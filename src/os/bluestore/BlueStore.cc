@@ -6287,7 +6287,7 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 {
   RWLock::RLocker l(coll_lock);
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
-  if (cp == coll_map.end())
+  if (cp == coll_map.end() || !cp->second->exists)
     return CollectionRef();
   return cp->second;
 }
@@ -6373,8 +6373,7 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << dendl;
-  if (!c->exists)
-    return false;
+  assert(c->exists);
 
   bool r = true;
 
@@ -6407,8 +6406,7 @@ int BlueStore::stat(
   bool allow_eio)
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
 
   {
@@ -6438,8 +6436,7 @@ int BlueStore::set_collection_opts(
     return -ENOENT;
   Collection *c = static_cast<Collection *>(ch.get());
   dout(15) << __func__ << " " << cid << " options " << opts << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
   RWLock::WLocker l(c->lock);
   c->pool_opts = opts;
   return 0;
@@ -6469,12 +6466,12 @@ int BlueStore::read(
 {
   utime_t start = ceph_clock_now();
   Collection *c = static_cast<Collection *>(c_.get());
+  assert(c->exists);
+
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  if (!c->exists)
-    return -ENOENT;
 
   bl.clear();
   int r;
@@ -6904,8 +6901,8 @@ int BlueStore::_fiemap(
   interval_set<uint64_t>& destset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   {
     RWLock::RLocker l(c->lock);
 
@@ -7041,8 +7038,7 @@ int BlueStore::getattr(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->cid << " " << oid << " " << name << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
 
   int r;
   {
@@ -7090,9 +7086,9 @@ int BlueStore::getattrs(
   map<string,bufferptr>& aset)
 {
   Collection *c = static_cast<Collection *>(c_.get());
+  assert(c->exists);
+
   dout(15) << __func__ << " " << c->cid << " " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
 
   int r;
   {
@@ -7178,6 +7174,8 @@ int BlueStore::collection_list(
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   Collection *c = static_cast<Collection *>(c_.get());
+  assert(c->exists);
+
   dout(15) << __func__ << " " << c->cid
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;
@@ -7197,9 +7195,6 @@ int BlueStore::_collection_list(
   Collection *c, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
-
-  if (!c->exists)
-    return -ENOENT;
 
   int r = 0;
   ghobject_t static_next;
@@ -7327,8 +7322,8 @@ int BlueStore::omap_get(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -7392,8 +7387,8 @@ int BlueStore::omap_get_header(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -7440,8 +7435,8 @@ int BlueStore::omap_get_keys(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -7501,8 +7496,8 @@ int BlueStore::omap_get_values(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   int r = 0;
   string final_key;
@@ -7558,8 +7553,8 @@ int BlueStore::omap_check_keys(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
-  if (!c->exists)
-    return -ENOENT;
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   int r = 0;
   string final_key;
@@ -7616,9 +7611,8 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 {
   Collection *c = static_cast<Collection *>(c_.get());
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
-  if (!c->exists) {
-    return ObjectMap::ObjectMapIterator();
-  }
+  assert(c->exists);
+
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
