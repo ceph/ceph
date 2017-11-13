@@ -128,7 +128,7 @@ struct RadosStriperImpl {
   }
 
   // objectid manipulation
-  std::string getObjectId(const object_t& soid, long long unsigned objectno);
+  void getObjectId(const object_t& soid, uint64_t no, std::string& id);
 
   // opening and closing of striped objects
   void unlockObject(const std::string& soid,
