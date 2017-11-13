@@ -1416,13 +1416,13 @@ ostream& print_actions(ostream& m, const uint64_t a) {
   bool begun = false;
   m << "[ ";
   for (auto i = 0U; i < s3Count; ++i) {
-    if (a & (1 << i)) {
+    if (a & (1ULL << i)) {
       if (begun) {
-	m << ", ";
+        m << ", ";
       } else {
-	begun = true;
+        begun = true;
       }
-      m << action_bit_string(1 << i);
+      m << action_bit_string(1ULL << i);
     }
   }
   if (begun) {
