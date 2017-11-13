@@ -116,7 +116,7 @@ public:
 
   // Tell if two files are identical
   rocksdb::Status AreFilesSame(const std::string& first,
-			       const std::string& second, bool* res) override;
+			       const std::string& second, bool* res);
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in
