@@ -408,7 +408,7 @@ class MDSRank {
 
     MDSMap *get_mds_map() { return mdsmap; }
 
-    int get_req_rate() const { return logger->get(l_mds_request); }
+    uint64_t get_num_requests() const { return logger->get(l_mds_request); }
   
     int get_mds_slow_req_count() const { return mds_slow_req_count; }
 

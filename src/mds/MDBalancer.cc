@@ -164,8 +164,6 @@ void MDBalancer::tick()
   }
 
   // balance?
-  if (last_heartbeat == utime_t())
-    last_heartbeat = now;
   if (mds->get_nodeid() == 0 &&
       g_conf->mds_bal_interval > 0 &&
       (num_bal_times ||
@@ -229,7 +227,26 @@ mds_load_t MDBalancer::get_load(utime_t now)
     dout(20) << "get_load no root, no load" << dendl;
   }
 
-  load.req_rate = mds->get_req_rate();
+  uint64_t num_requests = mds->get_num_requests();
+  bool new_req_rate = false;
+  if (last_get_load != utime_t() &&
+      now > last_get_load &&
+      num_requests >= last_num_requests) {
+    utime_t el = now;
+    el -= last_get_load;
+    if (el.sec() >= 1) {
+      load.req_rate = (num_requests - last_num_requests) / (double)el;
+      new_req_rate = true;
+    }
+  }
+  if (!new_req_rate) {
+    auto p = mds_load.find(mds->get_nodeid());
+    if (p != mds_load.end())
+      load.req_rate = p->second.req_rate;
+  }
+  last_get_load = now;
+  last_num_requests = num_requests;
+
   load.queue_len = messenger->get_dispatch_queue_len();
 
   ifstream cpu(PROCPREFIX "/proc/loadavg");
@@ -302,12 +319,14 @@ void MDBalancer::send_heartbeat()
 
   if (mds->get_nodeid() == 0) {
     beat_epoch++;
-   
     mds_load.clear();
   }
 
   // my load
   mds_load_t load = get_load(now);
+  mds->logger->set(l_mds_load_cent, 100 * load.mds_load());
+  mds->logger->set(l_mds_dispatch_queue_len, load.queue_len);
+
   map<mds_rank_t, mds_load_t>::value_type val(mds->get_nodeid(), load);
   mds_load.insert(val);
 
@@ -380,12 +399,18 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   if (who == 0) {
     dout(20) << " from mds0, new epoch " << m->get_beat() << dendl;
     if (beat_epoch != m->get_beat()) {
+      beat_epoch = m->get_beat();
       mds_load.clear();
     }
-    beat_epoch = m->get_beat();
+
     send_heartbeat();
 
     mds->mdcache->show_subtrees();
+  } else if (mds->get_nodeid() == 0) {
+    if (beat_epoch != m->get_beat()) {
+      dout(10) << " old heartbeat epoch, ignoring" << dendl;
+      goto out;
+    }
   }
 
   {

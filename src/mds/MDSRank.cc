@@ -266,11 +266,7 @@ void MDSRankDispatcher::tick()
   }
 
   // log
-  mds_load_t load = balancer->get_load(ceph_clock_now());
-
   if (logger) {
-    logger->set(l_mds_load_cent, 100 * load.mds_load());
-    logger->set(l_mds_dispatch_queue_len, messenger->get_dispatch_queue_len());
     logger->set(l_mds_subtrees, mdcache->num_subtrees());
 
     mdcache->log_stat();
