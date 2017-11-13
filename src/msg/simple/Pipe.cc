@@ -1009,9 +1009,10 @@ int Pipe::connect()
     entity_addr_t addr2bind = msgr->get_myaddr();
     if (msgr->cct->_conf->ms_bind_before_connect && (!addr2bind.is_blank_ip())) {
       addr2bind.set_port(0);
-      int r = ::bind(sd , addr2bind.get_sockaddr(), addr2bind.get_sockaddr_len());
-      if (r < 0) {
-        ldout(msgr->cct,2) << "client bind error " << ", " << cpp_strerror(errno) << dendl;
+      rc = ::bind(sd , addr2bind.get_sockaddr(), addr2bind.get_sockaddr_len());
+      if (rc < 0) {
+        rc = -errno;
+        ldout(msgr->cct,2) << "client bind error " << ", " << cpp_strerror(rc) << dendl;
         goto fail;
       }
     }
@@ -1021,10 +1022,10 @@ int Pipe::connect()
   ldout(msgr->cct,10) << "connecting to " << peer_addr << dendl;
   rc = ::connect(sd, peer_addr.get_sockaddr(), peer_addr.get_sockaddr_len());
   if (rc < 0) {
-    int stored_errno = errno;
+    rc = -errno;
     ldout(msgr->cct,2) << "connect error " << peer_addr
-	     << ", " << cpp_strerror(stored_errno) << dendl;
-    if (stored_errno == ECONNREFUSED) {
+	     << ", " << cpp_strerror(rc) << dendl;
+    if (rc == -ECONNREFUSED) {
       ldout(msgr->cct, 2) << "connection refused!" << dendl;
       msgr->dispatch_queue.queue_refused(connection_state.get());
     }
@@ -1039,6 +1040,7 @@ int Pipe::connect()
     goto fail;
   }
   if (memcmp(banner, CEPH_BANNER, strlen(CEPH_BANNER))) {
+    rc = -EPROTO;
     ldout(msgr->cct,0) << "connect protocol error (bad banner) on peer " << peer_addr << dendl;
     goto fail;
   }
@@ -1076,6 +1078,7 @@ int Pipe::connect()
     ::decode(peer_addr_for_me, p);
   }
   catch (buffer::error& e) {
+    rc = -EPROTO;
     ldout(msgr->cct,2) << "connect couldn't decode peer addrs: " << e.what()
 		       << dendl;
     goto fail;
@@ -1179,7 +1182,7 @@ int Pipe::connect()
       bufferptr bp = buffer::create(reply.authorizer_len);
       rc = tcp_read(bp.c_str(), reply.authorizer_len);
       if (rc < 0) {
-        ldout(msgr->cct,10) << "connect couldn't read connect authorizer_reply" << cpp_strerror(rc) << dendl;
+        ldout(msgr->cct,10) << "connect couldn't read connect authorizer_reply, " << cpp_strerror(rc) << dendl;
 	goto fail;
       }
       authorizer_reply.push_back(bp);
@@ -1188,6 +1191,7 @@ int Pipe::connect()
     if (authorizer) {
       bufferlist::iterator iter = authorizer_reply.begin();
       if (!authorizer->verify_reply(iter)) {
+        rc = -EPERM;
         ldout(msgr->cct,0) << "failed verifying authorize reply" << dendl;
 	goto fail;
       }
@@ -1207,6 +1211,7 @@ int Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_FEATURES) {
+      rc = -EPERM;
       ldout(msgr->cct,0) << "connect protocol feature mismatch, my " << std::hex
 	      << connect.features << " < peer " << reply.features
 	      << " missing " << (reply.features & ~policy.features_supported)
@@ -1215,6 +1220,7 @@ int Pipe::connect()
     }
 
     if (reply.tag == CEPH_MSGR_TAG_BADPROTOVER) {
+      rc = -EPERM;
       ldout(msgr->cct,0) << "connect protocol version mismatch, my " << connect.protocol_version
 	      << " != " << reply.protocol_version << dendl;
       goto fail_locked;
@@ -1222,8 +1228,10 @@ int Pipe::connect()
 
     if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
       ldout(msgr->cct,0) << "connect got BADAUTHORIZER" << dendl;
-      if (got_bad_auth)
+      if (got_bad_auth) {
+        rc = -EPERM;
         goto stop_locked;
+      }
       got_bad_auth = true;
       pipe_lock.Unlock();
       delete authorizer;
@@ -1272,7 +1280,7 @@ int Pipe::connect()
         uint64_t newly_acked_seq = 0;
         rc = tcp_read((char*)&newly_acked_seq, sizeof(newly_acked_seq));
         if (rc < 0) {
-          ldout(msgr->cct,2) << "connect read error on newly_acked_seq" << cpp_strerror(rc) << dendl;
+          ldout(msgr->cct,2) << "connect read error on newly_acked_seq, " << cpp_strerror(rc) << dendl;
           goto fail_locked;
         }
 	ldout(msgr->cct,2) << " got newly_acked_seq " << newly_acked_seq
@@ -1286,8 +1294,9 @@ int Pipe::connect()
 	  m->put();
 	  ++out_seq;
 	}
-        if (tcp_write((char*)&in_seq, sizeof(in_seq)) < 0) {
-          ldout(msgr->cct,2) << "connect write error on in_seq" << dendl;
+        rc = tcp_write((char*)&in_seq, sizeof(in_seq));
+        if (rc < 0) {
+          ldout(msgr->cct,2) << "connect write error on in_seq, " << cpp_strerror(rc) << dendl;
           goto fail_locked;
         }
       }
@@ -1353,7 +1362,7 @@ int Pipe::connect()
 
  stop_locked:
   delete authorizer;
-  return rc;
+  return rc < 0 ? rc : -1;
 }
 
 void Pipe::register_pipe()
