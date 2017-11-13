@@ -29,32 +29,33 @@ class ZstdCompressor : public Compressor {
   ZstdCompressor() : Compressor(COMP_ALG_ZSTD, "zstd") {}
 
   int compress(const bufferlist &src, bufferlist &dst) override {
-    bufferptr outptr = buffer::create_page_aligned(
-      ZSTD_compressBound(src.length()));
+    ZSTD_CStream *s = ZSTD_createCStream();
+    ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
+    auto p = src.begin();
+    size_t left = src.length();
+
+    size_t const out_max = ZSTD_compressBound(left);
+    bufferptr outptr = buffer::create_page_aligned(out_max);
     ZSTD_outBuffer_s outbuf;
     outbuf.dst = outptr.c_str();
     outbuf.size = outptr.length();
     outbuf.pos = 0;
 
-    ZSTD_CStream *s = ZSTD_createCStream();
-    ZSTD_initCStream_srcSize(s, COMPRESSION_LEVEL, src.length());
-    auto p = src.begin();
-    size_t left = src.length();
     while (left) {
       assert(!p.end());
       struct ZSTD_inBuffer_s inbuf;
       inbuf.pos = 0;
       inbuf.size = p.get_ptr_and_advance(left, (const char**)&inbuf.src);
-      ZSTD_compressStream(s, &outbuf, &inbuf);
       left -= inbuf.size;
+      ZSTD_EndDirective const zed = (left==0) ? ZSTD_e_end : ZSTD_e_continue;
+      size_t r = ZSTD_compress_generic(s, &outbuf, &inbuf, zed);
+      if (ZSTD_isError(r)) {
+	return -EINVAL;
+      }
     }
     assert(p.end());
-    int r = ZSTD_endStream(s, &outbuf);
+
     ZSTD_freeCStream(s);
-    if (ZSTD_isError(r)) {
-      return -EINVAL;
-    }
-    assert(r == 0); // we should have had enough room in the output buffer.
 
     // prefix with decompressed length
     ::encode((uint32_t)src.length(), dst);
