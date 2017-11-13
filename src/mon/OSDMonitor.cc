@@ -6157,6 +6157,20 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
   cmd_getval(cct, cmdmap, "app", app);
   bool app_exists = (p.application_metadata.count(app) > 0);
 
+  string key;
+  cmd_getval(cct, cmdmap, "key", key);
+  if (key == "all") {
+    ss << "key cannot be 'all'";
+    return -EINVAL;
+  }
+
+  string value;
+  cmd_getval(cct, cmdmap, "value", value);
+  if (value == "all") {
+    ss << "value cannot be 'all'";
+    return -EINVAL;
+  }
+
   if (boost::algorithm::ends_with(prefix, "enable")) {
     if (app.empty()) {
       ss << "application name must be provided";
