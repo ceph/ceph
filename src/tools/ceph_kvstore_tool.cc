@@ -13,6 +13,7 @@
 #include <map>
 #include <set>
 #include <string>
+#include <fstream>
 
 #include <boost/scoped_ptr.hpp>
 
@@ -23,7 +24,6 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
-#include "include/utime.h"
 #include "common/Clock.h"
 #include "kv/KeyValueDB.h"
 #include "common/url_escape.h"
@@ -231,7 +231,7 @@ class StoreTool
     uint64_t total_size = 0;
     uint64_t total_txs = 0;
 
-    utime_t started_at = ceph_clock_now();
+    auto started_at = coarse_mono_clock::now();
 
     do {
       int num_keys = 0;
@@ -256,14 +256,14 @@ class StoreTool
       if (num_keys > 0)
         other->submit_transaction_sync(tx);
 
-      utime_t cur_duration = ceph_clock_now() - started_at;
-      std::cout << "ts = " << cur_duration << "s, copied " << total_keys
+      auto cur_duration = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
+      std::cout << "ts = " << cur_duration.count() << "s, copied " << total_keys
                 << " keys so far (" << stringify(si_t(total_size)) << ")"
                 << std::endl;
 
     } while (it->valid());
 
-    utime_t time_taken = ceph_clock_now() - started_at;
+    auto time_taken = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
 
     std::cout << "summary:" << std::endl;
     std::cout << "  copied " << total_keys << " keys" << std::endl;
@@ -271,7 +271,7 @@ class StoreTool
     std::cout << "  total size " << stringify(si_t(total_size)) << std::endl;
     std::cout << "  from '" << store_path << "' to '" << other_path << "'"
               << std::endl;
-    std::cout << "  duration " << time_taken << " seconds" << std::endl;
+    std::cout << "  duration " << time_taken.count() << " seconds" << std::endl;
 
     return 0;
   }
@@ -558,8 +558,13 @@ int main(int argc, const char *argv[])
     }
 
   } else if (cmd == "store-crc") {
-    uint32_t crc = st.traverse(string(), true, NULL);
-    std::cout << "store at '" << path << "' crc " << crc << std::endl;
+    if (argc < 4) {
+      usage(argv[0]);
+      return 1;
+    }
+    std::ofstream fs(argv[4]);
+    uint32_t crc = st.traverse(string(), true, &fs);
+    std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {
     st.compact();
