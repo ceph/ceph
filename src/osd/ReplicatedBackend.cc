@@ -540,7 +540,7 @@ void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
   FUNCTRACE();
-  OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
+  OID_EVENT_TRACE_WITH_MSG((op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_applied");
@@ -564,7 +564,7 @@ void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
   FUNCTRACE();
-  OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
+  OID_EVENT_TRACE_WITH_MSG(op->op ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
     op->op->mark_event("op_commit");
