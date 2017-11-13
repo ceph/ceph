@@ -1061,68 +1061,11 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
 {
   assert(lock.is_locked());
 
-  std::string val = raw_val;
-
-  int r = opt.pre_validate(&val, error_message);
-  if (r != 0) {
-    return r;
-  }
-
   Option::value_t new_value;
-  if (opt.type == Option::TYPE_INT) {
-    int64_t f = strict_si_cast<int64_t>(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    }
-    new_value = f;
-  } else if (opt.type == Option::TYPE_UINT) {
-    uint64_t f = strict_si_cast<uint64_t>(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    }
-    new_value = f;
-  } else if (opt.type == Option::TYPE_STR) {
-    new_value = val;
-  } else if (opt.type == Option::TYPE_FLOAT) {
-    double f = strict_strtod(val.c_str(), error_message);
-    if (!error_message->empty()) {
-      return -EINVAL;
-    } else {
-      new_value = f;
-    }
-  } else if (opt.type == Option::TYPE_BOOL) {
-    if (strcasecmp(val.c_str(), "false") == 0) {
-      new_value = false;
-    } else if (strcasecmp(val.c_str(), "true") == 0) {
-      new_value = true;
-    } else {
-      int b = strict_strtol(val.c_str(), 10, error_message);
-      if (!error_message->empty()) {
-	return -EINVAL;
-      }
-      new_value = !!b;
-    }
-  } else if (opt.type == Option::TYPE_ADDR) {
-    entity_addr_t addr;
-    if (!addr.parse(val.c_str())){
-      return -EINVAL;
-    }
-    new_value = addr;
-  } else if (opt.type == Option::TYPE_UUID) {
-    uuid_d uuid;
-    if (!uuid.parse(val.c_str())) {
-      return -EINVAL;
-    }
-    new_value = uuid;
-  } else {
-    ceph_abort();
-  }
-
-  r = opt.validate(new_value, error_message);
-  if (r != 0) {
+  int r = opt.parse_value(raw_val, &new_value, error_message);
+  if (r < 0) {
     return r;
   }
-
 
   // Apply the value to its entry in the `values` map
   values[opt.name] = new_value;
