@@ -888,6 +888,13 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
   return _get_val(key, buf,len);
 }
 
+int md_config_t::get_val_as_string(const std::string &key,
+				   std::string *val) const
+{
+  Mutex::Locker l(lock);
+  return _get_val_as_string(key, val);
+}
+
 Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
@@ -915,7 +922,8 @@ Option::value_t md_config_t::_get_val_generic(const std::string &key) const
   }
 }
 
-int md_config_t::_get_val(const std::string &key, std::string *value) const {
+int md_config_t::_get_val_as_string(const std::string &key,
+				    std::string *value) const {
   assert(lock.is_locked());
 
   auto config_value = _get_val_generic(key);
@@ -942,7 +950,7 @@ int md_config_t::_get_val(const std::string &key, char **buf, int len) const
     return -EINVAL;
 
   string val ;
-  if (_get_val(key, &val) == 0) {
+  if (_get_val_as_string(key, &val) == 0) {
     int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
@@ -1216,7 +1224,7 @@ bool md_config_t::expand_meta(std::string &origval,
 	*oss << "expansion stack: " << std::endl;
 	for (const auto j : stack) {
           std::string val;
-          _get_val(j->name, &val);
+          _get_val_as_string(j->name, &val);
 	  *oss << j->name << "=" << val << std::endl;
 	}
 	return false;
