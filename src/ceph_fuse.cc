@@ -79,9 +79,11 @@ int main(int argc, const char **argv, const char *envp[]) {
   }
   env_to_vec(args);
 
-  std::vector<const char*> def_args{"--pid-file="};
+  std::map<std::string,std::string> defaults = {
+    { "pid_file", "" }
+  };
 
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_DAEMON,
 			 CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
