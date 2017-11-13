@@ -749,6 +749,7 @@ public:
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
   void dump(Formatter *f) const;
+  void dump_load(Formatter *f, utime_t now, const DecayRate& rate);
 };
 
 #endif
