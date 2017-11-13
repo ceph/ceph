@@ -923,8 +923,9 @@ void Paxos::commit_finish()
   new_value.clear();
 
   // WRITING -> REFRESH
-  // among other things, this lets do_refresh() -> mon->bootstrap() know
-  // it doesn't need to flush the store queue
+  // among other things, this lets do_refresh() -> mon->bootstrap() ->
+  // wait_for_paxos_write() know that it doesn't need to flush the store
+  // queue. and it should not, as we are in the async completion thread now!
   assert(is_writing() || is_writing_previous());
   state = STATE_REFRESH;
   assert(commits_started > 0);
@@ -935,8 +936,6 @@ void Paxos::commit_finish()
     if (mon->get_quorum().size() > 1) {
       extend_lease();
     }
-
-    finish_contexts(g_ceph_context, waiting_for_commit);
 
     assert(g_conf->paxos_kill_at != 10);
 
@@ -962,9 +961,7 @@ void Paxos::handle_commit(MonOpRequestRef op)
   op->mark_paxos_event("store_state");
   store_state(commit);
 
-  if (do_refresh()) {
-    finish_contexts(g_ceph_context, waiting_for_commit);
-  }
+  (void)do_refresh();
 }
 
 void Paxos::extend_lease()
@@ -1329,7 +1326,6 @@ void Paxos::shutdown()
     shutdown_cond.Wait(mon->lock);
 
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
-  finish_contexts(g_ceph_context, waiting_for_commit, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_active, -ECANCELED);
   finish_contexts(g_ceph_context, pending_finishers, -ECANCELED);
@@ -1380,7 +1376,6 @@ void Paxos::peon_init()
 
   // no chance to write now!
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
@@ -1407,7 +1402,6 @@ void Paxos::restart()
 
   finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
   finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, waiting_for_commit, -EAGAIN);
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 
   logger->inc(l_paxos_restart);
