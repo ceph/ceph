@@ -126,6 +126,8 @@ class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
         return self._set_crush_compat_weight_set_weights(weightmap)
 
 class CRUSHMap(ceph_module.BasePyCRUSH):
+    ITEM_NONE = 0x7fffffff
+
     def dump(self):
         return self._dump()
 
