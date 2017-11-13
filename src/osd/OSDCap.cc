@@ -398,6 +398,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 
     spaces = +ascii::space;
 
+    wildcard = (lit('*') | lit("all")) [_val = "*"];
+
     pool_name %= -(spaces >> lit("pool") >> (lit('=') | spaces) >> str);
     nspace %= (spaces >> lit("namespace")
 	       >> (lit('=') | spaces)
@@ -408,8 +410,8 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
     object_prefix %= -(spaces >> lit("object_prefix") >> spaces >> str);
     pooltag %= (spaces >> lit("tag")
 		>> spaces >> str // application
-		>> spaces >> (str | char_('*')) // key
-		>> -spaces >> lit('=') >> -spaces >> (str | char_('*'))); // value
+		>> spaces >> (wildcard | str) // key
+		>> -spaces >> lit('=') >> -spaces >> (wildcard | str)); // value
 
     match = (
       pooltag                                 [_val = phoenix::construct<OSDCapMatch>(_1)] |
@@ -421,7 +423,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 
     // rwxa := * | [r][w][x] [class-read] [class-write]
     rwxa =
-      (spaces >> lit("*")[_val = OSD_CAP_ANY]) |
+      (spaces >> wildcard[_val = OSD_CAP_ANY]) |
       ( eps[_val = 0] >>
 	(
 	 spaces >>
@@ -459,6 +461,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   qi::rule<Iterator, string()> quoted_string, equoted_string;
   qi::rule<Iterator, string()> unquoted_word;
   qi::rule<Iterator, string()> str, estr;
+  qi::rule<Iterator, string()> wildcard;
   qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, string()> class_name;
   qi::rule<Iterator, string()> class_cap;

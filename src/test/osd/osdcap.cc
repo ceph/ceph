@@ -79,6 +79,7 @@ const char *parse_good[] = {
   "allow rwx tag application key =value",
   "allow rwx tag application key= value",
   "allow rwx tag application key  =   value",
+  "allow all tag application all=all",
   0
 };
 
@@ -909,7 +910,11 @@ TEST(OSDCap, OutputParsed)
     {"allow rwx tag application key=value",
      "osdcap[grant(app application key key val value rwx)]"},
     {"allow rwx namespace ns* tag application key=value",
-     "osdcap[grant(namespace ns* app application key key val value rwx)]"}
+     "osdcap[grant(namespace ns* app application key key val value rwx)]"},
+	 {"allow all",
+	  "osdcap[grant(*)]"},
+	 {"allow rwx tag application all=all",
+	  "osdcap[grant(app application key * val * rwx)]"}
   };
 
   size_t num_tests = sizeof(test_values) / sizeof(*test_values);
