@@ -615,6 +615,8 @@ void MDBalancer::prep_rebalance(int beat)
 	      << dendl;
     }
 
+    mds_meta_load.clear();
+
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
@@ -1240,4 +1242,102 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   if (0 == who) {
     last_epoch_under = 0;
   }
+}
+
+int MDBalancer::dump_loads(Formatter *f)
+{
+  utime_t now = ceph_clock_now();
+  DecayRate& decayrate = mds->mdcache->decayrate;
+
+  list<CDir*> dfs;
+  if (mds->mdcache->get_root()) {
+    mds->mdcache->get_root()->get_dirfrags(dfs);
+  } else {
+    dout(5) << "dump_load no root" << dendl;
+  }
+
+  f->open_object_section("loads");
+
+  f->open_array_section("dirfrags");
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
+
+    if (f) {
+      f->open_object_section("dir");
+      dir->dump_load(f, now, decayrate);
+      f->close_section();
+    }
+
+    for (auto it = dir->begin(); it != dir->end(); ++it) {
+      CInode *in = it->second->get_linkage()->get_inode();
+      if (!in || !in->is_dir())
+	continue;
+
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (auto subdir : ls) {
+	if (subdir->pop_nested.meta_load() < .001)
+	  continue;
+	dfs.push_back(subdir);
+      }
+    }
+  }
+  f->close_section();  // dirfrags array
+
+  f->open_object_section("mds_load");
+  {
+
+    auto dump_mds_load = [f, now](mds_load_t& load) {
+      f->dump_float("request_rate", load.req_rate);
+      f->dump_float("cache_hit_rate", load.cache_hit_rate);
+      f->dump_float("queue_length", load.queue_len);
+      f->dump_float("cpu_load", load.cpu_load_avg);
+      f->dump_float("mds_load", load.mds_load());
+
+      DecayRate rate; // no decay
+      f->open_object_section("auth_dirfrags");
+      load.auth.dump(f, now, rate);
+      f->close_section();
+      f->open_object_section("all_dirfrags");
+      load.all.dump(f, now, rate);
+      f->close_section();
+    };
+
+    for (auto p : mds_load) {
+      stringstream name;
+      name << "mds." << p.first;
+      f->open_object_section(name.str().c_str());
+      dump_mds_load(p.second);
+      f->close_section();
+    }
+  }
+  f->close_section(); // mds_load
+
+  f->open_object_section("mds_meta_load");
+  for (auto p : mds_meta_load) {
+    stringstream name;
+    name << "mds." << p.first;
+    f->dump_float(name.str().c_str(), p.second);
+  }
+  f->close_section(); // mds_meta_load
+
+  f->open_object_section("mds_import_map");
+  for (auto p : mds_import_map) {
+    stringstream name1;
+    name1 << "mds." << p.first;
+    f->open_array_section(name1.str().c_str());
+    for (auto q : p.second) {
+      f->open_object_section("from");
+      stringstream name2;
+      name2 << "mds." << q.first;
+      f->dump_float(name2.str().c_str(), q.second);
+      f->close_section();
+    }
+    f->close_section(); // mds.? array
+  }
+  f->close_section(); // mds_import_map
+
+  f->close_section(); // loads
+  return 0;
 }

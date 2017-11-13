@@ -75,6 +75,8 @@ public:
 
   void handle_mds_failure(mds_rank_t who);
 
+  int dump_loads(Formatter *f);
+
 private:
   typedef struct {
     std::map<mds_rank_t, double> targets;
