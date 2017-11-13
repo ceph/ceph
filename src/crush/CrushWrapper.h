@@ -698,6 +698,13 @@ public:
    */
   map<string, string> get_full_location(int id) const;
 
+  /**
+   * return location map for a item, by name
+   */
+  int get_full_location(
+    const string& name,
+    std::map<string,string> *ploc);
+
   /*
    * identical to get_full_location(int id) although it returns the type/name
    * pairs in the order they occur in the hierarchy.
@@ -905,6 +912,7 @@ public:
 			   std::map<string,string> *ploc);
   static int parse_loc_multimap(const std::vector<string>& args,
 				std::multimap<string,string> *ploc);
+
 
   /**
    * get an item's weight
