@@ -17,7 +17,7 @@ New OSDs
 To activate newly prepared OSDs both the :term:`OSD id` and :term:`OSD uuid`
 need to be supplied. For example::
 
-    ceph-volume activate --bluestore 0 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
+    ceph-volume lvm activate --bluestore 0 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
 
 .. note:: The UUID is stored in the ``osd_fsid`` file in the OSD path, which is
           generated when :ref:`ceph-volume-lvm-prepare` is used.
@@ -46,7 +46,7 @@ For example::
 Would start the discovery process for the OSD with an id of ``0`` and a UUID of
 ``8715BEB4-15C5-49DE-BA6F-401086EC7B41``.
 
-.. note:: for more details on the systemd workflow see :ref:`ceph-volume-systemd`
+.. note:: for more details on the systemd workflow see :ref:`ceph-volume-lvm-systemd`
 
 The systemd unit will look for the matching OSD device, and by looking at its
 :term:`LVM tags` will proceed to:
