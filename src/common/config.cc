@@ -75,8 +75,9 @@ int ceph_resolve_file_search(const std::string& filename_list,
 
 
 md_config_t::md_config_t(bool is_daemon)
-  : cluster(""),
-  lock("md_config_t", true, false)
+  : is_daemon(is_daemon),
+    cluster(""),
+    lock("md_config_t", true, false)
 {
   // Load the compile-time list of Option into
   // a map so that we can resolve keys quickly.

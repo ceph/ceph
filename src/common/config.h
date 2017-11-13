@@ -65,6 +65,8 @@ public:
                          bool md_config_t::*,
                          entity_addr_t md_config_t::*,
                          uuid_d md_config_t::*> member_ptr_t;
+  /// true if we are a daemon (as per CephContext::code_env)
+  const bool is_daemon;
 
   /* Maps configuration options to the observer listening for them. */
   typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
