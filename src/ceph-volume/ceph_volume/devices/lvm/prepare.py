@@ -259,6 +259,10 @@ class Prepare(object):
 
               ceph-volume lvm prepare --filestore --data {vg/lv} --journal {vg/lv}
 
+          Existing block device, that will be made a group and logical volume:
+
+              ceph-volume lvm prepare --filestore --data /path/to/device --journal {vg/lv}
+
         Bluestore
         ---------
 
