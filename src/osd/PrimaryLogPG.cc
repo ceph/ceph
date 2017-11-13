@@ -7063,12 +7063,8 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     --ctx->delta_stats.num_objects_omap;
   }
 
-  // use newer snapc?
   if (ctx->new_snapset.seq > snapc.seq) {
-    snapc.seq = ctx->new_snapset.seq;
-    snapc.snaps = ctx->new_snapset.snaps;
-    filter_snapc(snapc.snaps);
-    dout(10) << " using newer snapc " << snapc << dendl;
+    dout(10) << " op snapset is old" << dendl;
   }
 
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
@@ -7168,9 +7164,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     }
   }
   
-  // update snapset with latest snap context
-  ctx->new_snapset.seq = snapc.seq;
-  ctx->new_snapset.snaps = snapc.snaps;
+  if (snapc.seq > ctx->new_snapset.seq) {
+    // update snapset with latest snap context
+    ctx->new_snapset.seq = snapc.seq;
+    ctx->new_snapset.snaps = snapc.snaps;
+  }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
 }
