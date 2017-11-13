@@ -59,7 +59,7 @@ public:
   int snap_unprotect(const char *snap_name);
   void execute_snap_unprotect(const std::string &snap_name, Context *on_finish);
 
-  int prepare_image_update();
+  int prepare_image_update(bool request_lock);
 
 private:
   ImageCtxT &m_image_ctx;
