@@ -1536,6 +1536,42 @@ static ceph::spinlock debug_lock;
     }
   }
 
+  // just like append_zero, but pre-conditions the crc cache in bufferptr
+  void buffer::list::append_zero_precalc_crc(unsigned len, unsigned crc)
+  {
+    ptr bp(len);
+    bp.zero(false);
+    unsigned part_crc = ceph_crc32c_zeros(crc, len);
+    bp.get_raw()->set_crc(make_pair(0, len), make_pair(crc, part_crc));
+    append(std::move(bp));
+  }
+
+  static char static_zeros[16384] = {};
+
+  // appends static bufferptrs, so this method is unsuitable
+  // when bufferptr contents change
+  void buffer::list::append_zero_static(unsigned len)
+  {
+    while (len) {
+      size_t block_size = (len > sizeof(static_zeros)) ? sizeof(static_zeros) : len;
+      append(buffer::create_static(block_size, &static_zeros[0]));
+      len -= block_size;
+    }
+  }
+
+  // as above, but it also pre-conditions the crc cache for that bufferptr
+  void buffer::list::append_zero_static_precalc_crc(unsigned len, unsigned crc)
+  {
+    while (len) {
+      size_t block_size = (len > sizeof(static_zeros)) ? sizeof(static_zeros) : len;
+      ptr bp(buffer::create_static(block_size, static_zeros));
+      unsigned part_crc = ceph_crc32c_zeros(crc, block_size);
+      bp.get_raw()->set_crc(make_pair(0, block_size), make_pair(crc, part_crc));
+      append(std::move(bp));
+      len -= block_size;
+    }
+  }
+
   
   /*
    * get a char
