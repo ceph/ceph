@@ -101,7 +101,7 @@ public:
   int metadata_remove(const std::string &key);
   void execute_metadata_remove(const std::string &key, Context *on_finish);
 
-  int prepare_image_update();
+  int prepare_image_update(bool request_lock);
 
 private:
   ImageCtxT &m_image_ctx;
