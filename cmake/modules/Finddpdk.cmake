@@ -13,6 +13,8 @@ find_library(DPDK_rte_kvargs_LIBRARY rte_kvargs)
 find_library(DPDK_rte_mbuf_LIBRARY rte_mbuf)
 find_library(DPDK_rte_ethdev_LIBRARY rte_ethdev)
 find_library(DPDK_rte_mempool_LIBRARY rte_mempool)
+find_library(DPDK_rte_mempool_ring_LIBRARY rte_mempool_ring)
+find_library(DPDK_rte_mempool_stack_LIBRARY rte_mempool_stack)
 find_library(DPDK_rte_ring_LIBRARY rte_ring)
 find_library(DPDK_rte_eal_LIBRARY rte_eal)
 find_library(DPDK_rte_cmdline_LIBRARY rte_cmdline)
@@ -29,6 +31,8 @@ set(check_LIBRARIES
   ${DPDK_rte_mbuf_LIBRARY}
   ${DPDK_rte_ethdev_LIBRARY}
   ${DPDK_rte_mempool_LIBRARY}
+  ${DPDK_rte_mempool_ring_LIBRARY}
+  ${DPDK_rte_mempool_stack_LIBRARY}
   ${DPDK_rte_ring_LIBRARY}
   ${DPDK_rte_eal_LIBRARY}
   ${DPDK_rte_cmdline_LIBRARY}
@@ -45,6 +49,8 @@ mark_as_advanced(DPDK_INCLUDE_DIR
   DPDK_rte_mbuf_LIBRARY
   DPDK_rte_ethdev_LIBRARY
   DPDK_rte_mempool_LIBRARY
+  DPDK_rte_mempool_ring_LIBRARY
+  DPDK_rte_mempool_stack_LIBRARY
   DPDK_rte_ring_LIBRARY
   DPDK_rte_eal_LIBRARY
   DPDK_rte_cmdline_LIBRARY
