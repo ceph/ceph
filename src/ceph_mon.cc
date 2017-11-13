@@ -214,12 +214,13 @@ int main(int argc, const char **argv)
   //  leveldb_block_size        = 64*1024       = 65536     // 64KB
   //  leveldb_compression       = false
   //  leveldb_log               = ""
-  vector<const char*> def_args;
-  def_args.push_back("--leveldb-write-buffer-size=33554432");
-  def_args.push_back("--leveldb-cache-size=536870912");
-  def_args.push_back("--leveldb-block-size=65536");
-  def_args.push_back("--leveldb-compression=false");
-  def_args.push_back("--leveldb-log=");
+  map<string,string> defaults = {
+    { "leveldb_write_buffer_size", "33554432" },
+    { "leveldb_cache_size", "536870912" },
+    { "leveldb_block_size", "65536" },
+    { "leveldb_compression", "false"},
+    { "leveldb_log", "" }
+  };
 
   int flags = 0;
   {
@@ -241,7 +242,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  auto cct = global_init(&def_args, args,
+  auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
 			 flags, "mon_data");
   ceph_heap_profiler_init();

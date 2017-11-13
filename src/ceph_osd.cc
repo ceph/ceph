@@ -112,14 +112,16 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  vector<const char*> def_args;
-  // We want to enable leveldb's log, while allowing users to override this
-  // option, therefore we will pass it as a default argument to global_init().
-  def_args.push_back("--leveldb-log=");
-
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_DAEMON,
-			 0, "osd_data");
+  map<string,string> defaults = {
+    // We want to enable leveldb's log, while allowing users to override this
+    // option, therefore we will pass it as a default argument to global_init().
+    { "leveldb_log", "" }
+  };
+  auto cct = global_init(
+    &defaults,
+    args, CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_DAEMON,
+    0, "osd_data");
   ceph_heap_profiler_init();
 
   Preforker forker;

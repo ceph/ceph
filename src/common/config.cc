@@ -227,6 +227,57 @@ const Option *md_config_t::find_option(const string& name) const
   return nullptr;
 }
 
+Option::value_t md_config_t::get_val_default(
+  const string& name,
+  bool meta) const
+{
+  Mutex::Locker l(lock);
+  const Option *o = find_option(name);
+  return _get_val_default(*o, meta);
+}
+
+Option::value_t md_config_t::_get_val_default(const Option& o, bool meta) const
+{
+  Option::value_t v;
+
+  auto p = default_values.find(o.name);
+  if (p != default_values.end()) {
+    // custom default
+    v = p->second;
+  } else {
+    // schema default
+    bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
+    if (is_daemon && has_daemon_default) {
+      v = o.daemon_value;
+    } else {
+      v = o.value;
+    }
+  }
+
+  if (meta) {
+    // expand meta fields
+    string *s = boost::get<std::string>(&v);
+    if (s) {
+      ostringstream oss;
+      expand_meta(*s, &oss);
+    }
+  }
+  return v;
+}
+
+void md_config_t::set_val_default(const string& name, const std::string& val)
+{
+  Mutex::Locker l(lock);
+  const Option *o = find_option(name);
+  assert(o);
+  string err;
+  Option::value_t v;
+  int r = o->parse_value(val, &v, &err);
+  assert(r == 0);
+  values[name] = v;
+  default_values[name] = v;
+}
+
 md_config_t::~md_config_t()
 {
 }
