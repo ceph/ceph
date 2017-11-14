@@ -69,7 +69,19 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
     m_lock(util::unique_lock_name("ImageRequestWQ<I>::m_lock", this)) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << "ictx=" << image_ctx << dendl;
+
+  SafeTimer *timer;
+  Mutex *timer_lock;
+  ImageCtx::get_timer_instance(cct, &timer, &timer_lock);
+
+  iops_throttle = new TokenBucketThrottle(
+      cct, 0, 0, timer, timer_lock);
   this->register_work_queue();
+}
+
+template <typename I>
+ImageRequestWQ<I>::~ImageRequestWQ() {
+  delete iops_throttle;
 }
 
 template <typename I>
@@ -542,12 +554,43 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
+void ImageRequestWQ<I>::apply_qos_iops_limit(uint64_t limit) {
+  iops_throttle->set_max(limit);
+  iops_throttle->set_average(limit);
+}
+
+template <typename I>
+void ImageRequestWQ<I>::handle_iops_throttle_ready(int r,
+                                                   ImageRequest<I> *item) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 15) << "r=" << r << ", " << "req=" << item << dendl;
+
+  assert(m_io_blockers.load() > 0);
+  --m_io_blockers;
+  item->set_throttled();
+  this->requeue(item);
+  this->signal();
+}
+
+template <typename I>
 void *ImageRequestWQ<I>::_void_dequeue() {
   CephContext *cct = m_image_ctx.cct;
   ImageRequest<I> *peek_item = this->front();
 
   // no queued IO requests or all IO is blocked/stalled
   if (peek_item == nullptr || m_io_blockers.load() > 0) {
+    return nullptr;
+  }
+
+  if (!peek_item->was_throttled() &&
+      iops_throttle->get<
+        ImageRequestWQ<I>, ImageRequest<I>,
+        &ImageRequestWQ<I>::handle_iops_throttle_ready>(1, this, peek_item)) {
+    ldout(cct, 15) << "throttling IO " << peek_item << dendl;
+
+    // dequeue the throttled item and block future IO
+    ThreadPool::PointerWQ<ImageRequest<I> >::_void_dequeue();
+    ++m_io_blockers;
     return nullptr;
   }
 

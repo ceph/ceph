@@ -199,6 +199,7 @@ namespace librbd {
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t qos_iops_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 

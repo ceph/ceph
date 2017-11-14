@@ -99,6 +99,14 @@ public:
     return m_trace;
   }
 
+  bool was_throttled() {
+    return m_throttled;
+  }
+
+  void set_throttled() {
+    m_throttled = true;
+  }
+
 protected:
   typedef std::list<ObjectRequestHandle *> ObjectRequests;
 
@@ -107,6 +115,7 @@ protected:
   Extents m_image_extents;
   ZTracer::Trace m_trace;
   bool m_bypass_image_cache = false;
+  bool m_throttled = false;
 
   ImageRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
                Extents &&image_extents, const char *trace_name,
