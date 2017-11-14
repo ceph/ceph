@@ -151,6 +151,7 @@ enum {
 
 static const char *config_keys[] = {
   "crush_location",
+  "objecter_mclock_service_tracker",
   NULL
 };
 
@@ -222,12 +223,26 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("crush_location")) {
     update_crush_location();
   }
+  if (changed.count("objecter_mclock_service_tracker")) {
+    update_mclock_service_tracker();
+  }
 }
 
 void Objecter::update_crush_location()
 {
   unique_lock wl(rwlock);
   crush_location = cct->crush_location.get_location();
+}
+
+void Objecter::update_mclock_service_tracker()
+{
+  unique_lock wl(rwlock);
+  if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
+    qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
+  } else if (!cct->_conf->objecter_mclock_service_tracker) {
+    qos_trk.reset();
+  }
+  mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
 }
 
 // messages ------------------------------
@@ -3167,6 +3182,11 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
+  if (mclock_service_tracker) {
+    dmc::ReqParams rp = qos_trk->get_req_params(op->target.osd);
+    m->set_qos_params(rp);
+  }
+
   logger->inc(l_osdc_op_send);
   logger->inc(l_osdc_op_send_bytes, m->get_data().length());
 
@@ -3490,6 +3510,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
+  if (mclock_service_tracker) {
+    qos_trk->track_resp(op->target.osd, m->get_qos_resp());
+  }
   ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
   _finish_op(op, 0);
 

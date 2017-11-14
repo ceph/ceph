@@ -556,6 +556,8 @@ set(libcommon_files
   common/Cycles.cc
   common/scrub_types.cc
   common/bit_str.cc
+  dmclock/src/dmclock_util.cc
+  dmclock/support/src/run_every.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc

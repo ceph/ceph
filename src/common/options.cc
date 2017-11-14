@@ -1577,6 +1577,12 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("objecter_mclock_service_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("whether to enable mclock service tracker for tracking completed IOs in a distributed environment")
+    .set_long_description("When using the client-side dmclock qos service in a distributed environment, you must enable mclock service tracker for tracking completed IOs.")
+    .add_see_also("osd_op_queue"),
+
     Option("filer_max_purge_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description("Max in-flight operations for purging a striped range (e.g., MDS journal)"),
