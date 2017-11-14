@@ -76,6 +76,8 @@ struct Option {
 
   unsigned flags = 0;
 
+  int subsys = -1; // if >= 0, we are a subsys debug level
+
   value_t value;
   value_t daemon_value;
 
@@ -262,6 +264,11 @@ struct Option {
   Option &set_validator(const validator_fn_t  &validator_)
   {
     validator = validator_;
+    return *this;
+  }
+
+  Option &set_subsys(int s) {
+    subsys = s;
     return *this;
   }
 

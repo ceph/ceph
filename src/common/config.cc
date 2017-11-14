@@ -12,6 +12,8 @@
  *
  */
 
+#include <boost/type_traits.hpp>
+
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -20,8 +22,6 @@
 #include "osd/osd_types.h"
 #include "common/errno.h"
 #include "common/hostname.h"
-
-#include <boost/type_traits.hpp>
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
@@ -91,6 +91,49 @@ md_config_t::md_config_t(bool is_daemon)
     schema.emplace(std::piecewise_construct,
 		   std::forward_as_tuple(i.name),
 		   std::forward_as_tuple(i));
+  }
+
+  // Define the debug_* options as well.
+  subsys_options.reserve(subsys.get_num());
+  for (unsigned i = 0; i < subsys.get_num(); ++i) {
+    string name = string("debug_") + subsys.get_name(i);
+    subsys_options.push_back(
+      Option(name, Option::TYPE_STR, Option::LEVEL_ADVANCED));
+    Option& opt = subsys_options.back();
+    opt.set_default(stringify(subsys.get_log_level(i)) + "/" +
+		    stringify(subsys.get_gather_level(i)));
+    string desc = string("Debug level for ") + subsys.get_name(i);
+    opt.set_description(desc.c_str());
+    opt.set_safe();
+    opt.set_long_description("The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.");
+    opt.set_subsys(i);
+    opt.set_validator([](std::string *value, std::string *error_message) {
+	int m, n;
+	int r = sscanf(value->c_str(), "%d/%d", &m, &n);
+	if (r >= 1) {
+	  if (m < 0 || m > 99) {
+	    *error_message = "value must be in range [0, 99]";
+	    return -ERANGE;
+	  }
+	  if (r == 2) {
+	    if (n < 0 || n > 99) {
+	      *error_message = "value must be in range [0, 99]";
+	      return -ERANGE;
+	    }
+	  } else {
+	    // normalize to M/N
+	    n = m;
+	    *value = stringify(m) + "/" + stringify(n);
+	  }
+	} else {
+	  *error_message = "value must take the form N or N/M, where N and M are integers";
+	  return -EINVAL;
+	}
+	return 0;
+      });
+  }
+  for (auto& opt : subsys_options) {
+    schema.emplace(opt.name, opt);
   }
 
   // Populate list of legacy_values according to the OPTION() definitions
@@ -325,30 +368,6 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     }
   }
 
-  // subsystems?
-  for (size_t o = 0; o < subsys.get_num(); o++) {
-    std::string as_option("debug_");
-    as_option += subsys.get_name(o);
-    std::string val;
-    int ret = _get_val_from_conf_file(my_sections, as_option.c_str(), val, false);
-    if (ret == 0) {
-      int log, gather;
-      int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
-      if (r >= 1) {
-	if (r < 2) {
-	  gather = log;
-	}
-        if (log < 0 || gather < 0) {
-          cerr << "ERROR for " << as_option << "."
-	       << "log nor gather levels cannot be negative!";
-        }
-	//	cout << "config subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
-	subsys.set_log_level(o, log);
-	subsys.set_gather_level(o, gather);
-      }
-    }	
-  }
-
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
   for (ConfFile::const_section_iter_t s = cf.sections_begin();
@@ -415,20 +434,6 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
   if (f) {
     f->dump_string("name", stringify(name));
     f->dump_string("cluster", cluster);
-  }
-  for (size_t o = 0; o < subsys.get_num(); o++) {
-    if (out)
-      *out << "debug_" << subsys.get_name(o)
-	   << " = " << subsys.get_log_level(o)
-	   << "/" << subsys.get_gather_level(o) << std::endl;
-    if (f) {
-      ostringstream ss;
-      std::string debug_name = "debug_";
-      debug_name += subsys.get_name(o);
-      ss << subsys.get_log_level(o)
-	 << "/" << subsys.get_gather_level(o);
-      f->dump_string(debug_name.c_str(), ss.str());
-    }
   }
   for (const auto& i: schema) {
     const Option &opt = i.second;
@@ -548,39 +553,6 @@ int md_config_t::parse_option(std::vector<const char*>& args,
   int ret = 0;
   size_t o = 0;
   std::string val;
-
-  // subsystems?
-  for (o = 0; o < subsys.get_num(); o++) {
-    std::string as_option("--");
-    as_option += "debug_";
-    as_option += subsys.get_name(o);
-    ostringstream err;
-    if (ceph_argparse_witharg(args, i, &val, err,
-			      as_option.c_str(), (char*)NULL)) {
-      if (err.tellp()) {
-        if (oss) {
-          *oss << err.str();
-        }
-        ret = -EINVAL;
-        break;
-      }
-      int log, gather;
-      int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
-      if (r >= 1) {
-	if (r < 2)
-	  gather = log;
-	//	  cout << "subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
-	subsys.set_log_level(o, log);
-	subsys.set_gather_level(o, gather);
-	if (oss)
-	  *oss << "debug_" << subsys.get_name(o) << "=" << log << "/" << gather << " ";
-      }
-      break;
-    }	
-  }
-  if (o < subsys.get_num()) {
-    return ret;
-  }
 
   std::string option_name;
   std::string error_message;
@@ -829,30 +801,6 @@ int md_config_t::set_val(const std::string &key, const char *val,
 
   string k(ConfFile::normalize_key_name(key));
 
-  // subsystems?
-  if (strncmp(k.c_str(), "debug_", 6) == 0) {
-    for (size_t o = 0; o < subsys.get_num(); o++) {
-      std::string as_option = std::string("debug_") + subsys.get_name(o);
-      if (k == as_option) {
-	int log, gather;
-	int r = sscanf(v.c_str(), "%d/%d", &log, &gather);
-	if (r >= 1) {
-	  if (r < 2) {
-	    gather = log;
-          }
-	  subsys.set_log_level(o, log);
-	  subsys.set_gather_level(o, gather);
-          if (err_ss) *err_ss << "Set " << k << " to " << log << "/" << gather;
-	  return 0;
-	}
-        if (err_ss) {
-          *err_ss << "Invalid debug level, should be <int> or <int>/<int>";
-        }
-	return -EINVAL;
-      }
-    }	
-  }
-
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
@@ -964,18 +912,6 @@ int md_config_t::_get_val(const std::string &key, char **buf, int len) const
   }
 
   string k(ConfFile::normalize_key_name(key));
-  // subsys?
-  for (size_t o = 0; o < subsys.get_num(); o++) {
-    std::string as_option = std::string("debug_") + subsys.get_name(o);
-    if (k == as_option) {
-      if (len == -1) {
-	*buf = (char*)malloc(20);
-	len = 20;
-      }
-      int l = snprintf(*buf, len, "%d/%d", subsys.get_log_level(o), subsys.get_gather_level(o));
-      return (l == len) ? -ENAMETOOLONG : 0;
-    }
-  }
 
   // couldn't find a configuration option with key 'k'
   return -ENOENT;
@@ -992,9 +928,6 @@ void md_config_t::get_all_keys(std::vector<std::string> *keys) const {
     if (opt.type == Option::TYPE_BOOL) {
       keys->push_back(negative_flag_prefix + opt.name);
     }
-  }
-  for (size_t i = 0; i < subsys.get_num(); ++i) {
-    keys->push_back(std::string("debug_") + subsys.get_name(i));
   }
 }
 
@@ -1076,7 +1009,22 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
     update_legacy_val(opt, legacy_ptr_iter->second);
   }
 
-  changed.insert(opt.name);
+  // Was this a debug_* option update?
+  if (opt.subsys >= 0) {
+    int log, gather;
+    int r = sscanf(raw_val.c_str(), "%d/%d", &log, &gather);
+    if (r >= 1) {
+      if (r < 2) {
+	gather = log;
+      }
+      subsys.set_log_level(opt.subsys, log);
+      subsys.set_gather_level(opt.subsys, gather);
+    }
+  } else {
+    // normal option, advertise the change.
+    changed.insert(opt.name);
+  }
+
   return 0;
 }
 

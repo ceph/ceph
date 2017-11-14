@@ -75,7 +75,7 @@ TEST(LibRadosConfig, DebugLevels) {
   memset(buf, 0, sizeof(buf));
   ret = rados_conf_get(cl, "debug_rados", buf, sizeof(buf));
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(0, strncmp("3/", buf, 2));
+  ASSERT_EQ(0, strcmp("3/3", buf));
 
   ret = rados_conf_set(cl, "debug_rados", "7/8");
   ASSERT_EQ(ret, 0);
