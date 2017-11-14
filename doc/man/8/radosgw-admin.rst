@@ -131,6 +131,15 @@ which are as follows:
 :command:`zone list`
   List all zones set on this cluster.
 
+:command:`metadata sync status`
+  Get metadata sync status.
+
+:command:`metadata sync init`
+  Init metadata sync.
+
+:command:`metadata sync run`
+  Run metadata sync.
+
 :command:`pool add`
   Add an existing pool for data placement.
 
