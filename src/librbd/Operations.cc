@@ -585,6 +585,7 @@ void Operations<I>::execute_rename(const std::string &dest_name,
 	m_image_ctx.image_watcher->register_watch(on_finish);
       });
     on_finish = new FunctionContext([this, dest_name, on_finish](int r) {
+        RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
 	operation::RenameRequest<I> *req = new operation::RenameRequest<I>(
 	  m_image_ctx, on_finish, dest_name);
 	req->send();
