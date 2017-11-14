@@ -57,7 +57,6 @@ extern "C" {
 #define RBD_FLAG_OBJECT_MAP_INVALID   (1<<0)
 #define RBD_FLAG_FAST_DIFF_INVALID    (1<<1)
 
-typedef void *rbd_snap_t;
 typedef void *rbd_image_t;
 typedef void *rbd_image_options_t;
 
@@ -73,6 +72,13 @@ typedef struct {
   uint64_t size;
   const char *name;
 } rbd_snap_info_t;
+
+typedef struct {
+  const char *pool_name;
+  const char *image_name;
+  const char *image_id;
+  bool trash;
+} rbd_child_info_t;
 
 #define RBD_MAX_IMAGE_NAME_SIZE 96
 #define RBD_MAX_BLOCK_NAME_SIZE 24
@@ -541,6 +547,12 @@ CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
 CEPH_RBD_API ssize_t rbd_list_children(rbd_image_t image, char *pools,
                                        size_t *pools_len, char *images,
                                        size_t *images_len);
+CEPH_RBD_API int rbd_list_children2(rbd_image_t image,
+                                    rbd_child_info_t *children,
+                                    int *max_children);
+CEPH_RBD_API void rbd_list_child_cleanup(rbd_child_info_t *child);
+CEPH_RBD_API void rbd_list_children_cleanup(rbd_child_info_t *children,
+                                            size_t num_children);
 
 /**
  * @defgroup librbd_h_locking Advisory Locking

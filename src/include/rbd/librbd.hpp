@@ -101,6 +101,13 @@ namespace librbd {
     time_t deferment_end_time;
   } trash_image_info_t;
 
+  typedef struct {
+    std::string pool_name;
+    std::string image_name;
+    std::string image_id;
+    bool trash;
+  } child_info_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -311,6 +318,11 @@ public:
    * of this image at the currently set snapshot.
    */
   int list_children(std::set<std::pair<std::string, std::string> > *children);
+  /**
+  * Returns a structure of poolname, imagename, imageid and trash flag
+  * for each clone of this image at the currently set snapshot.
+  */
+  int list_children2(std::vector<librbd::child_info_t> *children);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,

@@ -1292,11 +1292,30 @@ namespace librbd {
   {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
-    int r = librbd::list_children(ictx, *children);
+    vector<librbd::child_info_t> children2;
+    int r = librbd::list_children(ictx, &children2);
     if (r >= 0) {
-      for (set<pair<string, string> >::const_iterator it = children->begin();
-	   it != children->end(); ++it) {
-	tracepoint(librbd, list_children_entry, it->first.c_str(), it->second.c_str());
+      for (std::vector<librbd::child_info_t>::iterator it = children2.begin();
+           it != children2.end(); ++it) {
+        if (!it->trash) {
+          children->insert(make_pair(it->pool_name, it->image_name));
+          tracepoint(librbd, list_children_entry, it->pool_name.c_str(), it->image_name.c_str());
+        }
+      }
+    }
+    tracepoint(librbd, list_children_exit, r);
+    return r;
+  }
+
+  int Image::list_children2(vector<librbd::child_info_t> *children)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+    int r = librbd::list_children(ictx, children);
+    if (r >= 0) {
+      for (std::vector<librbd::child_info_t>::iterator it = children->begin();
+           it != children->end(); ++it) {
+        tracepoint(librbd, list_children_entry, it->pool_name.c_str(), it->image_name.c_str());
       }
     }
     tracepoint(librbd, list_children_exit, r);
@@ -3364,11 +3383,19 @@ extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
   set<pair<string, string> > image_set;
+  vector<librbd::child_info_t> children;
 
-  int r = librbd::list_children(ictx, image_set);
+  int r = librbd::list_children(ictx, &children);
   if (r < 0) {
     tracepoint(librbd, list_children_exit, r);
     return r;
+  }
+
+  for (std::vector<librbd::child_info_t>::iterator it = children.begin();
+       it != children.end(); ++it) {
+    if (!it->trash) {
+      image_set.insert(make_pair(it->pool_name, it->image_name));
+    }
   }
 
   size_t pools_total = 0;
@@ -3407,6 +3434,72 @@ extern "C" ssize_t rbd_list_children(rbd_image_t image, char *pools,
   ssize_t ret = image_set.size();
   tracepoint(librbd, list_children_exit, ret);
   return ret;
+}
+
+extern "C" int rbd_list_children2(rbd_image_t image,
+                                  rbd_child_info_t *children,
+	                          int *max_children)
+{
+  vector<librbd::child_info_t> cpp_children;
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, list_children_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+
+  if (!max_children) {
+    tracepoint(librbd, list_children_exit, -EINVAL);
+    return -EINVAL;
+  }
+
+  int r = librbd::list_children(ictx, &cpp_children);
+  if (r == -ENOENT) {
+    tracepoint(librbd, list_children_exit, *max_children);
+    r = 0;
+  }
+  if (r < 0) {
+    tracepoint(librbd, list_children_exit, *max_children);
+    return r;
+  }
+  if (*max_children < (int)cpp_children.size() + 1) {
+    *max_children = (int)cpp_children.size() + 1;
+    tracepoint(librbd, list_children_exit, *max_children);
+    return -ERANGE;
+  }
+
+  int i;
+  for (i = 0; i < (int)cpp_children.size(); i++) {
+    children[i].pool_name = strdup(cpp_children[i].pool_name.c_str());
+    children[i].image_name = strdup(cpp_children[i].image_name.c_str());
+    children[i].image_id = strdup(cpp_children[i].image_id.c_str());
+    children[i].trash = cpp_children[i].trash;
+    if (!children[i].pool_name || !children[i].image_name ||
+        !children[i].image_id) {
+      rbd_list_children_cleanup(&children[i], i);
+      tracepoint(librbd, list_children_exit, *max_children);
+      return -ENOMEM;
+    }
+    tracepoint(librbd, list_children_entry, children[i].pool_name, children[i].image_name);
+  }
+  children[i].pool_name = NULL;
+  children[i].image_name = NULL;
+  children[i].image_id = NULL;
+
+  r = (int)cpp_children.size();
+  tracepoint(librbd, list_children_exit, *max_children);
+  return r;
+}
+
+extern "C" void rbd_list_child_cleanup(rbd_child_info_t *child)
+{
+  free((void *)child->pool_name);
+  free((void *)child->image_name);
+  free((void *)child->image_id);
+}
+
+extern "C" void rbd_list_children_cleanup(rbd_child_info_t *children,
+                                          size_t num_children)
+{
+  for (size_t i=0; i < num_children; i++) {
+    rbd_list_child_cleanup(&children[i]);
+  }
 }
 
 extern "C" ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
