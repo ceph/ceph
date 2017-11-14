@@ -403,7 +403,7 @@ class RGWEnv {
 public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const boost::string_ref& name, const boost::string_ref& val);
+  void set(std::string name, std::string val);
   const char *get(const char *name, const char *def_val = nullptr) const;
   int get_int(const char *name, int def_val = 0) const;
   bool get_bool(const char *name, bool def_val = 0);
