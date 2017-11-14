@@ -86,6 +86,9 @@
     zone placement add         add a zone placement target
     zone placement modify      modify a zone placement target
     zone placement rm          remove a zone placement target
+    metadata sync status       get metadata sync status
+    metadata sync init         init metadata sync
+    metadata sync run          run metadata sync
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
