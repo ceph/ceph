@@ -5204,6 +5204,7 @@ TEST_F(TestLibRBD, FlushEmptyOpsOnExternalSnapshot) {
   read_comp->release();
 }
 
+#if 0
 TEST_F(TestLibRBD, TestImageOptions)
 {
   rados_ioctx_t ioctx;
@@ -5279,6 +5280,7 @@ TEST_F(TestLibRBD, TestImageOptions)
 
   rados_ioctx_destroy(ioctx);
 }
+#endif
 
 TEST_F(TestLibRBD, TestImageOptionsPP)
 {

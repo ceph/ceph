@@ -6,6 +6,7 @@ set(librbd_test
   test_internal.cc
   test_mirroring.cc
   test_BlockGuard.cc
+  test_WriteLogMap.cc
   test_Groups.cc
   test_MirroringWatcher.cc
   test_ObjectMap.cc
