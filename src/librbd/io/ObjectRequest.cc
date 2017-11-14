@@ -418,7 +418,7 @@ void AbstractObjectWriteRequest::guard_write()
 
 bool AbstractObjectWriteRequest::should_complete(int r)
 {
-  ldout(m_ictx->cct, 20) << get_op_type() << m_oid << " "
+  ldout(m_ictx->cct, 20) << get_op_type() << " " << m_oid << " "
                          << m_object_off << "~" << m_object_len
                          << " r = " << r << dendl;
 
