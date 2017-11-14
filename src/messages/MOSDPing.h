@@ -107,14 +107,7 @@ public:
       // we are targeting jumbo ethernet frames around 9000 bytes, 16k should
       // be more than sufficient!  the compiler will statically zero this so
       // that at runtime we are only adding a bufferptr reference to it.
-      static char zeros[16384] = {};
-      while (s > sizeof(zeros)) {
-        payload.append(buffer::create_static(sizeof(zeros), zeros));
-        s -= sizeof(zeros);
-      }
-      if (s) {
-        payload.append(buffer::create_static(s, zeros));
-      }
+      payload.append_zero_static_precalc_crc(s, 0);
     }
   }
 
