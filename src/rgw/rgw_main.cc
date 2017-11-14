@@ -79,17 +79,14 @@ static sig_t sighandler_alrm;
 class RGWProcess;
 
 static int signal_fd[2] = {0, 0};
-static std::atomic<int64_t> disable_signal_fd = { 0 };
 
 void signal_shutdown()
 {
-  if (!disable_signal_fd) {
-    int val = 0;
-    int ret = write(signal_fd[0], (char *)&val, sizeof(val));
-    if (ret < 0) {
-      derr << "ERROR: " << __func__ << ": write() returned "
-           << cpp_strerror(errno) << dendl;
-    }
+  int val = 0;
+  int ret = write(signal_fd[0], (char *)&val, sizeof(val));
+  if (ret < 0) {
+    derr << "ERROR: " << __func__ << ": write() returned "
+         << cpp_strerror(errno) << dendl;
   }
 }
 
