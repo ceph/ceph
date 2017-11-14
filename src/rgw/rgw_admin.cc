@@ -82,6 +82,7 @@ void usage()
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
@@ -91,6 +92,7 @@ void usage()
   cout << "  object rm                  remove object\n";
   cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
+  cout << "  object rewrite             rewrite the specified object\n";
   cout << "  objects expire             run expired objects cleanup\n";
   cout << "  period delete              delete a period\n";
   cout << "  period get                 get period info\n";
@@ -303,6 +305,9 @@ void usage()
   cout << "                             object deletions by not involving GC\n";
   cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
   cout << "                             ignores bucket index consistency\n";
+  cout << "   --min-rewrite-size        specify the min object size condition for bucket rewrite (default 4M)\n";
+  cout << "   --max-rewrite-size        specify the max object size condition for bucket rewrite (default ULLONG_MAX)\n";
+  cout << "   --min-rewrite-stripe-size specify the min stripe size condition for object rewrite (default 0)\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
