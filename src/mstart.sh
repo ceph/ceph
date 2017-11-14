@@ -52,6 +52,7 @@ export CEPH_PORT=$base_port
 export CEPH_RGW_PORT=$rgw_port
 
 mkdir -p $VSTART_DEST
+cp $root_path/ceph.conf $VSTART_DEST
 
 echo "Cluster dest path: $VSTART_DEST"
 echo "monitors base port: $CEPH_PORT"
