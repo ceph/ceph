@@ -4889,25 +4889,18 @@ void RGWPutLC::execute()
 void RGWDeleteLC::execute()
 {
   bufferlist bl;
-  map<string, bufferlist> orig_attrs, attrs;
+  map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
   rgw_raw_obj obj;
   store->get_bucket_instance_obj(s->bucket, obj);
   store->set_prefetch_data(s->obj_ctx, obj);
-  op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+  op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
   if (op_ret < 0)
     return;
-    
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-      const string& name = iter->first;
-      dout(10) << "DeleteLC : attr: " << name << dendl;
-      if (name.compare(0, (sizeof(RGW_ATTR_LC) - 1), RGW_ATTR_LC) != 0) {
-        if (attrs.find(name) == attrs.end()) {
-        attrs[name] = iter->second;
-        }
-      }
-    }
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+
+  attrs.erase(RGW_ATTR_LC);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				&s->bucket_info.objv_tracker);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket=" << s->bucket.name
             << " returned err=" << op_ret << dendl;
@@ -5008,24 +5001,21 @@ void RGWDeleteCORS::execute()
   }
   store->get_bucket_instance_obj(s->bucket, obj);
   store->set_prefetch_data(s->obj_ctx, obj);
-  map<string, bufferlist> orig_attrs, attrs, rmattrs;
+  map<string, bufferlist> attrs;
   map<string, bufferlist>::iterator iter;
 
-  op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+  op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
   if (op_ret < 0)
     return;
 
-  /* only remove meta attrs */
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    dout(10) << "DeleteCORS : attr: " << name << dendl;
-    if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
-      rmattrs[name] = iter->second;
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
+  attrs.erase(RGW_ATTR_CORS);
+  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				&s->bucket_info.objv_tracker);
+  if (op_ret < 0) {
+    ldout(s->cct, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket.name
+            << " returned err=" << op_ret << dendl;
+    return;
   }
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
