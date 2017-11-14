@@ -140,6 +140,15 @@ which are as follows:
 :command:`metadata sync run`
   Run metadata sync.
 
+:command:`data sync status`
+  Get data sync status of the specified source zone.
+  
+:command:`data sync init`
+  Init data sync for the specified source zone.
+
+:command:`data sync run`
+  Run data sync for the specified source zone.
+
 :command:`pool add`
   Add an existing pool for data placement.
 
@@ -353,6 +362,10 @@ Options
 .. option:: --rgw-zone=<zone>
 
 	Zone in which radosgw is running.
+
+.. option:: --source-zone=<zone>
+
+  Specify the source zone for data sync.
 
 .. option:: --fix
 
