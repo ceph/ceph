@@ -1056,9 +1056,19 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   std::string rwl_path = cct->_conf->get_val<std::string>("rbd_rwl_path");
   ldout(cct,5) << "rbd_rwl_path:" << rwl_path << dendl;
 
-  m_log_pool_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".pool";
+  std::string log_pool_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".pool";
+  std::string log_poolset_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".poolset";
   m_log_pool_size = ceph::max(cct->_conf->get_val<uint64_t>("rbd_rwl_size"), MIN_POOL_SIZE);
   //m_policy->set_block_count(m_image_ctx.size / BLOCK_SIZE);
+
+  if (access(log_poolset_name.c_str(), F_OK) == 0) {
+    m_log_pool_name = log_poolset_name;
+  } else {
+    m_log_pool_name = log_pool_name;
+    lderr(cct) << "failed to open poolset" << log_poolset_name
+	       << ":" << pmemobj_errormsg()
+	       << ". Opening/creating simple/unreplicated pool" << dendl;
+  }
   
   if (access(m_log_pool_name.c_str(), F_OK) != 0) {
     if ((m_log_pool =
@@ -1174,7 +1184,9 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
-      pmemobj_close(m_log_pool);
+      if (NULL != m_log_pool) {
+	pmemobj_close(m_log_pool);
+      }
       on_finish->complete(r);
     });
   if (m_image_ctx.persistent_cache_enabled) {
