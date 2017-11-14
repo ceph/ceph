@@ -64,7 +64,7 @@ namespace librbd {
 
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
-		    std::set<std::pair<std::string, std::string> > & names);
+                    std::vector<child_info_t> *names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
