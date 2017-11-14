@@ -3237,12 +3237,13 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
   string& serial = params[0];
   string& otp = params[1];
 
-  auto i = user->mfa_devices.find(serial);
-  if (i == user->mfa_devices.end()) {
+  auto i = user->mfa_ids.find(serial);
+  if (i == user->mfa_ids.end()) {
     ldout(store->ctx(), 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
     return -EACCES;
   }
 
+#if 0
   string& seed = i->second;
 
   utime_t now = ceph_clock_now();
@@ -3254,6 +3255,7 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
     ldout(cct, 5) << "NOTICE: totp token failed to validate" << dendl;
     return -EACCES;
   }
+#endif
 
   *verified = true;
 
