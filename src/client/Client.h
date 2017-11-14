@@ -139,6 +139,9 @@ typedef int (*client_getgroups_callback_t)(void *handle, gid_t **sgids);
 typedef void(*client_switch_interrupt_callback_t)(void *handle, void *data);
 typedef mode_t (*client_umask_callback_t)(void *handle);
 
+/* Callback for delegation recalls */
+typedef void (*ceph_deleg_cb_t)(Fh *fh, void *priv);
+
 struct client_callback_args {
   void *handle;
   client_ino_callback_t ino_cb;
@@ -404,6 +407,8 @@ protected:
 public:
   entity_name_t get_myname() { return messenger->get_myname(); } 
   void _sync_write_commit(Inode *in);
+  void wait_on_list(list<Cond*>& ls);
+  void signal_cond_list(list<Cond*>& ls);
 
 protected:
   std::unique_ptr<Filer>             filer;
@@ -482,8 +487,6 @@ protected:
 
   // helpers
   void wake_inode_waiters(MetaSession *s);
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
 
   void wait_on_context_list(list<Context*>& ls);
   void signal_context_list(list<Context*>& ls);
@@ -494,12 +497,16 @@ protected:
   void put_inode(Inode *in, int n=1);
   void close_dir(Dir *dir);
 
+  // same as unmount() but for when the client_lock is already held
+  void _unmount();
+
   friend class C_Client_FlushComplete; // calls put_inode()
   friend class C_Client_CacheInvalidate;  // calls ino_invalidate_cb
   friend class C_Client_DentryInvalidate;  // calls dentry_invalidate_cb
   friend class C_Block_Sync; // Calls block map and protected helpers
   friend class C_Client_RequestInterrupt;
   friend class C_Client_Remount;
+  friend class C_Deleg_Timeout; // Asserts on client_lock, called when a delegation is unreturned
   friend void intrusive_ptr_release(Inode *in);
 
   //int get_cache_size() { return lru.lru_get_size(); }
@@ -731,6 +738,7 @@ protected:
   // fs ops.
 private:
 
+  uint32_t deleg_timeout;
   void fill_dirent(struct dirent *de, const char *name, int type, uint64_t ino, loff_t next_off);
 
   // some readdir helpers
@@ -1237,6 +1245,9 @@ public:
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const struct md_config_t *conf,
 	                          const std::set <std::string> &changed) override;
+  uint32_t get_deleg_timeout() { return deleg_timeout; }
+  int set_deleg_timeout(uint32_t timeout);
+  int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 };
 
 /**

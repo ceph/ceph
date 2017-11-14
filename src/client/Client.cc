@@ -83,6 +83,7 @@
 #include "Client.h"
 #include "Inode.h"
 #include "Dentry.h"
+#include "Delegation.h"
 #include "Dir.h"
 #include "ClientSnapRealm.h"
 #include "Fh.h"
@@ -253,7 +254,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     mounted(false), unmounting(false), blacklisted(false),
     local_osd(-1), local_osd_epoch(0),
     unsafe_sync_write(0),
-    client_lock("Client::client_lock")
+    client_lock("Client::client_lock"),
+    deleg_timeout(0)
 {
   _reset_faked_inos();
   //
@@ -5060,10 +5062,17 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   check_cap_issue(in, cap, new_caps);
 
   // update caps
-  if (old_caps & ~new_caps) { 
-    ldout(cct, 10) << "  revocation of " << ccap_string(~new_caps & old_caps) << dendl;
+  int revoked = old_caps & ~new_caps;
+  if (revoked) {
+    ldout(cct, 10) << "  revocation of " << ccap_string(revoked) << dendl;
     cap->issued = new_caps;
     cap->implemented |= new_caps;
+
+    // recall delegations if we're losing caps necessary for them
+    if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_RD))
+      in->recall_deleg(false);
+    else if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_WR))
+      in->recall_deleg(true);
 
     if (((used & ~new_caps) & CEPH_CAP_FILE_BUFFER)
         && !_flush(in, new C_Client_FlushComplete(this, in))) {
@@ -5821,15 +5830,15 @@ void Client::flush_mdlog(MetaSession *session)
 }
 
 
-void Client::unmount()
+void Client::_unmount()
 {
-  Mutex::Locker lock(client_lock);
-
   if (unmounting)
     return;
 
   ldout(cct, 2) << "unmounting" << dendl;
   unmounting = true;
+
+  deleg_timeout = 0;
 
   flush_mdlog_sync(); // flush the mdlog for pending requests, if any
   while (!mds_requests.empty()) {
@@ -5942,6 +5951,12 @@ void Client::unmount()
   mounted = false;
 
   ldout(cct, 2) << "unmounted." << dendl;
+}
+
+void Client::unmount()
+{
+  Mutex::Locker lock(client_lock);
+  _unmount();
 }
 
 void Client::flush_cap_releases()
@@ -8361,6 +8376,8 @@ int Client::_release_fh(Fh *f)
   Inode *in = f->inode.get();
   ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
 
+  in->unset_deleg(f);
+
   if (in->snapid == CEPH_NOSNAP) {
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
@@ -8412,11 +8429,11 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
-  if ((flags & O_TRUNC) == 0 &&
-      in->caps_issued_mask(want)) {
+  if ((flags & O_TRUNC) == 0 && in->caps_issued_mask(want)) {
     // update wanted?
     check_caps(in, CHECK_CAPS_NODELAY);
   } else {
+
     MetaRequest *req = new MetaRequest(CEPH_MDS_OP_OPEN);
     filepath path;
     in->make_nosnap_relative_path(path);
@@ -8431,6 +8448,34 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     req->head.args.open.old_size = in->size;   // for O_TRUNC
     req->set_inode(in);
     result = make_request(req, perms);
+
+    /*
+     * NFS expects that delegations will be broken on a conflicting open,
+     * not just when there is actual conflicting access to the file. SMB leases
+     * and oplocks also have similar semantics.
+     *
+     * Ensure that clients that have delegations enabled will wait on minimal
+     * caps during open, just to ensure that other clients holding delegations
+     * return theirs first.
+     */
+    if (deleg_timeout && result == 0) {
+      int need = 0, have;
+
+      if (cmode & CEPH_FILE_MODE_WR)
+        need |= CEPH_CAP_FILE_WR;
+      if (cmode & CEPH_FILE_MODE_RD)
+        need |= CEPH_CAP_FILE_RD;
+
+      result = get_caps(in, need, want, &have, -1);
+      if (result < 0) {
+	ldout(cct, 1) << "Unable to get caps after open of inode " << *in <<
+			  " . Denying open: " <<
+			  cpp_strerror(result) << dendl;
+	in->put_open_ref(cmode);
+      } else {
+	put_cap_ref(in, need);
+      }
+    }
   }
 
   // success?
@@ -11911,8 +11956,9 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   req->set_filepath(path);
 
   InodeRef otherin;
-
+  Inode *in;
   Dentry *de;
+
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
@@ -11923,7 +11969,10 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
   res = _lookup(dir, name, 0, &otherin, perm);
   if (res < 0)
     goto fail;
-  req->set_other_inode(otherin.get());
+
+  in = otherin.get();
+  req->set_other_inode(in);
+  in->break_all_delegs();
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
 
   req->set_inode(dir);
@@ -12093,15 +12142,26 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     res = _lookup(fromdir, fromname, 0, &oldin, perm);
     if (res < 0)
       goto fail;
-    req->set_old_inode(oldin.get());
+
+    Inode *oldinode = oldin.get();
+    oldinode->break_all_delegs();
+    req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
 
     res = _lookup(todir, toname, 0, &otherin, perm);
-    if (res != 0 && res != -ENOENT) {
-      goto fail;
-    } else if (res == 0) {
-      req->set_other_inode(otherin.get());
+    switch (res) {
+    case 0:
+      {
+	Inode *in = otherin.get();
+	req->set_other_inode(in);
+	in->break_all_delegs();
+      }
       req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
+      break;
+    case -ENOENT:
+      break;
+    default:
+      goto fail;
     }
 
     req->set_inode(todir);
@@ -12172,6 +12232,7 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return -EDQUOT;
   }
 
+  in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   filepath path(newname, dir->ino);
@@ -13014,6 +13075,48 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
   return _flock(fh, cmd, owner);
 }
 
+int Client::set_deleg_timeout(uint32_t timeout)
+{
+  Mutex::Locker lock(client_lock);
+
+  /*
+   * The whole point is to prevent blacklisting so we must time out the
+   * delegation before the session autoclose timeout kicks in.
+   */
+  if (timeout >= mdsmap->get_session_autoclose())
+    return -EINVAL;
+
+  deleg_timeout = timeout;
+  return 0;
+}
+
+int Client::ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv)
+{
+  int ret = -EINVAL;
+
+  Mutex::Locker lock(client_lock);
+
+  if (!mounted)
+    return -ENOTCONN;
+
+  Inode *inode = fh->inode.get();
+
+  switch(cmd) {
+  case CEPH_DELEGATION_NONE:
+    inode->unset_deleg(fh);
+    ret = 0;
+    break;
+  default:
+    try {
+      ret = inode->set_deleg(fh, cmd, cb, priv);
+    } catch (std::bad_alloc) {
+      ret = -ENOMEM;
+    }
+    break;
+  }
+  return ret;
+}
+
 class C_Client_RequestInterrupt : public Context  {
 private:
   Client *client;
@@ -13736,6 +13839,8 @@ const char** Client::get_tracked_conf_keys() const
     "client_cache_size",
     "client_cache_mid",
     "client_acl_type",
+    "client_deleg_timeout",
+    "client_deleg_break_on_open",
     NULL
   };
   return keys;
@@ -13839,4 +13944,3 @@ void StandaloneClient::shutdown()
   objecter->shutdown();
   monclient->shutdown();
 }
-
