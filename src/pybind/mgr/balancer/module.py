@@ -11,6 +11,7 @@ import random
 import time
 from mgr_module import MgrModule, CommandResult
 from threading import Event
+from mgr_module import CRUSHMap
 
 # available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
 default_mode = 'none'
@@ -18,7 +19,6 @@ default_sleep_interval = 60   # seconds
 default_max_misplaced = .05    # max ratio of pgs replaced at a time
 
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
-
 
 class MappingState:
     def __init__(self, osdmap, pg_dump, desc=''):
@@ -451,6 +451,8 @@ class Module(MgrModule):
                     bytes_by_osd[osd] = 0
             for pgid, up in pm.iteritems():
                 for osd in [int(osd) for osd in up]:
+                    if osd == CRUSHMap.ITEM_NONE:
+                        continue
                     pgs_by_osd[osd] += 1
                     objects_by_osd[osd] += ms.pg_stat[pgid]['num_objects']
                     bytes_by_osd[osd] += ms.pg_stat[pgid]['num_bytes']
