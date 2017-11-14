@@ -89,11 +89,17 @@ which are as follows:
 :command:`bucket check`
   Check bucket index.
 
+:command:`bucket rewrite`
+  Rewrite all objects in the specified bucket.
+
 :command:`object rm`
   Remove an object.
 
 :command:`object unlink`
   Unlink object from bucket index.
+
+:command:`object rewrite`
+  Rewrite the specified object.
 
 :command:`quota set`
   Set quota params.
@@ -404,6 +410,19 @@ Options
 
 	Required for certain operations.
 
+.. option:: --min-rewrite-size
+
+    Specify the min object size condition for bucket rewrite (default 4M).
+
+.. option:: --max-rewrite-size
+
+    Specify the max object size condition for bucket rewrite (default ULLONG_MAX).
+
+.. option:: --min-rewrite-stripe-size
+
+    Specify the min stripe size condition for object rewrite,
+    default value is set to 0, in that case the specified object
+    will always be rewritten for restriping.
 
 Quota Options
 =============
