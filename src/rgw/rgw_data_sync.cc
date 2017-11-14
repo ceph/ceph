@@ -683,6 +683,7 @@ int RGWRemoteDataLog::init_sync_status(int num_shards)
   }
   RGWDataSyncEnv sync_env_local = sync_env;
   sync_env_local.http_manager = &http_manager;
+  sync_status.sync_info.num_shards = num_shards;
   auto instance_id = ceph::util::generate_random_number<uint64_t>();
   ret = crs.run(new RGWInitDataSyncStatusCoroutine(&sync_env_local, num_shards, instance_id, tn, &sync_status));
   http_manager.stop();
