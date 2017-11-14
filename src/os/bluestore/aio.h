@@ -45,6 +45,8 @@ struct aio_t {
   }
 };
 
+std::ostream& operator<<(std::ostream& os, const aio_t& aio);
+
 typedef boost::intrusive::list<
   aio_t,
   boost::intrusive::member_hook<
