@@ -143,6 +143,12 @@ void usage()
   cout << "  zone placement add         add a zone placement target\n";
   cout << "  zone placement modify      modify a zone placement target\n";
   cout << "  zone placement rm          remove a zone placement target\n";
+  cout << "  metadata sync status       get metadata sync status\n";
+  cout << "  metadata sync init         init metadata sync\n";
+  cout << "  metadata sync run          run metadata sync\n";
+  cout << "  data sync status           get data sync status of the specified source zone\n";
+  cout << "  data sync init             init data sync for the specified source zone\n";
+  cout << "  data sync run              run data sync for the specified source zone\n";
   cout << "  pool add                   add an existing pool for data placement\n";
   cout << "  pool rm                    remove an existing pool from data placement set\n";
   cout << "  pools list                 list placement active set\n";
