@@ -515,6 +515,7 @@ public:
   void split_old_inode(snapid_t snap);
   old_inode_t *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
+  bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
   // -- cache infrastructure --

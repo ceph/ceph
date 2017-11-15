@@ -2593,6 +2593,24 @@ void CInode::pre_cow_old_inode()
     cow_old_inode(follows, true);
 }
 
+bool CInode::has_snap_data(snapid_t snapid)
+{
+  bool found = snapid >= first && snapid <= last;
+  if (!found && is_multiversion()) {
+    auto p = old_inodes.lower_bound(snapid);
+    if (p != old_inodes.end()) {
+      if (p->second.first > snapid) {
+	if  (p != old_inodes.begin())
+	  --p;
+      }
+      if (p->second.first <= snapid && snapid <= p->first) {
+	found = true;
+      }
+    }
+  }
+  return found;
+}
+
 void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
 {
   dout(10) << "purge_stale_snap_data " << snaps << dendl;

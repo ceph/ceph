@@ -3057,6 +3057,9 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
 {
   MClientRequest *req = mdr->client_request;
 
+  if ((uint64_t)req->head.args.lookupino.snapid > 0)
+    return _lookup_snap_ino(mdr);
+
   inodeno_t ino = req->get_filepath().get_ino();
   CInode *in = mdcache->get_inode(ino);
   if (in && in->state_test(CInode::STATE_PURGING)) {
@@ -3087,7 +3090,7 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     rdlocks.insert(&dn->lock);
   }
 
-  unsigned mask = req->head.args.getattr.mask;
+  unsigned mask = req->head.args.lookupino.mask;
   if (mask) {
     Capability *cap = in->get_client_cap(mdr->get_client());
     int issued = 0;
@@ -3141,6 +3144,81 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     if (want_dentry)
       mdr->tracedn = dn;
     respond_to_request(mdr, 0);
+  }
+}
+
+void Server::_lookup_snap_ino(MDRequestRef& mdr)
+{
+  MClientRequest *req = mdr->client_request;
+
+  vinodeno_t vino;
+  vino.ino = req->get_filepath().get_ino();
+  vino.snapid = (__u64)req->head.args.lookupino.snapid;
+  inodeno_t parent_ino = (__u64)req->head.args.lookupino.parent;
+  __u32 hash = req->head.args.lookupino.hash;
+
+  dout(7) << "lookup_snap_ino " << vino << " parent " << parent_ino << " hash " << hash << dendl;
+
+  CInode *in = mdcache->lookup_snap_inode(vino);
+  if (!in) {
+    in = mdcache->get_inode(vino.ino);
+    if (in) {
+      if (in->state_test(CInode::STATE_PURGING) ||
+	  !in->has_snap_data(vino.snapid)) {
+	if (in->is_dir() || !parent_ino) {
+	  respond_to_request(mdr, -ESTALE);
+	  return;
+	}
+	in = NULL;
+      }
+    }
+  }
+
+  if (in) {
+    dout(10) << "reply to lookup_snap_ino " << *in << dendl;
+    mdr->snapid = vino.snapid;
+    mdr->tracei = in;
+    respond_to_request(mdr, 0);
+    return;
+  }
+
+  CInode *diri = NULL;
+  if (parent_ino) {
+    diri = mdcache->get_inode(parent_ino);
+    if (!diri) {
+      mdcache->open_ino(parent_ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr));
+      return;
+    }
+
+    if (!diri->is_dir()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    set<SimpleLock*> rdlocks, wrlocks, xlocks;
+    rdlocks.insert(&diri->dirfragtreelock);
+    if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
+      return;
+
+    frag_t frag = diri->dirfragtree[hash];
+    CDir *dir = try_open_auth_dirfrag(diri, frag, mdr);
+    if (!dir)
+      return;
+
+    if (!dir->is_complete()) {
+      if (dir->is_frozen()) {
+	mds->locker->drop_locks(mdr.get());
+	mdr->drop_local_auth_pins();
+	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+	return;
+      }
+      dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
+      return;
+    }
+
+    respond_to_request(mdr, -ESTALE);
+  } else {
+    mdcache->open_ino(vino.ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
   }
 }
 
