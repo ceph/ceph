@@ -619,6 +619,7 @@ int RGWReshard::update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& ne
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
+  entry.tenant = bucket_info.owner.tenant;
 
   int ret = get(entry);
   if (ret < 0) {
