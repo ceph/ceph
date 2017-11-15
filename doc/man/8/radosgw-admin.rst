@@ -131,6 +131,24 @@ which are as follows:
 :command:`zone list`
   List all zones set on this cluster.
 
+:command:`metadata sync status`
+  Get metadata sync status.
+
+:command:`metadata sync init`
+  Init metadata sync.
+
+:command:`metadata sync run`
+  Run metadata sync.
+
+:command:`data sync status`
+  Get data sync status of the specified source zone.
+  
+:command:`data sync init`
+  Init data sync for the specified source zone.
+
+:command:`data sync run`
+  Run data sync for the specified source zone.
+
 :command:`pool add`
   Add an existing pool for data placement.
 
@@ -344,6 +362,10 @@ Options
 .. option:: --rgw-zone=<zone>
 
 	Zone in which radosgw is running.
+
+.. option:: --source-zone=<zone>
+
+  Specify the source zone for data sync.
 
 .. option:: --fix
 
