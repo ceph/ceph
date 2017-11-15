@@ -7,3 +7,11 @@
   scrub scheduling) you can set the following option::
 
     osd scrub during recovery = true
+
+
+10.2.11
+-------
+
+* The RBD C API's rbd_discard method and the C++ API's Image::discard method
+  now enforce a maximum length of 2GB. This restriction prevents overflow of
+  the result code.

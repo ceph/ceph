@@ -2675,6 +2675,10 @@ extern "C" int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, discard_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only, ofs, len);
   int r = ictx->aio_work_queue->discard(ofs, len);
+  if (len > std::numeric_limits<int>::max()) {
+    tracepoint(librbd, discard_exit, -EINVAL);
+    return -EINVAL;
+  }
   tracepoint(librbd, discard_exit, r);
   return r;
 }
