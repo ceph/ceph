@@ -433,10 +433,19 @@ public:
       unsigned long new_size = info.size;
 
       if (new_size != size) {
+        dout(5) << "resize detected" << dendl;
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-            derr << "invalidate page cache failed: " << cpp_strerror(errno) << dendl;
-        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0)
+            derr << "invalidate page cache failed: " << cpp_strerror(errno)
+                 << dendl;
+        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
+        } else {
+          size = new_size;
+        }
+        if (ioctl(fd, BLKRRPART, NULL) < 0) {
+          derr << "rescan of partition table failed: " << cpp_strerror(errno)
+               << dendl;
+        }
         if (image.invalidate_cache() < 0)
             derr << "invalidate rbd cache failed" << dendl;
         size = new_size;
