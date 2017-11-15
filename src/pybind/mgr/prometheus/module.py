@@ -263,7 +263,10 @@ class Module(MgrModule):
                          key.split('+')]
         for state, value in reported_pg_s:
             path = 'pg_{}'.format(state)
-            self.metrics[path].set(value)
+            try:
+                self.metrics[path].set(value)
+            except KeyError:
+                self.log.warn('Skipping unknown PG State {}'.format(state))
         reported_states = [s[0] for s in reported_pg_s]
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
