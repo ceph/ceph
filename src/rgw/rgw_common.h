@@ -1534,6 +1534,10 @@ struct rgw_obj_key {
     instance = i;
   }
 
+  const string& get_instance() const {
+    return instance;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
