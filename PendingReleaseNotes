@@ -50,3 +50,10 @@
   pg-upmap-items` command), we recommend that all mappings be removed (via
   the `ceph osd rm-pg-upmap-items` command) before upgrading to this
   point release.
+
+13.0.0
+------
+
+* The RBD C API's rbd_discard method now enforces a maximum length of
+  2GB to match the C++ API's Image::discard method. This restriction
+  prevents overflow of the result code.
