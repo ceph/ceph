@@ -1602,6 +1602,7 @@ class RGWCompleteMultipart : public RGWOp {
 protected:
   string upload_id;
   string etag;
+  string version_id;
   char *data;
   int len;
 
