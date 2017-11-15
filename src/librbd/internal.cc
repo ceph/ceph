@@ -2248,7 +2248,6 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker md_locker(ictx->md_lock);
     r = ictx->invalidate_cache(false);
     ictx->perfcounter->inc(l_librbd_invalidate_cache);
     return r;
