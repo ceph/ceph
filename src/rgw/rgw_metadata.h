@@ -353,8 +353,8 @@ public:
           obj_version *existing_version = NULL);
   int remove(string& metadata_key);
 
-  int list_keys_init(string& section, void **phandle);
-  int list_keys_init(string& section, const string& marker, void **phandle);
+  int list_keys_init(const string& section, void **phandle);
+  int list_keys_init(const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 
