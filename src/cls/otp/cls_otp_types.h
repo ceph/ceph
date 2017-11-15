@@ -13,20 +13,18 @@ namespace rados {
     namespace otp {
 
       enum OTPType {
-        UNKNOWN = 0,
-        HOTP = 1,  /* unsupported */
-        TOTP = 2,
+        OTP_UNKNOWN = 0,
+        OTP_HOTP = 1,  /* unsupported */
+        OTP_TOTP = 2,
       };
 
       struct otp_info_t {
-        OTPType type{TOTP};
+        OTPType type{OTP_TOTP};
         string id;
         string seed;
         ceph::real_time time_ofs;
         uint32_t step_size{30}; /* num of seconds foreach otp to test */
         uint32_t window{2}; /* num of otp after/before start otp to test */
-        list<ceph::real_time> last_tries;
-        uint64_t last_success{0}; /* otp_counter of last successful check */
 
         otp_info_t() {}
 
@@ -40,8 +38,6 @@ namespace rados {
           ::encode(time_ofs, bl);
           ::encode(step_size, bl);
           ::encode(window, bl);
-          ::encode(last_tries, bl);
-          ::encode(last_success, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::iterator &bl) {
@@ -54,12 +50,40 @@ namespace rados {
           ::decode(time_ofs, bl);
           ::decode(step_size, bl);
           ::decode(window, bl);
-          ::decode(last_tries, bl);
-          ::decode(last_success, bl);
           DECODE_FINISH(bl);
         }
       };
       WRITE_CLASS_ENCODER(rados::cls::otp::otp_info_t)
+
+      enum OTPCheckResult {
+        OTP_CHECK_UNKNOWN = 0,
+        OTP_CHECK_SUCCESS = 1,
+        OTP_CHECK_FAIL = 2,
+      };
+
+      struct otp_check_t {
+        string token;
+        ceph::real_time timestamp;
+        OTPCheckResult result{OTP_CHECK_UNKNOWN};
+
+        void encode(bufferlist &bl) const {
+          ENCODE_START(1, 1, bl);
+          ::encode(token, bl);
+          ::encode(timestamp, bl);
+          ::encode((char)result, bl);
+          ENCODE_FINISH(bl);
+        }
+        void decode(bufferlist::iterator &bl) {
+          DECODE_START(1, bl);
+          ::decode(token, bl);
+          ::decode(timestamp, bl);
+          uint8_t t;
+          ::decode(t, bl);
+          result = (OTPCheckResult)t;
+          DECODE_FINISH(bl);
+        }
+      };
+      WRITE_CLASS_ENCODER(rados::cls::otp::otp_check_t)
 
       struct otp_repo_t {
         map<string, otp_info_t> entries;
@@ -83,6 +107,7 @@ namespace rados {
 }
 
 WRITE_CLASS_ENCODER(rados::cls::otp::otp_info_t)
+WRITE_CLASS_ENCODER(rados::cls::otp::otp_check_t)
 WRITE_CLASS_ENCODER(rados::cls::otp::otp_repo_t)
 
 #endif
