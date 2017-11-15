@@ -65,7 +65,7 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t min_alloc_size,
 			     (int64_t)min_alloc_size);
   assert(ISP2(bytes_per_block));
   size = P2ALIGN(new_size, bytes_per_block);
-  blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
+  blocks_per_key = cct->_conf->get_val<int64_t>("bluestore_freelist_blocks_per_key");
 
   _init_misc();
 
@@ -464,7 +464,7 @@ void BitmapFreelistManager::allocate(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (cct->_conf->bluestore_debug_freelist)
+  if (cct->_conf->get_val<bool>("bluestore_debug_freelist"))
     _verify_range(offset, length, 0);
   _xor(offset, length, txn);
 }
@@ -475,7 +475,7 @@ void BitmapFreelistManager::release(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (cct->_conf->bluestore_debug_freelist)
+  if (cct->_conf->get_val<bool>("bluestore_debug_freelist"))
     _verify_range(offset, length, 1);
   _xor(offset, length, txn);
 }

@@ -30,7 +30,7 @@ BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
     return;
   }
 
-  int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
+  int64_t zone_size_blks = cct->_conf->get_val<int64_t>("bluestore_bitmapallocator_blocks_per_zone");
   if (!ISP2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
          << " not power of 2 aligned!"
@@ -39,7 +39,7 @@ BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
     return;
   }
 
-  int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
+  int64_t span_size = cct->_conf->get_val<int64_t>("bluestore_bitmapallocator_span_size");
   if (!ISP2(span_size)) {
     derr << __func__ << " span_size " << span_size
          << " not power of 2 aligned!"

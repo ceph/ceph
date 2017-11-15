@@ -621,7 +621,7 @@ class MonitorDBStore
       do_dump = true;
     }
     if (kv_type == "rocksdb")
-      db->init(g_conf->mon_rocksdb_options);
+      db->init(g_conf->get_val<std::string>("mon_rocksdb_options"));
     else
       db->init();
 

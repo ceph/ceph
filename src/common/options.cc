@@ -845,7 +845,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_dpdk_gateway_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
+    .set_description("use $path.wal for wal")
     .set_safe(),
 
     Option("ms_dpdk_netmask_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -2907,16 +2907,16 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_db_paths", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
+    .set_description("/path/to/rocksdb,1024[;/path/to/another-rocksdb,2048]")
     .set_safe(),
 
     Option("rocksdb_log_to_ceph_log", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("log to ceph log"),
 
     Option("rocksdb_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_M)
-    .set_description(""),
+    .set_description("rocksdb cache size (unless set by bluestore/etc)"),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -2928,6 +2928,7 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_cache_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("lru")
+    .set_enum_allowed({"lru", "clock"})
     .set_description(""),
 
     Option("rocksdb_block_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -2936,19 +2937,22 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_perf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("enabling this will have 5-10% impact on performance for the stats collection"),
 
     Option("rocksdb_collect_compaction_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .add_see_also("rocksdb_perf")
+    .set_description("for rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled"),
 
     Option("rocksdb_collect_extended_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .add_see_also("rocksdb_perf")
+    .set_description("for rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled"),
 
     Option("rocksdb_collect_memory_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .add_see_also("rocksdb_perf")
+    .set_description("for rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled"),
 
     Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -3217,6 +3221,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("stupid")
+    .set_enum_allowed({"stupid", "bitmap"})
     .set_description(""),
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3336,7 +3341,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crc32c")
-    .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
+    .set_enum_allowed({"none", "xxhash32", "xxhash64", "crc32c", "crc32c_16", "crc32c_8"})
     .set_safe()
     .set_description("Default checksum algorithm to use")
     .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
@@ -3379,7 +3384,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_compression_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
-    .set_enum_allowed({"none", "passive", "aggressive", "force"})
+    .set_enum_allowed({"force", "aggressive", "passive", "none"})
     .set_safe()
     .set_description("Default policy for using compression when pool does not specify")
     .set_long_description("'none' means never use compression.  'passive' means use compression when clients hint that data is compressible.  'aggressive' means use compression unless clients hint that data is not compressible.  This option is used when the per-pool property for the compression mode is not present."),
@@ -3482,7 +3487,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_cache_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("2q")
-    .set_enum_allowed({"2q", "lru"})
+    .set_enum_allowed({"lru", "2q"})
     .set_description("Cache replacement algorithm"),
 
     Option("bluestore_2q_cache_kin_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)

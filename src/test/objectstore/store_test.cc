@@ -1057,7 +1057,7 @@ void doCompressionTest( boost::scoped_ptr<ObjectStore>& store)
   //force fsck
   EXPECT_EQ(store->umount(), 0);
   EXPECT_EQ(store->mount(), 0);
-  auto orig_min_blob_size = g_conf->bluestore_compression_min_blob_size;
+  auto orig_min_blob_size = g_conf->get_val<uint64_t>("bluestore_compression_min_blob_size");
   {
     g_conf->set_val("bluestore_compression_min_blob_size", "262144");
     g_ceph_context->_conf->apply_changes(NULL);
@@ -1375,8 +1375,8 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     ASSERT_EQ(r, 0);
     ASSERT_EQ( 0u, statfs.allocated);
     ASSERT_EQ( 0u, statfs.stored);
-    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
-    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+    ASSERT_EQ(g_conf->get_val<uint64_t>("bluestore_block_size"), statfs.total);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->get_val<uint64_t>("bluestore_block_size"));
     //force fsck
     EXPECT_EQ(store->umount(), 0);
     EXPECT_EQ(store->mount(), 0);
@@ -1609,10 +1609,10 @@ TEST_P(StoreTestSpecificAUSize, BluestoreFragmentedBlobTest) {
     struct store_statfs_t statfs;
     int r = store->statfs(&statfs);
     ASSERT_EQ(r, 0);
-    ASSERT_EQ(g_conf->bluestore_block_size, statfs.total);
+    ASSERT_EQ(g_conf->get_val<uint64_t>("bluestore_block_size"), statfs.total);
     ASSERT_EQ(0u, statfs.allocated);
     ASSERT_EQ(0u, statfs.stored);
-    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->bluestore_block_size);
+    ASSERT_TRUE(statfs.available > 0u && statfs.available < g_conf->get_val<uint64_t>("bluestore_block_size"));
   }
   std::string data;
   data.resize(0x10000 * 3);
@@ -1928,7 +1928,7 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf->get_val<uint64_t>("bluestore_min_alloc_size");
   g_conf->set_val("bluestore_inject_deferred_apply_delay", "1.0");
   g_ceph_context->_conf->apply_changes(NULL);
   unsigned size = min_alloc / 3;
@@ -2007,7 +2007,7 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
     r = store->apply_transaction(&osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf->bluestore_min_alloc_size;
+  unsigned min_alloc = g_conf->get_val<uint64_t>("bluestore_min_alloc_size");
   unsigned size = min_alloc / 3;
   bufferptr bpa(size);
   memset(bpa.c_str(), 1, bpa.length());

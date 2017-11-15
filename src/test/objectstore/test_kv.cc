@@ -319,7 +319,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
   cfs.push_back(KeyValueDB::ColumnFamily("cf2", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf->get_val<std::string>("bluestore_rocksdb_options")));
   cout << "creating two column families and opening them" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
   {
@@ -374,7 +374,7 @@ TEST_P(KVTest, RocksDBIteratorTest) {
 
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf->get_val<std::string>("bluestore_rocksdb_options")));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
   {
@@ -427,7 +427,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
     return; // No merge operators for this database type
   std::vector<KeyValueDB::ColumnFamily> cfs;
   cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
-  ASSERT_EQ(0, db->init(g_conf->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->init(g_conf->get_val<std::string>("bluestore_rocksdb_options")));
   cout << "creating one column family and opening it" << std::endl;
   ASSERT_EQ(0, db->create_and_open(cout, cfs));
 

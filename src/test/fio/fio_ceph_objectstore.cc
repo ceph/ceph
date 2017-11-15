@@ -90,7 +90,7 @@ struct Engine {
       cct->get_perfcounters_collection()->dump_formatted(f, false);
       ostr << "FIO plugin ";
       f->flush(ostr);
-      if (g_conf->rocksdb_perf) {
+      if (g_conf->get_val<bool>("rocksdb_perf")) {
         os->get_db_statistics(f);
         ostr << "FIO get_db_statistics ";
         f->flush(ostr);

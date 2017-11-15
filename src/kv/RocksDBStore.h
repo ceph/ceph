@@ -151,7 +151,7 @@ public:
     compact_thread(this),
     compact_on_mount(false),
     disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange)
+    enable_rmrange(cct->_conf->get_val<bool>("rocksdb_enable_rmrange"))
   {}
 
   ~RocksDBStore() override;

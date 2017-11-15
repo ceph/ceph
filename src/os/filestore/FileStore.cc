@@ -1722,7 +1722,7 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      ret = omap_store->init(cct->_conf->filestore_rocksdb_options);
+      ret = omap_store->init(cct->_conf->get_val<std::string>("filestore_rocksdb_options"));
     else
       ret = omap_store->init();
 

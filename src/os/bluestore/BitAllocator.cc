@@ -542,12 +542,12 @@ void BitMapZone::dump_state(CephContext* const cct, int& count)
  */
 int64_t BitMapArea::get_zone_size(CephContext* cct)
 {
-  return cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
+  return cct->_conf->get_val<int64_t>("bluestore_bitmapallocator_blocks_per_zone");
 }
 
 int64_t BitMapArea::get_span_size(CephContext* cct)
 {
-  return cct->_conf->bluestore_bitmapallocator_span_size;
+  return cct->_conf->get_val<int64_t>("bluestore_bitmapallocator_span_size");
 }
 
 int BitMapArea::get_level(CephContext* cct, int64_t total_blocks)
