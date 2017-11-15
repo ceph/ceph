@@ -62,32 +62,11 @@ function(do_build_dpdk dpdk_dir)
       "unsupported target \"${target}\"")
   endif()
 
-  if(WITH_KERNEL_DIR)
-    if(NOT IS_DIRECTORY ${WITH_KERNEL_DIR})
-      message(FATAL "not able to build DPDK support: "
-        "WITH_KERNEL_DIR=\"${WITH_KERNEL_DIR}\" does not exist")
-    endif()
-  else()
-    execute_process(
-      COMMAND uname -r
-      OUTPUT_VARIABLE kernel_release
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    set(kernel_header_dir "/lib/modules/${kernel_release}/build")
-    if(NOT IS_DIRECTORY ${kernel_header_dir})
-      message(FATAL "not able to build DPDK support: "
-        "\"${kernel_header_dir}\" does not exist. DPDK uses it for building "
-        "kernel modules. Please either disable WITH_DPDK and WITH_SPDK, "
-        "or install linux-headers of the kernel version of the target machine, "
-        "and specify \"-DWITH_RTE_KERNEL_DIR=<the-path-to-the-linux-headers-dir> "
-        "when running \"cmake\"")
-    endif()
-    set(WITH_KERNEL_DIR ${kernel_header_dir})
-  endif(WITH_KERNEL_DIR)
   include(ExternalProject)
   ExternalProject_Add(dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
     CONFIGURE_COMMAND $(MAKE) config O=${dpdk_dir} T=${target}
-    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} $(MAKE) O=${dpdk_dir} EXTRA_CFLAGS=-fPIC RTE_KERNELDIR=${WITH_KERNEL_DIR}
+    BUILD_COMMAND env CC=${CMAKE_C_COMPILER} $(MAKE) O=${dpdk_dir} EXTRA_CFLAGS=-fPIC
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND "true")
   ExternalProject_Add_Step(dpdk-ext patch-config
