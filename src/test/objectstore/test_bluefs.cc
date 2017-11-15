@@ -1,28 +1,21 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <ctime>
-#include <thread>
-#include <cstdio>
-#include <cstring>
+#include <stdio.h>
+#include <string.h>
 #include <iostream>
-#include <algorithm>
-
+#include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
-
+#include <thread>
 #include "global/global_init.h"
-
-#include "include/random.h"
+#include "common/ceph_argparse.h"
 #include "include/stringify.h"
 #include "include/scope_guard.h"
-
 #include "common/errno.h"
-#include "common/ceph_argparse.h"
+#include <gtest/gtest.h>
 
 #include "os/bluestore/BlueFS.h"
-
-#include <gtest/gtest.h>
 
 string get_temp_bdev(uint64_t size)
 {

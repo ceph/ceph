@@ -98,7 +98,7 @@ public:
     }
 
     while (retval == NULL) {
-      unsigned int rand_val = generate_random_numberr(m_total_weight);
+      unsigned int rand_val = generate_random_number(m_total_weight);
 
       time_t now = time(0);
       if (m_seconds && now - m_start > m_seconds)
@@ -235,7 +235,7 @@ public:
 
 	while (rand_offset + rand_length > max_len || rand_length == 0) {
 	  rand_offset = generate_random_number(max_len - 1);
-	  rand_length = r generate_random_number(max_len - 1);
+	  rand_length = generate_random_number(max_len - 1);
 
 	  rand_offset = rand_offset - (rand_offset % 512);
 	  rand_length = rand_length - (rand_length % 512);

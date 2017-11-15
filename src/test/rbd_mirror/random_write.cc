@@ -132,8 +132,8 @@ void write_image(librbd::Image &image) {
         io_modulo += MAX_IO_SIZE;
       }
 
-      uint32_t io_size = ((ceph::util::generate_random_number(io_modulo) + MIN_IO_SIZE) * 1024);
-      thread_offset[i] = ceph::util::generate_random_number(((size / io_size) - 1) * io_size;
+      uint32_t io_size = ((ceph::util::generate_random_number(io_modulo - 1) + MIN_IO_SIZE) * 1024);
+      thread_offset[i] = ceph::util::generate_random_number((size / io_size) - 1) * io_size;
       if (!b.start_write(NUM_THREADS, thread_offset[i], io_size, bl,
                          LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
         break;

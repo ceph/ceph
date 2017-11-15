@@ -12,46 +12,35 @@
  *
  */
 
-#include <ctime>
-#include <cstdio>
-#include <cstring>
+#include <glob.h>
+#include <stdio.h>
+#include <string.h>
 #include <iostream>
-
+#include <time.h>
+#include <sys/mount.h>
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
-
-#include <sys/mount.h>
-
-#include <glob.h>
-
-#include "global/global_init.h"
+#include <gtest/gtest.h>
 
 #include "os/ObjectStore.h"
 #include "os/filestore/FileStore.h"
 #if defined(WITH_BLUESTORE)
 #include "os/bluestore/BlueStore.h"
 #endif
-
-#include "include/util.h"
-#include "include/random.h"
 #include "include/Context.h"
-#include "include/stringify.h"
-#include "include/coredumpctl.h"
-#include "include/unordered_map.h"
-
 #include "common/ceph_argparse.h"
+#include "global/global_init.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
+#include "include/stringify.h"
+#include "include/coredumpctl.h"
 
+#include "include/unordered_map.h"
 #include "store_test_fixture.h"
 
-// Clobber other assert() to use our own:
-#include "include/assert.h"
-
-#include <gtest/gtest.h>
 
 typedef boost::mt11213b gen_type;
 

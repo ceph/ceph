@@ -20,8 +20,6 @@
 #include <optional>
 #include <type_traits>
 
-#include "common/backport_std.h"
-
 // Basic random number facility, adapted from N3551:
 namespace ceph::util {
 

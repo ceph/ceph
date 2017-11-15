@@ -21,6 +21,8 @@
 
 using namespace ceph::util;
 
+using ceph::util::generate_random_number;
+
 class WeightedPriorityQueueTest : public testing::Test
 {
 protected:
@@ -36,6 +38,7 @@ protected:
   typedef std::map<Prio, KlassItem> LQ;
   typedef std::list<Item> Removed;
   const unsigned max_prios = 5; // (0-4) * 64
+
   const unsigned klasses = 37;  // Make prime to help get good coverage
 
   void fill_queue(WQ &wq, LQ &strictq, LQ &normq,
@@ -197,6 +200,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_static) {
   test_queue(1000);
 } 
 
+TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
   test_queue(generate_random_number(500, 1500 - 1), true);
 } 
 
@@ -214,7 +218,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class) {
   WQ wq(0, 0);
   LQ strictq, normq;
-  unsigned num_items = 1000;
+  unsigned num_items = 100;
   fill_queue(wq, strictq, normq, num_items);
   unsigned num_to_remove = 0;
   const Klass k = 5;

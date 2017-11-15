@@ -9,7 +9,6 @@
 #include "include/utime.h"
 
 #include "common/Clock.h"
-#include "common/backport_std.h"
 #include "common/sctp_crc32.h"
 #include "common/crc32c_intel_baseline.h"
 #include "common/crc32c_aarch64.h"

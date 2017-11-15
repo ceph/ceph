@@ -239,7 +239,8 @@ public:
     RandWrap rand(in.seqnum);
     if (max_length == 0)
       return 0;
-    return (ceph::util::generate_random_number((max_length/2) - 1) + ((max_length - 1)/2) + 1;
+
+    return 1 + ceph::util::generate_random_number((max_length/2) - 1) + ((max_length - 1)/2);
   }
 };
 
