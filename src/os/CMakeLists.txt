@@ -90,8 +90,9 @@ if(HAVE_LIBZFS)
 endif()
 
 if(WITH_SPDK)
+  # librt is used by libspdk_env_dpdk
   target_link_libraries(os
-    ${SPDK_LIBRARIES}
+    ${SPDK_LIBRARIES} rt
     ${DPDK_LIBRARIES})
   target_include_directories(os
     SYSTEM
@@ -119,22 +120,10 @@ if(WITH_BLUESTORE)
 endif()
 
 if(WITH_SPDK)
-  include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/spdk/include")
-  add_custom_target(build_spdk
-    COMMAND
-    $(MAKE) DPDK_INC_DIR=${DPDK_INCLUDE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/lib
-    COMMENT "spdk building")
-  # TODO: should use add_library(spdk INTERFACE IMPORTED) instead in new cmake,
-  # if INTERFACE is supported.
+  include(BuildSPDK)
+  include_directories(SYSTEM ${SPDK_INCLUDE_DIR})
   foreach(lib nvme log env_dpdk util)
-    add_library(spdk_${lib} STATIC IMPORTED)
-    add_dependencies(spdk_${lib} build_spdk)
-    target_link_libraries(os PRIVATE spdk_${lib})
-    set_target_properties(spdk_${lib} PROPERTIES
-      IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/src/spdk/build/lib/libspdk_${lib}.a"
-      INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/spdk/include")
-    list(APPEND SPDK_LIBRARIES spdk_${lib})
+    target_link_libraries(os spdk_${lib})
   endforeach()
 endif(WITH_SPDK)
 

@@ -217,7 +217,8 @@ endif()
 
 option(WITH_SPDK "Enable SPDK" OFF)
 if(WITH_SPDK)
-  find_package(dpdk REQUIRED)
+  include(BuildSPDK)
+  build_spdk()
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
