@@ -5361,6 +5361,29 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Time in seconds between attempts to trim sync logs."),
 
+    Option("rgw_sync_log_trim_max_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_description("Maximum number of buckets to trim per interval")
+    .set_long_description("The maximum number of buckets to consider for bucket index log trimming each trim interval, regardless of the number of bucket index shards. Priority is given to buckets with the most sync activity over the last trim interval.")
+    .add_see_also("rgw_sync_log_trim_interval")
+    .add_see_also("rgw_sync_log_trim_min_cold_buckets")
+    .add_see_also("rgw_sync_log_trim_concurrent_buckets"),
+
+    Option("rgw_sync_log_trim_min_cold_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("Minimum number of cold buckets to trim per interval")
+    .set_long_description("Of the `rgw_sync_log_trim_max_buckets` selected for bucket index log trimming each trim interval, at least this many of them must be 'cold' buckets. These buckets are selected in order from the list of all bucket instances, to guarantee that all buckets will be visited eventually.")
+    .add_see_also("rgw_sync_log_trim_interval")
+    .add_see_also("rgw_sync_log_trim_max_buckets")
+    .add_see_also("rgw_sync_log_trim_concurrent_buckets"),
+
+    Option("rgw_sync_log_trim_concurrent_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(4)
+    .set_description("Maximum number of buckets to trim in parallel")
+    .add_see_also("rgw_sync_log_trim_interval")
+    .add_see_also("rgw_sync_log_trim_max_buckets")
+    .add_see_also("rgw_sync_log_trim_min_cold_buckets"),
+
     Option("rgw_sync_data_inject_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

@@ -23,6 +23,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
+#include "rgw_sync_log_trim.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -2280,6 +2281,7 @@ class RGWRados
   RGWSyncTraceManager *sync_tracer;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
+  boost::optional<rgw::BucketTrimManager> bucket_trim;
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
 
   Mutex meta_sync_thread_lock;
@@ -2708,6 +2710,7 @@ public:
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj);
     int init(const rgw_bucket& _bucket, int sid);
+    int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
   class Object {
