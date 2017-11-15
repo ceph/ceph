@@ -90,15 +90,9 @@ if(HAVE_LIBZFS)
 endif()
 
 if(WITH_SPDK)
-  # librt is used by libspdk_env_dpdk
   target_link_libraries(os
-    ${SPDK_LIBRARIES} rt
-    ${DPDK_LIBRARIES})
-  target_include_directories(os
-    SYSTEM
-    PRIVATE
-    ${DPDK_INCLUDE_DIR})
-endif(WITH_SPDK)
+    ${SPDK_LIBRARIES})
+endif()
 
 if(WITH_LTTNG)
   add_dependencies(os objectstore-tp)
@@ -118,14 +112,6 @@ if(WITH_BLUESTORE)
   install(TARGETS ceph-bluestore-tool
     DESTINATION bin)
 endif()
-
-if(WITH_SPDK)
-  include(BuildSPDK)
-  include_directories(SYSTEM ${SPDK_INCLUDE_DIR})
-  foreach(lib nvme log env_dpdk util)
-    target_link_libraries(os spdk_${lib})
-  endforeach()
-endif(WITH_SPDK)
 
 if(WITH_PMEM)
   include(ExternalProject)
