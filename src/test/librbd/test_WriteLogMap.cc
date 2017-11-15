@@ -49,7 +49,65 @@ public:
   CephContext *m_cct;
 };
 
-TEST_F(TestWriteLogMap, FirstTest) {
+uint64_t BlockToBytes(int n) { return n * BLOCK_SIZE; }
+    
+TEST_F(TestWriteLogMap, AddOverlaps) {
+  WriteLogMap map(m_cct);
+
+  WriteLogEntry e0(BlockToBytes(0), BlockToBytes(1));
+  map.add_entry(&e0);
+
+  WriteLogMapEntries found0 = map.find_map_entries(BlockExtent(0, 0));
+
+  cout << "found0=[" << found0.size() << ":";
+  for (auto &map_entry : found0) {
+    cout << map_entry;
+  }
+  cout << "]" << std::endl;
+
+  WriteLogEntry e1(BlockToBytes(1), BlockToBytes(1));
+  map.add_entry(&e1);
+  
+  found0 = map.find_map_entries(BlockExtent(1, 1));
+
+  cout << "found0=[" << found0.size() << ":";
+  for (auto &map_entry : found0) {
+    cout << map_entry;
+  }
+  cout << "]" << std::endl;
+
+  WriteLogEntry e2(BlockToBytes(2), BlockToBytes(1));
+  map.add_entry(&e2);
+
+  found0 = map.find_map_entries(BlockExtent(2, 2));
+
+  cout << "found0=[" << found0.size() << ":";
+  for (auto &map_entry : found0) {
+    cout << map_entry;
+  }
+  cout << "]" << std::endl;
+
+  WriteLogEntry e3(BlockToBytes(1), BlockToBytes(1));
+  map.add_entry(&e3);
+
+  found0 = map.find_map_entries(BlockExtent(99, 99));
+
+  cout << "found0=[" << found0.size() << ":";
+  for (auto &map_entry : found0) {
+    cout << map_entry;
+  }
+  cout << "]" << std::endl;
+
+  WriteLogMapEntries found1 = map.find_map_entries(BlockExtent(1, 1));
+
+  cout << "found1=[" << found1.size() << ":";
+  for (auto &map_entry : found1) {
+    cout << map_entry;
+  }
+  cout << "]" << std::endl;
+
+  //ASSERT_EQ(map.find_map_entries(BlockExtent(1, 1)), {{ &e1 }});
+  
   /*
   OpBlockGuard op_block_guard(m_cct);
 
@@ -83,3 +141,6 @@ uint32_t TestWriteLogMap::s_index = 0;
 } // namespace cache
 } // namespace librbd
 
+/* Local Variables: */
+/* eval: (c-set-offset 'innamespace 0) */
+/* End: */
