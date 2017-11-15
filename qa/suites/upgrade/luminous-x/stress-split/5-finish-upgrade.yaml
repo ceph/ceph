@@ -6,4 +6,5 @@ tasks:
     daemons: [osd.3, osd.4, osd.5]
     wait-for-healthy: false
     wait-for-osds-up: true
+    mon-health-to-clog: false
 
