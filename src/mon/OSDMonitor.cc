@@ -5816,13 +5816,21 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
       user_map[*i] = string();
       (*erasure_code_profile_map)[*i] = string();
     } else {
-      const string key = i->substr(0, equal);
+      string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
       if (key.find("ruleset-") == 0) {
-	*ss << "property '" << key << "' is no longer supported; try "
-	    << "'crush-" << key.substr(8) << "' instead";
-	return -EINVAL;
+	if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+	    g_conf->get_val<bool>("mon_fixup_legacy_erasure_code_profiles")) {
+	  mon->clog->warn() << "erasure code profile property '" << key
+			    << "' is no longer supported; try "
+			    << "'crush-" << key.substr(8) << "' instead";
+	  key = string("crush-") + key.substr(8);
+	} else {
+	  *ss << "property '" << key << "' is no longer supported; try "
+	      << "'crush-" << key.substr(8) << "' instead";
+	  return -EINVAL;
+	}
       }
       user_map[key] = value;
       (*erasure_code_profile_map)[key] = value;
