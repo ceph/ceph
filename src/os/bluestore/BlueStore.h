@@ -1661,7 +1661,7 @@ public:
     Sequencer *parent;
     BlueStore *store;
 
-    spg_t shard_hint;
+    size_t shard;
 
     uint64_t last_seq = 0;
 
