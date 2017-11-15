@@ -28,6 +28,7 @@ struct cls_otp_check_otp_op
 {
   string id;
   string val;
+  string token;
 
   cls_otp_check_otp_op() = default;
 
@@ -35,16 +36,56 @@ struct cls_otp_check_otp_op
     ENCODE_START(1, 1, bl);
     ::encode(id, bl);
     ::encode(val, bl);
+    ::encode(token, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     ::decode(id, bl);
     ::decode(val, bl);
+    ::decode(token, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_otp_check_otp_op)
+
+struct cls_otp_get_result_op
+{
+  string token;
+
+  cls_otp_get_result_op() = default;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(token, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(token, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_otp_get_result_op)
+
+struct cls_otp_get_result_reply
+{
+  rados::cls::otp::otp_check_t result;
+
+  cls_otp_get_result_reply() = default;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(result, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) {
+    DECODE_START(1, bl);
+    ::decode(result, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_otp_get_result_reply)
 
 struct cls_otp_remove_otp_op
 {
