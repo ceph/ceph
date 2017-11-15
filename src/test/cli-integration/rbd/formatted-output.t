@@ -56,8 +56,8 @@ TODO: figure out why .* does not match the block_name_prefix line in rbd info.
 For now, use a more inclusive regex.
   $ rbd info foo
   rbd image 'foo':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 1024 MB in 256 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info foo --format json | python -mjson.tool | sed 's/,$/, /'
@@ -84,8 +84,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info foo@snap
   rbd image 'foo':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 1024 MB in 256 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   \tprotected: False (esc)
@@ -113,8 +113,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar
   rbd image 'bar':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 1024 MB in 256 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -160,8 +160,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar@snap
   rbd image 'bar':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 512 MB in 128 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -210,8 +210,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info bar@snap2
   rbd image 'bar':
-  \tsize 1024 MB in 256 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 1024 MB in 256 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -260,8 +260,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info baz
   rbd image 'baz':
-  \tsize 2048 MB in 512 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 2048 MB in 512 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
@@ -299,8 +299,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info quux
   rbd image 'quux':
-  \tsize 1024 kB in 1 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 1024 kB in 1 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 1 (esc)
   $ rbd info quux --format json | python -mjson.tool | sed 's/,$/, /'
@@ -325,8 +325,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/child
   rbd image 'child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 512 MB in 128 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
@@ -370,8 +370,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/child@snap
   rbd image 'child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 512 MB in 128 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
@@ -432,8 +432,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/deep-flatten-child
   rbd image 'deep-flatten-child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 512 MB in 128 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
@@ -479,8 +479,8 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </image>
   $ rbd info rbd_other/deep-flatten-child@snap
   rbd image 'deep-flatten-child':
-  \tsize 512 MB in 128 objects (esc)
-  \torder 22 (4096 kB objects) (esc)
+  \tsize: 512 MB in 128 objects (esc)
+  \torder: 22 (4096 kB objects) (esc)
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
