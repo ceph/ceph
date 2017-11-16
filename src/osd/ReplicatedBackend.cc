@@ -666,11 +666,17 @@ void ReplicatedBackend::be_deep_scrub(
   __u64 pos = 0;
   bool skip_data_digest = store->has_builtin_csum() &&
     g_conf->get_val<bool>("osd_skip_data_digest");
+  utime_t sleeptime;
+  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   while (true) {
+    if (sleeptime != utime_t()) {
+      lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
+      sleeptime.sleep();
+    }
     handle.reset_tp_timeout();
     r = store->read(
 	  ch,
