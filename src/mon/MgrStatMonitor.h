@@ -60,7 +60,7 @@ public:
 
   void update_logger();
 
-  const ServiceMap& get_service_map() {
+  const ServiceMap& get_service_map() const {
     return service_map;
   }
 
@@ -83,6 +83,7 @@ public:
   }
   void dump_info(Formatter *f) const {
     digest.dump(f);
+    f->dump_object("servicemap", get_service_map());
   }
   void dump_fs_stats(stringstream *ss,
 		     Formatter *f,
