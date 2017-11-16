@@ -765,6 +765,10 @@ void ReplicatedBackend::be_deep_scrub(
     return;
   }
 
+
+  uint64_t limit = (cct->_conf->get_val<bool>("osd_deep_scrub_limit_omap_to_key_threshold") ? cct->_conf->get_val<uint64_t>(
+                         "osd_deep_scrub_large_omap_object_key_threshold") : 0);
+
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
     coll,
     ghobject_t(
@@ -773,7 +777,8 @@ void ReplicatedBackend::be_deep_scrub(
   uint64_t keys_scanned = 0;
   uint64_t value_sum = 0;
   for (iter->seek_to_first(); iter->status() == 0 && iter->valid();
-    iter->next(false)) {
+    iter->next(false) &&
+    (limit == 0 || keys_scanned < limit)) {
     ++keys_scanned;
     handle.reset_tp_timeout();
 
@@ -789,12 +794,16 @@ void ReplicatedBackend::be_deep_scrub(
     bl.clear();
   }
 
-  if (keys_scanned > cct->_conf->get_val<uint64_t>(
+  if (keys_scanned >= cct->_conf->get_val<uint64_t>(
                          "osd_deep_scrub_large_omap_object_key_threshold") ||
       value_sum > cct->_conf->get_val<uint64_t>(
                       "osd_deep_scrub_large_omap_object_value_sum_threshold")) {
+    if (limit > 0) {
+      dout(25) << __func__ << " " << poid
+               << " omap scrub has been limited by configuration to " << limit << dendl;
+    }
     dout(25) << __func__ << " " << poid
-             << " large omap object detected. Object has " << keys_scanned
+             << " large omap object detected. Object has " << (limit > 0 ? "at least " : "") << keys_scanned
              << " keys and size " << value_sum << " bytes" << dendl;
     o.large_omap_object_found = true;
     o.large_omap_object_key_count = keys_scanned;

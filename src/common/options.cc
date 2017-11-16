@@ -2576,6 +2576,13 @@ std::vector<Option> get_global_options() {
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
 
+    Option("osd_deep_scrub_limit_omap_to_key_threshold", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("scrub on omaps will only be done on the number of keys specified in "
+                     "osd_deep_scrub_large_omap_object_key_threshold")
+    .add_service("osd")
+    .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
+
     Option("osd_class_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_LIBDIR "/rados-classes")
     .set_description(""),
