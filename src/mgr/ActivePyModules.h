@@ -108,9 +108,7 @@ public:
   int init();
   void shutdown();
 
-  int start_one(std::string const &module_name,
-                PyObject *pClass,
-                const SafeThreadState &pMyThreadState);
+  int start_one(PyModuleRef py_module);
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
