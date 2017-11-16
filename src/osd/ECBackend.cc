@@ -2428,6 +2428,8 @@ void ECBackend::be_deep_scrub(
   uint64_t stride = cct->_conf->osd_deep_scrub_stride;
   if (stride % sinfo.get_chunk_size())
     stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
+  utime_t sleeptime;
+  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
   uint64_t pos = 0;
   bool skip_data_digest = store->has_builtin_csum() &&
     g_conf->get_val<bool>("osd_skip_data_digest");
@@ -2436,6 +2438,10 @@ void ECBackend::be_deep_scrub(
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   while (true) {
+    if (sleeptime != utime_t()) {
+      lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
+      sleeptime.sleep();
+    }
     bufferlist bl;
     handle.reset_tp_timeout();
     r = store->read(
