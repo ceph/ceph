@@ -1208,9 +1208,9 @@ ostream& operator <<(ostream& m, const Condition& c) {
   if (c.ifexists) {
     m << "IfExists";
   }
-  m << ": { " << c.key;
+  m << ": { " << c.key << ": ";
   print_array(m, c.vals.cbegin(), c.vals.cend());
-  return m << "}";
+  return m << " } }";
 }
 
 Effect Statement::eval(const Environment& e,
