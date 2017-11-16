@@ -11578,7 +11578,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
 int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string *bucket_ver, string *master_ver,
     map<RGWObjCategory, RGWStorageStats>& stats, string *max_marker, bool *syncstopped)
 {
-  map<string, rgw_bucket_dir_header> headers;
+  vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
   int r = cls_bucket_head(bucket_info, shard_id, headers, &bucket_instance_ids);
   if (r < 0) {
@@ -11587,25 +11587,25 @@ int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string 
 
   assert(headers.size() == bucket_instance_ids.size());
 
-  map<string, rgw_bucket_dir_header>::iterator iter = headers.begin();
+  auto iter = headers.begin();
   map<int, string>::iterator viter = bucket_instance_ids.begin();
   BucketIndexShardsManager ver_mgr;
   BucketIndexShardsManager master_ver_mgr;
   BucketIndexShardsManager marker_mgr;
   char buf[64];
   for(; iter != headers.end(); ++iter, ++viter) {
-    accumulate_raw_stats(iter->second, stats);
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->second.ver);
+    accumulate_raw_stats(*iter, stats);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
     ver_mgr.add(viter->first, string(buf));
-    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->second.master_ver);
+    snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
     master_ver_mgr.add(viter->first, string(buf));
     if (shard_id >= 0) {
-      *max_marker = iter->second.max_marker;
+      *max_marker = iter->max_marker;
     } else {
-      marker_mgr.add(viter->first, iter->second.max_marker);
+      marker_mgr.add(viter->first, iter->max_marker);
     }
     if (syncstopped != NULL)
-      *syncstopped = iter->second.syncstopped;
+      *syncstopped = iter->syncstopped;
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);
@@ -11618,7 +11618,7 @@ int RGWRados::get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id, string 
 int RGWRados::get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id,
     map<int, string>& markers)
 {
-  map<string, rgw_bucket_dir_header> headers;
+  vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
   int r = cls_bucket_head(bucket_info, shard_id, headers, &bucket_instance_ids);
   if (r < 0)
@@ -11626,14 +11626,14 @@ int RGWRados::get_bi_log_status(RGWBucketInfo& bucket_info, int shard_id,
 
   assert(headers.size() == bucket_instance_ids.size());
 
-  map<string, rgw_bucket_dir_header>::iterator iter = headers.begin();
+  auto iter = headers.begin();
   map<int, string>::iterator viter = bucket_instance_ids.begin();
 
   for(; iter != headers.end(); ++iter, ++viter) {
     if (shard_id >= 0) {
-      markers[shard_id] = iter->second.max_marker;
+      markers[shard_id] = iter->max_marker;
     } else {
-      markers[viter->first] = iter->second.max_marker;
+      markers[viter->first] = iter->max_marker;
     }
   }
   return 0;
@@ -12137,7 +12137,7 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     ent.size = 0;
     ent.size_rounded = 0;
 
-    map<string, rgw_bucket_dir_header> headers;
+    vector<rgw_bucket_dir_header> headers;
 
     RGWBucketInfo bucket_info;
     int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
@@ -12149,11 +12149,11 @@ int RGWRados::update_containers_stats(map<string, RGWBucketEnt>& m)
     if (r < 0)
       return r;
 
-    map<string, rgw_bucket_dir_header>::iterator hiter = headers.begin();
+    auto hiter = headers.begin();
     for (; hiter != headers.end(); ++hiter) {
       RGWObjCategory category = main_category;
-      map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->second.stats).find((uint8_t)category);
-      if (iter != hiter->second.stats.end()) {
+      map<uint8_t, struct rgw_bucket_category_stats>::iterator iter = (hiter->stats).find((uint8_t)category);
+      if (iter != hiter->stats.end()) {
         struct rgw_bucket_category_stats& stats = iter->second;
         ent.count += stats.num_entries;
         ent.size += stats.total_size;
@@ -13044,7 +13044,7 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
   return 0;
 }
 
-int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
+int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids)
 {
   librados::IoCtx index_ctx;
   map<int, string> oids;
@@ -13059,7 +13059,7 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ma
 
   map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
   for(; iter != list_results.end(); ++iter) {
-    headers[oids[iter->first]] = iter->second.dir.header;
+    headers.push_back(std::move(iter->second.dir.header));
   }
   return 0;
 }
@@ -13131,7 +13131,7 @@ int RGWRados::cls_user_get_header_async(const string& user_id, RGWGetUserHeader_
 
 int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketInfo& bucket_info)
 {
-  map<string, struct rgw_bucket_dir_header> headers;
+  vector<rgw_bucket_dir_header> headers;
   int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, headers);
   if (r < 0) {
     ldout(cct, 20) << "cls_bucket_header() returned " << r << dendl;
@@ -13143,7 +13143,7 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
   bucket_info.bucket.convert(&entry.bucket);
 
   for (const auto& hiter : headers) {
-    for (const auto& iter : hiter.second.stats) {
+    for (const auto& iter : hiter.stats) {
       const struct rgw_bucket_category_stats& header_stats = iter.second;
       entry.size += header_stats.total_size;
       entry.size_rounded += header_stats.total_size_rounded;
@@ -13165,7 +13165,7 @@ int RGWRados::cls_user_sync_bucket_stats(rgw_raw_obj& user_obj, const RGWBucketI
 
 int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucket_entry& entry)
 {
-  map<string, struct rgw_bucket_dir_header> headers;
+  vector<rgw_bucket_dir_header> headers;
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(this);
   int ret = get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL);
@@ -13182,7 +13182,7 @@ int RGWRados::cls_user_get_bucket_stats(const rgw_bucket& bucket, cls_user_bucke
   bucket.convert(&entry.bucket);
 
   for (const auto& hiter : headers) {
-    for (const auto& iter : hiter.second.stats) {
+    for (const auto& iter : hiter.stats) {
       const struct rgw_bucket_category_stats& header_stats = iter.second;
       entry.size += header_stats.total_size;
       entry.size_rounded += header_stats.total_size_rounded;
