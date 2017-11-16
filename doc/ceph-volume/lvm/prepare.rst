@@ -33,19 +33,24 @@ the back end can be specified with:
 This is the OSD backend that allows preparation of logical volumes for
 a :term:`filestore` objectstore OSD.
 
-The process is *very* strict, it requires an existing logical volume for the
-OSD data and a partitioned physical device or logical volume for the journal.
-No special preparation is needed for these volumes other than following the
-minimum size requirements for data and journal.
+It can use a logical volume for the OSD data and a partitioned physical device
+or logical volume for the journal.  No special preparation is needed for these
+volumes other than following the minimum size requirements for data and
+journal.
 
 The API call looks like::
 
     ceph-volume prepare --filestore --data volume_group/lv_name --journal journal
 
-The ``--data`` value *must* be a volume group name and a logical volume name
-separated by a ``/``. Since logical volume names are not enforced for
-uniqueness, this prevents using the wrong volume. The ``--journal`` can be
-either a logical volume *or* a partition.
+There is flexibility to use a raw device or partition as well for ``--data``
+that will be converted to a logical volume. This is not ideal in all situations
+since ``ceph-volume`` is just going to create a unique volume group and
+a logical volume from that device.
+
+When using logical volumes for ``--data``, the  value *must* be a volume group
+name and a logical volume name separated by a ``/``. Since logical volume names
+are not enforced for uniqueness, this prevents using the wrong volume. The
+``--journal`` can be either a logical volume *or* a partition.
 
 When using a partition, it *must* contain a ``PARTUUID`` discoverable by
 ``blkid``, so that it can later be identified correctly regardless of the
@@ -171,11 +176,10 @@ more flexibility for devices. Bluestore supports the following configurations:
 * A block device and a block.db device
 * A single block device
 
-It can accept a whole device (not a partition, otherwise it will raise an
-error) or a logical volume for ``block``. If a physical device is provided it
-will then be turned into a logical volume. This allows a simpler approach at
-using LVM but at the cost of flexibility: there are no options or
-configurations to change how the LV is created.
+It can accept a whole device (or partition), or a logical volume for ``block``.
+If a physical device is provided it will then be turned into a logical volume.
+This allows a simpler approach at using LVM but at the cost of flexibility:
+there are no options or configurations to change how the LV is created.
 
 The ``block`` is specified with the ``--data`` flag, and in its simplest use
 case it looks like::
