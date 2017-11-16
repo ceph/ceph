@@ -1964,6 +1964,36 @@ protected:
     friend class RecoveryMachine;
 
     /* States */
+    // Initial
+    // Reset
+    // Start
+    //   Started
+    //     Primary
+    //       WaitActingChange
+    //       Peering
+    //         GetInfo
+    //         GetLog
+    //         GetMissing
+    //         WaitUpThru
+    //         Incomplete
+    //       Active
+    //         Activating
+    //         Clean
+    //         Recovered
+    //         Backfilling
+    //         WaitRemoteBackfillReserved
+    //         WaitLocalBackfillReserved
+    //         NotBackfilling
+    //         NotRecovering
+    //         Recovering
+    //         WaitRemoteRecoveryReserved
+    //         WaitLocalRecoveryReserved
+    //     ReplicaActive
+    //       RepNotRecovering
+    //       RepRecovering
+    //       RepWaitBackfillReserved
+    //       RepWaitRecoveryReserved
+    //     Stray
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       explicit Crashed(my_context ctx);
