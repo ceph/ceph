@@ -2847,12 +2847,30 @@ public:
 
   int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
-  virtual int get_bucket_info(RGWObjectCtx& obj_ctx,
-                              const string& tenant_name, const string& bucket_name,
-                              RGWBucketInfo& info,
-                              ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
   virtual int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
                                      map<string, bufferlist> *pattrs, bool create_entry_point);
+
+private:
+  int _get_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant,
+		       const string& bucket_name, RGWBucketInfo& info,
+		       real_time *pmtime,
+		       map<string, bufferlist> *pattrs,
+		       boost::optional<obj_version> refresh_version);
+public:
+
+
+  int get_bucket_info(RGWObjectCtx& obj_ctx,
+		      const string& tenant_name, const string& bucket_name,
+		      RGWBucketInfo& info,
+		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+
+  // Returns true on successful refresh. Returns false if there was an
+  // error or the version stored on the OSD is the same as that
+  // presented in the BucketInfo structure.
+  //
+  int try_refresh_bucket_info(RGWBucketInfo& info,
+			      ceph::real_time *pmtime,
+			      map<string, bufferlist> *pattrs = nullptr);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags);
