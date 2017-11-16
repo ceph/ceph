@@ -1035,7 +1035,7 @@ PG::Scrubber::Scrubber()
  : reserved(false), reserve_failed(false),
    epoch_start(0),
    active(false),
-   waiting_on(0), shallow_errors(0), deep_errors(0), fixed(0),
+   shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
    auto_repair(false),
    num_digest_updates_pending(0),
@@ -3855,9 +3855,11 @@ void PG::do_replica_scrub_map(OpRequestRef op)
 	   << scrubber.received_maps[m->from].valid_through
 	   << dendl;
 
-  --scrubber.waiting_on;
+  dout(10) << __func__ << " waiting_on_whom was " << scrubber.waiting_on_whom
+	   << dendl;
+  assert(scrubber.waiting_on_whom.count(m->from));
   scrubber.waiting_on_whom.erase(m->from);
-  if (scrubber.waiting_on == 0) {
+  if (scrubber.waiting_on_whom.empty()) {
     if (ops_blocked_by_scrub()) {
       requeue_scrub(true);
     } else {
@@ -4647,7 +4649,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         // ask replicas to wait until
         // last_update_applied >= scrubber.subset_last_update and then scan
         scrubber.waiting_on_whom.insert(pg_whoami);
-        ++scrubber.waiting_on;
 
         // request maps from replicas
 	for (set<pg_shard_t>::iterator i = actingbackfill.begin();
@@ -4658,8 +4659,9 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
                              scrubber.start, scrubber.end, scrubber.deep,
 			     scrubber.seed);
           scrubber.waiting_on_whom.insert(*i);
-          ++scrubber.waiting_on;
         }
+	dout(10) << __func__ << " waiting_on_whom " << scrubber.waiting_on_whom
+		 << dendl;
 
         scrubber.state = PG::Scrubber::WAIT_PUSHES;
 
@@ -4699,14 +4701,16 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           return;
         }
 
-        --scrubber.waiting_on;
+	dout(10) << __func__ << " waiting_on_whom was "
+		 << scrubber.waiting_on_whom << dendl;
+	assert(scrubber.waiting_on_whom.count(pg_whoami));
         scrubber.waiting_on_whom.erase(pg_whoami);
 
         scrubber.state = PG::Scrubber::WAIT_REPLICAS;
         break;
 
       case PG::Scrubber::WAIT_REPLICAS:
-        if (scrubber.waiting_on > 0) {
+        if (!scrubber.waiting_on_whom.empty()) {
           // will be requeued by sub_op_scrub_map
           dout(10) << "wait for replicas to build scrub map" << dendl;
           done = true;
@@ -4717,7 +4721,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
       case PG::Scrubber::COMPARE_MAPS:
         assert(last_update_applied >= scrubber.subset_last_update);
-        assert(scrubber.waiting_on == 0);
+        assert(scrubber.waiting_on_whom.empty());
 
         scrub_compare_maps();
 	scrubber.start = scrubber.end;
@@ -7574,7 +7578,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
     q.f->dump_stream("scrubber.subset_last_update") << pg->scrubber.subset_last_update;
     q.f->dump_bool("scrubber.deep", pg->scrubber.deep);
     q.f->dump_unsigned("scrubber.seed", pg->scrubber.seed);
-    q.f->dump_int("scrubber.waiting_on", pg->scrubber.waiting_on);
     {
       q.f->open_array_section("scrubber.waiting_on_whom");
       for (set<pg_shard_t>::iterator p = pg->scrubber.waiting_on_whom.begin();
