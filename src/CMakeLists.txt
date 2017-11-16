@@ -733,6 +733,7 @@ if (WITH_MGR)
       mgr/ActivePyModules.cc
       mgr/OSDHealthMetricCollector.cc
       mgr/StandbyPyModules.cc
+      mgr/PyModule.cc
       mgr/PyModuleRegistry.cc
       mgr/PyModuleRunner.cc
       mgr/PyFormatter.cc

@@ -152,7 +152,7 @@ void MgrStandby::send_beacon()
   dout(1) << state_str() << dendl;
 
   set<string> modules;
-  PyModuleRegistry::list_modules(&modules);
+  py_module_registry.list_modules(&modules);
 
   // Whether I think I am available (request MgrMonitor to set me
   // as available in the map)

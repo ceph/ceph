@@ -15,6 +15,8 @@
 // Python.h comes first because otherwise it clobbers ceph's assert
 #include "Python.h"
 
+#include "PyModule.h"
+
 #include "common/debug.h"
 #include "mgr/Gil.h"
 
@@ -24,19 +26,14 @@
 #define dout_subsys ceph_subsys_mgr
 
 
-std::string handle_pyerror();
-
 PyModuleRunner::~PyModuleRunner()
 {
-  Gil gil(pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true);
 
   if (pClassInstance) {
     Py_XDECREF(pClassInstance);
     pClassInstance = nullptr;
   }
-
-  Py_DECREF(pClass);
-  pClass = nullptr;
 }
 
 int PyModuleRunner::serve()
@@ -45,7 +42,7 @@ int PyModuleRunner::serve()
 
   // This method is called from a separate OS thread (i.e. a thread not
   // created by Python), so tell Gil to wrap this in a new thread state.
-  Gil gil(pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true);
 
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("serve"), nullptr);
@@ -68,10 +65,10 @@ int PyModuleRunner::serve()
     Py_DECREF(pvalue_str);
     PyErr_Restore(ptype, pvalue, ptraceback);
     
-    clog->error() << "Unhandled exception from module '" << module_name
+    clog->error() << "Unhandled exception from module '" << get_name()
                   << "' while running on mgr." << g_conf->name.get_id()
                   << ": " << exc_msg;
-    derr << module_name << ".serve:" << dendl;
+    derr << get_name() << ".serve:" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
   }
@@ -83,7 +80,7 @@ void PyModuleRunner::shutdown()
 {
   assert(pClassInstance != nullptr);
 
-  Gil gil(pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true);
 
   auto pValue = PyObject_CallMethod(pClassInstance,
       const_cast<char*>("shutdown"), nullptr);
@@ -91,7 +88,7 @@ void PyModuleRunner::shutdown()
   if (pValue != NULL) {
     Py_DECREF(pValue);
   } else {
-    derr << "Failed to invoke shutdown() on " << module_name << dendl;
+    derr << "Failed to invoke shutdown() on " << get_name() << dendl;
     derr << handle_pyerror() << dendl;
   }
 }
@@ -99,7 +96,7 @@ void PyModuleRunner::shutdown()
 void PyModuleRunner::log(int level, const std::string &record)
 {
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr[" << module_name << "] "
+#define dout_prefix *_dout << "mgr[" << get_name() << "] "
   dout(level) << record << dendl;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "

@@ -30,9 +30,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
 
-// Declaration fulfilled by ActivePyModules
-std::string handle_pyerror();
-
 
 StandbyPyModules::StandbyPyModules(MonClient *monc_, const MgrMap &mgr_map_,
     LogChannelRef clog_)
@@ -77,17 +74,16 @@ void StandbyPyModules::shutdown()
   modules.clear();
 }
 
-int StandbyPyModules::start_one(std::string const &module_name,
-    PyObject *pClass, const SafeThreadState &pMyThreadState)
+int StandbyPyModules::start_one(PyModuleRef py_module)
 {
   Mutex::Locker l(lock);
+  const std::string &module_name = py_module->get_name();
 
   assert(modules.count(module_name) == 0);
 
   modules[module_name].reset(new StandbyPyModule(
       state,
-      module_name, pClass,
-      pMyThreadState, clog));
+      py_module, clog));
 
   if (modules.size() == 1) {
     load_config_thread.create("LoadConfig");
@@ -109,26 +105,26 @@ int StandbyPyModules::start_one(std::string const &module_name,
 
 int StandbyPyModule::load()
 {
-  Gil gil(pMyThreadState, true);
+  Gil gil(py_module->pMyThreadState, true);
 
   // We tell the module how we name it, so that it can be consistent
   // with us in logging etc.
   auto pThisPtr = PyCapsule_New(this, nullptr, nullptr);
   assert(pThisPtr != nullptr);
-  auto pModuleName = PyString_FromString(module_name.c_str());
+  auto pModuleName = PyString_FromString(get_name().c_str());
   assert(pModuleName != nullptr);
   auto pArgs = PyTuple_Pack(2, pModuleName, pThisPtr);
   Py_DECREF(pThisPtr);
   Py_DECREF(pModuleName);
 
-  pClassInstance = PyObject_CallObject(pClass, pArgs);
+  pClassInstance = PyObject_CallObject(py_module->pStandbyClass, pArgs);
   Py_DECREF(pArgs);
   if (pClassInstance == nullptr) {
-    derr << "Failed to construct class in '" << module_name << "'" << dendl;
+    derr << "Failed to construct class in '" << get_name() << "'" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
   } else {
-    dout(1) << "Constructed class from module: " << module_name << dendl;
+    dout(1) << "Constructed class from module: " << get_name() << dendl;
     return 0;
   }
 }
@@ -172,7 +168,7 @@ bool StandbyPyModule::get_config(const std::string &key,
   PyEval_RestoreThread(tstate);
 
   const std::string global_key = PyModuleRegistry::config_prefix
-    + module_name + "/" + key;
+    + get_name() + "/" + key;
 
   dout(4) << __func__ << "key: " << global_key << dendl;
 
@@ -190,7 +186,7 @@ std::string StandbyPyModule::get_active_uri() const
 {
   std::string result;
   state.with_mgr_map([&result, this](const MgrMap &mgr_map){
-    auto iter = mgr_map.services.find(module_name);
+    auto iter = mgr_map.services.find(get_name());
     if (iter != mgr_map.services.end()) {
       result = iter->second;
     }
