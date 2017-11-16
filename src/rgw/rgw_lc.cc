@@ -966,3 +966,8 @@ std::string rgwlc_s3_expiration_header(
   return hdr;
 
 } /* rgwlc_s3_expiration_header */
+
+void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
+{
+  o.push_back(new RGWLifecycleConfiguration);
+}
