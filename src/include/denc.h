@@ -292,22 +292,25 @@ template<typename T, typename=void> struct ExtType {
 
 template<typename T> struct ExtType<
   T,
-  typename std::enable_if<std::is_same<T, int16_t>::value ||
-			  std::is_same<T, uint16_t>::value>::type> {
+  typename std::enable_if<
+    _denc::is_any_of<typename _denc::underlying_type<T>::type,
+		     int16_t, uint16_t>::value>::type> {
   using type = __le16;
 };
 
 template<typename T> struct ExtType<
   T,
-  typename std::enable_if<std::is_same<T, int32_t>::value ||
-			  std::is_same<T, uint32_t>::value>::type> {
+  typename std::enable_if<
+    _denc::is_any_of<typename _denc::underlying_type<T>::type,
+		     int32_t, uint32_t>::value>::type> {
   using type = __le32;
 };
 
 template<typename T> struct ExtType<
   T,
-  typename std::enable_if<std::is_same<T, int64_t>::value ||
-			  std::is_same<T, uint64_t>::value>::type> {
+  typename std::enable_if<
+    _denc::is_any_of<typename _denc::underlying_type<T>::type,
+		     int64_t, uint64_t>::value>::type> {
   using type = __le64;
 };
 
@@ -335,12 +338,12 @@ struct denc_traits<
   }
   static void decode(T& o, buffer::ptr::iterator &p,
 		     uint64_t f=0) {
-    o = *(etype*)p.get_pos_add(sizeof(etype));
+    o = static_cast<T>(*(etype*)p.get_pos_add(sizeof(etype)));
   }
   static void decode(T& o, buffer::list::iterator &p) {
     etype e;
     p.copy(sizeof(etype), reinterpret_cast<char*>(&e));
-    o = e;
+    o = static_cast<T>(e);
   }
 };
 
