@@ -1416,7 +1416,7 @@ void CDir::mark_clean()
 // caller should hold auth pin of this
 void CDir::log_mark_dirty()
 {
-  if (is_dirty() || is_projected())
+  if (is_dirty() || projected_version > get_version())
     return; // noop if it is already dirty or will be dirty
 
   version_t pv = pre_dirty();
