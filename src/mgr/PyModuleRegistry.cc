@@ -35,100 +35,10 @@ std::string PyModuleRegistry::config_prefix;
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr[py] "
 
-namespace {
-  PyObject* log_write(PyObject*, PyObject* args) {
-    char* m = nullptr;
-    if (PyArg_ParseTuple(args, "s", &m)) {
-      auto len = strlen(m);
-      if (len && m[len-1] == '\n') {
-	m[len-1] = '\0';
-      }
-      dout(4) << m << dendl;
-    }
-    Py_RETURN_NONE;
-  }
 
-  PyObject* log_flush(PyObject*, PyObject*){
-    Py_RETURN_NONE;
-  }
-
-  static PyMethodDef log_methods[] = {
-    {"write", log_write, METH_VARARGS, "write stdout and stderr"},
-    {"flush", log_flush, METH_VARARGS, "flush"},
-    {nullptr, nullptr, 0, nullptr}
-  };
-}
 
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr " << __func__ << " "
-
-
-
-std::string PyModule::get_site_packages()
-{
-  std::stringstream site_packages;
-
-  // CPython doesn't auto-add site-packages dirs to sys.path for us,
-  // but it does provide a module that we can ask for them.
-  auto site_module = PyImport_ImportModule("site");
-  assert(site_module);
-
-  auto site_packages_fn = PyObject_GetAttrString(site_module, "getsitepackages");
-  if (site_packages_fn != nullptr) {
-    auto site_packages_list = PyObject_CallObject(site_packages_fn, nullptr);
-    assert(site_packages_list);
-
-    auto n = PyList_Size(site_packages_list);
-    for (Py_ssize_t i = 0; i < n; ++i) {
-      if (i != 0) {
-        site_packages << ":";
-      }
-      site_packages << PyString_AsString(PyList_GetItem(site_packages_list, i));
-    }
-
-    Py_DECREF(site_packages_list);
-    Py_DECREF(site_packages_fn);
-  } else {
-    // Fall back to generating our own site-packages paths by imitating
-    // what the standard site.py does.  This is annoying but it lets us
-    // run inside virtualenvs :-/
-
-    auto site_packages_fn = PyObject_GetAttrString(site_module, "addsitepackages");
-    assert(site_packages_fn);
-
-    auto known_paths = PySet_New(nullptr);
-    auto pArgs = PyTuple_Pack(1, known_paths);
-    PyObject_CallObject(site_packages_fn, pArgs);
-    Py_DECREF(pArgs);
-    Py_DECREF(known_paths);
-    Py_DECREF(site_packages_fn);
-
-    auto sys_module = PyImport_ImportModule("sys");
-    assert(sys_module);
-    auto sys_path = PyObject_GetAttrString(sys_module, "path");
-    assert(sys_path);
-
-    dout(1) << "sys.path:" << dendl;
-    auto n = PyList_Size(sys_path);
-    bool first = true;
-    for (Py_ssize_t i = 0; i < n; ++i) {
-      dout(1) << "  " << PyString_AsString(PyList_GetItem(sys_path, i)) << dendl;
-      if (first) {
-        first = false;
-      } else {
-        site_packages << ":";
-      }
-      site_packages << PyString_AsString(PyList_GetItem(sys_path, i));
-    }
-
-    Py_DECREF(sys_path);
-    Py_DECREF(sys_module);
-  }
-
-  Py_DECREF(site_module);
-
-  return site_packages.str();
-}
 
 int PyModuleRegistry::init(const MgrMap &map)
 {
@@ -159,10 +69,15 @@ int PyModuleRegistry::init(const MgrMap &map)
 
   std::list<std::string> failed_modules;
 
+  std::set<std::string> module_names;
+  list_modules(&module_names);
   // Load python code
-  for (const auto& module_name : mgr_map.modules) {
+  for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
-    auto mod = std::make_unique<PyModule>(module_name);
+
+    bool enabled = (mgr_map.modules.count(module_name) > 0);
+
+    auto mod = std::make_shared<PyModule>(module_name, enabled);
     int r = mod->load(pMainThreadState);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
@@ -185,158 +100,6 @@ int PyModuleRegistry::init(const MgrMap &map)
   return 0;
 }
 
-
-int PyModule::load(PyThreadState *pMainThreadState)
-{
-  assert(pMainThreadState != nullptr);
-
-  // Configure sub-interpreter and construct C++-generated python classes
-  {
-    SafeThreadState sts(pMainThreadState);
-    Gil gil(sts);
-
-    auto thread_state = Py_NewInterpreter();
-    if (thread_state == nullptr) {
-      derr << "Failed to create python sub-interpreter for '" << module_name << '"' << dendl;
-      return -EINVAL;
-    } else {
-      pMyThreadState.set(thread_state);
-      // Some python modules do not cope with an unpopulated argv, so lets
-      // fake one.  This step also picks up site-packages into sys.path.
-      const char *argv[] = {"ceph-mgr"};
-      PySys_SetArgv(1, (char**)argv);
-
-      if (g_conf->daemonize) {
-        auto py_logger = Py_InitModule("ceph_logger", log_methods);
-#if PY_MAJOR_VERSION >= 3
-        PySys_SetObject("stderr", py_logger);
-        PySys_SetObject("stdout", py_logger);
-#else
-        PySys_SetObject(const_cast<char*>("stderr"), py_logger);
-        PySys_SetObject(const_cast<char*>("stdout"), py_logger);
-#endif
-      }
-
-      // Configure sys.path to include mgr_module_path
-      std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                             + ":" + g_conf->get_val<std::string>("mgr_module_path");
-      dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-
-      PySys_SetPath(const_cast<char*>(sys_path.c_str()));
-    }
-
-    PyMethodDef ModuleMethods[] = {
-      {nullptr}
-    };
-
-    // Initialize module
-    PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
-    assert(ceph_module != nullptr);
-
-    auto load_class = [ceph_module](const char *name, PyTypeObject *type)
-    {
-      type->tp_new = PyType_GenericNew;
-      if (PyType_Ready(type) < 0) {
-          assert(0);
-      }
-      Py_INCREF(type);
-
-      PyModule_AddObject(ceph_module, name, (PyObject *)type);
-    };
-
-    load_class("BaseMgrModule", &BaseMgrModuleType);
-    load_class("BaseMgrStandbyModule", &BaseMgrStandbyModuleType);
-    load_class("BasePyOSDMap", &BasePyOSDMapType);
-    load_class("BasePyOSDMapIncremental", &BasePyOSDMapIncrementalType);
-    load_class("BasePyCRUSH", &BasePyCRUSHType);
-  }
-
-  // Environment is all good, import the external module
-  {
-    Gil gil(pMyThreadState);
-    int r;
-    r = load_subclass_of("MgrModule", &pClass);
-    if (r) {
-      derr << "Class not found in module '" << module_name << "'" << dendl;
-      return r;
-    }
-    r = load_subclass_of("MgrStandbyModule", &pStandbyClass);
-    if (!r) {
-      dout(4) << "Standby mode available in module '" << module_name
-              << "'" << dendl;
-    } else {
-      dout(4) << "Standby mode not provided by module '" << module_name
-              << "'" << dendl;
-    }
-  }
-  return 0;
-} 
-
-int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)
-{
-  // load the base class
-  PyObject *mgr_module = PyImport_ImportModule("mgr_module");
-  if (!mgr_module) {
-    derr << "Module not found: 'mgr_module'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  }
-  auto mgr_module_type = PyObject_GetAttrString(mgr_module, base_class);
-  Py_DECREF(mgr_module);
-  if (!mgr_module_type) {
-    derr << "Unable to import MgrModule from mgr_module" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -EINVAL;
-  }
-
-  // find the sub class
-  PyObject *plugin_module = PyImport_ImportModule(module_name.c_str());
-  if (!plugin_module) {
-    derr << "Module not found: '" << module_name << "'" << dendl;
-    derr << handle_pyerror() << dendl;
-    return -ENOENT;
-  }
-  auto locals = PyModule_GetDict(plugin_module);
-  Py_DECREF(plugin_module);
-  PyObject *key, *value;
-  Py_ssize_t pos = 0;
-  *py_class = nullptr;
-  while (PyDict_Next(locals, &pos, &key, &value)) {
-    if (!PyType_Check(value)) {
-      continue;
-    }
-    if (!PyObject_IsSubclass(value, mgr_module_type)) {
-      continue;
-    }
-    if (PyObject_RichCompareBool(value, mgr_module_type, Py_EQ)) {
-      continue;
-    }
-    auto class_name = PyString_AsString(key);
-    if (*py_class) {
-      derr << __func__ << ": ignoring '"
-	   << module_name << "." << class_name << "'"
-	   << ": only one '" << base_class
-	   << "' class is loaded from each plugin" << dendl;
-      continue;
-    }
-    *py_class = value;
-    dout(4) << __func__ << ": found class: '"
-	    << module_name << "." << class_name << "'" << dendl;
-  }
-  Py_DECREF(mgr_module_type);
-
-  return *py_class ? 0 : -EINVAL;
-}
-
-PyModule::~PyModule()
-{
-  if (pMyThreadState.ts != nullptr) {
-    Gil gil(pMyThreadState, true);
-    Py_XDECREF(pClass);
-    Py_XDECREF(pStandbyClass);
-  }
-}
-
 void PyModuleRegistry::standby_start(MonClient *monc)
 {
   Mutex::Locker l(lock);
@@ -350,11 +113,13 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
+    if (!i.second->is_enabled()) {
+      continue;
+    }
+
     if (i.second->pStandbyClass) {
       dout(4) << "starting module " << i.second->get_name() << dendl;
-      int r = standby_modules->start_one(i.first,
-              i.second->pStandbyClass,
-              i.second->pMyThreadState);
+      int r = standby_modules->start_one(i.second);
       if (r != 0) {
         derr << "failed to start module '" << i.second->get_name()
              << "'" << dendl;;
@@ -396,10 +161,12 @@ void PyModuleRegistry::active_start(
               config_, ds, cs, mc, clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
+    if (!i.second->is_enabled()) {
+      continue;
+    }
+
     dout(4) << "Starting " << i.first << dendl;
-    int r = active_modules->start_one(i.first,
-            i.second->pClass,
-            i.second->pMyThreadState);
+    int r = active_modules->start_one(i.second);
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << i.first << "')"
            << dendl;

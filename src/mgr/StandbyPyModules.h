@@ -89,12 +89,10 @@ class StandbyPyModule : public PyModuleRunner
 
   StandbyPyModule(
       StandbyPyModuleState &state_,
-      const std::string &module_name_,
-      PyObject *pClass_,
-      const SafeThreadState &pMyThreadState_,
+      PyModuleRef py_module_,
       LogChannelRef clog_)
     :
-      PyModuleRunner(module_name_, pClass_, pMyThreadState_, clog_),
+      PyModuleRunner(py_module_, clog_),
       state(state_)
   {
   }
@@ -139,9 +137,7 @@ public:
       const MgrMap &mgr_map_,
       LogChannelRef clog_);
 
-  int start_one(std::string const &module_name,
-                PyObject *pClass,
-                const SafeThreadState &pMyThreadState);
+  int start_one(PyModuleRef py_module);
 
   void shutdown();
 

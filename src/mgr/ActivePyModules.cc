@@ -12,7 +12,6 @@
  */
 
 // Include this first to get python headers earlier
-#include "BaseMgrModule.h"
 #include "Gil.h"
 
 #include "common/errno.h"
@@ -321,26 +320,23 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   }
 }
 
-int ActivePyModules::start_one(std::string const &module_name,
-    PyObject *pClass, const SafeThreadState &pMyThreadState)
+int ActivePyModules::start_one(PyModuleRef py_module)
 {
   Mutex::Locker l(lock);
 
-  assert(modules.count(module_name) == 0);
+  assert(modules.count(py_module->get_name()) == 0);
 
-  modules[module_name].reset(new ActivePyModule(
-      module_name, pClass,
-      pMyThreadState, clog));
+  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
 
-  int r = modules[module_name]->load(this);
+  int r = modules[py_module->get_name()]->load(this);
   if (r != 0) {
     return r;
   } else {
-    dout(4) << "Starting thread for " << module_name << dendl;
+    dout(4) << "Starting thread for " << py_module->get_name() << dendl;
     // Giving Thread the module's module_name member as its
     // char* thread name: thread must not outlive module class lifetime.
-    modules[module_name]->thread.create(
-        modules[module_name]->get_name().c_str());
+    modules[py_module->get_name()]->thread.create(
+        py_module->get_name().c_str());
 
     return 0;
   }

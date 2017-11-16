@@ -14,8 +14,8 @@
 
 #pragma once
 
-// Python.h comes first because otherwise it clobbers ceph's assert
-#include "Python.h"
+// First because it includes Python.h
+#include "PyModule.h"
 
 #include <string>
 #include <map>
@@ -26,37 +26,15 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
-class PyModule
-{
-private:
-  const std::string module_name;
-  std::string get_site_packages();
-  int load_subclass_of(const char* class_name, PyObject** py_class);
-public:
-  SafeThreadState pMyThreadState;
-  PyObject *pClass = nullptr;
-  PyObject *pStandbyClass = nullptr;
 
-  PyModule(const std::string &module_name_)
-    : module_name(module_name_)
-  {
-  }
-
-  ~PyModule();
-
-  int load(PyThreadState *pMainThreadState);
-
-  std::string get_name() const {
-    return module_name;
-  }
-};
 
 /**
  * This class is responsible for setting up the python runtime environment
  * and importing the python modules.
  *
  * It is *not* responsible for constructing instances of their BaseMgrModule
- * subclasses.
+ * subclasses: that is the job of ActiveMgrModule, which consumes the class
+ * references that we load here.
  */
 class PyModuleRegistry
 {
@@ -65,7 +43,7 @@ private:
 
   LogChannelRef clog;
 
-  std::map<std::string, std::unique_ptr<PyModule>> modules;
+  std::map<std::string, PyModuleRef> modules;
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
@@ -79,7 +57,7 @@ private:
 public:
   static std::string config_prefix;
 
-  static void list_modules(std::set<std::string> *modules);
+  void list_modules(std::set<std::string> *modules);
 
   PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
