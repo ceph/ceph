@@ -189,6 +189,17 @@ void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
     finish(r);
     return;
   }
+
+  {
+    // avoid the need to refresh to delete the newly unprotected snapshot
+    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+    auto snap_info_it = m_dst_image_ctx->snap_info.find(m_prev_snap_id);
+    if (snap_info_it != m_dst_image_ctx->snap_info.end()) {
+      snap_info_it->second.protection_status =
+        RBD_PROTECTION_STATUS_UNPROTECTED;
+    }
+  }
+
   if (handle_cancellation()) {
     return;
   }
