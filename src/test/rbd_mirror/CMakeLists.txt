@@ -16,6 +16,7 @@ set_target_properties(rbd_mirror_test PROPERTIES COMPILE_FLAGS
 add_executable(unittest_rbd_mirror
   test_main.cc
   test_mock_fixture.cc
+  test_mock_ImageMap.cc
   test_mock_ImageReplayer.cc
   test_mock_ImageSync.cc
   test_mock_ImageSyncThrottler.cc
