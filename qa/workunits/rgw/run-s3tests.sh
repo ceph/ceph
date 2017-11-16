@@ -20,6 +20,7 @@ elif [ -e $root_path/../build/CMakeCache.txt ]; then
 fi
 PATH=$PATH:$BIN_PATH
 
+rm -rf tmp.s3-tests*
 dir=tmp.s3-tests.$$
 
 # clone and bootstrap
@@ -29,6 +30,13 @@ git clone https://github.com/ceph/s3-tests
 cd s3-tests
 git checkout ceph-$branch
 VIRTUALENV_PYTHON=/usr/bin/python2 ./bootstrap
+
+graphfile="./request_decision_graph.yml"
+if [ -e "$graphfile" ]
+then
+  cp $graphfile ../../
+fi
+
 cd ../..
 
 # users
@@ -78,6 +86,7 @@ EOF
 S3TEST_CONF=`pwd`/s3.conf $dir/s3-tests/virtualenv/bin/nosetests -a '!fails_on_rgw' -v 
 
 rm -rf $dir
+rm -rf $graphfile
 
 echo OK.
 
