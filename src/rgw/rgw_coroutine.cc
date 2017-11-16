@@ -332,7 +332,7 @@ int RGWCoroutinesStack::unwind(int retcode)
   rgw_spawned_stacks *src_spawned = &(*pos)->spawned;
 
   if (pos == ops.begin()) {
-    ldout(cct, 0) << "stack " << (void *)this << " end" << dendl;
+    ldout(cct, 15) << "stack " << (void *)this << " end" << dendl;
     spawned.inherit(src_spawned);
     ops.clear();
     pos = ops.end();
