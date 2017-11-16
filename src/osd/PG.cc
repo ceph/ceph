@@ -4146,8 +4146,17 @@ int PG::build_scrub_map_chunk(
     return ret;
   }
 
-
+  if (deep) {
+    scrub_queued = true;
+    unlock();
+  }
   get_pgbackend()->be_scan_list(map, ls, deep, seed, handle);
+  if (deep) {
+    handle.suspend_tp_timeout();
+    lock();
+    scrub_queued = false;
+    handle.reset_tp_timeout();
+  }
   _scan_rollback_obs(rollback_obs, handle);
   _scan_snaps(map);
   _repair_oinfo_oid(map);
