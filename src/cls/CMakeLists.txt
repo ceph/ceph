@@ -78,13 +78,13 @@ set_target_properties(cls_otp PROPERTIES
   INSTALL_RPATH "")
 install(TARGETS cls_otp DESTINATION ${cls_dir})
 
-# set(cls_otp_client_srcs
-#   otp/cls_otp_client.cc
-#   otp/cls_otp_types.cc
-#   otp/cls_otp_ops.cc)
-# add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
-# 
-# list(APPEND cls_embedded_srcs ${cls_otp_srcs} ${cls_otp_client_srcs})
+set(cls_otp_client_srcs
+  otp/cls_otp_client.cc
+#  otp/cls_otp_types.cc
+#  otp/cls_otp_ops.cc
+  )
+add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
+list(APPEND cls_embedded_srcs ${cls_otp_srcs} ${cls_otp_client_srcs})
 
 # cls_refcount
 set(cls_refcount_srcs
