@@ -289,6 +289,38 @@ void RGWOp_Set_Bucket_Quota::execute()
   http_ret = RGWBucketAdminOp::set_quota(store, op_state);
 }
 
+class RGWOp_Sync_Bucket : public RGWRESTOp {
+
+public:
+  RGWOp_Sync_Bucket() {}
+
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_WRITE);
+  }
+
+  void execute() override;
+
+  const char* name() const override { return "sync_bucket"; }
+}
+
+void RGWOp_Sync_Bucket::execute()
+{
+  std::string bucket;
+  std::string tenant;
+  bool sync_bucket;
+
+  RGWBucketAdminOpState op_state;
+  RESTArgs::get_string(s, "bucket", bucket, &bucket);
+  RESTArgs::get_string(s, "tenant", tenant, &tenant);
+  RESTArgs::get_bool(s, "sync", true, &sync_bucket);
+
+  op_state.set_bucket_name(bucket);
+  op_state.set_tenant(tenant);
+  op_state.set_sync_bucket(sync_bucket);
+
+  http_ret = RGWBucketAdminOp::sync_bucket(store, op_state);
+}
+
 class RGWOp_Object_Remove: public RGWRESTOp {
 
 public:
@@ -318,6 +350,7 @@ void RGWOp_Object_Remove::execute()
 
   http_ret = RGWBucketAdminOp::remove_object(store, op_state);
 }
+
 
 RGWOp *RGWHandler_Bucket::op_get()
 {

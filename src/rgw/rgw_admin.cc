@@ -7320,29 +7320,19 @@ next:
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
+    } 
+    if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
+      bucket_op.set_sync_bucket(false);
+    } else {
+      bucket_op.set_sync_bucket(true);
     }
-
+    bucket_op.set_tenant(tenant);
+    string err_msg;
+    ret = RGWBucketAdminOp::sync_bucket(store, bucket_op, &err_msg);
     if (ret < 0) {
-      cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    RGWPeriod period;
-    ret = period.init(g_ceph_context, store->svc()->sysobj, realm_id, realm_name, true);
-    if (ret < 0) {
-      cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    if (!store->svc()->zone->is_meta_master()) {
-      cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
-      cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
-      return EINVAL;
-    }
-
-    rgw_obj obj(bucket, object);
-    ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
-    if (ret < 0)
+      cerr << err_msg << std::endl;
       return -ret;
+    }
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
