@@ -34,7 +34,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
 #include "ImageDeleter.h"
-#include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
+#include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -266,12 +266,10 @@ bool ImageDeleter<I>::process_image_delete() {
   m_active_delete->to_string(ss);
   std::string del_info_str = ss.str();
   dout(10) << "start processing delete request: " << del_info_str << dendl;
-  int r;
-  cls::rbd::MirrorImage mirror_image;
 
   // remote image was disabled, now we need to delete local image
   IoCtx ioctx;
-  r = m_active_delete->local_rados->ioctx_create2(
+  int r = m_active_delete->local_rados->ioctx_create2(
     m_active_delete->local_pool_id, ioctx);
   if (r < 0) {
     derr << "error accessing local pool " << m_active_delete->local_pool_id
@@ -282,142 +280,31 @@ bool ImageDeleter<I>::process_image_delete() {
 
   dout(20) << "connected to local pool: " << ioctx.get_pool_name() << dendl;
 
-  auto &global_image_id = m_active_delete->global_image_id;
-  std::string local_image_id;
-  r = librbd::cls_client::mirror_image_get_image_id(
-    &ioctx, global_image_id, &local_image_id);
-  if (r == -ENOENT) {
-    dout(10) << "image " << global_image_id << " is not mirrored" << dendl;
-    complete_active_delete(r);
-    return true;
-  } else if (r < 0) {
-    derr << "error retrieving local id for image " << global_image_id
-         << ": " << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  }
+  C_SaferCond remove_ctx;
+  image_deleter::ErrorResult error_result;
+  auto req = image_deleter::RemoveRequest<I>::create(
+    ioctx, m_active_delete->global_image_id, m_active_delete->ignore_orphaned,
+    &error_result, m_work_queue, &remove_ctx);
+  req->send();
 
-  std::string mirror_uuid;
-  C_SaferCond tag_owner_ctx;
-  Journal<>::get_tag_owner(ioctx, local_image_id, &mirror_uuid, m_work_queue,
-                           &tag_owner_ctx);
-  r = tag_owner_ctx.wait();
-  if (r < 0 && r != -ENOENT) {
-    derr << "error retrieving image primary info for image " << global_image_id
-         << ": " << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  } else if (r != -ENOENT) {
-    if (mirror_uuid == Journal<>::LOCAL_MIRROR_UUID) {
-      dout(10) << "image " << global_image_id << " is local primary" << dendl;
-      complete_active_delete(-EISPRM);
-      return true;
-    } else if (mirror_uuid == Journal<>::ORPHAN_MIRROR_UUID &&
-               !m_active_delete->ignore_orphaned) {
-      dout(10) << "image " << global_image_id << " is orphaned" << dendl;
-      complete_active_delete(-EISPRM);
-      return true;
-    }
-  }
-
-  dout(20) << "local image is not the primary" << dendl;
-  bool has_snapshots;
-  r = image_has_snapshots_and_children(&ioctx, local_image_id, &has_snapshots);
+  r = remove_ctx.wait();
   if (r < 0) {
-    enqueue_failed_delete(r);
-    return true;
-  }
-
-  mirror_image.global_image_id = global_image_id;
-  mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_DISABLING;
-  r = cls_client::mirror_image_set(&ioctx, local_image_id, mirror_image);
-  if (r == -ENOENT) {
-    dout(10) << "local image is not mirrored, aborting deletion..." << dendl;
-    complete_active_delete(r);
-    return true;
-  } else if (r == -EEXIST || r == -EINVAL) {
-    derr << "cannot disable mirroring for image " << global_image_id
-         << ": global_image_id has changed/reused: "
-         << cpp_strerror(r) << dendl;
-    complete_active_delete(r);
-    return true;
-  } else if (r < 0) {
-    derr << "cannot disable mirroring for image " << global_image_id
-         << ": " << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  }
-
-  dout(20) << "set local image mirroring to disable" << dendl;
-
-  if (has_snapshots) {
-    dout(20) << "local image has snapshots" << dendl;
-
-    C_SaferCond purge_ctx;
-    auto req = image_deleter::SnapshotPurgeRequest<I>::create(
-      ioctx, local_image_id, &purge_ctx);
-    req->send();
-
-    r = purge_ctx.wait();
-    if (r == -EBUSY) {
+    if (error_result == image_deleter::ERROR_RESULT_COMPLETE) {
+      complete_active_delete(r);
+      return true;
+    } else if (error_result == image_deleter::ERROR_RESULT_RETRY_IMMEDIATELY) {
       Mutex::Locker l(m_delete_lock);
       m_active_delete->notify(r);
       m_delete_queue.push_front(std::move(m_active_delete));
       return false;
-    } else if (r < 0) {
+    } else {
       enqueue_failed_delete(r);
       return true;
     }
   }
 
-  librbd::NoOpProgressContext ctx;
-  r = librbd::remove(ioctx, "", local_image_id, ctx, true);
-  if (r < 0 && r != -ENOENT) {
-    derr << "error removing image " << global_image_id << " "
-         << "(" << local_image_id << ") from local pool: "
-         << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  }
-
-  // image was already deleted from rbd_directory, now we will make sure
-  // that will be also removed from rbd_mirroring
-  if (r == -ENOENT) {
-    dout(20) << "local image does not exist, removing image from rbd_mirroring"
-             << dendl;
-  }
-
-  r = cls_client::mirror_image_remove(&ioctx, local_image_id);
-  if (r < 0 && r != -ENOENT) {
-    derr << "error removing image from mirroring directory: "
-         << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  }
-
-  dout(10) << "Successfully deleted image "
-           << global_image_id << " " << "(" << local_image_id << ")" << dendl;
-
   complete_active_delete(0);
   return true;
-}
-
-template <typename I>
-int ImageDeleter<I>::image_has_snapshots_and_children(IoCtx *ioctx,
-                                                      string& image_id,
-                                                      bool *has_snapshots) {
-  string header_oid = librbd::util::header_name(image_id);
-  ::SnapContext snapc;
-  int r = cls_client::get_snapcontext(ioctx, header_oid, &snapc);
-  if (r < 0 && r != -ENOENT) {
-    derr << "error retrieving snapshot context for image id " << image_id
-         << ": " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  *has_snapshots = !snapc.snaps.empty();
-
-  return 0;
 }
 
 template <typename I>
