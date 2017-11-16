@@ -1193,6 +1193,15 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
   }
   return m;
 }
+
+template<typename Iterator>
+ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
+  m << "{ ";
+  std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+  m << " }";
+  return m;
+}
+
 }
 
 ostream& operator <<(ostream& m, const Condition& c) {
@@ -1433,12 +1442,12 @@ ostream& operator <<(ostream& m, const Statement& s) {
   }
   if (!s.princ.empty()) {
     m << "Principal: ";
-    print_array(m, s.princ.cbegin(), s.princ.cend());
+    print_dict(m, s.princ.cbegin(), s.princ.cend());
     m << ", ";
   }
   if (!s.noprinc.empty()) {
     m << "NotPrincipal: ";
-    print_array(m, s.noprinc.cbegin(), s.noprinc.cend());
+    print_dict(m, s.noprinc.cbegin(), s.noprinc.cend());
     m << ", ";
   }
 
@@ -1492,7 +1501,7 @@ ostream& operator <<(ostream& m, const Statement& s) {
 
   if (!s.conditions.empty()) {
     m << "Condition: ";
-    print_array(m, s.conditions.cbegin(), s.conditions.cend());
+    print_dict(m, s.conditions.cbegin(), s.conditions.cend());
   }
 
   return m << " }";
