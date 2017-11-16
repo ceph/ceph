@@ -25,6 +25,7 @@
     bucket rm                  remove bucket
     bucket check               check bucket index
     bucket reshard             reshard bucket
+    bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
     bi get                     retrieve bucket index object entries
@@ -34,6 +35,7 @@
     object rm                  remove object
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
+    object rewrite             rewrite the specified object
     objects expire             run expired objects cleanup
     period delete              delete a period
     period get                 get period info
@@ -252,6 +254,9 @@
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
                                ignores bucket index consistency
+     --min-rewrite-size        specify the min object size condition for bucket rewrite (default 4M)
+     --max-rewrite-size        specify the max object size condition for bucket rewrite (default ULLONG_MAX)
+     --min-rewrite-stripe-size specify the min stripe size condition for object rewrite (default 0)
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
