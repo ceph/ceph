@@ -264,7 +264,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
                                          &ctx);
-  EXPECT_EQ(-rbd::mirror::ImageDeleter<>::EISPRM, ctx.wait());
+  EXPECT_EQ(-EPERM, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
@@ -280,7 +280,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Orphan_Image) {
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
                                          &ctx);
-  EXPECT_EQ(-rbd::mirror::ImageDeleter<>::EISPRM, ctx.wait());
+  EXPECT_EQ(-EPERM, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
   ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());

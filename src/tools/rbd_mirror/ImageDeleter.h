@@ -128,9 +128,6 @@ private:
 
   void run();
   bool process_image_delete();
-  int image_has_snapshots_and_children(librados::IoCtx *ioctx,
-                                       std::string& image_id,
-                                       bool *has_snapshots);
 
   void complete_active_delete(int r);
   void enqueue_failed_delete(int error_code);
