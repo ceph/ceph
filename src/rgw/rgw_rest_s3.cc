@@ -3826,6 +3826,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
         case RGW_OP_PUT_ACLS:
         case RGW_OP_PUT_CORS:
+        case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
         case RGW_OP_DELETE_MULTI_OBJ:
