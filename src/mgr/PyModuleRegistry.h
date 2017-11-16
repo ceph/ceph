@@ -59,6 +59,14 @@ public:
 
   void list_modules(std::set<std::string> *modules);
 
+  void get_modules(std::list<PyModuleRef> *modules_out)
+  {
+    Mutex::Locker l(lock);
+    for (const auto &i : modules) {
+      modules_out->push_back(i.second);
+    }
+  }
+
   PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
   {}

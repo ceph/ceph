@@ -233,8 +233,37 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     // Populate can_run by interrogating the module's callback that
     // may check for dependencies etc
-    // TODO
+    PyObject *pCanRunTuple = PyObject_CallMethod(pClass,
+      const_cast<char*>("can_run"), const_cast<char*>("()"));
+    if (pCanRunTuple != nullptr) {
+      if (PyTuple_Check(pCanRunTuple) && PyTuple_Size(pCanRunTuple) == 2) {
+        PyObject *pCanRun = PyTuple_GetItem(pCanRunTuple, 0);
+        PyObject *can_run_str = PyTuple_GetItem(pCanRunTuple, 1);
+        if (!PyBool_Check(pCanRun) || !PyString_Check(can_run_str)) {
+          derr << "Module " << get_name()
+               << " returned wrong type in can_run" << dendl;
+          can_run = false;
+        } else {
+          can_run = (pCanRun == Py_True);
+          if (!can_run) {
+            error_string = PyString_AsString(can_run_str);
+            dout(4) << "Module " << get_name()
+                    << " reported that it cannot run: "
+                    << error_string << dendl;
+          }
+        }
+      } else {
+        derr << "Module " << get_name()
+             << " returned wrong type in can_run" << dendl;
+        can_run = false;
+      }
 
+      Py_DECREF(pCanRunTuple);
+    } else {
+      derr << "Exception calling can_run on " << get_name() << dendl;
+      derr << handle_pyerror() << dendl;
+      can_run = false;
+    }
   }
   return 0;
 }

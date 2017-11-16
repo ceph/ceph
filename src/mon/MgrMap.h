@@ -28,7 +28,7 @@ public:
   std::set<std::string> available_modules;
 
   StandbyInfo(uint64_t gid_, const std::string &name_,
-	      std::set<std::string>& am)
+	      const std::set<std::string>& am)
     : gid(gid_), name(name_), available_modules(am)
   {}
 

@@ -58,6 +58,13 @@ class Module(MgrModule):
     def get_fsid(self):
         return self.get('mon_map')['fsid']
 
+    @staticmethod
+    def can_run():
+        if InfluxDBClient is not None:
+            return True, ""
+        else:
+            return False, "influxdb python module not found"
+
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
