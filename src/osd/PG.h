@@ -1885,7 +1885,8 @@ public:
 	boost::statechart::custom_reaction< Backfilled >,
 	boost::statechart::custom_reaction< AllReplicasActivated >,
 	boost::statechart::custom_reaction< DeferRecovery >,
-	boost::statechart::custom_reaction< DeferBackfill >
+	boost::statechart::custom_reaction< DeferBackfill >,
+	boost::statechart::custom_reaction< DoRecovery>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1901,6 +1902,9 @@ public:
 	return discard_event();
       }
       boost::statechart::result react(const DeferBackfill& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DoRecovery&) {
 	return discard_event();
       }
     };
