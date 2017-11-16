@@ -434,17 +434,17 @@ Options
 
 .. option:: --min-rewrite-size
 
-    Specify the min object size condition for bucket rewrite (default 4M).
+    Specify the min object size for bucket rewrite (default 4M).
 
 .. option:: --max-rewrite-size
 
-    Specify the max object size condition for bucket rewrite (default ULLONG_MAX).
+    Specify the max object size for bucket rewrite (default ULLONG_MAX).
 
 .. option:: --min-rewrite-stripe-size
 
-    Specify the min stripe size condition for object rewrite,
-    default value is set to 0, in that case the specified object
-    will always be rewritten for restriping.
+    Specify the min stripe size for object rewrite (default 0). If the value
+    is set to 0, then the specified object will always be
+    rewritten for restriping.
 
 Quota Options
 =============
