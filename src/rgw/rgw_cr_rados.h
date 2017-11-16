@@ -410,7 +410,8 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
   RGWRados *store;
 
   string marker;
-  map<string, bufferlist> *entries;
+  using omap_ptr = std::shared_ptr<std::map<std::string, bufferlist>>;
+  omap_ptr entries;
   int max_entries;
 
   int rval;
@@ -424,7 +425,7 @@ public:
   RGWRadosGetOmapKeysCR(RGWRados *_store,
 		      const rgw_raw_obj& _obj,
 		      const string& _marker,
-		      map<string, bufferlist> *_entries, int _max_entries);
+		      omap_ptr _entries, int _max_entries);
 
   int send_request() override;
 

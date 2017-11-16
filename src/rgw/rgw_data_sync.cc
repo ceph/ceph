@@ -1090,8 +1090,9 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   uint32_t shard_id;
   rgw_data_sync_marker sync_marker;
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  using omap_map = std::map<std::string, bufferlist>;
+  std::shared_ptr<omap_map> entries;
+  omap_map::iterator iter;
 
   string oid;
 
@@ -1132,7 +1133,7 @@ class RGWDataSyncShardCR : public RGWCoroutine {
 
   string error_oid;
   RGWOmapAppend *error_repo;
-  map<string, bufferlist> error_entries;
+  std::shared_ptr<omap_map> error_entries;
   string error_marker;
   int max_error_entries;
 
@@ -1251,19 +1252,20 @@ public:
       set_marker_tracker(new RGWDataSyncShardMarkerTrack(sync_env, status_oid, sync_marker, tn));
       total_entries = sync_marker.pos;
       do {
-        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid), sync_marker.marker, &entries, max_entries));
+        entries = std::make_shared<omap_map>();
+        yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid), sync_marker.marker, entries, max_entries));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: RGWRadosGetOmapKeysCR() returned ret=" << retcode));
           lease_cr->go_down();
           drain_all();
           return set_cr_error(retcode);
         }
-        if (entries.size() > 0) {
+        if (entries->size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
-        tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
-        iter = entries.begin();
-        for (; iter != entries.end(); ++iter) {
+        tn->log(20, SSTR("retrieved " << entries->size() << " entries to sync"));
+        iter = entries->begin();
+        for (; iter != entries->end(); ++iter) {
           tn->log(20, SSTR("full sync: " << iter->first));
           total_entries++;
           if (!marker_tracker->start(iter->first, total_entries, real_time())) {
@@ -1279,7 +1281,7 @@ public:
           }
           sync_marker.marker = iter->first;
         }
-      } while ((int)entries.size() == max_entries);
+      } while ((int)entries->size() == max_entries);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
@@ -1345,18 +1347,19 @@ public:
         }
 
         /* process bucket shards that previously failed */
+        error_entries = std::make_shared<omap_map>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, error_oid),
-                                             error_marker, &error_entries,
+                                             error_marker, error_entries,
                                              max_error_entries));
-        tn->log(20, SSTR("read error repo, got " << error_entries.size() << " entries"));
-        iter = error_entries.begin();
-        for (; iter != error_entries.end(); ++iter) {
+        tn->log(20, SSTR("read error repo, got " << error_entries->size() << " entries"));
+        iter = error_entries->begin();
+        for (; iter != error_entries->end(); ++iter) {
           tn->log(20, SSTR("handle error entry: " << iter->first));
           spawn(new RGWDataSyncSingleEntryCR(sync_env, iter->first, iter->first, nullptr /* no marker tracker */, error_repo, true, tn), false);
           error_marker = iter->first;
         }
-        if ((int)error_entries.size() != max_error_entries) {
-          if (error_marker.empty() && error_entries.empty()) {
+        if ((int)error_entries->size() != max_error_entries) {
+          if (error_marker.empty() && error_entries->empty()) {
             /* the retry repo is empty, we back off a bit before calling it again */
             retry_backoff_secs *= 2;
             if (retry_backoff_secs > RETRY_BACKOFF_SECS_MAX) {
