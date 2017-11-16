@@ -33,7 +33,7 @@ struct Listener {
                             const std::string &instance_id) = 0;
 };
 
-enum PolicyMetaType {
+enum PolicyMetaType : uint32_t {
   POLICY_META_TYPE_NONE = 0,
 };
 
