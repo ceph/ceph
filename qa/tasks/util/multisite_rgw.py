@@ -202,7 +202,6 @@ def extract_zone_info(ctx, client, client_config):
     cluster_name, daemon_type, client_id = teuthology.split_role(client)
     client_with_id = daemon_type + '.' + client_id
     client_with_cluster = cluster_name + '.' + client_with_id
-    print client_with_cluster
     ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
     ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
     ceph_config.update(ctx.ceph[cluster_name].conf.get(client_with_cluster, {}))
