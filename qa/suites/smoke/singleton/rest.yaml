@@ -8,6 +8,9 @@ overrides:
           osd pool default pg num: 64
           osd pool default pgp num: 64
           mon max pg per osd: 1024
+      ceph_mgr_modules:
+         - status
+         - restful
       dmcrypt_journal_collocation: true
       ceph_stable_release: luminous
       ceph_origin: distro
