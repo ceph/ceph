@@ -1185,20 +1185,12 @@ const char* condop_string(const TokenID t) {
 template<typename Iterator>
 ostream& print_array(ostream& m, Iterator begin, Iterator end) {
   if (begin == end) {
-    m << "[";
+    m << "[]";
   } else {
-    auto beforelast = end - 1;
     m << "[ ";
-    for (auto i = begin; i != end; ++i) {
-      m << *i;
-      if (i != beforelast) {
-	m << ", ";
-      } else {
-	m << " ";
-      }
-    }
+    std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+    m << " ]";
   }
-  m << "]";
   return m;
 }
 }
