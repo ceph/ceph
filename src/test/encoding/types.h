@@ -306,6 +306,9 @@ TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
 
+#include "rgw/rgw_lc.h"
+TYPE(RGWLifecycleConfiguration)
+
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
 TYPE(rgw_bucket_dir_entry_meta)

@@ -809,3 +809,8 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   return (nt+24*60*60 - tt);
 }
 
+void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
+{
+  o.push_back(new RGWLifecycleConfiguration);
+}
+
