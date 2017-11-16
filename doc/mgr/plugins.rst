@@ -124,6 +124,19 @@ the monitor cluster, use this function:
 
 .. automethod:: MgrModule.have_mon_connection
 
+Reporting if your module cannot run
+-----------------------------------
+
+If your module cannot be run for any reason (such as a missing dependency),
+then you can report that by implementing the ``can_run`` function.
+
+.. automethod:: MgrModule.can_run
+
+Note that this will only work properly if your module can always be imported:
+if you are importing a dependency that may be absent, then do it in a
+try/except block so that your module can be loaded far enough to use
+``can_run`` even if the dependency is absent.
+
 Sending commands
 ----------------
 

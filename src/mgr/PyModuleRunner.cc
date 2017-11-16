@@ -70,6 +70,9 @@ int PyModuleRunner::serve()
                   << ": " << exc_msg;
     derr << get_name() << ".serve:" << dendl;
     derr << handle_pyerror() << dendl;
+
+    py_module->fail(exc_msg);
+
     return -EINVAL;
   }
 

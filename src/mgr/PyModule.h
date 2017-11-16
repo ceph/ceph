@@ -45,6 +45,9 @@ private:
   // (e.g. throwing an exception from serve())
   bool failed = false;
 
+  // Populated if loaded, can_run or failed indicates a problem
+  std::string error_string;
+
 public:
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
@@ -59,9 +62,27 @@ public:
 
   int load(PyThreadState *pMainThreadState);
 
+  /**
+   * Mark the module as failed, recording the reason in the error
+   * string.
+   */
+  void fail(const std::string &reason)
+  {
+    Mutex::Locker l(lock);
+    failed = true;
+    error_string = reason;
+  }
+
   bool is_enabled() const { Mutex::Locker l(lock) ; return enabled; }
-  const std::string &get_name() const
-    { Mutex::Locker l(lock) ; return module_name; }
+  const std::string &get_name() const {
+    Mutex::Locker l(lock) ; return module_name;
+  }
+  const std::string &get_error_string() const {
+    Mutex::Locker l(lock) ; return error_string;
+  }
+  bool get_can_run() const {
+    Mutex::Locker l(lock) ; return can_run;
+  }
 };
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
