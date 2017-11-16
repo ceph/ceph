@@ -196,6 +196,12 @@ struct TestMockIoImageRequestWQ : public TestMockFixture {
                     *on_finish = ctx;
                   }));
   }
+
+  void expect_was_throttled(MockImageRequest &mock_image_request,
+                            bool throttled) {
+    EXPECT_CALL(mock_image_request, was_throttled())
+      .WillOnce(Return(throttled));
+  }
 };
 
 TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
@@ -221,6 +227,7 @@ TEST_F(TestMockIoImageRequestWQ, AcquireLockError) {
 
   librbd::exclusive_lock::MockPolicy mock_exclusive_lock_policy;
   expect_front(mock_image_request_wq, mock_image_request);
+  expect_was_throttled(*mock_image_request, false);
   expect_is_refresh_request(mock_image_ctx, false);
   expect_is_write_op(*mock_image_request, true);
   expect_dequeue(mock_image_request_wq, mock_image_request);
@@ -258,6 +265,7 @@ TEST_F(TestMockIoImageRequestWQ, RefreshError) {
   mock_image_request_wq.aio_write(aio_comp, 0, 0, {}, 0);
 
   expect_front(mock_image_request_wq, mock_image_request);
+  expect_was_throttled(*mock_image_request, false);
   expect_is_refresh_request(mock_image_ctx, true);
   expect_is_write_op(*mock_image_request, true);
   expect_dequeue(mock_image_request_wq, mock_image_request);
