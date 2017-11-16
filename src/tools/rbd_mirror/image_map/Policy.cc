@@ -233,7 +233,7 @@ bool Policy::perform_transition(ActionState *action_state, StateTransition::Acti
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
-  StateTransition::State state;
+  StateTransition::State state = action_state->transition.next_state;
 
   bool complete = is_transition_complete(action_type, &state);
   dout(10) << ": advancing state: " << action_state->current_state << " -> "
