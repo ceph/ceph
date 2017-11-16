@@ -1380,9 +1380,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       image_id = ictx->id;
       ictx->owner_lock.get_read();
       if (ictx->exclusive_lock != nullptr) {
-        r = ictx->operations->prepare_image_update();
-        if (r < 0 || (ictx->exclusive_lock != nullptr &&
-                      !ictx->exclusive_lock->is_lock_owner())) {
+        r = ictx->operations->prepare_image_update(false);
+        if (r < 0) {
 	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
 	  ictx->owner_lock.put_read();
 	  ictx->state->close();
