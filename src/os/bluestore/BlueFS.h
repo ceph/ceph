@@ -38,8 +38,47 @@ enum {
   l_bluefs_last,
 };
 
-class BlueFS {
+class BlueFS : public md_config_obs_t {
 public:
+  // config observer
+  const char** get_tracked_conf_keys() const override {
+    static const char* KEYS[] = {
+      "bluefs_allocator",
+      "bluefs_alloc_size",
+      "bluefs_buffered_io",
+      "bluefs_min_flush_size",
+      "bluefs_max_prefetch",
+      "bluefs_max_log_runway",
+      "bluefs_min_log_runway",
+      "bluefs_preextend_wal_files",
+      "bluefs_sync_write",
+      NULL 
+    };
+    return KEYS;
+  }
+
+  void handle_conf_change(const struct md_config_t* conf,
+    const std::set<std::string>& changed) override {
+      m_bluefs_allocator =
+        conf->get_val<std::string>("bluefs_allocator");
+      m_bluefs_alloc_size =
+        conf->get_val<uint64_t>("bluefs_alloc_size");
+      m_bluefs_buffered_io =
+        conf->get_val<bool>("bluefs_buffered_io");
+      m_bluefs_min_flush_size =
+        conf->get_val<uint64_t>("bluefs_min_flush_size;");
+      m_bluefs_max_prefetch =
+        conf->get_val<uint64_t>("bluefs_max_prefetch");
+      m_bluefs_max_log_runway =
+        conf->get_val<uint64_t>("bluefs_max_log_runway");
+      m_bluefs_min_log_runway =
+        conf->get_val<uint64_t>("bluefs_min_log_runway");
+      m_bluefs_preextend_wal_files =
+        conf->get_val<bool>("bluefs_preextend_wal_files");
+      m_bluefs_sync_write =
+        conf->get_val<bool>("bluefs_sync_write");
+  }
+
   CephContext* cct;
   static constexpr unsigned MAX_BDEV = 3;
   static constexpr unsigned BDEV_WAL = 0;
@@ -51,6 +90,16 @@ public:
     WRITER_WAL,
     WRITER_SST,
   };
+
+  std::string m_bluefs_allocator;
+  uint64_t m_bluefs_alloc_size;
+  bool m_bluefs_buffered_io;
+  uint64_t m_bluefs_min_flush_size;
+  uint64_t m_bluefs_max_prefetch;
+  uint64_t m_bluefs_max_log_runway;
+  uint64_t m_bluefs_min_log_runway;
+  bool m_bluefs_preextend_wal_files;
+  bool m_bluefs_sync_write;
 
   struct File : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
@@ -131,7 +180,7 @@ public:
       : file(f),
 	pos(0),
 	buffer_appender(buffer.get_page_aligned_appender(
-			  g_conf->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
+          g_conf->get_val<uint64_t>("bluefs_alloc_size") / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
     }

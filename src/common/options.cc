@@ -3185,11 +3185,11 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_min_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_M)
-    .set_description(""),
+    .set_description("alloc when we get this low"),
 
     Option("bluefs_max_log_runway", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4194304)
-    .set_description(""),
+    .set_description("alloc this much at a time"),
 
     Option("bluefs_log_compact_min_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5.0)
@@ -3201,11 +3201,11 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_min_flush_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(512_K)
-    .set_description(""),
+    .set_description("ignore flush until its this big"),
 
     Option("bluefs_compact_log_sync", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("sync or async log compaction"),
 
     Option("bluefs_buffered_io", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -3217,11 +3217,11 @@ std::vector<Option> get_global_options() {
 
     Option("bluefs_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("stupid")
-    .set_description(""),
+    .set_description("stupid or bitmap"),
 
-    Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("this requires that rocksdb has recycling enabled"),
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
@@ -3523,10 +3523,10 @@ std::vector<Option> get_global_options() {
     .add_tag("mkfs")
     .set_description("Key value database to use for bluestore"),
 
-    Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("stupid")
     .set_enum_allowed({"bitmap", "stupid"})
-    .set_description("Allocator policy"),
+    .set_description("stupid or bitmap"),
 
     Option("bluestore_freelist_blocks_per_key", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(128)

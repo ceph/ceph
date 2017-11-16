@@ -946,19 +946,6 @@ OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
 
 OPTION(objectstore_blackhole, OPT_BOOL)
 
-OPTION(bluefs_alloc_size, OPT_U64)
-OPTION(bluefs_max_prefetch, OPT_U64)
-OPTION(bluefs_min_log_runway, OPT_U64)  // alloc when we get this low
-OPTION(bluefs_max_log_runway, OPT_U64)  // alloc this much at a time
-OPTION(bluefs_log_compact_min_ratio, OPT_FLOAT)      // before we consider
-OPTION(bluefs_log_compact_min_size, OPT_U64)  // before we consider
-OPTION(bluefs_min_flush_size, OPT_U64)  // ignore flush until its this big
-OPTION(bluefs_compact_log_sync, OPT_BOOL)  // sync or async log compaction?
-OPTION(bluefs_buffered_io, OPT_BOOL)
-OPTION(bluefs_sync_write, OPT_BOOL)
-OPTION(bluefs_allocator, OPT_STR)     // stupid | bitmap
-OPTION(bluefs_preextend_wal_files, OPT_BOOL)  // this *requires* that rocksdb has recycling enabled
-
 OPTION(bluestore_bluefs, OPT_BOOL)
 OPTION(bluestore_bluefs_env_mirror, OPT_BOOL) // mirror to normal Env for debug
 OPTION(bluestore_bluefs_min, OPT_U64) // 1gb
@@ -967,6 +954,7 @@ OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT) // how much to reclaim at a time
 OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balance free space between bluefs and bluestore
+
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
