@@ -28,7 +28,7 @@ public:
 
   template <typename T>
   inline void operator()(const T& t) const {
-    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    ::encode(T::TYPE, m_bl);
     t.encode(m_bl);
   }
 private:
