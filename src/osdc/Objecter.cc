@@ -3188,7 +3188,11 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   }
 
   logger->inc(l_osdc_op_send);
-  logger->inc(l_osdc_op_send_bytes, m->get_data().length());
+  uint64_t op_bytes = 0;
+  for (auto &p: m->ops)
+    op_bytes += p.indata.length();
+  if (op_bytes)
+    logger->inc(l_osdc_op_send_bytes, op_bytes);
 
   return m;
 }
