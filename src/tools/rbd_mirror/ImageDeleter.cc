@@ -29,11 +29,12 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
-#include "librbd/journal/Policy.h"
+#include "librbd/image/RemoveRequest.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
 #include "ImageDeleter.h"
+#include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -74,19 +75,6 @@ public:
 
 private:
   ImageDeleter<I> *image_del;
-};
-
-struct DeleteJournalPolicy : public librbd::journal::Policy {
-  bool append_disabled() const override {
-    return true;
-  }
-  bool journal_disabled() const override {
-    return false;
-  }
-
-  void allocate_tag_on_lock(Context *on_finish) override {
-    on_finish->complete(0);
-  }
 };
 
 } // anonymous namespace
@@ -365,85 +353,21 @@ bool ImageDeleter<I>::process_image_delete() {
   if (has_snapshots) {
     dout(20) << "local image has snapshots" << dendl;
 
-    ImageCtx *imgctx = new ImageCtx("", local_image_id, nullptr, ioctx, false);
-    r = imgctx->state->open(false);
-    if (r < 0) {
-      derr << "error opening image " << global_image_id << " ("
-           << local_image_id << "): " << cpp_strerror(r) << dendl;
+    C_SaferCond purge_ctx;
+    auto req = image_deleter::SnapshotPurgeRequest<I>::create(
+      ioctx, local_image_id, &purge_ctx);
+    req->send();
+
+    r = purge_ctx.wait();
+    if (r == -EBUSY) {
+      Mutex::Locker l(m_delete_lock);
+      m_active_delete->notify(r);
+      m_delete_queue.push_front(std::move(m_active_delete));
+      return false;
+    } else if (r < 0) {
       enqueue_failed_delete(r);
       return true;
     }
-
-    {
-      RWLock::WLocker snap_locker(imgctx->snap_lock);
-      imgctx->set_journal_policy(new DeleteJournalPolicy());
-    }
-
-    std::vector<librbd::snap_info_t> snaps;
-    r = librbd::snap_list(imgctx, snaps);
-    if (r < 0) {
-      derr << "error listing snapshot of image " << imgctx->name
-           << cpp_strerror(r) << dendl;
-      imgctx->state->close();
-      enqueue_failed_delete(r);
-      return true;
-    }
-
-    for (const auto& snap : snaps) {
-      dout(20) << "processing deletion of snapshot " << imgctx->name << "@"
-               << snap.name << dendl;
-
-      bool is_protected;
-      r = librbd::snap_is_protected(imgctx, snap.name.c_str(), &is_protected);
-      if (r < 0) {
-        derr << "error checking snapshot protection of snapshot "
-             << imgctx->name << "@" << snap.name << ": " << cpp_strerror(r)
-             << dendl;
-        imgctx->state->close();
-        enqueue_failed_delete(r);
-        return true;
-      }
-      if (is_protected) {
-        dout(20) << "snapshot " << imgctx->name << "@" << snap.name
-                 << " is protected, issuing unprotect command" << dendl;
-
-        r = imgctx->operations->snap_unprotect(
-          cls::rbd::UserSnapshotNamespace(), snap.name.c_str());
-        if (r == -EBUSY) {
-          // there are still clones of snapshots of this image, therefore send
-          // the delete request to the end of the queue
-          dout(10) << "local image id " << local_image_id << " has "
-                   << "snapshots with cloned children, postponing deletion..."
-                   << dendl;
-          imgctx->state->close();
-          Mutex::Locker l(m_delete_lock);
-          m_active_delete->notify(r);
-          m_delete_queue.push_front(std::move(m_active_delete));
-          return false;
-        } else if (r < 0) {
-          derr << "error unprotecting snapshot " << imgctx->name << "@"
-               << snap.name << ": " << cpp_strerror(r) << dendl;
-          imgctx->state->close();
-          enqueue_failed_delete(r);
-          return true;
-        }
-      }
-
-      r = imgctx->operations->snap_remove(cls::rbd::UserSnapshotNamespace(),
-					  snap.name.c_str());
-      if (r < 0) {
-        derr << "error removing snapshot " << imgctx->name << "@"
-             << snap.name << ": " << cpp_strerror(r) << dendl;
-        imgctx->state->close();
-        enqueue_failed_delete(r);
-        return true;
-      }
-
-      dout(10) << "snapshot " << imgctx->name << "@" << snap.name
-               << " was deleted" << dendl;
-    }
-
-    imgctx->state->close();
   }
 
   librbd::NoOpProgressContext ctx;
