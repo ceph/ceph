@@ -411,6 +411,24 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   return 0;
 }
 
+int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
+                                     uint64_t expected_object_size,
+                                     uint64_t expected_write_size,
+                                     const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    get_file(oid, true, snapc);
+  }
+
+  return 0;
+}
+
 int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
                                   uint64_t len,
                                   std::map<uint64_t,uint64_t> *m,
