@@ -3184,16 +3184,12 @@ public:
                RGWBucketInfo& dest_bucket_info,
 	       RGWRados::Object::Read& read_op, off_t end,
                rgw_obj& dest_obj,
-               rgw_obj& src_obj,
-               uint64_t max_chunk_size,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
                map<string, bufferlist>& attrs,
-               RGWObjCategory category,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *version_id,
-               string *ptag,
                ceph::buffer::list *petag);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
