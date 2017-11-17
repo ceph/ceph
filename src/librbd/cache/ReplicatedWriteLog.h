@@ -287,6 +287,9 @@ struct WriteLogMapEntry {
   WriteLogMapEntry(BlockExtent block_extent, WriteLogEntry *log_entry)
     : block_extent(block_extent) , log_entry(log_entry) {
   }
+  WriteLogMapEntry(BlockExtent block_extent)
+    : block_extent(block_extent) , log_entry(NULL) {
+  }
   WriteLogMapEntry(WriteLogEntry *log_entry)
     : block_extent(log_entry->block_extent()) , log_entry(log_entry) {
   }
@@ -302,9 +305,6 @@ struct WriteLogMapEntry {
 };
 typedef std::list<WriteLogMapEntry> WriteLogMapEntries;
 class WriteLogMap {
-private:
-  struct WriteLogMapExtent;
-
 public:
   WriteLogMap(CephContext *cct)
     : m_cct(cct), m_lock("librbd::cache::rwl::WriteLogMap::m_lock") {
@@ -329,43 +329,28 @@ private:
   //WriteLogEntries find_entries_locked(BlockExtent block_extent);
   WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
-  struct WriteLogMapExtent : public boost::intrusive::list_base_hook<>,
-			     public boost::intrusive::set_base_hook<> {
-    WriteLogMapEntry map_entry;
-  };
-
-  struct WriteLogMapExtentKey {
-    typedef BlockExtent type;
-    const BlockExtent &operator()(const WriteLogMapExtent &value) {
-      return value.map_entry.block_extent;
-    }
-  };
-
-  struct WriteLogMapExtentCompare {
-    bool operator()(const BlockExtent &lhs,
-                    const BlockExtent &rhs) const {
+  struct WriteLogMapEntryCompare {
+    bool operator()(const WriteLogMapEntry &lhs,
+                    const WriteLogMapEntry &rhs) const {
       // check for range overlap (lhs < rhs)
-      if (lhs.block_end <= rhs.block_start) {
+      if (lhs.block_extent.block_end < rhs.block_extent.block_start) {
         return true;
       }
       return false;
     }
   };
 
-  typedef std::deque<WriteLogMapExtent> WriteLogMapExtentsPool;
-  typedef boost::intrusive::list<WriteLogMapExtent> WriteLogMapExtents;
-  typedef boost::intrusive::set<
-    WriteLogMapExtent,
-    boost::intrusive::compare<WriteLogMapExtentCompare>,
-    boost::intrusive::key_of_value<WriteLogMapExtentKey> >
-      BlockExtentToWriteLogMapExtents;
+  typedef std::set<WriteLogMapEntry,
+		   WriteLogMapEntryCompare> BlockExtentToWriteLogMapEntries;
+
+  WriteLogMapEntry block_extent_to_map_key(BlockExtent &block_extent) {
+    return WriteLogMapEntry(block_extent, NULL);
+  }
 
   CephContext *m_cct;
 
   Mutex m_lock;
-  WriteLogMapExtentsPool m_map_extent_pool;
-  WriteLogMapExtents m_free_map_extents;
-  BlockExtentToWriteLogMapExtents m_block_to_log_entry_map;
+  BlockExtentToWriteLogMapEntries m_block_to_log_entry_map;
 };
 
 } // namespace rwl

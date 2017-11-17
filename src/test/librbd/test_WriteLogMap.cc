@@ -58,81 +58,43 @@ TEST_F(TestWriteLogMap, AddOverlaps) {
   map.add_entry(&e0);
 
   WriteLogMapEntries found0 = map.find_map_entries(BlockExtent(0, 0));
-
-  cout << "found0=[" << found0.size() << ":";
-  for (auto &map_entry : found0) {
-    cout << map_entry;
-  }
-  cout << "]" << std::endl;
-
+  int numfound = found0.size();
+  ASSERT_EQ(1, numfound);
+  ASSERT_EQ(&e0, found0.front().log_entry);
+  
   WriteLogEntry e1(BlockToBytes(1), BlockToBytes(1));
   map.add_entry(&e1);
   
   found0 = map.find_map_entries(BlockExtent(1, 1));
-
-  cout << "found0=[" << found0.size() << ":";
-  for (auto &map_entry : found0) {
-    cout << map_entry;
-  }
-  cout << "]" << std::endl;
+  numfound = found0.size();
+  ASSERT_EQ(1, numfound);
+  ASSERT_EQ(&e1, found0.front().log_entry);
 
   WriteLogEntry e2(BlockToBytes(2), BlockToBytes(1));
   map.add_entry(&e2);
 
   found0 = map.find_map_entries(BlockExtent(2, 2));
+  numfound = found0.size();
+  ASSERT_EQ(1, numfound);
+  ASSERT_EQ(&e2, found0.front().log_entry);
 
-  cout << "found0=[" << found0.size() << ":";
-  for (auto &map_entry : found0) {
-    cout << map_entry;
-  }
-  cout << "]" << std::endl;
-
+  /* replaces e1 */
   WriteLogEntry e3(BlockToBytes(1), BlockToBytes(1));
   map.add_entry(&e3);
 
-  found0 = map.find_map_entries(BlockExtent(99, 99));
+  found0 = map.find_map_entries(BlockExtent(1, 1));
+  numfound = found0.size();
+  ASSERT_EQ(1, numfound);
+  ASSERT_EQ(&e3, found0.front().log_entry);
 
-  cout << "found0=[" << found0.size() << ":";
-  for (auto &map_entry : found0) {
-    cout << map_entry;
-  }
-  cout << "]" << std::endl;
-
-  WriteLogMapEntries found1 = map.find_map_entries(BlockExtent(1, 1));
-
-  cout << "found1=[" << found1.size() << ":";
-  for (auto &map_entry : found1) {
-    cout << map_entry;
-  }
-  cout << "]" << std::endl;
-
-  //ASSERT_EQ(map.find_map_entries(BlockExtent(1, 1)), {{ &e1 }});
-  
-  /*
-  OpBlockGuard op_block_guard(m_cct);
-
-  Operation op1;
-  BlockGuardCell *cell1;
-  ASSERT_EQ(0, op_block_guard.detain({1, 3}, &op1, &cell1));
-
-  Operation op2;
-  BlockGuardCell *cell2;
-  ASSERT_EQ(0, op_block_guard.detain({0, 1}, &op2, &cell2));
-
-  Operation op3;
-  BlockGuardCell *cell3;
-  ASSERT_EQ(0, op_block_guard.detain({3, 6}, &op3, &cell3));
-
-  Operations released_ops;
-  op_block_guard.release(cell1, &released_ops);
-  ASSERT_TRUE(released_ops.empty());
-
-  op_block_guard.release(cell2, &released_ops);
-  ASSERT_TRUE(released_ops.empty());
-
-  op_block_guard.release(cell3, &released_ops);
-  ASSERT_TRUE(released_ops.empty());
-  */
+  found0 = map.find_map_entries(BlockExtent(0, 99));
+  numfound = found0.size();
+  ASSERT_EQ(3, numfound);
+  ASSERT_EQ(&e0, found0.front().log_entry);
+  found0.pop_front();
+  ASSERT_EQ(&e3, found0.front().log_entry);
+  found0.pop_front();
+  ASSERT_EQ(&e2, found0.front().log_entry);
 }
 
 uint32_t TestWriteLogMap::s_index = 0;
