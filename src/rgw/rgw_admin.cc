@@ -1650,59 +1650,6 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
   return 0;
 }
 
-int set_bucket_sync_enabled(rgw::sal::RGWRadosStore *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
-{
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-
-  int r = store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  if (opt_cmd == OPT_BUCKET_SYNC_ENABLE) {
-    bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
-  } else if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
-  }
-
-  r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
-  if (r < 0) {
-    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  int shards_num = bucket_info.num_shards? bucket_info.num_shards : 1;
-  int shard_id = bucket_info.num_shards? 0 : -1;
-
-  if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    r = store->svc()->bilog_rados->log_stop(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
-      return r;
-    }
-  } else {
-    r = store->svc()->bilog_rados->log_start(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
-      return r;
-    }
-  }
-
-  for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = store->svc()->datalog_rados->add_entry(bucket_info.bucket, shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-      return r;
-    }
-  }
-
-  return 0;
-}
-
-
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RGWRadosStore *store,
                                                     const RGWZoneGroup& zonegroup,
