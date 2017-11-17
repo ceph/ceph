@@ -23,8 +23,6 @@
 #include "global/global_init.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
-
 void usage()
 {
   cout << " usage: [--print] [--createsimple <numosd> [--clobber] [--pg_bits <bitsperosd>]] <mapfilename>" << std::endl;
@@ -91,7 +89,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
@@ -138,89 +136,89 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
       usage();
-    } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-p", "--print", (char*)nullptr)) {
       print = true;
-    } else if (ceph_argparse_witharg(args, i, &val, err, "--dump", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--dump", (char*)nullptr)) {
       print = true;
       if (!val.empty() && val != "plain") {
 	print_formatter.reset(Formatter::create(val, "", "json"));
       }
-    } else if (ceph_argparse_witharg(args, i, &val, err, "--tree", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--tree", (char*)nullptr)) {
       tree = true;
       if (!val.empty() && val != "plain") {
 	tree_formatter.reset(Formatter::create(val, "", "json"));
       }
-    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)nullptr)) {
       upmap_cleanup = true;
-    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)nullptr)) {
       upmap_save = true;
-    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap", (char*)nullptr)) {
       upmap_cleanup = true;
       upmap = true;
-    } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &upmap_max, err, "--upmap-max", (char*)nullptr)) {
+    } else if (ceph_argparse_witharg(args, i, &upmap_deviation, err, "--upmap-deviation", (char*)nullptr)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--upmap-pool", (char*)nullptr)) {
       upmap_pools.insert(val);
-    } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &num_osd, err, "--createsimple", (char*)nullptr)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
       createsimple = true;
-    } else if (ceph_argparse_flag(args, i, "--health", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--health", (char*)nullptr)) {
       health = true;
-    } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--with-default-pool", (char*)nullptr)) {
       createpool = true;
-    } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--create-from-conf", (char*)nullptr)) {
       create_from_conf = true;
-    } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--mark-up-in", (char*)nullptr)) {
       mark_up_in = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--mark-out", (char*)nullptr)) {
       marked_out = std::stoi(val);
-    } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--clear-temp", (char*)nullptr)) {
       clear_temp = true;
-    } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs", (char*)nullptr)) {
       test_map_pgs = true;
-    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump", (char*)nullptr)) {
       test_map_pgs_dump = true;
-    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump-all", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-map-pgs-dump-all", (char*)nullptr)) {
       test_map_pgs_dump_all = true;
-    } else if (ceph_argparse_flag(args, i, "--test-random", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test-random", (char*)nullptr)) {
       test_random = true;
-    } else if (ceph_argparse_flag(args, i, "--clobber", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--clobber", (char*)nullptr)) {
       clobber = true;
-    } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--pg_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--pg_bits", (char*)nullptr)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--pgp_bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--pgp_bits", (char*)nullptr)) {
       if (!err.str().empty()) {
 	cerr << err.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--export_crush", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--export_crush", (char*)nullptr)) {
       export_crush = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--import_crush", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--import_crush", (char*)nullptr)) {
       import_crush = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_pg", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_pg", (char*)nullptr)) {
       test_map_pg = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_object", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--test_map_object", (char*)nullptr)) {
       test_map_object = val;
-    } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--test_crush", (char*)nullptr)) {
       test_crush = true;
-    } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--pg_num", (char*)nullptr)) {
       string interr;
       pg_num = strict_strtoll(val.c_str(), 10, &interr);
       if (interr.length() > 0) {
         cerr << "error parsing integer value " << interr << std::endl;
         exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)NULL)) {
-    } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &range_first, err, "--range_first", (char*)nullptr)) {
+    } else if (ceph_argparse_witharg(args, i, &range_last, err, "--range_last", (char*)nullptr)) {
+    } else if (ceph_argparse_witharg(args, i, &pool, err, "--pool", (char*)nullptr)) {
       if (!err.str().empty()) {
         cerr << err.str() << std::endl;
         exit(EXIT_FAILURE);
@@ -241,7 +239,7 @@ int main(int argc, const char **argv)
 
   if (range_first >= 0 && range_last >= 0) {
     set<OSDMap*> maps;
-    OSDMap *prev = NULL;
+    OSDMap *prev = nullptr;
     for (int i=range_first; i <= range_last; i++) {
       ostringstream f;
       f << fn << "/" << i;
@@ -659,12 +657,12 @@ int main(int argc, const char **argv)
   if (tree) {
     if (tree_formatter) {
       tree_formatter->open_object_section("tree");
-      osdmap.print_tree(tree_formatter.get(), NULL);
+      osdmap.print_tree(tree_formatter.get(), nullptr);
       tree_formatter->close_section();
       tree_formatter->flush(cout);
       cout << std::endl;
     } else {
-      osdmap.print_tree(NULL, &cout);
+      osdmap.print_tree(nullptr, &cout);
     }
   }
   if (modified) {
