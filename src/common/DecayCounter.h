@@ -115,10 +115,12 @@ public:
 
   void adjust(double a) {
     val += a;
+    if (val < 0)
+      val = 0;
   }
   void adjust(utime_t now, const DecayRate& rate, double a) {
     decay(now, rate);
-    val += a;
+    adjust(a);
   }
   void scale(double f) {
     val *= f;

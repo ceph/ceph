@@ -2600,6 +2600,8 @@ void Migrator::import_reverse(CDir *dir)
   import_state_t& stat = import_state[dir->dirfrag()];
   stat.state = IMPORT_ABORTING;
 
+  utime_t now = ceph_clock_now();
+
   set<CDir*> bounds;
   cache->get_subtree_bounds(dir, bounds);
 
@@ -2630,13 +2632,7 @@ void Migrator::import_reverse(CDir *dir)
     q.pop_front();
     
     // dir
-    assert(cur->is_auth());
-    cur->state_clear(CDir::STATE_AUTH);
-    cur->remove_bloom();
-    cur->clear_replica_map();
-    cur->set_replica_nonce(CDir::EXPORT_NONCE);
-    if (cur->is_dirty())
-      cur->mark_clean();
+    cur->abort_import(now);
 
     for (auto &p : *cur) {
       CDentry *dn = p.second;

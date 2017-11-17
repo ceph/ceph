@@ -2562,7 +2562,20 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
   }
 }
 
+void CDir::abort_import(utime_t now)
+{
+  assert(is_auth());
+  state_clear(CDir::STATE_AUTH);
+  remove_bloom();
+  clear_replica_map();
+  set_replica_nonce(CDir::EXPORT_NONCE);
+  if (is_dirty())
+    mark_clean();
 
+  pop_auth_subtree_nested.sub(now, cache->decayrate, pop_auth_subtree);
+  pop_me.zero(now);
+  pop_auth_subtree.zero(now);
+}
 
 
 /********************************
