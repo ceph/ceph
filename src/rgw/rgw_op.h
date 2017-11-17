@@ -59,6 +59,7 @@ protected:
   int do_aws4_auth_completion();
 
   virtual int init_quota();
+
 public:
 RGWOp() : s(nullptr), dialect_handler(nullptr), store(nullptr),
     cors_exist(false), op_ret(0) {}
