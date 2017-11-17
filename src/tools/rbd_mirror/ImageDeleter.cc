@@ -193,14 +193,13 @@ void ImageDeleter<I>::run() {
 }
 
 template <typename I>
-void ImageDeleter<I>::schedule_image_delete(RadosRef local_rados,
-                                            int64_t local_pool_id,
+void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
                                             const std::string& global_image_id,
                                             bool ignore_orphaned) {
   dout(20) << "enter" << dendl;
 
   Mutex::Locker locker(m_delete_lock);
-
+  int64_t local_pool_id = local_io_ctx->get_id();
   auto del_info = find_delete_info(local_pool_id, global_image_id);
   if (del_info != nullptr) {
     dout(20) << "image " << global_image_id << " "
@@ -212,8 +211,8 @@ void ImageDeleter<I>::schedule_image_delete(RadosRef local_rados,
   }
 
   m_delete_queue.push_front(
-    unique_ptr<DeleteInfo>(new DeleteInfo(local_rados, local_pool_id,
-                                          global_image_id, ignore_orphaned)));
+    unique_ptr<DeleteInfo>(new DeleteInfo(local_pool_id, global_image_id,
+                                          local_io_ctx, ignore_orphaned)));
   m_delete_queue_cond.Signal();
 }
 
@@ -267,27 +266,14 @@ bool ImageDeleter<I>::process_image_delete() {
   std::string del_info_str = ss.str();
   dout(10) << "start processing delete request: " << del_info_str << dendl;
 
-  // remote image was disabled, now we need to delete local image
-  IoCtx ioctx;
-  int r = m_active_delete->local_rados->ioctx_create2(
-    m_active_delete->local_pool_id, ioctx);
-  if (r < 0) {
-    derr << "error accessing local pool " << m_active_delete->local_pool_id
-         << ": " << cpp_strerror(r) << dendl;
-    enqueue_failed_delete(r);
-    return true;
-  }
-
-  dout(20) << "connected to local pool: " << ioctx.get_pool_name() << dendl;
-
   C_SaferCond remove_ctx;
   image_deleter::ErrorResult error_result;
   auto req = image_deleter::RemoveRequest<I>::create(
-    ioctx, m_active_delete->global_image_id, m_active_delete->ignore_orphaned,
-    &error_result, m_work_queue, &remove_ctx);
+    *m_active_delete->local_io_ctx, m_active_delete->global_image_id,
+    m_active_delete->ignore_orphaned, &error_result, m_work_queue, &remove_ctx);
   req->send();
 
-  r = remove_ctx.wait();
+  int r = remove_ctx.wait();
   if (r < 0) {
     if (error_result == image_deleter::ERROR_RESULT_COMPLETE) {
       complete_active_delete(r);
