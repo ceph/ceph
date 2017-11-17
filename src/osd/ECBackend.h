@@ -602,7 +602,7 @@ public:
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return new ECRecPred(ec_impl);
   }
 
@@ -622,7 +622,7 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() override {
+  IsPGReadablePredicate *get_is_readable_predicate() const override {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
