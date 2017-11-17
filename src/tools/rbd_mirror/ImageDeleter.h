@@ -48,8 +48,7 @@ public:
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
-  void schedule_image_delete(RadosRef local_rados,
-                             int64_t local_pool_id,
+  void schedule_image_delete(IoCtxRef local_io_ctx,
                              const std::string& global_image_id,
                              bool ignore_orphaned);
   void wait_for_scheduled_deletion(int64_t local_pool_id,
@@ -80,20 +79,19 @@ private:
   };
 
   struct DeleteInfo {
-    RadosRef local_rados;
     int64_t local_pool_id;
     std::string global_image_id;
+    IoCtxRef local_io_ctx;
     bool ignore_orphaned;
     int error_code = 0;
     int retries = 0;
     bool notify_on_failed_retry = true;
     Context *on_delete = nullptr;
 
-    DeleteInfo(RadosRef local_rados, int64_t local_pool_id,
-               const std::string& global_image_id,
-               bool ignore_orphaned)
-      : local_rados(local_rados), local_pool_id(local_pool_id),
-        global_image_id(global_image_id), ignore_orphaned(ignore_orphaned) {
+    DeleteInfo(int64_t local_pool_id, const std::string& global_image_id,
+               IoCtxRef local_io_ctx, bool ignore_orphaned)
+      : local_pool_id(local_pool_id), global_image_id(global_image_id),
+        local_io_ctx(local_io_ctx), ignore_orphaned(ignore_orphaned) {
     }
 
     bool match(int64_t local_pool_id, const std::string &global_image_id) {

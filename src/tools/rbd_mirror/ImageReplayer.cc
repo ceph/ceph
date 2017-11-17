@@ -382,7 +382,8 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
-  r = m_local->ioctx_create2(m_local_pool_id, m_local_ioctx);
+  m_local_ioctx.reset(new librados::IoCtx{});
+  r = m_local->ioctx_create2(m_local_pool_id, *m_local_ioctx);
   if (r < 0) {
     derr << "error opening ioctx for local pool " << m_local_pool_id
          << ": " << cpp_strerror(r) << dendl;
@@ -426,7 +427,7 @@ void ImageReplayer<I>::prepare_local_image() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
   auto req = PrepareLocalImageRequest<I>::create(
-    m_local_ioctx, m_global_image_id, &m_local_image_id,
+    *m_local_ioctx, m_global_image_id, &m_local_image_id,
     &m_local_image_tag_owner, m_threads->work_queue, ctx);
   req->send();
 }
@@ -518,7 +519,7 @@ void ImageReplayer<I>::bootstrap() {
     ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
 
   BootstrapRequest<I> *request = BootstrapRequest<I>::create(
-    m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
+    *m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
     &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
     m_global_image_id, m_threads->work_queue, m_threads->timer,
     &m_threads->timer_lock, m_local_mirror_uuid, m_remote_image.mirror_uuid,
@@ -1429,7 +1430,7 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
 
   librados::AioCompletion *aio_comp = create_rados_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_mirror_status_update>(this);
-  int r = m_local_ioctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
+  int r = m_local_ioctx->aio_operate(RBD_MIRRORING, aio_comp, &op);
   assert(r == 0);
   aio_comp->release();
 }
@@ -1656,8 +1657,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       delete_requested = true;
     }
     if (delete_requested || m_resync_requested) {
-      m_image_deleter->schedule_image_delete(m_local,
-                                             m_local_pool_id,
+      m_image_deleter->schedule_image_delete(m_local_ioctx,
                                              m_global_image_id,
                                              m_resync_requested);
 
@@ -1680,8 +1680,6 @@ void ImageReplayer<I>::handle_shut_down(int r) {
   }
 
   dout(20) << "stop complete" << dendl;
-  m_local_ioctx.close();
-
   ReplayStatusFormatter<I>::destroy(m_replay_status_formatter);
   m_replay_status_formatter = nullptr;
 
@@ -1797,7 +1795,7 @@ template <typename I>
 void ImageReplayer<I>::on_name_changed() {
   {
     Mutex::Locker locker(m_lock);
-    std::string name = m_local_ioctx.get_pool_name() + "/" +
+    std::string name = m_local_ioctx->get_pool_name() + "/" +
       m_local_image_ctx->name;
     if (m_name == name) {
       return;
