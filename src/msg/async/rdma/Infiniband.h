@@ -58,7 +58,7 @@ class Port {
   int port_num;
   struct ibv_port_attr* port_attr;
   uint16_t lid;
-  int gid_idx;
+  int gid_idx = 0;
   union ibv_gid gid;
 
  public:
@@ -74,7 +74,7 @@ class Port {
 class Device {
   ibv_device *device;
   const char* name;
-  uint8_t  port_cnt;
+  uint8_t  port_cnt = 0;
  public:
   explicit Device(CephContext *c, ibv_device* d);
   ~Device() {
@@ -207,9 +207,9 @@ class Infiniband {
 
      public:
       ibv_mr* mr;
-      uint32_t lkey;
+      uint32_t lkey = 0;
       uint32_t bytes;
-      uint32_t bound;
+      uint32_t bound = 0;
       uint32_t offset;
       char* buffer; // TODO: remove buffer/refactor TX
       char  data[0];
@@ -234,7 +234,7 @@ class Infiniband {
 
       MemoryManager& manager;
       uint32_t buffer_size;
-      uint32_t num_chunk;
+      uint32_t num_chunk = 0;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
