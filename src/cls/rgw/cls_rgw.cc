@@ -13,6 +13,9 @@
 #include "common/escape.h"
 
 #include "include/compat.h"
+#include "rgw/rgw_common.h"
+#include "rgw/rgw_rados.h"
+#include <boost/algorithm/string.hpp>
 
 CLS_VER(1,0)
 CLS_NAME(rgw)
@@ -710,10 +713,32 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return 0;
 }
 
+static inline bool is_multipart_objname(const string& name)
+{
+  int ret = true;
+  rgw_obj_key obj_key;
+  if (!rgw_obj_key::parse_raw_oid(name, &obj_key)) {
+	CLS_LOG(0,"ERROR: %s(): %s: cannot parse_raw_oid\n", __func__, name.c_str());
+	ret = false;
+  } else {
+    CLS_LOG(20,"%s(): %s: parse_raw_oid returned name=%s ns=%s instance=%s\n",
+	  __func__, name.c_str(), obj_key.name.c_str(), obj_key.ns.c_str(),
+	  obj_key.instance.c_str());
+    if (obj_key.ns == RGW_OBJ_NS_MULTIPART
+     && (!boost::algorithm::ends_with(name, MP_META_SUFFIX))) {
+      // filter the name like: star with "_multipart" and not end with ".meta"
+      ret = false;
+    }
+  }
+  return ret;
+}
+
 static void unaccount_entry(struct rgw_bucket_dir_header& header, struct rgw_bucket_dir_entry& entry)
 {
   struct rgw_bucket_category_stats& stats = header.stats[entry.meta.category];
-  stats.num_entries--;
+  if (is_multipart_objname(entry.key.name)) {
+    stats.num_entries--;
+  }
   stats.total_size -= entry.meta.accounted_size;
   stats.total_size_rounded -= cls_rgw_get_rounded_size(entry.meta.accounted_size);
   stats.actual_size -= entry.meta.size;
@@ -899,7 +924,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       entry.key = op.key;
       entry.exists = true;
       entry.tag = op.tag;
-      stats.num_entries++;
+      if (is_multipart_objname(entry.key.name)) {
+        stats.num_entries++;
+      }
       stats.total_size += meta.accounted_size;
       stats.total_size_rounded += cls_rgw_get_rounded_size(meta.accounted_size);
       stats.actual_size += meta.size;

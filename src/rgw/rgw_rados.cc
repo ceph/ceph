@@ -6907,7 +6907,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   uint64_t orig_size;
   
   if (!reset_obj) {    //Multipart upload, it has immutable head. 
-    orig_exists = false;
+    orig_exists = true;
     orig_size = 0;
   } else {
     orig_exists = state->exists;
