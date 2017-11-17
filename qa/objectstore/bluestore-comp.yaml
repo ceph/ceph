@@ -8,11 +8,10 @@ overrides:
       osd:
         osd objectstore: bluestore
         bluestore block size: 96636764160
-        debug bluestore: 20
-        debug bluefs: 20
+        debug bluestore: 10
+        debug bluefs: 10
         debug rocksdb: 10
         bluestore compression mode: aggressive
-        bluestore fsck on mount: true
         # lower the full ratios since we can fill up a 100gb osd so quickly
         mon osd full ratio: .9
         mon osd backfillfull_ratio: .85
