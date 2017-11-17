@@ -30,7 +30,7 @@ using namespace librbd::cache::file;
 BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes)
 {
   return BlockExtent(offset_bytes / BLOCK_SIZE,
-		     (offset_bytes + length_bytes) / BLOCK_SIZE);
+		     ((offset_bytes + length_bytes) / BLOCK_SIZE) - 1);
 }
 
 BlockExtent block_extent(ImageCache::Extent& image_extent)
