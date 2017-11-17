@@ -755,7 +755,7 @@ Upgrade compatibility notes, Kraken to Luminous
 * The ``mon_osd_max_op_age`` option has been renamed to
   ``mon_osd_warn_op_age`` (default: 32 seconds), to indicate we
   generate a warning at this age.  There is also a new
-  ``mon_osd_err_op_age_ratio`` that is a expressed as a multitple of
+  ``mon_osd_err_op_age_ratio`` that is a expressed as a multiple of
   ``mon_osd_warn_op_age`` (default: 128, for roughly 60 minutes) to
   control when an error is generated.
 
@@ -796,7 +796,7 @@ Upgrade compatibility notes, Kraken to Luminous
 * We no longer test the FileStore ceph-osd backend in combination with
   btrfs.  We recommend against using btrfs.  If you are using
   btrfs-based OSDs and want to upgrade to luminous you will need to
-  add the follwing to your ceph.conf::
+  add the following to your ceph.conf::
 
     enable experimental unrecoverable data corrupting features = btrfs
 
@@ -804,7 +804,7 @@ Upgrade compatibility notes, Kraken to Luminous
   continuing to test the Jewel stable branch against btrfs.  We
   recommend moving these OSDs to FileStore with XFS or BlueStore.
 * The ``ruleset-*`` properties for the erasure code profiles have been
-  renamed to ``crush-*`` to (1) move away from the obsolete 'ruleset'
+  renamed to ``crush-*`` to move away from the obsolete 'ruleset'
   term and to be more clear about their purpose.  There is also a new
   optional ``crush-device-class`` property to specify a CRUSH device
   class to use for the erasure coded pool.  Existing erasure code
@@ -905,7 +905,7 @@ Upgrade compatibility notes, Kraken to Luminous
     a standby, and 0 if you did not.  You can customize this using
     ``ceph fs set <fs> standby_count_wanted <number>``.  Setting it
     to zero will effectively disable the health check.
-  * The "ceph mds tell ..." command has been removed.  It is superceded
+  * The "ceph mds tell ..." command has been removed.  It is superseded
     by "ceph tell mds.<id> ..."
   * The ``apply`` mode of cephfs-journal-tool has been removed
 
