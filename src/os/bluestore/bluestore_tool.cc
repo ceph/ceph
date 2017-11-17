@@ -471,6 +471,7 @@ int main(int argc, char **argv)
     for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
       interval_set<uint64_t> before;
       fs->get_block_extents(devid, &before);
+      if (before.empty()) continue;
       uint64_t end = before.range_end();
       uint64_t size = fs->get_block_device_size(devid);
       if (end < size) {
