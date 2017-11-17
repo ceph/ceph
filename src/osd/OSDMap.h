@@ -236,9 +236,9 @@ struct PGTempMap {
     using ceph::encode;
     size_t need = sizeof(int32_t) * (1 + v.size());
     if (need < data.get_append_buffer_unused_tail_length()) {
-      ceph::buffer::ptr z(data.get_append_buffer_unused_tail_length());
-      z.zero();
-      data.append(z.c_str(), z.length());
+      bufferlist tmpbl;
+      tmpbl.append_zero_static(data.get_append_buffer_unused_tail_length());
+      data.append(tmpbl.c_str(), tmpbl.length());
     }
     encode(v, data);
     map[pgid] = (int32_t*)(data.back().end_c_str()) - (1 + v.size());
