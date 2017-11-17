@@ -128,6 +128,39 @@ class Prepare(object):
             tags['ceph.%s_device' % device_type] = path
         return path, uuid, tags
 
+    def prepare_device(self, arg, device_type, cluster_fsid, osd_fsid):
+        """
+        Check if ``arg`` is a device or partition to create an LV out of it
+        with a distinct volume group name, assigning LV tags on it and
+        ultimately, returning the logical volume object.  Failing to detect
+        a device or partition will result in error.
+
+        :param arg: The value of ``--data`` when parsing args
+        :param device_type: Usually, either ``data`` or ``block`` (filestore vs. bluestore)
+        :param cluster_fsid: The cluster fsid/uuid
+        :param osd_fsid: The OSD fsid/uuid
+        """
+        if disk.is_partition(arg) or disk.is_device(arg):
+            # we must create a vg, and then a single lv
+            vg_name = "ceph-%s" % cluster_fsid
+            if api.get_vg(vg_name=vg_name):
+                # means we already have a group for this, make a different one
+                # XXX this could end up being annoying for an operator, maybe?
+                vg_name = "ceph-%s" % str(uuid.uuid4())
+            api.create_vg(vg_name, arg)
+            lv_name = "osd-%s-%s" % (device_type, osd_fsid)
+            return api.create_lv(
+                lv_name,
+                vg_name,  # the volume group
+                tags={'ceph.type': device_type})
+        else:
+            error = [
+                'Cannot use device (%s).',
+                'A vg/lv path or an existing device is needed' % arg]
+            raise RuntimeError(' '.join(error))
+
+        raise RuntimeError('no data logical volume found with: %s' % arg)
+
     @decorators.needs_root
     def prepare(self, args):
         # FIXME we don't allow re-using a keyring, we always generate one for the
@@ -146,7 +179,7 @@ class Prepare(object):
 
             data_lv = self.get_lv(args.data)
             if not data_lv:
-                raise RuntimeError('no data logical volume found with: %s' % args.data)
+                data_lv = self.prepare_device(args.data, 'data', cluster_fsid, osd_fsid)
 
             tags = {
                 'ceph.osd_fsid': osd_fsid,
@@ -172,25 +205,7 @@ class Prepare(object):
         elif args.bluestore:
             block_lv = self.get_lv(args.data)
             if not block_lv:
-                if disk.is_partition(args.data) or disk.is_device(args.data):
-                    # we must create a vg, and then a single lv
-                    vg_name = "ceph-%s" % cluster_fsid
-                    if api.get_vg(vg_name=vg_name):
-                        # means we already have a group for this, make a different one
-                        # XXX this could end up being annoying for an operator, maybe?
-                        vg_name = "ceph-%s" % str(uuid.uuid4())
-                    api.create_vg(vg_name, args.data)
-                    block_name = "osd-block-%s" % osd_fsid
-                    block_lv = api.create_lv(
-                        block_name,
-                        vg_name,  # the volume group
-                        tags={'ceph.type': 'block'})
-                else:
-                    error = [
-                        'Cannot use device (%s) for bluestore. ' % args.data,
-                        'A vg/lv path or an existing device is needed'
-                    ]
-                    raise RuntimeError(' '.join(error))
+                block_lv = self.prepare_device(args.data, 'block', cluster_fsid, osd_fsid)
 
             tags = {
                 'ceph.osd_fsid': osd_fsid,
@@ -243,6 +258,10 @@ class Prepare(object):
           Or:
 
               ceph-volume lvm prepare --filestore --data {vg/lv} --journal {vg/lv}
+
+          Existing block device, that will be made a group and logical volume:
+
+              ceph-volume lvm prepare --filestore --data /path/to/device --journal {vg/lv}
 
         Bluestore
         ---------
