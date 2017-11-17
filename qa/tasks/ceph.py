@@ -1070,6 +1070,8 @@ def osd_scrub_pgs(ctx, config):
         # allow this to fail; in certain cases the OSD might not be up
         # at this point.  we will catch all pgs below.
         try:
+            manager.raw_cluster_cmd('tell', 'osd.' + id_, 'config', 'set',
+                                    'osd_debug_deep_scrub_sleep', '0');
             manager.raw_cluster_cmd('osd', 'deep-scrub', id_)
         except run.CommandFailedError:
             pass
