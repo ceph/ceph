@@ -4535,9 +4535,7 @@ int BlueStore::_write_bdev_label(CephContext *cct,
   uint32_t crc = bl.crc32c(-1);
   encode(crc, bl);
   ceph_assert(bl.length() <= BDEV_LABEL_BLOCK_SIZE);
-  bufferptr z(BDEV_LABEL_BLOCK_SIZE - bl.length());
-  z.zero();
-  bl.append(std::move(z));
+  bl.append_zero_static(BDEV_LABEL_BLOCK_SIZE - bl.length());
 
   int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC));
   if (fd < 0) {
