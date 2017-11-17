@@ -3706,6 +3706,8 @@ public:
   int delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompletion *>& handles);
   int delete_obj_aio(const rgw_obj& obj, RGWBucketInfo& info, RGWObjState *astate,
                      list<librados::AioCompletion *>& handles, bool keep_index_consistent);
+
+  int check_mfa(const rgw_user& user, const string& otp_id, const string& pin);
  private:
   /**
    * This is a helper method, it generates a list of bucket index objects with the given
