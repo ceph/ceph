@@ -14157,3 +14157,47 @@ bool RGWRados::call_erase(const std::string&) {
 void RGWRados::call_zap() {
   return;
 }
+
+int RGWRados::check_mfa(const rgw_user& user, const string& otp_id, const string& pin)
+{
+  string oid = string("user:") + user.to_str();
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+
+  rgw_rados_ref ref;
+  int r = get_system_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  otp_check_t result;
+
+  librados::ObjectWriteOperation op;
+  rados::cls::otp::OTP::check(ref.io_ctx, obj.get_oid(), otp_id, pin, &result);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get(ref.ioctx, ref.oid, id, result);
+  if (r < 0) {
+    return r;
+  }
+
+  ldout(cct, 20) << "OTP check, otp_id=" << otp_id << " result=" << (int)result << dendl;
+
+  return (result.result == rados::cls::otp::OTP_CHECK ? 0 : -EACCES);
+}
+
