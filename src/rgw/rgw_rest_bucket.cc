@@ -301,7 +301,7 @@ public:
   void execute() override;
 
   const char* name() const override { return "sync_bucket"; }
-}
+};
 
 void RGWOp_Sync_Bucket::execute()
 {

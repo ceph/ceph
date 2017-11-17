@@ -599,7 +599,7 @@ int RGWBucket::init(RGWRadosStore *storage, RGWBucketAdminOpState& op_state,
 
   if (bucket.name.empty() && user_id.empty())
     return -EINVAL;
-
+  
   // split possible tenant/name
   auto pos = bucket.name.find('/');
   if (pos != string::npos) {
