@@ -350,14 +350,12 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   std::string clone_id = create_clone();
 
   m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->set_busy_timer_interval(0.1);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
                                          &ctx);
   EXPECT_EQ(-EBUSY, ctx.wait());
-
-  ASSERT_EQ(1u, m_deleter->get_delete_queue_items().size());
-  ASSERT_EQ(0u, m_deleter->get_failed_queue_items().size());
 
   m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_CLONE_IMAGE_ID,
                                    false);
@@ -449,18 +447,14 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
                                          &ctx);
   EXPECT_EQ(-EBUSY, ctx.wait());
 
-  ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
-  ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
-
   EXPECT_EQ(0, ictx->state->close());
 }
 
 TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
+  EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_delete_retry_interval", "0.1"));
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
   EXPECT_EQ(0, ictx->state->open(false));
-
-  m_deleter->set_failed_timer_interval(2);
 
   m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
 
@@ -481,28 +475,4 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
 
   check_image_deleted();
 }
-
-TEST_F(TestImageDeleter, Delete_Is_Idempotent) {
-  ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
-                                false);
-  EXPECT_EQ(0, ictx->state->open(false));
-
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
-  C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
-  EXPECT_EQ(-EBUSY, ctx.wait());
-
-  ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
-  ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
-
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
-  ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
-  ASSERT_EQ(1u, m_deleter->get_failed_queue_items().size());
-
-  EXPECT_EQ(0, ictx->state->close());
-}
-
 
