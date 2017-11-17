@@ -6777,9 +6777,7 @@ int OSD::_do_command(
     }
 
     bufferlist bl;
-    bufferptr bp(bsize);
-    bp.zero();
-    bl.push_back(std::move(bp));
+    bl.append_zero(bsize);
     bl.rebuild_page_aligned();
 
     {

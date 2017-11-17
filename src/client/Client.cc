@@ -9289,9 +9289,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 	int64_t some = in->size - pos;
 	if (some > left)
 	  some = left;
-	auto z = buffer::ptr_node::create(some);
-	z->zero();
-	bl->push_back(std::move(z));
+	bl->append_zero(some);
 	read += some;
 	pos += some;
 	left -= some;
