@@ -313,7 +313,7 @@ protected:
 public:
   bool is_subtrees() { return !subtrees.empty(); }
   void list_subtrees(list<CDir*>& ls);
-  void adjust_subtree_auth(CDir *root, mds_authority_t auth);
+  void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool adjust_pop=true);
   void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, mds_authority_t(a,b));
   }
@@ -327,7 +327,7 @@ public:
   }
   void map_dirfrag_set(list<dirfrag_t>& dfs, set<CDir*>& result);
   void try_subtree_merge(CDir *root);
-  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval);
+  void try_subtree_merge_at(CDir *root, set<CInode*> *to_eval, bool adjust_pop=true);
   void subtree_merge_writebehind_finish(CInode *in, MutationRef& mut);
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);

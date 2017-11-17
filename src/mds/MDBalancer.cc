@@ -1266,6 +1266,36 @@ void MDBalancer::add_import(CDir *dir, utime_t now)
   }
 }
 
+void MDBalancer::adjust_pop_for_rename(CDir *pdir, CDir *dir, utime_t now, bool inc)
+{
+  DecayRate& rate = mds->mdcache->decayrate;
+
+  bool adjust_subtree_nest = dir->is_auth();
+  bool adjust_subtree = adjust_subtree_nest && !dir->is_subtree_root();
+  while (true) {
+    if (inc) {
+      pdir->pop_nested.add(now, rate, dir->pop_nested);
+      if (adjust_subtree)
+	pdir->pop_auth_subtree.add(now, rate, dir->pop_auth_subtree);
+
+      if (adjust_subtree_nest)
+	pdir->pop_auth_subtree_nested.add(now, rate, dir->pop_auth_subtree_nested);
+    } else {
+      pdir->pop_nested.sub(now, rate, dir->pop_nested);
+      if (adjust_subtree)
+	pdir->pop_auth_subtree.sub(now, rate, dir->pop_auth_subtree);
+
+      if (adjust_subtree_nest)
+	pdir->pop_auth_subtree_nested.sub(now, rate, dir->pop_auth_subtree_nested);
+    }
+
+    if (pdir->is_subtree_root())
+      adjust_subtree = false;
+    pdir = pdir->inode->get_parent_dir();
+    if (!pdir) break;
+  }
+}
+
 void MDBalancer::handle_mds_failure(mds_rank_t who)
 {
   if (0 == who) {

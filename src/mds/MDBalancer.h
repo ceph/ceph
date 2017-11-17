@@ -51,6 +51,7 @@ public:
 
   void subtract_export(CDir *ex, utime_t now);
   void add_import(CDir *im, utime_t now);
+  void adjust_pop_for_rename(CDir *pdir, CDir *dir, utime_t now, bool inc);
 
   void hit_inode(utime_t now, CInode *in, int type, int who=-1);
   void hit_dir(utime_t now, CDir *dir, int type, int who=-1, double amount=1.0);
