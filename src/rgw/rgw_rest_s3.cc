@@ -245,10 +245,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
-  
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
@@ -2042,9 +2039,7 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   if (delete_marker) {
     dump_header(s, "x-amz-delete-marker", "true");
   }
