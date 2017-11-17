@@ -1773,25 +1773,25 @@ class RGWRequest;
 /** Store all the state necessary to complete and respond to an HTTP request*/
 struct req_state {
   CephContext *cct;
-  rgw::io::BasicClient *cio;
+  rgw::io::BasicClient *cio{nullptr};
   RGWRequest *req{nullptr}; /// XXX: re-remove??
-  http_op op;
+  http_op op{OP_UNKNOWN};
   RGWOpType op_type{};
-  bool content_started;
-  int format;
-  ceph::Formatter *formatter;
+  bool content_started{false};
+  int format{0};
+  ceph::Formatter *formatter{nullptr};
   string decoded_uri;
   string relative_uri;
-  const char *length;
-  int64_t content_length;
+  const char *length{nullptr};
+  int64_t content_length{0};
   map<string, string> generic_attrs;
   rgw_err err;
-  bool expect_cont;
-  uint64_t obj_size;
+  bool expect_cont{false};
+  uint64_t obj_size{0};
   bool enable_ops_log;
   bool enable_usage_log;
   uint8_t defer_to_bucket_acls;
-  uint32_t perm_mask;
+  uint32_t perm_mask{0};
 
   /* Set once when url_bucket is parsed and not violated thereafter. */
   string account_name;
@@ -1810,7 +1810,7 @@ struct req_state {
   string zonegroup_name;
   string zonegroup_endpoint;
   string bucket_instance_id;
-  int bucket_instance_shard_id;
+  int bucket_instance_shard_id{-1};
   string redirect_zone_endpoint;
 
   string redirect;
@@ -1818,9 +1818,9 @@ struct req_state {
   RGWBucketInfo bucket_info;
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
-  bool bucket_exists;
+  bool bucket_exists{false};
 
-  bool has_bad_meta;
+  bool has_bad_meta{false};
 
   RGWUserInfo *user;
 
@@ -1863,13 +1863,13 @@ struct req_state {
 
   /* Is the request made by an user marked as a system one?
    * Being system user means we also have the admin status. */
-  bool system_request;
+  bool system_request{false};
 
   string canned_acl;
-  bool has_acl_header;
-  bool local_source; /* source is local */
+  bool has_acl_header{false};
+  bool local_source{false}; /* source is local */
 
-  int prot_flags;
+  int prot_flags{0};
 
   /* Content-Disposition override for TempURL of Swift API. */
   struct {
@@ -1883,12 +1883,12 @@ struct req_state {
   req_init_state init_state;
 
   utime_t time;
-  void *obj_ctx;
+  void *obj_ctx{nullptr};
   string dialect;
   string req_id;
   string trans_id;
 
-  bool mfa_verified;
+  bool mfa_verified{false};
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();
