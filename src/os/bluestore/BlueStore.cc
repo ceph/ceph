@@ -6256,7 +6256,8 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-  std::lock_guard<std::mutex> l(reap_lock);
+  // _reap_collections and this in the same thread,
+  // so no need a lock.
   removed_collections.push_back(c);
 }
 
@@ -6265,7 +6266,8 @@ void BlueStore::_reap_collections()
 
   list<CollectionRef> removed_colls;
   {
-    std::lock_guard<std::mutex> l(reap_lock);
+    // _queue_reap_collection and this in the same thread.
+    // So no need a lock.
     if (!removed_collections.empty())
       removed_colls.swap(removed_collections);
     else
@@ -6295,7 +6297,6 @@ void BlueStore::_reap_collections()
   if (removed_colls.empty()) {
     dout(10) << __func__ << " all reaped" << dendl;
   } else {
-    std::lock_guard<std::mutex> l(reap_lock);
     removed_collections.splice(removed_collections.begin(), removed_colls);
   }
 }
