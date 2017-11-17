@@ -68,8 +68,9 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("category", val, obj);
   category = (uint8_t)val;
   JSONDecoder::decode_json("size", size, obj);
-  utime_t ut(mtime);
+  utime_t ut;
   JSONDecoder::decode_json("mtime", ut, obj);
+  mtime = ut.to_real_time();
   JSONDecoder::decode_json("etag", etag, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
