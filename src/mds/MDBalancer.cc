@@ -413,8 +413,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
                           << " : " << cpp_strerror(r);
       }
       prep_rebalance(m->get_beat());
-    
-      mds_load.clear();
     }
   }
 
