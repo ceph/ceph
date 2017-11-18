@@ -15,7 +15,6 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 
@@ -42,7 +41,7 @@ int main(int argc, const char **argv, char *envp[])
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
@@ -61,10 +60,11 @@ int main(int argc, const char **argv, char *envp[])
   vector<MonClient*> mclients{static_cast<unsigned>(num_client), nullptr};
 
   cout << "ceph-syn: starting " << num_client << " syn client(s)" << std::endl;
+  auto public_addr = g_conf->get_val<entity_addr_t>("public_addr");
   for (int i=0; i<num_client; i++) {
     messengers[i] = Messenger::create_client_messenger(g_ceph_context,
 						       "synclient");
-    messengers[i]->bind(g_conf->public_addr);
+    messengers[i]->bind(public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
     auto client = new StandaloneClient(messengers[i], mclients[i]);
@@ -75,9 +75,9 @@ int main(int argc, const char **argv, char *envp[])
     messengers[i]->start();
   }
 
-  for (list<SyntheticClient*>::iterator p = synclients.begin(); 
-       p != synclients.end();
-       ++p)
+  auto p = synclients.begin();
+  auto end = synclients.end();
+  for (; p != end; ++p)
     (*p)->start_thread();
 
   //cout << "waiting for client(s) to finish" << std::endl;
@@ -88,16 +88,19 @@ int main(int argc, const char **argv, char *envp[])
     synclients.pop_front();
     syn->join_thread();
     delete syn;
+    syn = nullptr;
     delete client;
+    client = nullptr;
   }
 
   for (int i = 0; i < num_client; ++i) {
     // wait for messenger to finish
     delete mclients[i];
+    mclients[i] = nullptr;
     messengers[i]->shutdown();
     messengers[i]->wait();
     delete messengers[i];
+    messengers[i] = nullptr;
   }
   return 0;
 }
-
