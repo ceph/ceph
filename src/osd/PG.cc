@@ -2679,17 +2679,13 @@ void PG::_update_calc_stats()
   info.stats.ondisk_log_start = pg_log.get_tail();
   info.stats.snaptrimq_len = snap_trimq.size();
 
-  // If actingset is larger then upset we will have misplaced,
-  // so we will report based on actingset size.
+  unsigned num_shards = get_osdmap()->get_pg_size(info.pgid.pgid);
 
-  // If upset is larger then we will have degraded,
-  // so we will report based on upset size.
-
-  // If target is the largest of them all, it will contribute to
-  // the degraded count because num_object_copies is
-  // computed using target and eventual used to get degraded total.
-
-  unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
+  // In rare case that upset is too large (usually transient), use as target
+  // for calculations below.
+  unsigned target = std::max(num_shards, (unsigned)upset.size());
+  // Not sure this could ever happen, that actingset > upset
+  // which only matters if actingset > num_shards.
   unsigned nrep = std::max(actingset.size(), upset.size());
   // calc num_object_copies
   info.stats.stats.calc_copies(std::max(target, nrep));
@@ -2751,10 +2747,31 @@ void PG::_update_calc_stats()
       peer.second.stats.stats.sum.num_objects_missing = missing;
     }
 
+    if (pool.info.is_replicated()) {
+      // Add to missing_target_objects up to target elements (num_objects missing)
+      assert(target >= missing_target_objects.size());
+      unsigned needed = target - missing_target_objects.size();
+      for (; needed; --needed)
+	missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD)));
+    } else {
+      for (unsigned i = 0 ; i < num_shards; ++i) {
+        shard_id_t shard(i);
+	bool found = false;
+	for (const auto& t : missing_target_objects) {
+	  if (std::get<1>(t).shard == shard) {
+	    found = true;
+	    break;
+	  }
+	}
+	if (!found)
+	  missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD,shard)));
+      }
+    }
+
     for (const auto& item : missing_target_objects)
-      dout(20) << __func__ << " missing shard " << item.second << " missing= " << item.first << dendl;
+      dout(20) << __func__ << " missing shard " << std::get<1>(item) << " missing= " << std::get<0>(item) << dendl;
     for (const auto& item : acting_source_objects)
-      dout(20) << __func__ << " acting shard " << item.second << " missing=" << item.first << dendl;
+      dout(20) << __func__ << " acting shard " << std::get<1>(item) << " missing= " << std::get<0>(item) << dendl;
 
     // A misplaced object is not stored on the correct OSD
     int64_t misplaced = 0;
@@ -2766,28 +2783,41 @@ void PG::_update_calc_stats()
 
       int64_t extra_missing = -1;
 
-      if (!acting_source_objects.empty()) {
-	auto extra_copy = acting_source_objects.begin();
-	extra_missing = extra_copy->first;
-        acting_source_objects.erase(*extra_copy);
+      if (pool.info.is_replicated()) {
+	if (!acting_source_objects.empty()) {
+	  auto extra_copy = acting_source_objects.begin();
+	  extra_missing = std::get<0>(*extra_copy);
+          acting_source_objects.erase(extra_copy);
+	}
+      } else {	// Erasure coded
+	// Use corresponding shard
+	for (const auto& a : acting_source_objects) {
+	  if (std::get<1>(a).shard == std::get<1>(*m).shard) {
+	    extra_missing = std::get<0>(a);
+	    acting_source_objects.erase(a);
+	    break;
+	  }
+	}
       }
 
-      if (extra_missing >= 0 && m->first >= extra_missing) {
+      if (extra_missing >= 0 && std::get<0>(*m) >= extra_missing) {
 	// We don't know which of the objects on the target
 	// are part of extra_missing so assume are all degraded.
-	misplaced += m->first - extra_missing;
+	misplaced += std::get<0>(*m) - extra_missing;
 	degraded += extra_missing;
       } else {
 	// 1. extra_missing == -1, more targets than sources so degraded
-	// 2. extra_missing > m->first, so that we know that some extra_missing
+	// 2. extra_missing > std::get<0>(m), so that we know that some extra_missing
 	//    previously degraded are now present on the target.
-	degraded += m->first;
+	degraded += std::get<0>(*m);
       }
     }
-    if (target > upset.size()) {
-      int64_t undersize_degraded = (num_objects * (target - upset.size()));
-      degraded += undersize_degraded;
-      dout(20) << __func__ << " undersize degraded " << undersize_degraded << dendl;
+    // If there are still acting that haven't been accounted for
+    // then they are misplaced
+    for (const auto& a : acting_source_objects) {
+      int64_t extra_misplaced = std::max((int64_t)0, num_objects - std::get<0>(a));
+      dout(20) << __func__ << " extra acting misplaced " << extra_misplaced << dendl;
+      misplaced += extra_misplaced;
     }
     dout(20) << __func__ << " degraded " << degraded << dendl;
     dout(20) << __func__ << " misplaced " << misplaced << dendl;
