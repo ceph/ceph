@@ -169,6 +169,7 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
+BuildRequires:  cunit-devel
 BuildRequires:	python-Cython
 BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
