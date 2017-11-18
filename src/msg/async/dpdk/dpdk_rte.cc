@@ -52,7 +52,7 @@ namespace dpdk {
     }
 
     bool done = false;
-    const char *hexstring = c->_conf->get_val<std::string>("ms_dpdk_coremaskbit").c_str();
+    const char *hexstring = c->_conf->get_val<std::string>("ms_dpdk_coremask").c_str();
     int num = (int)strtol(hexstring, NULL, 0);
     unsigned int coremaskbit = bitcount(num);
 

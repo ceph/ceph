@@ -33,6 +33,7 @@ rm -rf build && ./do_cmake.sh "$*" \
 	-D WITH_CEPHFS=OFF \
 	-D WITH_EMBEDDED=OFF \
 	-D WITH_MGR=YES \
+	-D WITH_SPDK=OFF \
 	2>&1 | tee cmake.log
 
 echo start building 
