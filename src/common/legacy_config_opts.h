@@ -72,8 +72,6 @@ OPTION(mon_cluster_log_to_graylog, OPT_STR)
 OPTION(mon_cluster_log_to_graylog_host, OPT_STR)
 OPTION(mon_cluster_log_to_graylog_port, OPT_STR)
 
-OPTION(enable_experimental_unrecoverable_data_corrupting_features, OPT_STR)
-
 SAFE_OPTION(plugin_dir, OPT_STR)
 
 OPTION(xio_trace_mempool, OPT_BOOL) // mempool allocation counters

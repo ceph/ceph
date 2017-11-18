@@ -139,7 +139,7 @@ public:
     } else {
       TypedSingletonWrapper<T> *wrapper =
         dynamic_cast<TypedSingletonWrapper<T> *>(_associated_objs[name]);
-      assert(wrapper != NULL);
+      assert(wrapper);
       p = wrapper->singleton;
     }
   }
@@ -216,6 +216,7 @@ private:
     }
     ~TypedSingletonWrapper() override {
       delete singleton;
+      singleton = nullptr;
     }
 
     T *singleton;
