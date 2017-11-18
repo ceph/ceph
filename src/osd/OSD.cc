@@ -3659,10 +3659,12 @@ void OSD::recursive_remove_collection(CephContext* cct,
   for (vector<ghobject_t>::iterator p = objects.begin();
        p != objects.end();
        ++p, removed++) {
-    OSDriver::OSTransaction _t(driver.get_transaction(&t));
-    int r = mapper.remove_oid(p->hobj, &_t);
-    if (r != 0 && r != -ENOENT)
-      ceph_abort();
+    if (p->hobj.snap < CEPH_MAXSNAP) {
+      OSDriver::OSTransaction _t(driver.get_transaction(&t));
+      int r = mapper.remove_oid(p->hobj, &_t);
+      if (r != 0 && r != -ENOENT)
+        ceph_abort();
+    }
     t.remove(tmp, *p);
     if (removed > cct->_conf->osd_target_transaction_size) {
       int r = store->apply_transaction(osr.get(), std::move(t));
