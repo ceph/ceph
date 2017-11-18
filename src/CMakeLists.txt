@@ -534,6 +534,8 @@ set(libcommon_files
   common/util.cc
   librbd/Features.cc
   arch/probe.cc
+  blake2/sse/blake2b.c
+  blake2/sse/blake2bp.c
   ${auth_files}
   ${mds_files})
 
@@ -612,6 +614,8 @@ else()
 endif()
 
 add_library(common-objs OBJECT ${libcommon_files})
+target_include_directories(common-objs PRIVATE
+  "${PROJECT_SOURCE_DIR}/src/blake2/sse")
 set(ceph_common_objs
   $<TARGET_OBJECTS:common_buffer_obj>
   $<TARGET_OBJECTS:common_texttable_obj>

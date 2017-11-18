@@ -52,3 +52,6 @@
 [submodule "src/rapidjson"]
 	path = src/rapidjson
 	url = https://github.com/ceph/rapidjson
+[submodule "src/blake2"]
+	path = src/blake2
+	url = https://github.com/BLAKE2/BLAKE2.git
