@@ -70,98 +70,72 @@ Mgr::~Mgr()
 {
 }
 
-
-/**
- * Context for completion of metadata mon commands: take
- * the result and stash it in DaemonStateIndex
- */
-class MetadataUpdate : public Context
+void MetadataUpdate::finish(int r)
 {
-  DaemonStateIndex &daemon_state;
-  DaemonKey key;
-
-  std::map<std::string, std::string> defaults;
-
-public:
-  bufferlist outbl;
-  std::string outs;
-
-  MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
-    : daemon_state(daemon_state_), key(key_) {}
-
-  void set_default(const std::string &k, const std::string &v)
-  {
-    defaults[k] = v;
-  }
-
-  void finish(int r) override
-  {
-    daemon_state.clear_updating(key);
-    if (r == 0) {
-      if (key.first == "mds" || key.first == "osd") {
-        json_spirit::mValue json_result;
-        bool read_ok = json_spirit::read(
-            outbl.to_str(), json_result);
-        if (!read_ok) {
-          dout(1) << "mon returned invalid JSON for "
-                  << key.first << "." << key.second << dendl;
-          return;
-        }
-        dout(4) << "mon returned valid metadata JSON for "
+  daemon_state.clear_updating(key);
+  if (r == 0) {
+    if (key.first == "mds" || key.first == "osd") {
+      json_spirit::mValue json_result;
+      bool read_ok = json_spirit::read(
+          outbl.to_str(), json_result);
+      if (!read_ok) {
+        dout(1) << "mon returned invalid JSON for "
                 << key.first << "." << key.second << dendl;
+        return;
+      }
+      dout(4) << "mon returned valid metadata JSON for "
+              << key.first << "." << key.second << dendl;
 
-        json_spirit::mObject daemon_meta = json_result.get_obj();
+      json_spirit::mObject daemon_meta = json_result.get_obj();
 
-        // Apply any defaults
-        for (const auto &i : defaults) {
-          if (daemon_meta.find(i.first) == daemon_meta.end()) {
-            daemon_meta[i.first] = i.second;
-          }
+      // Apply any defaults
+      for (const auto &i : defaults) {
+        if (daemon_meta.find(i.first) == daemon_meta.end()) {
+          daemon_meta[i.first] = i.second;
         }
+      }
 
-        DaemonStatePtr state;
-        if (daemon_state.exists(key)) {
-          state = daemon_state.get(key);
-	  Mutex::Locker l(state->lock);
-          if (key.first == "mds") {
-            daemon_meta.erase("name");
-          } else if (key.first == "osd") {
-            daemon_meta.erase("id");
-          }
-          daemon_meta.erase("hostname");
-          state->metadata.clear();
-          for (const auto &i : daemon_meta) {
-            state->metadata[i.first] = i.second.get_str();
-          }
-        } else {
-          state = std::make_shared<DaemonState>(daemon_state.types);
-          state->key = key;
-          state->hostname = daemon_meta.at("hostname").get_str();
-
-          if (key.first == "mds") {
-            daemon_meta.erase("name");
-          } else if (key.first == "osd") {
-            daemon_meta.erase("id");
-          }
-          daemon_meta.erase("hostname");
-
-          for (const auto &i : daemon_meta) {
-            state->metadata[i.first] = i.second.get_str();
-          }
-
-          daemon_state.insert(state);
+      DaemonStatePtr state;
+      if (daemon_state.exists(key)) {
+        state = daemon_state.get(key);
+	Mutex::Locker l(state->lock);
+        if (key.first == "mds") {
+          daemon_meta.erase("name");
+        } else if (key.first == "osd") {
+          daemon_meta.erase("id");
+        }
+        daemon_meta.erase("hostname");
+        state->metadata.clear();
+        for (const auto &i : daemon_meta) {
+          state->metadata[i.first] = i.second.get_str();
         }
       } else {
-        ceph_abort();
+        state = std::make_shared<DaemonState>(daemon_state.types);
+        state->key = key;
+        state->hostname = daemon_meta.at("hostname").get_str();
+
+        if (key.first == "mds") {
+          daemon_meta.erase("name");
+        } else if (key.first == "osd") {
+          daemon_meta.erase("id");
+        }
+        daemon_meta.erase("hostname");
+
+        for (const auto &i : daemon_meta) {
+          state->metadata[i.first] = i.second.get_str();
+        }
+
+        daemon_state.insert(state);
       }
     } else {
-      dout(1) << "mon failed to return metadata for "
-              << key.first << "." << key.second << ": "
-	      << cpp_strerror(r) << dendl;
+      ceph_abort();
     }
+  } else {
+    dout(1) << "mon failed to return metadata for "
+            << key.first << "." << key.second << ": "
+	    << cpp_strerror(r) << dendl;
   }
-};
-
+}
 
 void Mgr::background_init(Context *completion)
 {

@@ -105,4 +105,33 @@ public:
   std::map<std::string, std::string> get_services() const;
 };
 
+/**
+ * Context for completion of metadata mon commands: take
+ * the result and stash it in DaemonStateIndex
+ */
+class MetadataUpdate : public Context
+{
+
+private:
+  DaemonStateIndex &daemon_state;
+  DaemonKey key;
+
+  std::map<std::string, std::string> defaults;
+
+public:
+  bufferlist outbl;
+  std::string outs;
+
+  MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
+    : daemon_state(daemon_state_), key(key_) {}
+
+  void set_default(const std::string &k, const std::string &v)
+  {
+    defaults[k] = v;
+  }
+
+  void finish(int r) override;
+};
+
+
 #endif
