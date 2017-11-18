@@ -2663,11 +2663,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	  ret = io_ctx.remove(oid);
 	}
       }
+      std::string name = (nspace.size() ? nspace + "/" : "") + oid;
       if (ret < 0) {
-        string name = (nspace.size() ? nspace + "/" : "" ) + oid;
         cerr << "error removing " << pool_name << ">" << name << ": " << cpp_strerror(ret) << std::endl;
         goto out;
-      }
+      } else
+        std::cout << "successfully " << name << " removed from " << pool_name
+          << "\n";
     }
   }
   else if (strcmp(nargs[0], "create") == 0) {
@@ -2678,7 +2680,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (ret < 0) {
       cerr << "error creating " << pool_name << "/" << oid << ": " << cpp_strerror(ret) << std::endl;
       goto out;
-    }
+    } else
+      std::cout << "successfully created object " << oid << " in " << pool_name
+      << '\n';
   }
 
   else if (strcmp(nargs[0], "tmap") == 0) {
