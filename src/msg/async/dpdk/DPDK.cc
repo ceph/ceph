@@ -532,7 +532,7 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     for (int i = 0; i < mbufs_per_queue_rx; i++) {
       rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
       assert(m);
-      rte_mbuf_refcnt_update(m, -1);
+      rte_mbuf_refcnt_set(m, 1);
       _rx_free_bufs.push_back(m);
     }
 
@@ -562,7 +562,6 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     }
   }
 
-  ldout(cct, 20) << __func__ << " count " << rte_mempool_count(_pktmbuf_pool_rx) << " free count " << rte_mempool_free_count(_pktmbuf_pool_rx) << dendl;
   return _pktmbuf_pool_rx != nullptr;
 }
 
@@ -785,8 +784,6 @@ bool DPDKQueuePair::rx_gc(bool force)
     ldout(cct, 10) << __func__ << " free segs " << _num_rx_free_segs
                    << " thresh " << rx_gc_thresh
                    << " free pkts " << _rx_free_pkts.size()
-                   << " pool count " << rte_mempool_count(_pktmbuf_pool_rx)
-                   << " free pool count " << rte_mempool_free_count(_pktmbuf_pool_rx)
                    << dendl;
 
     while (!_rx_free_pkts.empty()) {
