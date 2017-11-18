@@ -6319,9 +6319,9 @@ void BlueStore::_reap_collections()
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
 		     << " flush_txns " << o->flushing_count << dendl;
-	    return false;
+	    return true;
 	  }
-	  return true;
+	  return false;
 	})) {
       all_reaped = false;
       continue;
