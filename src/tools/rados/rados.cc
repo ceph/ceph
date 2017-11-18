@@ -96,6 +96,7 @@ void usage(ostream& out)
 "   rmxattr <obj-name> attr\n"
 "   stat <obj-name>                  stat the named object\n"
 "   stat2 <obj-name>                 stat2 the named object (with high precision time)\n"
+"   touch <obj-name> [timestamp]     change the named object modification time\n"
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
@@ -2268,6 +2269,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       utime_t t(mtime);
       cout << pool_name << "/" << oid
 	   << " mtime " << t << ", size " << size << std::endl;
+    }
+  } 
+  else if (strcmp(nargs[0], "touch") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+    time_t timestamp = time(NULL);
+    if (nargs.size() > 2) {
+      char* endptr = NULL;
+      timestamp = static_cast<time_t>(strtoll(nargs[2], &endptr, 10));
+      if (*endptr) {
+        cerr << "Invalid value for timestamp: '" << nargs[2] << "'" << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+    }
+    
+    ObjectWriteOperation op;
+    op.create(false);
+    op.mtime(&timestamp);
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << " error touch-ing " << pool_name << "/" << oid << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
     }
   }
   else if (strcmp(nargs[0], "get") == 0) {
