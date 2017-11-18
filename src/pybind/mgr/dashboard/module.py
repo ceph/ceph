@@ -519,7 +519,9 @@ class Module(MgrModule):
                     'rbd_pools': rbd_pools,
                     'rbd_mirroring': rbd_mirroring,
                     'health_status': self._health_data()['status'],
-                    'filesystems': filesystems
+                    'filesystems': filesystems,
+                    'mgr_id': global_instance().get_mgr_id(),
+                    'have_mon_connection': global_instance().have_mon_connection()
                 }
 
         class Root(EndPoint):

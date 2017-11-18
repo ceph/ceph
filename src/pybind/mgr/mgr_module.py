@@ -594,3 +594,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: a string
         """
         return self._ceph_set_uri(uri)
+
+    def have_mon_connection(self):
+        """
+        Check whether this ceph-mgr daemon has an open connection
+        to a monitor.  If it doesn't, then it's likely that the
+        information we have about the cluster is out of date,
+        and/or the monitor cluster is down.
+        """
+
+        return self._ceph_have_mon_connection()

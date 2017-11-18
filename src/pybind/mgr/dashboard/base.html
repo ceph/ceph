@@ -38,10 +38,14 @@
             var refresh_interval = 5000;
 
             var refresh = function() {
-                $.get("{{ url_prefix }}/toplevel_data", function(data) {
-                    _.extend(toplevel_data, data);
-                    setTimeout(refresh, refresh_interval);
-                });
+                $.get("{{ url_prefix }}/toplevel_data")
+                    .done(function(data) {
+                        _.extend(toplevel_data, data);
+                        setTimeout(refresh, refresh_interval);
+                    })
+                    .fail(function(){
+                        $("#mgr-load-banner").show();
+                    });
             };
 
             rivets.configure({
@@ -57,14 +61,6 @@
                     return "color: #FFC200;";
                 } else if (status_str == "HEALTH_ERR") {
                     return "color: #ff0000;"
-                }
-            }
-
-            rivets.formatters.health_ok = function(status_str) {
-                if (status_str == "HEALTH_OK") {
-                    return true;
-                } else {
-                    return false;
                 }
             }
 
@@ -150,8 +146,12 @@
                 return (isNaN(value) || value == 0)
             };
 
-            rivets.bind($("#health"), toplevel_data);
+            // Bindings for the dynamic menu content
             rivets.bind($("section.sidebar"), toplevel_data);
+
+            // Bindings for the danger header when there's no mon connection
+            rivets.bind($("#mon-conn-banner"), toplevel_data);
+
             setTimeout(refresh, refresh_interval);
         });
       </script>
@@ -293,8 +293,16 @@
 </head>
 
 <body class="hold-transition sidebar-mini sidebar-collapse">
-<div class="wrapper">
 
+<div style="display:none;" id="mon-conn-banner" class="alert alert-danger" rv-hide="have_mon_connection">
+No monitor connection from manager daemon {mgr_id}: data may be stale
+</div>
+
+<div style="display:none;" id="mgr-load-banner" class="alert alert-warning">
+Failed to load data from server <a href="javascript:window.location.reload(true)">Reload</a>
+</div>
+
+<div class="wrapper">
     <!-- Main Header -->
     <header class="main-header">
         <!-- Logo -->
@@ -316,14 +324,6 @@
                role="button">
                 <span class="sr-only">Toggle navigation</span>
             </a>
-
-            <div id="health" style="font-size: 18px; padding: 12px 12px;">
-                <span rv-hide="health_status | health_ok" >
-                    <span rv-style="health_status | health_color">
-                        {health_status}
-                    </span>
-                </span>
-            </div>
 
             <!-- Navbar Right Menu -->
             <div class="navbar-custom-menu">

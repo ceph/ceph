@@ -502,6 +502,16 @@ ceph_set_uri(BaseMgrModule *self, PyObject *args)
   Py_RETURN_NONE;
 }
 
+static PyObject*
+ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
+{
+  if (self->py_modules->get_monc().is_connected()) {
+    Py_RETURN_TRUE;
+  } else {
+    Py_RETURN_FALSE;
+  }
+}
+
 
 PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get", (PyCFunction)ceph_state_get, METH_VARARGS,
@@ -554,6 +564,10 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_set_uri", (PyCFunction)ceph_set_uri, METH_VARARGS,
     "Advertize a service URI served by this module"},
+
+  {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
+    METH_NOARGS, "Find out whether this mgr daemon currently has "
+                 "a connection to a monitor"},
 
   {NULL, NULL, 0, NULL}
 };
