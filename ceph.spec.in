@@ -30,8 +30,7 @@
 %bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
-%endif
-%if 0%{?suse_version}
+%elseif 0%{?suse_version}
 %bcond_with selinux
 %endif
 
@@ -173,8 +172,7 @@ BuildRequires:	python-Cython
 BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
 BuildRequires:  rdma-core-devel
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 Requires:	systemd
 BuildRequires:  boost-random
 BuildRequires:	btrfs-progs
@@ -212,8 +210,7 @@ BuildRequires:  babeltrace-devel
 %endif
 %if 0%{?suse_version}
 BuildRequires:	libexpat-devel
-%endif
-%if 0%{?rhel} || 0%{?fedora}
+%elseif 0%{?rhel} || 0%{?fedora}
 BuildRequires:	expat-devel
 %endif
 #hardened-cc1
@@ -326,8 +323,7 @@ Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       python-cherrypy
 Requires:       python-werkzeug
 Requires:       pyOpenSSL
-%endif
-%if 0%{?suse_version}
+%elseif 0%{?suse_version}
 Requires: 	python-CherryPy
 Requires:       python-Werkzeug
 Requires:       python-pyOpenSSL
@@ -437,8 +433,7 @@ and providing access to them over the network.
 Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
 Group:		System/Libraries
-%endif
-%if 0%{?rhel} || 0%{?fedora}
+%elseif 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 %endif
 %description -n librados2
@@ -876,8 +871,7 @@ popd
 install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 %if 0%{?fedora} || 0%{?rhel}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
-%endif
-%if 0%{?suse_version}
+%elseif 0%{?suse_version}
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
 %endif
 install -m 0644 -D systemd/ceph.tmpfiles.d %{buildroot}%{_tmpfilesdir}/ceph-common.conf
@@ -964,8 +958,7 @@ rm -rf %{buildroot}
 %config(noreplace) %{_sysconfdir}/logrotate.d/ceph
 %if 0%{?fedora} || 0%{?rhel}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
-%endif
-%if 0%{?suse_version}
+%elseif 0%{?suse_version}
 %{_localstatedir}/adm/fillup-templates/sysconfig.*
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
@@ -1004,8 +997,7 @@ rm -rf %{buildroot}
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-disk@\*.service ceph.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-disk@\*.service ceph.target
 %systemd_post ceph-volume@\*.service ceph.target
 %endif
@@ -1016,8 +1008,7 @@ fi
 %preun base
 %if 0%{?suse_version}
 %service_del_preun ceph-disk@\*.service ceph.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-disk@\*.service ceph.target
 %systemd_preun ceph-volume@\*.service ceph.target
 %endif
@@ -1028,8 +1019,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-disk@\*.service ceph.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-disk@\*.service ceph.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1113,8 +1103,7 @@ CEPH_USER_ID=167
 %if 0%{?rhel} || 0%{?fedora}
 /usr/sbin/groupadd ceph -g $CEPH_GROUP_ID -o -r 2>/dev/null || :
 /usr/sbin/useradd ceph -u $CEPH_USER_ID -o -r -g ceph -s /sbin/nologin -c "Ceph daemons" -d %{_localstatedir}/lib/ceph 2>/dev/null || :
-%endif
-%if 0%{?suse_version}
+%elseif 0%{?suse_version}
 if ! getent group ceph >/dev/null ; then
     CEPH_GROUP_ID_OPTION=""
     getent group $CEPH_GROUP_ID >/dev/null || CEPH_GROUP_ID_OPTION="-g $CEPH_GROUP_ID"
@@ -1155,8 +1144,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mds@\*.service ceph-mds.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mds@\*.service ceph-mds.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1166,8 +1154,7 @@ fi
 %preun mds
 %if 0%{?suse_version}
 %service_del_preun ceph-mds@\*.service ceph-mds.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-mds@\*.service ceph-mds.target
 %endif
 
@@ -1176,8 +1163,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-mds@\*.service ceph-mds.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mds@\*.service ceph-mds.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1204,8 +1190,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mgr@\*.service ceph-mgr.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mgr@\*.service ceph-mgr.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1215,8 +1200,7 @@ fi
 %preun mgr
 %if 0%{?suse_version}
 %service_del_preun ceph-mgr@\*.service ceph-mgr.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-mgr@\*.service ceph-mgr.target
 %endif
 
@@ -1225,8 +1209,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-mgr@\*.service ceph-mgr.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mgr@\*.service ceph-mgr.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1257,8 +1240,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-mon@\*.service ceph-mon.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-mon@\*.service ceph-mon.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1268,8 +1250,7 @@ fi
 %preun mon
 %if 0%{?suse_version}
 %service_del_preun ceph-mon@\*.service ceph-mon.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-mon@\*.service ceph-mon.target
 %endif
 
@@ -1278,8 +1259,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-mon@\*.service ceph-mon.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-mon@\*.service ceph-mon.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1316,8 +1296,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-rbd-mirror@\*.service ceph-rbd-mirror.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1327,8 +1306,7 @@ fi
 %preun -n rbd-mirror
 %if 0%{?suse_version}
 %service_del_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 
@@ -1337,8 +1315,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-rbd-mirror@\*.service ceph-rbd-mirror.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1372,8 +1349,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-radosgw@\*.service ceph-radosgw.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1383,8 +1359,7 @@ fi
 %preun radosgw
 %if 0%{?suse_version}
 %service_del_preun ceph-radosgw@\*.service ceph-radosgw.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 
@@ -1393,8 +1368,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-radosgw@\*.service ceph-radosgw.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-radosgw@\*.service ceph-radosgw.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
@@ -1435,8 +1409,7 @@ fi
 if [ $1 -eq 1 ] ; then
   /usr/bin/systemctl preset ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
 fi
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_post ceph-osd@\*.service ceph-osd.target
 %endif
 if [ $1 -eq 1 ] ; then
@@ -1451,8 +1424,7 @@ fi
 %preun osd
 %if 0%{?suse_version}
 %service_del_preun ceph-osd@\*.service ceph-osd.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_preun ceph-osd@\*.service ceph-osd.target
 %endif
 
@@ -1461,8 +1433,7 @@ test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
 %service_del_postun ceph-osd@\*.service ceph-osd.target
-%endif
-%if 0%{?fedora} || 0%{?rhel}
+%elseif 0%{?fedora} || 0%{?rhel}
 %systemd_postun ceph-osd@\*.service ceph-osd.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
