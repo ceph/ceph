@@ -2646,9 +2646,20 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   } else if (strcmp(nargs[0], "rm") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
+
+    if (strcmp(nargs[2], "--yes-i-really-really-mean-it") != 0) {
+      cerr << "WARNING:\n"
+           << " This will PARMANENTLY DESTROY object from a pool"
+           << " with noway back.\n"
+           << " To confirm, follow pool with"
+           << " --yes-i-really-really-mean-it\n";
+      ret = -1;
+      goto out;
+    }
+    
     vector<const char *>::iterator iter = nargs.begin();
     ++iter;
-    for (; iter != nargs.end(); ++iter) {
+    for (; iter != nargs.end() - 1; ++iter) {
       const string & oid = *iter;
       if (use_striper) {
 	if (forcefull) {
