@@ -117,7 +117,7 @@ int KvStoreBench::setup(int argc, const char** argv) {
       } else if (strcmp(args[i], "--cache-refresh") == 0) {
 	auto temp = atoi(args[i+1]);
 	assert (temp != 0);
-	cache_refresh = 100 / temp;
+	cache_refresh = 100 / (double)temp;
       } else if (strcmp(args[i], "-t") == 0) {
 	max_ops_in_flight = atoi(args[i+1]);
       } else if (strcmp(args[i], "--clients") == 0) {
