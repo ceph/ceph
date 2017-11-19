@@ -192,6 +192,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   ASSERT_EQ(std::string("remote image id"), remote_image_id);
   ASSERT_TRUE(remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_DISCONNECTED, client_state);
+  delete remote_journaler;
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
@@ -239,6 +240,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, SuccessNotRegistered) {
   ASSERT_EQ(std::string("remote image id"), remote_image_id);
   ASSERT_TRUE(remote_journaler != nullptr);
   ASSERT_EQ(cls::journal::CLIENT_STATE_CONNECTED, client_state);
+  delete remote_journaler;
 }
 
 TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, MirrorUuidError) {
