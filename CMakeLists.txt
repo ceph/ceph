@@ -186,10 +186,10 @@ else()
 endif(LINUX)
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
-if(${WITH_BLUESTORE})
-  find_package(aio REQUIRED)
+if(WITH_BLUESTORE)
+  find_package(aio)
   set(HAVE_LIBAIO ${AIO_FOUND})
-endif(${WITH_BLUESTORE})
+endif()
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(WITH_OPENLDAP)

@@ -7883,10 +7883,11 @@ void BlueStore::_txc_calc_cost(TransContext *txc)
   // a configurable (with different hdd and ssd defaults), and add
   // that to the bytes value.
   int ios = 1;  // one "io" for the kv commit
+#ifdef HAVE_LIBAIO
   for (auto& p : txc->ioc.pending_aios) {
     ios += p.iov.size();
   }
-
+#endif
 #ifdef HAVE_SPDK
   ios += txc->ioc.total_nseg;
 #endif
@@ -8037,10 +8038,10 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   OpSequencer *osr = txc->osr.get();
   std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
-
+#ifdef HAVE_LIBAIO
   // release aio contexts (including pinned buffers).
   txc->ioc.running_aios.clear();
-
+#endif
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;

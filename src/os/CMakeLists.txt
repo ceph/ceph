@@ -29,13 +29,17 @@ if(WITH_BLUESTORE)
     bluestore/BlueStore.cc
     bluestore/bluestore_types.cc
     bluestore/FreelistManager.cc
-    bluestore/KernelDevice.cc
     bluestore/StupidAllocator.cc
     bluestore/BitMapAllocator.cc
     bluestore/BitAllocator.cc
-    bluestore/aio.cc
   )
 endif(WITH_BLUESTORE)
+
+if(HAVE_LIBAIO)
+  list(APPEND libos_srcs
+    bluestore/KernelDevice.cc
+    bluestore/aio.cc)
+endif()
 
 if(WITH_FUSE)
   list(APPEND libos_srcs
