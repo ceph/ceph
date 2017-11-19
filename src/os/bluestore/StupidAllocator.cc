@@ -24,7 +24,9 @@ StupidAllocator::~StupidAllocator()
 
 unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
 {
-  uint64_t len = orig_len / cct->_conf->bdev_block_size;
+  auto bdev_block_size = cct->_conf->get_val<int64_t>(
+    "bdev_block_size");
+  uint64_t len = orig_len / bdev_block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   ldout(cct, 30) << __func__ << " len 0x" << std::hex << orig_len
 		 << std::dec << " -> " << bin << dendl;
@@ -160,9 +162,11 @@ int64_t StupidAllocator::allocate_int(
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
   *length = MIN(MAX(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
-  if (cct->_conf->bluestore_debug_small_allocations) {
+  auto bluestore_debug_small_allocations = cct->_conf->get_val<int64_t>(
+    "bluestore_debug_small_allocations");
+  if (bluestore_debug_small_allocations) {
     uint64_t max =
-      alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
+      alloc_unit * (rand() % bluestore_debug_small_allocations);
     if (max && *length > max) {
       ldout(cct, 10) << __func__ << " shortening allocation of 0x" << std::hex
 	       	     << *length << " -> 0x"

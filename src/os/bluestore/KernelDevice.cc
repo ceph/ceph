@@ -38,7 +38,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
     fd_buffered(-1),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    aio_queue(cct->_conf->bdev_aio_max_queue_depth),
+    aio_queue(cct->_conf->get_val<int64_t>("bdev_aio_max_queue_depth")),
     aio_stop(false),
     aio_thread(this),
     injecting_crash(0)
@@ -76,7 +76,7 @@ int KernelDevice::open(const string& p)
     goto out_direct;
   }
   dio = true;
-  aio = cct->_conf->bdev_aio;
+  aio = cct->_conf->get_val<bool>("bdev_aio");
   if (!aio) {
     assert(0 == "non-aio not supported");
   }
@@ -109,7 +109,7 @@ int KernelDevice::open(const string& p)
   // blksize doesn't strictly matter except that some file systems may
   // require a read/modify/write if we write something smaller than
   // it.
-  block_size = cct->_conf->bdev_block_size;
+  block_size = cct->_conf->get_val<int64_t>("bdev_block_size");
   if (block_size != (unsigned)st.st_blksize) {
     dout(1) << __func__ << " backing device/file reports st_blksize "
 	    << st.st_blksize << ", using bdev_block_size "
@@ -289,12 +289,15 @@ int KernelDevice::flush()
   }
 
   dout(10) << __func__ << " start" << dendl;
-  if (cct->_conf->bdev_inject_crash) {
+  auto bdev_inject_crash = cct->_conf->get_val<int64_t>("bdev_inject_crash");
+  if (bdev_inject_crash) {
     ++injecting_crash;
     // sleep for a moment to give other threads a chance to submit or
     // wait on io that races with a flush.
     derr << __func__ << " injecting crash. first we sleep..." << dendl;
-    sleep(cct->_conf->bdev_inject_crash_flush_delay);
+    auto bdev_inject_crash_flush_delay = cct->_conf->get_val<int64_t>(
+      "bdev_inject_crash_flush_delay");
+    sleep(bdev_inject_crash_flush_delay);
     derr << __func__ << " and now we die" << dendl;
     cct->_log->flush();
     _exit(1);
@@ -346,11 +349,12 @@ void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
+  auto bdev_aio_poll_ms = cct->_conf->get_val<int64_t>("bdev_aio_poll_ms");
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = cct->_conf->bdev_aio_reap_max;
+    int max = cct->_conf->get_val<int64_t>("bdev_aio_reap_max");
     aio_t *aio[max];
-    int r = aio_queue.get_next_completed(cct->_conf->bdev_aio_poll_ms,
+    int r = aio_queue.get_next_completed(bdev_aio_poll_ms,
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
@@ -405,7 +409,8 @@ void KernelDevice::_aio_thread()
 	}
       }
     }
-    if (cct->_conf->bdev_debug_aio) {
+    auto bdev_debug_aio = cct->_conf->get_val<bool>("bdev_debug_aio");
+    if (bdev_debug_aio) {
       utime_t now = ceph_clock_now();
       std::lock_guard<std::mutex> l(debug_queue_lock);
       if (debug_oldest) {
@@ -413,11 +418,13 @@ void KernelDevice::_aio_thread()
 	  debug_stall_since = now;
 	} else {
 	  utime_t cutoff = now;
-	  cutoff -= cct->_conf->bdev_debug_aio_suicide_timeout;
+          auto bdev_debug_aio_suicide_timeout = cct->_conf->get_val<double>(
+            "bdev_debug_aio_suicide_timeout");
+	  cutoff -= bdev_debug_aio_suicide_timeout;
 	  if (debug_stall_since < cutoff) {
 	    derr << __func__ << " stalled aio " << debug_oldest
 		 << " since " << debug_stall_since << ", timeout is "
-		 << cct->_conf->bdev_debug_aio_suicide_timeout
+		 << bdev_debug_aio_suicide_timeout
 		 << "s, suicide" << dendl;
 	    assert(0 == "stalled aio... buggy kernel or bad device?");
 	  }
@@ -425,10 +432,13 @@ void KernelDevice::_aio_thread()
       }
     }
     reap_ioc();
-    if (cct->_conf->bdev_inject_crash) {
+    auto bdev_inject_crash = cct->_conf->get_val<int64_t>("bdev_inject_crash");
+    auto bdev_inject_crash_flush_delay = cct->_conf->get_val<int64_t>(
+      "bdev_inject_crash_flush_delay");
+    if (bdev_inject_crash) {
       ++inject_crash_count;
-      if (inject_crash_count * cct->_conf->bdev_aio_poll_ms / 1000 >
-	  cct->_conf->bdev_inject_crash + cct->_conf->bdev_inject_crash_flush_delay) {
+      if (inject_crash_count * bdev_aio_poll_ms / 1000 >
+	  bdev_inject_crash + bdev_inject_crash_flush_delay) {
 	derr << __func__ << " bdev_inject_crash trigger from aio thread"
 	     << dendl;
 	cct->_log->flush();
@@ -447,7 +457,9 @@ void KernelDevice::_aio_log_start(
 {
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  if (cct->_conf->bdev_debug_inflight_ios) {
+  auto bdev_debug_inflight_ios = cct->_conf->get_val<bool>(
+    "bdev_debug_inflight_ios");
+  if (bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     if (debug_inflight.intersects(offset, length)) {
       derr << __func__ << " inflight overlap of 0x"
@@ -490,7 +502,9 @@ void KernelDevice::_aio_log_finish(
 {
   dout(20) << __func__ << " " << aio << " 0x"
 	   << std::hex << offset << "~" << length << std::dec << dendl;
-  if (cct->_conf->bdev_debug_inflight_ios) {
+  auto bdev_debug_inflight_ios = cct->_conf->get_val<bool>(
+    "bdev_debug_inflight_ios");
+  if (bdev_debug_inflight_ios) {
     Mutex::Locker l(debug_lock);
     debug_inflight.erase(offset, length);
   }
@@ -518,8 +532,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
   ioc->num_pending -= pending;
   assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
   assert(ioc->pending_aios.size() == 0);
-  
-  if (cct->_conf->bdev_debug_aio) {
+  auto bdev_debug_aio = cct->_conf->get_val<bool>("bdev_debug_aio"); 
+  if (bdev_debug_aio) {
     list<aio_t>::iterator p = ioc->running_aios.begin();
     while (p != e) {
       dout(30) << __func__ << " " << *p << dendl;
@@ -546,8 +560,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered)
   uint64_t len = bl.length();
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 	  << std::dec << " buffered" << dendl;
-  if (cct->_conf->bdev_inject_crash &&
-      rand() % cct->_conf->bdev_inject_crash == 0) {
+  auto bdev_inject_crash = cct->_conf->get_val<int64_t>("bdev_inject_crash");
+  if (bdev_inject_crash && rand() % bdev_inject_crash == 0) {
     derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
 	 << off << "~" << len << std::dec << dendl;
     ++injecting_crash;
@@ -631,8 +645,8 @@ int KernelDevice::aio_write(
     ioc->pending_aios.push_back(aio_t(ioc, fd_direct));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
-    if (cct->_conf->bdev_inject_crash &&
-	rand() % cct->_conf->bdev_inject_crash == 0) {
+    auto bdev_inject_crash = cct->_conf->get_val<int64_t>("bdev_inject_crash");
+    if (bdev_inject_crash && rand() % bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
 	   << off << "~" << len << std::dec
 	   << dendl;

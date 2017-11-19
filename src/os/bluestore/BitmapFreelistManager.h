@@ -18,6 +18,10 @@ class BitmapFreelistManager : public FreelistManager {
   ceph::shared_ptr<KeyValueDB::MergeOperator> merge_op;
   std::mutex lock;
 
+  int64_t bdev_block_size;
+  int64_t bluestore_freelist_blocks_per_key;
+  bool bluestore_debug_freelist;
+
   uint64_t size;            ///< size of device (bytes)
   uint64_t bytes_per_block; ///< bytes per block (bdev_block_size)
   uint64_t blocks_per_key;  ///< blocks (bits) per key/value pair
