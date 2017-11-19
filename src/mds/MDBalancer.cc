@@ -1098,7 +1098,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
 {
   // hit me
-  double v = dir->pop_me.get(type).hit(now, amount);
+  double v = dir->pop_me.get(type).hit(now, mds->mdcache->decayrate, amount);
 
   const bool hot = (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
                    (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
@@ -1166,12 +1166,12 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
   while (true) {
-    dir->pop_nested.get(type).hit(now, amount);
+    dir->pop_nested.get(type).hit(now, mds->mdcache->decayrate, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
 
     if (hit_subtree) {
-      dir->pop_auth_subtree.get(type).hit(now, amount);
+      dir->pop_auth_subtree.get(type).hit(now, mds->mdcache->decayrate, amount);
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }
