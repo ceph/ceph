@@ -73,6 +73,7 @@ public:
   static void trim_whitespace(std::string &str, bool strip_internal);
   static std::string normalize_key_name(const std::string &key);
   friend std::ostream &operator<<(std::ostream &oss, const ConfFile &cf);
+  std::string get_config_filename() const;
 
 private:
   void load_from_buffer(const char *buf, size_t sz,
@@ -81,6 +82,7 @@ private:
 			        std::deque<std::string> *errors);
 
   std::map <std::string, ConfSection> sections;
+  std::string config_filename;
 };
 
 #endif

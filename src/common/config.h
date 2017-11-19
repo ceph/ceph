@@ -197,6 +197,9 @@ public:
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
 
+  /// returns the filename of config file used, empty string if not read from file
+  std::string get_config_file() const;
+
 private:
   void validate_schema();
   void validate_default_settings();

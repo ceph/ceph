@@ -128,6 +128,7 @@ public:
    */
   void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
 		  ceph::bufferlist *out);
+  void config_diff_with(const char* file, std::stringstream* errors, Formatter* f, const std::string& other_name);
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {

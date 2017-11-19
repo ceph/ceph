@@ -369,6 +369,45 @@ public:
   }
 };
 
+void CephContext::config_diff_with(const char* file, std::stringstream* errors, Formatter* f, const std::string& other_name)
+{
+  md_config_t other_conf;
+
+  int err = other_conf.parse_config_files(file, errors, 0);
+  other_conf.parse_env();
+  if (err == 0) {
+    map<string,pair<string,string> > diff;
+    set<string> unknown;
+    other_conf.diff(_conf, &diff, &unknown);
+    f->open_object_section("diff");
+
+    f->open_object_section("current");
+    for (map<string,pair<string,string> >::iterator p = diff.begin();
+	 p != diff.end(); ++p) {
+      f->dump_string(p->first.c_str(), p->second.second);
+    }
+    f->close_section(); // current
+    f->open_object_section(other_name.c_str());
+    for (map<string,pair<string,string> >::iterator p = diff.begin();
+	 p != diff.end(); ++p) {
+      f->dump_string(p->first.c_str(), p->second.first);
+    }
+    f->close_section(); // other
+    f->close_section(); // diff
+
+    f->open_array_section("unknown");
+    for (set<string>::iterator p = unknown.begin();
+	 p != unknown.end(); ++p) {
+      f->dump_string("option", *p);
+    }
+    f->close_section(); // unknown
+  } else {
+    std::ostringstream errs;
+    errs << "error parsing config file " << file << ": " << cpp_strerror(err) << " (" << err << ")";
+    f->dump_string("error", errs.str());
+  }
+}
+
 void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
 			     std::string format, bufferlist *out)
 {
@@ -512,6 +551,20 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
         f->dump_string("option", *p);
       }
       f->close_section(); // unknown
+    } else if (command == "config diff local") {
+      string conf = _conf->get_config_file();
+      if (conf == "") {
+        f->dump_string("error", "current config not loaded from file");
+      } else {
+	config_diff_with(conf.c_str(), &ss, f, "ondisk");
+      }
+    } else if (command == "config diff file") {
+      string filename;
+      if (!cmd_getval(this, cmdmap, "filename", filename)) {
+        f->dump_string("error", "syntax error: 'config diff file <filename>'");
+      } else {
+	config_diff_with(filename.c_str(), &ss, f, "file");
+      }
     } else if (command == "config diff get") {
       std::string setting;
       if (!cmd_getval(this, cmdmap, "var", setting)) {
@@ -626,6 +679,8 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("config diff get",
       "config diff get name=var,type=CephString", _admin_hook,
       "dump diff get <field>: dump diff of current and default config setting <field>");
+  _admin_socket->register_command("config diff local", "config diff local", _admin_hook, "dump diff of current config and the config that was used initially");
+  _admin_socket->register_command("config diff file", "config diff file name=file,type=CephString", _admin_hook, "dump diff of current config and specified config file");
   _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
@@ -669,6 +724,8 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("config help");
   _admin_socket->unregister_command("config diff");
   _admin_socket->unregister_command("config diff get");
+  _admin_socket->unregister_command("config diff local");
+  _admin_socket->unregister_command("config diff file");
   _admin_socket->unregister_command("log flush");
   _admin_socket->unregister_command("log dump");
   _admin_socket->unregister_command("log reopen");

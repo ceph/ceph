@@ -906,8 +906,7 @@ md_config_t::_get_val_generic(const std::string &key) const
 int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
-  std::string normalized_key(ConfFile::normalize_key_name(key));
-  auto& config_value = _get_val_generic(normalized_key.c_str());
+  auto& config_value = _get_val_generic(key);
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
     if (auto *flag = boost::get<bool>(&config_value)) {
@@ -1353,35 +1352,56 @@ void md_config_t::diff_helper(
 
   char local_buf[4096];
   char other_buf[4096];
-  for (const auto &i : schema) {
-    const Option &opt = i.second;
+  set<string> checked_opts;
+
+  if (setting.empty()) {
+    for (const auto &i : schema) {
+      checked_opts.insert(i.second.name);
+    }
+  } else {
+    const auto i = schema.find(setting);
+    if (i != schema.end()) {
+      checked_opts.insert(setting);
+    }
+  }
+
+  for (size_t o = 0; o < subsys.get_num(); o++) {
+    std::string as_option("debug_");
+    as_option += subsys.get_name(o);
     if (!setting.empty()) {
-      if (setting != opt.name) {
-        continue;
+      if (setting == as_option) {
+	checked_opts.insert(as_option);
+	break;
+      } else {
+	continue;
       }
     }
+    checked_opts.insert(as_option);
+  }
+
+  for (const auto &opt : checked_opts) {
     memset(local_buf, 0, sizeof(local_buf));
     memset(other_buf, 0, sizeof(other_buf));
 
     char *other_val = other_buf;
-    int err = other->get_val(opt.name, &other_val, sizeof(other_buf));
+    int err = other->get_val(opt, &other_val, sizeof(other_buf));
     if (err < 0) {
       if (err == -ENOENT) {
-        unknown->insert(opt.name);
+        unknown->insert(opt);
       }
       continue;
     }
 
     char *local_val = local_buf;
-    err = _get_val(opt.name, &local_val, sizeof(local_buf));
+    err = _get_val(opt, &local_val, sizeof(local_buf));
     if (err != 0)
       continue;
 
     if (strcmp(local_val, other_val))
-      diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
+      diff->insert(make_pair(opt, make_pair(local_val, other_val)));
     else if (!setting.empty()) {
-        diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
-        break;
+      diff->insert(make_pair(opt, make_pair(local_val, other_val)));
+      break;
     }
   }
 }
@@ -1391,3 +1411,7 @@ void md_config_t::complain_about_parse_errors(CephContext *cct)
   ::complain_about_parse_errors(cct, &parse_errors);
 }
 
+std::string md_config_t::get_config_file() const
+{
+  return cf.get_config_filename();
+}
