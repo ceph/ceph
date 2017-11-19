@@ -4,6 +4,9 @@ macro(build_spdk)
     build_dpdk()
   endif()
   find_package(CUnit REQUIRED)
+  if(LINUX)
+    find_package(aio REQUIRED)
+  endif()
   include(ExternalProject)
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
