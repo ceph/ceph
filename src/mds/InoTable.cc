@@ -119,15 +119,13 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
   dout(10) << "replay_alloc_ids " << ids << dendl;
   interval_set<inodeno_t> is;
   is.intersection_of(free, ids);
-  if (is == ids) {
-    free.subtract(ids);
-    projected_free.subtract(ids);
-  } else {
+  if (!(is==ids)) {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
 	<< is << " is in free " << free;
-    free.subtract(is);
-    projected_free.subtract(is);
   }
+  free.subtract(is);
+  projected_free.subtract(is);
+
   projected_version = ++version;
 }
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 
