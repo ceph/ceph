@@ -17,7 +17,12 @@
 #include <libgen.h>
 #include <unistd.h>
 
+#include "BlockDevice.h"
+
+#if defined(HAVE_LIBAIO)
 #include "KernelDevice.h"
+#endif
+
 #if defined(HAVE_SPDK)
 #include "NVMEDevice.h"
 #endif
@@ -82,10 +87,11 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new PMEMDevice(cct, cb, cbpriv);
   }
 #endif
-
+#if defined(HAVE_LIBAIO)
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv);
   }
+#endif
 #if defined(HAVE_SPDK)
   if (type == "ust-nvme") {
     return new NVMEDevice(cct, cb, cbpriv);
