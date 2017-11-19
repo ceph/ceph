@@ -739,11 +739,6 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
   const uint32_t kpo = g_conf->mds_sessionmap_keys_per_op;
   map<string, bufferlist> to_set;
   for (uint32_t i = 0; i < write_sessions.size(); ++i) {
-    // Start a new write transaction?
-    if (i % g_conf->mds_sessionmap_keys_per_op == 0) {
-      to_set.clear();
-    }
-
     const entity_name_t &session_id = write_sessions[i];
     Session *session = session_map[session_id];
     session->clear_dirty_completed_requests();
@@ -764,6 +759,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
         || i % kpo == kpo - 1) {
       ObjectOperation op;
       op.omap_set(to_set);
+      to_set.clear(); // clear to start a new transaction      
 
       SnapContext snapc;
       object_t oid = get_object_name();
