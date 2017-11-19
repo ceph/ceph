@@ -12114,7 +12114,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
   Context *fin = nullptr;
   if (!header->get_recursive()) {
-    cs->take_finisher();
+    fin = cs->take_finisher();
   }
 
   // If the scrub did some repair, then flush the journal at the end of
