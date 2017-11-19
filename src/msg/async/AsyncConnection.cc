@@ -1806,6 +1806,11 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
     ldout(async_msgr->cct, 1) << __func__ << " state changed while accept_conn, it must be mark_down" << dendl;
     assert(state == STATE_CLOSED || state == STATE_NONE);
+    // if other thread mark down this connection before we enter "accept_conn",
+    // it may cause this connection exists in "conns" with STATE_CLOSED state.
+    // so it will let other replacing connection failed and stuck into loop.
+    // it's safe to unregister_conn even if already erased
+    async_msgr->unregister_conn(this);
     goto fail_registered;
   }
 
