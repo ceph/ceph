@@ -4707,6 +4707,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
+  map<string,string> kv_options;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4820,10 +4821,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	   BDEV_LABEL_BLOCK_SIZE);
       }
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "true");
+      kv_options["separate_wal_dir"] = "1";
       bluefs_single_shared_device = false;
     } else if (::lstat(bfn.c_str(), &st) == -1) {
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
+      kv_options.erase("separate_wal_dir");
     } else {
       //symlink exist is bug
       derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
@@ -4867,20 +4868,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
                << (uint64_t)(db_size * 95 / 100) << " "
                << fn + ".slow" << ","
                << (uint64_t)(slow_size * 95 / 100);
-      cct->_conf->set_val("rocksdb_db_paths", db_paths.str(), false);
-      dout(10) << __func__ << " set rocksdb_db_paths to "
-	       << cct->_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+      kv_options["db_paths"] = db_paths.str();
+      dout(10) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
     if (create) {
       env->CreateDir(fn);
-      if (cct->_conf->rocksdb_separate_wal_dir)
+      if (kv_options.count("separate_wal_dir"))
 	env->CreateDir(fn + ".wal");
-
-      if (cct->_conf->with_val<std::string>(
-            "rocksdb_db_paths", [](const std::string& s) {
-              return s.length(); }))
-        env->CreateDir(fn + ".slow");
+      if (kv_options.count("rocksdb_db_paths"))
+	env->CreateDir(fn + ".slow");
     }
   } else if (create) {
     int r = ::mkdir(fn.c_str(), 0755);
@@ -4893,7 +4890,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     }
 
     // wal_dir, too!
-    if (cct->_conf->rocksdb_separate_wal_dir) {
+    if (kv_options.count("separate_wal_dir")) {
       string walfn = path + "/db.wal";
       r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
@@ -4910,6 +4907,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   db = KeyValueDB::create(cct,
 			  kv_backend,
 			  fn,
+			  kv_options,
 			  static_cast<void*>(env));
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
