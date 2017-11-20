@@ -86,15 +86,15 @@ public:
     return val+delta;
   }
 
-  double get_last() {
+  double get_last() const {
     return val;
   }
   
-  double get_last_vel() {
+  double get_last_vel() const {
     return vel;
   }
 
-  utime_t get_last_decay() { 
+  utime_t get_last_decay() const {
     return last_decay; 
   }
 
