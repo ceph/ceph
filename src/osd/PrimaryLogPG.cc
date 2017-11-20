@@ -4241,12 +4241,17 @@ int PrimaryLogPG::do_tmapup(OpContext *ctx, bufferlist::iterator& bp, OSDOp& osd
   return result;
 }
 
-static int check_offset_and_length(uint64_t offset, uint64_t length, uint64_t max)
+static int check_offset_and_length(uint64_t offset, uint64_t length,
+  uint64_t max, DoutPrefixProvider *dpp)
 {
   if (offset >= max ||
       length > max ||
-      offset + length > max)
+      offset + length > max) {
+    ldpp_dout(dpp, 10) << __func__ << " "
+      << "osd_max_object_size >= 4GB; Hard limit of object size is 4GB.\n"
+      << dendl;
     return -EFBIG;
+  }
 
   return 0;
 }
@@ -4927,6 +4932,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   const hobject_t& soid = oi.soid;
   bool skip_data_digest = osd->store->has_builtin_csum() &&
     g_conf->get_val<bool>("osd_skip_data_digest");
+  auto osd_max_object_size = cct->_conf->get_val<uint64_t>(
+    "osd_max_object_size");
 
   PGTransaction* t = ctx->op_t.get();
   if (!oi.has_extents() &&
@@ -4998,10 +5005,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
-	obs.exists &&
-	op.extent.offset < cct->_conf->osd_max_object_size &&
-	op.extent.length >= 1 &&
-	op.extent.length <= cct->_conf->osd_max_object_size &&
+        obs.exists &&
+        op.extent.offset < osd_max_object_size &&
+        op.extent.length >= 1 &&
+        op.extent.length <= osd_max_object_size &&
 	op.extent.offset + op.extent.length >= oi.size) {
       if (op.extent.offset >= oi.size) {
         // no-op
@@ -5700,7 +5707,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    oi.truncate_size = op.extent.truncate_size;
 	  }
 	}
-	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
+	result = check_offset_and_length(op.extent.offset, op.extent.length,
+          osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
 
@@ -5745,7 +5753,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  break;
 	}
-	result = check_offset_and_length(0, op.extent.length, cct->_conf->osd_max_object_size);
+	result = check_offset_and_length(0, op.extent.length,
+          osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
 
@@ -5790,9 +5799,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       ++ctx->num_write;
       { // zero
-	result = check_offset_and_length(op.extent.offset, op.extent.length, cct->_conf->osd_max_object_size);
+	result = check_offset_and_length(op.extent.offset, op.extent.length,
+          osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
+ 
 	assert(op.extent.length);
 	if (obs.exists && !oi.is_whiteout()) {
 	  t->zero(soid, op.extent.offset, op.extent.length);
@@ -5862,10 +5873,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 
-	if (op.extent.offset > cct->_conf->osd_max_object_size) {
-	  result = -EFBIG;
+        result = check_offset_and_length(op.extent.offset, op.extent.length,
+          osd_max_object_size, get_dpp());
+        if (result < 0)
 	  break;
-	}
 
 	if (op.extent.truncate_seq) {
 	  assert(op.extent.offset == op.extent.truncate_size);
