@@ -295,7 +295,7 @@ void *Accepter::entry()
   ldout(msgr->cct,1) << __func__ << " start" << dendl;
   
   int errors = 0;
-  int ch;
+  char *ch;
 
   struct pollfd pfd[2];
   memset(pfd, 0, sizeof(pfd));
@@ -327,7 +327,7 @@ void *Accepter::entry()
     if (pfd[1].revents & (POLLIN | POLLERR | POLLNVAL | POLLHUP)) {
       // We got "signaled" to exit the poll
       // clean the selfpipe
-      if (::read(shutdown_rd_fd, &ch, 1) == -1) {
+      if (::read(shutdown_rd_fd, ch, 1) == -1) {
         if (errno != EAGAIN)
           ldout(msgr->cct,1) << __func__ << " Cannot read selfpipe: "
  			      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
