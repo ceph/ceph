@@ -2343,21 +2343,40 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       do_proxy_read(op, obc);
     }
     return cache_result_t::HANDLED_PROXY;
-  case object_manifest_t::TYPE_CHUNKED:
-    if (can_proxy_chunked_read(op, obc)) {
-      do_proxy_chunked_op(op, obc->obs.oi.soid, obc, write_ordered);
-      return cache_result_t::HANDLED_PROXY;
-    }
-    
-    for (auto& p : obc->obs.oi.manifest.chunk_map) {
-      if (p.second.flags == chunk_info_t::FLAG_MISSING) {
-	const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
-	const object_locator_t oloc = m->get_object_locator();
-	promote_object(obc, obc->obs.oi.soid, oloc, op, NULL);
-	return cache_result_t::BLOCKED_PROMOTE;
+  case object_manifest_t::TYPE_CHUNKED: 
+    {
+      if (can_proxy_chunked_read(op, obc)) {
+	do_proxy_chunked_op(op, obc->obs.oi.soid, obc, write_ordered);
+	return cache_result_t::HANDLED_PROXY;
       }
+
+      MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
+      assert(m->get_type() == CEPH_MSG_OSD_OP);
+      hobject_t head = m->get_hobj();
+
+      if (is_degraded_or_backfilling_object(head)) {
+	dout(20) << __func__ << ": " << head << " is degraded, waiting" << dendl;
+	wait_for_degraded_object(head, op);
+	return cache_result_t::BLOCKED_RECOVERY;
+      }
+
+      if (scrubber.write_blocked_by_scrub(head)) {
+	dout(20) << __func__ << ": waiting for scrub" << dendl;
+	waiting_for_scrub.push_back(op);
+	op->mark_delayed("waiting for scrub");
+	return cache_result_t::BLOCKED_RECOVERY;
+      }
+      
+      for (auto& p : obc->obs.oi.manifest.chunk_map) {
+	if (p.second.flags == chunk_info_t::FLAG_MISSING) {
+	  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+	  const object_locator_t oloc = m->get_object_locator();
+	  promote_object(obc, obc->obs.oi.soid, oloc, op, NULL);
+	  return cache_result_t::BLOCKED_PROMOTE;
+	}
+      }
+      return cache_result_t::NOOP;
     }
-    return cache_result_t::NOOP;
   default:
     assert(0 == "unrecognized manifest type");
   }
