@@ -911,14 +911,12 @@ Option::value_t md_config_t::_get_val_generic(const std::string &key) const
   // In key names, leading and trailing whitespace are not significant.
   string k(ConfFile::normalize_key_name(key));
 
-  const auto &opt_iter = schema.find(k);
-  if (opt_iter != schema.end()) {
-    // Using .at() is safe because all keys in the schema always have
-    // entries in ::values
-    return values.at(k);
-  } else {
-    return Option::value_t(boost::blank());
+  auto p = values.find(k);
+  if (p != values.end()) {
+    return p->second;
   }
+
+  return Option::value_t(boost::blank());
 }
 
 int md_config_t::_get_val_as_string(const std::string &key,
