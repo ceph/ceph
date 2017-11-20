@@ -1,8 +1,0 @@
-overrides:
-  ceph:
-    wait-for-scrub: false
-    conf:
-      client:
-        debug rgw: 20
-  rgw:
-    compression type: random

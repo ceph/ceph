@@ -1,0 +1,15 @@
+roles:
+- - source.mon.a
+  - source.mgr.x
+  - source.mon.b
+  - source.osd.0
+  - source.osd.1
+  - source.osd.2
+- - source.client.0
+- - target.mon.a
+  - target.mgr.y
+  - target.mon.b
+  - target.osd.0
+  - target.osd.1
+  - target.osd.2
+- - target.client.1

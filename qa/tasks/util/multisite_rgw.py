@@ -205,7 +205,7 @@ def extract_zone_info(ctx, client, client_config):
     ceph_config = ctx.ceph[cluster_name].conf.get('global', {})
     ceph_config.update(ctx.ceph[cluster_name].conf.get('client', {}))
     ceph_config.update(ctx.ceph[cluster_name].conf.get(client_with_cluster, {}))
-    print ceph_config
+   
     for key in ['rgw zone', 'rgw region', 'rgw zone root pool']:
         assert key in ceph_config, \
             'ceph conf must contain {key} for {client}'.format(key=key,
