@@ -22,19 +22,23 @@ DISTRO_CODENAME_MAP = {
         "6": "core",
     },
     "fedora": {
-        "21": "twenty one",
+        "25": "25",
+        "24": "24",
+        "23": "23",
+        "22": "22",
+        "21": "21",
         "20": "heisenbug",
     },
 }
 
 DEFAULT_OS_VERSION = dict(
     ubuntu="16.04",
-    fedora="20",
-    centos="7.0",
+    fedora="25",
+    centos="7.4",
     opensuse="12.2",
     sles="11-sp2",
-    rhel="7.0",
-    debian='7.0'
+    rhel="7.4",
+    debian='8.0'
 )
 
 
