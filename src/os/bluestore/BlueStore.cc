@@ -4727,8 +4727,11 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       env->CreateDir(fn);
       if (cct->_conf->rocksdb_separate_wal_dir)
 	env->CreateDir(fn + ".wal");
-      if (cct->_conf->get_val<std::string>("rocksdb_db_paths").length())
-	env->CreateDir(fn + ".slow");
+
+      if (cct->_conf->with_val<std::string>(
+            "rocksdb_db_paths", [](const std::string& s) {
+              return s.length(); }))
+        env->CreateDir(fn + ".slow");
     }
   } else if (create) {
     int r = ::mkdir(fn.c_str(), 0755);
