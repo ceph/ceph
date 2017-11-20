@@ -452,26 +452,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
   m->put();
 }
 
-
-void MDBalancer::export_empties()
-{
-  dout(5) << "export_empties checking for empty imports" << dendl;
-
-  std::set<CDir *> subtrees;
-  mds->mdcache->get_fullauth_subtrees(subtrees);
-  for (auto &dir : subtrees) {
-    if (dir->is_freezing() || dir->is_frozen())
-      continue;
-
-    if (!dir->inode->is_base() &&
-	!dir->inode->is_stray() &&
-	dir->get_num_head_items() == 0)
-      mds->mdcache->migrator->export_empty_import(dir);
-  }
-}
-
-
-
 double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxex,
                              mds_rank_t im, double& maxim)
 {

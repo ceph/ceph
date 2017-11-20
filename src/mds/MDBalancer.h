@@ -85,8 +85,6 @@ private:
 
   void handle_export_pins(void);
 
-  void export_empties();
-
   mds_load_t get_load(utime_t now);
   int localize_balancer();
   void send_heartbeat();
