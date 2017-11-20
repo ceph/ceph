@@ -9851,11 +9851,6 @@ int RGWRados::Object::Read::range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_
   return 0;
 }
 
-int RGWRados::SystemObject::get_state(RGWRawObjState **pstate, RGWObjVersionTracker *objv_tracker)
-{
-  return store->get_system_obj_state(&ctx, obj, pstate, objv_tracker);
-}
-
 int RGWRados::stat_system_obj(RGWObjectCtx& obj_ctx,
                               RGWRados::SystemObject::Read::GetObjState& state,
                               rgw_raw_obj& obj,
