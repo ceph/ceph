@@ -831,7 +831,7 @@ public:
     return (ceph_tid_t)last_tid++;
   }
 
-  // -- backfill_reservation --
+  // -- recovery and backfill reservation --
   Finisher reserver_finisher;
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
