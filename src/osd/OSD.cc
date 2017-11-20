@@ -4185,6 +4185,7 @@ static vector<int32_t> twiddle(const vector<int>& acting) {
 void OSD::resume_creating_pg()
 {
   bool do_sub_pg_creates = false;
+  bool have_pending_creates = false;
   MOSDPGTemp *pgtemp = nullptr;
   {
     const auto max_pgs_per_osd =
@@ -4217,14 +4218,40 @@ void OSD::resume_creating_pg()
       pg = pending_creates_from_osd.erase(pg);
       spare_pgs--;
     }
+    have_pending_creates = (pending_creates_from_mon > 0 ||
+			    !pending_creates_from_osd.empty());
   }
+
+  bool do_renew_subs = false;
   if (do_sub_pg_creates) {
     if (monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0)) {
       dout(4) << __func__ << ": resolicit pg creates from mon since "
 	      << last_pg_create_epoch << dendl;
-      monc->renew_subs();
+      do_renew_subs = true;
     }
   }
+  version_t start = osdmap->get_epoch() + 1;
+  if (have_pending_creates) {
+    // don't miss any new osdmap deleting PGs
+    if (monc->sub_want("osdmap", start, 0)) {
+      dout(4) << __func__ << ": resolicit osdmap from mon since "
+	      << start << dendl;
+      do_renew_subs = true;
+    }
+  } else if (pgtemp || do_sub_pg_creates) {
+    // no need to subscribe the osdmap continuously anymore
+    // once the pgtemp and/or mon_subscribe(pg_creates) is sent
+    if (monc->sub_want_increment("osdmap", start, CEPH_SUBSCRIBE_ONETIME)) {
+      dout(4) << __func__ << ": re-subscribe osdmap(onetime) since"
+	      << start << dendl;
+      do_renew_subs = true;
+    }
+  }
+
+  if (do_renew_subs) {
+    monc->renew_subs();
+  }
+
   if (pgtemp) {
     pgtemp->forced = true;
     monc->send_mon_message(pgtemp);
