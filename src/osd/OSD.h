@@ -1285,6 +1285,7 @@ private:
   void write_superblock();
   void write_superblock(ObjectStore::Transaction& t);
   int read_superblock();
+  int probe_smart(const char *device, int timeout);
 
   void clear_temp_objects();
 

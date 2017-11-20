@@ -1613,6 +1613,15 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("osd_smart_report_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    //.set_default(86400) // change back when finished!!
+    .set_default(0)
+    .set_description("Frequency (in seconds) for OSD to run smarctl, default is set to 86400"),
+
+    Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
+
     Option("osd_max_backfills", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description(""),
