@@ -481,6 +481,6 @@ static void _list_modules(
 
 void PyModuleRegistry::list_modules(std::set<std::string> *modules)
 {
-  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
+  g_conf->with_val<std::string>("mgr_module_path",
+				&_list_modules, modules);
 }
-
