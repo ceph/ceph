@@ -604,6 +604,8 @@ if(WITH_SYSTEMD)
   add_subdirectory(systemd)
 endif()
 
+add_subdirectory(etc/sysctl)
+
 include(CTags)
 option(CTAG_EXCLUDES "Exclude files/directories when running ctag.")
 add_tags(ctags
