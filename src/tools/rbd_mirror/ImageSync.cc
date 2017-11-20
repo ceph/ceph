@@ -351,6 +351,7 @@ void ImageSync<I>::handle_update_sync_point(int r) {
     if (m_image_copy_request != nullptr) {
       m_update_sync_ctx = new FunctionContext(
         [this](int r) {
+          Mutex::Locker locker(m_lock);
           this->send_update_sync_point();
         });
       m_timer->add_event_after(m_update_sync_point_interval,
