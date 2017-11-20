@@ -22,7 +22,9 @@ class Test(object):
 
         log.info('Create user on master client')
 
-        temp_yaml_file = 'user_create.yaml'
+        temp_yaml_file = 'user_create_' + str(os.getpid()) + pwd.getpwuid(os.getuid()).pw_name
+
+#        temp_yaml_file = 'user_create.yaml'
 
         if self.user_data is None:
             assert isinstance(self.user_data, dict), "configuration not given"
@@ -43,7 +45,7 @@ class Test(object):
         mclient.run(args=['cat',
                              'rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/' + temp_yaml_file])
 
-        mclient.run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
+#        mclient.run(args=['sudo', 'rm', '-f', run.Raw('%s' % local_file)], check_status=False)
 
         mclient.run(
             args=[
@@ -54,6 +56,8 @@ class Test(object):
         log.info('copy user_details file from source client into local dir')
 
         self.user_file = mclient.get_file('user_details', '/tmp')
+
+#        os.unlink(local_file)
 
     def target_execution(self, mclient, tclient):
 
@@ -94,6 +98,15 @@ class Test(object):
                     '-c rgw-tests/ceph-qe-scripts/rgw/tests/multisite/yamls/%s ' % (self.script_fname, self.yaml_fname))])
 
 
+def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
+
+    # copies to /tmp dir and then puts it in destination machines
+
+    io_info_file = src_node.get_file(file_name, '/tmp')
+
+    dest_node.put_file(io_info_file, file_name)
+
+
 def test_exec(ctx, config, user_data, data, tclient, mclient):
 
     assert data is not None, "Got no test in configuration"
@@ -108,6 +121,24 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
     # wait until users are synced to target
     time.sleep(20)
     test.target_execution(mclient, tclient)
+
+    # copy the io_yaml from from target node to master node.
+
+    time.sleep(60)
+    # wait for sync
+
+    if not 'acls' in script_name:
+
+        # no verification is being done for acls test cases right now.
+
+        copy_file_from(tclient, mclient)
+
+        # start verify of io on master node.
+
+        mclient.run(
+            args=[
+                run.Raw(
+                    'sudo venv/bin/python2.7 rgw-tests/ceph-qe-scripts/rgw/lib/read_io_info.py')])
 
 
 @contextlib.contextmanager
@@ -314,6 +345,8 @@ def task(ctx, config):
                 'git',
                 'clone',
                 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git',
+                '-b',
+                'multisite-debugging'
                 ])
 
         remote.run(args=['virtualenv', 'venv'])
@@ -358,6 +391,7 @@ def task(ctx, config):
 
             )
         )
+
 
     if config['test-name'] == 'test_Mbuckets_with_Nobjects':
 
@@ -532,6 +566,7 @@ def task(ctx, config):
 
         data = dict(
             config=dict(
+                bucket_count=test_config['bucket_count'],
                 objects_count=test_config['objects_count'],
                 objects_size_range=dict(
                     min=test_config['min_file_size'],
@@ -559,7 +594,6 @@ def task(ctx, config):
         data = dict(
             config=dict(
                 bucket_count=test_config['bucket_count'],
-                user_count=test_config['user_count'],
                 objects_size_range=dict(
                     min=test_config['min_file_size'],
                     max=test_config['max_file_size']
@@ -574,18 +608,25 @@ def task(ctx, config):
         yield
     finally:
 
-        remote.run(
-            args=[
-                'source',
-                'venv/bin/activate',
-                run.Raw(';'),
-                run.Raw('pip uninstall boto names PyYaml -y'),
-                run.Raw(';'),
-                'deactivate'])
+        remotes = ctx.cluster.only(teuthology.is_type('client'))
+        for remote, roles_for_host in remotes.remotes.iteritems():
 
-        log.info('test completed')
+            remote.run(
+                args=[
+                    'source',
+                    'venv/bin/activate',
+                    run.Raw(';'),
+                    run.Raw('pip uninstall boto names PyYaml -y'),
+                    run.Raw(';'),
+                    'deactivate'])
 
-        log.info("Deleting repos")
+            log.info('test completed')
 
-        remote.run(args=[run.Raw(
-            'sudo rm -rf venv rgw-tests *.json Download.* Download *.mpFile  x* key.*  Mp.* *.key.*')])
+            log.info("Deleting repos")
+
+            cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+            soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                    '*.key.*', 'user_details', 'io_info.yaml']
+
+            map(cleanup, soot)
