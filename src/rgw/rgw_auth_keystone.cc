@@ -101,8 +101,6 @@ TokenEngine::get_from_keystone(const std::string& token) const
 
   /* NULL terminate for debug output. */
   token_body_bl.append(static_cast<char>(0));
-  ldout(cct, 20) << "received response status=" << validate.get_http_status()
-                 << ", body=" << token_body_bl.c_str() << dendl;
 
   /* Detect Keystone rejection earlier than during the token parsing.
    * Although failure at the parsing phase doesn't impose a threat,
@@ -114,8 +112,13 @@ TokenEngine::get_from_keystone(const std::string& token) const
       validate.get_http_status() ==
           /* Most likely: non-existent token supplied by the client. */
           RGWValidateKeystoneToken::HTTP_STATUS_NOTFOUND) {
+    ldout(cct, 5) << "Failed keystone auth from " << url << " with "
+                  << validate.get_http_status() << dendl;
     return boost::none;
   }
+
+  ldout(cct, 20) << "received response status=" << validate.get_http_status()
+                 << ", body=" << token_body_bl.c_str() << dendl;
 
   TokenEngine::token_envelope_t token_body;
   ret = token_body.parse(cct, token, token_body_bl, config.get_api_version());
