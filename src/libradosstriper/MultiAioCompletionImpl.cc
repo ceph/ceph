@@ -68,4 +68,5 @@ void intrusive_ptr_add_ref(libradosstriper::MultiAioCompletionImpl* ptr)
 void intrusive_ptr_release(libradosstriper::MultiAioCompletionImpl* ptr)
 {
   ptr->put();
+  ptr = nullptr;
 }

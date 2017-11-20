@@ -36,6 +36,7 @@ libradosstriper::MultiAioCompletion::~MultiAioCompletion()
 {
   assert(pc->ref == 1);
   pc->put();
+  pc = nullptr;
 }
 
 int libradosstriper::MultiAioCompletion::set_complete_callback
@@ -110,11 +111,12 @@ void libradosstriper::MultiAioCompletion::release()
 {
   MultiAioCompletionImpl *c = (MultiAioCompletionImpl *)pc;
   c->put();
+  c = nullptr;
   delete this;
 }
 
 libradosstriper::RadosStriper::RadosStriper() :
-  rados_striper_impl(0)
+  rados_striper_impl(nullptr)
 {
 }
 
@@ -134,8 +136,10 @@ libradosstriper::RadosStriper::RadosStriper(const RadosStriper& rs)
 
 libradosstriper::RadosStriper& libradosstriper::RadosStriper::operator=(const RadosStriper& rs)
 {
-  if (rados_striper_impl)
+  if (rados_striper_impl) {
     rados_striper_impl->put();
+    rados_striper_impl = nullptr;
+  }
   rados_striper_impl = rs.rados_striper_impl;
   rados_striper_impl->get();
   return *this;
@@ -143,9 +147,10 @@ libradosstriper::RadosStriper& libradosstriper::RadosStriper::operator=(const Ra
 
 libradosstriper::RadosStriper::~RadosStriper()
 {
-  if (rados_striper_impl)
+  if (rados_striper_impl) {
     rados_striper_impl->put();
-  rados_striper_impl = 0;
+    rados_striper_impl = nullptr;
+  }
 }
 
 int libradosstriper::RadosStriper::striper_create(librados::IoCtx& ioctx,
@@ -359,6 +364,7 @@ extern "C" void rados_striper_destroy(rados_striper_t striper)
 {
   libradosstriper::RadosStriperImpl *impl = (libradosstriper::RadosStriperImpl *)striper;
   impl->put();
+  impl = nullptr;
 }
 
 extern "C" int rados_striper_set_object_layout_stripe_unit(rados_striper_t striper,
@@ -596,6 +602,7 @@ extern "C" int rados_striper_multi_aio_get_return_value(rados_striper_multi_comp
 extern "C" void rados_striper_multi_aio_release(rados_striper_multi_completion_t c)
 {
   ((libradosstriper::MultiAioCompletionImpl*)c)->put();
+  c = nullptr;
 }
 
 extern "C" int rados_striper_aio_write(rados_striper_t striper,
