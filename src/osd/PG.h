@@ -572,11 +572,12 @@ protected:
   bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
+  virtual const PGBackend* get_pgbackend() const = 0;
 
 protected:
   /*** PG ****/
   /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const {
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
