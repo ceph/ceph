@@ -6908,3 +6908,10 @@ void RGWDeleteBucketPolicy::execute()
     op_ret = 0; /* lost a race, but it's ok because policies are immutable */
   }
 }
+
+void RGWGetClusterStat::execute()
+{
+  op_ret = this->store->get_rados_handle()->cluster_stat(stats_op);
+}
+
+
