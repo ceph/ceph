@@ -477,9 +477,9 @@ class TestBuilderProject(object):
     DISTRO_MATRIX_NOVER = [
         ('rhel', None, None, 'centos7'),
         ('centos', None, None, 'centos7'),
-        ('fedora', None, None, 'fedora20'),
+        ('fedora', None, None, 'fedora25'),
         ('ubuntu', None, None, 'xenial'),
-        ('debian', None, None, 'wheezy'),
+        ('debian', None, None, 'jessie'),
     ]
 
     @pytest.mark.parametrize(
@@ -754,7 +754,7 @@ class TestShamanProject(TestBuilderProject):
     DISTRO_MATRIX_NOVER = [
         ('rhel', None, None, 'centos/7'),
         ('centos', None, None, 'centos/7'),
-        ('fedora', None, None, 'fedora/20'),
+        ('fedora', None, None, 'fedora/25'),
         ('ubuntu', None, None, 'ubuntu/16.04'),
-        ('debian', None, None, 'debian/7.0'),
+        ('debian', None, None, 'debian/8.0'),
     ]
