@@ -55,6 +55,33 @@ void IOContext::aio_wait()
   dout(20) << __func__ << " " << this << " done" << dendl;
 }
 
+uint64_t IOContext::get_num_ios() const
+{
+  // this is about the simplest model for transaction cost you can
+  // imagine.  there is some fixed overhead cost by saying there is a
+  // minimum of one "io".  and then we have some cost per "io" that is
+  // a configurable (with different hdd and ssd defaults), and add
+  // that to the bytes value.
+  uint64_t ios = 0;
+#ifdef HAVE_LIBAIO
+  for (auto& p : pending_aios) {
+    ios += p.iov.size();
+  }
+#endif
+#ifdef HAVE_SPDK
+  ios += total_nseg;
+#endif
+  return ios;
+}
+
+void IOContext::release_running_aios()
+{
+#ifdef HAVE_LIBAIO
+  // release aio contexts (including pinned buffers).
+  running_aios.clear();
+#endif
+}
+
 BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 				 aio_callback_t cb, void *cbpriv)
 {

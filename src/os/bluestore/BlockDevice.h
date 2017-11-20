@@ -72,8 +72,9 @@ public:
   bool has_pending_aios() {
     return num_pending.load();
   }
-
+  void release_running_aios();
   void aio_wait();
+  uint64_t get_num_ios() const;
 
   void try_aio_wake() {
     if (num_running == 1) {
