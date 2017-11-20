@@ -1449,6 +1449,8 @@ void ReplicatedBackend::prepare_pull(
   pi.recovery_progress = op.recovery_progress;
   pi.cache_dont_need = h->cache_dont_need;
   pi.lock_manager = std::move(lock_manager);
+
+  get_parent()->get_logger()->inc(l_osd_pull);
 }
 
 /*
