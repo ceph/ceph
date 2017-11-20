@@ -423,11 +423,18 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 	     << bloom_bits << dendl;
     bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(bloom_bits));
   }
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "binary_search")
+  using std::placeholders::_1;
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "binary_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kBinarySearch;
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "hash_search")
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "hash_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "two_level")
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "two_level")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
   bbt_opts.cache_index_and_filter_blocks = 
       g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");
