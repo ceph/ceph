@@ -252,7 +252,7 @@ class Module(MgrModule):
         return 0, "", output
 
     def handle_osd_status(self, cmd):
-        osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data'])
+        osd_table = PrettyTable(['id', 'host', 'used', 'avail', 'wr ops', 'wr data', 'rd ops', 'rd data', 'state'])
         osdmap = self.get("osd_map")
 
         filter_osds = set()
@@ -279,17 +279,26 @@ class Module(MgrModule):
             if bucket_filter and osd_id not in filter_osds:
                 continue
 
-            metadata = self.get_metadata('osd', "%s" % osd_id)
-            stats = osd_stats[osd_id]
+            hostname = ""
+            kb_used = 0
+            kb_avail = 0
 
-            osd_table.add_row([osd_id, metadata['hostname'],
-                               self.format_bytes(stats['kb_used'] * 1024, 5),
-                               self.format_bytes(stats['kb_avail'] * 1024, 5),
+            if osd_id in osd_stats:
+                metadata = self.get_metadata('osd', "%s" % osd_id)
+                stats = osd_stats[osd_id]
+                hostname = metadata['hostname']
+                kb_used = stats['kb_used'] * 1024
+                kb_avail = stats['kb_avail'] * 1024
+
+            osd_table.add_row([osd_id, hostname,
+                               self.format_bytes(kb_used, 5),
+                               self.format_bytes(kb_avail, 5),
                                self.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_w") +
                                self.get_rate("osd", osd_id.__str__(), "osd.op_rw"), 5),
                                self.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_in_bytes"), 5),
                                self.format_dimless(self.get_rate("osd", osd_id.__str__(), "osd.op_r"), 5),
                                self.format_bytes(self.get_rate("osd", osd_id.__str__(), "osd.op_out_bytes"), 5),
+                               ','.join(osd['state']),
                                ])
 
         return 0, "", osd_table.get_string()
