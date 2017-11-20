@@ -2236,7 +2236,7 @@ class PrepareData(object):
 
     def prepare(self, *to_prepare_list):
         if self.type == self.DEVICE:
-            self.prepare_device(*to_prepare_list)
+            self.prepare_device()
         elif self.type == self.FILE:
             self.prepare_file(*to_prepare_list)
         else:
@@ -2310,7 +2310,7 @@ class PrepareData(object):
         if self.args.osd_uuid is None:
             self.args.osd_uuid = str(uuid.uuid4())
 
-    def prepare_device(self, *to_prepare_list):
+    def prepare_device(self):
         self.sanity_checks()
         self.set_variables()
         if self.args.zap_disk is not None:
@@ -2408,7 +2408,7 @@ class PrepareFilestoreData(PrepareData):
         return 0  # get as much space as possible
 
     def prepare_device(self, *to_prepare_list):
-        super(PrepareFilestoreData, self).prepare_device(*to_prepare_list)
+        super(PrepareFilestoreData, self).prepare_device()
         for to_prepare in to_prepare_list:
             to_prepare.prepare()
         self.set_data_partition()
@@ -2426,7 +2426,7 @@ class PrepareBluestoreData(PrepareData):
         return 100  # MB
 
     def prepare_device(self, *to_prepare_list):
-        super(PrepareBluestoreData, self).prepare_device(*to_prepare_list)
+        super(PrepareBluestoreData, self).prepare_device()
         self.set_data_partition()
         for to_prepare in to_prepare_list:
             to_prepare.prepare()
