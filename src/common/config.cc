@@ -873,21 +873,18 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
   return _get_val(key, buf,len);
 }
 
-const Option::value_t&
-md_config_t::get_val_generic(const std::string &key) const
+Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
   return _get_val_generic(key);
 }
 
-const Option::value_t&
-md_config_t::_get_val_generic(const std::string &key) const
+Option::value_t md_config_t::_get_val_generic(const std::string &key) const
 {
   assert(lock.is_locked());
 
-  static const Option::value_t empty{boost::blank()};
   if (key.empty()) {
-    return empty;
+    return Option::value_t(boost::blank());
   }
 
   // In key names, leading and trailing whitespace are not significant.
@@ -899,7 +896,7 @@ md_config_t::_get_val_generic(const std::string &key) const
     // entries in ::values
     return values.at(k);
   } else {
-    return empty;
+    return Option::value_t(boost::blank());
   }
 }
 
@@ -907,12 +904,12 @@ int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
   std::string normalized_key(ConfFile::normalize_key_name(key));
-  auto& config_value = _get_val_generic(normalized_key.c_str());
+  Option::value_t config_value = _get_val_generic(normalized_key.c_str());
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
-    if (auto *flag = boost::get<bool>(&config_value)) {
+    if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
-    } else if (auto *dp = boost::get<double>(&config_value)) {
+    } else if (double *dp = boost::get<double>(&config_value)) {
       oss << std::fixed << *dp;
     } else {
       oss << config_value;
