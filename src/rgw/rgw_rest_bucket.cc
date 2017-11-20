@@ -368,6 +368,10 @@ RGWOp *RGWHandler_Bucket::op_put()
 {
   if (s->info.args.sub_resource_exists("quota"))
     return new RGWOp_Set_Bucket_Quota;
+
+  if (s->info.args.sub_resource_exists("sync"))
+    return new RGWOp_Sync_Bucket;
+  
   return new RGWOp_Bucket_Link;
 }
 
