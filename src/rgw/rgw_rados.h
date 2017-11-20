@@ -2650,13 +2650,11 @@ public:
     RGWObjectCtx& ctx;
     rgw_raw_obj obj;
 
-    RGWObjState *state;
-
-  protected:
-    int get_state(RGWRawObjState **pstate, RGWObjVersionTracker *objv_tracker);
-
   public:
-    SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
+
+    SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) :
+      store(_store), ctx(_ctx), obj(_obj)
+    {}
 
     void invalidate_state();
 
