@@ -1298,6 +1298,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mon_fixup_legacy_erasure_code_profiles", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Automatically adjust ruleset-* to crush-* so that legacy apps can set modern erasure code profiles without modification"),
+
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
