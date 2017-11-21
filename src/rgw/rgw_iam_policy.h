@@ -201,7 +201,7 @@ struct ARN {
   Partition partition;
   Service service;
   std::string region;
-  // Once we refity tenant, we should probably use that instead of a
+  // Once we refit tenant, we should probably use that instead of a
   // string.
   std::string account;
   std::string resource;
