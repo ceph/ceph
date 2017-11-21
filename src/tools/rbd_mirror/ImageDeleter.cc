@@ -165,10 +165,17 @@ ImageDeleter<I>::~ImageDeleter() {
 template <typename I>
 void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
                                             const std::string& global_image_id,
-                                            bool ignore_orphaned) {
+                                            bool ignore_orphaned,
+                                            Context *on_delete) {
   int64_t local_pool_id = local_io_ctx->get_id();
   dout(5) << "local_pool_id=" << local_pool_id << ", "
           << "global_image_id=" << global_image_id << dendl;
+
+  if (on_delete != nullptr) {
+    on_delete = new FunctionContext([this, on_delete](int r) {
+        m_work_queue->queue(on_delete, r);
+      });
+  }
 
   {
     Mutex::Locker locker(m_lock);
@@ -179,11 +186,17 @@ void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
       if (ignore_orphaned) {
         del_info->ignore_orphaned = true;
       }
+
+      if (del_info->on_delete != nullptr) {
+        del_info->on_delete->complete(-ESTALE);
+      }
+      del_info->on_delete = on_delete;
       return;
     }
 
     m_delete_queue.emplace_back(new DeleteInfo(local_pool_id, global_image_id,
-                                               local_io_ctx, ignore_orphaned));
+                                               local_io_ctx, ignore_orphaned,
+                                               on_delete));
   }
   remove_images();
 }

@@ -51,7 +51,8 @@ public:
 
   void schedule_image_delete(IoCtxRef local_io_ctx,
                              const std::string& global_image_id,
-                             bool ignore_orphaned);
+                             bool ignore_orphaned,
+                             Context *on_finish);
   void wait_for_scheduled_deletion(int64_t local_pool_id,
                                    const std::string &global_image_id,
                                    Context *ctx,
@@ -76,22 +77,24 @@ private:
     std::string global_image_id;
     IoCtxRef local_io_ctx;
     bool ignore_orphaned = false;
+    Context *on_delete = nullptr;
 
     image_deleter::ErrorResult error_result = {};
     int error_code = 0;
     utime_t retry_time = {};
     int retries = 0;
     bool notify_on_failed_retry = true;
-    Context *on_delete = nullptr;
 
     DeleteInfo(int64_t local_pool_id, const std::string& global_image_id)
       : local_pool_id(local_pool_id), global_image_id(global_image_id) {
     }
 
     DeleteInfo(int64_t local_pool_id, const std::string& global_image_id,
-               IoCtxRef local_io_ctx, bool ignore_orphaned)
+               IoCtxRef local_io_ctx, bool ignore_orphaned,
+               Context *on_delete)
       : local_pool_id(local_pool_id), global_image_id(global_image_id),
-        local_io_ctx(local_io_ctx), ignore_orphaned(ignore_orphaned) {
+        local_io_ctx(local_io_ctx), ignore_orphaned(ignore_orphaned),
+        on_delete(on_delete) {
     }
 
     inline bool operator==(const DeleteInfo& delete_info) const {

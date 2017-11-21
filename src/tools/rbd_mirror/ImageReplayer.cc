@@ -1657,9 +1657,8 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       delete_requested = true;
     }
     if (delete_requested || m_resync_requested) {
-      m_image_deleter->schedule_image_delete(m_local_ioctx,
-                                             m_global_image_id,
-                                             m_resync_requested);
+      m_image_deleter->schedule_image_delete(m_local_ioctx, m_global_image_id,
+                                             m_resync_requested, nullptr);
 
       m_local_image_id = "";
       m_resync_requested = false;
