@@ -337,7 +337,7 @@ size_t RGWHTTPClient::send_http_data(void * const ptr,
     return 0;
   }
 
-  bool pause;
+  bool pause = false;
 
   int ret = req_data->client->send_data(ptr, size * nmemb, &pause);
   if (ret < 0) {
