@@ -422,6 +422,13 @@ COMMAND("mon stat", "summarize monitor status", "mon", "r", "cli,rest")
 COMMAND("mon getmap " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"get monmap", "mon", "r", "cli,rest")
+COMMAND("mon safe-to-add " \
+        "name=name,type=CephString " \
+        "name=addr,type=CephIPAddr", \
+        "add new monitor named <name> at <addr>", "mon", "rw", "cli,rest")
+COMMAND("mon safe-to-rm " \
+        "name=name,type=CephString", \
+        "remove monitor named <name>", "mon", "rw", "cli,rest")
 COMMAND("mon add " \
 	"name=name,type=CephString " \
 	"name=addr,type=CephIPAddr", \

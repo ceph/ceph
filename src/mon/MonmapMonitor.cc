@@ -485,9 +485,58 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
    * completed and state has been committed, which may not be true.
    */
 
-
   bool propose = false;
-  if (prefix == "mon add") {
+
+  if (prefix == "mon safe-to-add") {
+    /**
+     * 1.Check my rank
+     * 2.Check if there is existing quorum
+     * 3.Check i ever joined
+     * 3.Check if i'm outside of quorum
+     * 4.Prove monitors
+     * 5.Ready to go?
+     */
+    std::string name;
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    std::string addrstr;
+    cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+    entity_addr_t addr;
+    bufferlist rdata;
+
+    if (!addr.parse(addrstr.c_str())) {
+      err = -EINVAL;
+      ss << "addr " << addr << " does not parse";
+      goto reply;
+    }
+
+    if (addr.get_port() == 0) {
+      ss << "port defaulted to " << CEPH_MON_PORT;
+      addr.set_port(CEPH_MON_PORT);
+    }
+
+    if (mon->quorum.size()) {
+      if (monmap.contains(name)) {
+        if (monmap.get_addr(name) == addr) {
+          // same name and same address
+          err = 0;
+          goto reply;
+        } else {
+          // error: same name and different address
+        }
+      } else if (monmap.contains(addr)) {
+        // error: different name and same address
+      }
+    }
+
+    // let's start election
+    if (mon->outside_quorum.count(name))
+       mon->start_election();
+
+    pending_map.add(name, addr);
+    pending_map.last_changed = ceph_clock_now();
+    propose = true;
+  } else if (prefix == "mon safe-to-rm") {
+  } else if (prefix == "mon add") {
     string name;
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     string addrstr;
