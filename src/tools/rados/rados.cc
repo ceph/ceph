@@ -2073,7 +2073,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       librados::pool_stat_t& s = i->second;
       if (!formatter) {
         tab << pool_name
-            << si_t(s.num_bytes)
+            << byte_u_t(s.num_bytes)
             << s.num_objects
             << s.num_object_clones
             << s.num_object_copies
@@ -2081,9 +2081,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
             << s.num_objects_unfound
             << s.num_objects_degraded
             << s.num_rd
-            << si_t(s.num_rd_kb << 10)
+            << byte_u_t(s.num_rd_kb << 10)
             << s.num_wr
-            << si_t(s.num_wr_kb << 10)
+            << byte_u_t(s.num_wr_kb << 10)
             << TextTable::endrow;
       } else {
         formatter->open_object_section("pool");
@@ -2125,11 +2125,11 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << std::endl;
       cout << "total_objects    " << tstats.num_objects
            << std::endl;
-      cout << "total_used       " << si_t(tstats.kb_used << 10)
+      cout << "total_used       " << byte_u_t(tstats.kb_used << 10)
            << std::endl;
-      cout << "total_avail      " << si_t(tstats.kb_avail << 10)
+      cout << "total_avail      " << byte_u_t(tstats.kb_avail << 10)
            << std::endl;
-      cout << "total_space      " << si_t(tstats.kb << 10)
+      cout << "total_space      " << byte_u_t(tstats.kb << 10)
            << std::endl;
     } else {
       formatter->close_section();

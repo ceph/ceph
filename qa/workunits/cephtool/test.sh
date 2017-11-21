@@ -1747,17 +1747,34 @@ function test_mon_osd_pool_quota()
   ceph osd pool set-quota tmp-quota-pool max_bytes 10
   ceph osd pool set-quota tmp-quota-pool max_objects 10M
   #
-  # get quotas
-  #
-  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
-  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
-  #
   # get quotas in json-pretty format
   #
   ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
     grep '"quota_max_objects":.*10485760'
   ceph osd pool get-quota tmp-quota-pool --format=json-pretty | \
     grep '"quota_max_bytes":.*10'
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10B'
+  ceph osd pool get-quota tmp-quota-pool | grep 'max objects.*10M objects'
+  #
+  # set valid quotas with unit prefix
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10K
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
+  # set valid quotas with unit prefix
+  #
+  ceph osd pool set-quota tmp-quota-pool max_bytes 10Ki
+  #
+  # get quotas
+  #
+  ceph osd pool get-quota tmp-quota-pool | grep 'max bytes.*10Ki'
+  #
   #
   # reset pool quotas
   #

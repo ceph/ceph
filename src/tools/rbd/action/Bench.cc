@@ -199,8 +199,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   uint64_t size = 0;
   image.size(&size);
   if (io_size > size) {
-    std::cerr << "rbd: io-size " << prettybyte_t(io_size) << " "
-              << "larger than image size " << prettybyte_t(size) << std::endl;
+    std::cerr << "rbd: io-size " << byte_u_t(io_size) << " "
+              << "larger than image size " << byte_u_t(size) << std::endl;
     return -EINVAL;
   }
 

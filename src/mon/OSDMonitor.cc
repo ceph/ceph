@@ -4617,13 +4617,13 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       if (p->quota_max_objects == 0)
         rs << "N/A";
       else
-        rs << si_t(p->quota_max_objects) << " objects";
+        rs << si_u_t(p->quota_max_objects) << " objects";
       rs << "\n"
          << "  max bytes  : ";
       if (p->quota_max_bytes == 0)
         rs << "N/A";
       else
-        rs << si_t(p->quota_max_bytes) << "B";
+        rs << byte_u_t(p->quota_max_bytes);
       rdata.append(rs.str());
     }
     rdata.append("\n");
@@ -5177,7 +5177,7 @@ bool OSDMonitor::update_pools_status()
           (uint64_t)sum.num_bytes >= pool.quota_max_bytes) {
         mon->clog->warn() << "pool '" << pool_name << "' is full"
                          << " (reached quota's max_bytes: "
-                         << si_t(pool.quota_max_bytes) << ")";
+                         << byte_u_t(pool.quota_max_bytes) << ")";
       }
       if (pool.quota_max_objects > 0 &&
 		 (uint64_t)sum.num_objects >= pool.quota_max_objects) {
