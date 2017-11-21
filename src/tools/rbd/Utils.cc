@@ -442,7 +442,7 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
   //Validate pool name while creating/renaming/copying/cloning/importing/etc
   if (spec_validation == SPEC_VALIDATION_FULL) {
     boost::regex pattern("^[^@/]+?$");
-    if (!boost::regex_match (*pool_name, pattern)) {
+    if ((pool_name != nullptr) && !boost::regex_match (*pool_name, pattern)) {
       std::cerr << "rbd: invalid pool name '" << *pool_name << "'" << std::endl;
       return -EINVAL;
     }
