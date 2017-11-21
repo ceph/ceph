@@ -149,6 +149,21 @@ public:
   int get_json_resource(const string& resource, param_vec_t *params, T& t);
   template <class T>
   int get_json_resource(const string& resource, const rgw_http_param_pair *pp, T& t);
+
+private:
+  void populate_zonegroup(param_vec_t& params, const string& zonegroup) {
+    if (!zonegroup.empty()) {
+      params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "zonegroup", zonegroup));
+    }
+  }
+  void populate_uid(param_vec_t& params, const rgw_user *uid) {
+    if (uid) {
+      string uid_str = uid->to_str();
+      if (!uid->empty()){
+        params.push_back(param_pair_t(RGW_SYS_PARAM_PREFIX "uid", uid_str));
+      }
+    }
+  }
 };
 
 class S3RESTConn : public RGWRESTConn {
