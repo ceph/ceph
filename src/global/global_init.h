@@ -46,8 +46,7 @@ void intrusive_ptr_release(CephContext* cct);
 void global_pre_init(std::vector < const char * > *alt_def_args,
 		     std::vector < const char* >& args,
 		     uint32_t module_type, code_environment_t code_env,
-		     int flags,
-		     const char *data_dir_option = 0);
+		     int flags);
 
 /*
  * perform all of the steps that global_init_daemonize performs just prior

@@ -30,6 +30,7 @@
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/assert.h"
+#include "mds/MDSMap.h"
 
 #include "include/cephfs/libcephfs.h"
 
@@ -1723,6 +1724,12 @@ extern "C" int ceph_ll_setlk(struct ceph_mount_info *cmount,
   return (cmount->get_client()->ll_setlk(fh, fl, owner, sleep));
 }
 
+extern "C" int ceph_ll_delegation(struct ceph_mount_info *cmount, Fh *fh,
+				  unsigned cmd, ceph_deleg_cb_t cb, void *priv)
+{
+  return (cmount->get_client()->ll_delegation(fh, cmd, cb, priv));
+}
+
 extern "C" uint32_t ceph_ll_stripe_unit(class ceph_mount_info *cmount,
 					Inode *in)
 {
@@ -1777,4 +1784,18 @@ extern "C" void ceph_buffer_free(char *buf)
   if (buf) {
     free(buf);
   }
+}
+
+extern "C" uint32_t ceph_get_cap_return_timeout(class ceph_mount_info *cmount)
+{
+  if (!cmount->is_mounted())
+    return 0;
+  return cmount->get_client()->mdsmap->get_session_autoclose().sec();
+}
+
+extern "C" int ceph_set_deleg_timeout(class ceph_mount_info *cmount, uint32_t timeout)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->set_deleg_timeout(timeout);
 }

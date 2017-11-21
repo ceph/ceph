@@ -24,8 +24,7 @@
 #define STRINGIFY(x) _STR(x)
 
 CephContext *common_preinit(const CephInitParameters &iparams,
-			    enum code_environment_t code_env, int flags,
-			    const char *data_dir_option)
+			    enum code_environment_t code_env, int flags)
 {
   // set code environment
   ANNOTATE_BENIGN_RACE_SIZED(&g_code_env, sizeof(g_code_env), "g_code_env");
@@ -39,9 +38,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 
   // Set up our entity name.
   conf->name = iparams.name;
-
-  if (data_dir_option)
-    conf->data_dir_option = data_dir_option;
 
   // different default keyring locations for osd and mds.  this is
   // for backward compatibility.  moving forward, we want all keyrings
