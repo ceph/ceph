@@ -3080,7 +3080,9 @@ void OSDMonitor::check_pg_creates_sub(Subscription *sub)
 }
 
 void OSDMonitor::do_application_enable(int64_t pool_id,
-                                       const std::string &app_name)
+                                       const std::string &app_name,
+				       const std::string &app_key,
+				       const std::string &app_value)
 {
   assert(paxos->is_plugged() && is_writeable());
 
@@ -3097,7 +3099,11 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
     p = pending_inc.new_pools[pool_id];
   }
 
-  p.application_metadata.insert({app_name, {}});
+  if (app_key.empty()) {
+    p.application_metadata.insert({app_name, {}});
+  } else {
+    p.application_metadata.insert({app_name, {{app_key, app_value}}});
+  }
   p.last_change = pending_inc.epoch;
   pending_inc.new_pools[pool_id] = p;
 }
@@ -6087,6 +6093,20 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
   string app;
   cmd_getval(cct, cmdmap, "app", app);
   bool app_exists = (p.application_metadata.count(app) > 0);
+
+  string key;
+  cmd_getval(cct, cmdmap, "key", key);
+  if (key == "all") {
+    ss << "key cannot be 'all'";
+    return -EINVAL;
+  }
+
+  string value;
+  cmd_getval(cct, cmdmap, "value", value);
+  if (value == "all") {
+    ss << "value cannot be 'all'";
+    return -EINVAL;
+  }
 
   if (boost::algorithm::ends_with(prefix, "enable")) {
     if (app.empty()) {

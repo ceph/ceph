@@ -92,9 +92,10 @@ Authorization (Capabilities)
 
 Ceph uses the term "capabilities" (caps) to describe authorizing an
 authenticated user to exercise the functionality of the monitors, OSDs and
-metadata servers. Capabilities can also restrict access to data within a pool or
-a namespace within a pool. A Ceph administrative user sets a user's
-capabilities when creating or updating a user.
+metadata servers. Capabilities can also restrict access to data within a pool,
+a namespace within a pool, or a set of pools based on their application tags.
+A Ceph administrative user sets a user's capabilities when creating or updating
+a user.
 
 Capability syntax follows the form::
 
@@ -110,7 +111,7 @@ Capability syntax follows the form::
   ``class-write`` access settings or ``profile {name}``. Additionally, OSD
   capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]]'
+	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]] [tag {application} {key}={value}]'
 	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
 
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
@@ -216,6 +217,12 @@ OpenStack, a typical deployment would have pools for volumes, images, backups
 and virtual machines, and users such as ``client.glance``, ``client.cinder``,
 etc.
 
+Application Tags
+----------------
+
+Access may be restricted to specific pools as defined by their application
+metadata. The ``*`` wildcard may be used for the ``key`` argument, the
+``value`` argument, or both. ``all`` is a synony for ``*``.
 
 Namespace
 ---------
@@ -240,6 +247,11 @@ cluster. By contrast, writing an object to a namespace simply associates the
 namespace to the object name with out the computational overhead of a separate 
 pool. Rather than creating a separate pool for a user or set of users, you may
 use a namespace. **Note:** Only available using ``librados`` at this time.
+
+Access may be restricted to specific RADOS namespaces using the ``namespace``
+capability. Limited globbing of namespaces is supported; if the last character
+of the specified namespace is ``*``, then access is granted to any namespace
+starting with the provided argument.
 
 
 Managing Users
