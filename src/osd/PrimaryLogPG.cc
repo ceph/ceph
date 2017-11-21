@@ -7617,11 +7617,9 @@ struct C_Copyfrom : public Context {
   hobject_t oid;
   epoch_t last_peering_reset;
   ceph_tid_t tid;
-  PrimaryLogPG::CopyOpRef cop;
-  C_Copyfrom(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
-	     const PrimaryLogPG::CopyOpRef& c)
+  C_Copyfrom(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
-      tid(0), cop(c)
+      tid(0)
   {}
   void finish(int r) override {
     if (r == -ECANCELED)
@@ -7936,7 +7934,7 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
   op.set_last_op_flags(cop->src_obj_fadvise_flags);
 
   C_Copyfrom *fin = new C_Copyfrom(this, obc->obs.oi.soid,
-				   get_last_peering_reset(), cop);
+				   get_last_peering_reset());
   unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
   gather.set_finisher(new C_OnFinisher(fin,
 				       osd->objecter_finishers[n]));
