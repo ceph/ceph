@@ -173,9 +173,9 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
   bool complete;
   if (r == 0) {
     post_execute_state_callback(global_image_id, action_state.transition.next_state);
-    complete = perform_transition(&action_state, action.get_action_type());
+    complete = perform_transition(&action_state, &action);
   } else {
-    complete = abort_or_retry(&action_state);
+    complete = abort_or_retry(&action_state, &action);
   }
 
   if (complete) {
@@ -229,13 +229,15 @@ bool Policy::is_transition_complete(StateTransition::ActionType action_type, Sta
   return complete;
 }
 
-bool Policy::perform_transition(ActionState *action_state, StateTransition::ActionType action_type) {
+bool Policy::perform_transition(ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
   StateTransition::State state = action_state->transition.next_state;
+  // delete context based on retry_on_error flag
+  action->state_callback_complete(state, action_state->transition.retry_on_error);
 
-  bool complete = is_transition_complete(action_type, &state);
+  bool complete = is_transition_complete(action->get_action_type(), &state);
   dout(10) << ": advancing state: " << action_state->current_state << " -> "
            << state << dendl;
 
@@ -248,15 +250,19 @@ bool Policy::perform_transition(ActionState *action_state, StateTransition::Acti
   return complete;
 }
 
-bool Policy::abort_or_retry(ActionState *action_state) {
+bool Policy::abort_or_retry(ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
   bool complete = !action_state->transition.retry_on_error;
-  if (complete && action_state->last_idle_state) {
-    dout(10) << ": using last idle state=" << action_state->last_idle_state.get()
-             << " as current state" << dendl;
-    action_state->current_state = action_state->last_idle_state.get();
+  if (complete) {
+    // we aborted, so the context need not be freed
+    action->state_callback_complete(action_state->transition.next_state, false);
+    if (action_state->last_idle_state) {
+      dout(10) << ": using last idle state=" << action_state->last_idle_state.get()
+               << " as current state" << dendl;
+      action_state->current_state = action_state->last_idle_state.get();
+    }
   }
 
   return complete;
