@@ -885,30 +885,33 @@ void RGWGetBucketVersioning_ObjStore_S3::send_response()
 
 struct ver_config_status {
   int status{VersioningSuspended};
-  int mfa_status{0};
+
+  enum MFAStatus {
+    MFA_UNKNOWN,
+    MFA_DISABLED,
+    MFA_ENABLED,
+  } mfa_status{MFA_UNKNOWN};
+  int retcode{0};
 
   void decode_xml(XMLObj *obj) {
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     string status_str;
     string mfa_str;
     RGWXMLDecoder::decode_xml("Status", status_str, obj);
-dout(0) << __FILE__ << ":" << __LINE__ << dendl;
     if (status_str == "Enabled") {
       status = VersioningEnabled;
     } else if (status_str != "Suspended") {
       status = VersioningStatusInvalid;
     }
 
-dout(0) << __FILE__ << ":" << __LINE__ << " status_str=" << status_str << dendl;
 
-    RGWXMLDecoder::decode_xml("MfaDelete", mfa_str, obj);
-dout(0) << __FILE__ << ":" << __LINE__ << " mfa_str=" << mfa_str << dendl;
-    if (mfa_str == "Enabled") {
-      mfa_status = 1;
-    } else if (mfa_str == "Disabled") {
-      mfa_status = 0;
-    } else {
-      mfa_status = -EINVAL;
+    if (RGWXMLDecoder::decode_xml("MfaDelete", mfa_str, obj)) {
+      if (mfa_str == "Enabled") {
+        mfa_status = MFA_ENABLED;
+      } else if (mfa_str == "Disabled") {
+        mfa_status = MFA_DISABLED;
+      } else {
+        retcode = -EINVAL;
+      }
     }
   }
 };
@@ -937,14 +940,17 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
   }
 
   if (!parser.parse(data, len, 1)) {
-    ldout(s->cct, 10) << "failed to parse data: " << data << dendl;
+    ldout(s->cct, 10) << "NOTICE: failed to parse data: " << data << dendl;
     r = -EINVAL;
     return r;
   }
 
   ver_config_status status_conf;
 
-  RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser);
+  if (!RGWXMLDecoder::decode_xml("VersioningConfiguration", status_conf, &parser)) {
+    ldout(s->cct, 10) << "NOTICE: bad versioning config input" << dendl;
+    return -EINVAL;
+  }
 
   if (!store->is_meta_master()) {
     /* only need to keep this data around if we're not meta master */
@@ -956,10 +962,21 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     r = -EINVAL;
   }
 
-  if (status_conf.mfa_status >= 0) {
-    mfa_status = (bool)status_conf.mfa_status;
-  } else {
-    r = -EINVAL;
+  if (status_conf.mfa_status != ver_config_status::MFA_UNKNOWN) {
+    mfa_set_status = true;
+    switch (status_conf.mfa_status) {
+      case ver_config_status::MFA_DISABLED:
+        mfa_status = false;
+        break;
+      case ver_config_status::MFA_ENABLED:
+        mfa_status = true;
+        break;
+      default:
+        ldout(s->cct, 0) << "ERROR: RGWSetBucketVersioning_ObjStore_S3::get_params(): unexpected switch case mfa_status=" << status_conf.mfa_status << dendl;
+        r = -EIO;
+    }
+  } else if (status_conf.retcode < 0) {
+    r = status_conf.retcode;
   }
   return r;
 }
