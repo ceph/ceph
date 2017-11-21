@@ -776,6 +776,7 @@ enum BucketVersionStatus {
 class RGWSetBucketVersioning : public RGWOp {
 protected:
   int versioning_status;
+  bool mfa_set_status{false};
   bool mfa_status{false};
   bufferlist in_data;
 public:

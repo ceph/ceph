@@ -200,6 +200,7 @@ using ceph::crypto::MD5;
 #define ERR_NO_SUCH_LC           2041
 #define ERR_NO_SUCH_USER         2042
 #define ERR_NO_SUCH_SUBUSER      2043
+#define ERR_MFA_REQUIRED         2044
 #define ERR_USER_SUSPENDED       2100
 #define ERR_INTERNAL_ERROR       2200
 #define ERR_NOT_IMPLEMENTED      2201
@@ -1352,8 +1353,8 @@ struct RGWBucketInfo
 
   bool versioned() const { return (flags & BUCKET_VERSIONED) != 0; }
   int versioning_status() { return flags & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED | BUCKET_MFA_ENABLED); }
-  bool versioning_enabled() { return versioning_status() == BUCKET_VERSIONED; }
-  bool mfa_enabled() { return versioning_status() == BUCKET_MFA_ENABLED; }
+  bool versioning_enabled() { return (versioning_status() & (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED)) == BUCKET_VERSIONED; }
+  bool mfa_enabled() { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
 
   bool has_swift_versioning() const {

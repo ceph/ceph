@@ -2171,6 +2171,12 @@ void RGWSetBucketVersioning::execute()
   if (op_ret < 0)
     return;
 
+  if (mfa_set_status &&
+      !s->mfa_verified) {
+    op_ret = -ERR_MFA_REQUIRED;
+    return;
+  }
+
   if (!store->is_meta_master()) {
     op_ret = forward_request_to_master(s, NULL, store, in_data, nullptr);
     if (op_ret < 0) {
@@ -2179,19 +2185,34 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
+  bool modified = mfa_set_status;
+
   op_ret = retry_raced_bucket_write(store, s, [this] {
+      if (mfa_set_status) {
+        if (mfa_status) {
+          s->bucket_info.flags |= BUCKET_MFA_ENABLED;
+        } else {
+          s->bucket_info.flags &= ~BUCKET_MFA_ENABLED;
+        }
+      }
+
       if (versioning_status == VersioningEnabled) {
 	s->bucket_info.flags |= BUCKET_VERSIONED;
 	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+        modified = true;
       } else if (versioning_status == VersioningSuspended) {
 	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+        modified = true;
       } else {
 	return op_ret;
       }
-      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					       &s->bucket_attrs);
-      return op_ret;
+      return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+                                             &s->bucket_attrs);
     });
+
+  if (!modified) {
+    return;
+  }
 
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
@@ -4327,6 +4348,13 @@ int RGWDeleteObj::verify_permission()
     return -EACCES;
   }
 
+  if (s->bucket_info.mfa_enabled() &&
+      !s->object.instance.empty() &&
+      !s->mfa_verified) {
+    ldout(s->cct, 5) << "NOTICE: object delete request with a versioned object, mfa auth not provided" << dendl;
+    return -ERR_MFA_REQUIRED;
+  }
+
   return 0;
 }
 
@@ -5938,6 +5966,21 @@ void RGWDeleteMultiObj::execute()
 
   if (multi_delete->is_quiet())
     quiet = true;
+
+  if (s->bucket_info.mfa_enabled()) {
+    bool has_versioned = false;
+    for (auto i : multi_delete->objects) {
+      if (!i.instance.empty()) {
+        has_versioned = true;
+        break;
+      }
+    }
+    if (has_versioned && !s->mfa_verified) {
+      ldout(s->cct, 5) << "NOTICE: multi-object delete request with a versioned object, mfa auth not provided" << dendl;
+      op_ret = -ERR_MFA_REQUIRED;
+      goto error;
+    }
+  }
 
   begin_response();
   if (multi_delete->objects.empty()) {
