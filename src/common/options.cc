@@ -5870,9 +5870,14 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(30)
     .set_description("interval to refresh peers in rbd-mirror daemon"),
 
+    Option("rbd_mirror_concurrent_image_deletions", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_min(1)
+    .set_description("maximum number of image deletions in parallel"),
+
     Option("rbd_mirror_delete_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description("interval to check and retry the failed requests in deleter"),
+    .set_description("interval to check and retry the failed deletion requests"),
 
     Option("rbd_mirror_image_state_check_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
