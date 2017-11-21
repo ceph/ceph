@@ -63,7 +63,9 @@ namespace rgw {
     RGWLibIO(const RGWUserInfo &_user_info)
       : user_info(_user_info) {}
 
-    void init_env(CephContext *cct) override {}
+    void init_env(CephContext *cct) override {
+      env.init(cct);
+    }
 
     const RGWUserInfo& get_user() {
       return user_info;
