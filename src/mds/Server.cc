@@ -3044,11 +3044,14 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (!check_access(mdr, ref, MAY_READ))
     return;
 
+  utime_t now = ceph_clock_now();
+  mdr->set_mds_stamp(now);
+
   // note which caps are requested, so we return at least a snapshot
   // value for them.  (currently this matters for xattrs and inline data)
   mdr->getattr_caps = mask;
 
-  mds->balancer->hit_inode(ceph_clock_now(), ref, META_POP_IRD,
+  mds->balancer->hit_inode(now, ref, META_POP_IRD,
 			   req->get_source().num());
 
   // reply
@@ -3324,6 +3327,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
   if (!check_access(mdr, cur, mask))
     return;
 
+  utime_t now = ceph_clock_now();
+  mdr->set_mds_stamp(now);
+
   if (cur->is_file() || cur->is_dir()) {
     if (mdr->snapid == CEPH_NOSNAP) {
       // register new cap
@@ -3359,9 +3365,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
   
   // hit pop
   if (cmode & CEPH_FILE_MODE_WR)
-    mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IWR);
+    mds->balancer->hit_inode(now, cur, META_POP_IWR);
   else
-    mds->balancer->hit_inode(mdr->get_mds_stamp(), cur, META_POP_IRD,
+    mds->balancer->hit_inode(now, cur, META_POP_IRD,
 			     mdr->client_request->get_source().num());
 
   CDentry *dn = 0;
@@ -3399,7 +3405,8 @@ public:
     MDRequestRef null_ref;
     get_mds()->mdcache->send_dentry_link(dn, null_ref);
 
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
+    utime_t now = ceph_clock_now();
+    get_mds()->balancer->hit_inode(now, newi, META_POP_IWR);
 
     server->respond_to_request(mdr, 0);
 
@@ -3857,7 +3864,8 @@ public:
       get_mds()->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
+    utime_t now = ceph_clock_now();
+    get_mds()->balancer->hit_inode(now, in, META_POP_IWR);
 
     server->respond_to_request(mdr, 0);
 
@@ -4789,7 +4797,8 @@ public:
     
     mdr->apply();
 
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
+    utime_t now = ceph_clock_now();
+    get_mds()->balancer->hit_inode(now, in, META_POP_IWR);
 
     server->respond_to_request(mdr, 0);
   }
@@ -4995,7 +5004,8 @@ public:
       get_mds()->locker->share_inode_max_size(newi);
 
     // hit pop
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), newi, META_POP_IWR);
+    utime_t now = ceph_clock_now();
+    get_mds()->balancer->hit_inode(now, newi, META_POP_IWR);
 
     // reply
     server->respond_to_request(mdr, 0);
@@ -5366,8 +5376,9 @@ void Server::_link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
   mdcache->send_dentry_link(dn, null_ref);
 
   // bump target popularity
-  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
-  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_inode(now, targeti, META_POP_IWR);
+  mds->balancer->hit_dir(now, dn->get_dir(), META_POP_IWR);
 
   // reply
   respond_to_request(mdr, 0);
@@ -5492,8 +5503,9 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
     mdcache->send_dentry_unlink(dn, NULL, null_ref);
   
   // bump target popularity
-  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
-  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_inode(now, targeti, META_POP_IWR);
+  mds->balancer->hit_dir(now, dn->get_dir(), META_POP_IWR);
 
   // reply
   respond_to_request(mdr, 0);
@@ -5610,7 +5622,8 @@ void Server::_logged_slave_link(MDRequestRef& mdr, CInode *targeti)
   mdr->apply();
 
   // hit pop
-  mds->balancer->hit_inode(mdr->get_mds_stamp(), targeti, META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_inode(now, targeti, META_POP_IWR);
 
   // done.
   mdr->slave_request->put();
@@ -6074,7 +6087,8 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
     mdcache->adjust_subtree_after_rename(strayin, dn->get_dir(), true);
 
   // bump pop
-  mds->balancer->hit_dir(mdr->get_mds_stamp(), dn->get_dir(), META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_dir(now, dn->get_dir(), META_POP_IWR);
 
   // reply
   respond_to_request(mdr, 0);
@@ -6919,9 +6933,10 @@ void Server::_rename_finish(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, 
     assert(g_conf->mds_kill_rename_at != 6);
   
   // bump popularity
-  mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_dir(now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->is_remote() && in->is_auth())
-    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
+    mds->balancer->hit_inode(now, in, META_POP_IWR);
 
   // did we import srci?  if so, explicitly ack that import that, before we unlock and reply.
 
@@ -7803,10 +7818,10 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
   destdnl = destdn->get_linkage();
 
   // bump popularity
-  mds->balancer->hit_dir(mdr->get_mds_stamp(), srcdn->get_dir(), META_POP_IWR);
+  utime_t now = ceph_clock_now();
+  mds->balancer->hit_dir(now, srcdn->get_dir(), META_POP_IWR);
   if (destdnl->get_inode() && destdnl->get_inode()->is_auth())
-    mds->balancer->hit_inode(mdr->get_mds_stamp(), destdnl->get_inode(),
-			     META_POP_IWR);
+    mds->balancer->hit_inode(now, destdnl->get_inode(), META_POP_IWR);
 
   // done.
   mdr->slave_request->put();
@@ -7854,8 +7869,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
       ::decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
-      mdcache->migrator->finish_export_inode(destdnl->get_inode(),
-					     mdr->get_mds_stamp(),
+      mdcache->migrator->finish_export_inode(destdnl->get_inode(), ceph_clock_now(),
 					     mdr->slave_to_mds, peer_imported, finished);
       mds->queue_waiters(finished);   // this includes SINGLEAUTH waiters.
 
