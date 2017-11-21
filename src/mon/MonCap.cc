@@ -530,6 +530,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     // rwxa := * | [r][w][x]
     rwxa =
       (lit("*")[_val = MON_CAP_ANY]) |
+      (lit("all")[_val = MON_CAP_ANY]) |
       ( eps[_val = 0] >>
 	( lit('r')[_val |= MON_CAP_R] ||
 	  lit('w')[_val |= MON_CAP_W] ||

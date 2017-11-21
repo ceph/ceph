@@ -195,9 +195,11 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EAGAIN;
     }
     mon->osdmon()->do_application_enable(data,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", fs_name);
     mon->osdmon()->do_application_enable(metadata,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "metadata", fs_name);
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
@@ -522,7 +524,9 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(poolid, pg_pool_t::APPLICATION_NAME_CEPHFS);
+    mon->osdmon()->do_application_enable(poolid,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", poolname);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
