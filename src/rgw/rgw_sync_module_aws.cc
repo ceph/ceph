@@ -914,7 +914,7 @@ public:
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {
     instance.id = string("s3:") + instance.conf.s3_endpoint;
-    instance.conn.reset(new RGWRESTConn(cct,
+    instance.conn.reset(new S3RESTConn(cct,
                                     sync_env->store,
                                     instance.id,
                                     { instance.conf.s3_endpoint },

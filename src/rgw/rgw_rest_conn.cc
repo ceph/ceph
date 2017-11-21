@@ -81,7 +81,7 @@ string RGWRESTConn::get_url()
   return endpoint;
 }
 
-static void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup)
+void RGWRESTConn::populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup)
 {
   if (uid) {
     string uid_str = uid->to_str();
@@ -371,7 +371,7 @@ RGWRESTReadResource::RGWRESTReadResource(RGWRESTConn *_conn,
 
 void RGWRESTReadResource::init_common(param_vec_t *extra_headers)
 {
-  populate_params(params, nullptr, conn->get_self_zonegroup());
+  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
@@ -431,7 +431,7 @@ RGWRESTSendResource::RGWRESTSendResource(RGWRESTConn *_conn,
 
 void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 {
-  populate_params(params, nullptr, conn->get_self_zonegroup());
+  conn->populate_params(params, nullptr, conn->get_self_zonegroup());
 
   if (extra_headers) {
     headers.insert(extra_headers->begin(), extra_headers->end());
