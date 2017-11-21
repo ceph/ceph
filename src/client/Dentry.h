@@ -11,18 +11,10 @@ class Dir;
 struct Inode;
 
 class Dentry : public LRUObject {
- public:
-  string   name;                      // sort of lame
-  //const char *name;
-  Dir	   *dir;
-  InodeRef inode;
-  int	   ref;                       // 1 if there's a dir beneath me.
-  int64_t offset;
-  mds_rank_t lease_mds;
-  utime_t lease_ttl;
-  uint64_t lease_gen;
-  ceph_seq_t lease_seq;
-  int cap_shared_gen;
+public:
+  ~Dentry() {
+    assert(ref == 0);
+  }
 
   /*
    * ref==1 -> cached, unused
@@ -45,18 +37,16 @@ class Dentry : public LRUObject {
 
   void dump(Formatter *f) const;
 
-  Dentry() :
-    dir(0), ref(1), offset(0),
-    lease_mds(-1), lease_gen(0), lease_seq(0), cap_shared_gen(0)
-  { }
-private:
-  ~Dentry() {
-    assert(ref == 0);
-  }
+  string   name;                      // sort of lame
+  Dir	   *dir = nullptr;
+  InodeRef inode;
+  int	   ref = 1; // 1 if there's a dir beneath me.
+  int64_t offset = 0;
+  mds_rank_t lease_mds = -1;
+  utime_t lease_ttl;
+  uint64_t lease_gen = 0;
+  ceph_seq_t lease_seq = 0;
+  int cap_shared_gen = 0;
 };
-
-
-
-
 
 #endif
