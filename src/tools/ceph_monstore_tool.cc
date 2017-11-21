@@ -1317,13 +1317,13 @@ int main(int argc, char **argv) {
         out_store.apply_transaction(tx);
 
       std::cout << "copied " << total_keys << " keys so far ("
-                << stringify(si_t(total_size)) << ")" << std::endl;
+                << stringify(byte_u_t(total_size)) << ")" << std::endl;
 
     } while (it->valid());
     out_store.close();
     std::cout << "summary: copied " << total_keys << " keys, using "
               << total_tx << " transactions, totalling "
-              << stringify(si_t(total_size)) << std::endl;
+              << stringify(byte_u_t(total_size)) << std::endl;
     std::cout << "from '" << store_path << "' to '" << out_path << "'"
               << std::endl;
   } else if (cmd == "rewrite-crush") {
