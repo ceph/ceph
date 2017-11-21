@@ -85,8 +85,8 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD4(schedule_image_delete, void(RadosRef, int64_t,
-                                           const std::string&, bool));
+  MOCK_METHOD4(schedule_image_delete, void(IoCtxRef, const std::string&, bool,
+                                           Context*));
   MOCK_METHOD4(wait_for_scheduled_deletion,
                void(int64_t, const std::string&, Context*, bool));
   MOCK_METHOD2(cancel_waiter, void(int64_t, const std::string&));
@@ -400,7 +400,7 @@ public:
                                     const std::string& global_image_id,
                                     bool ignore_orphan) {
     EXPECT_CALL(mock_image_deleter,
-                schedule_image_delete(_, _, global_image_id, ignore_orphan));
+                schedule_image_delete(_, global_image_id, ignore_orphan, nullptr));
   }
 
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
