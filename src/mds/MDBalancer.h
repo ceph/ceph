@@ -53,8 +53,8 @@ public:
   void add_import(CDir *im, utime_t now);
   void adjust_pop_for_rename(CDir *pdir, CDir *dir, utime_t now, bool inc);
 
-  void hit_inode(utime_t now, CInode *in, int type, int who=-1);
-  void hit_dir(utime_t now, CDir *dir, int type, int who=-1, double amount=1.0);
+  void hit_inode(const utime_t& now, CInode *in, int type, int who=-1);
+  void hit_dir(const utime_t& now, CDir *dir, int type, int who=-1, double amount=1.0);
 
   void queue_split(const CDir *dir, bool fast);
   void queue_merge(CDir *dir);
