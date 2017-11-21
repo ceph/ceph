@@ -229,7 +229,8 @@ int64_t TestImageDeleter::m_local_pool_id;
 
 
 TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -246,7 +247,8 @@ TEST_F(TestImageDeleter, Delete_Split_Brain_Image) {
   promote_image();
   demote_image();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, true);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, true,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -262,11 +264,9 @@ TEST_F(TestImageDeleter, Delete_Split_Brain_Image) {
 TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
   promote_image();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
   EXPECT_EQ(-EPERM, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
@@ -277,11 +277,9 @@ TEST_F(TestImageDeleter, Fail_Delete_Orphan_Image) {
   promote_image();
   demote_image();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
   EXPECT_EQ(-EPERM, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
@@ -291,7 +289,8 @@ TEST_F(TestImageDeleter, Fail_Delete_Orphan_Image) {
 TEST_F(TestImageDeleter, Delete_Image_With_Child) {
   create_snapshot();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -306,7 +305,8 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
   create_snapshot("snap1");
   create_snapshot("snap2");
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -320,7 +320,8 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
 TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChild) {
   create_snapshot("snap1", true);
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -335,7 +336,8 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
   create_snapshot("snap1", true);
   create_snapshot("snap2", true);
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -349,20 +351,15 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
 TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
   std::string clone_id = create_clone();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-  m_deleter->set_busy_timer_interval(0.1);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
+  m_deleter->set_busy_timer_interval(0.1);
   EXPECT_EQ(-EBUSY, ctx.wait());
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_CLONE_IMAGE_ID,
-                                   false);
-
   C_SaferCond ctx2;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_CLONE_IMAGE_ID,
-                                         &ctx2);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_CLONE_IMAGE_ID,
+                                   false, &ctx2);
   EXPECT_EQ(0, ctx2.wait());
 
   C_SaferCond ctx3;
@@ -382,7 +379,8 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
   EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                             mirror_image));
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -406,7 +404,8 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
   EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx, m_local_image_id,
                                             mirror_image));
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   nullptr);
 
   C_SaferCond ctx;
   m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
@@ -422,11 +421,9 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
 TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
   remove_image();
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
   EXPECT_EQ(-ENOENT, ctx.wait());
 
   ASSERT_EQ(0u, m_deleter->get_delete_queue_items().size());
@@ -440,11 +437,9 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
                                 false);
   EXPECT_EQ(0, ictx->state->open(false));
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
   EXPECT_EQ(-EBUSY, ctx.wait());
 
   EXPECT_EQ(0, ictx->state->close());
@@ -456,11 +451,9 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
                                 false);
   EXPECT_EQ(0, ictx->state->open(false));
 
-  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false);
-
   C_SaferCond ctx;
-  m_deleter->wait_for_scheduled_deletion(m_local_pool_id, GLOBAL_IMAGE_ID,
-                                         &ctx);
+  m_deleter->schedule_image_delete(m_local_io_ctx_ref, GLOBAL_IMAGE_ID, false,
+                                   &ctx);
   EXPECT_EQ(-EBUSY, ctx.wait());
 
   EXPECT_EQ(0, ictx->state->close());
