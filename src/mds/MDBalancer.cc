@@ -1079,7 +1079,7 @@ void MDBalancer::find_exports(CDir *dir,
 
 }
 
-void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
+void MDBalancer::hit_inode(const utime_t& now, CInode *in, int type, int who)
 {
   // hit inode
   in->pop.get(type).hit(now, mds->mdcache->decayrate);
@@ -1120,7 +1120,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
   }
 }
 
-void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
+void MDBalancer::hit_dir(const utime_t& now, CDir *dir, int type, int who, double amount)
 {
   // hit me
   double v = dir->pop_me.get(type).hit(now, mds->mdcache->decayrate, amount);
