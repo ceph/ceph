@@ -51,7 +51,7 @@ function(do_build_dpdk dpdk_dir)
   set(target "${arch}-${machine_tmpl}-${execenv}-${toolchain}")
 
   execute_process(
-    COMMAND make showconfigs
+    COMMAND ${CMAKE_MAKE_PROGRAM} showconfigs
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/spdk/dpdk
     OUTPUT_VARIABLE supported_targets
     OUTPUT_STRIP_TRAILING_WHITESPACE)
@@ -59,7 +59,8 @@ function(do_build_dpdk dpdk_dir)
   list(FIND supported_targets ${target} found)
   if(found EQUAL -1)
     message(FATAL_ERROR "not able to build DPDK support: "
-      "unsupported target \"${target}\"")
+      "unsupported target. "
+      "\"${target}\" not listed in ${supported_targets}")
   endif()
 
   include(ExternalProject)
