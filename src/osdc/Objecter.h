@@ -1840,6 +1840,7 @@ public:
     int osd;
     int incarnation;
     ConnectionRef con;
+    uint64_t objecter_completion_locks_per_session;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
     using unique_completion_lock = std::unique_lock<
@@ -1848,7 +1849,9 @@ public:
 
     OSDSession(CephContext *cct, int o) :
       osd(o), incarnation(0), con(NULL),
-      num_locks(cct->_conf->objecter_completion_locks_per_session),
+      objecter_completion_locks_per_session(cct->_conf->get_val<uint64_t>(
+        "objecter_completion_locks_per_session")),
+      num_locks(objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
     ~OSDSession() override;
@@ -1858,7 +1861,6 @@ public:
     unique_completion_lock get_lock(object_t& oid);
   };
   map<int,OSDSession*> osd_sessions;
-
   bool osdmap_full_flag() const;
   bool osdmap_pool_full(const int64_t pool_id) const;
 
@@ -2016,32 +2018,63 @@ private:
 	   double mon_timeout,
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
+    objecter_mclock_service_tracker(cct->_conf->get_val<bool>(
+      "objecter_mclock_service_tracker")),
+    objecter_inject_no_watch_ping(cct->_conf->get_val<bool>(
+      "objecter_inject_no_watch_ping")),
+    objecter_debug_inject_relock_delay(cct->_conf->get_val<bool>(
+      "objecter_debug_inject_relock_delay")),
+    osdc_blkin_trace_all(cct->_conf->get_val<bool>(
+      "osdc_blkin_trace_all")),
+    objecter_tick_interval(cct->_conf->get_val<double>(
+      "objecter_tick_interval")),
+    objecter_timeout(cct->_conf->get_val<double>(
+      "objecter_timeout")),
+    osd_client_op_priority(cct->_conf->get_val<uint64_t>(
+      "osd_client_op_priority")),
+    objecter_inflight_op_bytes(cct->_conf->get_val<uint64_t>(
+      "objecter_inflight_op_bytes")),
+    objecter_inflight_ops(cct->_conf->get_val<uint64_t>(
+      "objecter_inflight_ops")),
+    objecter_retry_writes_after_first_reply(cct->_conf->get_val<bool>(
+      "objecter_retry_writes_after_first_reply")),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
-    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
+    mclock_service_tracker(objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
-    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
+    keep_balanced_budget(false),
+    honor_osdmap_full(true), osdmap_full_try(false),
     blacklist_events_enabled(false),
     last_seen_osdmap_version(0), last_seen_pgmap_version(0),
     logger(NULL), tick_event(0), m_request_state_hook(NULL),
     homeless_session(new OSDSession(cct, -1)),
     mon_timeout(ceph::make_timespan(mon_timeout)),
     osd_timeout(ceph::make_timespan(osd_timeout)),
-    op_throttle_bytes(cct, "objecter_bytes",
-		      cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
+    op_throttle_bytes(cct, "objecter_bytes", objecter_inflight_op_bytes),
+    op_throttle_ops(cct, "objecter_ops", objecter_inflight_ops),
     epoch_barrier(0),
-    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
+    retry_writes_after_first_reply(objecter_retry_writes_after_first_reply)
   {
-    if (cct->_conf->objecter_mclock_service_tracker) {
+    if (objecter_mclock_service_tracker)
       qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
-    }
   }
   ~Objecter() override;
 
   void init();
   void start(const OSDMap *o = nullptr);
   void shutdown();
+
+  // ------
+  bool objecter_mclock_service_tracker;
+  bool objecter_inject_no_watch_ping;
+  bool objecter_debug_inject_relock_delay;
+  bool osdc_blkin_trace_all;
+  bool objecter_retry_writes_after_first_reply;
+  double objecter_tick_interval;
+  double objecter_timeout;
+  uint64_t osd_client_op_priority;
+  uint64_t objecter_inflight_op_bytes;
+  uint64_t objecter_inflight_ops;
 
   // These two templates replace osdmap_(get)|(put)_read. Simply wrap
   // whatever functionality you want to use the OSDMap in a lambda like:

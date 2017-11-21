@@ -360,7 +360,9 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 
   std::vector<object_t> remove_oids;
 
-  int max = cct->_conf->filer_max_purge_ops - pr->uncommitted;
+  auto filer_max_purge_ops = cct->_conf->get_val<uint64_t>(
+    "filer_max_purge_ops");
+  int max = filer_max_purge_ops - pr->uncommitted;
   while (pr->num > 0 && max > 0) {
     remove_oids.push_back(file_object_t(pr->ino, pr->first));
     pr->uncommitted++;
@@ -458,7 +460,9 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
 
   vector<ObjectExtent> extents;
 
-  int max = cct->_conf->filer_max_truncate_ops - tr->uncommitted;
+  auto filer_max_truncate_ops = cct->_conf->get_val<uint64_t>(
+    "filer_max_truncate_ops");
+  int max = filer_max_truncate_ops - tr->uncommitted;
   if (max > 0 && tr->length > 0) {
     uint64_t len = tr->layout.get_period() * max;
     if (len > tr->length)

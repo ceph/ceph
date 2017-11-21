@@ -152,6 +152,15 @@ enum {
 static const char *config_keys[] = {
   "crush_location",
   "objecter_mclock_service_tracker",
+  "objecter_inject_no_watch_ping",
+  "objecter_debug_inject_relock_delay",
+  "osdc_blkin_trace_all",
+  "objecter_tick_interval",
+  "objecter_timeout",
+  "osd_client_op_priority",
+  "objecter_inflight_op_bytes",
+  "objecter_inflight_ops",
+  "objecter_retry_writes_after_first_reply",
   NULL
 };
 
@@ -237,12 +246,12 @@ void Objecter::update_crush_location()
 void Objecter::update_mclock_service_tracker()
 {
   unique_lock wl(rwlock);
-  if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
+  if (objecter_mclock_service_tracker && (!mclock_service_tracker))
     qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
-  } else if (!cct->_conf->objecter_mclock_service_tracker) {
+  else if (!objecter_mclock_service_tracker)
     qos_trk.reset();
-  }
-  mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
+
+  mclock_service_tracker = objecter_mclock_service_tracker;
 }
 
 // messages ------------------------------
@@ -682,7 +691,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   // rwlock is locked unique
   // info->session->lock is locked
 
-  if (cct->_conf->objecter_inject_no_watch_ping) {
+  if (objecter_inject_no_watch_ping) {
     ldout(cct, 10) << __func__ << " " << info->linger_id << " SKIPPING"
 		   << dendl;
     return;
@@ -2115,9 +2124,8 @@ void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend,
 void Objecter::start_tick()
 {
   assert(tick_event == 0);
-  tick_event =
-    timer.add_event(ceph::make_timespan(cct->_conf->objecter_tick_interval),
-		    &Objecter::tick, this);
+  tick_event = timer.add_event(ceph::make_timespan(objecter_tick_interval),
+    &Objecter::tick, this);
 }
 
 void Objecter::tick()
@@ -2140,7 +2148,7 @@ void Objecter::tick()
 
   // look for laggy requests
   auto cutoff = ceph::coarse_mono_clock::now();
-  cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
+  cutoff -= ceph::make_timespan(objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
 
@@ -2205,7 +2213,7 @@ void Objecter::tick()
   // Make sure we don't reschedule if we wake up after shutdown
   if (initialized) {
     tick_event = timer.reschedule_me(ceph::make_timespan(
-				       cct->_conf->objecter_tick_interval));
+      objecter_tick_interval));
   }
 }
 
@@ -2397,7 +2405,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
       (check_for_latest_map && sul.owns_lock_shared())) {
     epoch_t orig_epoch = osdmap->get_epoch();
     sul.unlock();
-    if (cct->_conf->objecter_debug_inject_relock_delay) {
+    if (objecter_debug_inject_relock_delay) {
       sleep(1);
     }
     sul.lock();
@@ -3169,14 +3177,15 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   m->set_mtime(op->mtime);
   m->set_retry_attempt(op->attempts++);
 
-  if (!op->trace.valid() && cct->_conf->osdc_blkin_trace_all) {
+  if (!op->trace.valid() && osdc_blkin_trace_all) {
     op->trace.init("op", &trace_endpoint);
   }
 
   if (op->priority)
     m->set_priority(op->priority);
-  else
-    m->set_priority(cct->_conf->osd_client_op_priority);
+  else {
+    m->set_priority(osd_client_op_priority);
+  }
 
   if (op->reqid != osd_reqid_t()) {
     m->set_reqid(op->reqid);
@@ -3582,7 +3591,7 @@ void Objecter::handle_osd_backoff(MOSDBackoff *m)
 				   CEPH_OSD_BACKOFF_OP_ACK_BLOCK,
 				   m->id, m->begin, m->end);
       // this priority must match the MOSDOps from _prepare_osd_op
-      r->set_priority(cct->_conf->osd_client_op_priority);
+      r->set_priority(osd_client_op_priority);
       con->send_message(r);
     }
     break;

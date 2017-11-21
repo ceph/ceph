@@ -1890,7 +1890,9 @@ void ObjectCacher::flusher_entry()
     loff_t actual = get_stat_dirty() + get_stat_dirty_waiting();
 
     ZTracer::Trace trace;
-    if (cct->_conf->osdc_blkin_trace_all) {
+    auto osdc_blkin_trace_all = cct->_conf->get_val<bool>(
+      "osdc_blkin_trace_all");
+    if (osdc_blkin_trace_all) {
       trace.init("flusher", &trace_endpoint);
       trace.event("start");
     }

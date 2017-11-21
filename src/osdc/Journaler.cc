@@ -90,7 +90,9 @@ void Journaler::_set_layout(file_layout_t const *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  uint64_t periods = cct->_conf->get_val<uint64_t>("journaler_prefetch_periods");
+  auto journaler_prefetch_periods = cct->_conf->get_val<int64_t>(
+    "journaler_prefetch_periods");
+  uint64_t periods =  (uint64_t)journaler_prefetch_periods;
   fetch_len = layout.get_period() * periods;
 }
 
@@ -738,7 +740,9 @@ void Journaler::_flush(C_OnFinisher *onsafe)
 
 bool Journaler::_write_head_needed()
 {
-  return last_wrote_head + seconds(cct->_conf->get_val<int64_t>("journaler_write_head_interval"))
+  auto journaler_write_head_interval = cct->_conf->get_val<int64_t>(
+    "journaler_write_head_interval");
+  return last_wrote_head + seconds(journaler_write_head_interval)
       < ceph::real_clock::now();
 }
 
