@@ -115,9 +115,9 @@ int PMEMDevice::open(const string& p)
 
   dout(1) << __func__
     << " size " << size
-    << " (" << pretty_si_t(size) << "B)"
+    << " (" << byte_u_t(size) << ")"
     << " block_size " << block_size
-    << " (" << pretty_si_t(block_size) << "B)"
+    << " (" << byte_u_t(block_size) << ")"
     << dendl;
   return 0;
 

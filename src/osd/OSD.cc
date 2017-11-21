@@ -694,9 +694,9 @@ void OSDService::promote_throttle_recalibrate()
   uint64_t attempts, obj, bytes;
   promote_counter.sample_and_attenuate(&attempts, &obj, &bytes);
   dout(10) << __func__ << " " << attempts << " attempts, promoted "
-	   << obj << " objects and " << pretty_si_t(bytes) << " bytes; target "
+	   << obj << " objects and " << byte_u_t(bytes) << "; target "
 	   << target_obj_sec << " obj/sec or "
-	   << pretty_si_t(target_bytes_sec) << " bytes/sec"
+	   << byte_u_t(target_bytes_sec) << "/sec"
 	   << dendl;
 
   // calculate what the probability *should* be, given the targets
@@ -6756,7 +6756,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       // having a sane value.  If we allow any block size to be set things
       // can still go sideways.
       ss << "block 'size' values are capped at "
-         << prettybyte_t(cct->_conf->osd_bench_max_block_size) << ". If you wish to use"
+         << byte_u_t(cct->_conf->osd_bench_max_block_size) << ". If you wish to use"
          << " a higher value, please adjust 'osd_bench_max_block_size'";
       r = -EINVAL;
       goto out;
@@ -6769,7 +6769,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
         bsize * duration * cct->_conf->osd_bench_small_size_max_iops;
       if (count > max_count) {
         ss << "'count' values greater than " << max_count
-           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
+           << " for a block size of " << byte_u_t(bsize) << ", assuming "
            << cct->_conf->osd_bench_small_size_max_iops << " IOPS,"
            << " for " << duration << " seconds,"
            << " can cause ill effects on osd. "
@@ -6792,8 +6792,8 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
         cct->_conf->osd_bench_large_size_max_throughput * duration;
       if (count > max_count) {
         ss << "'count' values greater than " << max_count
-           << " for a block size of " << prettybyte_t(bsize) << ", assuming "
-           << prettybyte_t(cct->_conf->osd_bench_large_size_max_throughput) << "/s,"
+           << " for a block size of " << byte_u_t(bsize) << ", assuming "
+           << byte_u_t(cct->_conf->osd_bench_large_size_max_throughput) << "/s,"
            << " for " << duration << " seconds,"
            << " can cause ill effects on osd. "
            << " Please adjust 'osd_bench_large_size_max_throughput'"
@@ -6807,7 +6807,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       bsize = osize;
 
     dout(1) << " bench count " << count
-            << " bsize " << prettybyte_t(bsize) << dendl;
+            << " bsize " << byte_u_t(bsize) << dendl;
 
     ObjectStore::Transaction cleanupt;
 
@@ -6887,9 +6887,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       f->close_section();
       f->flush(ss);
     } else {
-      ss << "bench: wrote " << prettybyte_t(count)
-	 << " in blocks of " << prettybyte_t(bsize) << " in "
-	 << (end-start) << " sec at " << prettybyte_t(rate) << "/sec";
+      ss << "bench: wrote " << byte_u_t(count)
+	 << " in blocks of " << byte_u_t(bsize) << " in "
+	 << (end-start) << " sec at " << byte_u_t(rate) << "/sec";
     }
   }
 

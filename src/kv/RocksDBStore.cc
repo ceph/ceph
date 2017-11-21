@@ -354,8 +354,8 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing)
 
   opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(bbt_opts));
   dout(10) << __func__ << " block size " << g_conf->rocksdb_block_size
-           << ", block_cache size " << prettybyte_t(block_cache_size)
-	   << ", row_cache size " << prettybyte_t(row_cache_size)
+           << ", block_cache size " << byte_u_t(block_cache_size)
+	   << ", row_cache size " << byte_u_t(row_cache_size)
 	   << "; shards "
 	   << (1 << g_conf->rocksdb_cache_shard_bits)
 	   << ", type " << g_conf->rocksdb_cache_type
