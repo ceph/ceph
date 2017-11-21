@@ -164,9 +164,10 @@ void write_data(BlueFS &fs, uint64_t rationed_bytes)
       if (r < 0) {
          break;
       }
-      written_bytes += g_conf->bluefs_alloc_size;
+      auto alloc_size = g_conf->get_val<uint64_t>("bluefs_alloc_size");
+      written_bytes += alloc_size;
       j++;
-      if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
+      if ((rationed_bytes - written_bytes) <= alloc_size) {
         break;
       }
     }
@@ -210,8 +211,9 @@ void write_single_file(BlueFS &fs, uint64_t rationed_bytes)
       if (r < 0) {
          break;
       }
-      written_bytes += g_conf->bluefs_alloc_size;
-      if ((rationed_bytes - written_bytes) <= g_conf->bluefs_alloc_size) {
+      auto alloc_size = g_conf->get_val<uint64_t>("bluefs_alloc_size");
+      written_bytes += alloc_size;
+      if ((rationed_bytes - written_bytes) <= alloc_size) {
         break;
       }
     }

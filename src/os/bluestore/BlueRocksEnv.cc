@@ -127,7 +127,8 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
     if (pattern == RANDOM)
       h->buf.max_prefetch = 4096;
     else if (pattern == SEQUENTIAL)
-      h->buf.max_prefetch = fs->cct->_conf->bluefs_max_prefetch;
+      h->buf.max_prefetch = fs->cct->_conf->get_val<uint64_t>(
+        "bluefs_max_prefetch");
   }
 
   // Remove any kind of caching of data from the offset to offset+length
