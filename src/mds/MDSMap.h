@@ -249,6 +249,11 @@ public:
   utime_t get_session_timeout() const {
     return utime_t(session_timeout,0);
   }
+
+  utime_t get_session_autoclose() const {
+    return utime_t(session_autoclose, 0);
+  }
+
   uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
   
