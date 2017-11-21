@@ -75,12 +75,12 @@ void WriteLogOperation::complete(int result) {
  * entry will be updated to remove the regions that overlap with
  * this.
  */
-int WriteLogMap::add_entry(WriteLogEntry *log_entry) {
+void WriteLogMap::add_entry(WriteLogEntry *log_entry) {
   Mutex::Locker locker(m_lock);
   add_entry_locked(log_entry);
 }
 
-int WriteLogMap::add_entries(WriteLogEntries &log_entries) {
+void WriteLogMap::add_entries(WriteLogEntries &log_entries) {
   Mutex::Locker locker(m_lock);
   ldout(m_cct, 20) << dendl;
   for (auto &log_entry : log_entries) {
@@ -97,7 +97,7 @@ void WriteLogMap::remove_entry(WriteLogEntry *log_entry) {
   remove_entry_locked(log_entry);
 }
 
-int WriteLogMap::remove_entries(WriteLogEntries &log_entries) {
+void WriteLogMap::remove_entries(WriteLogEntries &log_entries) {
   Mutex::Locker locker(m_lock);
   ldout(m_cct, 20) << dendl;
   for (auto &log_entry : log_entries) {
@@ -149,10 +149,15 @@ void WriteLogMap::add_entry_locked(WriteLogEntry *log_entry) {
 	}
       } else {
 	assert(map_entry.block_extent.block_start > entry.block_extent.block_start);
-	/* The new entry occludes the end of the old entry */
-	BlockExtent adjusted_extent(entry.block_extent.block_start,
-				    map_entry.block_extent.block_start-1);
-	adjust_map_entry_locked(entry, adjusted_extent);
+	if (map_entry.block_extent.block_end >= entry.block_extent.block_end) {
+	  /* The new entry occludes the end of the old entry */
+	  BlockExtent adjusted_extent(entry.block_extent.block_start,
+				      map_entry.block_extent.block_start-1);
+	  adjust_map_entry_locked(entry, adjusted_extent);
+	} else {
+	  /* The new entry splits the old entry */
+	  split_map_entry_locked(entry, map_entry.block_extent);
+	}
       }
     }
   }
@@ -209,6 +214,25 @@ void WriteLogMap::adjust_map_entry_locked(WriteLogMapEntry &map_entry, BlockExte
   m_block_to_log_entry_map.erase(it);
 
   m_block_to_log_entry_map.insert(WriteLogMapEntry(new_extent, adjusted.log_entry));
+}
+
+void WriteLogMap::split_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &removed_extent)
+{
+  auto it = m_block_to_log_entry_map.find(map_entry);
+  assert(it != m_block_to_log_entry_map.end());
+
+  WriteLogMapEntry split = *it;
+  m_block_to_log_entry_map.erase(it);
+
+  BlockExtent left_extent(split.block_extent.block_start,
+			  removed_extent.block_start-1);
+  m_block_to_log_entry_map.insert(WriteLogMapEntry(left_extent, split.log_entry));
+
+  BlockExtent right_extent(removed_extent.block_end+1,
+			   split.block_extent.block_end);
+  m_block_to_log_entry_map.insert(WriteLogMapEntry(right_extent, split.log_entry));
+
+  split.log_entry->referring_map_entries++;
 }
 
 #if 0

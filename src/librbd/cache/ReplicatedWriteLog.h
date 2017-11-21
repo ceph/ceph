@@ -313,10 +313,10 @@ public:
   WriteLogMap(const WriteLogMap&) = delete;
   WriteLogMap &operator=(const WriteLogMap&) = delete;
 
-  int add_entry(WriteLogEntry *log_entry);
-  int add_entries(WriteLogEntries &log_entries);
+  void add_entry(WriteLogEntry *log_entry);
+  void add_entries(WriteLogEntries &log_entries);
   void remove_entry(WriteLogEntry *log_entry);
-  int remove_entries(WriteLogEntries &log_entries);
+  void remove_entries(WriteLogEntries &log_entries);
   //WriteLogEntries find_entries(BlockExtent block_extent);
   WriteLogMapEntries find_map_entries(BlockExtent block_extent);
   
@@ -326,6 +326,7 @@ private:
   void add_map_entry_locked(WriteLogMapEntry &map_entry);
   void remove_map_entry_locked(WriteLogMapEntry &map_entry);
   void adjust_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &new_extent);
+  void split_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &removed_extent);
   //WriteLogEntries find_entries_locked(BlockExtent block_extent);
   WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
