@@ -1,12 +1,12 @@
 roles:
 - - mon.a
-  - mon.b
-  - mon.c
-  - mgr.x
+- - mgr.x
   - osd.0
   - osd.1
-  - osd.2
+  - mon.b
+- - osd.2
   - osd.3
+  - mon.c
 openstack:
   - volumes: # attached to each instance
       count: 4
