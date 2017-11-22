@@ -119,7 +119,7 @@ private:
   bool m_commit_position_valid = false;
   ObjectPosition m_commit_position;
   SplayedObjectPositions m_commit_positions;
-  uint64_t m_active_set;
+  uint64_t m_active_set = 0;
 
   boost::optional<uint64_t> m_active_tag_tid = boost::none;
   boost::optional<uint64_t> m_prune_tag_tid = boost::none;
