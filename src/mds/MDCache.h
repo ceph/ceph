@@ -788,6 +788,13 @@ public:
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
     return get_inode(vinodeno_t(ino, s));
   }
+  CInode* lookup_snap_inode(vinodeno_t vino) {
+    auto p = snap_inode_map.lower_bound(vino);
+    if (p != snap_inode_map.end() &&
+	p->second->ino() == vino.ino && p->second->first <= vino.snapid)
+      return p->second;
+    return NULL;
+  }
 
   CDir* get_dirfrag(dirfrag_t df) {
     CInode *in = get_inode(df.ino);

@@ -192,6 +192,7 @@ public:
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
   void handle_client_lookup_ino(MDRequestRef& mdr,
 				bool want_parent, bool want_dentry);
+  void _lookup_snap_ino(MDRequestRef& mdr);
   void _lookup_ino_2(MDRequestRef& mdr, int r);
   void handle_client_readdir(MDRequestRef& mdr);
   void handle_client_file_setlock(MDRequestRef& mdr);
