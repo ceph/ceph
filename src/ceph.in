@@ -312,6 +312,9 @@ def parse_cmdargs(args=None, target=''):
                         type=int,
                         help='set a timeout for connecting to the cluster')
 
+    parser.add_argument('--block', action='store_true',
+                        help='block until completion (deep-scrub only)')
+
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
 
@@ -888,6 +891,15 @@ def main():
         print('"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0]),
               file=sys.stderr)
         return 1
+
+    if parsed_args.block:
+        if (len(childargs) >= 2 and
+                childargs[0] == 'osd' and
+                childargs[1] == 'deep-scrub'):
+            print("We got it here!", file=sys.stderr)
+            print(parsed_args, file=sys.stderr)
+            print(childargs, file=sys.stderr)
+            return 1
 
     if parsed_args.help:
         # short default timeout for -h
