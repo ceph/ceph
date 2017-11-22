@@ -8378,7 +8378,8 @@ void PrimaryLogPG::_copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint
     uint64_t length = manifest->chunk_map[iter->first].length;
     hobject_t soid = manifest->chunk_map[iter->first].oid;
     object_locator_t oloc(soid);
-    CopyOpRef sub_cop(std::make_shared<CopyOp>(cop->cb, cop->obc, cop->src, oloc,
+    CopyCallback * cb = NULL;
+    CopyOpRef sub_cop(std::make_shared<CopyOp>(cb, ObjectContextRef(), cop->src, oloc,
 		       cop->results.user_version, cop->flags, cop->mirror_snapset,
 		       cop->src_obj_fadvise_flags, cop->dest_obj_fadvise_flags));
     sub_cop->cursor.data_offset = obj_offset;
