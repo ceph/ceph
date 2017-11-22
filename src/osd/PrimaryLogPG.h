@@ -589,7 +589,7 @@ public:
       on_committed.emplace_back(std::forward<F>(f));
     }
 
-    bool sent_reply;
+    bool sent_reply = false;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
     list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,

@@ -4584,7 +4584,7 @@ int PrimaryLogPG::finish_checksum(OSDOp& osd_op,
 struct C_ExtentCmpRead : public Context {
   PrimaryLogPG *primary_log_pg;
   OSDOp &osd_op;
-  ceph_le64 read_length;
+  ceph_le64 read_length{};
   bufferlist read_bl;
   Context *fill_extent_ctx;
 
