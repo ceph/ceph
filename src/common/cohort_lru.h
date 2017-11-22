@@ -305,7 +305,7 @@ namespace cohort {
       struct Latch {
 	Partition* p;
 	LK* lock;
-	insert_commit_data commit_data;
+	insert_commit_data commit_data{};
 
 	Latch() : p(nullptr), lock(nullptr) {}
       };
