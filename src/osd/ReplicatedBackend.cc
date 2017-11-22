@@ -246,12 +246,13 @@ void ReplicatedBackend::on_change()
   dout(10) << __func__ << dendl;
   for (map<ceph_tid_t, InProgressOp>::iterator i = in_progress_ops.begin();
        i != in_progress_ops.end();
-       in_progress_ops.erase(i++)) {
+       i++) {
     if (i->second.on_commit)
       delete i->second.on_commit;
     if (i->second.on_applied)
       delete i->second.on_applied;
   }
+  in_progress_ops.clear();
   clear_recovery_state();
 }
 
@@ -480,15 +481,16 @@ void ReplicatedBackend::submit_transaction(
   assert(added.size() <= 1);
   assert(removed.size() <= 1);
 
-  assert(!in_progress_ops.count(tid));
-  InProgressOp &op = in_progress_ops.insert(
+  auto insert_res = in_progress_ops.insert(
     make_pair(
       tid,
       InProgressOp(
 	tid, on_all_commit, on_all_acked,
 	orig_op, at_version)
       )
-    ).first->second;
+    );
+  assert(insert_res.second);
+  InProgressOp &op = insert_res.first->second;
 
   op.waiting_for_applied.insert(
     parent->get_actingbackfill_shards().begin(),
@@ -595,9 +597,8 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   ceph_tid_t rep_tid = r->get_tid();
   pg_shard_t from = r->from;
 
-  if (in_progress_ops.count(rep_tid)) {
-    map<ceph_tid_t, InProgressOp>::iterator iter =
-      in_progress_ops.find(rep_tid);
+  auto iter = in_progress_ops.find(rep_tid);
+  if (iter != in_progress_ops.end()) {
     InProgressOp &ip_op = iter->second;
     const MOSDOp *m = NULL;
     if (ip_op.op)
