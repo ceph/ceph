@@ -1607,11 +1607,12 @@ public:
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
+        bool appendable;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGWObjCategory::Main), flags(0),
                  if_match(NULL), if_nomatch(NULL), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false) {}
+                 modify_tail(false),  completeMultipart(false), appendable(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -1771,7 +1772,7 @@ public:
                    const string& etag, const string& content_type,
                    const string& storage_class,
                    bufferlist *acl_bl, RGWObjCategory category,
-		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr);
+		   list<rgw_obj_index_key> *remove_objs, const string *user_data = nullptr, bool appendable = false);
       int complete_del(int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        list<rgw_obj_index_key> *remove_objs);

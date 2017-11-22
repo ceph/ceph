@@ -157,6 +157,8 @@ The ``ListBucketResult`` contains objects, where each object is within a ``Conte
 +------------------------+-----------+------------------------------------------+
 | ``StorageClass``       | String    | Should always return ``STANDARD``.       |
 +------------------------+-----------+------------------------------------------+
+| ``Type``               | String    | ``Appendable`` or ``Normal``.            |
++------------------------+-----------+------------------------------------------+
 
 Get Bucket Location
 -------------------
