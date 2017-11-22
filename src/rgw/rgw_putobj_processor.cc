@@ -500,4 +500,168 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   return 0;
 }
 
+int AppendObjectProcessor::process_first_chunk(bufferlist &&data, rgw::putobj::DataProcessor **processor)
+{
+  int r = writer.write_exclusive(data);
+  if (r < 0) {
+    return r;
+  }
+  *processor = &stripe;
+  return 0;
+}
+
+int AppendObjectProcessor::prepare()
+{
+  RGWObjState *astate;
+  int r = store->get_obj_state(&obj_ctx, bucket_info, head_obj, &astate);
+  if (r < 0) {
+    return r;
+  }
+  cur_size = astate->size;
+  *cur_accounted_size = astate->accounted_size;
+  if (!astate->exists) {
+    if (position != 0) {
+      ldout(store->ctx(), 5) << "ERROR: Append position should be zero" << dendl;
+      return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
+    } else {
+      cur_part_num = 1;
+      //set the prefix
+      char buf[33];
+      gen_rand_alphanumeric(store->ctx(), buf, sizeof(buf) - 1);
+      string oid_prefix = head_obj.key.name;
+      oid_prefix.append(".");
+      oid_prefix.append(buf);
+      oid_prefix.append("_");
+      manifest.set_prefix(oid_prefix);
+    }
+  } else {
+    // check whether the object appendable
+    map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_APPEND_PART_NUM);
+    if (iter == astate->attrset.end()) {
+      ldout(store->ctx(), 5) << "ERROR: The object is not appendable" << dendl;
+      return -ERR_OBJECT_NOT_APPENDABLE;
+    }
+    if (position != *cur_accounted_size) {
+      ldout(store->ctx(), 5) << "ERROR: Append position should be equal to the obj size" << dendl;
+      return -ERR_POSITION_NOT_EQUAL_TO_LENGTH;
+    }
+    try {
+      decode(cur_part_num, iter->second);
+    } catch (buffer::error& err) {
+      ldout(store->ctx(), 5) << "ERROR: failed to decode part num" << dendl;
+      return -EIO;
+    }
+    cur_part_num++;
+    //get the current obj etag
+    iter = astate->attrset.find(RGW_ATTR_ETAG);
+    if (iter != astate->attrset.end()) {
+      string s = rgw_string_unquote(iter->second.c_str());
+      size_t pos = s.find("-");
+      cur_etag = s.substr(0, pos);
+    }
+    cur_manifest = &astate->manifest;
+    manifest.set_prefix(cur_manifest->get_prefix());
+  }
+  manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
+  if (r < 0) {
+    return r;
+  }
+  rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
+
+  uint64_t chunk_size = 0;
+  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
+  if (r < 0) {
+    return r;
+  }
+  r = writer.set_stripe_obj(std::move(stripe_obj));
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t stripe_size = manifest_gen.cur_stripe_max_size();
+
+  uint64_t max_head_size = std::min(chunk_size, stripe_size);
+  set_head_chunk_size(max_head_size);
+
+  // initialize the processors
+  chunk = ChunkProcessor(&writer, chunk_size);
+  stripe = StripeProcessor(&chunk, this, stripe_size);
+
+  return 0;
+}
+
+int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, ceph::real_time *mtime,
+                                    ceph::real_time set_mtime, map <string, bufferlist> &attrs,
+                                    ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
+                                    const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled)
+{
+  int r = writer.drain();
+  if (r < 0)
+    return r;
+  const uint64_t actual_size = get_actual_size();
+  r = manifest_gen.create_next(actual_size);
+  if (r < 0) {
+    return r;
+  }
+  obj_ctx.obj.set_atomic(head_obj);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+  //For Append obj, disable versioning
+  op_target.set_versioning_disabled(true);
+  RGWRados::Object::Write obj_op(&op_target);
+  if (cur_manifest) {
+    cur_manifest->append(manifest, store);
+    obj_op.meta.manifest = cur_manifest;
+  } else {
+    obj_op.meta.manifest = &manifest;
+  }
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+  obj_op.meta.appendable = true;
+  //Add the append part number
+  bufferlist cur_part_num_bl;
+  encode(cur_part_num, cur_part_num_bl);
+  attrs[RGW_ATTR_APPEND_PART_NUM] = cur_part_num_bl;
+  //calculate the etag
+  if (!cur_etag.empty()) {
+    MD5 hash;
+    char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+    hex_to_buf(cur_etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    hash.Update((const unsigned char *)petag, sizeof(petag));
+    hex_to_buf(etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    hash.Update((const unsigned char *)petag, sizeof(petag));
+    hash.Final((unsigned char *)final_etag);
+    buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
+    snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
+             "-%lld", (long long)cur_part_num);
+    bufferlist etag_bl;
+    etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
+    attrs[RGW_ATTR_ETAG] = etag_bl;
+  }
+  r = obj_op.write_meta(actual_size + cur_size, accounted_size + *cur_accounted_size, attrs);
+  if (r < 0) {
+    return r;
+  }
+  if (!obj_op.meta.canceled) {
+    // on success, clear the set of objects for deletion
+    writer.clear_written();
+  }
+  if (pcanceled) {
+    *pcanceled = obj_op.meta.canceled;
+  }
+  *cur_accounted_size += accounted_size;
+
+  return 0;
+}
+
 } // namespace rgw::putobj

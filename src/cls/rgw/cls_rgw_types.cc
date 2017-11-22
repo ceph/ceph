@@ -64,6 +64,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
   encode_json("content_type", content_type, f);
   encode_json("accounted_size", accounted_size, f);
   encode_json("user_data", user_data, f);
+  encode_json("appendable", appendable, f);
 }
 
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
@@ -81,6 +82,7 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("content_type", content_type, obj);
   JSONDecoder::decode_json("accounted_size", accounted_size, obj);
   JSONDecoder::decode_json("user_data", user_data, obj);
+  JSONDecoder::decode_json("appendable", appendable, obj);
 }
 
 void rgw_bucket_dir_entry::generate_test_instances(list<rgw_bucket_dir_entry*>& o)
