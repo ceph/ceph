@@ -35,7 +35,7 @@ if ! ${PYTHON} -m pytest --version > /dev/null 2>&1; then
     exit 1
 fi
 
-sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH ${PYTHON} -m pytest -s -v $(dirname $0)/ceph-disk-test.py
+sudo env PATH=$(dirname $0):$(dirname $0)/..:$PATH PYTHONWARNINGS=ignore ${PYTHON} -m pytest -s -v $(dirname $0)/ceph-disk-test.py
 result=$?
 
 sudo rm -f /lib/udev/rules.d/60-ceph-by-partuuid.rules
