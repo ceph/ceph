@@ -30,11 +30,18 @@ OpenRequest<I>::OpenRequest(I *image_ctx, uint64_t flags,
   : m_image_ctx(image_ctx),
     m_skip_open_parent_image(flags & OPEN_FLAG_SKIP_OPEN_PARENT),
     m_on_finish(on_finish), m_error_result(0) {
+  if ((flags & OPEN_FLAG_OLD_FORMAT) != 0) {
+    m_image_ctx->old_format = true;
+  }
 }
 
 template <typename I>
 void OpenRequest<I>::send() {
-  send_v2_detect_header();
+  if (m_image_ctx->old_format) {
+    send_v1_detect_header();
+  } else {
+    send_v2_detect_header();
+  }
 }
 
 template <typename I>

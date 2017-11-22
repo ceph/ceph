@@ -113,7 +113,7 @@ public:
       copyup_list_lock(util::unique_lock_name("librbd::ImageCtx::copyup_list_lock", this)),
       completed_reqs_lock(util::unique_lock_name("librbd::ImageCtx::completed_reqs_lock", this)),
       extra_read_flags(0),
-      old_format(true),
+      old_format(false),
       order(0), size(0), features(0),
       format_string(NULL),
       id(image_id), parent(NULL),
