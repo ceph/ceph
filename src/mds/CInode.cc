@@ -2751,10 +2751,24 @@ client_t CInode::calc_ideal_loner()
   return loner;
 }
 
-client_t CInode::choose_ideal_loner()
+bool CInode::choose_ideal_loner()
 {
   want_loner_cap = calc_ideal_loner();
-  return want_loner_cap;
+  int changed = false;
+  if (loner_cap >= 0 && loner_cap != want_loner_cap) {
+    if (!try_drop_loner())
+      return false;
+    changed = true;
+  }
+
+  if (want_loner_cap >= 0) {
+    if (loner_cap < 0) {
+      set_loner_cap(want_loner_cap);
+      changed = true;
+    } else
+      assert(loner_cap == want_loner_cap);
+  }
+  return changed;
 }
 
 bool CInode::try_set_loner()
@@ -2822,9 +2836,8 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
 void CInode::choose_lock_states(int dirty_caps)
 {
   int issued = get_caps_issued() | dirty_caps;
-  if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
-      choose_ideal_loner() >= 0)
-    try_set_loner();
+  if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)))
+    choose_ideal_loner();
   choose_lock_state(&filelock, issued);
   choose_lock_state(&nestlock, issued);
   choose_lock_state(&dirfragtreelock, issued);
@@ -3314,12 +3327,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, realm);
-      if (is_auth()) {
-	if (choose_ideal_loner() >= 0)
-	  try_set_loner();
-	else if (get_wanted_loner() < 0)
-	  try_drop_loner();
-      }
+      if (is_auth())
+	choose_ideal_loner();
     }
 
     int issue = 0;
