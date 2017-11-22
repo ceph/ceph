@@ -94,6 +94,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_CORS_FOUND, {404, "NoSuchCORSConfiguration"}},
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
     { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
+    { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
