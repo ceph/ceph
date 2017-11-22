@@ -823,18 +823,19 @@ int MDSDaemon::_handle_command(
     cpu_profiler_handle_command(argvec, ds);
   } else {
     // Give MDSRank a shot at the command
-    if (mds_rank) {
+    if (!mds_rank) {
+      ss << "MDS not active";
+      r = -EINVAL;
+    }
+    else {
       bool handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
 					      need_reply);
-      if (handled) {
-        goto out;
+      if (!handled) {
+        // MDSDaemon doesn't know this command
+        ss << "unrecognized command! " << prefix;
+        r = -EINVAL;
       }
     }
-
-    // Neither MDSDaemon nor MDSRank know this command
-    std::ostringstream ss;
-    ss << "unrecognized command! " << prefix;
-    r = -EINVAL;
   }
 
 out:
