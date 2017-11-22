@@ -11447,7 +11447,9 @@ bool PrimaryLogPG::primary_error(
        ++i) {
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
-    if (!peer_missing[peer].is_missing(soid, v)) {
+    pg_missing_item mi;
+    bool missing = peer_missing[peer].is_missing(soid, &mi);
+    if (!missing || mi.have == v) {
       missing_loc.add_location(soid, peer);
       dout(10) << info.pgid << " unexpectedly missing " << soid << " v" << v
 	       << ", there should be a copy on shard " << peer << dendl;
