@@ -317,10 +317,10 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
   if (out)
     *out << num_pg << " pgs: "
          << states << "; "
-         << prettybyte_t(pg_sum.stats.sum.num_bytes) << " data, "
-         << kb_t(osd_sum.kb_used) << " used, "
-         << kb_t(osd_sum.kb_avail) << " / "
-         << kb_t(osd_sum.kb) << " avail";
+         << si_t(pg_sum.stats.sum.num_bytes) << " data, "
+         << si_t(osd_sum.kb_used << 10) << " used, "
+         << si_t(osd_sum.kb_avail << 10) << " / "
+         << si_t(osd_sum.kb << 10) << " avail";
   if (f) {
     f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_bytes", pg_sum.stats.sum.num_bytes);

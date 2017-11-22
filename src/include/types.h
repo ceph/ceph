@@ -405,26 +405,6 @@ inline ostream& operator<<(ostream& out, const pretty_si_t& b)
   return out << b.v << " ";
 }
 
-struct kb_t {
-  uint64_t v;
-  // cppcheck-suppress noExplicitConstructor
-  kb_t(uint64_t _v) : v(_v) {}
-};
-
-inline ostream& operator<<(ostream& out, const kb_t& kb)
-{
-  uint64_t bump_after = 100;
-  if (kb.v > bump_after << 40)
-    return out << (kb.v >> 40) << " PB";    
-  if (kb.v > bump_after << 30)
-    return out << (kb.v >> 30) << " TB";    
-  if (kb.v > bump_after << 20)
-    return out << (kb.v >> 20) << " GB";    
-  if (kb.v > bump_after << 10)
-    return out << (kb.v >> 10) << " MB";
-  return out << kb.v << " kB";
-}
-
 inline ostream& operator<<(ostream& out, const ceph_mon_subscribe_item& i)
 {
   return out << i.start
