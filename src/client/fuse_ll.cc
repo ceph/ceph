@@ -93,7 +93,7 @@ public:
   ceph::unordered_map<uint64_t,int> snap_stag_map;
   ceph::unordered_map<int,uint64_t> stag_snap_map;
 
-  pthread_key_t fuse_req_key;
+  pthread_key_t fuse_req_key = 0;
   void set_fuse_req(fuse_req_t);
   fuse_req_t get_fuse_req();
 
