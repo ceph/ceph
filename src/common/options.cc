@@ -3069,7 +3069,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_objectstore", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("filestore")
+    .set_default("bluestore")
     .set_description(""),
 
     Option("osd_objectstore_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
