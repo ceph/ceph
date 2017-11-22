@@ -354,9 +354,11 @@ struct TrashImageSpec {
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
-                   utime_t deletion_time, utime_t deferment_end_time) :
-    source(source), name(name), deletion_time(deletion_time),
-    deferment_end_time(deferment_end_time) {}
+                 const utime_t& deletion_time,
+                 const utime_t& deferment_end_time)
+    : source(source), name(name), deletion_time(deletion_time),
+      deferment_end_time(deferment_end_time) {
+  }
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& it);

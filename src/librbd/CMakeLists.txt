@@ -107,6 +107,7 @@ set(librbd_internal_srcs
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc
+  trash/MoveRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
