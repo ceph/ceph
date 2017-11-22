@@ -33,7 +33,8 @@ CLS_NAME(otp)
 
 #define ATTEMPTS_PER_WINDOW 5
 
-static string otp_key_prefix = "otp.";
+static string otp_header_key = "header";
+static string otp_key_prefix = "otp/";
 
 struct otp_header {
   set<string> ids;
@@ -123,7 +124,7 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
   int step_size = (otp.step_size ? otp.step_size : 1);
   int step_window = otp.window * step_size;
 
-  if (step_window > (uint32_t)secs / 2) {
+  if ((uint32_t)step_window > secs / 2) {
     step_window = secs / 2;
   }
 
@@ -218,13 +219,13 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
 {
   bufferlist bl;
   ::encode(h, bl);
-  int r = cls_cxx_map_read_header(hctx, &bl);
+  int r = cls_cxx_map_get_val(hctx, otp_header_key.c_str(), &bl);
   if (r == -ENOENT || r == -ENODATA) {
     *h = otp_header();
     return 0;
   }
   if (r < 0) {
-    CLS_ERR("ERROR: %s(): failed to read map header (r=%d)", __func__, r);
+    CLS_ERR("ERROR: %s(): failed to read header (r=%d)", __func__, r);
     return r;
   }
 
@@ -249,9 +250,9 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
   bufferlist bl;
   ::encode(h, bl);
 
-  int r = cls_cxx_map_write_header(hctx, &bl);
+  int r = cls_cxx_map_set_val(hctx, otp_header_key.c_str(), &bl);
   if (r < 0) {
-    CLS_ERR("failed to store map header (r=%d)", r);
+    CLS_ERR("failed to store header (r=%d)", r);
     return r;
   }
 
@@ -272,16 +273,12 @@ static int otp_set_op(cls_method_context_t hctx,
   }
 
   otp_header h;
-  bool update_header = false;
   int r = read_header(hctx, &h);
   if (r < 0) {
     return r;
   }
 
   for (auto entry : op.entries) {
-    bool existed = (h.ids.find(entry.id) != h.ids.end());
-    update_header = (update_header || !existed);
-
     otp_instance instance;
     instance.otp = entry;
 
@@ -293,11 +290,9 @@ static int otp_set_op(cls_method_context_t hctx,
     h.ids.insert(entry.id);
   }
 
-  if (update_header) {
-    r = write_header(hctx, h);
-    if (r < 0) {
-      return r;
-    }
+  r = write_header(hctx, h);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
