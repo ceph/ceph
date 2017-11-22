@@ -1,4 +1,7 @@
-#!/bin/sh -ex
+#!/usr/bin/env bash
+set -ex
+
+. $(dirname $0)/../../standalone/ceph-helpers.sh
 
 export RBD_FORCE_ALLOW_V1=1
 
@@ -655,10 +658,105 @@ test_namespace() {
     rbd namespace remove rbd test2
 }
 
+get_migration_state() {
+    local image=$1
+
+    rbd --format xml status $image |
+        $XMLSTARLET sel -t -v '//status/migration/state'
+}
+
+test_migration() {
+    echo "testing migration..."
+    remove_images
+    rados mkpool rbd2
+    rbd pool init rbd2
+
+    # Convert to new format
+    rbd create --image-format 1 -s 128M test1
+    rbd info test1 | grep 'format: 1'
+    rbd migration prepare test1 --image-format 2
+    test "$(get_migration_state test1)" = prepared
+    rbd info test1 | grep 'format: 2'
+    rbd rm test1 && exit 1 || true
+    rbd migration execute test1
+    test "$(get_migration_state test1)" = executed
+    rbd migration commit test1
+    get_migration_state test1 && exit 1 || true
+
+    # Enable layering (and some other features)
+    rbd info test1 | grep 'features: .*layering' && exit 1 || true
+    rbd migration prepare test1 --image-feature \
+        layering,exclusive-lock,object-map,fast-diff,deep-flatten
+    rbd info test1 | grep 'features: .*layering'
+    rbd migration execute test1
+    rbd migration commit test1
+
+    # Migration to other pool
+    rbd migration prepare test1 rbd2/test1
+    test "$(get_migration_state rbd2/test1)" = prepared
+    rbd ls | wc -l | grep '^0$'
+    rbd -p rbd2 ls | grep test1
+    rbd migration execute test1
+    test "$(get_migration_state rbd2/test1)" = executed
+    rbd rm rbd2/test1 && exit 1 || true
+    rbd migration commit test1
+
+    # Enable data pool
+    rbd create -s 128M test1
+    rbd migration prepare test1 --data-pool rbd2
+    rbd info test1 | grep 'data_pool: rbd2'
+    rbd migration execute test1
+    rbd migration commit test1
+
+    for format in 1 2; do
+        # Abort migration after successful prepare
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 --data-pool rbd2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd migration abort test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+
+        # Abort migration after successful execute
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 --data-pool rbd2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd migration execute test2
+        rbd migration abort test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+
+        # Migration is automatically aborted if prepare failed
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 --data-pool INVALID_DATA_POOL && exit 1 || true
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+
+        # Abort migration to other pool
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 rbd2/test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 rbd2/test2
+        rbd migration abort test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+
+        # The same but abort using destination image
+        rbd create -s 128M --image-format ${format} test2
+        rbd migration prepare test2 rbd2/test2
+        rbd migration abort rbd2/test2
+        rbd bench --io-type write --io-size 1024 --io-total 1024 test2
+        rbd rm test2
+    done
+
+    remove_images
+    rados rmpool rbd2 rbd2 --yes-i-really-really-mean-it
+}
+
 test_pool_image_args
 test_rename
 test_ls
 test_remove
+test_migration
 RBD_CREATE_ARGS=""
 test_others
 test_locking
