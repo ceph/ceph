@@ -11,7 +11,7 @@
 #include "include/types.h"
 
 struct aio_t {
-  struct iocb iocb;  // must be first element; see shenanigans in aio_queue_t
+  struct iocb iocb{};  // must be first element; see shenanigans in aio_queue_t
   void *priv;
   int fd;
   boost::container::small_vector<iovec,4> iov;
