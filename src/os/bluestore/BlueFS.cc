@@ -105,6 +105,24 @@ void BlueFS::_shutdown_logger()
   delete logger;
 }
 
+const char **BlueFS::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "bluefs_wal_direct_io",
+    NULL
+  };
+  return KEYS;
+}
+
+void BlueFS::handle_conf_change(const struct md_config_t *conf,
+				   const std::set<std::string> &changed)
+{
+  if (changed.count("bluefs_wal_direct_io")) {
+    wal_use_directio = cct->_conf->get_val<bool>("bluefs_wal_direct_io");
+    dout(10) << __func__ << " bluefs_wal_direct_io: "  << wal_use_directio << dendl;
+  }
+}
+
 void BlueFS::_update_logger_stats()
 {
   // we must be holding the lock
@@ -401,6 +419,8 @@ int BlueFS::mount()
   block_all.clear();
   block_all.resize(MAX_BDEV);
   _init_alloc();
+
+  wal_use_directio = cct->_conf->get_val<bool>("bluefs_wal_direct_io");
 
   r = _replay(false, false);
   if (r < 0) {
@@ -1590,7 +1610,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   h->buffer_appender.flush();
 
   bool buffered;
-  if (h->file->fnode.ino == 1)
+  if (h->file->fnode.ino == 1 || (h->writer_type == WRITER_WAL && wal_use_directio))
     buffered = false;
   else
     buffered = cct->_conf->bluefs_buffered_io;

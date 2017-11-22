@@ -38,9 +38,15 @@ enum {
   l_bluefs_last,
 };
 
-class BlueFS {
+class BlueFS : public md_config_obs_t {
 public:
   CephContext* cct;
+
+  // config observer
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const struct md_config_t *conf,
+                                  const std::set<std::string> &changed) override;
+
   static constexpr unsigned MAX_BDEV = 3;
   static constexpr unsigned BDEV_WAL = 0;
   static constexpr unsigned BDEV_DB = 1;
@@ -241,6 +247,8 @@ private:
   FileRef new_log = nullptr;
   FileWriter *new_log_writer = nullptr;
 
+  // WAL read&write whether use directIO
+  bool wal_use_directio = false;
   /*
    * There are up to 3 block devices:
    *
