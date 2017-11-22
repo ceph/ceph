@@ -235,7 +235,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
          lock->get_type() == CEPH_LOCK_IPOLICY) &&
 	mds->is_cluster_degraded() &&
 	mdr->is_master() &&
-	!mdr->is_replay()) {
+	!mdr->is_queued_for_replay()) {
       // waiting for recovering mds, to guarantee replayed requests and mksnap/setlayout
       // get processed in proper order.
       bool wait = false;
@@ -587,7 +587,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       assert(mdr->is_master());
       if ((*p)->needs_recover()) {
 	if (mds->is_cluster_degraded()) {
-	  if (!mdr->is_replay()) {
+	  if (!mdr->is_queued_for_replay()) {
 	    // see comments in SimpleLock::set_state_rejoin() and
 	    // ScatterLock::encode_state_for_rejoin()
 	    drop_locks(mdr.get());
