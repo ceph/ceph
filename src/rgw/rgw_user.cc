@@ -65,7 +65,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       marker = i->first;
 
       RGWBucketEnt& bucket_ent = i->second;
-      ret = rgw_bucket_sync_user_stats(store, user_id, bucket_ent.bucket);
+      ret = rgw_bucket_sync_user_stats(store, user_id.tenant, bucket_ent.bucket.name);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;

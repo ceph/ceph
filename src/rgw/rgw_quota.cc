@@ -575,7 +575,7 @@ int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user, rgw_bucket
 
 int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
-  int r = rgw_bucket_sync_user_stats(store, user, bucket);
+  int r = rgw_bucket_sync_user_stats(store, user.tenant, bucket.name);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: rgw_bucket_sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
