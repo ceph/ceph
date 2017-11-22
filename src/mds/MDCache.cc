@@ -881,8 +881,8 @@ void MDCache::adjust_subtree_auth(CDir *dir, mds_authority_t auth)
 void MDCache::try_subtree_merge(CDir *dir)
 {
   dout(7) << "try_subtree_merge " << *dir << dendl;
-  assert(subtrees.count(dir));
-  set<CDir*> oldbounds = subtrees[dir];
+  // record my old bounds
+  auto oldbounds = subtrees.at(dir);
 
   set<CInode*> to_eval;
   // try merge at my root
@@ -911,31 +911,32 @@ public:
 void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval)
 {
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
-  assert(subtrees.count(dir));
+
+  if (dir->dir_auth.second != CDIR_AUTH_UNKNOWN ||
+      dir->state_test(CDir::STATE_EXPORTBOUND) ||
+      dir->state_test(CDir::STATE_AUXSUBTREE))
+    return;
+
+  auto it = subtrees.find(dir);
+  assert(it != subtrees.end());
 
   // merge with parent?
   CDir *parent = dir;  
   if (!dir->inode->is_base())
     parent = get_subtree_root(dir->get_parent_dir());
   
-  if (parent != dir &&                              // we have a parent,
-      parent->dir_auth == dir->dir_auth &&          // auth matches,
-      dir->dir_auth.second == CDIR_AUTH_UNKNOWN &&  // auth is unambiguous,
-      !dir->state_test(CDir::STATE_EXPORTBOUND) && // not an exportbound,
-      !dir->state_test(CDir::STATE_AUXSUBTREE)) {  // not aux subtree
+  if (parent != dir &&				// we have a parent,
+      parent->dir_auth == dir->dir_auth) {	// auth matches,
     // merge with parent.
     dout(10) << "  subtree merge at " << *dir << dendl;
     dir->set_dir_auth(CDIR_AUTH_DEFAULT);
     
     // move our bounds under the parent
-    for (set<CDir*>::iterator p = subtrees[dir].begin();
-	 p != subtrees[dir].end();
-	 ++p) 
-      subtrees[parent].insert(*p);
+    subtrees[parent].insert(it->second.begin(), it->second.end());
     
     // we are no longer a subtree or bound
     dir->put(CDir::PIN_SUBTREE);
-    subtrees.erase(dir);
+    subtrees.erase(it);
     subtrees[parent].erase(dir);
 
     // adjust popularity?
