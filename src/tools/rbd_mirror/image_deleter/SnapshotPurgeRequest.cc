@@ -67,6 +67,9 @@ void SnapshotPurgeRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << "failed to open image '" << m_image_id << "': " << cpp_strerror(r)
          << dendl;
+    m_image_ctx->destroy();
+    m_image_ctx = nullptr;
+
     finish(r);
     return;
   }
