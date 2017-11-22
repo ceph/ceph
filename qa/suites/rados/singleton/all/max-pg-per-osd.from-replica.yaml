@@ -3,7 +3,7 @@ roles:
   - mgr.x
   - osd.0
   - osd.1
-  - osd.2
+- - osd.2
   - osd.3
 openstack:
   - volumes: # attached to each instance
