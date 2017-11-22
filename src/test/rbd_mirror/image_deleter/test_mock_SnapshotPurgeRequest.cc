@@ -218,6 +218,7 @@ TEST_F(TestMockImageDeleterSnapshotPurgeRequest, OpenError) {
   InSequence seq;
   expect_set_journal_policy(mock_image_ctx);
   expect_open(mock_image_ctx, -EPERM);
+  expect_destroy(mock_image_ctx);
 
   C_SaferCond ctx;
   auto req = MockSnapshotPurgeRequest::create(m_local_io_ctx, mock_image_ctx.id,
