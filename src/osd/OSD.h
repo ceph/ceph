@@ -1944,6 +1944,8 @@ public:
     return pg_map.size();
   }
 
+  std::set<int> get_mapped_pools();
+
 protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
