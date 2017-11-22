@@ -37,6 +37,15 @@ namespace rados {
         rados_op->exec("otp", "otp_set", in);
       }
 
+      void OTP::set(librados::ObjectWriteOperation *rados_op,
+                       const list<otp_info_t>& entries) {
+        cls_otp_set_otp_op op;
+        op.entries = entries;
+        bufferlist in;
+        ::encode(op, in);
+        rados_op->exec("otp", "otp_set", in);
+      }
+
       void OTP::remove(librados::ObjectWriteOperation *rados_op,
                        const string& id) {
         cls_otp_remove_otp_op op;
