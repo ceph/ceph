@@ -820,10 +820,6 @@ void Migrator::export_dir(CDir *dir, mds_rank_t dest)
     dout(7) << "already exporting" << dendl;
     return;
   }
-  if (dest == mds->get_nodeid() || !mds->mdsmap->is_up(dest)) {
-    dout(7) << "cannot export: dest " << dest << " is me or is not active" << dendl;
-    return;
-  }
 
   if (g_conf->mds_thrash_exports) {
     // create random subtree bound (which will not be exported)
