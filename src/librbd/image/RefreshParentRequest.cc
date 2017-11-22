@@ -121,11 +121,15 @@ void RefreshParentRequest<I>::send_open_parent() {
     m_parent_image_ctx->set_read_flag(librados::OPERATION_LOCALIZE_READS);
   }
 
+  uint64_t flags = 0;
+  if (m_parent_md.spec.image_id.empty()) {
+    flags |= OPEN_FLAG_OLD_FORMAT;
+  }
   using klass = RefreshParentRequest<I>;
   Context *ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
       klass, &klass::handle_open_parent, false>(this));
-  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, 0, ctx);
+  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, flags, ctx);
   req->send();
 }
 

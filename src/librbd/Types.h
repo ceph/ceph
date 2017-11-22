@@ -116,6 +116,7 @@ struct SnapInfo {
 
 enum {
   OPEN_FLAG_SKIP_OPEN_PARENT = 1 << 0,
+  OPEN_FLAG_OLD_FORMAT = 1 << 1,
 };
 
 } // namespace librbd
