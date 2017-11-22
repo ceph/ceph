@@ -396,6 +396,29 @@ Commands
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
 
+:command:`migration abort` *image-spec*
+  Cancel image migration. This step may be run after successful or
+  failed migration prepare or migration execute steps and returns the
+  image to its initial (before migration) state. All modifications to
+  the destination image are lost.
+
+:command:`migration commit` *image-spec*
+  Commit image migration. This step is run after a successful migration
+  prepare and migration execute steps and removes the source image data.
+
+:command:`migration execute` *image-spec*
+  Execute image migration. This step is run after a successful migration
+  prepare step and copies image data to the destination.
+
+:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] *src-image-spec* [*dest-image-spec*]
+  Prepare image migration. This is the first step when migrating an
+  image, i.e. changing the image location, format or other
+  parameters that can't be changed dynamically. The destination can
+  match the source, and in this case *dest-image-spec* can be omitted.
+  After this step the source image is set as a parent of the
+  destination image, and the image is accessible in copy-on-write mode
+  by its destination spec.
+
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
 
