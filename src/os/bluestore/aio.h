@@ -2,9 +2,6 @@
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
-
-#include "acconfig.h"
-#ifdef HAVE_LIBAIO
 # include <libaio.h>
 
 #include <boost/intrusive/list.hpp>
@@ -91,5 +88,3 @@ struct aio_queue_t {
 		   void *priv, int *retries);
   int get_next_completed(int timeout_ms, aio_t **paio, int max);
 };
-
-#endif

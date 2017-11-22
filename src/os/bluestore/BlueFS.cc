@@ -1242,12 +1242,14 @@ void BlueFS::_compact_log_sync()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
+#ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(log_writer, &completed_ios);
     wait_for_aio(log_writer);
     completed_ios.clear();
   }
+#endif
   flush_bdev();
 
   dout(10) << __func__ << " writing super" << dendl;
@@ -1778,6 +1780,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   return 0;
 }
 
+#ifdef HAVE_LIBAIO
 // we need to retire old completed aios so they don't stick around in
 // memory indefinitely (along with their bufferlist refs).
 void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
@@ -1803,6 +1806,7 @@ void BlueFS::wait_for_aio(FileWriter *h)
   }
   dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
+#endif
 
 int BlueFS::_flush(FileWriter *h, bool force)
 {
@@ -1892,6 +1896,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 
 void BlueFS::_flush_bdev_safely(FileWriter *h)
 {
+#ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(h, &completed_ios);
@@ -1900,7 +1905,9 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
     completed_ios.clear();
     flush_bdev();
     lock.lock();
-  } else {
+  } else
+#endif
+  {
     lock.unlock();
     flush_bdev();
     lock.lock();

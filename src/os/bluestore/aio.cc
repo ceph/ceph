@@ -3,8 +3,6 @@
 
 #include "aio.h"
 
-#if defined(HAVE_LIBAIO)
-
 std::ostream& operator<<(std::ostream& os, const aio_t& aio)
 {
   unsigned i = 0;
@@ -72,5 +70,3 @@ int aio_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
   }
   return r;
 }
-
-#endif
