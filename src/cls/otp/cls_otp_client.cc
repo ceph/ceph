@@ -96,8 +96,13 @@ namespace rados {
         return 0;
       }
 
-      int OTP::get(librados::IoCtx& ioctx, const string& oid,
-                    const list<string> *ids, bool get_all, list<otp_info_t> *result) {
+      int OTP::get(librados::ObjectReadOperation *rop,
+                   librados::IoCtx& ioctx, const string& oid,
+                   const list<string> *ids, bool get_all, list<otp_info_t> *result) {
+        librados::ObjectReadOperation _rop;
+        if (!rop) {
+          rop = &_rop;
+        }
         cls_otp_get_otp_op op;
         if (ids) {
           op.ids = *ids;
@@ -105,10 +110,15 @@ namespace rados {
         op.get_all = get_all;
         bufferlist in;
         bufferlist out;
+        int op_ret;
         ::encode(op, in);
-        int r = ioctx.exec(oid, "otp", "otp_get", in, out);
+        rop->exec("otp", "otp_get", in, &out, &op_ret);
+        int r = ioctx.operate(oid, rop, nullptr);
         if (r < 0) {
           return r;
+        }
+        if (op_ret < 0) {
+          return op_ret;
         }
 
         cls_otp_get_otp_reply ret;
@@ -124,12 +134,13 @@ namespace rados {
         return 0;
       }
 
-      int OTP::get(librados::IoCtx& ioctx, const string& oid,
+      int OTP::get(librados::ObjectReadOperation *op,
+                   librados::IoCtx& ioctx, const string& oid,
                     const string& id, otp_info_t *result) {
         list<string> ids{ id };
         list<otp_info_t> ret;
 
-        int r = get(ioctx, oid, &ids, false, &ret);
+        int r = get(op, ioctx, oid, &ids, false, &ret);
         if (r < 0) {
           return r;
         }
@@ -141,9 +152,9 @@ namespace rados {
         return 0;
       }
 
-      int OTP::get_all(librados::IoCtx& ioctx, const string& oid,
+      int OTP::get_all(librados::ObjectReadOperation *op, librados::IoCtx& ioctx, const string& oid,
                        list<otp_info_t> *result) {
-        return get(ioctx, oid, nullptr, true, result);
+        return get(op, ioctx, oid, nullptr, true, result);
       }
 
     } // namespace otp
