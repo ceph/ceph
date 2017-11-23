@@ -68,10 +68,10 @@ public:
 
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints);
   RGWRESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred);
-
   // custom move needed for atomic
   RGWRESTConn(RGWRESTConn&& other);
   RGWRESTConn& operator=(RGWRESTConn&& other);
+  virtual ~RGWRESTConn() = default;
 
   int get_url(string& endpoint);
   string get_url();
@@ -175,6 +175,7 @@ public:
 
   S3RESTConn(CephContext *_cct, RGWRados *store, const string& _remote_id, const list<string>& endpoints, RGWAccessKey _cred):
     RGWRESTConn(_cct, store, _remote_id, endpoints, _cred) {}
+  ~S3RESTConn() override = default;
 
   void populate_params(param_vec_t& params, const rgw_user *uid, const string& zonegroup) override {
     // do not populate any params in S3 REST Connection.
@@ -249,6 +250,7 @@ public:
 		      param_vec_t& _params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
+  ~RGWRESTReadResource() = default;
 
   rgw_io_id get_io_id(int io_type) {
     return req.get_io_id(io_type);
@@ -371,6 +373,8 @@ public:
 		      param_vec_t& params,
 		      param_vec_t *extra_headers,
 		      RGWHTTPManager *_mgr);
+
+  ~RGWRESTSendResource() = default;
 
   rgw_io_id get_io_id(int io_type) {
     return req.get_io_id(io_type);

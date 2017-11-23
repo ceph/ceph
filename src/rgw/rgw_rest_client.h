@@ -50,7 +50,7 @@ public:
 
   int receive_header(void *ptr, size_t len) override;
   int receive_data(void *ptr, size_t len, bool *pause) override;
-  int send_data(void *ptr, size_t len) override;
+  int send_data(void *ptr, size_t len, bool* pause=nullptr) override;
 
   bufferlist& get_response() { return response; }
 
