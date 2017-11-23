@@ -160,6 +160,9 @@ public:
   int complete_request(string& etag, real_time *mtime, uint64_t *psize, map<string, string>& attrs);
 
   void add_params(param_vec_t *params);
+
+private:
+  int do_send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource, bufferlist *send_data = nullptr /* optional input data */);
 };
 
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {

@@ -591,10 +591,20 @@ int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey& key, map<string, string>&
   string resource;
   send_prepare_convert(obj, &resource);
 
-  return send_prepare(&key, extra_headers, resource);
+  return do_send_prepare(&key, extra_headers, resource);
 }
 
 int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
+                                           bufferlist *send_data)
+{
+  string new_resource;
+  //do not encode slash
+  url_encode(resource, new_resource, false);
+
+  return do_send_prepare(key, extra_headers, new_resource, send_data);
+}
+
+int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, string>& extra_headers, const string& resource,
                                          bufferlist *send_data)
 {
   string new_url = url;
