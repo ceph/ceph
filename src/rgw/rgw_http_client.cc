@@ -564,7 +564,7 @@ int RGWHTTPHeadersCollector::receive_header(void * const ptr, const size_t len)
   return 0;
 }
 
-int RGWHTTPTransceiver::send_data(void* ptr, size_t len)
+int RGWHTTPTransceiver::send_data(void* ptr, size_t len, bool* pause)
 {
   int length_to_copy = 0;
   if (post_data_index < post_data.length()) {

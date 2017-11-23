@@ -57,6 +57,7 @@ class RGWIOProvider
 
 public:
   RGWIOProvider() {}
+  virtual ~RGWIOProvider() = default; 
 
   void assign_io(RGWIOIDProvider& io_id_provider, int io_type = -1);
   rgw_io_id get_io_id(int io_type) {
@@ -107,10 +108,8 @@ protected:
   virtual int receive_data(void *ptr, size_t len, bool *pause) {
     return 0;
   }
-  virtual int send_data(void *ptr, size_t len, bool *pause) {
-    return send_data(ptr, len);
-  }
-  virtual int send_data(void *ptr, size_t len) {
+
+  virtual int send_data(void *ptr, size_t len, bool *pause=nullptr) {
     return 0;
   }
 
@@ -269,7 +268,7 @@ public:
   }
 
 protected:
-  int send_data(void* ptr, size_t len) override;
+  int send_data(void* ptr, size_t len, bool *pause=nullptr) override;
 
   int receive_data(void *ptr, size_t len, bool *pause) override {
     read_bl->append((char *)ptr, len);

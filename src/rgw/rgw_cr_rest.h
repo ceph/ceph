@@ -339,6 +339,7 @@ public:
   virtual int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data, rgw_rest_obj *info) = 0;
   virtual bool has_attrs() = 0;
   virtual void get_attrs(std::map<string, string> *attrs) = 0;
+  virtual ~RGWStreamReadResourceCRF() = default;
 };
 
 class RGWStreamWriteResourceCRF {
@@ -352,6 +353,8 @@ public:
   virtual int send() = 0;
   virtual int write(bufferlist& data, bool *need_retry) = 0; /* reentrant */
   virtual int drain_writes(bool *need_retry) = 0; /* reentrant */
+  
+  virtual ~RGWStreamWriteResourceCRF() = default;
 };
 
 class RGWStreamReadHTTPResourceCRF : public RGWStreamReadResourceCRF {
@@ -391,7 +394,7 @@ public:
                                                                 env(_env),
                                                                 caller(_caller),
                                                                 http_manager(_http_manager) {}
-  virtual ~RGWStreamReadHTTPResourceCRF();
+  ~RGWStreamReadHTTPResourceCRF() override;
 
   int init() override;
   int read(bufferlist *data, uint64_t max, bool *need_retry) override; /* reentrant */
@@ -451,7 +454,7 @@ public:
                                                                caller(_caller),
                                                                http_manager(_http_manager),
                                                                write_drain_notify_cb(this) {}
-  virtual ~RGWStreamWriteHTTPResourceCRF() {}
+  virtual ~RGWStreamWriteHTTPResourceCRF() = default;
 
   int init() override {
     return 0;
