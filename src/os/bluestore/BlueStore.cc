@@ -6552,6 +6552,78 @@ struct region_t {
 typedef list<region_t> regions2read_t;
 typedef map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
 
+static std::pair<BlueStore::ready_regions_t, blobs2read_t>
+_consult_cache(
+  CephContext* const cct,
+  BlueStore::OnodeRef o,
+  const uint64_t offset,
+  const size_t length)
+{
+  std::string path;
+  BlueStore::ready_regions_t ready_regions;
+
+  // build blob-wise list to of stuff read (that isn't cached)
+  blobs2read_t blobs2read;
+  unsigned left = length;
+  uint64_t pos = offset;
+  auto lp = o->extent_map.seek_lextent(offset);
+  while (left > 0 && lp != o->extent_map.extent_map.end()) {
+    if (pos < lp->logical_offset) {
+      unsigned hole = lp->logical_offset - pos;
+      if (hole >= left) {
+	break;
+      }
+      dout(30) << __func__ << "  hole 0x" << std::hex << pos << "~" << hole
+	       << std::dec << dendl;
+      pos += hole;
+      left -= hole;
+    }
+    BlueStore::BlobRef bptr = lp->blob;
+    unsigned l_off = pos - lp->logical_offset;
+    unsigned b_off = l_off + lp->blob_offset;
+    unsigned b_len = std::min(left, lp->length - l_off);
+
+    BlueStore::ready_regions_t cache_res;
+    interval_set<uint32_t> cache_interval;
+    bptr->shared_blob->bc.read(
+      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval);
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+	     << " need 0x" << b_off << "~" << b_len
+	     << " cache has 0x" << cache_interval
+	     << std::dec << dendl;
+
+    auto pc = cache_res.begin();
+    while (b_len > 0) {
+      unsigned l;
+      if (pc != cache_res.end() &&
+	  pc->first == b_off) {
+	l = pc->second.length();
+	ready_regions[pos].claim(pc->second);
+	dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
+		 << b_off << "~" << l << std::dec << dendl;
+	++pc;
+      } else {
+	l = b_len;
+	if (pc != cache_res.end()) {
+	  assert(pc->first > b_off);
+	  l = pc->first - b_off;
+	}
+	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
+		 << b_off << "~" << l << std::dec << dendl;
+	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
+      }
+      pos += l;
+      b_off += l;
+      left -= l;
+      b_len -= l;
+    }
+    ++lp;
+  }
+
+  return std::make_pair(ready_regions, blobs2read);
+}
+
+
 int BlueStore::_do_read(
   Collection *c,
   OnodeRef o,
@@ -6589,72 +6661,17 @@ int BlueStore::_do_read(
     length = o->onode.size - offset;
   }
 
+  // build blob-wise list to of stuff read (that isn't cached)
+  ready_regions_t ready_regions;
+  blobs2read_t blobs2read;
+  std::tie(ready_regions, blobs2read) = \
+    _consult_cache(cct, o, offset, length);
+
   utime_t start = ceph_clock_now();
   o->extent_map.fault_range(db, offset, length);
   logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start);
   _dump_onode(o);
 
-  ready_regions_t ready_regions;
-
-  // build blob-wise list to of stuff read (that isn't cached)
-  blobs2read_t blobs2read;
-  unsigned left = length;
-  uint64_t pos = offset;
-  unsigned num_regions = 0;
-  auto lp = o->extent_map.seek_lextent(offset);
-  while (left > 0 && lp != o->extent_map.extent_map.end()) {
-    if (pos < lp->logical_offset) {
-      unsigned hole = lp->logical_offset - pos;
-      if (hole >= left) {
-	break;
-      }
-      dout(30) << __func__ << "  hole 0x" << std::hex << pos << "~" << hole
-	       << std::dec << dendl;
-      pos += hole;
-      left -= hole;
-    }
-    BlobRef bptr = lp->blob;
-    unsigned l_off = pos - lp->logical_offset;
-    unsigned b_off = l_off + lp->blob_offset;
-    unsigned b_len = std::min(left, lp->length - l_off);
-
-    ready_regions_t cache_res;
-    interval_set<uint32_t> cache_interval;
-    bptr->shared_blob->bc.read(
-      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval);
-    dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << b_off << "~" << b_len
-	     << " cache has 0x" << cache_interval
-	     << std::dec << dendl;
-
-    auto pc = cache_res.begin();
-    while (b_len > 0) {
-      unsigned l;
-      if (pc != cache_res.end() &&
-	  pc->first == b_off) {
-	l = pc->second.length();
-	ready_regions[pos].claim(pc->second);
-	dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
-		 << b_off << "~" << l << std::dec << dendl;
-	++pc;
-      } else {
-	l = b_len;
-	if (pc != cache_res.end()) {
-	  assert(pc->first > b_off);
-	  l = pc->first - b_off;
-	}
-	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
-		 << b_off << "~" << l << std::dec << dendl;
-	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
-	++num_regions;
-      }
-      pos += l;
-      b_off += l;
-      left -= l;
-      b_len -= l;
-    }
-    ++lp;
-  }
 
   // read raw blob data.  use aio if we have >1 blobs to read.
   start = ceph_clock_now(); // for the sake of simplicity 
@@ -6679,7 +6696,7 @@ int BlueStore::_do_read(
 	[&](uint64_t offset, uint64_t length) {
 	  int r;
 	  // use aio if there are more regions to read than those in this blob
-	  if (num_regions > p.second.size()) {
+	  if (blobs2read.size() > p.second.size()) {
 	    r = bdev->aio_read(offset, length, &bl, &ioc);
 	  } else {
 	    r = bdev->read(offset, length, &bl, &ioc, false);
@@ -6724,7 +6741,7 @@ int BlueStore::_do_read(
 	  [&](uint64_t offset, uint64_t length) {
 	    int r;
 	    // use aio if there is more than one region to read
-	    if (num_regions > 1) {
+	    if (blobs2read.size() > 1) {
 	      r = bdev->aio_read(offset, length, &reg.bl, &ioc);
 	    } else {
 	      r = bdev->read(offset, length, &reg.bl, &ioc, false);
@@ -6806,7 +6823,7 @@ int BlueStore::_do_read(
   // generate a resulting buffer
   auto pr = ready_regions.begin();
   auto pr_end = ready_regions.end();
-  pos = 0;
+  uint64_t pos = 0;
   while (pos < length) {
     if (pr != pr_end && pr->first == pos + offset) {
       dout(30) << __func__ << " assemble 0x" << std::hex << pos
