@@ -130,10 +130,11 @@ using ceph::crypto::MD5;
 #define RGW_CAP_WRITE           0x2
 #define RGW_CAP_ALL             (RGW_CAP_READ | RGW_CAP_WRITE)
 
-#define RGW_REST_SWIFT          0x1
-#define RGW_REST_SWIFT_AUTH     0x2
-#define RGW_REST_S3             0x4
-#define RGW_REST_WEBSITE     0x8
+#define RGW_REST_SWIFT          0x01
+#define RGW_REST_SWIFT_AUTH     0x02
+#define RGW_REST_S3             0x04
+#define RGW_REST_S3WEBSITE      0x08
+#define RGW_REST_ADMIN          0x10
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
@@ -261,6 +262,8 @@ enum {
   l_rgw_last,
 };
 
+typedef std::map<int, std::string> rgw_prot_flags_map;
+extern rgw_prot_flags_map rgw_prot_flags;
 
  /* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);

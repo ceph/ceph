@@ -289,9 +289,10 @@ RGWRESTMgr_Realm::RGWRESTMgr_Realm()
 }
 
 RGWHandler_REST*
-RGWRESTMgr_Realm::get_handler(struct req_state*,
+RGWRESTMgr_Realm::get_handler(struct req_state* const s,
                               const rgw::auth::StrategyRegistry& auth_registry,
                               const std::string&)
 {
+  s->prot_flags |= RGW_REST_ADMIN;
   return new RGWHandler_Realm(auth_registry);
 }

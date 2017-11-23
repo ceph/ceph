@@ -3376,7 +3376,12 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
                                             const rgw::auth::StrategyRegistry& auth_registry,
                                             const std::string& frontend_prefix)
 {
-  bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_WEBSITE);
+  bool is_s3website = enable_s3website && (s->prot_flags & RGW_REST_S3WEBSITE);
+
+  if (!is_s3website) {
+    s->prot_flags |= RGW_REST_S3;
+  }
+
   int ret =
     RGWHandler_REST_S3::init_from_header(s,
 					is_s3website ? RGW_FORMAT_HTML :
@@ -3438,7 +3443,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   *new_op = op;
   ldout(s->cct, 10) << __func__ << "Starting retarget" << dendl;
 
-  if (!(s->prot_flags & RGW_REST_WEBSITE))
+  if (!(s->prot_flags & RGW_REST_S3WEBSITE))
     return 0;
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);

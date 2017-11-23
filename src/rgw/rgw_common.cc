@@ -134,6 +134,14 @@ rgw_http_errors rgw_http_swift_errors({
     { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
 });
 
+rgw_prot_flags_map rgw_prot_flags({
+    {RGW_REST_SWIFT, "SWIFT_REST"},
+    {RGW_REST_SWIFT_AUTH, "SWIFT_AUTH"},
+    {RGW_REST_S3, "REST"},
+    {RGW_REST_S3WEBSITE, "WEBSITE"},
+    {RGW_REST_ADMIN, "ADMIN"},
+});
+
 int rgw_perf_start(CephContext *cct)
 {
   PerfCountersBuilder plb(cct, cct->_conf->name.to_str(), l_rgw_first, l_rgw_last);
@@ -325,13 +333,13 @@ void set_req_state_err(struct rgw_err& err,	/* out */
   err.ret = -err_no;
   bool is_website_redirect = false;
 
-  if (prot_flags & RGW_REST_SWIFT) {
+  if (prot_flags & (RGW_REST_SWIFT | RGW_REST_SWIFT_AUTH)) {
     if (search_err(rgw_http_swift_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
   }
 
   //Default to searching in s3 errors
-  is_website_redirect |= (prot_flags & RGW_REST_WEBSITE)
+  is_website_redirect |= (prot_flags & RGW_REST_S3WEBSITE)
 		&& err_no == ERR_WEBSITE_REDIRECT && err.is_clear();
   if (search_err(rgw_http_s3_errors, err_no, is_website_redirect, err.http_ret, err.err_code))
       return;
