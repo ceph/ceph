@@ -6497,6 +6497,33 @@ TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
   ASSERT_TRUE(found);
 }
 
+TEST_F(TestLibRBD, TestListWatchers) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  std::list<librbd::image_watcher_t> watchers;
+
+  // No watchers
+  ASSERT_EQ(0, rbd.open_read_only(ioctx, image, name.c_str(), nullptr));
+  ASSERT_EQ(0, image.list_watchers(watchers));
+  ASSERT_EQ(0, watchers.size());
+  ASSERT_EQ(0, image.close());
+
+  // One watcher
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+  ASSERT_EQ(0, image.list_watchers(watchers));
+  ASSERT_EQ(1, watchers.size());
+  ASSERT_EQ(0, image.close());
+}
+
 // poorman's assert()
 namespace ceph {
   void __ceph_assert_fail(const char *assertion, const char *file, int line,
