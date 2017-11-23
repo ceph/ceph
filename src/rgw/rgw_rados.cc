@@ -14262,3 +14262,44 @@ int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *
   return 0;
 }
 
+int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries, bool reset_obj)
+{
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  rgw_rados_ref ref;
+  int r = get_system_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  if (reset_obj) {
+    op.remove();
+    op.set_op_flags2(LIBRADOS_OP_FLAG_FAILOK);
+    op.create(false);
+  }
+  rados::cls::otp::OTP::set(&op, entries);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP set entries.size()=" << entries.size() << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result)
+{
+  rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  rgw_rados_ref ref;
+  int r = get_system_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  r = rados::cls::otp::OTP::get_all(ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+

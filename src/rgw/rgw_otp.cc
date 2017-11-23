@@ -25,37 +25,17 @@ using namespace std;
 static RGWMetadataHandler *otp_meta_handler = NULL;
 
 
-struct RGWUserCompleteInfo {
-  RGWUserInfo info;
-  map<string, bufferlist> attrs;
-  bool has_attrs;
-
-  RGWUserCompleteInfo()
-    : has_attrs(false)
-  {}
-
-  void dump(Formatter * const f) const {
-    info.dump(f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    decode_json_obj(info, obj);
-    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
-
-class RGWUserMetadataObject : public RGWMetadataObject {
-  RGWUserCompleteInfo uci;
+class RGWOTPMetadataObject : public RGWMetadataObject {
+  list<rados::cls::otp::otp_info_t> result;
 public:
-  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, obj_version& v, real_time m)
-      : uci(_uci) {
+  RGWOTPMetadataObject(list<rados::cls::otp::otp_info_t>& _result, obj_version& v, real_time m) {
+    result.swap(_result);
     objv = v;
     mtime = m;
   }
 
   void dump(Formatter *f) const override {
-    uci.dump(f);
+    encode_json("devices", result, f);
   }
 };
 
@@ -64,28 +44,37 @@ public:
   string get_type() override { return "otp"; }
 
   int get(RGWRados *store, string& entry, RGWMetadataObject **obj) override {
-#if 0
-    RGWUserCompleteInfo uci;
     RGWObjVersionTracker objv_tracker;
     real_time mtime;
 
-    rgw_user uid(entry);
-
-    int ret = rgw_get_user_info_by_uid(store, uid, uci.info, &objv_tracker,
-                                       &mtime, NULL, &uci.attrs);
-    if (ret < 0) {
-      return ret;
+    list<rados::cls::otp::otp_info_t> result;
+    int r = store->list_mfa(entry, &result);
+    if (r < 0) {
+      return r;
     }
 
-    RGWUserMetadataObject *mdo = new RGWUserMetadataObject(uci, objv_tracker.read_version, mtime);
+    RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject(result, objv_tracker.read_version, mtime);
     *obj = mdo;
-
-#endif
-    return -ENOTSUP;
+    return 0;
   }
 
   int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
           real_time mtime, JSONObj *obj, sync_type_t sync_mode) override {
+
+    list<rados::cls::otp::otp_info_t> devices;
+    try {
+      JSONDecoder::decode_json("devices", devices, obj);
+    } catch (JSONDecoder::err& e) {
+      return -EINVAL;
+    }
+
+    int r = store->set_mfa(entry, devices, true);
+    if (r < 0) {
+      return r;
+    }
+
+    return STATUS_APPLIED;
+
 #if 0
     RGWUserCompleteInfo uci;
 
@@ -122,34 +111,21 @@ public:
 
     return STATUS_APPLIED;
 #endif
-    return -ENOTSUP;
+  }
+
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    return store->meta_mgr->remove_entry(this, entry, &objv_tracker);
+  }
+
+  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
+    oid = key;
+    pool = store->get_zone_params().otp_pool;
   }
 
   struct list_keys_info {
     RGWRados *store;
     RGWListRawObjsCtx ctx;
   };
-
-  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
-    RGWUserInfo info;
-
-#warning FIXME
-#if 0
-    rgw_user uid(entry);
-
-    int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker);
-    if (ret < 0)
-      return ret;
-
-    return rgw_delete_user(store, info, objv_tracker);
-#endif
-    return -ENOTSUP;
-  }
-
-  void get_pool_and_oid(RGWRados *store, const string& key, rgw_pool& pool, string& oid) override {
-    oid = key;
-    pool = store->get_zone_params().user_uid_pool;
-  }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
   {
