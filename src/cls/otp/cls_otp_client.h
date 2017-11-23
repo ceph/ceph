@@ -20,11 +20,14 @@ namespace rados {
         static void create(librados::ObjectWriteOperation *op, const otp_info_t& config);
         static void set(librados::ObjectWriteOperation *op, const list<otp_info_t>& entries);
         static void remove(librados::ObjectWriteOperation *op, const string& id);
-        static int get(librados::IoCtx& ioctx, const string& oid,
+        static int get(librados::ObjectReadOperation *op,
+                       librados::IoCtx& ioctx, const string& oid,
                        const list<string> *ids, bool get_all, list<otp_info_t> *result);
-        static int get(librados::IoCtx& ioctx, const string& oid,
+        static int get(librados::ObjectReadOperation *op,
+                       librados::IoCtx& ioctx, const string& oid,
                        const string& id, otp_info_t *result);
-        static int get_all(librados::IoCtx& ioctx, const string& oid,
+        static int get_all(librados::ObjectReadOperation *op,
+                           librados::IoCtx& ioctx, const string& oid,
                            list<otp_info_t> *result);
         static int check(CephContext *cct, librados::IoCtx& ioctx, const string& oid,
                          const string& id, const string& val, otp_check_t *result);

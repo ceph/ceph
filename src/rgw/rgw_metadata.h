@@ -5,6 +5,7 @@
 #define CEPH_RGW_METADATA_H
 
 #include <string>
+#include <utility>
 #include <boost/optional.hpp>
 
 #include "include/types.h"
@@ -342,6 +343,11 @@ public:
 
   int register_handler(RGWMetadataHandler *handler);
 
+  template <typename F>
+  int operate(RGWMetadataHandler *handler, const string& key,
+              RGWObjVersionTracker *objv_tracker, RGWMDLogStatus op_type,
+              F&& f);
+
   RGWMetadataHandler *get_handler(const string& type);
 
   int put_entry(RGWMetadataHandler *handler, const string& key, bufferlist& bl, bool exclusive,
@@ -368,5 +374,32 @@ public:
 
   int get_log_shard_id(const string& section, const string& key, int *shard_id);
 };
+
+template <typename F>
+int RGWMetadataManager::operate(RGWMetadataHandler *handler, const string& key,
+                                RGWObjVersionTracker *objv_tracker, RGWMDLogStatus op_type,
+                                F&& f)
+{
+  string section;
+  RGWMetadataLogData log_data;
+  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
+  if (ret < 0)
+    return ret;
+
+  string oid;
+  rgw_pool pool;
+
+  handler->get_pool_and_oid(store, key, pool, oid);
+
+  ret = std::forward<F>(f)();
+
+  /* cascading ret into post_modify() */
+
+  ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
+  if (ret < 0)
+    return ret;
+
+  return 0;
+}
 
 #endif

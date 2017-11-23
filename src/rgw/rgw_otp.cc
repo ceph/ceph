@@ -16,6 +16,7 @@
 #include "include/types.h"
 
 #include "rgw_common.h"
+#include "rgw_tools.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -48,11 +49,10 @@ public:
     real_time mtime;
 
     list<rados::cls::otp::otp_info_t> result;
-    int r = store->list_mfa(entry, &result);
+    int r = store->list_mfa(entry, &result, &objv_tracker, &mtime);
     if (r < 0) {
       return r;
     }
-
     RGWOTPMetadataObject *mdo = new RGWOTPMetadataObject(result, objv_tracker.read_version, mtime);
     *obj = mdo;
     return 0;
@@ -68,49 +68,24 @@ public:
       return -EINVAL;
     }
 
-    int r = store->set_mfa(entry, devices, true);
-    if (r < 0) {
-      return r;
-    }
-
-    return STATUS_APPLIED;
-
-#if 0
-    RGWUserCompleteInfo uci;
-
-    try {
-      decode_json_obj(uci, obj);
-    } catch (JSONDecoder::err& e) {
-      return -EINVAL;
-    }
-
-    map<string, bufferlist> *pattrs = NULL;
-    if (uci.has_attrs) {
-      pattrs = &uci.attrs;
-    }
-
-    rgw_user uid(entry);
-
-    RGWUserInfo old_info;
+    bufferlist bl;
     real_time orig_mtime;
-    int ret = rgw_get_user_info_by_uid(store, uid, old_info, &objv_tracker, &orig_mtime);
-    if (ret < 0 && ret != -ENOENT)
+    RGWObjectCtx obj_ctx(store);
+    int ret = rgw_get_system_obj(store, obj_ctx, store->get_zone_params().otp_pool,
+                                 entry, bl, &objv_tracker, &orig_mtime, nullptr, nullptr);
+    if (ret < 0 && ret != -ENOENT) {
       return ret;
-
-    // are we actually going to perform this put, or is it too old?
+    }
     if (ret != -ENOENT &&
         !check_versions(objv_tracker.read_version, orig_mtime,
 			objv_tracker.write_version, mtime, sync_mode)) {
       return STATUS_NO_APPLY;
     }
-
-    ret = rgw_store_user_info(store, uci.info, &old_info, &objv_tracker, mtime, false, pattrs);
-    if (ret < 0) {
-      return ret;
-    }
+    store->meta_mgr->operate(this, entry, &objv_tracker, MDLOG_STATUS_WRITE, [&] {
+         return store->set_mfa(entry, devices, true, &objv_tracker);
+    });
 
     return STATUS_APPLIED;
-#endif
   }
 
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
