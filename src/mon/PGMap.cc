@@ -181,6 +181,8 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
   if (f)
     f->close_section();
 
+  auto pgs = num_pg;
+
   if (f) {
     f->dump_unsigned("num_pgs", num_pg);
     f->dump_unsigned("num_pools", pg_pool_sum.size());
@@ -190,86 +192,99 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
     f->dump_unsigned("bytes_avail", osd_sum.kb_avail * 1024ull);
     f->dump_unsigned("bytes_total", osd_sum.kb * 1024ull);
   } else {
-    *out << "    pools:   " << pg_pool_sum.size() << " pools, "
-         << num_pg << " pgs\n";
-    *out << "    objects: " << si_t(pg_sum.stats.sum.num_objects) << " objects, "
-         << si_t(pg_sum.stats.sum.num_bytes) << "\n";
+    auto pools = pg_pool_sum.size();
+    auto num_objects = pg_sum.stats.sum.num_objects;
+    auto num_bytes = pg_sum.stats.sum.num_bytes;
+    auto kb_used = osd_sum.kb_used << 10;
+    auto kb_avail = osd_sum.kb_avail << 10;
+    auto kb = osd_sum.kb << 10;
+    if (kb_used == 0 && kb_avail == 0 && kb == 0) {
+      pools = 0;
+      pgs = 0;
+      num_objects = 0;
+      num_bytes = 0;
+    }
+    *out << "    pools:   " << pools << " pools, "
+         << pgs << " pgs\n";
+    *out << "    objects: " << si_t(num_objects) << " objects, "
+         << si_t(num_bytes) << "\n";
     *out << "    usage:   "
-         << si_t(osd_sum.kb_used << 10) << " used, "
-         << si_t(osd_sum.kb_avail << 10) << " / "
-         << si_t(osd_sum.kb << 10) << " avail\n";
+         << si_t(kb_used << 10) << " used, "
+         << si_t(kb_avail << 10) << " / "
+         << si_t(kb << 10) << " avail\n";
     *out << "    pgs:     ";
   }
 
-  bool pad = false;
+  if (pgs) {
+    bool pad = false;
 
-  if (num_pg_unknown > 0) {
-    float p = (float)num_pg_unknown / (float)num_pg;
-    if (f) {
-      f->dump_float("unknown_pgs_ratio", p);
-    } else {
-      char b[20];
-      snprintf(b, sizeof(b), "%.3lf", p * 100.0);
-      *out << b << "% pgs unknown\n";
-      pad = true;
-    }
-  }
-
-  int num_pg_inactive = num_pg - num_pg_active - num_pg_unknown;
-  if (num_pg_inactive > 0) {
-    float p = (float)num_pg_inactive / (float)num_pg;
-    if (f) {
-      f->dump_float("inactive_pgs_ratio", p);
-    } else {
-      if (pad) {
-        *out << "             ";
+    if (num_pg_unknown > 0) {
+      float p = (float)num_pg_unknown / (float)num_pg;
+      if (f) {
+        f->dump_float("unknown_pgs_ratio", p);
+      } else {
+        char b[20];
+        snprintf(b, sizeof(b), "%.3lf", p * 100.0);
+        *out << b << "% pgs unknown\n";
+        pad = true;
       }
-      char b[20];
-      snprintf(b, sizeof(b), "%.3f", p * 100.0);
-      *out << b << "% pgs not active\n";
-      pad = true;
     }
-  }
 
-  list<string> sl;
-  overall_recovery_summary(f, &sl);
-  if (!f && !sl.empty()) {
-    for (auto p = sl.begin(); p != sl.end(); ++p) {
-      if (pad) {
-        *out << "             ";
+    int num_pg_inactive = num_pg - num_pg_active - num_pg_unknown;
+    if (num_pg_inactive > 0) {
+      float p = (float)num_pg_inactive / (float)num_pg;
+      if (f) {
+        f->dump_float("inactive_pgs_ratio", p);
+      } else {
+        if (pad) {
+          *out << "             ";
+        }
+        char b[20];
+        snprintf(b, sizeof(b), "%.3f", p * 100.0);
+        *out << b << "% pgs not active\n";
+        pad = true;
       }
-      *out << *p << "\n";
-      pad = true;
-    }
-  }
-  sl.clear();
-
-  if (!f) {
-    unsigned max_width = 1;
-    for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
-         p != state_by_count.rend();
-         ++p)
-    {
-      std::stringstream ss;
-      ss << p->first;
-      max_width = MAX(ss.str().size(), max_width);
     }
 
-    for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
-         p != state_by_count.rend();
-         ++p)
-    {
-      if (pad) {
-        *out << "             ";
+    list<string> sl;
+    overall_recovery_summary(f, &sl);
+    if (!f && !sl.empty()) {
+     for (auto p = sl.begin(); p != sl.end(); ++p) {
+        if (pad) {
+          *out << "             ";
+        }
+        *out << *p << "\n";
+        pad = true;
       }
-      pad = true;
-      out->setf(std::ios::left);
-      *out << std::setw(max_width) << p->first
-           << " " << pg_state_string(p->second) << "\n";
-      out->unsetf(std::ios::left);
+    }
+    sl.clear();
+
+    if (!f) {
+      unsigned max_width = 1;
+      for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+           p != state_by_count.rend();
+           ++p)
+      {
+        std::stringstream ss;
+        ss << p->first;
+        max_width = MAX(ss.str().size(), max_width);
+      }
+
+      for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
+           p != state_by_count.rend();
+           ++p)
+      {
+        if (pad) {
+          *out << "             ";
+        }
+        pad = true;
+        out->setf(std::ios::left);
+        *out << std::setw(max_width) << p->first
+             << " " << pg_state_string(p->second) << "\n";
+        out->unsetf(std::ios::left);
+      }
     }
   }
-
   ostringstream ss_rec_io;
   overall_recovery_rate_summary(f, &ss_rec_io);
   ostringstream ss_client_io;
