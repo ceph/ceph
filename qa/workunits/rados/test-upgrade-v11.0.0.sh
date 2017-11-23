@@ -17,7 +17,7 @@ for f in \
     'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*:*ListObjectsError*' \
     'api_io --gtest_filter=-*Checksum*:*CmpExt*' \
     api_lock \
-    'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Checksum*:*CloneRange*' \
+    'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Compare*:*Checksum*:*CloneRange*' \
     'api_watch_notify --gtest_filter=-*WatchNotify3*' \
     api_tier api_pool api_snapshots api_stat api_cmd \
     'api_c_write_operations --gtest_filter=-*WriteSame*:*CmpExt*' \
