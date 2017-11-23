@@ -22,6 +22,7 @@
 #include "global/signal_handler.h"
 
 #include "mgr/MgrContext.h"
+#include "mgr/mgr_commands.h"
 
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
@@ -189,7 +190,10 @@ void MgrStandby::send_beacon()
       // We are informing the mon that we are done initializing: inform
       // it of our command set.  This has to happen after init() because
       // it needs the python modules to have loaded.
-      m->set_command_descs(active_mgr->get_command_set());
+      std::vector<MonCommand> commands = mgr_commands;
+      std::vector<MonCommand> py_commands = py_module_registry.get_commands();
+      commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+      m->set_command_descs(commands);
       dout(4) << "going active, including " << m->get_command_descs().size()
               << " commands in beacon" << dendl;
     }

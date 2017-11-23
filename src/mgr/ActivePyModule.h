@@ -34,25 +34,10 @@
 class ActivePyModule;
 class ActivePyModules;
 
-/**
- * A Ceph CLI command description provided from a Python module
- */
-class ModuleCommand {
-public:
-  std::string cmdstring;
-  std::string helpstring;
-  std::string perm;
-  ActivePyModule *handler;
-};
-
 class ActivePyModule : public PyModuleRunner
 {
 private:
   health_check_map_t health_checks;
-
-  std::vector<ModuleCommand> commands;
-
-  int load_commands();
 
   // Optional, URI exposed by plugins that implement serve()
   std::string uri;
@@ -66,11 +51,6 @@ public:
   int load(ActivePyModules *py_modules);
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
-
-  const std::vector<ModuleCommand> &get_commands() const
-  {
-    return commands;
-  }
 
   int handle_command(
     const cmdmap_t &cmdmap,

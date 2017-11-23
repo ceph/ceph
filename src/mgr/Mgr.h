@@ -101,7 +101,6 @@ public:
   void background_init(Context *completion);
   void shutdown();
 
-  std::vector<MonCommand> get_command_set() const;
   std::map<std::string, std::string> get_services() const;
 };
 

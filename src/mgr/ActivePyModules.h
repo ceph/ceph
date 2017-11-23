@@ -90,11 +90,11 @@ public:
 
   void set_uri(const std::string& module_name, const std::string &uri);
 
-  // Python command definitions, including callback
-  std::vector<ModuleCommand> get_py_commands() const;
-
-  // Monitor command definitions, suitable for CLI
-  std::vector<MonCommand> get_commands() const;
+  int handle_command(
+    const std::string &module_name,
+    const cmdmap_t &cmdmap,
+    std::stringstream *ds,
+    std::stringstream *ss);
 
   std::map<std::string, std::string> get_services() const;
 

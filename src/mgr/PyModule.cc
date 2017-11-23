@@ -210,10 +210,20 @@ int PyModule::load(PyThreadState *pMainThreadState)
   // Environment is all good, import the external module
   {
     Gil gil(pMyThreadState);
+
     int r;
     r = load_subclass_of("MgrModule", &pClass);
     if (r) {
       derr << "Class not found in module '" << module_name << "'" << dendl;
+      return r;
+    }
+
+    r = load_commands();
+    if (r != 0) {
+      std::ostringstream oss;
+      oss << "Missing COMMAND attribute in module '" << module_name << "'";
+      error_string = oss.str();
+      derr << oss.str() << dendl;
       return r;
     }
 
@@ -265,6 +275,56 @@ int PyModule::load(PyThreadState *pMainThreadState)
       can_run = false;
     }
   }
+  return 0;
+}
+
+int PyModule::load_commands()
+{
+  // Don't need a Gil here -- this is called from load(),
+  // which already has one.
+  PyObject *command_list = PyObject_GetAttrString(pClass, "COMMANDS");
+  if (command_list == nullptr) {
+    // Even modules that don't define command should still have the COMMANDS
+    // from the MgrModule definition.  Something is wrong!
+    derr << "Module " << get_name() << " has missing COMMANDS member" << dendl;
+    return -EINVAL;
+  }
+  if (!PyObject_TypeCheck(command_list, &PyList_Type)) {
+    // Relatively easy mistake for human to make, e.g. defining COMMANDS
+    // as a {} instead of a []
+    derr << "Module " << get_name() << " has COMMANDS member of wrong type ("
+            "should be a list)" << dendl;
+    return -EINVAL;
+  }
+  const size_t list_size = PyList_Size(command_list);
+  for (size_t i = 0; i < list_size; ++i) {
+    PyObject *command = PyList_GetItem(command_list, i);
+    assert(command != nullptr);
+
+    ModuleCommand item;
+
+    PyObject *pCmd = PyDict_GetItemString(command, "cmd");
+    assert(pCmd != nullptr);
+    item.cmdstring = PyString_AsString(pCmd);
+
+    dout(20) << "loaded command " << item.cmdstring << dendl;
+
+    PyObject *pDesc = PyDict_GetItemString(command, "desc");
+    assert(pDesc != nullptr);
+    item.helpstring = PyString_AsString(pDesc);
+
+    PyObject *pPerm = PyDict_GetItemString(command, "perm");
+    assert(pPerm != nullptr);
+    item.perm = PyString_AsString(pPerm);
+
+    item.module_name = module_name;
+
+    commands.push_back(item);
+  }
+  Py_DECREF(command_list);
+
+  dout(10) << "loaded " << commands.size() << " commands" << dendl;
+
   return 0;
 }
 

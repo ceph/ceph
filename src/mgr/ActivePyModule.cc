@@ -46,7 +46,7 @@ int ActivePyModule::load(ActivePyModules *py_modules)
     dout(1) << "Constructed class from module: " << get_name() << dendl;
   }
 
-  return load_commands();
+  return 0;
 }
 
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
@@ -100,55 +100,7 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
   }
 }
 
-int ActivePyModule::load_commands()
-{
-  // Don't need a Gil here -- this is called from ActivePyModule::load(),
-  // which already has one.
-  PyObject *command_list = PyObject_GetAttrString(pClassInstance, "COMMANDS");
-  if (command_list == nullptr) {
-    // Even modules that don't define command should still have the COMMANDS
-    // from the MgrModule definition.  Something is wrong!
-    derr << "Module " << get_name() << " has missing COMMANDS member" << dendl;
-    return -EINVAL;
-  }
-  if (!PyObject_TypeCheck(command_list, &PyList_Type)) {
-    // Relatively easy mistake for human to make, e.g. defining COMMANDS
-    // as a {} instead of a []
-    derr << "Module " << get_name() << " has COMMANDS member of wrong type ("
-            "should be a list)" << dendl;
-    return -EINVAL;
-  }
-  const size_t list_size = PyList_Size(command_list);
-  for (size_t i = 0; i < list_size; ++i) {
-    PyObject *command = PyList_GetItem(command_list, i);
-    assert(command != nullptr);
 
-    ModuleCommand item;
-
-    PyObject *pCmd = PyDict_GetItemString(command, "cmd");
-    assert(pCmd != nullptr);
-    item.cmdstring = PyString_AsString(pCmd);
-
-    dout(20) << "loaded command " << item.cmdstring << dendl;
-
-    PyObject *pDesc = PyDict_GetItemString(command, "desc");
-    assert(pDesc != nullptr);
-    item.helpstring = PyString_AsString(pDesc);
-
-    PyObject *pPerm = PyDict_GetItemString(command, "perm");
-    assert(pPerm != nullptr);
-    item.perm = PyString_AsString(pPerm);
-
-    item.handler = this;
-
-    commands.push_back(item);
-  }
-  Py_DECREF(command_list);
-
-  dout(10) << "loaded " << commands.size() << " commands" << dendl;
-
-  return 0;
-}
 
 int ActivePyModule::handle_command(
   const cmdmap_t &cmdmap,
