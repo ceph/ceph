@@ -4162,7 +4162,8 @@ bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
   if (is_mon_create) {
     pending_creates_from_mon++;
   } else {
-    pending_creates_from_osd.emplace(pgid.pgid);
+    bool is_primary = osdmap->get_pg_acting_rank(pgid.pgid, whoami) == 0;
+    pending_creates_from_osd.emplace(pgid.pgid, is_primary);
   }
   dout(5) << __func__ << " withhold creation of pg " << pgid
 	  << ": " << pg_map.size() << " >= "<< max_pgs_per_osd << dendl;
@@ -4213,8 +4214,8 @@ void OSD::resume_creating_pg()
 	pgtemp = new MOSDPGTemp{osdmap->get_epoch()};
       }
       vector<int> acting;
-      osdmap->pg_to_up_acting_osds(*pg, nullptr, nullptr, &acting, nullptr);
-      pgtemp->pg_temp[*pg] = twiddle(acting);
+      osdmap->pg_to_up_acting_osds(pg->first, nullptr, nullptr, &acting, nullptr);
+      pgtemp->pg_temp[pg->first] = twiddle(acting);
       pg = pending_creates_from_osd.erase(pg);
       spare_pgs--;
     }
@@ -5018,21 +5019,9 @@ void OSD::tick_without_osd_lock()
     }
   }
 
-  check_ops_in_flight();
+  mgrc.update_osd_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(OSD_TICK_INTERVAL, new C_Tick_WithoutOSDLock(this));
-}
-
-void OSD::check_ops_in_flight()
-{
-  vector<string> warnings;
-  if (op_tracker.check_ops_in_flight(warnings)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
-    }
-  }
 }
 
 // Usage:
@@ -7097,6 +7086,42 @@ MPGStats* OSD::collect_pg_stats()
   return m;
 }
 
+vector<OSDHealthMetric> OSD::get_health_metrics()
+{
+  vector<OSDHealthMetric> metrics;
+  {
+    utime_t oldest_secs;
+    const utime_t now = ceph_clock_now();
+    auto too_old = now;
+    too_old -= cct->_conf->get_val<double>("osd_op_complaint_time");
+    int slow = 0;
+    auto count_slow_ops = [&](TrackedOp& op) {
+      if (op.get_initiated() < too_old) {
+	slow++;
+	return true;
+      } else {
+	return false;
+      }
+    };
+    if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+      metrics.emplace_back(osd_metric::SLOW_OPS, slow, oldest_secs);
+    } else {
+      // no news is not good news.
+      metrics.emplace_back(osd_metric::SLOW_OPS, 0, 0);
+    }
+  }
+  with_unique_lock(pending_creates_lock, [&]() {
+      auto n_primaries = pending_creates_from_mon;
+      for (const auto& create : pending_creates_from_osd) {
+	if (create.second) {
+	  n_primaries++;
+	}
+      }
+      metrics.emplace_back(osd_metric::PENDING_CREATING_PGS, n_primaries);
+    });
+  return metrics;
+}
+
 // =====================================================
 // MAP
 
@@ -7877,7 +7902,7 @@ void OSD::consume_map()
     [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.cbegin();
 	 pg != pending_creates_from_osd.cend();) {
-      if (osdmap->get_pg_acting_rank(*pg, whoami) < 0) {
+      if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {
 	pg = pending_creates_from_osd.erase(pg);
       } else {
 	++pg;

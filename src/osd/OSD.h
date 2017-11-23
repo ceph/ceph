@@ -1554,7 +1554,6 @@ private:
   
   // -- op tracking --
   OpTracker op_tracker;
-  void check_ops_in_flight();
   void test_ops(std::string command, std::string args, ostream& ss);
   friend class TestOpsSocketHook;
   TestOpsSocketHook *test_ops_hook;
@@ -1925,7 +1924,8 @@ protected:
   ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
 
   std::mutex pending_creates_lock;
-  std::set<pg_t> pending_creates_from_osd;
+  using create_from_osd_t = std::pair<pg_t, bool /* is primary*/>;
+  std::set<create_from_osd_t> pending_creates_from_osd;
   unsigned pending_creates_from_mon = 0;
 
   map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
@@ -2232,6 +2232,7 @@ protected:
 
   // -- status reporting --
   MPGStats *collect_pg_stats();
+  std::vector<OSDHealthMetric> get_health_metrics();
 
 private:
   bool ms_can_fast_dispatch_any() const override { return true; }
