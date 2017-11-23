@@ -2679,7 +2679,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_pg_blocked_by", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16)
-    .set_description(""),
+    .set_description("max peer osds to report that are blocking our progress"),
 
     Option("osd_op_log_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)

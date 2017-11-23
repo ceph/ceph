@@ -2752,13 +2752,16 @@ void PG::_update_calc_stats()
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
     info.stats.stats.sum.num_objects_misplaced = misplaced;
   }
+
+  _update_blocked_by();
 }
 
 void PG::_update_blocked_by()
 {
-  // set a max on the number of blocking peers we report. if we go
-  // over, report a random subset.  keep the result sorted.
-  unsigned keep = MIN(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
+  // set a max on the number of blocking peers (16 by default)  we report. if we
+  // go over, report a random subset.  keep the result sorted.
+  unsigned keep = MIN(blocked_by.size(),
+    cct->_conf->get_val<uint64_t>("osd_max_pg_blocked_by"));
   unsigned skip = blocked_by.size() - keep;
   info.stats.blocked_by.clear();
   info.stats.blocked_by.resize(keep);
@@ -2810,7 +2813,6 @@ void PG::publish_stats_to_osd()
   }
 
   _update_calc_stats();
-  _update_blocked_by();
 
   pg_stat_t pre_publish = info.stats;
   pre_publish.stats.add(unstable_stats);

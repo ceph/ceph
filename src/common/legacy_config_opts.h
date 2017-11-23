@@ -780,7 +780,6 @@ OPTION(osd_force_recovery_pg_log_entries_factor, OPT_FLOAT) // max entries facto
 OPTION(osd_pg_log_trim_min, OPT_U32)
 OPTION(osd_op_complaint_time, OPT_FLOAT) // how many seconds old makes an op complaint-worthy
 OPTION(osd_command_max_records, OPT_INT)
-OPTION(osd_max_pg_blocked_by, OPT_U32)    // max peer osds to report that are blocking our progress
 OPTION(osd_op_log_threshold, OPT_INT) // how many op log messages to show in one go
 OPTION(osd_verify_sparse_read_holes, OPT_BOOL)  // read fiemap-reported holes and verify they are zeros
 OPTION(osd_backoff_on_unfound, OPT_BOOL)   // object unfound
