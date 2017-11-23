@@ -332,13 +332,21 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_persist_on_write_until_flush(true), m_persist_on_flush(false),
     m_flush_seen(false),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock"),
+    m_persist_finisher(image_ctx.cct),
+    m_log_append_finisher(image_ctx.cct),
+    m_on_persist_finisher(image_ctx.cct),
     m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock"),
     m_blocks_to_log_entries(image_ctx.cct) {
+  m_persist_finisher.start();
+  m_log_append_finisher.start();
+  m_on_persist_finisher.start();
 }
 
 template <typename I>
 ReplicatedWriteLog<I>::~ReplicatedWriteLog() {
-  //delete m_policy;
+  m_persist_finisher.wait_for_empty();
+  m_log_append_finisher.wait_for_empty();
+  m_on_persist_finisher.wait_for_empty();
 }
 
 template <typename ExtentsType>
@@ -523,8 +531,9 @@ void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
     m_ops_to_append.splice(m_ops_to_append.end(), ops);
   }
 
-  /* TODO: push this to a finisher */
-  append_scheduled_ops();
+  m_log_append_finisher.queue(new FunctionContext([this](int r) {
+	append_scheduled_ops();
+      }));
 }
 
 /*
@@ -562,8 +571,9 @@ void ReplicatedWriteLog<I>::schedule_flush_and_append(WriteLogOperations &ops)
     m_ops_to_flush.splice(m_ops_to_flush.end(), ops);
   }
 
-  /* TODO: push this to a finisher */
-  flush_then_append_scheduled_ops();
+  m_persist_finisher.queue(new FunctionContext([this](int r) {
+	flush_then_append_scheduled_ops();
+      }));
 }
 
 /*
@@ -636,7 +646,10 @@ template <typename I>
 void ReplicatedWriteLog<I>::complete_op_log_entries(WriteLogOperations &ops, int result)
 {
   for (auto &operation : ops) {
-    operation->on_write_persist->complete(result);
+    WriteLogOperation *op = operation;
+    m_on_persist_finisher.queue(new FunctionContext([this, op, result](int r) {
+	  op->on_write_persist->complete(result);
+	}));
   }
 }
 
@@ -756,10 +769,12 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     }
   }
 
+  m_async_op_tracker.start_op();
   write_req->_on_finish =
-    new FunctionContext([this, write_req](int r) {
-	complete_write_req(write_req, r);
-      });
+    new C_OnFinisher(new FunctionContext([this, write_req](int r) {
+	  complete_write_req(write_req, r);
+	  m_async_op_tracker.finish_op();
+	}), &m_on_persist_finisher);
 
   m_blocks_to_log_entries.add_entries(log_entries);
   

@@ -20,6 +20,7 @@
 #include <boost/intrusive/set.hpp>
 #include <deque>
 #include <list>
+#include "common/Finisher.h"
 #include "include/assert.h"
 
 namespace librbd {
@@ -177,11 +178,7 @@ public:
   bufferlist bl;
   Context *on_write_persist; /* Completion for things waiting on this write to persist */
   WriteLogOperation(WriteLogOperationSet *set, uint64_t image_offset_bytes, uint64_t write_bytes);
-  ~WriteLogOperation() {
-    if (NULL != log_entry) {
-      delete(log_entry);
-    }
-  }
+  ~WriteLogOperation();
   WriteLogOperation(const WriteLogOperation&) = delete;
   WriteLogOperation &operator=(const WriteLogOperation&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
@@ -242,10 +239,7 @@ public:
 
   void finish(int r) override {
     if (r < 0) {
-      bool initial = false;
-      if (m_callback_invoked.compare_exchange_strong(initial, true)) {
-	m_callback(NULL);
-      }
+      acquired(NULL);
     }
   }
   
@@ -449,7 +443,10 @@ private:
   bool m_wake_up_scheduled = false;
 
   Contexts m_post_work_contexts;
-
+  Finisher m_persist_finisher;
+  Finisher m_log_append_finisher;
+  Finisher m_on_persist_finisher;
+  
   RWLock m_log_append_lock;
 
   WriteLogOperations m_ops_to_flush; /* Write ops neding flush in local log */
