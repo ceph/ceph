@@ -3110,7 +3110,8 @@ void Monitor::handle_command(MonOpRequestRef op)
     double duration = std::chrono::duration<double>(end-start).count();
     dout(1) << "finished manual compaction in " << duration << " seconds" << dendl;
     ostringstream oss;
-    oss << "compacted " << g_conf->get_val<std::string>("mon_keyvaluedb") << " in " << duration << " seconds";
+    auto mon_keyvaluedb = g_conf->get_val<std::string>("mon_keyvaluedb");
+    oss << "compacted " << mon_keyvaluedb << " in " << duration << " seconds";
     rs = oss.str();
     r = 0;
   }

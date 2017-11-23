@@ -4719,8 +4719,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
                << fn + ".slow" << ","
                << (uint64_t)(slow_size * 95 / 100);
       cct->_conf->set_val("rocksdb_db_paths", db_paths.str(), false);
-      dout(10) << __func__ << " set rocksdb_db_paths to "
-	       << cct->_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+      auto rocksdb_db_paths = cct->_conf->get_val<std::string>(
+        "rocksdb_db_paths");
+      dout(10) << __func__ << " set rocksdb_db_paths to " << rocksdb_db_paths
+               << dendl;
     }
 
     if (create) {

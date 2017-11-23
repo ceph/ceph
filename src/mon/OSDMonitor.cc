@@ -5421,15 +5421,16 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
                                  FastReadType fast_read,
 				 ostream *ss)
 {
+  auto mon_max_pool_pg_num = g_conf->get_val<uint64_t>("mon_max_pool_pg_num");
   if (name.length() == 0)
     return -EINVAL;
   if (pg_num == 0)
     pg_num = g_conf->get_val<uint64_t>("osd_pool_default_pg_num");
   if (pgp_num == 0)
     pgp_num = g_conf->get_val<uint64_t>("osd_pool_default_pgp_num");
-  if (pg_num > g_conf->get_val<uint64_t>("mon_max_pool_pg_num")) {
+  if (pg_num > mon_max_pool_pg_num) {
     *ss << "'pg_num' must be greater than 0 and less than or equal to "
-        << g_conf->get_val<uint64_t>("mon_max_pool_pg_num")
+        << mon_max_pool_pg_num
         << " (you may adjust 'mon max pool pg num' for higher values)";
     return -ERANGE;
   }
@@ -5716,9 +5717,10 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 	return -EEXIST;
       return 0;
     }
-    if (static_cast<uint64_t>(n) > g_conf->get_val<uint64_t>("mon_max_pool_pg_num")) {
+    auto mon_max_pool_pg_num = g_conf->get_val<uint64_t>("mon_max_pool_pg_num");
+    if (static_cast<uint64_t>(n) > mon_max_pool_pg_num) {
       ss << "'pg_num' must be greater than 0 and less than or equal to "
-         << g_conf->get_val<uint64_t>("mon_max_pool_pg_num")
+         << mon_max_pool_pg_num
          << " (you may adjust 'mon max pool pg num' for higher values)";
       return -ERANGE;
     }
