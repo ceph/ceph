@@ -104,6 +104,20 @@ static void get_new_date_str(string& date_str)
   date_str = rgw_to_asctime(ceph_clock_now());
 }
 
+static void get_gmt_date_str(string& date_str)
+{
+  auto now_time = ceph::real_clock::now();
+  time_t rawtime = ceph::real_clock::to_time_t(now_time);
+
+  char buffer[80];
+
+  struct tm timeInfo;
+  gmtime_r(&rawtime, &timeInfo);
+  strftime(buffer, sizeof(buffer), "%a, %d %b %Y %H:%M:%S %z", &timeInfo);  
+  
+  date_str = buffer;
+}
+
 int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *_method, const char *resource)
 {
   method = _method;
@@ -431,7 +445,7 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(date_str);
+  get_gmt_date_str(date_str);
 
   string params_str;
   map<string, string>& args = new_info.args.get_params();
@@ -588,7 +602,7 @@ int RGWRESTStreamRWRequest::send_prepare(RGWAccessKey *key, map<string, string>&
     new_url.append("/");
 
   string date_str;
-  get_new_date_str(date_str);
+  get_gmt_date_str(date_str);
 
   RGWEnv new_env;
   req_info new_info(cct, &new_env);
