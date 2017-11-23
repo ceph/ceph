@@ -1834,10 +1834,29 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 
   uint64_t left = ROUND_UP_TO(len, min_alloc_size);
   int r = -ENOSPC;
+  int64_t alloc_len = 0;
+  AllocExtentVector extents;
+  
   if (alloc[id]) {
     r = alloc[id]->reserve(left);
   }
-  if (r < 0) {
+
+  if (r == 0) {
+    uint64_t hint = 0;
+    if (!ev->empty()) {
+       hint = ev->back().end();
+    }
+    extents.reserve(4);  // 4 should be (more than) enough for most allocations
+    alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
+  }
+  
+  if (r < 0 || (alloc_len < (int64_t)left)) {
+    if (r == 0) {
+      alloc[id]->unreserve(left - alloc_len);
+      for (auto& p : extents) {
+        alloc[id]->release(p.offset, p.length);
+      }
+    }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
 	dout(1) << __func__ << " failed to allocate 0x" << std::hex << left
@@ -1855,25 +1874,9 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     else
       derr << __func__ << " failed to allocate 0x" << std::hex << left
 	   << " on bdev " << (int)id << ", dne" << std::dec << dendl;
+    if (alloc[id])
+      alloc[id]->dump();
     return r;
-  }
-
-  uint64_t hint = 0;
-  if (!ev->empty()) {
-    hint = ev->back().end();
-  }
-
-  AllocExtentVector extents;
-  extents.reserve(4);  // 4 should be (more than) enough for most allocations
-  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
-                          &extents);
-  if (alloc_len < (int64_t)left) {
-    derr << __func__ << " allocate failed on 0x" << std::hex << left
-	 << " min_alloc_size 0x" << min_alloc_size 
-         << " hint 0x" <<  hint << std::dec << dendl;
-    alloc[id]->dump();
-    assert(0 == "allocate failed... wtf");
-    return -ENOSPC;
   }
 
   for (auto& p : extents) {
