@@ -491,34 +491,6 @@ void ActivePyModules::set_config(const std::string &module_name,
   }
 }
 
-std::vector<ModuleCommand> ActivePyModules::get_py_commands() const
-{
-  Mutex::Locker l(lock);
-
-  std::vector<ModuleCommand> result;
-  for (const auto& i : modules) {
-    auto module = i.second.get();
-    auto mod_commands = module->get_commands();
-    for (auto j : mod_commands) {
-      result.push_back(j);
-    }
-  }
-
-  return result;
-}
-
-std::vector<MonCommand> ActivePyModules::get_commands() const
-{
-  std::vector<ModuleCommand> commands = get_py_commands();
-  std::vector<MonCommand> result;
-  for (auto &pyc: commands) {
-    result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                        pyc.perm, "cli", MonCommand::FLAG_MGR});
-  }
-  return result;
-}
-
-
 std::map<std::string, std::string> ActivePyModules::get_services() const
 {
   std::map<std::string, std::string> result;
@@ -711,6 +683,18 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
   if (p != modules.end()) {
     p->second->set_health_checks(std::move(checks));
   }
+}
+
+int ActivePyModules::handle_command(
+  std::string const &module_name,
+  const cmdmap_t &cmdmap,
+  std::stringstream *ds,
+  std::stringstream *ss)
+{
+  lock.Lock();
+  auto mod = modules.at(module_name).get();
+  lock.Unlock();
+  return mod->handle_command(cmdmap, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)

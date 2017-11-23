@@ -22,6 +22,19 @@
 
 std::string handle_pyerror();
 
+/**
+ * A Ceph CLI command description provided from a Python module
+ */
+class ModuleCommand {
+public:
+  std::string cmdstring;
+  std::string helpstring;
+  std::string perm;
+
+  // Call the ActivePyModule of this name to handle the command
+  std::string module_name;
+};
+
 class PyModule
 {
   mutable Mutex lock{"PyModule::lock"};
@@ -48,6 +61,9 @@ private:
   // Populated if loaded, can_run or failed indicates a problem
   std::string error_string;
 
+  int load_commands();
+  std::vector<ModuleCommand> commands;
+
 public:
   SafeThreadState pMyThreadState;
   PyObject *pClass = nullptr;
@@ -62,6 +78,18 @@ public:
 
   int load(PyThreadState *pMainThreadState);
 
+
+  /**
+   * Extend `out` with the contents of `this->commands`
+   */
+  void get_commands(std::vector<ModuleCommand> *out) const
+  {
+    Mutex::Locker l(lock);
+    assert(out != nullptr);
+    out->insert(out->end(), commands.begin(), commands.end());
+  }
+
+
   /**
    * Mark the module as failed, recording the reason in the error
    * string.
@@ -74,6 +102,9 @@ public:
   }
 
   bool is_enabled() const { Mutex::Locker l(lock) ; return enabled; }
+  bool is_failed() const { Mutex::Locker l(lock) ; return failed; }
+  bool is_loaded() const { Mutex::Locker l(lock) ; return loaded; }
+
   const std::string &get_name() const {
     Mutex::Locker l(lock) ; return module_name;
   }
