@@ -117,6 +117,25 @@ public:
     std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
   }
 
+  std::vector<MonCommand> get_commands() const;
+  std::vector<ModuleCommand> get_py_commands() const;
+
+  /**
+   * module_name **must** exist, but does not have to be loaded
+   * or runnable.
+   */
+  PyModuleRef get_module(const std::string &module_name)
+  {
+    Mutex::Locker l(lock);
+    return modules.at(module_name);
+  }
+
+  int handle_command(
+    std::string const &module_name,
+    const cmdmap_t &cmdmap,
+    std::stringstream *ds,
+    std::stringstream *ss);
+
   // FIXME: breaking interface so that I don't have to go rewrite all
   // the places that call into these (for now)
   // >>>
@@ -135,16 +154,6 @@ public:
     }
   }
 
-  std::vector<MonCommand> get_commands() const
-  {
-    assert(active_modules);
-    return active_modules->get_commands();
-  }
-  std::vector<ModuleCommand> get_py_commands() const
-  {
-    assert(active_modules);
-    return active_modules->get_py_commands();
-  }
   void get_health_checks(health_check_map_t *checks)
   {
     assert(active_modules);

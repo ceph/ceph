@@ -251,3 +251,42 @@ void PyModuleRegistry::list_modules(std::set<std::string> *modules)
   g_conf->with_val<std::string>("mgr_module_path",
 				&_list_modules, modules);
 }
+
+int PyModuleRegistry::handle_command(
+  std::string const &module_name,
+  const cmdmap_t &cmdmap,
+  std::stringstream *ds,
+  std::stringstream *ss)
+{
+  if (active_modules) {
+    return active_modules->handle_command(module_name, cmdmap, ds, ss);
+  } else {
+    // We do not expect to be called before active modules is up, but
+    // it's straightfoward to handle this case so let's do it.
+    return -EAGAIN;
+  }
+}
+
+std::vector<ModuleCommand> PyModuleRegistry::get_py_commands() const
+{
+  Mutex::Locker l(lock);
+
+  std::vector<ModuleCommand> result;
+  for (const auto& i : modules) {
+    i.second->get_commands(&result);
+  }
+
+  return result;
+}
+
+std::vector<MonCommand> PyModuleRegistry::get_commands() const
+{
+  std::vector<ModuleCommand> commands = get_py_commands();
+  std::vector<MonCommand> result;
+  for (auto &pyc: commands) {
+    result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
+                        pyc.perm, "cli", MonCommand::FLAG_MGR});
+  }
+  return result;
+}
+
