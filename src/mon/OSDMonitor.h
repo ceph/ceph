@@ -192,6 +192,15 @@ struct osdmap_manifest_t {
     decode(p);
   }
 
+  void dump(Formatter *f) {
+    f->dump_unsigned("first_pinned", get_first_pinned());
+    f->dump_unsigned("last_pinned", get_last_pinned());
+    f->open_array_section("pinned_maps");
+    for (auto& i : pinned) {
+      f->dump_unsigned("epoch", i);
+    }
+    f->close_section();
+ }
 };
 WRITE_CLASS_ENCODER(osdmap_manifest_t);
 

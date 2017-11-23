@@ -4057,6 +4057,12 @@ void OSDMonitor::dump_info(Formatter *f)
   f->open_object_section("crushmap");
   osdmap.crush->dump(f);
   f->close_section();
+
+  if (has_osdmap_manifest) {
+    f->open_object_section("osdmap_manifest");
+    osdmap_manifest.dump(f);
+    f->close_section();
+  }
 }
 
 namespace {
