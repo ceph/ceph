@@ -7,6 +7,7 @@
 
 #define CLS_OTP_MAX_REPO_SIZE 100
 
+class JSONObj;
 
 namespace rados {
   namespace cls {
@@ -53,6 +54,7 @@ namespace rados {
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
+        void decode_json(JSONObj *obj);
       };
       WRITE_CLASS_ENCODER(rados::cls::otp::otp_info_t)
 
