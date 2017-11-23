@@ -1,6 +1,8 @@
 
 import time
 import requests
+import errno
+from teuthology.exceptions import CommandFailedError
 
 from tasks.mgr.mgr_test_case import MgrTestCase
 
@@ -76,3 +78,44 @@ class TestModuleSelftest(MgrTestCase):
         # Check that all mgr daemons are still running
         self.assertEqual(original_active, self.mgr_cluster.get_active_id())
         self.assertEqual(original_standbys, self.mgr_cluster.get_standby_ids())
+
+    def test_module_commands(self):
+        """
+        That module-handled commands have appropriate  behavior on
+        disabled/failed/recently-enabled modules.
+        """
+
+        self._load_module("selftest")
+
+        # Calling a command on a disabled module should return the proper
+        # error code.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "module", "disable", "status")
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "osd", "status")
+
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EOPNOTSUPP)
+
+        # Calling a command that really doesn't exist should give me EINVAL.
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "osd", "albatross")
+
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EINVAL)
+
+        # Enabling a module and then immediately using ones of its commands
+        # should work (#21683)
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "module", "enable", "status")
+        self.mgr_cluster.mon_manager.raw_cluster_cmd("osd", "status")
+
+        # Calling a command for a failed module should return the proper
+        # error code.
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "self-test", "background", "start", "throw_exception")
+        with self.assertRaises(CommandFailedError) as exc_raised:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "self-test", "run"
+            )
+        self.assertEqual(exc_raised.exception.exitstatus, errno.EIO)
