@@ -17,10 +17,13 @@ class Module(MgrModule):
     activities in its serve() thread.
     """
 
+    # These workloads are things that can be requested to run inside the
+    # serve() function
     WORKLOAD_COMMAND_SPAM = "command_spam"
+    WORKLOAD_THROW_EXCEPTION = "throw_exception"
     SHUTDOWN = "shutdown"
 
-    WORKLOADS = (WORKLOAD_COMMAND_SPAM, )
+    WORKLOADS = (WORKLOAD_COMMAND_SPAM, WORKLOAD_THROW_EXCEPTION)
 
     COMMANDS = [
             {
@@ -211,6 +214,8 @@ class Module(MgrModule):
             elif self._workload == self.SHUTDOWN:
                 self.log.info("Shutting down...")
                 break
+            elif self._workload == self.WORKLOAD_THROW_EXCEPTION:
+                raise RuntimeError("Synthetic exception in serve")
             else:
                 self.log.info("Waiting for workload request...")
                 self._event.wait()
