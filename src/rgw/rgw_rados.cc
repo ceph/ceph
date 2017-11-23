@@ -4544,7 +4544,11 @@ int RGWRados::init_complete()
   data_notifier->start();
 
   lc = new RGWLC();
-  lc->initialize(cct, this);
+  ret = lc->initialize(cct, this);
+  if (ret) {
+    ldout(cct, 0) << "ERROR: lc initialize error " << ret << dendl;
+    return ret;
+  }
 
   if (use_lc_thread)
     lc->start_processor();

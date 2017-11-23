@@ -3419,6 +3419,60 @@ static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, buffe
   return ret;
 }
 
+static int rgw_cls_lc_set_meta(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  bufferlist::iterator in_iter = in->begin();
+
+  cls_rgw_lc_set_meta_op meta_op;
+  try {
+    ::decode(meta_op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_lc_set_meta(): failed to decode meta_op\n");
+    return -EINVAL;
+  }
+
+  bufferlist bl;
+  ::encode(meta_op.meta, bl);
+
+  int ret = cls_cxx_map_set_val(hctx, meta_op.meta.first, &bl);
+  return ret;
+}
+
+static int rgw_cls_lc_get_meta(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  cls_rgw_lc_get_meta_op_ret op_ret;
+  cls_rgw_lc_get_meta_op meta_op;
+  bufferlist::iterator in_iter = in->begin();
+  try {
+    ::decode(meta_op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_lc_get_meta(): failed to decode meta_op\n");
+    return -EINVAL;
+  }
+
+  bool more;
+  string filter_prefix;
+  map<string, bufferlist> vals;
+  int ret = cls_cxx_map_get_vals(hctx, meta_op.key, filter_prefix, 1, &vals, &more);
+  if (ret < 0)
+    return ret;
+
+  pair<string, int> meta;
+  if (!vals.empty()) {
+    map<string, bufferlist>::iterator iter = vals.begin();
+    try {
+      bufferlist::iterator bl_iter = iter->second.begin();
+      ::decode(meta, bl_iter);
+    } catch (buffer::error& err) {
+      CLS_LOG(1, "ERROR: rgw_cls_lc_list_entries(): failed to decode meta\n");
+      return -EIO;
+    }
+  }
+  op_ret.meta = meta;
+  ::encode(op_ret, *out);
+  return 0;
+}
+
 static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist::iterator in_iter = in->begin();
@@ -3830,6 +3884,8 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_lc_put_head;
   cls_method_handle_t h_rgw_lc_get_head;
   cls_method_handle_t h_rgw_lc_list_entries;
+  cls_method_handle_t h_rgw_lc_set_meta;
+  cls_method_handle_t h_rgw_lc_get_meta;
   cls_method_handle_t h_rgw_reshard_add;
   cls_method_handle_t h_rgw_reshard_list;
   cls_method_handle_t h_rgw_reshard_get;
@@ -3891,6 +3947,9 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_LC_PUT_HEAD, CLS_METHOD_RD| CLS_METHOD_WR, rgw_cls_lc_put_head, &h_rgw_lc_put_head);
   cls_register_cxx_method(h_class, RGW_LC_GET_HEAD, CLS_METHOD_RD, rgw_cls_lc_get_head, &h_rgw_lc_get_head);
   cls_register_cxx_method(h_class, RGW_LC_LIST_ENTRIES, CLS_METHOD_RD, rgw_cls_lc_list_entries, &h_rgw_lc_list_entries);
+  cls_register_cxx_method(h_class, RGW_LC_SET_META, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_set_meta, &h_rgw_lc_set_meta);
+  cls_register_cxx_method(h_class, RGW_LC_GET_META, CLS_METHOD_RD, rgw_cls_lc_get_meta, &h_rgw_lc_get_meta);
+
   cls_register_cxx_method(h_class, "reshard_add", CLS_METHOD_RD | CLS_METHOD_WR, rgw_reshard_add, &h_rgw_reshard_add);
   cls_register_cxx_method(h_class, "reshard_list", CLS_METHOD_RD, rgw_reshard_list, &h_rgw_reshard_list);
   cls_register_cxx_method(h_class, "reshard_get", CLS_METHOD_RD,rgw_reshard_get, &h_rgw_reshard_get);

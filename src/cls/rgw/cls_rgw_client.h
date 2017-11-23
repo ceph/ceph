@@ -527,6 +527,8 @@ int cls_rgw_lc_list(librados::IoCtx& io_ctx, string& oid,
                     const string& marker,
                     uint32_t max_entries,
                     map<string, int>& entries);
+int cls_rgw_lc_set_meta(librados::IoCtx& io_ctx, string& oid, pair<string, int>& meta);
+int cls_rgw_lc_get_meta(librados::IoCtx& io_ctx, string& oid, string& key, pair<string, int>& meta);
 
 /* resharding */
 void cls_rgw_reshard_add(librados::ObjectWriteOperation& op, const cls_rgw_reshard_entry& entry);

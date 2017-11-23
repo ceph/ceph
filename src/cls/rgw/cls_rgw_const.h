@@ -53,6 +53,8 @@
 #define RGW_LC_PUT_HEAD "lc_put_head"
 #define RGW_LC_GET_HEAD "lc_get_head"
 #define RGW_LC_LIST_ENTRIES "lc_list_entries"
+#define RGW_LC_SET_META "lc_set_meta"
+#define RGW_LC_GET_META "lc_get_meta"
 
 
 #endif

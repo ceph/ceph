@@ -1057,6 +1057,60 @@ struct cls_rgw_lc_set_entry_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_set_entry_op)
 
+struct cls_rgw_lc_set_meta_op {
+  pair<string, int> meta;
+  cls_rgw_lc_set_meta_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(meta, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(meta, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_set_meta_op)
+
+struct cls_rgw_lc_get_meta_op {
+  string key;
+  cls_rgw_lc_get_meta_op() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_meta_op)
+
+struct cls_rgw_lc_get_meta_op_ret {
+  pair<string, int> meta;
+  cls_rgw_lc_get_meta_op_ret() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    ::encode(meta, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    ::decode(meta, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_rgw_lc_get_meta_op_ret)
+
 struct cls_rgw_lc_put_head_op {
   cls_rgw_lc_obj_head head;
 

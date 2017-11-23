@@ -171,16 +171,239 @@ void *RGWLC::LCWorker::entry() {
   return NULL;
 }
 
-void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
+static int restore_miss_entry(IoCtx& io_ctx, string& meta_oid, int new_objs, int max_lock_secs)
+{
+  int ret = 0;
+  string marker;
+  map<string, int > tmp_entries;
+  rados::cls::lock::Lock l(lc_index_lock_name); 
+
+  int index = 0;
+
+  ret = cls_rgw_lc_list(io_ctx, meta_oid, marker, MAX_LC_LIST_ENTRIES, tmp_entries);
+  if (ret < 0) {
+    dout(20) << "RGWLC::restore_miss_entry() cls_rgw_lc_list error " << ret << dendl;
+    return ret;
+  }
+  vector<std::string> result;
+  string bucket_name, bucket_id;
+  string oid;
+
+  for (auto iter = tmp_entries.begin(); iter != tmp_entries.end(); ++iter) {
+    if (!iter->first.compare(lc_meta_key)) {
+      continue;
+    }
+    boost::split(result, iter->first, boost::is_any_of(":"));
+    bucket_name = result[1];
+    bucket_id = result[2];
+    string new_id = bucket_name + ':' +bucket_id;
+    index = ceph_str_hash_linux(new_id.c_str(), new_id.size()) % HASH_PRIME % new_objs;
+
+    oid = lc_oid_prefix;
+    char buf[32];
+    snprintf(buf, 32, ".%d", index);
+    oid.append(buf);
+
+    do{
+      utime_t time(max_lock_secs, 0);
+      l.set_duration(time);
+      ret = l.lock_exclusive(&io_ctx, oid);
+      if (ret == -EBUSY) {
+	dout(0) << "RGWLC::restore_miss_entry() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+	sleep(5);
+	continue;
+      }
+      if (ret < 0) {
+	return ret;
+      }
+      pair<string, int > entry(iter->first, lc_uninitial);
+      ret = cls_rgw_lc_set_entry(io_ctx, oid, entry);
+      if (ret < 0) {
+	dout(0) << "RGWLC::restore_miss_entry() failed to rm entry " << oid << ret << dendl;
+	l.unlock(&io_ctx, oid);
+	return ret;
+      }
+      ret = cls_rgw_lc_rm_entry(io_ctx, meta_oid, entry);
+      if (ret < 0) {
+	dout(0) << "RGWLC::restore_miss_entry() failed to rm entry " << oid << ret << dendl;
+	l.unlock(&io_ctx, oid);
+	return ret;
+      }
+
+      l.unlock(&io_ctx, oid);
+      break;
+    }while(1);
+  }
+
+  return ret;
+}
+
+static int reset_all_entry(IoCtx& io_ctx, string& meta_oid, int old_objs, int new_objs, int max_lock_secs) 
+{
+  int ret, i; 
+  map<string, int > entries;
+  char buf[32];
+  string oid;
+  int index = 0;
+
+  rados::cls::lock::Lock l(lc_index_lock_name); 
+  for (i = 0; i < old_objs; i++) {
+    snprintf(buf, 32, ".%d", i);
+    oid = lc_oid_prefix;
+    oid.append(buf);
+
+    string marker;
+    map<string, int > tmp_entries;
+    utime_t time(max_lock_secs, 0);
+    l.set_duration(time);
+    ret = l.lock_exclusive(&io_ctx, oid);
+    if (ret == -EBUSY) { /* already locked by another lc processor */
+      dout(0) << "RGWLC::reset_all_entry() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0) {
+      dout(0) << "RGWLC::reset_all_entry() failed to lock " << oid << ret << dendl;
+      return ret;
+    }
+
+    do {
+      int ret = cls_rgw_lc_list(io_ctx, oid, marker, MAX_LC_LIST_ENTRIES, tmp_entries);
+      if (ret < 0) {
+	dout(0) << "RGWLC::reset_all_entry() cls_rgw_lc_list error " << oid << ret << dendl;
+	l.unlock(&io_ctx, oid);
+	return ret;
+      }
+      for (auto iter = tmp_entries.begin(); iter != tmp_entries.end(); ++iter) {
+	pair<string, int > e(iter->first, lc_uninitial);
+	entries.insert(e);
+	ret = cls_rgw_lc_set_entry(io_ctx, meta_oid, e);
+	if (ret < 0) {
+	  dout(0) << "RGWLC::reset_all_entry() failed to rm entry " << oid << ret << dendl;
+	  l.unlock(&io_ctx, oid);
+	  return ret;
+	}
+	ret = cls_rgw_lc_rm_entry(io_ctx, oid, e);
+	if (ret < 0) {
+	  dout(0) << "RGWLC::reset_all_entry() failed to rm entry " << oid << ret << dendl;
+	  l.unlock(&io_ctx, oid);
+	  return ret;
+	}
+      }
+    } while (!tmp_entries.empty());
+    l.unlock(&io_ctx, oid);
+  }
+
+  vector<std::string> result;
+  string bucket_name, bucket_id;
+  for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+    boost::split(result, entry->first, boost::is_any_of(":"));
+    bucket_name = result[1];
+    bucket_id = result[2];
+    string new_id = bucket_name + ':' +bucket_id;
+    index = ceph_str_hash_linux(new_id.c_str(), new_id.size()) % HASH_PRIME % new_objs;
+    oid = lc_oid_prefix;
+    snprintf(buf, 32, ".%d", index);
+    oid.append(buf);
+
+    do {
+      utime_t time(max_lock_secs, 0);
+      l.set_duration(time);
+      ret = l.lock_exclusive(&io_ctx, oid);
+      if (ret == -EBUSY) {
+	dout(0) << "RGWLC::reset_all_entry() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+	sleep(5);
+	continue;
+      }
+      if (ret < 0) {
+	return ret;
+      }
+
+      pair<string, int > new_entry(entry->first, lc_uninitial);
+      ret = cls_rgw_lc_set_entry(io_ctx, oid,  new_entry);
+      if (ret < 0) {
+	l.unlock(&io_ctx, oid);
+	dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry " << oid << dendl;
+	return ret;
+      }
+
+      ret = cls_rgw_lc_rm_entry(io_ctx, meta_oid, new_entry);
+      if (ret < 0) {
+	dout(0) << "RGWLC::reset_all_entry() failed to rm entry " << oid << ret << dendl;
+	l.unlock(&io_ctx, oid);
+	return ret;
+      }
+      l.unlock(&io_ctx, oid);
+      break;
+    }while(1);
+  }
+
+  ret = restore_miss_entry(io_ctx, meta_oid, new_objs, max_lock_secs);
+  return ret;
+}
+
+int RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
   max_objs = cct->_conf->rgw_lc_max_objs;
+  int old_objs = 0, objs = 0, ret = 0;
+  string lc_meta_obj_name = "lc.meta";
+  pair<string, int > meta;
+  int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
+  string lc_objs = "lc_objs";
+
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
+  else if (max_objs < MIN_MAX_OBJS)
+    max_objs = MIN_MAX_OBJS;
 
-  obj_names = new string[max_objs];
+  rados::cls::lock::Lock l(lc_meta_lock_name);
+  do {
+    utime_t time(max_lock_secs, 0);
+    l.set_duration(time);
 
-  for (int i = 0; i < max_objs; i++) {
+    ret = l.lock_exclusive(&store->lc_pool_ctx, lc_meta_obj_name);
+    if (ret == -EBUSY) { /* already locked by another lc processor */
+      ldout(cct, 0) << "RGWLC::initialize() failed to acquire lock on, sleep 5, try again " << lc_meta_obj_name << dendl;
+      sleep(5);
+      continue;
+    }
+    if (ret < 0){
+      ldout(cct, 0) << __LINE__ << "RGWLC::initialize() lock error " <<  ret << dendl;
+      return ret;
+    }
+    map<string, int > tmp_entries;
+    string marker;
+    ret = cls_rgw_lc_get_meta(store->lc_pool_ctx, lc_meta_obj_name, lc_meta_key, meta);
+    old_objs = meta.second;
+    if (ret) {
+      ldout(cct, 0) << __LINE__ << "RGWLC::initialize() lock error " <<  ret << dendl;
+      l.unlock(&store->lc_pool_ctx, lc_meta_obj_name);
+      return ret;
+    } else {
+      objs = max_objs;
+      if (old_objs != max_objs) {
+	ret = reset_all_entry(store->lc_pool_ctx, lc_meta_obj_name, old_objs, max_objs, max_lock_secs);
+	if (ret) {
+	  l.unlock(&store->lc_pool_ctx, lc_meta_obj_name);
+	  ldout(cct, 0) << "reset_all_entry failed " << ret << dendl;
+	  return ret;
+	}
+	pair<string, int> m(lc_meta_key, objs);
+	ret = cls_rgw_lc_set_meta(store->lc_pool_ctx, lc_meta_obj_name, m);
+	if (ret) {
+	  l.unlock(&store->lc_pool_ctx, lc_meta_obj_name);
+	  ldout(cct, 0) << "cls_rgw_lc_set_meta failed " << ret << dendl;
+	  return ret;
+	}
+      }
+      break;
+    }
+    l.unlock(&store->lc_pool_ctx, lc_meta_obj_name);
+  }while(1);
+
+  obj_names = new string[objs];
+  for (int i = 0; i < objs; i++) {
     obj_names[i] = lc_oid_prefix;
     char buf[32];
     snprintf(buf, 32, ".%d", i);
@@ -191,6 +414,7 @@ void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
   char cookie_buf[COOKIE_LEN + 1];
   gen_rand_alphanumeric(cct, cookie_buf, sizeof(cookie_buf) - 1);
   cookie = cookie_buf;
+  return ret;
 }
 
 void RGWLC::finalize()
@@ -228,7 +452,6 @@ int RGWLC::bucket_lc_prepare(int index)
 
   string marker;
 
-#define MAX_LC_LIST_ENTRIES 100
   do {
     int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, MAX_LC_LIST_ENTRIES, entries);
     if (ret < 0)

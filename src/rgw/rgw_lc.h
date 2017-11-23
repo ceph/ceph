@@ -23,9 +23,13 @@
 #include <atomic>
 
 #define HASH_PRIME 7877
+#define MIN_MAX_OBJS 1
 #define MAX_ID_LEN 255
+#define MAX_LC_LIST_ENTRIES 100
 static string lc_oid_prefix = "lc";
 static string lc_index_lock_name = "lc_process";
+static string lc_meta_lock_name = "lc_meta";
+static string lc_meta_key = "rgw_lc_max_objs";
 
 extern const char* LC_STATUS[];
 
@@ -364,7 +368,7 @@ class RGWLC {
     finalize();
   }
 
-  void initialize(CephContext *_cct, RGWRados *_store);
+  int initialize(CephContext *_cct, RGWRados *_store);
   void finalize();
 
   int process();

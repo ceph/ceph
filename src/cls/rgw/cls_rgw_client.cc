@@ -776,6 +776,38 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, string& oid, pair<string, int>& entry)
   return r;
 }
 
+int cls_rgw_lc_set_meta(IoCtx& io_ctx, string& oid, pair<string, int>& meta)
+{
+  bufferlist in, out;
+  cls_rgw_lc_set_meta_op call;
+  call.meta = meta;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_SET_META, in, out);
+  return r;
+}
+
+int cls_rgw_lc_get_meta(IoCtx& io_ctx, string& oid, string& key, pair<string, int>& meta)
+{
+  bufferlist in, out;
+  cls_rgw_lc_get_meta_op call;
+  call.key = key;
+  ::encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_GET_META, in, out);
+  if (r < 0)
+    return r;
+
+  cls_rgw_lc_get_meta_op_ret ret;
+  try {
+    bufferlist::iterator iter = out.begin();
+    ::decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  meta = ret.meta;
+  return r;
+}
+
 int cls_rgw_lc_list(IoCtx& io_ctx, string& oid,
                     const string& marker,
                     uint32_t max_entries,
