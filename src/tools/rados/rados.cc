@@ -573,8 +573,8 @@ public:
     LoadGen *lg;
     librados::AioCompletion *completion;
 
-    LoadGenOp() : id(0), type(0), off(0), len(0), lg(NULL), completion(NULL) {}
-    explicit LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(NULL) {}
+    LoadGenOp() : id(0), type(0), off(0), len(0), lg(nullptr), completion(nullptr) {}
+    explicit LoadGenOp(LoadGen *_lg) : id(0), type(0), off(0), len(0), lg(_lg), completion(nullptr) {}
   };
 
   int max_op;
@@ -702,7 +702,7 @@ int LoadGen::bootstrap(const char *pool)
       }
     }
 
-    librados::AioCompletion *c = rados->aio_create_completion(NULL, NULL, NULL);
+    librados::AioCompletion *c = rados->aio_create_completion(nullptr, nullptr, nullptr);
     completions.push_back(c);
     // generate object
     ret = io_ctx.aio_write(info.name, c, bl, buf_len, info.len - buf_len);
@@ -729,7 +729,7 @@ int LoadGen::bootstrap(const char *pool)
 
 void LoadGen::run_op(LoadGenOp *op)
 {
-  op->completion = rados->aio_create_completion(op, _load_gen_cb, NULL);
+  op->completion = rados->aio_create_completion(op, _load_gen_cb, nullptr);
 
   switch (op->type) {
   case OP_READ:
@@ -886,7 +886,7 @@ protected:
   }
   void completions_done() override {
     delete[] completions;
-    completions = NULL;
+    completions = nullptr;
   }
   int create_completion(int slot, void (*cb)(void *, void*), void *arg) override {
     completions[slot] = rados.aio_create_completion((void *) arg, 0, cb);
@@ -992,7 +992,7 @@ protected:
 
 public:
   RadosBencher(CephContext *cct_, librados::Rados& _r, librados::IoCtx& _i)
-    : ObjBencher(cct_), completions(NULL), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
+    : ObjBencher(cct_), completions(nullptr), rados(_r), io_ctx(_i), iterator_valid(false), write_destination(OP_WRITE_DEST_OBJ) {}
   ~RadosBencher() override { }
 
   void set_write_destination(OpWriteDest dest) {
@@ -1165,7 +1165,7 @@ static int do_cache_flush(IoCtx& io_ctx, string oid)
   io_ctx.aio_operate(oid.c_str(), completion, &op,
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY,
-		     NULL);
+		     nullptr);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
@@ -1182,7 +1182,7 @@ static int do_cache_try_flush(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
-		     NULL);
+		     nullptr);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
@@ -1199,7 +1199,7 @@ static int do_cache_evict(IoCtx& io_ctx, string oid)
 		     librados::OPERATION_IGNORE_CACHE |
 		     librados::OPERATION_IGNORE_OVERLAY |
 		     librados::OPERATION_SKIPRWLOCKS,
-		     NULL);
+		     nullptr);
   completion->wait_for_safe();
   int r = completion->get_return_value();
   completion->release();
@@ -1609,8 +1609,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 {
   int ret;
   bool create_pool = false;
-  const char *pool_name = NULL;
-  const char *target_pool_name = NULL;
+  const char *pool_name = nullptr;
+  const char *target_pool_name = nullptr;
   string oloc, target_oloc, nspace, target_nspace;
   int concurrent_ios = 16;
   unsigned op_size = default_op_size;
@@ -1624,7 +1624,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   bool no_verify = false;
   bool use_striper = false;
   bool with_clones = false;
-  const char *snapname = NULL;
+  const char *snapname = nullptr;
   snap_t snapid = CEPH_NOSNAP;
   std::map<std::string, std::string>::const_iterator i;
 
@@ -1645,9 +1645,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string run_name;
   std::string prefix;
   bool forcefull = false;
-  Formatter *formatter = NULL;
+  Formatter *formatter = nullptr;
   bool pretty_format = false;
-  const char *output = NULL;
+  const char *output = nullptr;
   bool omap_key_valid = false;
   std::string omap_key;
   std::string omap_key_pretty;
@@ -2200,7 +2200,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
 
-    char* endptr = NULL;
+    char* endptr = nullptr;
     uint64_t new_auid = strtol(nargs[1], &endptr, 10);
     if (*endptr) {
       cerr << "Invalid value for new-auid: '" << nargs[1] << "'" << std::endl;
@@ -2275,9 +2275,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (!pool_name || nargs.size() < 2)
       usage_exit();
     string oid(nargs[1]);
-    time_t timestamp = time(NULL);
+    time_t timestamp = time(nullptr);
     if (nargs.size() > 2) {
-      char* endptr = NULL;
+      char* endptr = nullptr;
       timestamp = static_cast<time_t>(strtoll(nargs[2], &endptr, 10));
       if (*endptr) {
         cerr << "Invalid value for timestamp: '" << nargs[2] << "'" << std::endl;
@@ -2328,7 +2328,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
 
     string oid(nargs[1]);
-    char* endptr = NULL;
+    char* endptr = nullptr;
     long size = strtoll(nargs[2], &endptr, 10);
     if (*endptr) {
       cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
@@ -2806,7 +2806,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     if (nargs.size() < 2)
       usage_exit();
     if (nargs.size() > 2) {
-      char* endptr = NULL;
+      char* endptr = nullptr;
       auid = strtol(nargs[2], &endptr, 10);
       if (*endptr) {
 	cerr << "Invalid value for auid: '" << nargs[2] << "'" << std::endl;
@@ -2996,7 +2996,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   else if (strcmp(nargs[0], "bench") == 0) {
     if (!pool_name || nargs.size() < 3)
       usage_exit();
-    char* endptr = NULL;
+    char* endptr = nullptr;
     int seconds = strtol(nargs[1], &endptr, 10);
     if (*endptr) {
       cerr << "Invalid value for seconds: '" << nargs[1] << "'" << std::endl;
@@ -3041,7 +3041,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     bencher.set_show_time(show_time);
     bencher.set_write_destination(static_cast<OpWriteDest>(bench_write_dest));
 
-    ostream *outstream = NULL;
+    ostream *outstream = nullptr;
     if (formatter) {
       bencher.set_formatter(formatter);
       if (output)
@@ -3638,7 +3638,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
   common_init_finish(g_ceph_context);
 
@@ -3646,113 +3646,113 @@ int main(int argc, const char **argv)
   for (i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)nullptr)) {
       usage(cout);
       exit(0);
-    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-f", "--force", (char*)nullptr)) {
       opts["force"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--force-full", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--force-full", (char*)nullptr)) {
       opts["force-full"] = "true";
-    } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-d", "--delete-after", (char*)nullptr)) {
       opts["delete-after"] = "true";
     } else if (ceph_argparse_flag(args, i, "-C", "--create", "--create-pool",
-				  (char*)NULL)) {
+				  (char*)nullptr)) {
       opts["create"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char*)nullptr)) {
       opts["pretty-format"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--show-time", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--show-time", (char*)nullptr)) {
       opts["show-time"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--no-cleanup", (char*)nullptr)) {
       opts["no-cleanup"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--no-hints", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--no-hints", (char*)nullptr)) {
       opts["no-hints"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)nullptr)) {
       opts["no-verify"] = "true";
-    } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--run-name", (char*)nullptr)) {
       opts["run-name"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--prefix", (char*)nullptr)) {
       opts["prefix"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)nullptr)) {
       opts["pool"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-pool", (char*)nullptr)) {
       opts["target_pool"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-locator" , (char *)nullptr)) {
       opts["object_locator"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--target-locator" , (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-locator" , (char *)nullptr)) {
       opts["target_locator"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-nspace" , (char *)nullptr)) {
       opts["target_nspace"] = val;
-    } else if (ceph_argparse_flag(args, i, "--striper" , (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--striper" , (char *)nullptr)) {
       opts["striper"] = "true";
-    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-t", "--concurrent-ios", (char*)nullptr)) {
       opts["concurrent-ios"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--block-size", (char*)nullptr)) {
       opts["block-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-b", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", (char*)nullptr)) {
       opts["block-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--object-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-size", (char*)nullptr)) {
       opts["object-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)nullptr)) {
       opts["max-objects"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--offset", (char*)nullptr)) {
       opts["offset"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", (char*)nullptr)) {
       opts["object-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-s", "--snap", (char*)nullptr)) {
       opts["snap"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-S", "--snapid", (char*)nullptr)) {
       opts["snapid"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-object-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-object-size", (char*)nullptr)) {
       opts["min-object-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-object-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-object-size", (char*)nullptr)) {
       opts["max-object-size"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-op-len", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-op-len", (char*)nullptr)) {
       opts["min-op-len"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-op-len", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-op-len", (char*)nullptr)) {
       opts["max-op-len"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-ops", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-ops", (char*)nullptr)) {
       opts["max-ops"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-backlog", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-backlog", (char*)nullptr)) {
       opts["max-backlog"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--target-throughput", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--target-throughput", (char*)nullptr)) {
       opts["target-throughput"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--read-percent", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--read-percent", (char*)nullptr)) {
       opts["read-percent"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)nullptr)) {
       opts["num-objects"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--run-length", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--run-length", (char*)nullptr)) {
       opts["run-length"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)nullptr)) {
       opts["workers"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)nullptr)) {
       opts["format"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--lock-tag", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-tag", (char*)nullptr)) {
       opts["lock-tag"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--lock-cookie", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-cookie", (char*)nullptr)) {
       opts["lock-cookie"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--lock-description", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-description", (char*)nullptr)) {
       opts["lock-description"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--lock-duration", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-duration", (char*)nullptr)) {
       opts["lock-duration"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--lock-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--lock-type", (char*)nullptr)) {
       opts["lock-type"] = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-N", "--namespace", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-N", "--namespace", (char*)nullptr)) {
       opts["namespace"] = val;
-    } else if (ceph_argparse_flag(args, i, "--all", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--all", (char*)nullptr)) {
       opts["all"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--default", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--default", (char*)nullptr)) {
       opts["default"] = "true";
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--output", (char*)nullptr)) {
       opts["output"] = val;
-    } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--write-omap", (char*)nullptr)) {
       opts["write-dest-omap"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--write-object", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--write-object", (char*)nullptr)) {
       opts["write-dest-obj"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--write-xattr", (char*)nullptr)) {
       opts["write-dest-xattr"] = "true";
-    } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--with-clones", (char*)nullptr)) {
       opts["with-clones"] = "true";
-    } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--omap-key-file", (char*)nullptr)) {
       opts["omap-key-file"] = val;
     } else {
       if (val[0] == '-')

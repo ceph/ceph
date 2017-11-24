@@ -30,7 +30,7 @@ using namespace librados;
  */
 int PoolDump::dump(IoCtx *io_ctx)
 {
-  assert(io_ctx != NULL);
+  assert(io_ctx!= nullptr);
 
   int r = 0;
   write_super();

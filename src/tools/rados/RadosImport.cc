@@ -33,12 +33,12 @@ int RadosImport::import(std::string pool, bool no_overwrite)
     cerr << "Error " << ret << " in cluster.init" << std::endl;
     return ret;
   }
-  ret = cluster.conf_read_file(NULL);
+  ret = cluster.conf_read_file(nullptr);
   if (ret) {
     cerr << "Error " << ret << " in cluster.conf_read_file" << std::endl;
     return ret;
   }
-  ret = cluster.conf_parse_env(NULL);
+  ret = cluster.conf_parse_env(nullptr);
   if (ret) {
     cerr << "Error " << ret << " in cluster.conf_read_env" << std::endl;
     return ret;
