@@ -710,7 +710,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
               << info.rank << " damaged" << dendl;
 
       utime_t until = ceph_clock_now();
-      until += g_conf->mds_blacklist_interval;
+      until += g_conf->get_val<double>("mon_mds_blacklist_interval");
       const auto blacklist_epoch = mon->osdmon()->blacklist(info.addr, until);
       request_proposal(mon->osdmon());
       pending_fsmap.damaged(gid, blacklist_epoch);
@@ -1217,7 +1217,7 @@ bool MDSMonitor::fail_mds_gid(mds_gid_t gid)
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
     utime_t until = ceph_clock_now();
-    until += g_conf->mds_blacklist_interval;
+    until += g_conf->get_val<double>("mon_mds_blacklist_interval");
     blacklist_epoch = mon->osdmon()->blacklist(info.addr, until);
   }
 
