@@ -2160,14 +2160,7 @@ int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m
     return -EIO;
   }
 
-  uint64_t head_size = manifest->get_head_size();
-
-  if (head_size > 0) {
-    cur_stripe_size = head_size;
-  } else {
-    cur_stripe_size = rule.stripe_max_size;
-  }
-  
+  cur_stripe_size = rule.stripe_max_size;
   cur_part_id = rule.start_part_num;
 
   manifest->get_implicit_location(cur_part_id, cur_stripe, 0, NULL, &cur_obj);
