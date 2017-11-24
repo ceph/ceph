@@ -3881,6 +3881,9 @@ void OSDMonitor::tick()
 
   dout(10) << osdmap << dendl;
 
+  // always update osdmap manifest, regardless of being the leader.
+  load_osdmap_manifest();
+
   if (!mon->is_leader()) return;
 
   bool do_propose = false;
@@ -3891,8 +3894,16 @@ void OSDMonitor::tick()
   }
 
   // mark osds down?
-  if (check_failures(now))
+  if (check_failures(now)) {
     do_propose = true;
+  }
+
+  // Force a proposal if we need to prune; pruning is performed on
+  // ``encode_pending()``, hence why we need to regularly trigger a proposal
+  // even if there's nothing going on.
+  if (is_prune_enabled() && should_prune()) {
+    do_propose = true;
+  }
 
   // mark down osds out?
 
