@@ -857,8 +857,8 @@ void OSDMonitor::prime_pg_temp(
 
   if (next_up == next_acting) {
     acting.clear();
-    dout(20) << __func__ << "next_up === next_acting now, clear pg_temp"
-             << dendl;
+    dout(20) << __func__ << " next_up == next_acting now, clear pg_temp"
+	     << dendl;
   }
 
   dout(20) << __func__ << " " << pgid << " " << up << "/" << acting
