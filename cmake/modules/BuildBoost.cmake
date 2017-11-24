@@ -75,7 +75,7 @@ function(do_build_boost version)
   set(install_command
     ${b2} install)
   set(boost_root_dir "${CMAKE_BINARY_DIR}/boost")
-  if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/libs/config/include/boost/config.hpp")
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     message(STATUS "boost already in src")
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
