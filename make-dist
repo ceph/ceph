@@ -46,7 +46,16 @@ download_boost() {
         fi
     done
     set -e
-    tar xjf $boost_fname -C src
+    tar xjf $boost_fname -C src \
+        --exclude="$boost_version_underscore/libs/*/doc" \
+        --exclude="$boost_version_underscore/libs/*/example" \
+        --exclude="$boost_version_underscore/libs/*/examples" \
+        --exclude="$boost_version_underscore/libs/*/meta" \
+        --exclude="$boost_version_underscore/libs/*/test" \
+        --exclude="$boost_version_underscore/tools/boostbook" \
+        --exclude="$boost_version_underscore/tools/quickbook" \
+        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude='doc' --exclude='more' --exclude='status'
     mv src/boost_${boost_version_underscore} src/boost
     tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
