@@ -23,7 +23,19 @@ if [ -z "$id"  ]; then
     exit 1;
 fi
 
-data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
+## should not be changed
+conf_path=/etc/ceph
+## in case that users have customized conf file name (e.g., ceph-x.conf)
+conf_file="${conf_path}/`ls ${conf_path} | grep conf$`"
+## customized data path?
+data="`egrep 'osd data|osd_data' ${conf_file} | awk '{print $4}'`"
+if [ ${data} ]
+then
+  path=`awk -F $ '{print $1}' <<< "${data}"`
+  data=${path}${id}
+else
+  data="/var/lib/ceph/osd/${cluster:-ceph}-$id"
+fi
 
 # assert data directory exists - see http://tracker.ceph.com/issues/17091
 if [ ! -d "$data" ]; then
