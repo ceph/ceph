@@ -1644,6 +1644,132 @@ public:
     }
   };
 
+  class RegionReader {
+  protected:
+    struct region_t {
+      const uint64_t logical_offset;
+      const uint64_t blob_xoffset;   //region offset within the blob
+      const uint64_t length;
+
+      region_t(const uint64_t logical_offset,
+               const uint64_t blob_xoffset,
+               const uint64_t length)
+        : logical_offset(logical_offset),
+          blob_xoffset(blob_xoffset),
+          length(length) {
+      }
+
+      friend ostream& operator<<(ostream& out, const region_t& r) {
+        return out << "0x" << std::hex << r.logical_offset << ":"
+          << r.blob_xoffset << "~" << r.length << std::dec;
+      }
+    };
+
+    BlueStore* const store;
+    BlobRef bptr;
+    ghobject_t oid;
+
+    virtual void add_region_hint(
+      uint64_t logical_offset,
+      uint64_t blob_offset,
+      uint64_t length) = 0;
+
+    int _verify_csum(
+      const ghobject_t& oid,
+      const bluestore_blob_t* blob,
+      uint64_t blob_xoffset,
+      const ceph::bufferlist& bl,
+      uint64_t logical_offset);
+
+  public:
+    typedef std::unique_ptr<RegionReader> Ref;
+    typedef std::function<int(uint64_t,		//< offset
+                              uint64_t,		//< length
+                              ceph::bufferlist*,//< buffer to fill
+                              size_t)> io_issuer_t;
+
+    RegionReader(BlueStore* const store, BlobRef bptr)
+      : store(store),
+        bptr(bptr) {
+    }
+    virtual ~RegionReader() {
+    }
+
+    virtual int issue_io(io_issuer_t) = 0;
+    virtual int postprocess(ready_regions_t&, bool buffered) = 0;
+
+    static Ref create_or_update(
+      Ref&& current,
+      BlueStore* store,
+      BlobRef blob,
+      uint64_t logical_offset,
+      uint64_t blob_offset,
+      uint64_t length);
+  };
+
+  typedef RegionReader::Ref RegionReaderRef;
+
+  class PlainRegionReader : public RegionReader {
+    // --------------------------------------------------------
+    // intermediate data structures used while reading non-compressed
+    // portions of an object
+    struct plain_region_t : public region_t {
+      ceph::bufferlist bl;
+
+      // used later in read process
+      uint64_t front = 0;
+      uint64_t r_off = 0;
+
+      using region_t::region_t;
+    };
+
+    std::vector<plain_region_t> regions2read;
+
+    void add_region_hint(
+      const uint64_t logical_offset,
+      const uint64_t blob_offset,
+      const uint64_t length) override {
+      regions2read.emplace_back(logical_offset, blob_offset, length);
+    }
+
+public:
+    using RegionReader::RegionReader;
+    int issue_io(io_issuer_t) override;
+    int postprocess(ready_regions_t&, bool buffered) override;
+  };
+
+  class CompressedRegionReader : public RegionReader {
+    std::vector<region_t> regions2read;
+    ceph::bufferlist compressed_bl;
+   
+    void add_region_hint(
+      const uint64_t logical_offset,
+      const uint64_t blob_offset,
+      const uint64_t length) override {
+      regions2read.emplace_back(logical_offset, blob_offset, length);
+    }
+
+    int _decompress(
+      ceph::bufferlist& source,
+      ceph::bufferlist* result);
+  public:
+    using RegionReader::RegionReader;
+    int issue_io(io_issuer_t) override;
+    int postprocess(ready_regions_t&, bool buffered) override;
+  };
+
+  typedef std::map<BlobRef,
+                   RegionReaderRef> blobs2read_t;
+
+  
+  std::tuple<BlueStore::ready_regions_t,
+             BlueStore::blobs2read_t,
+             size_t>
+  _consult_cache(
+    BlueStore::OnodeRef o,
+    const uint64_t offset,
+    const size_t length);
+
   class OpSequencer : public Sequencer_impl {
   public:
     std::mutex qlock;
@@ -2452,13 +2578,7 @@ private:
 
   // --------------------------------------------------------
   // read processing internal methods
-  int _verify_csum(
-    OnodeRef& o,
-    const bluestore_blob_t* blob,
-    uint64_t blob_xoffset,
-    const bufferlist& bl,
-    uint64_t logical_offset) const;
-  int _decompress(bufferlist& source, bufferlist* result);
+  bool _do_read_is_buffered(const uint32_t op_flags) const;
 
 
   // --------------------------------------------------------
