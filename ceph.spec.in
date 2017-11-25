@@ -28,6 +28,7 @@
 %bcond_without cephfs_java
 %bcond_with lowmem_builder
 %bcond_without lttng
+%global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
@@ -36,7 +37,7 @@
 %bcond_without lowmem_builder
 #Compat macro for new _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
-  %define _fillupdir /var/adm/fillup-templates
+%global _fillupdir /var/adm/fillup-templates
 %endif
 %if 0%{?is_opensuse}
 %bcond_without lttng
@@ -84,8 +85,9 @@ License:	LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and 
 Group:		System/Filesystems
 %endif
 URL:		http://ceph.com/
-Source0:	https://download.ceph.com/tarballs/@TARBALL_BASENAME@.tar.bz2
+Source0:	%{?_remote_tarball_prefix}@TARBALL_BASENAME@.tar.bz2
 %if 0%{?suse_version}
+# _insert_obs_source_lines_here
 %if 0%{?is_opensuse}
 ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le
 %else
