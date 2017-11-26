@@ -330,4 +330,7 @@
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
 
+/* Defined if boost::context is available */
+#cmakedefine HAVE_BOOST_CONTEXT
+
 #endif /* CONFIG_H */
