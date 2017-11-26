@@ -60,9 +60,11 @@ void PGLog::IndexedLog::trim(
   assert(s <= can_rollback_to);
 
   auto earliest_dup_version =
-    log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
-    ? 0u
-    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked;
+    log.rbegin()->version.version < cct->_conf->get_val<uint64_t>(
+      "osd_pg_log_dups_tracked") ?
+      0u :
+      log.rbegin()->version.version - cct->_conf->get_val<uint64_t>(
+        "osd_pg_log_dups_tracked");
 
   while (!log.empty()) {
     const pg_log_entry_t &e = *log.begin();

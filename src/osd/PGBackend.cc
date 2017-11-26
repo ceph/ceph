@@ -80,12 +80,13 @@ void PGBackend::send_recovery_deletes(int prio,
       msg->set_priority(prio);
 
       while (it != objects.end() &&
-	     cost < cct->_conf->osd_max_push_cost &&
-	     deletes < cct->_conf->osd_max_push_objects) {
+	     cost < cct->_conf->get_val<uint64_t>("osd_max_push_cost") &&
+	     deletes < cct->_conf->get_val<uint64_t>(
+               "osd_max_push_objects")) {
 	dout(20) << __func__ << ": sending recovery delete << " << it->first
 		 << " " << it->second << " to osd." << shard << dendl;
 	msg->objects.push_back(*it);
-	cost += cct->_conf->osd_push_per_object_cost;
+	cost += cct->_conf->get_val<uint64_t>("osd_push_per_object_cost");
 	++deletes;
 	++it;
       }
@@ -1040,9 +1041,11 @@ void PGBackend::be_compare_scrubmaps(
 	update = MAYBE;
       }
       if (auth_object.digest_present && auth_object.omap_digest_present &&
-	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
+	  cct->_conf->get_val<uint64_t>(
+            "osd_debug_scrub_chance_rewrite_digest") &&
 	  (((unsigned)rand() % 100) >
-	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
+	   cct->_conf->get_val<uint64_t>(
+             "osd_debug_scrub_chance_rewrite_digest"))) {
 	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
 	update = MAYBE;
       }
@@ -1072,7 +1075,8 @@ void PGBackend::be_compare_scrubmaps(
       if (update != NO) {
 	utime_t age = now - auth_oi.local_mtime;
 	if (update == FORCE ||
-	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
+	    age > cct->_conf->get_val<int64_t>(
+              "osd_deep_scrub_update_digest_min_age")) {
 	  dout(20) << __func__ << " will update digest on " << *k << dendl;
           boost::optional<uint32_t> data_digest, omap_digest;
           if (auth_oi.is_data_digest()) {
@@ -1083,9 +1087,10 @@ void PGBackend::be_compare_scrubmaps(
           }
 	  missing_digest[*k] = make_pair(data_digest, omap_digest);
 	} else {
-	  dout(20) << __func__ << " missing digest but age " << age
-		   << " < " << cct->_conf->osd_deep_scrub_update_digest_min_age
-		   << " on " << *k << dendl;
+	  dout(20) << __func__ << " missing digest but age " << age << " < "
+                   << cct->_conf->get_val<int64_t>(
+                     "osd_deep_scrub_update_digest_min_age") << " on "
+                   << *k << dendl;
 	}
       }
     }

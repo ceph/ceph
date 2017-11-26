@@ -652,7 +652,8 @@ public:
     dirty_from_dups(eversion_t::max()),
     write_from_dups(eversion_t::max()),
     cct(cct),
-    pg_log_debug(!(cct && !(cct->_conf->osd_debug_pg_log_writeout))),
+    pg_log_debug(!(cct && !(cct->_conf->get_val<bool>(
+      "osd_debug_pg_log_writeout")))),
     touched_log(false),
     clear_divergent_priors(false)
   { }

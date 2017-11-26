@@ -401,7 +401,7 @@ void PG::proc_master_log(
     dirty_info = true;
   }
   update_history(oinfo.history);
-  assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+  assert(cct->_conf->get_val<bool>("osd_find_best_info_ignore_history_les") ||
 	 info.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].claim(omissing);
@@ -591,7 +591,8 @@ void PG::MissingLoc::add_batch_sources_info(
   for (map<hobject_t, pg_missing_item>::const_iterator i = needs_recovery_map.begin();
       i != needs_recovery_map.end();
       ++i) {
-    if (handle && ++loop >= pg->cct->_conf->osd_loop_before_reset_tphandle) {
+    if (handle && ++loop >= pg->cct->_conf->get_val<uint64_t>(
+      "osd_loop_before_reset_tphandle")) {
       handle->reset_tp_timeout();
       loop = 0;
     }
@@ -620,7 +621,8 @@ bool PG::MissingLoc::add_source_info(
        ++p) {
     const hobject_t &soid(p->first);
     eversion_t need = p->second.need;
-    if (handle && ++loop >= pg->cct->_conf->osd_loop_before_reset_tphandle) {
+    if (handle && ++loop >= pg->cct->_conf->get_val<uint64_t>(
+      "osd_loop_before_reset_tphandle")) {
       handle->reset_tp_timeout();
       loop = 0;
     }
@@ -1038,7 +1040,8 @@ map<pg_shard_t, pg_info_t>::const_iterator PG::find_best_info(
   for (map<pg_shard_t, pg_info_t>::const_iterator i = infos.begin();
        i != infos.end();
        ++i) {
-    if (!cct->_conf->osd_find_best_info_ignore_history_les &&
+    if (!cct->_conf->get_val<bool>(
+      "osd_find_best_info_ignore_history_les") &&
 	max_last_epoch_started_found < i->second.history.last_epoch_started) {
       *history_les_bound = true;
       max_last_epoch_started_found = i->second.history.last_epoch_started;
@@ -1462,7 +1465,8 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   // Otherwise, we will go "peered", but not "active"
   if (num_want_acting < pool.info.min_size &&
       (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
+       !cct->_conf->get_val<bool>(
+         "osd_allow_recovery_below_min_size"))) {
     want_acting.clear();
     dout(10) << "choose_acting failed, below min size" << dendl;
     return false;
@@ -1564,7 +1568,8 @@ void PG::activate(ObjectStore::Transaction& t,
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
     if (acting.size() >= pool.info.min_size) {
-      assert(cct->_conf->osd_find_best_info_ignore_history_les ||
+      assert(cct->_conf->get_val<bool>(
+        "osd_find_best_info_ignore_history_les") ||
 	     info.last_epoch_started <= activation_epoch);
       info.last_epoch_started = activation_epoch;
       info.last_interval_started = info.history.same_interval_since;
@@ -1720,7 +1725,8 @@ void PG::activate(ObjectStore::Transaction& t,
 	  get_osdmap()->get_epoch(), pi);
 
 	// send some recent log, so that op dup detection works well.
-	m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
+	m->log.copy_up_to(pg_log.get_log(), cct->_conf->get_val<uint64_t>(
+          "osd_min_pg_log_entries"));
 	m->info.log_tail = m->log.tail;
 	pi.log_tail = m->log.tail;  // sigh...
 
@@ -2009,7 +2015,8 @@ bool PG::queue_scrub()
     return false;
   }
   scrubber.priority = scrubber.must_scrub ?
-         cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
+         cct->_conf->get_val<uint64_t>(
+           "osd_requested_scrub_priority") : get_scrub_priority();
   scrubber.must_scrub = false;
   state_set(PG_STATE_SCRUBBING);
   if (scrubber.must_deep_scrub) {
@@ -2029,7 +2036,8 @@ unsigned PG::get_scrub_priority()
   // a higher value -> a higher priority
   int pool_scrub_priority = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_PRIORITY, &pool_scrub_priority);
-  return pool_scrub_priority > 0 ? pool_scrub_priority : cct->_conf->osd_scrub_priority;
+  return pool_scrub_priority > 0 ?
+    pool_scrub_priority : cct->_conf->get_val<uint64_t>("osd_scrub_priority");
 }
 
 void PG::mark_clean()
@@ -2758,7 +2766,8 @@ void PG::_update_blocked_by()
 {
   // set a max on the number of blocking peers we report. if we go
   // over, report a random subset.  keep the result sorted.
-  unsigned keep = MIN(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
+  unsigned keep = MIN(blocked_by.size(), cct->_conf->get_val<uint64_t>(
+    "osd_max_pg_blocked_by"));
   unsigned skip = blocked_by.size() - keep;
   info.stats.blocked_by.clear();
   info.stats.blocked_by.resize(keep);
@@ -2815,7 +2824,7 @@ void PG::publish_stats_to_osd()
   pg_stat_t pre_publish = info.stats;
   pre_publish.stats.add(unstable_stats);
   utime_t cutoff = now;
-  cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
+  cutoff -= cct->_conf->get_val<int64_t>("osd_pg_stat_report_interval_max");
   if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
     dout(15) << "publish_stats_to_osd " << pg_stats_publish.reported_epoch
@@ -3068,7 +3077,7 @@ void PG::prepare_write_info(map<string,bufferlist> *km)
 				last_written_info,
 				past_intervals,
 				dirty_big_info, need_update_epoch,
-				cct->_conf->osd_fast_info,
+				cct->_conf->get_val<bool>("osd_fast_info"),
 				osd->logger);
   assert(ret == 0);
   if (need_update_epoch)
@@ -3376,8 +3385,8 @@ void PG::read_state(ObjectStore *store)
     pgmeta_oid,
     info,
     oss,
-    cct->_conf->osd_ignore_stale_divergent_priors,
-    cct->_conf->osd_debug_verify_missing_on_start);
+    cct->_conf->get_val<bool>("osd_ignore_stale_divergent_priors"),
+    cct->_conf->get_val<bool>("osd_debug_verify_missing_on_start"));
   if (oss.tellp())
     osd->clog->error() << oss.rdbuf();
 
@@ -3625,7 +3634,8 @@ bool PG::sched_scrub()
   double deep_scrub_interval = 0;
   pool.info.opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &deep_scrub_interval);
   if (deep_scrub_interval <= 0) {
-    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
+    deep_scrub_interval = cct->_conf->get_val<double>(
+      "osd_deep_scrub_interval");
   }
   bool time_for_deep = ceph_clock_now() >=
     info.history.last_deep_scrub_stamp + deep_scrub_interval;
@@ -3633,7 +3643,8 @@ bool PG::sched_scrub()
   bool deep_coin_flip = false;
   // Only add random deep scrubs when NOT user initiated scrub
   if (!scrubber.must_scrub)
-      deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
+      deep_coin_flip = (rand() % 100) < cct->_conf->get_val<double>(
+        "osd_deep_scrub_randomize_ratio") * 100;
   dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
 
   time_for_deep = (time_for_deep || deep_coin_flip);
@@ -3739,7 +3750,8 @@ void PG::reg_next_scrub()
   utime_t reg_stamp;
   bool must = false;
   if (scrubber.must_scrub ||
-      (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats)) {
+      (info.stats.stats_invalid && cct->_conf->get_val<bool>(
+        "osd_scrub_invalid_stats"))) {
     reg_stamp = ceph_clock_now();
     must = true;
   } else {
@@ -3829,8 +3841,9 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
 	     << dendl;
     return;
   }
-  if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
-      osd->inc_scrubs_pending()) {
+  if ((cct->_conf->get_val<bool>("osd_scrub_during_recovery") ||
+       !osd->is_recovery_active()) &&
+       osd->inc_scrubs_pending()) {
     scrubber.reserved = true;
   } else {
     dout(20) << __func__ << ": failed to reserve remotely" << dendl;
@@ -4284,7 +4297,7 @@ void PG::replica_scrub(
  */
 void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
-  if (cct->_conf->osd_scrub_sleep > 0 &&
+  if (cct->_conf->get_val<double>("osd_scrub_sleep") > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
        scrubber.state == PG::Scrubber::INACTIVE) &&
        scrubber.needs_sleep) {
@@ -4317,8 +4330,8 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
           pg->unlock();
         });
     Mutex::Locker l(osd->scrub_sleep_lock);
-    osd->scrub_sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
-                                           scrub_requeue_callback);
+    osd->scrub_sleep_timer.add_event_after(cct->_conf->get_val<double>(
+      "osd_scrub_sleep"), scrub_requeue_callback);
     scrubber.sleeping = true;
     scrubber.sleep_start = ceph_clock_now();
     return;
@@ -4507,14 +4520,15 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   * left end of the range if we are a tier because they may legitimately
 	   * not exist (see _scrub).
 	   */
-	  int min = MAX(3, cct->_conf->osd_scrub_chunk_min);
+	  int min = MAX(3, cct->_conf->get_val<int64_t>(
+            "osd_scrub_chunk_min"));
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
-	    MAX(min, cct->_conf->osd_scrub_chunk_max),
+	    MAX(min, cct->_conf->get_val<int64_t>("osd_scrub_chunk_max")),
 	    &objects,
 	    &candidate_end);
 	  assert(ret >= 0);
@@ -4909,7 +4923,8 @@ void PG::scrub_finish()
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (repair && scrubber.auto_repair
-      && scrubber.authoritative.size() > cct->_conf->osd_scrub_auto_repair_num_errors) {
+      && scrubber.authoritative.size() > cct->_conf->get_val<uint64_t>(
+    "osd_scrub_auto_repair_num_errors")) {
     state_clear(PG_STATE_REPAIR);
     repair = false;
   }
@@ -5515,7 +5530,7 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 
   if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
     // DEBUG: verify that the snaps are empty in snap_mapper
-    if (cct->_conf->osd_debug_verify_snaps_on_info) {
+    if (cct->_conf->get_val<bool>("osd_debug_verify_snaps_on_info")) {
       interval_set<snapid_t> p;
       p.union_of(oinfo.purged_snaps, info.purged_snaps);
       p.subtract(info.purged_snaps);
@@ -5632,7 +5647,8 @@ ostream& operator<<(ostream& out, const PG& pg)
 bool PG::can_discard_op(OpRequestRef& op)
 {
   const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
-  if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
+  if (cct->_conf->get_val<bool>("osd_discard_disconnected_ops") &&
+      OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
   }
@@ -5897,7 +5913,7 @@ void PG::handle_advance_map(
 	   << dendl;
   update_osdmap_ref(osdmap);
   pool.update(osdmap);
-  if (cct->_conf->osd_debug_verify_cached_snaps) {
+  if (cct->_conf->get_val<bool>("osd_debug_verify_cached_snaps")) {
     interval_set<snapid_t> actual_removed_snaps;
     const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
     assert(pi);
@@ -5926,7 +5942,7 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   ActMap evt;
   recovery_state.handle_event(evt, rctx);
   if (osdmap_ref->get_epoch() - last_persisted_osdmap_ref->get_epoch() >
-    cct->_conf->osd_pg_epoch_persisted_max_stale) {
+    cct->_conf->get_val<uint64_t>("osd_pg_epoch_persisted_max_stale")) {
     dout(20) << __func__ << ": Dirtying info: last_persisted is "
 	     << last_persisted_osdmap_ref->get_epoch()
 	     << " while current is " << osdmap_ref->get_epoch() << dendl;
@@ -6470,7 +6486,8 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevokedTooFull &)
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->state_clear(PG_STATE_BACKFILLING);
   cancel_backfill();
-  pg->schedule_backfill_retry(pg->cct->_conf->osd_backfill_retry_interval);
+  pg->schedule_backfill_retry(pg->cct->_conf->get_val<double>(
+    "osd_backfill_retry_interval"));
   return transit<NotBackfilling>();
 }
 
@@ -6572,7 +6589,8 @@ void PG::RecoveryState::WaitRemoteBackfillReserved::retry()
   pg->state_set(PG_STATE_BACKFILL_TOOFULL);
   pg->publish_stats_to_osd();
 
-  pg->schedule_backfill_retry(pg->cct->_conf->osd_backfill_retry_interval);
+  pg->schedule_backfill_retry(pg->cct->_conf->get_val<double>(
+    "osd_backfill_retry_interval"));
 }
 
 boost::statechart::result
@@ -6745,12 +6763,15 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
   PG *pg = context< RecoveryMachine >().pg;
   ostringstream ss;
 
-  if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
+  if (pg->cct->_conf->get_val<double>(
+    "osd_debug_reject_backfill_probability") > 0 &&
+      (rand()%1000 < (pg->cct->_conf->get_val<double>(
+    "osd_debug_reject_backfill_probability")*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RejectRemoteReservation());
-  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+  } else if (!pg->cct->_conf->get_val<bool>(
+    "osd_debug_skip_full_check_in_backfill_reservation") &&
       pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected: "
 		       << ss.str() << dendl;
@@ -6815,13 +6836,16 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
   PG *pg = context< RecoveryMachine >().pg;
 
   ostringstream ss;
-  if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
+  if (pg->cct->_conf->get_val<double>(
+    "osd_debug_reject_backfill_probability") > 0 &&
+      (rand()%1000 < (pg->cct->_conf->get_val<double>(
+    "osd_debug_reject_backfill_probability")*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << "failure injection" << dendl;
     post_event(RejectRemoteReservation());
     return discard_event();
-  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
+  } else if (!pg->cct->_conf->get_val<bool>(
+    "osd_debug_skip_full_check_in_backfill_reservation") &&
 	     pg->osd->check_backfill_full(ss)) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
 		       << ss.str() << dendl;
@@ -6950,7 +6974,8 @@ PG::RecoveryState::WaitLocalRecoveryReserved::WaitLocalRecoveryReserved(my_conte
   PG *pg = context< RecoveryMachine >().pg;
 
   // Make sure all nodes that part of the recovery aren't full
-  if (!pg->cct->_conf->osd_debug_skip_full_check_in_recovery &&
+  if (!pg->cct->_conf->get_val<bool>(
+    "osd_debug_skip_full_check_in_recovery") &&
       pg->osd->check_osdmap_full(pg->actingbackfill)) {
     post_event(RecoveryTooFull());
     return;
@@ -6975,7 +7000,8 @@ PG::RecoveryState::WaitLocalRecoveryReserved::react(const RecoveryTooFull &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_RECOVERY_TOOFULL);
-  pg->schedule_recovery_retry(pg->cct->_conf->osd_recovery_retry_interval);
+  pg->schedule_recovery_retry(pg->cct->_conf->get_val<double>(
+    "osd_recovery_retry_interval"));
   return transit<NotRecovering>();
 }
 
@@ -7294,7 +7320,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
   }
 
   // if we haven't reported our PG stats in a long time, do so now.
-  if (pg->info.stats.reported_epoch + pg->cct->_conf->osd_pg_stat_report_interval_max < advmap.osdmap->get_epoch()) {
+  if (pg->info.stats.reported_epoch + pg->cct->_conf->get_val<int64_t>(
+    "osd_pg_stat_report_interval_max") < advmap.osdmap->get_epoch()) {
     ldout(pg->cct, 20) << "reporting stats to osd after " << (advmap.osdmap->get_epoch() - pg->info.stats.reported_epoch)
 		       << " epochs" << dendl;
     need_publish = true;
@@ -7317,13 +7344,13 @@ boost::statechart::result PG::RecoveryState::Active::react(const ActMap&)
     pg->discover_all_missing(*context< RecoveryMachine >().get_query_map());
   }
 
-  if (pg->cct->_conf->osd_check_for_log_corruption)
+  if (pg->cct->_conf->get_val<bool>("osd_check_for_log_corruption"))
     pg->check_log_for_corruption(pg->osd->store);
 
   uint64_t unfound = pg->missing_loc.num_unfound();
   if (unfound > 0 &&
       pg->all_unfound_are_queried_or_lost(pg->get_osdmap())) {
-    if (pg->cct->_conf->osd_auto_mark_unfound_lost) {
+    if (pg->cct->_conf->get_val<bool>("osd_auto_mark_unfound_lost")) {
       pg->osd->clog->error() << pg->info.pgid.pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically "
 			    << "mark these objects lost but this feature is not yet implemented "
