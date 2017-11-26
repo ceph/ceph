@@ -10,14 +10,14 @@ Synopsis
 ========
 
 | **ceph-bluestore-tool** *command*
-  [ --dev *device* ... ]
+  [ --dev *device path* ... ]
   [ --path *osd path* ]
   [ --out-dir *dir* ]
   [ --log-file | -l *filename* ]
   [ --deep ]
 | **ceph-bluestore-tool** fsck|repair --path *osd path* [ --deep ]
-| **ceph-bluestore-tool** show-label --dev *device* ...
-| **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
+| **ceph-bluestore-tool** show-label --dev *device path* ...
+| **ceph-bluestore-tool** prime-osd-dir --dev *device path* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
 
@@ -55,16 +55,16 @@ Commands
 
    Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
 
-.. option:: show-label --dev *device* [...]
+.. option:: show-label --dev *device path* [...]
 
    Show device label(s).	   
 
 Options
 =======
 
-.. option:: --dev *device*
+.. option:: --dev *device path*
 
-   Add *device* to the list of devices to consider
+   Add *device path* to the list of devices to consider
 
 .. option:: --path *osd path*
 
@@ -93,7 +93,7 @@ Device labels
 Every BlueStore block device has a single block label at the beginning of the
 device.  You can dump the contents of the label with::
 
-  ceph-bluestore-tool show-label --dev *device*
+  ceph-bluestore-tool show-label --dev *device path*
 
 The main device will have a lot of metadata, including information
 that used to be stored in small files in the OSD data directory.  The
@@ -106,7 +106,7 @@ OSD directory priming
 You can generate the content for an OSD data directory that can start up a
 BlueStore OSD with the *prime-osd-dir* command::
 
-  ceph-bluestore-tool prime-osd-dir --dev *main device* --path /var/lib/ceph/osd/ceph-*id*
+  ceph-bluestore-tool prime-osd-dir --dev *main device path* --path /var/lib/ceph/osd/ceph-*id*
 
 
 Availability

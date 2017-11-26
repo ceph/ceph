@@ -168,7 +168,7 @@ int main(int argc, char **argv)
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("log-file,l", po::value<string>(&log_file), "log file")
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
-    ("dev", po::value<vector<string>>(&devs), "device(s)")
+    ("dev", po::value<vector<string>>(&devs), "device path(s)")
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
@@ -213,7 +213,7 @@ int main(int argc, char **argv)
   }
   if (action == "prime-osd-dir") {
     if (devs.size() != 1) {
-      cerr << "must specify the main bluestore device" << std::endl;
+      cerr << "must specify the block bluestore device" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (path.empty()) {
@@ -224,7 +224,7 @@ int main(int argc, char **argv)
   if (action == "set-label-key" ||
       action == "rm-label-key") {
     if (devs.size() != 1) {
-      cerr << "must specify the main bluestore device" << std::endl;
+      cerr << "must specify the block bluestore device" << std::endl;
       exit(EXIT_FAILURE);
     }
     if (key.size() == 0) {
