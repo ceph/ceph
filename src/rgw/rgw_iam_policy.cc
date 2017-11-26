@@ -1185,32 +1185,33 @@ const char* condop_string(const TokenID t) {
 template<typename Iterator>
 ostream& print_array(ostream& m, Iterator begin, Iterator end) {
   if (begin == end) {
-    m << "[";
+    m << "[]";
   } else {
-    auto beforelast = end - 1;
     m << "[ ";
-    for (auto i = begin; i != end; ++i) {
-      m << *i;
-      if (i != beforelast) {
-	m << ", ";
-      } else {
-	m << " ";
-      }
-    }
+    std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+    m << " ]";
   }
-  m << "]";
   return m;
 }
+
+template<typename Iterator>
+ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
+  m << "{ ";
+  std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+  m << " }";
+  return m;
+}
+
 }
 
 ostream& operator <<(ostream& m, const Condition& c) {
-  m << "{ " << condop_string(c.op);
+  m << condop_string(c.op);
   if (c.ifexists) {
     m << "IfExists";
   }
   m << ": { " << c.key;
   print_array(m, c.vals.cbegin(), c.vals.cend());
-  return m << "}";
+  return m << " }";
 }
 
 Effect Statement::eval(const Environment& e,
@@ -1441,12 +1442,12 @@ ostream& operator <<(ostream& m, const Statement& s) {
   }
   if (!s.princ.empty()) {
     m << "Principal: ";
-    print_array(m, s.princ.cbegin(), s.princ.cend());
+    print_dict(m, s.princ.cbegin(), s.princ.cend());
     m << ", ";
   }
   if (!s.noprinc.empty()) {
     m << "NotPrincipal: ";
-    print_array(m, s.noprinc.cbegin(), s.noprinc.cend());
+    print_dict(m, s.noprinc.cbegin(), s.noprinc.cend());
     m << ", ";
   }
 
@@ -1500,7 +1501,7 @@ ostream& operator <<(ostream& m, const Statement& s) {
 
   if (!s.conditions.empty()) {
     m << "Condition: ";
-    print_array(m, s.conditions.cbegin(), s.conditions.cend());
+    print_dict(m, s.conditions.cbegin(), s.conditions.cend());
   }
 
   return m << " }";
