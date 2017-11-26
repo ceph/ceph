@@ -1572,6 +1572,9 @@ int RGWHandler_REST_SWIFT::authorize()
     /* anonymous access */
     rgw_get_anon_user(*(s->user));
     s->perm_mask = RGW_PERM_FULL_CONTROL;
+    if (! s->account_name.empty()) {
+      s->bucket_tenant = s->account_name;
+    }
     return 0;
   }
 
@@ -1606,7 +1609,9 @@ int RGWHandler_REST_SWIFT::postauth_init()
   struct req_init_state* t = &s->init_state;
 
   /* XXX Stub this until Swift Auth sets account into URL. */
-  s->bucket_tenant = s->user->user_id.tenant;
+  if (s->bucket_tenant.empty()) {
+    s->bucket_tenant = s->user->user_id.tenant;
+  }
   s->bucket_name = t->url_bucket;
 
   dout(10) << "s->object=" <<
