@@ -85,14 +85,8 @@ librados::RadosClient::RadosClient(CephContext *cct_)
 
 int64_t librados::RadosClient::lookup_pool(const char *name)
 {
-  int r = wait_for_osdmap();
-  if (r < 0) {
-    return r;
-  }
-
-  int64_t ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
-                                 name);
-  if (-ENOENT == ret) {
+  int64_t ret = -ENOENT;
+  while (ret == -ENOENT) {
     // Make sure we have the latest map
     int r = wait_for_latest_osdmap();
     if (r < 0)
@@ -100,7 +94,6 @@ int64_t librados::RadosClient::lookup_pool(const char *name)
     ret = objecter->with_osdmap(std::mem_fn(&OSDMap::lookup_pg_pool_name),
                                  name);
   }
-
   return ret;
 }
 
@@ -269,8 +262,8 @@ int librados::RadosClient::connect()
 
   objecter = new (std::nothrow) Objecter(cct, messenger, &monclient,
 			  &finisher,
-			  cct->_conf->rados_mon_op_timeout,
-			  cct->_conf->rados_osd_op_timeout);
+			  cct->_conf->get_val<double>("rados_mon_op_timeout"),
+			  cct->_conf->get_val<double>("rados_osd_op_timeout"));
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
@@ -338,11 +331,11 @@ int librados::RadosClient::connect()
 
     if (objecter) {
       delete objecter;
-      objecter = NULL;
+      objecter = nullptr;
     }
     if (messenger) {
       delete messenger;
-      messenger = NULL;
+      messenger = nullptr;
     }
   }
 
@@ -443,11 +436,15 @@ uint64_t librados::RadosClient::get_instance_id()
 
 librados::RadosClient::~RadosClient()
 {
-  if (messenger)
+  if (messenger) {
     delete messenger;
-  if (objecter)
+    messenger = nullptr;
+  }
+  if (objecter) {
     delete objecter;
-  cct = NULL;
+    objecter = nullptr;
+  }
+  cct = nullptr;
 }
 
 int librados::RadosClient::create_ioctx(const char *name, IoCtxImpl **io)
@@ -545,8 +542,9 @@ int librados::RadosClient::wait_for_osdmap()
     Mutex::Locker l(lock);
 
     utime_t timeout;
-    if (cct->_conf->rados_mon_op_timeout > 0)
-      timeout.set_from_double(cct->_conf->rados_mon_op_timeout);
+    if (cct->_conf->get_val<double>("rados_mon_op_timeout") > 0)
+      timeout.set_from_double(cct->_conf->get_val<double>(
+        "rados_mon_op_timeout"));
 
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
