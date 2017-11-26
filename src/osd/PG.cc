@@ -3624,9 +3624,7 @@ bool PG::sched_scrub()
 
   double deep_scrub_interval = 0;
   pool.info.opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &deep_scrub_interval);
-  if (deep_scrub_interval <= 0) {
-    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
-  }
+  deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
   bool time_for_deep = ceph_clock_now() >=
     info.history.last_deep_scrub_stamp + deep_scrub_interval;
 
