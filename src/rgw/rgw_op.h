@@ -38,6 +38,7 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_etag.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -2034,17 +2035,7 @@ static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
   return 0;
 } /* encode_dlo_manifest_attr */
 
-static inline void complete_etag(MD5& hash, string *etag)
-{
-  char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
 
-  hash.Final((byte *)etag_buf);
-  buf_to_hex((const unsigned char *)etag_buf, CEPH_CRYPTO_MD5_DIGESTSIZE,
-	    etag_buf_str);
-
-  *etag = etag_buf_str;
-} /* complete_etag */
 
 class RGWSetAttrs : public RGWOp {
 protected:

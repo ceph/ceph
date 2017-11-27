@@ -4363,6 +4363,12 @@ std::vector<Option> get_rgw_options() {
     .set_default(0)
     .set_description("The maximum number of metadata items that can be put via single request"),
 
+    Option("rgw_etag_format", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("MD5")
+    .set_description("Override default etag format")
+    .set_long_description(
+      "This setting can be used to specify a non-default algorithm for computiing object etags.  'BLAKE2B1' specifies to use an RGW-defined format consisting of 'BLAKE2B:<hex-digits>', where <hex-digits> is a hex-code encoding of the 64-byte Blake2b hash of the object bytes."),
+
     Option("rgw_override_bucket_index_max_shards", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

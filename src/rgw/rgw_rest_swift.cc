@@ -885,11 +885,12 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
       return -EINVAL;
     }
 
-    MD5 etag_sum;
+    rgw::EtagVariant ev = rgw::etag_factory(
+      s->cct->_conf->get_val<std::string>("rgw_etag_format"));
+    rgw::Etag* etag_sum = get_etag(ev);
     uint64_t total_size = 0;
     for (const auto& entry : slo_info->entries) {
-      etag_sum.Update((const byte *)entry.etag.c_str(),
-                      entry.etag.length());
+      etag_sum->update(entry.etag.c_str(), entry.etag.length());
       total_size += entry.size_bytes;
 
       ldout(s->cct, 20) << "slo_part: " << entry.path
@@ -897,7 +898,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
                         << " etag=" << entry.etag
                         << dendl;
     }
-    complete_etag(etag_sum, &lo_etag);
+    lo_etag = etag_sum->final();
     slo_info->total_size = total_size;
 
     ofs = slo_info->raw_data_len;

@@ -57,7 +57,6 @@
 
 using namespace std;
 using namespace librados;
-using ceph::crypto::MD5;
 using boost::optional;
 using boost::none;
 
@@ -1132,7 +1131,9 @@ static int iterate_user_manifest_parts(CephContext * const cct,
   list_op.params.prefix = obj_prefix;
   list_op.params.delim = delim;
 
-  MD5 etag_sum;
+  rgw::EtagVariant ev = rgw::etag_factory(
+    cct->_conf->get_val<std::string>("rgw_etag_format"));
+  rgw::Etag* etag_sum = get_etag(ev);
   do {
 #define MAX_LIST_OBJS 100
     int r = list_op.list_objects(MAX_LIST_OBJS, &objs, NULL, &is_truncated);
@@ -1145,15 +1146,15 @@ static int iterate_user_manifest_parts(CephContext * const cct,
       const uint64_t obj_size = ent.meta.accounted_size;
       uint64_t start_ofs = 0, end_ofs = obj_size;
 
-      if ((ptotal_len || cb) && !found_start && cur_total_len + obj_size > (uint64_t)ofs) {
+      if ((ptotal_len || cb) &&
+	  !found_start && cur_total_len + obj_size > (uint64_t)ofs) {
 	start_ofs = ofs - obj_ofs;
 	found_start = true;
       }
 
       obj_ofs += obj_size;
       if (pobj_sum) {
-        etag_sum.Update((const byte *)ent.meta.etag.c_str(),
-                        ent.meta.etag.length());
+        etag_sum->update(ent.meta.etag.c_str(), ent.meta.etag.length());
       }
 
       if ((ptotal_len || cb) && !found_end && obj_ofs > (uint64_t)end) {
@@ -1168,7 +1169,8 @@ static int iterate_user_manifest_parts(CephContext * const cct,
         len_count += end_ofs - start_ofs;
 
         if (cb) {
-          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, cb_param);
+          r = cb(bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs,
+		 cb_param);
           if (r < 0) {
             return r;
           }
@@ -1187,7 +1189,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
     *pobj_size = obj_ofs;
   }
   if (pobj_sum) {
-    complete_etag(etag_sum, pobj_sum);
+    *pobj_sum = etag_sum->final();
   }
 
   return 0;
@@ -1404,7 +1406,9 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
-  MD5 etag_sum;
+  rgw::EtagVariant ev = rgw::etag_factory(
+    s->cct->_conf->get_val<std::string>("rgw_etag_format"));
+  rgw::Etag* etag_sum = get_etag(ev);
   total_len = 0;
 
   for (const auto& entry : slo_info.entries) {
@@ -1490,14 +1494,13 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
-    etag_sum.Update((const byte *)entry.etag.c_str(),
-                    entry.etag.length());
+    etag_sum->update(entry.etag.c_str(), entry.etag.length());
 
     slo_parts[total_len] = part;
     total_len += part.size;
   }
 
-  complete_etag(etag_sum, &lo_etag);
+  lo_etag = etag_sum->final();
 
   s->obj_size = slo_info.total_size;
   ldout(s->cct, 20) << "s->obj_size=" << s->obj_size << dendl;
@@ -3253,9 +3256,6 @@ void RGWPutObj::execute()
   std::unique_ptr<RGWPutObjDataProcessor> encrypt;
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
   bufferlist bl, aclbl, bs;
   int len;
   map<string, string>::iterator iter;
@@ -3267,6 +3267,10 @@ void RGWPutObj::execute()
       s->bucket_info.placement_rule);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
+
+  rgw::EtagVariant ev = rgw::etag_factory(
+    s->cct->_conf->get_val<std::string>("rgw_etag_format"));
+  rgw::Etag* etag_ptr = get_etag(ev);
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
   perfcounter->inc(l_rgw_put);
@@ -3293,7 +3297,10 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  if (supplied_md5_b64) {
+  /* AFAICT satisfied by Content-MD5 header, which was removed in RFC
+   * 7231 (2014) */
+  if (supplied_md5_b64 &&
+      (etag_ptr->get_type() == rgw::EtagTypes::md5)) {
     need_calc_md5 = true;
 
     ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
@@ -3398,7 +3405,7 @@ void RGWPutObj::execute()
     }
 
     if (need_calc_md5) {
-      hash.Update((const byte *)data.c_str(), data.length());
+      etag_ptr->update(data.c_str(), data.length());
     }
 
     /* update torrrent */
@@ -3431,7 +3438,8 @@ void RGWPutObj::execute()
       /* restart processing with different oid suffix */
 
       dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx), &multipart);
+      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+				   &multipart);
       filter = processor;
 
       string oid_rand;
@@ -3501,8 +3509,6 @@ void RGWPutObj::execute()
     goto done;
   }
 
-  hash.Final(m);
-
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
@@ -3517,11 +3523,14 @@ void RGWPutObj::execute()
         << ", blocks=" << cs_info.blocks.size() << dendl;
   }
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+  if (need_calc_md5) {
+    etag = etag_ptr->final();
+  }
 
-  etag = calc_md5;
-
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+  /* XXX for now skip !MD5, as clients only send MD5 */
+  if (supplied_md5_b64 &&
+    (etag_ptr->get_type() == rgw::EtagTypes::md5) &&
+    (etag != supplied_md5)) {
     op_ret = -ERR_BAD_DIGEST;
     goto done;
   }
@@ -3535,7 +3544,7 @@ void RGWPutObj::execute()
       ldout(s->cct, 0) << "bad user manifest: " << dlo_manifest << dendl;
       goto done;
     }
-    complete_etag(hash, &etag);
+    etag = etag_ptr->final();
     ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
 
@@ -3544,11 +3553,12 @@ void RGWPutObj::execute()
     ::encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
-    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
-    complete_etag(hash, &etag);
+    etag_ptr->update(slo_info->raw_data, slo_info->raw_data_len);
+    etag = etag_ptr->final();
     ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
 
+  /* XXX check */
   if (supplied_etag && etag.compare(supplied_etag) != 0) {
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
     goto done;
@@ -3664,9 +3674,9 @@ void RGWPostObj::execute()
    * is capable to handle multiple files in single form. */
   do {
     std::unique_ptr<RGWPutObjDataProcessor> encrypt;
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    MD5 hash;
+    rgw::EtagVariant ev = rgw::etag_factory(
+      s->cct->_conf->get_val<std::string>("rgw_etag_format"));
+    rgw::Etag* etag_sum = get_etag(ev);
     ceph::buffer::list bl, aclbl;
     int len = 0;
 
@@ -3679,16 +3689,20 @@ void RGWPostObj::execute()
       return;
     }
 
-    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket,
+					bucket_quota);
     if (op_ret < 0) {
       return;
     }
 
-    if (supplied_md5_b64) {
+    if (supplied_md5_b64 &&
+	(etag_sum->get_type() == rgw::EtagTypes::md5)) {
       char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
       ldout(s->cct, 15) << "supplied_md5_b64=" << supplied_md5_b64 << dendl;
-      op_ret = ceph_unarmor(supplied_md5_bin, &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
-                            supplied_md5_b64, supplied_md5_b64 + strlen(supplied_md5_b64));
+      op_ret = ceph_unarmor(supplied_md5_bin,
+			    &supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1],
+                            supplied_md5_b64,
+			    supplied_md5_b64 + strlen(supplied_md5_b64));
       ldout(s->cct, 15) << "ceph_armor ret=" << op_ret << dendl;
       if (op_ret != CEPH_CRYPTO_MD5_DIGESTSIZE) {
         op_ret = -ERR_INVALID_DIGEST;
@@ -3750,7 +3764,7 @@ void RGWPostObj::execute()
         break;
       }
 
-      hash.Update((const byte *)data.c_str(), data.length());
+      etag_sum->update(data.c_str(), data.length());
       op_ret = put_data_and_throttle(filter, data, ofs, false);
 
       ofs += len;
@@ -3773,7 +3787,6 @@ void RGWPostObj::execute()
 
     s->obj_size = ofs;
 
-
     op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
                                 user_quota, bucket_quota, s->obj_size);
     if (op_ret < 0) {
@@ -3785,12 +3798,12 @@ void RGWPostObj::execute()
       return;
     }
 
-    hash.Final(m);
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag = etag_sum->final();
 
-    etag = calc_md5;
-    
-    if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+    /* XXX for now skip !MD5, as clients only send MD5 */
+    if (supplied_md5_b64 &&
+	(etag_sum->get_type() == rgw::EtagTypes::md5) &&
+      	(etag != supplied_md5)) {
       op_ret = -ERR_BAD_DIGEST;
       return;
     }
@@ -5277,9 +5290,9 @@ void RGWCompleteMultipart::execute()
   map<uint32_t, RGWUploadPartInfo>::iterator obj_iter;
   map<string, bufferlist> attrs;
   off_t ofs = 0;
-  MD5 hash;
-  char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  char final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
+  rgw::EtagVariant ev = rgw::etag_factory(
+    s->cct->_conf->get_val<std::string>("rgw_etag_format"));
+  rgw::Etag* etag_mp = get_etag(ev);
   bufferlist etag_bl;
   rgw_obj meta_obj;
   rgw_obj target_obj;
@@ -5400,7 +5413,6 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
-      char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
       if (iter->first != (int)obj_iter->first) {
         ldout(s->cct, 0) << "NOTICE: parts num mismatch: next requested: "
 			 << iter->first << " next uploaded: "
@@ -5416,9 +5428,10 @@ void RGWCompleteMultipart::execute()
         return;
       }
 
-      hex_to_buf(obj_iter->second.etag.c_str(), petag,
-		CEPH_CRYPTO_MD5_DIGESTSIZE);
-      hash.Update((const byte *)petag, sizeof(petag));
+      char petag[obj_iter->second.etag.length()];
+      int petag_len = hex_to_buf(obj_iter->second.etag.c_str(), petag,
+				 obj_iter->second.etag.length());
+      etag_mp->update(petag, petag_len);
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
 
@@ -5471,16 +5484,15 @@ void RGWCompleteMultipart::execute()
       accounted_size += obj_part.accounted_size;
     }
   } while (truncated);
-  hash.Final((byte *)final_etag);
 
-  buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
-  snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
-           "-%lld", (long long)parts->parts.size());
-  etag = final_etag_str;
-  ldout(s->cct, 10) << "calculated etag: " << final_etag_str << dendl;
+  char buf[4];
+  sprintf(buf, "-%lld", static_cast<long long>(parts->parts.size()));
+  etag = etag_mp->final();
+  etag += buf;
 
-  etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
+  ldout(s->cct, 10) << "calculated etag: " << etag << dendl;
 
+  etag_bl.append(etag.c_str(), etag.length() + 1);
   attrs[RGW_ATTR_ETAG] = etag_bl;
 
   if (compressed) {
