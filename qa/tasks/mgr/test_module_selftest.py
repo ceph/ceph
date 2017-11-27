@@ -119,3 +119,14 @@ class TestModuleSelftest(MgrTestCase):
                 "mgr", "self-test", "run"
             )
         self.assertEqual(exc_raised.exception.exitstatus, errno.EIO)
+
+        # A health alert should be raised for a module that has thrown
+        # an exception from its serve() method
+        self.wait_for_health(
+            "Module 'selftest' has failed: Synthetic exception in serve",
+            timeout=30)
+
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "module", "disable", "selftest")
+
+        self.wait_for_health_clear(timeout=30)

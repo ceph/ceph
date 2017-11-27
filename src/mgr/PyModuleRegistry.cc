@@ -290,3 +290,61 @@ std::vector<MonCommand> PyModuleRegistry::get_commands() const
   return result;
 }
 
+void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
+{
+  Mutex::Locker l(lock);
+
+  // Only the active mgr reports module issues
+  if (active_modules) {
+    active_modules->get_health_checks(checks);
+
+    std::map<std::string, std::string> dependency_modules;
+    std::map<std::string, std::string> failed_modules;
+
+    /*
+     * Break up broken modules into two categories:
+     *  - can_run=false: the module is working fine but explicitly
+     *    telling you that a dependency is missing.  Advise the user to
+     *    read the message from the module and install what's missing.
+     *  - failed=true or loaded=false: something unexpected is broken,
+     *    either at runtime (from serve()) or at load time.  This indicates
+     *    a bug and the user should be guided to inspect the mgr log
+     *    to investigate and gather evidence.
+     */
+
+    for (const auto &i : modules) {
+      auto module = i.second;
+      if (module->is_enabled() && !module->get_can_run()) {
+        dependency_modules[module->get_name()] = module->get_error_string();
+      } else if ((module->is_enabled() && !module->is_loaded())
+              || module->is_failed()) {
+        failed_modules[module->get_name()] = module->get_error_string();
+      }
+    }
+
+    if (!dependency_modules.empty()) {
+      std::ostringstream ss;
+      if (dependency_modules.size() == 1) {
+        auto iter = dependency_modules.begin();
+        ss << "Module '" << iter->first << "' has failed dependency: "
+           << iter->second;
+      } else if (dependency_modules.size() > 1) {
+        ss << dependency_modules.size() << " modules have failed dependencies";
+      }
+      checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str());
+    }
+
+    if (!failed_modules.empty()) {
+      std::ostringstream ss;
+      if (failed_modules.size() == 1) {
+        auto iter = failed_modules.begin();
+        ss << "Module '" << iter->first << "' has failed: "
+           << iter->second;
+      } else if (failed_modules.size() > 1) {
+        ss << failed_modules.size() << " modules have failed";
+      }
+      checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
+    }
+  }
+}
+
