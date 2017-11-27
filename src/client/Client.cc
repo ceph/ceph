@@ -18,6 +18,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <utime.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <sys/param.h>
 #include <fcntl.h>
@@ -4020,12 +4021,14 @@ private:
 public:
   explicit C_Client_Remount(Client *c) : client(c) {}
   void finish(int r) override {
-    assert (r == 0);
+    assert(r == 0);
+    errno = 0;
     r = client->remount_cb(client->callback_handle);
     if (r != 0) {
+      int e = errno;
       client_t whoami = client->get_nodeid();
       lderr(client->cct) << "tried to remount (to trim kernel dentries) and got error "
-			 << r << dendl;
+			 << r << " (errno = " << e << "; " << strerror(e) << ")" << dendl;
       if (client->require_remount && !client->unmounting) {
 	assert(0 == "failed to remount for kernel dentry trimming");
       }
