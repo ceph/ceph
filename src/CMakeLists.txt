@@ -414,6 +414,7 @@ set(libcommon_files
   common/LogClient.cc
   common/LogEntry.cc
   common/PrebufferedStreambuf.cc
+  common/ThreadLocalPrebufferedStreambuf.cc
   common/BackTrace.cc
   common/perf_counters.cc
   common/perf_histogram.cc

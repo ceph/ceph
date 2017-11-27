@@ -205,6 +205,7 @@ void Log::stop_graylog()
 
 void Log::submit_entry(Entry *e)
 {
+  e->finish();
   pthread_mutex_lock(&m_queue_mutex);
   m_queue_mutex_holder = pthread_self();
 

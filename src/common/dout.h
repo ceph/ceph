@@ -54,7 +54,7 @@ public:
     }									\
     static size_t _log_exp_length = 80; 				\
     ceph::logging::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
-    ostream _dout_os(&_dout_e->m_streambuf);				\
+    ostream& _dout_os = _dout_e->get_ostream();                            \
     static_assert(std::is_convertible<decltype(&*cct), 			\
 				      CephContext* >::value,		\
 		  "provided cct must be compatible with CephContext*"); \
