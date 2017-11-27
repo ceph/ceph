@@ -77,7 +77,6 @@ class CephDisk:
         proc = subprocess.Popen(
             args=command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
             shell=True,
             bufsize=1)
         output, _ = proc.communicate()
