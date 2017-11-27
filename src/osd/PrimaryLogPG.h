@@ -840,6 +840,13 @@ protected:
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
 	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
+          dout(20) << __func__ << "change waiting rwlocks to waiting for scrub" << dendl;
+          list<OpRequestRef>::iterator op_iter = p.second.begin();
+          while (op_iter != p.second.end()) {
+            *op_iter->mark_delayed("waiting for scrub");
+            ++op_iter;
+          }
+
 	  waiting_for_scrub.splice(
 	    waiting_for_scrub.begin(),
 	    p.second,
