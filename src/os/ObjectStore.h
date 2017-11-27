@@ -1735,6 +1735,10 @@ public:
      return read(c->get_cid(), oid, offset, len, bl, op_flags);
    }
 
+  virtual bool has_async_read() const {
+    return false;
+  }
+
   /**
    * fiemap -- get extent map of data of an object
    *
