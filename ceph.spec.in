@@ -750,7 +750,9 @@ This package contains the Java libraries for the Ceph File System.
 
 %package -n rados-objclass-devel
 Summary:        RADOS object class development kit
-Group:          Development/Libraries
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
 Requires:       librados2-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
