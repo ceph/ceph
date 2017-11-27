@@ -1028,8 +1028,8 @@ def write_one_line(parent, name, text):
     with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
-    path_set_context(tmp)
     os.rename(tmp, path)
+    path_set_context(path)
 
 
 def init_get():
