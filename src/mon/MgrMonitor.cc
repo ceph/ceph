@@ -40,6 +40,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 const static std::string command_descs_prefix = "mgr_command_descs";
 
 
+version_t MgrMonitor::get_trim_to() const
+{
+  int64_t max = g_conf->get_val<int64_t>("mon_max_mgrmap_epochs");
+  if (map.epoch > max) {
+    return map.epoch - max;
+  }
+  return 0;
+}
+
 void MgrMonitor::create_initial()
 {
   // Take a local copy of initial_modules for tokenizer to iterate over.

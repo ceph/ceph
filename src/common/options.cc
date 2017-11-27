@@ -1169,6 +1169,10 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description(""),
 
+    Option("mon_max_mgrmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(500)
+    .set_description(""),
+
     Option("mon_max_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
     .set_description(""),
