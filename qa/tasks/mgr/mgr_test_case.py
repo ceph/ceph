@@ -74,13 +74,23 @@ class MgrTestCase(CephTestCase):
                                 "{1} are required".format(
                 len(self.mgr_cluster.mgr_ids), self.MGRS_REQUIRED))
 
-        # Restart all the daemons
+        # Stop all the daemons
         for daemon in self.mgr_cluster.mgr_daemons.values():
             daemon.stop()
 
         for mgr_id in self.mgr_cluster.mgr_ids:
             self.mgr_cluster.mgr_fail(mgr_id)
 
+        # Unload all non-default plugins
+        loaded = json.loads(self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                   "mgr", "module", "ls"))['enabled_modules']
+        unload_modules = set(loaded) - {"status", "restful"}
+
+        for m in unload_modules:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                "mgr", "module", "disable", m)
+
+        # Start all the daemons
         for daemon in self.mgr_cluster.mgr_daemons.values():
             daemon.restart()
 

@@ -130,11 +130,26 @@ public:
     return modules.at(module_name);
   }
 
+  /**
+   * Pass through command to the named module for execution.
+   *
+   * The command must exist in the COMMANDS reported by the module.  If it
+   * doesn't then this will abort.
+   *
+   * If ActivePyModules has not been instantiated yet then this will
+   * return EAGAIN.
+   */
   int handle_command(
     std::string const &module_name,
     const cmdmap_t &cmdmap,
     std::stringstream *ds,
     std::stringstream *ss);
+
+  /**
+   * Pass through health checks reported by modules, and report any
+   * modules that have failed (i.e. unhandled exceptions in serve())
+   */
+  void get_health_checks(health_check_map_t *checks);
 
   // FIXME: breaking interface so that I don't have to go rewrite all
   // the places that call into these (for now)
@@ -154,11 +169,6 @@ public:
     }
   }
 
-  void get_health_checks(health_check_map_t *checks)
-  {
-    assert(active_modules);
-    active_modules->get_health_checks(checks);
-  }
   std::map<std::string, std::string> get_services() const
   {
     assert(active_modules);
