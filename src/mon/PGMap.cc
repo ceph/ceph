@@ -845,8 +845,9 @@ void PGMapDigest::dump_object_stat_sum(
     curr_object_copies_rate = (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
 
   float used = 0.0;
+  // note avail passed in is raw_avail, calc raw_used here.
   if (avail) {
-    used = sum.num_bytes * curr_object_copies_rate;
+    used = sum.num_bytes * raw_used_rate * curr_object_copies_rate;
     used /= used + avail;
   } else if (sum.num_bytes) {
     used = 1.0;
