@@ -12,7 +12,7 @@ An individual OSD cannot be converted in place in isolation, however:
 BlueStore and FileStore are simply too different for that to be
 practical.  "Conversion" will rely either on the cluster's normal
 replication and healing support or tools and strategies that copy OSD
-content from and old (FileStore) device to a new (BlueStore) one.
+content from an old (FileStore) device to a new (BlueStore) one.
 
 
 Deploy new OSDs with BlueStore
