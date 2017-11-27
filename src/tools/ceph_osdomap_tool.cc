@@ -23,7 +23,6 @@
 #include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");

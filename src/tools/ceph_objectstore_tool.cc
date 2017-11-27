@@ -45,7 +45,6 @@
 #include "include/util.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {

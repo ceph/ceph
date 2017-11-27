@@ -19,7 +19,6 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "include/ceph_features.h"
 #include "include/compat.h"

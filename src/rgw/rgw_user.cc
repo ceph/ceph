@@ -26,7 +26,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 
 static RGWMetadataHandler *user_meta_handler = NULL;

@@ -23,7 +23,6 @@
 #include <list>
 #include <mutex>
 #include <map>
-using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "common/ceph_time.h"

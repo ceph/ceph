@@ -21,7 +21,6 @@
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
-using namespace std;
 
 #define PGLOG_INDEXED_OBJECTS          (1 << 0)
 #define PGLOG_INDEXED_CALLER_OPS       (1 << 1)

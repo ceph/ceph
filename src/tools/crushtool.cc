@@ -40,7 +40,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_crush
 
-using namespace std;
 
 const char *infn = "stdin";
 

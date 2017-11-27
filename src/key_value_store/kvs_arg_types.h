@@ -13,7 +13,6 @@
 #include "include/encoding.h"
 #include "key_value_store/kv_flat_btree_async.h"
 
-using namespace std;
 using ceph::bufferlist;
 
 struct assert_size_args {

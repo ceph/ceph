@@ -18,7 +18,6 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 #include "include/ceph_features.h"
