@@ -151,6 +151,18 @@ BlueFS *open_bluefs(
   return fs;
 }
 
+void infering_bluefs_devices(vector<string>& devs, std::string& path)
+{
+  cout << "infering bluefs devices from bluestore path" << std::endl;
+  for (auto fn : {"block", "block.wal", "block.db"}) {
+    string p = path + "/" + fn;
+    struct stat st;
+    if (::stat(p.c_str(), &st) == 0) {
+      devs.push_back(p);
+    }
+  }
+}
+
 int main(int argc, char **argv)
 {
   string out_dir;
@@ -241,16 +253,8 @@ int main(int argc, char **argv)
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (devs.empty()) {
-      cout << "infering bluefs devices from bluestore path" << std::endl;
-      for (auto fn : {"block", "block.wal", "block.db"}) {
-	string p = path + "/" + fn;
-	struct stat st;
-	if (::stat(p.c_str(), &st) == 0) {
-	  devs.push_back(p);
-	}
-      }
-    }
+    if (devs.empty())
+      infering_bluefs_devices(devs, path);
   }
   if (action == "bluefs-export" || action == "bluefs-log-dump") {
     if (path.empty()) {
@@ -261,28 +265,14 @@ int main(int argc, char **argv)
       cerr << "must specify out-dir to export bluefs" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-        devs.push_back(p);
-      }
-    }
+    infering_bluefs_devices(devs, path);
   }
   if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-        devs.push_back(p);
-      }
-    }
+    infering_bluefs_devices(devs, path);
   }
 
   vector<const char*> args;
@@ -538,7 +528,6 @@ int main(int argc, char **argv)
 	  cerr << "open " << path << " failed: " << cpp_strerror(r) << std::endl;
 	  exit(EXIT_FAILURE);
 	}
-	assert(fd >= 0);
 	if (size > 0) {
 	  BlueFS::FileReader *h;
 	  r = fs->open_for_read(dir, file, &h, false);
