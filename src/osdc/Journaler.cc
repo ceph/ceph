@@ -933,8 +933,8 @@ void Journaler::_assimilate_prefetch()
 
   if (got_any) {
     ldout(cct, 10) << "_assimilate_prefetch read_buf now " << read_pos << "~"
-		   << read_buf.length() << ", read pointers " << read_pos
-		   << "/" << received_pos << "/" << requested_pos
+		   << read_buf.length() << ", read pointers read_pos=" << read_pos 
+                   << " received_pos=" << received_pos << " requested_pos=" << requested_pos
 		   << dendl;
 
     // Update readability (this will also hit any decode errors resulting
@@ -989,8 +989,8 @@ void Journaler::_issue_read(uint64_t len)
 
   // go.
   ldout(cct, 10) << "_issue_read reading " << requested_pos << "~" << len
-		 << ", read pointers " << read_pos << "/" << received_pos
-		 << "/" << (requested_pos+len) << dendl;
+		 << ", read pointers read_pos=" << read_pos << " received_pos=" << received_pos
+		 << " requested_pos+len=" << (requested_pos+len) << dendl;
 
   // step by period (object).  _don't_ do a single big filer.read()
   // here because it will wait for all object reads to complete before
