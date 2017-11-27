@@ -4526,6 +4526,7 @@ void Objecter::dump_requests(Formatter *fmt)
 
 void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
 {
+  auto now = ceph::coarse_mono_time::now();
   for (map<ceph_tid_t,Op*>::const_iterator p = s->ops.begin();
        p != s->ops.end();
        ++p) {
@@ -4533,7 +4534,7 @@ void Objecter::_dump_ops(const OSDSession *s, Formatter *fmt)
     fmt->open_object_section("op");
     fmt->dump_unsigned("tid", op->tid);
     op->target.dump(fmt);
-    fmt->dump_stream("last_sent") << op->stamp;
+    fmt->dump_stream("duration") << (now - last_sent);
     fmt->dump_int("attempts", op->attempts);
     fmt->dump_stream("snapid") << op->snapid;
     fmt->dump_stream("snap_context") << op->snapc;
