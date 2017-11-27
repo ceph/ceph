@@ -54,6 +54,7 @@ set(rgw_a_srcs
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
+  rgw_etag.cc
   rgw_env.cc
   rgw_es_query.cc
   rgw_formats.cc
