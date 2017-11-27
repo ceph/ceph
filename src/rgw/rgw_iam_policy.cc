@@ -1059,7 +1059,8 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     return none;
   }
 
-  m.v6 = s.find(':');
+  m.v6 = (s.find(':') == string::npos) ? false : true;
+
   auto slash = s.find('/');
   if (slash == string::npos) {
     m.prefix = m.v6 ? 128 : 32;
@@ -1082,7 +1083,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
 
   if (m.v6) {
     struct sockaddr_in6 a;
-    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a)) != 1) {
+    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a.sin6_addr)) != 1) {
       return none;
     }
 
@@ -1104,13 +1105,13 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     m.addr |= Address(a.sin6_addr.s6_addr[15]) << 120;
   } else {
     struct sockaddr_in a;
-    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
+    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a.sin_addr)) != 1) {
       return none;
     }
     m.addr = ntohl(a.sin_addr.s_addr);
   }
 
-  return none;
+  return m;
 }
 
 namespace {
