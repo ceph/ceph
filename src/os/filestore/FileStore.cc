@@ -249,7 +249,7 @@ int FileStore::lfn_open(const coll_t& cid,
 
   if (create)
     flags |= O_CREAT;
-  if (cct->_conf->filestore_odsync_write) {
+  if (cct->_conf->get_val<bool>("filestore_odsync_write")) {
     flags |= O_DSYNC;
   }
 
@@ -489,7 +489,7 @@ int FileStore::lfn_unlink(const coll_t& cid, const ghobject_t& o,
 	assert(!m_filestore_fail_eio || r != -EIO);
 	return r;
       }
-      if (cct->_conf->filestore_debug_inject_read_err) {
+      if (cct->_conf->get_val<bool>("filestore_debug_inject_read_err")) {
 	debug_obj_on_delete(o);
       }
       if (!m_disable_wbthrottle) {
@@ -538,44 +538,64 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   fdcache(cct),
   wbthrottle(cct),
   next_osr_id(0),
-  m_disable_wbthrottle(cct->_conf->filestore_odsync_write ||
-                      !cct->_conf->filestore_wbthrottle_enable),
-  throttle_ops(cct, "filestore_ops", cct->_conf->filestore_caller_concurrency),
-  throttle_bytes(cct, "filestore_bytes", cct->_conf->filestore_caller_concurrency),
-  m_ondisk_finisher_num(cct->_conf->filestore_ondisk_finisher_threads),
-  m_apply_finisher_num(cct->_conf->filestore_apply_finisher_threads),
-  op_tp(cct, "FileStore::op_tp", "tp_fstore_op", cct->_conf->filestore_op_threads, "filestore_op_threads"),
-  op_wq(this, cct->_conf->filestore_op_thread_timeout,
-	cct->_conf->filestore_op_thread_suicide_timeout, &op_tp),
+  m_disable_wbthrottle(cct->_conf->get_val<bool>("filestore_odsync_write") ||
+                      !cct->_conf->get_val<bool>("filestore_wbthrottle_enable")),
+  throttle_ops(cct, "filestore_ops",
+    cct->_conf->get_val<int64_t>("filestore_caller_concurrency")),
+  throttle_bytes(cct, "filestore_bytes",
+    cct->_conf->get_val<int64_t>("filestore_caller_concurrency")),
+  m_ondisk_finisher_num(cct->_conf->get_val<int64_t>(
+    "filestore_ondisk_finisher_threads")),
+  m_apply_finisher_num(cct->_conf->get_val<int64_t>(
+    "filestore_apply_finisher_threads")),
+  op_tp(cct, "FileStore::op_tp", "tp_fstore_op",
+        cct->_conf->get_val<int64_t>("filestore_op_threads"),
+        "filestore_op_threads"),
+  op_wq(this, cct->_conf->get_val<int64_t>("filestore_op_thread_timeout"),
+	cct->_conf->get_val<int64_t>("filestore_op_thread_suicide_timeout"),
+        &op_tp),
   logger(nullptr),
   trace_endpoint("0.0.0.0", 0, "FileStore"),
   read_error_lock("FileStore::read_error_lock"),
-  m_filestore_commit_timeout(cct->_conf->filestore_commit_timeout),
-  m_filestore_journal_parallel(cct->_conf->filestore_journal_parallel ),
-  m_filestore_journal_trailing(cct->_conf->filestore_journal_trailing),
-  m_filestore_journal_writeahead(cct->_conf->filestore_journal_writeahead),
-  m_filestore_fiemap_threshold(cct->_conf->filestore_fiemap_threshold),
-  m_filestore_max_sync_interval(cct->_conf->filestore_max_sync_interval),
-  m_filestore_min_sync_interval(cct->_conf->filestore_min_sync_interval),
-  m_filestore_fail_eio(cct->_conf->filestore_fail_eio),
-  m_filestore_fadvise(cct->_conf->filestore_fadvise),
+  m_filestore_commit_timeout(cct->_conf->get_val<double>(
+    "filestore_commit_timeout")),
+  m_filestore_journal_parallel(cct->_conf->get_val<bool>(
+    "filestore_journal_parallel") ),
+  m_filestore_journal_trailing(cct->_conf->get_val<bool>(
+    "filestore_journal_trailing")),
+  m_filestore_journal_writeahead(cct->_conf->get_val<bool>(
+    "filestore_journal_writeahead")),
+  m_filestore_fiemap_threshold(cct->_conf->get_val<int64_t>(
+    "filestore_fiemap_threshold")),
+  m_filestore_max_sync_interval(cct->_conf->get_val<double>(
+    "filestore_max_sync_interval")),
+  m_filestore_min_sync_interval(cct->_conf->get_val<double>(
+    "filestore_min_sync_interval")),
+  m_filestore_fail_eio(cct->_conf->get_val<bool>(
+    "filestore_fail_eio")),
+  m_filestore_fadvise(cct->_conf->get_val<bool>(
+    "filestore_fadvise")),
   do_update(do_update),
-  m_journal_dio(cct->_conf->journal_dio),
-  m_journal_aio(cct->_conf->journal_aio),
-  m_journal_force_aio(cct->_conf->journal_force_aio),
-  m_osd_rollback_to_cluster_snap(cct->_conf->osd_rollback_to_cluster_snap),
-  m_osd_use_stale_snap(cct->_conf->osd_use_stale_snap),
+  m_journal_dio(cct->_conf->get_val<bool>("journal_dio")),
+  m_journal_aio(cct->_conf->get_val<bool>("journal_aio")),
+  m_journal_force_aio(cct->_conf->get_val<bool>("journal_force_aio")),
+  m_osd_rollback_to_cluster_snap(cct->_conf->get_val<std::string>(
+    "osd_rollback_to_cluster_snap")),
+  m_osd_use_stale_snap(cct->_conf->get_val<bool>(
+    "osd_use_stale_snap")),
   m_filestore_do_dump(false),
   m_filestore_dump_fmt(true),
-  m_filestore_sloppy_crc(cct->_conf->filestore_sloppy_crc),
-  m_filestore_sloppy_crc_block_size(cct->_conf->filestore_sloppy_crc_block_size),
-  m_filestore_max_alloc_hint_size(cct->_conf->filestore_max_alloc_hint_size),
+  m_filestore_sloppy_crc(cct->_conf->get_val<bool>("filestore_sloppy_crc")),
+  m_filestore_sloppy_crc_block_size(cct->_conf->get_val<int64_t>(
+    "filestore_sloppy_crc_block_size")),
+  m_filestore_max_alloc_hint_size(cct->_conf->get_val<uint64_t>(
+    "filestore_max_alloc_hint_size")),
   m_fs_type(0),
   m_filestore_max_inline_xattr_size(0),
   m_filestore_max_inline_xattrs(0),
   m_filestore_max_xattr_value_size(0)
 {
-  m_filestore_kill_at = cct->_conf->filestore_kill_at;
+  m_filestore_kill_at = cct->_conf->get_val<int64_t>("filestore_kill_at");
   for (int i = 0; i < m_ondisk_finisher_num; ++i) {
     ostringstream oss;
     oss << "filestore-ondisk-" << i;
@@ -598,8 +618,10 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   current_op_seq_fn = sss.str();
 
   ostringstream omss;
-  if (cct->_conf->filestore_omap_backend_path != "") {
-      omap_dir = cct->_conf->filestore_omap_backend_path;
+  auto filestore_omap_backend_path = cct->_conf->get_val<std::string>(
+    "filestore_omap_backend_path");
+  if (filestore_omap_backend_path != "") {
+      omap_dir = filestore_omap_backend_path;
   } else {
       omss << basedir << "/current/omap";
       omap_dir = omss.str();
@@ -687,7 +709,8 @@ void FileStore::collect_metadata(map<string,string> *pm)
   ss << "0x" << std::hex << m_fs_type << std::dec;
   (*pm)["filestore_f_type"] = ss.str();
 
-  if (cct->_conf->filestore_collect_device_partition_information) {
+  if (cct->_conf->get_val<bool>(
+    "filestore_collect_device_partition_information")) {
     rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
   } else {
     rc = -EINVAL;
@@ -903,7 +926,8 @@ int FileStore::mkfs()
   }
 
   // superblock
-  superblock.omap_backend = cct->_conf->filestore_omap_backend;
+  superblock.omap_backend = cct->_conf->get_val<std::string>(
+    "filestore_omap_backend"); 
   ret = write_superblock();
   if (ret < 0) {
     derr << __FUNC__ << ": write_superblock() failed: "
@@ -974,7 +998,8 @@ int FileStore::mkfs()
   }
   ret = KeyValueDB::test_init(superblock.omap_backend, omap_dir);
   if (ret < 0) {
-    derr << __FUNC__ << ": failed to create " << cct->_conf->filestore_omap_backend << dendl;
+    derr << __FUNC__ << ": failed to create "
+         << cct->_conf->get_val<std::string>("filestore_omap_backend") << dendl;
     goto close_fsid_fd;
   }
   // create fsid under omap
@@ -1026,7 +1051,8 @@ int FileStore::mkfs()
     dout(1) << __FUNC__ << ": omap fsid is already set to " << fsid << dendl;
   }
 
-  dout(1) << cct->_conf->filestore_omap_backend << " db exists/created" << dendl;
+  dout(1) << cct->_conf->get_val<std::string>("filestore_omap_backend")
+          << " db exists/created" << dendl;
 
   // journal?
   ret = mkjournal();
@@ -1491,7 +1517,9 @@ int FileStore::mount()
 	 << cpp_strerror(ret) << dendl;
     goto close_fsid_fd;
   } else if (ret == 0) {
-    if (do_update || (int)version_stamp < cct->_conf->filestore_update_to) {
+    auto filestore_update_to = cct->_conf->get_val<int64_t>(
+      "filestore_update_to");
+    if (do_update || (int)version_stamp < filestore_update_to) {
       derr << __FUNC__ << ": stale version stamp detected: "
 	   << version_stamp
 	   << ". Proceeding, do_update "
@@ -1503,7 +1531,7 @@ int FileStore::mount()
       derr << __FUNC__ << ": stale version stamp " << version_stamp
 	   << ". Please run the FileStore update script before starting the "
 	   << "OSD, or set filestore_update_to to " << target_version
-	   << " (currently " << cct->_conf->filestore_update_to << ")"
+	   << " (currently " << filestore_update_to << ")"
 	   << dendl;
       goto close_fsid_fd;
     }
@@ -1724,7 +1752,8 @@ int FileStore::mount()
     }
 
     if (superblock.omap_backend == "rocksdb")
-      ret = omap_store->init(cct->_conf->filestore_rocksdb_options);
+      ret = omap_store->init(cct->_conf->get_val<std::string>(
+        "filestore_rocksdb_options"));
     else
       ret = omap_store->init();
 
@@ -1753,7 +1782,8 @@ int FileStore::mount()
     }
     stringstream err2;
 
-    if (cct->_conf->filestore_debug_omap_check && !dbomap->check(err2)) {
+    if (cct->_conf->get_val<bool>("filestore_debug_omap_check") &&
+        !dbomap->check(err2)) {
       derr << err2.str() << dendl;
       delete dbomap;
       dbomap = nullptr;
@@ -1827,7 +1857,7 @@ int FileStore::mount()
     wbthrottle.start();
   } else {
     dout(0) << __FUNC__ << ": INFO: WbThrottle is disabled" << dendl;
-    if (cct->_conf->filestore_odsync_write) {
+    if (cct->_conf->get_val<bool>("filestore_odsync_write")) {
       dout(0) << __FUNC__ << ": INFO: O_DSYNC write is enabled" << dendl;
     }
   }
@@ -1848,7 +1878,8 @@ int FileStore::mount()
 
   {
     stringstream err2;
-    if (cct->_conf->filestore_debug_omap_check && !object_map->check(err2)) {
+    if (cct->_conf->get_val<bool>("filestore_debug_omap_check") &&
+        !object_map->check(err2)) {
       derr << err2.str() << dendl;
       ret = -EINVAL;
       goto stop_sync;
@@ -1870,7 +1901,8 @@ int FileStore::mount()
   timer.init();
 
   // upgrade?
-  if (cct->_conf->filestore_update_to >= (int)get_target_version()) {
+  if (cct->_conf->get_val<int64_t>("filestore_update_to") >=
+    (int)get_target_version()) {
     int err = upgrade();
     if (err < 0) {
       derr << "error converting store" << dendl;
@@ -2084,8 +2116,10 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
     wbthrottle.throttle();
   }
   // inject a stall?
-  if (cct->_conf->filestore_inject_stall) {
-    int orig = cct->_conf->filestore_inject_stall;
+  auto filestore_inject_stall = cct->_conf->get_val<int64_t>(
+    "filestore_inject_stall");
+  if (filestore_inject_stall) {
+    int orig = filestore_inject_stall;
     dout(5) << __FUNC__ << ": filestore_inject_stall " << orig << ", sleeping" << dendl;
     sleep(orig);
     cct->_conf->set_val("filestore_inject_stall", "0");
@@ -2162,7 +2196,7 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   ObjectStore::Transaction::collect_contexts(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
-  if (cct->_conf->objectstore_blackhole) {
+  if (cct->_conf->get_val<bool>("objectstore_blackhole")) {
     dout(0) << __FUNC__ << ": objectstore_blackhole = TRUE, dropping transaction"
 	    << dendl;
     delete ondisk;
@@ -3219,7 +3253,7 @@ int FileStore::stat(
 	     << " = " << r
 	     << " (size " << st->st_size << ")" << dendl;
   }
-  if (cct->_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->get_val<bool>("filestore_debug_inject_read_err") &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -3304,11 +3338,13 @@ int FileStore::read(
 
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
-  if (cct->_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->get_val<bool>("filestore_debug_inject_read_err") &&
       debug_data_eio(oid)) {
     return -EIO;
-  } else if (cct->_conf->filestore_debug_random_read_err &&
-    (rand() % (int)(cct->_conf->filestore_debug_random_read_err * 100.0)) == 0) {
+  } else if (cct->_conf->get_val<double>(
+    "filestore_debug_random_read_err") &&
+    (rand() % (int)(cct->_conf->get_val<double>(
+      "filestore_debug_random_read_err") * 100.0)) == 0) {
     dout(0) << __func__ << ": inject random EIO" << dendl;
     return -EIO;
   } else {
@@ -3571,7 +3607,7 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
   int ret = 0;
 
-  if (cct->_conf->filestore_punch_hole) {
+  if (cct->_conf->get_val<bool>("filestore_punch_hole")) {
 #ifdef CEPH_HAVE_FALLOCATE
 # if !defined(__APPLE__) && !defined(__FreeBSD__)
 #    ifdef FALLOC_FL_KEEP_SIZE
@@ -4036,7 +4072,8 @@ void FileStore::sync_entry()
 
       dout(15) << __FUNC__ << ": committing " << cp << dendl;
       stringstream errstream;
-      if (cct->_conf->filestore_debug_omap_check && !object_map->check(errstream)) {
+      if (cct->_conf->get_val<bool>("filestore_debug_omap_check") &&
+          !object_map->check(errstream)) {
 	derr << errstream.str() << dendl;
 	ceph_abort();
       }
@@ -4212,7 +4249,7 @@ void FileStore::flush()
 {
   dout(10) << __FUNC__ << dendl;
 
-  if (cct->_conf->filestore_blackhole) {
+  if (cct->_conf->get_val<bool>("filestore_blackhole")) {
     // wait forever
     Mutex lock("FileStore::flush::lock");
     Cond cond;
@@ -4457,7 +4494,7 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
-  if (cct->_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->get_val<bool>("filestore_debug_inject_read_err") &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -4531,7 +4568,7 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
 
-  if (cct->_conf->filestore_debug_inject_read_err &&
+  if (cct->_conf->get_val<bool>("filestore_debug_inject_read_err") &&
       debug_mdata_eio(oid)) {
     return -EIO;
   } else {
@@ -5662,7 +5699,7 @@ int FileStore::_split_collection(const coll_t& cid,
     _close_replay_guard(dest, spos);
   }
   _collection_set_bits(cid, bits);
-  if (!r && cct->_conf->filestore_debug_verify_split) {
+  if (!r && cct->_conf->get_val<bool>("filestore_debug_verify_split")) {
     vector<ghobject_t> objects;
     ghobject_t next;
     while (1) {
@@ -5817,23 +5854,32 @@ void FileStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("filestore_max_alloc_hint_size") ||
       changed.count("filestore_fadvise")) {
     Mutex::Locker l(lock);
-    m_filestore_min_sync_interval = conf->filestore_min_sync_interval;
-    m_filestore_max_sync_interval = conf->filestore_max_sync_interval;
-    m_filestore_kill_at = conf->filestore_kill_at;
-    m_filestore_fail_eio = conf->filestore_fail_eio;
-    m_filestore_fadvise = conf->filestore_fadvise;
-    m_filestore_sloppy_crc = conf->filestore_sloppy_crc;
-    m_filestore_sloppy_crc_block_size = conf->filestore_sloppy_crc_block_size;
-    m_filestore_max_alloc_hint_size = conf->filestore_max_alloc_hint_size;
+    m_filestore_min_sync_interval = conf->get_val<double>(
+      "filestore_min_sync_interval");
+    m_filestore_max_sync_interval = conf->get_val<double>(
+      "filestore_max_sync_interval");
+    m_filestore_kill_at = conf->get_val<int64_t>(
+      "filestore_kill_at");
+    m_filestore_fail_eio = conf->get_val<bool>(
+      "filestore_fail_eio");
+    m_filestore_fadvise = conf->get_val<bool>(
+      "filestore_fadvise");
+    m_filestore_sloppy_crc = conf->get_val<bool>(
+      "filestore_sloppy_crc");
+    m_filestore_sloppy_crc_block_size = conf->get_val<int64_t>(
+      "filestore_sloppy_crc_block_size");
+    m_filestore_max_alloc_hint_size = conf->get_val<uint64_t>(
+      "filestore_max_alloc_hint_size");
   }
   if (changed.count("filestore_commit_timeout")) {
     Mutex::Locker l(sync_entry_timeo_lock);
-    m_filestore_commit_timeout = conf->filestore_commit_timeout;
+    m_filestore_commit_timeout = conf->get_val<double>(
+      "filestore_commit_timeout");
   }
   if (changed.count("filestore_dump_file")) {
-    if (conf->filestore_dump_file.length() &&
-	conf->filestore_dump_file != "-") {
-      dump_start(conf->filestore_dump_file);
+    auto filestore_dump_file = conf->get_val<std::string>("filestore_dump_file");
+    if (filestore_dump_file.length() && filestore_dump_file != "-") {
+      dump_start(filestore_dump_file);
     } else {
       dump_stop();
     }
@@ -5844,21 +5890,21 @@ int FileStore::set_throttle_params()
 {
   stringstream ss;
   bool valid = throttle_bytes.set_params(
-    cct->_conf->filestore_queue_low_threshhold,
-    cct->_conf->filestore_queue_high_threshhold,
-    cct->_conf->filestore_expected_throughput_bytes,
-    cct->_conf->filestore_queue_high_delay_multiple,
-    cct->_conf->filestore_queue_max_delay_multiple,
-    cct->_conf->filestore_queue_max_bytes,
+    cct->_conf->get_val<double>("filestore_queue_low_threshhold"),
+    cct->_conf->get_val<double>("filestore_queue_high_threshhold"),
+    cct->_conf->get_val<double>("filestore_expected_throughput_bytes"),
+    cct->_conf->get_val<double>("filestore_queue_high_delay_multiple"),
+    cct->_conf->get_val<double>("filestore_queue_max_delay_multiple"),
+    cct->_conf->get_val<uint64_t>("filestore_queue_max_bytes"),
     &ss);
 
   valid &= throttle_ops.set_params(
-    cct->_conf->filestore_queue_low_threshhold,
-    cct->_conf->filestore_queue_high_threshhold,
-    cct->_conf->filestore_expected_throughput_ops,
-    cct->_conf->filestore_queue_high_delay_multiple,
-    cct->_conf->filestore_queue_max_delay_multiple,
-    cct->_conf->filestore_queue_max_ops,
+    cct->_conf->get_val<double>("filestore_queue_low_threshhold"),
+    cct->_conf->get_val<double>("filestore_queue_high_threshhold"),
+    cct->_conf->get_val<double>("filestore_expected_throughput_ops"),
+    cct->_conf->get_val<double>("filestore_queue_high_delay_multiple"),
+    cct->_conf->get_val<double>("filestore_queue_max_delay_multiple"),
+    cct->_conf->get_val<uint64_t>("filestore_queue_max_ops"),
     &ss);
 
   logger->set(l_filestore_op_queue_max_ops, throttle_ops.get_max());
@@ -5922,46 +5968,63 @@ void FileStore::set_xattr_limits_via_conf()
   switch (m_fs_type) {
 #if defined(__linux__)
   case XFS_SUPER_MAGIC:
-    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_xfs;
-    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_xfs;
-    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_xfs;
+    fs_xattr_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattr_size_xfs");
+    fs_xattrs = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattrs_xfs");
+    fs_xattr_max_value_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_xattr_value_size_xfs");
     break;
   case BTRFS_SUPER_MAGIC:
-    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_btrfs;
-    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_btrfs;
-    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_btrfs;
+    fs_xattr_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattr_size_btrfs");
+    fs_xattrs = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattrs_btrfs");
+    fs_xattr_max_value_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_xattr_value_size_btrfs");
     break;
 #endif
   default:
-    fs_xattr_size = cct->_conf->filestore_max_inline_xattr_size_other;
-    fs_xattrs = cct->_conf->filestore_max_inline_xattrs_other;
-    fs_xattr_max_value_size = cct->_conf->filestore_max_xattr_value_size_other;
+    fs_xattr_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattr_size_other");
+    fs_xattrs = cct->_conf->get_val<uint64_t>(
+      "filestore_max_inline_xattrs_other");
+    fs_xattr_max_value_size = cct->_conf->get_val<uint64_t>(
+      "filestore_max_xattr_value_size_other");
     break;
   }
 
   // Use override value if set
-  if (cct->_conf->filestore_max_inline_xattr_size)
-    m_filestore_max_inline_xattr_size = cct->_conf->filestore_max_inline_xattr_size;
+  auto filestore_max_inline_xattr_size = cct->_conf->get_val<uint64_t>(
+    "filestore_max_inline_xattr_size");
+  if (filestore_max_inline_xattr_size)
+    m_filestore_max_inline_xattr_size = filestore_max_inline_xattr_size;
   else
     m_filestore_max_inline_xattr_size = fs_xattr_size;
 
   // Use override value if set
-  if (cct->_conf->filestore_max_inline_xattrs)
-    m_filestore_max_inline_xattrs = cct->_conf->filestore_max_inline_xattrs;
+  auto filestore_max_inline_xattrs = cct->_conf->get_val<uint64_t>(
+    "filestore_max_inline_xattrs");
+  if (filestore_max_inline_xattrs)
+    m_filestore_max_inline_xattrs = filestore_max_inline_xattrs;
   else
     m_filestore_max_inline_xattrs = fs_xattrs;
 
   // Use override value if set
-  if (cct->_conf->filestore_max_xattr_value_size)
-    m_filestore_max_xattr_value_size = cct->_conf->filestore_max_xattr_value_size;
+  auto filestore_max_xattr_value_size = cct->_conf->get_val<uint64_t>(
+    "filestore_max_xattr_value_size");
+  if (filestore_max_xattr_value_size)
+    m_filestore_max_xattr_value_size = filestore_max_xattr_value_size;
   else
     m_filestore_max_xattr_value_size = fs_xattr_max_value_size;
 
-  if (m_filestore_max_xattr_value_size < cct->_conf->osd_max_object_name_len) {
+  auto osd_max_object_name_len = cct->_conf->get_val<uint64_t>(
+    "osd_max_object_name_len");
+  if (m_filestore_max_xattr_value_size < osd_max_object_name_len) {
     derr << "WARNING: max attr value size ("
 	 << m_filestore_max_xattr_value_size
 	 << ") is smaller than osd_max_object_name_len ("
-	 << cct->_conf->osd_max_object_name_len
+	 << osd_max_object_name_len
 	 << ").  Your backend filesystem appears to not support attrs large "
 	 << "enough to handle the configured max rados name size.  You may get "
 	 << "unexpected ENAMETOOLONG errors on rados operations or buggy "

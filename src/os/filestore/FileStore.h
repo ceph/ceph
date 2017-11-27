@@ -319,7 +319,7 @@ private:
     void flush() override {
       Mutex::Locker l(qlock);
 
-      while (cct->_conf->filestore_blackhole)
+      while (cct->_conf->get_val<bool>("filestore_blackhole"))
 	cond.Wait(qlock);  // wait forever
 
 
