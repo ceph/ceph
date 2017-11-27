@@ -22,7 +22,6 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
-#include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
