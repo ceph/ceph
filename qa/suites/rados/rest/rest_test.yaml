@@ -20,9 +20,18 @@ tasks:
 - ceph:
     fs: xfs
     log-whitelist:
-    - \(OSDMAP_FLAGS\)
-    - \(OSD_DOWN\)
-    - but it is still running
+      - overall HEALTH
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(REQUEST_SLOW\)
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+      - but it is still running
     conf:
       client.rest0:
         debug ms: 1
