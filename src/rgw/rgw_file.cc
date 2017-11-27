@@ -1324,14 +1324,17 @@ namespace rgw {
     filter = processor;
     if (compression_type != "none") {
       plugin = Compressor::create(s->cct, compression_type);
-    if (! plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-                       << compression_type << dendl;
-    } else {
-      compressor.emplace(s->cct, plugin, filter);
-      filter = &*compressor;
+      if (! plugin) {
+	ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+			 << compression_type << dendl;
+      } else {
+	compressor.emplace(s->cct, plugin, filter);
+	filter = &*compressor;
+      }
     }
-  }
+
+    /* etag type */
+    ev = EtagBlake2bp_1();
 
   done:
     return op_ret;
@@ -1363,7 +1366,8 @@ namespace rgw {
     if (need_to_wait) {
       orig_data = data;
     }
-    hash.Update((const byte *)data.c_str(), data.length());
+
+    get_etag(ev)->update(data.c_str(), data.length());
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
@@ -1416,8 +1420,6 @@ namespace rgw {
   {
     buffer::list bl, aclbl, ux_key, ux_attrs;
     map<string, string>::iterator iter;
-    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     struct req_state* s = get_state();
 
     size_t osize = rgw_fh->get_size();
@@ -1440,7 +1442,7 @@ namespace rgw {
       goto done;
     }
 
-    hash.Final(m);
+    etag = get_etag(ev)->final();
 
     if (compressor && compressor->is_compressed()) {
       bufferlist tmp;
@@ -1455,9 +1457,6 @@ namespace rgw {
 			<< ", orig_size=" << cs_info.orig_size
 			<< ", blocks=" << cs_info.blocks.size() << dendl;
     }
-
-    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-    etag = calc_md5;
 
     bl.append(etag.c_str(), etag.size() + 1);
     emplace_attr(RGW_ATTR_ETAG, std::move(bl));

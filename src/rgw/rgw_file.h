@@ -35,6 +35,7 @@
 #include "rgw_ldap.h"
 #include "rgw_token.h"
 #include "rgw_compression.h"
+#include "rgw_etag.h"
 
 
 /* XXX
@@ -2260,7 +2261,7 @@ public:
   CompressorRef plugin;
   buffer::list data;
   uint64_t timer_id;
-  MD5 hash;
+  rgw::EtagVariant ev;
   off_t real_ofs;
   size_t bytes_written;
   bool multipart;
