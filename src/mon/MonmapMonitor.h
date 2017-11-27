@@ -22,7 +22,6 @@
 #include <map>
 #include <set>
 
-using namespace std;
 
 #include "include/types.h"
 #include "msg/Messenger.h"

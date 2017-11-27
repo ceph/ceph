@@ -19,7 +19,6 @@
 
 #include <map>
 #include <mutex>
-using namespace std;
 
 #include "include/types.h"
 #include "include/xlist.h"

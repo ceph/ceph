@@ -5,7 +5,6 @@
 #include "OSDHealthMetricCollector.h"
 
 
-using namespace std;
 
 ostream& operator<<(ostream& os,
                     const OSDHealthMetricCollector::DaemonKey& daemon) {

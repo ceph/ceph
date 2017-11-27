@@ -17,7 +17,6 @@
 
 #include <list>
 #include <map>
-using namespace std;
 
 #include "include/types.h"
 #include "include/xlist.h"

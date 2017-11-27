@@ -59,7 +59,6 @@ extern "C" {
 #include <iostream>
 #include <iomanip>
 
-using namespace std;
 
 #include "include/unordered_map.h"
 

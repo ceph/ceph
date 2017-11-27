@@ -32,7 +32,6 @@
 #include "os/bluestore/BlueStore.h"
 #endif
 
-using namespace std;
 
 class StoreTool
 {

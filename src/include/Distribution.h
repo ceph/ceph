@@ -17,7 +17,6 @@
 #define CEPH_DISTRIBUTION_H
 
 #include <vector>
-using namespace std;
 
 class Distribution {
   vector<float> p;

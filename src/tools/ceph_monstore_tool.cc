@@ -34,7 +34,6 @@
 #include "crush/CrushCompiler.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 class TraceIter {
   int fd;
