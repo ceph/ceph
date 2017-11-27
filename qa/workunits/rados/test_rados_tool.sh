@@ -302,6 +302,8 @@ test_omap() {
         $RADOS_TOOL -p $POOL rmomapkey $OBJ $i
     done
     $RADOS_TOOL -p $POOL listomapvals $OBJ | grep -c value | grep 5
+    $RADOS_TOOL -p $POOL clearomap $OBJ |
+    $RADOS_TOOL -p $POOL listomapvals $OBJ | wc -l | grep 0
     cleanup
 
     for i in $(seq 1 1 10)
