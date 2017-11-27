@@ -19,6 +19,7 @@
 #include "byteorder.h"
 
 #include "uuid.h"
+#include "common/backport14.h"
 
 #include <netinet/in.h>
 #include <fcntl.h>
@@ -121,20 +122,14 @@ inline ostream& operator<<(ostream& out, const pair<A,B>& v) {
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v) {
   out << "[";
-  for (auto p = v.begin(); p != v.end(); ++p) {
-    if (p != v.begin()) out << ",";
-    out << *p;
-  }
+  std::copy(v.begin(), v.end(), ceph::make_ostream_joiner(out, ","));
   out << "]";
   return out;
 }
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   out << "<";
-  for (auto p = v.begin(); p != v.end(); ++p) {
-    if (p != v.begin()) out << ",";
-    out << *p;
-  }
+  std::copy(v.begin(), v.end(), ceph::make_ostream_joiner(out, ","));
   out << ">";
   return out;
 }
@@ -147,34 +142,19 @@ inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
 
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist) {
-  for (auto it = ilist.begin();
-       it != ilist.end();
-       ++it) {
-    if (it != ilist.begin()) out << ",";
-    out << *it;
-  }
+  std::copy(ilist.begin(), ilist.end(), ceph::make_ostream_joiner(out, ","));
   return out;
 }
 
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
+  std::copy(iset.begin(), iset.end(), ceph::make_ostream_joiner(out, ","));
   return out;
 }
 
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset) {
-  for (auto it = iset.begin();
-       it != iset.end();
-       ++it) {
-    if (it != iset.begin()) out << ",";
-    out << *it;
-  }
+  std::copy(iset.begin(), iset.end(), ceph::make_ostream_joiner(out, ","));
   return out;
 }
 
