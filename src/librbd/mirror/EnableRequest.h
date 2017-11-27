@@ -44,9 +44,6 @@ private:
    * <start>
    *    |
    *    v
-   * GET_MIRROR_MODE  * * * * * * *
-   *    |                         *
-   *    v                         *
    * GET_TAG_OWNER  * * * * * * * *
    *    |                         *
    *    v                         *
