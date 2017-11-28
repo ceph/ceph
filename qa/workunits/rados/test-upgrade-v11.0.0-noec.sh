@@ -14,14 +14,18 @@ trap cleanup EXIT ERR HUP INT QUIT
 pids=""
 for f in \
     'api_aio --gtest_filter=-LibRadosAio.RacingRemovePP:*WriteSame*:*CmpExt*:*RoundTrip3*:*RoundTripPP3*:*Quota*:*LibRadosAioEC*' \
-    'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*:*ListObjectsError*' \
-    'api_io --gtest_filter=-*Checksum*:*CmpExt*' \
-    api_lock \
-    'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Compare*:*Checksum*:*CloneRange*' \
-    'api_watch_notify --gtest_filter=-*WatchNotify3*' \
-    api_tier api_pool api_snapshots api_stat api_cmd \
-    'api_c_write_operations --gtest_filter=-*WriteSame*:*CmpExt*' \
-    'api_c_read_operations --gtest_filter=-*Checksum*:*CmpExt*' \
+    'api_list --gtest_filter=-LibRadosList*.EnumerateObjects*:*ListObjectsError*:*EC*' \
+    'api_io --gtest_filter=-*Checksum*:*CmpExt*:*EC*' \
+    'api_lock --gtest_filter=-*EC*' \
+    'api_misc --gtest_filter=-*WriteSame*:*CmpExt*:*Compare*:*Checksum*:*CloneRange*:*EC*' \
+    'api_watch_notify --gtest_filter=-*WatchNotify3*:*EC*' \
+    'api_tier --gtest_filter=-*EC*' \
+    'api_pool --gtest_filter=-*EC*' \
+    'api_snapshots --gtest_filter=-*EC*' \
+    'api_stat --gtest_filter=-*EC*' \
+    'api_cmd --gtest_filter=-*EC*' \
+    'api_c_write_operations --gtest_filter=-*WriteSame*:*CmpExt*:*EC*' \
+    'api_c_read_operations --gtest_filter=-*Checksum*:*CmpExt*:*EC*' \
     list_parallel \
     open_pools_parallel \
     delete_pools_parallel \
