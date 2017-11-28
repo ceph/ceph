@@ -5,7 +5,7 @@ meta:
 workload:
   full_sequential:
     - sequential:
-      - ceph-fuse:
+      - ceph-fuse: [client.2]
       - print: "**** done ceph-fuse 2-workload"
       - workunit:
           clients:
