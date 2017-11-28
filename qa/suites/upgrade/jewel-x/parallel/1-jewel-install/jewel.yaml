@@ -1,3 +1,22 @@
+overrides:
+  ceph:
+    conf:
+      client.0:
+        debug ms: 1
+        debug client: 10
+        debug monc: 10
+      client.1:
+        debug ms: 1
+        debug client: 10
+        debug monc: 10
+      client.2:
+        debug ms: 1
+        debug client: 10
+        debug monc: 10
+      client.3:
+        debug ms: 1
+        debug client: 10
+        debug monc: 10
 meta:
 - desc: |
    install ceph/jewel latest
