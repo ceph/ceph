@@ -113,7 +113,7 @@ class CephDisk:
         LOG.debug(self.unused_disks('sd.'))
         if self.unused_disks('sd.'):
             return
-        modprobe = "modprobe scsi_debug vpd_use_hostno=0 add_host=1 dev_size_mb=200 ; udevadm settle"
+        modprobe = "modprobe scsi_debug vpd_use_hostno=0 add_host=1 dev_size_mb=300 ; udevadm settle"
         try:
             self.sh(modprobe)
         except:
