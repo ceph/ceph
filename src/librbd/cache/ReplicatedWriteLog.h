@@ -324,6 +324,27 @@ private:
   //WriteLogEntries find_entries_locked(BlockExtent block_extent);
   WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
+  /* We map block extents to write log entries, or portions of write
+   * log entries. These are both represented by a
+   * WriteLogMapEntry. When a WriteLogEntry is added to this map, a
+   * WriteLogMapEntry is created to represent the entire block extent
+   * of the WriteLogEntry, and the WriteLogMapEntry is added to the
+   * set.
+   *
+   * The set must not contain overlapping
+   * WriteLogMapEntrys. WriteLogMapEntrys in the set that overlap with
+   * one being added are adjusted (shrunk, split, or removed) before
+   * the new entry is added.
+   *
+   * This comparison works despite the ambiguity because we ensure the
+   * set contains no overlapping entries.  This comparison works to
+   * find entries that overlap with a given block extentbecause
+   * equal_range() returns the first entry in which the extent doesn't
+   * end before the given extent starts, and the last entry for which
+   * the extent starts before the given extent ends (the first entry
+   * the key is less than, and the last entry that is less than the
+   * key).
+   */
   struct WriteLogMapEntryCompare {
     bool operator()(const WriteLogMapEntry &lhs,
                     const WriteLogMapEntry &rhs) const {
