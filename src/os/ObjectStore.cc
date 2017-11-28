@@ -20,9 +20,7 @@
 
 #include "filestore/FileStore.h"
 #include "memstore/MemStore.h"
-#if defined(WITH_BLUESTORE)
 #include "bluestore/BlueStore.h"
-#endif
 #include "kstore/KStore.h"
 
 void decode_str_str_map_to_bl(bufferlist::iterator& p,
@@ -72,7 +70,6 @@ ObjectStore *ObjectStore::create(CephContext *cct,
   if (type == "memstore") {
     return new MemStore(cct, data);
   }
-#if defined(WITH_BLUESTORE)
   if (type == "bluestore") {
     return new BlueStore(cct, data);
   }
@@ -83,11 +80,6 @@ ObjectStore *ObjectStore::create(CephContext *cct,
       return new BlueStore(cct, data);
     }
   }
-#else
-  if (type == "random") {
-    return new FileStore(cct, data, journal, flags);
-  }
-#endif
   if (type == "kstore" &&
       cct->check_experimental_feature_enabled("kstore")) {
     return new KStore(cct, data);
@@ -102,16 +94,12 @@ int ObjectStore::probe_block_device_fsid(
 {
   int r;
 
-#if defined(WITH_BLUESTORE)
-  // first try bluestore -- it has a crc on its header and will fail
-  // reliably.
   r = BlueStore::get_block_device_fsid(cct, path, fsid);
   if (r == 0) {
     lgeneric_dout(cct, 0) << __func__ << " " << path << " is bluestore, "
 			  << *fsid << dendl;
     return r;
   }
-#endif
 
   // okay, try FileStore (journal).
   r = FileStore::get_block_device_fsid(cct, path, fsid);
