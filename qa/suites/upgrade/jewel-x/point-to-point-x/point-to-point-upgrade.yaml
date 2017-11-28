@@ -16,6 +16,11 @@ overrides:
     - scrub
     - osd_map_max_advance
     - wrongly marked
+    - overall HEALTH_
+    - \(MGR_DOWN\)
+    - \(OSD_
+    - \(PG_
+    - \(CACHE_
     fs: xfs
     conf:
       global:
@@ -24,6 +29,7 @@ overrides:
         mon debug unsafe allow tier with nonempty snaps: true
       osd:
         osd map max advance: 1000
+        osd map cache size: 1100
 roles:
 - - mon.a
   - mds.a
