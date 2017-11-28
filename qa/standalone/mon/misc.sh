@@ -81,10 +81,20 @@ function TEST_osd_pool_get_set() {
     ceph osd dump | grep 'pool ' | grep 'deep_scrub_interval' && return 1
 
     #replicated pool size restrict in 1 and 10
-    ! ceph osd pool set $TEST_POOL 11 || return 1
+    ! ceph osd pool set $TEST_POOL size 11 || return 1
     #replicated pool min_size must be between in 1 and size
     ! ceph osd pool set $TEST_POOL min_size $(expr $size + 1) || return 1
     ! ceph osd pool set $TEST_POOL min_size 0 || return 1
+
+    ceph osd pool set $TEST_POOL qos_res 123 || return 1
+    ceph osd dump | grep 'pool ' | grep 'qos_res 123' || return 1
+    ceph osd pool set $TEST_POOL qos_wgt 123 || return 1
+    ceph osd dump | grep 'pool ' | grep 'qos_wgt 123' || return 1
+    ceph osd pool set $TEST_POOL qos_lim 123 || return 1
+    ceph osd dump | grep 'pool ' | grep 'qos_lim 123' || return 1
+    #qos_res and qos_wgt must not be 0 at the same time
+    ceph osd pool set $TEST_POOL qos_res 0 || return 1
+    ! ceph osd pool set $TEST_POOL qos_wgt 0 || return 1
 
     local ecpool=erasepool
     create_pool $ecpool 12 12 erasure default || return 1
