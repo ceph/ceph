@@ -13,33 +13,45 @@ static bool ci_char_eq(char c1, char c2)
   return tolower(c1) == tolower(c2);
 }
 
-bool match_wildcards(boost::string_view pattern, boost::string_view input,
-                     uint32_t flags)
+static bool match_wildcards(const char *, const char *, uint32_t);
+static bool match_asterisk(const char *pattern, const char *input, uint32_t flags)
+{
+  while ('\0' != *input) {
+    if (match_wildcards(pattern, input, flags))
+      return true;
+    input++;
+  }
+
+  return '\0' == *pattern;
+}
+
+static bool match_wildcards(const char *pattern, const char *input, uint32_t flags)
 {
   const auto eq = (flags & MATCH_CASE_INSENSITIVE) ? &ci_char_eq : &char_eq;
 
-  auto it1 = pattern.begin();
-  auto it2 = input.begin();
   while (true) {
-    if (it1 == pattern.end())
-      return it2 == input.end();
-    if (*it1 == '*') {
-      if (it1 + 1 == pattern.end())
-        return true;
-      if (it2 == input.end() || eq(*(it1 + 1), *it2))
-        ++it1;
-      else
-        ++it2;
-      continue;
-    }
-    if (it2 == input.end())
+    if ('\0' == *pattern)
+      return '\0' == *input;
+
+    if ('*' == *pattern)
+      return match_asterisk(pattern+1, input, flags);
+
+    if ('\0' == *input)
       return false;
-    if (*it1 == '?' || eq(*it1, *it2)) {
-      ++it1;
-      ++it2;
+
+    if ('?' == *pattern || eq(*pattern, *input)) {
+      pattern++;
+      input++;
       continue;
     }
+
     return false;
   }
-  return false;
+}
+
+bool match_wildcards(boost::string_view pattern, boost::string_view input, uint32_t flags)
+{
+  const char *p_input = input.data();
+  const char *p_pattern = pattern.data();
+  return match_wildcards(p_pattern, p_input, flags);
 }
