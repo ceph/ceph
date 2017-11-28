@@ -42,7 +42,7 @@ public:
   RWLock(const std::string &n, bool track_lock=true, bool ld=true, bool prioritize_write=false)
     : name(n), id(-1), track(track_lock),
       lockdep(ld) {
-#if defined(PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)
+#if !defined(__FreeBSD__) && !defined(__APPLE__)
     if (prioritize_write) {
       pthread_rwlockattr_t attr;
       pthread_rwlockattr_init(&attr);
