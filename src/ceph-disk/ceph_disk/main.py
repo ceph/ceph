@@ -1028,8 +1028,8 @@ def write_one_line(parent, name, text):
     with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
-    path_set_context(tmp)
     os.rename(tmp, path)
+    path_set_context(path)
 
 
 def init_get():
@@ -1292,6 +1292,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
@@ -2733,8 +2735,8 @@ class Lockbox(object):
             ptype = self.partition.get_ptype()
             ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
-                LOG.warning('incorrect partition UUID: %s, expected %s'
-                            % (ptype, str(ready)))
+                LOG.warning('incorrect partition UUID: %s, expected %s',
+                            ptype, str(ready))
         else:
             LOG.debug('Creating osd partition on %s',
                       self.args.lockbox)
@@ -2778,12 +2780,12 @@ class Lockbox(object):
     def populate(self):
         maybe_mkdir(os.path.join(STATEDIR, 'osd-lockbox'))
         args = ['mkfs', '-t', 'ext4', self.partition.get_dev()]
-        LOG.debug('Creating lockbox fs on %s: ' + str(" ".join(args)))
+        LOG.debug('Creating lockbox fs: %s', " ".join(args))
         command_check_call(args)
         path = self.get_mount_point()
         maybe_mkdir(path)
         args = ['mount', '-t', 'ext4', self.partition.get_dev(), path]
-        LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+        LOG.debug('Mounting lockbox: %s', " ".join(args))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
         if self.args.cluster_uuid is None:
