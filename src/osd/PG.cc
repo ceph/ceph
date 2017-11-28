@@ -1465,6 +1465,131 @@ void PG::calc_replicated_acting(
   }
 }
 
+bool PG::recoverable_and_ge_min_size(const vector<int> &want) const
+{
+  unsigned num_want_acting = 0;
+  set<pg_shard_t> have;
+  for (int i = 0; i < (int)want.size(); ++i) {
+    if (want[i] != CRUSH_ITEM_NONE) {
+      ++num_want_acting;
+      have.insert(
+        pg_shard_t(
+          want[i],
+          pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+    }
+  }
+
+  // We go incomplete if below min_size for ec_pools since backfill
+  // does not currently maintain rollbackability
+  // Otherwise, we will go "peered", but not "active"
+  if (num_want_acting < pool.info.min_size &&
+      (pool.info.is_erasure() ||
+       !cct->_conf->osd_allow_recovery_below_min_size)) {
+    dout(10) << __func__ << "failed, below min size" << dendl;
+    return false;
+  }
+
+  /* Check whether we have enough acting shards to later perform recovery */
+  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
+      get_pgbackend()->get_is_recoverable_predicate());
+  if (!(*recoverable_predicate)(have)) {
+    dout(10) << __func__ << "failed, not recoverable" << dendl;
+    return false;
+  }
+
+  return true;
+}
+
+void PG::choose_async_recovery_ec(const map<pg_shard_t, pg_info_t> &all_info,
+                                  const pg_info_t &auth_info,
+                                  vector<int> *want,
+                                  set<pg_shard_t> *async_recovery) const
+{
+  set<pair<int, pg_shard_t> > candidates_by_cost;
+  for (uint8_t i = 0; i < want->size(); ++i) {
+    if ((*want)[i] == CRUSH_ITEM_NONE)
+      continue;
+
+    // Considering log entries to recover is accurate enough for
+    // now. We could use minimum_to_decode_with_cost() later if
+    // necessary.
+    pg_shard_t shard_i((*want)[i], shard_id_t(i));
+    auto shard_info = all_info.find(shard_i)->second;
+    // for ec pools we rollback all entries past the authoritative
+    // last_update *before* activation. This is relatively inexpensive
+    // compared to recovery, since it is purely local, so treat shards
+    // past the authoritative last_update the same as those equal to it.
+    version_t auth_version = auth_info.last_update.version;
+    version_t candidate_version = shard_info.last_update.version;
+    if (auth_version > candidate_version &&
+        (auth_version - candidate_version) > cct->_conf->get_val<uint64_t>("osd_async_recovery_min_pg_log_entries")) {
+      candidates_by_cost.insert(make_pair(auth_version - candidate_version, shard_i));
+    }
+  }
+
+  dout(20) << __func__ << "candidates by cost are: " << candidates_by_cost
+           << dendl;
+
+  // take out as many osds as we can for async recovery, in order of cost
+  for (auto weighted_shard : candidates_by_cost) {
+    pg_shard_t cur_shard = weighted_shard.second;
+    vector<int> candidate_want(*want);
+    candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
+    if (recoverable_and_ge_min_size(candidate_want)) {
+      want->swap(candidate_want);
+      async_recovery->insert(cur_shard);
+    }
+  }
+  dout(20) << __func__ << "result want=" << *want
+           << " async_recovery=" << *async_recovery << dendl;
+}
+
+void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_info,
+                                          const pg_info_t &auth_info,
+                                          vector<int> *want,
+                                          set<pg_shard_t> *async_recovery) const
+{
+  set<pair<int, pg_shard_t> > candidates_by_cost;
+  for (auto osd_num : *want) {
+    pg_shard_t shard_i(osd_num, shard_id_t::NO_SHARD);
+    auto shard_info = all_info.find(shard_i)->second;
+    // use the approximate magnitude of the difference in length of
+    // logs as the cost of recovery
+    version_t auth_version = auth_info.last_update.version;
+    version_t candidate_version = shard_info.last_update.version;
+    size_t approx_entries;
+    if (auth_version > candidate_version) {
+      approx_entries = auth_version - candidate_version;
+    } else {
+      approx_entries = candidate_version - auth_version;
+    }
+    if (approx_entries > cct->_conf->get_val<uint64_t>("osd_async_recovery_min_pg_log_entries")) {
+      candidates_by_cost.insert(make_pair(approx_entries, shard_i));
+    }
+  }
+
+  dout(20) << __func__ << "candidates by cost are: " << candidates_by_cost
+           << dendl;
+
+  // take out as many osds as we can for async recovery, in order of cost
+  for (auto weighted_shard : candidates_by_cost) {
+    pg_shard_t cur_shard = weighted_shard.second;
+    vector<int> candidate_want(*want);
+    for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
+      if (*it == cur_shard.osd) {
+        candidate_want.erase(it);
+	async_recovery->insert(cur_shard);
+        break;
+      }
+    }
+    if (want->size() <= pool.info.min_size) {
+      break;
+    }
+  }
+  dout(20) << __func__ << "result want=" << *want
+           << " async_recovery=" << *async_recovery << dendl;
+}
+
 /**
  * choose acting
  *
@@ -1545,36 +1670,18 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       ss);
   dout(10) << ss.str() << dendl;
 
-  unsigned num_want_acting = 0;
-  set<pg_shard_t> have;
-  for (int i = 0; i < (int)want.size(); ++i) {
-    if (want[i] != CRUSH_ITEM_NONE) {
-      ++num_want_acting;
-      have.insert(
-        pg_shard_t(
-          want[i],
-          pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
+  if (!recoverable_and_ge_min_size(want)) {
+    want_acting.clear();
+    return false;
+  }
+
+  set<pg_shard_t> want_async_recovery;
+  if (HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_MIMIC)) {
+    if (pool.info.is_erasure()) {
+      choose_async_recovery_ec(all_info, auth_log_shard->second, &want, &want_async_recovery);
+    } else {
+      choose_async_recovery_replicated(all_info, auth_log_shard->second, &want, &want_async_recovery);
     }
-  }
-
-  // We go incomplete if below min_size for ec_pools since backfill
-  // does not currently maintain rollbackability
-  // Otherwise, we will go "peered", but not "active"
-  if (num_want_acting < pool.info.min_size &&
-      (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
-    want_acting.clear();
-    dout(10) << __func__ << " failed, below min size" << dendl;
-    return false;
-  }
-
-  /* Check whether we have enough acting shards to later perform recovery */
-  boost::scoped_ptr<IsPGRecoverablePredicate> recoverable_predicate(
-    get_pgbackend()->get_is_recoverable_predicate());
-  if (!(*recoverable_predicate)(have)) {
-    want_acting.clear();
-    dout(10) << __func__ << " failed, not recoverable" << dendl;
-    return false;
   }
 
   if (want != acting) {
