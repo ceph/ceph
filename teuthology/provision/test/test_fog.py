@@ -82,7 +82,8 @@ class TestFOG(object):
         assert obj.os_type == 'type'
         assert obj.os_version == '1.0'
 
-    def test_create(self):
+    @mark.parametrize('success', [True, False])
+    def test_create(self, success):
         self.mocks['m_Remote_hostname'].return_value = 'name.fqdn'
         self.mocks['m_Remote_machine_type'].return_value = 'type1'
         obj = self.klass('name.fqdn', 'type', '1.0')
@@ -93,18 +94,27 @@ class TestFOG(object):
             set_image=DEFAULT,
             schedule_deploy_task=DEFAULT,
             wait_for_deploy_task=DEFAULT,
+            cancel_deploy_task=DEFAULT,
             _wait_for_ready=DEFAULT,
             _fix_hostname=DEFAULT,
         ) as local_mocks:
             local_mocks['get_host_data'].return_value = dict(id=host_id)
-            obj.create()
+            if not success:
+                local_mocks['wait_for_deploy_task'].side_effect = RuntimeError
+                with raises(RuntimeError):
+                    obj.create()
+            else:
+                obj.create()
             assert local_mocks['get_host_data'].called_once_with()
             assert local_mocks['set_image'].called_once_with(host_id)
             assert local_mocks['schedule_deploy_task']\
                 .called_once_with(host_id)
             assert local_mocks['wait_for_deploy_task'].called_once_with()
-            assert local_mocks['_wait_for_ready'].called_once_with()
-            assert local_mocks['_fix_hostname'].called_once_with()
+            if success:
+                assert local_mocks['_wait_for_ready'].called_once_with()
+                assert local_mocks['_fix_hostname'].called_once_with()
+            else:
+                assert len(local_mocks['cancel_deploy_task'].call_args_list) == 1
         assert self.mocks['m_Remote_console']\
             .return_value.power_off.called_once_with()
         assert self.mocks['m_Remote_console']\
@@ -259,6 +269,19 @@ class TestFOG(object):
             obj.wait_for_deploy_task(9)
             assert len(local_mocks['deploy_task_active'].call_args_list) == \
                 tries + 1
+
+    def test_cancel_deploy_task(self):
+        obj = self.klass('name.fqdn', 'type', '1.0')
+        with patch.multiple(
+            'teuthology.provision.fog.FOG',
+            do_request=DEFAULT,
+        ) as local_mocks:
+            obj.cancel_deploy_task(10)
+            assert local_mocks['do_request'].called_once_with(
+                '/task/cancel',
+                method='DELETE',
+                data='{"id": 10}',
+            )
 
     @mark.parametrize(
         'tries',

@@ -76,12 +76,16 @@ class FOG(object):
         host_id = int(host_data['id'])
         self.set_image(host_id)
         task_id = self.schedule_deploy_task(host_id)
-        # Use power_off/power_on because other methods call _wait_for_login,
-        # which will not work here since the newly-imaged host will have an
-        # incorrect hostname
-        self.remote.console.power_off()
-        self.remote.console.power_on()
-        self.wait_for_deploy_task(task_id)
+        try:
+            # Use power_off/power_on because other methods call
+            # _wait_for_login, which will not work here since the newly-imaged
+            # host will have an incorrect hostname
+            self.remote.console.power_off()
+            self.remote.console.power_on()
+            self.wait_for_deploy_task(task_id)
+        except Exception:
+            self.cancel_deploy_task(task_id)
+            raise
         self._wait_for_ready()
         self._fix_hostname()
         self.log.info("Deploy complete!")
@@ -234,6 +238,15 @@ class FOG(object):
             while proceed():
                 if not self.deploy_task_active(task_id):
                     break
+
+    def cancel_deploy_task(self,  task_id):
+        """ Cancel an active deploy task """
+        resp = self.do_request(
+            '/task/cancel',
+            method='DELETE',
+            data='{"id": %i}' % task_id,
+        )
+        resp.raise_for_status()
 
     def _wait_for_ready(self):
         """ Attempt to connect to the machine via SSH """
