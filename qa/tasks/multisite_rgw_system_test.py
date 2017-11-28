@@ -104,7 +104,7 @@ def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
 
     io_info_file = src_node.get_file(file_name, '/tmp')
 
-    dest_node.put_file(io_info_file, file_name)
+    dest_node.put_file(io_info_file, file_name, sudo=True)
 
 
 def test_exec(ctx, config, user_data, data, tclient, mclient):
@@ -131,7 +131,10 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
 
         # no verification is being done for acls test cases right now.
 
-        copy_file_from(tclient, mclient)
+        # copy_file_from(tclient, mclient)
+        
+        io_info_fname = mclient.get_file('io_info.yaml', '/tmp')
+        tclient.put_file(io_info_fname, 'io_info.yaml')
 
         # start verify of io on master node.
 
