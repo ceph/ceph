@@ -1161,6 +1161,10 @@ const char *pg_pool_t::APPLICATION_NAME_CEPHFS("cephfs");
 const char *pg_pool_t::APPLICATION_NAME_RBD("rbd");
 const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
 
+static const double OSD_POOL_DEFAULT_MCLOCK_RES = 0.0;
+static const double OSD_POOL_DEFAULT_MCLOCK_WGT = 1.0;
+static const double OSD_POOL_DEFAULT_MCLOCK_LIM = 0.0;
+
 void pg_pool_t::dump(Formatter *f) const
 {
   f->dump_unsigned("flags", get_flags());
@@ -1238,6 +1242,9 @@ void pg_pool_t::dump(Formatter *f) const
     f->close_section(); // application
   }
   f->close_section(); // application_metadata
+  f->dump_float("qos_res", get_qos_res());
+  f->dump_float("qos_wgt", get_qos_wgt());
+  f->dump_float("qos_lim", get_qos_lim());
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -1249,6 +1256,36 @@ void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* t
           is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
+}
+
+double pg_pool_t::get_qos_res() const
+{
+  return qos_res;
+}
+
+double pg_pool_t::get_qos_wgt() const
+{
+  return qos_wgt;
+}
+
+double pg_pool_t::get_qos_lim() const
+{
+  return qos_lim;
+}
+
+void pg_pool_t::set_qos_res(double r)
+{
+  qos_res = r;
+}
+
+void pg_pool_t::set_qos_wgt(double w)
+{
+  qos_wgt = w;
+}
+
+void pg_pool_t::set_qos_lim(double l)
+{
+  qos_lim = l;
 }
 
 void pg_pool_t::calc_pg_masks()
@@ -1552,13 +1589,16 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 26;
+  uint8_t v = 27;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
     v = 21;
   } else if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
+  }
+  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    v = 26;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1577,7 +1617,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   encode(snaps, bl, features);
   encode(removed_snaps, bl);
   encode(auid, bl);
-  if (v >= 27) {
+  if (v >= 28) {
     encode(flags, bl);
   } else {
     auto tmp = flags;
@@ -1634,12 +1674,17 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 26) {
     encode(application_metadata, bl);
   }
+  if (v >= 27) {
+    encode(qos_res, bl);
+    encode(qos_wgt, bl);
+    encode(qos_lim, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1789,6 +1834,15 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 26) {
     decode(application_metadata, bl);
   }
+  if (struct_v >= 27) {
+    decode(qos_res, bl);
+    decode(qos_wgt, bl);
+    decode(qos_lim, bl);
+  } else {
+    qos_res = OSD_POOL_DEFAULT_MCLOCK_RES;
+    qos_wgt = OSD_POOL_DEFAULT_MCLOCK_WGT;
+    qos_lim = OSD_POOL_DEFAULT_MCLOCK_LIM;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1855,8 +1909,47 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.expected_num_objects = 123456;
   a.fast_read = false;
   a.application_metadata = {{"rbd", {{"key", "value"}}}};
+  a.qos_res = OSD_POOL_DEFAULT_MCLOCK_RES;
+  a.qos_wgt = OSD_POOL_DEFAULT_MCLOCK_WGT;
+  a.qos_lim = OSD_POOL_DEFAULT_MCLOCK_LIM;
   o.push_back(new pg_pool_t(a));
 }
+
+pg_pool_t::pg_pool_t() :
+  flags(0), type(0), size(0), min_size(0),
+  crush_rule(0), object_hash(0),
+  pg_num(0), pgp_num(0),
+  last_change(0),
+  last_force_op_resend(0),
+  last_force_op_resend_preluminous(0),
+  snap_seq(0), snap_epoch(0),
+  auid(0),
+  quota_max_bytes(0), quota_max_objects(0),
+  pg_num_mask(0), pgp_num_mask(0),
+  tier_of(-1), read_tier(-1), write_tier(-1),
+  cache_mode(CACHEMODE_NONE),
+  target_max_bytes(0), target_max_objects(0),
+  cache_target_dirty_ratio_micro(0),
+  cache_target_dirty_high_ratio_micro(0),
+  cache_target_full_ratio_micro(0),
+  cache_min_flush_age(0),
+  cache_min_evict_age(0),
+  hit_set_params(),
+  hit_set_period(0),
+  hit_set_count(0),
+  use_gmt_hitset(true),
+  min_read_recency_for_promote(0),
+  min_write_recency_for_promote(0),
+  hit_set_grade_decay_rate(0),
+  hit_set_search_last_n(0),
+  stripe_width(0),
+  expected_num_objects(0),
+  fast_read(false),
+  opts(),
+  qos_res(OSD_POOL_DEFAULT_MCLOCK_RES),
+  qos_wgt(OSD_POOL_DEFAULT_MCLOCK_WGT),
+  qos_lim(OSD_POOL_DEFAULT_MCLOCK_LIM)
+{ }
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
@@ -1920,6 +2013,9 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       out << it->first;
     }
   }
+  out << " qos_res " << p.get_qos_res()
+      << " qos_wgt " << p.get_qos_wgt()
+      << " qos_lim " << p.get_qos_lim();
   return out;
 }
 

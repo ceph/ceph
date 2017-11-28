@@ -2168,6 +2168,36 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("osd_pool_default_mclock_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock reservation of the pool operator requests")
+    .set_long_description("mclock reservation of the pool operator requests when osd_op_queue is 'mclock_pool'; higher values increase the reservation")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_pool_default_mclock_wgt")
+    .add_see_also("osd_pool_default_mclock_lim")
+    .add_see_also("osd_op_queue_mclock_anticipation_timeout")
+    .add_see_also("objecter_mclock_service_tracker"),
+
+    Option("osd_pool_default_mclock_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.0)
+    .set_description("mclock weight of the pool operator requests")
+    .set_long_description("mclock weight of the pool operator requests when osd_op_queue is 'mclock_pool'; higher values increase the weight")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_pool_default_mclock_res")
+    .add_see_also("osd_pool_default_mclock_lim")
+    .add_see_also("osd_op_queue_mclock_anticipation_timeout")
+    .add_see_also("objecter_mclock_service_tracker"),
+
+    Option("osd_pool_default_mclock_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock limit of the pool operator requests")
+    .set_long_description("mclock limit of the pool operator requests when osd_op_queue is 'mclock_pool'; higher values increase the limit")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_pool_default_mclock_res")
+    .add_see_also("osd_pool_default_mclock_wgt")
+    .add_see_also("osd_op_queue_mclock_anticipation_timeout")
+    .add_see_also("objecter_mclock_service_tracker"),
+
     Option("osd_hit_set_min_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description(""),

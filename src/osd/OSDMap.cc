@@ -3670,6 +3670,9 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       pools[pool].last_change = epoch;
       pools[pool].application_metadata.insert(
         {pg_pool_t::APPLICATION_NAME_RBD, {}});
+      pools[pool].qos_res = cct->_conf->get_val<double>("osd_pool_default_mclock_res");
+      pools[pool].qos_wgt = cct->_conf->get_val<double>("osd_pool_default_mclock_wgt");
+      pools[pool].qos_lim = cct->_conf->get_val<double>("osd_pool_default_mclock_lim");
       pool_name[pool] = plname;
       name_pool[plname] = pool;
     }

@@ -1403,6 +1403,10 @@ public:
   /// application -> key/value metadata
   map<string, std::map<string, string>> application_metadata;
 
+  double qos_res;
+  double qos_wgt;
+  double qos_lim;
+
 private:
   vector<uint32_t> grade_table;
 
@@ -1421,38 +1425,7 @@ public:
     }
   }
 
-  pg_pool_t()
-    : flags(0), type(0), size(0), min_size(0),
-      crush_rule(0), object_hash(0),
-      pg_num(0), pgp_num(0),
-      last_change(0),
-      last_force_op_resend(0),
-      last_force_op_resend_preluminous(0),
-      snap_seq(0), snap_epoch(0),
-      auid(0),
-      quota_max_bytes(0), quota_max_objects(0),
-      pg_num_mask(0), pgp_num_mask(0),
-      tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE),
-      target_max_bytes(0), target_max_objects(0),
-      cache_target_dirty_ratio_micro(0),
-      cache_target_dirty_high_ratio_micro(0),
-      cache_target_full_ratio_micro(0),
-      cache_min_flush_age(0),
-      cache_min_evict_age(0),
-      hit_set_params(),
-      hit_set_period(0),
-      hit_set_count(0),
-      use_gmt_hitset(true),
-      min_read_recency_for_promote(0),
-      min_write_recency_for_promote(0),
-      hit_set_grade_decay_rate(0),
-      hit_set_search_last_n(0),
-      stripe_width(0),
-      expected_num_objects(0),
-      fast_read(false),
-      opts()
-  { }
+  pg_pool_t();
 
   void dump(Formatter *f) const;
 
@@ -1558,6 +1531,14 @@ public:
     last_force_op_resend = t;
     last_force_op_resend_preluminous = t;
   }
+
+  double get_qos_res() const;
+  double get_qos_wgt() const;
+  double get_qos_lim() const;
+
+  void set_qos_res(double r);
+  void set_qos_wgt(double w);
+  void set_qos_lim(double l);
 
   void calc_pg_masks();
 
