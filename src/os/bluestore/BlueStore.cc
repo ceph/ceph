@@ -6476,7 +6476,7 @@ int BlueStore::read(
   bufferlist& bl,
   uint32_t op_flags)
 {
-  utime_t start = ceph_clock_now();
+  PerfGuard(logger, l_bluestore_read_lat);
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -6489,9 +6489,8 @@ int BlueStore::read(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    utime_t start1 = ceph_clock_now();
+    PerfGuard(logger, l_bluestore_read_onode_meta_lat);
     OnodeRef o = c->get_onode(oid, false);
-    logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -6518,7 +6517,6 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  logger->tinc(l_bluestore_read_lat, ceph_clock_now() - start);
   return r;
 }
 
@@ -6892,9 +6890,9 @@ int BlueStore::RegionReader::_verify_csum(
   const bufferlist& bl,
   const uint64_t logical_offset)
 {
+  PerfGuard(store->logger, l_bluestore_csum_lat);
   int bad;
   uint64_t bad_csum;
-  utime_t start = ceph_clock_now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
   if (r < 0) {
     if (r == -1) {
@@ -6923,7 +6921,6 @@ int BlueStore::RegionReader::_verify_csum(
                    << cpp_strerror(r) << pdendl;
     }
   }
-  store->logger->tinc(l_bluestore_csum_lat, ceph_clock_now() - start);
   return r;
 }
 
@@ -6932,7 +6929,7 @@ int BlueStore::CompressedRegionReader::_decompress(
   ceph::bufferlist* result)
 {
   int r = 0;
-  utime_t start = ceph_clock_now();
+  PerfGuard(store->logger, l_bluestore_decompress_lat);
   bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
@@ -6956,7 +6953,6 @@ int BlueStore::CompressedRegionReader::_decompress(
       r = -EIO;
     }
   }
-  store->logger->tinc(l_bluestore_decompress_lat, ceph_clock_now() - start);
   return r;
 }
 
