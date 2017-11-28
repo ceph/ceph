@@ -86,7 +86,7 @@ class TestIntegration():
         rem = remote.Remote(HOST)
         interval = 3
         rem.run(args="echo before; sleep %s; echo after" % interval)
-        for record in caplog.records():
+        for record in caplog.records:
             if record.msg == 'before':
                 before_time = record.created
             elif record.msg == 'after':

@@ -16,27 +16,27 @@ class FakeRemote(object):
 
 def test_sh_normal(caplog):
     assert misc.sh("/bin/echo ABC") == "ABC\n"
-    assert "truncated" not in caplog.text()
+    assert "truncated" not in caplog.text
 
 
 def test_sh_truncate(caplog):
     assert misc.sh("/bin/echo -n AB ; /bin/echo C", 2) == "ABC\n"
-    assert "truncated" in caplog.text()
-    assert "ABC" not in caplog.text()
+    assert "truncated" in caplog.text
+    assert "ABC" not in caplog.text
 
 
 def test_sh_fail(caplog):
     with pytest.raises(subprocess.CalledProcessError) as excinfo:
         misc.sh("/bin/echo -n AB ; /bin/echo C ; exit 111", 2) == "ABC\n"
     assert excinfo.value.returncode == 111
-    for record in caplog.records():
+    for record in caplog.records:
         if record.levelname == 'ERROR':
             assert ('replay full' in record.message or
                     'ABC\n' == record.message)
 
 def test_sh_progress(caplog):
     misc.sh("echo AB ; sleep 5 ; /bin/echo C", 2) == "ABC\n"
-    records = caplog.records()
+    records = caplog.records
     assert ':sh: ' in records[0].message
     assert 'AB' == records[1].message
     assert 'C' == records[2].message
