@@ -1292,6 +1292,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
