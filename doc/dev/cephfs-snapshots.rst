@@ -33,7 +33,7 @@ Important Data Structures
 
 Creating a snapshot
 -------------------
-Before testing the cephfs snapshot function, you have to enable the setting "allow_new_snaps".
+Because CephFS snapshot currently is an experimental feature, we are supposed to enable it explicitly by the command below before testing.
 
 .. code::
 
