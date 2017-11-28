@@ -33,6 +33,13 @@ Important Data Structures
 
 Creating a snapshot
 -------------------
+Before testing the cephfs snapshot function, you have to enable the setting "allow_new_snaps".
+
+.. code::
+
+       $ ceph fs set mycephfs allow_new_snaps true --yes-i-really-mean-it
+
+
 To make a snapshot on directory "/1/2/3/foo", the client invokes "mkdir" on
 "/1/2/3/foo/.snap" directory. This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
