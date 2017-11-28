@@ -23,3 +23,10 @@
 
 >= 12.2.2
 ---------
+
+- *CephFS*:
+
+  * The CephFS client now catches failures to clear dentries during startup
+    and refuses to start as consistency and untrimmable cache issues may
+    develop. The new option client_die_on_failed_dentry_invalidate (default:
+    true) may be turned off to allow the client to proceed (dangerous!).

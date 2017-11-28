@@ -275,7 +275,6 @@ class Client : public Dispatcher, public md_config_obs_t {
   client_getgroups_callback_t getgroups_cb;
   client_umask_callback_t umask_cb;
   bool can_invalidate_dentries;
-  bool require_remount;
 
   Finisher async_ino_invalidator;
   Finisher async_dentry_invalidator;
@@ -761,6 +760,8 @@ private:
   int _release_fh(Fh *fh);
   void _put_fh(Fh *fh);
 
+  int _do_remount(void);
+  friend class C_Client_Remount;
 
   struct C_Readahead : public Context {
     Client *client;
