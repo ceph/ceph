@@ -22,3 +22,9 @@
   delete workload, it can lead to high latency when leveldb's
   single-threaded compaction cannot keep up. rocksdb supports multiple
   threads for compaction, which avoids this problem.
+
+* The CephFS client now catches failures to clear dentries during startup
+  and refuses to start as consistency and untrimmable cache issues may
+  develop. The new option client_die_on_failed_dentry_invalidate (default:
+  true) may be turned off to allow the client to proceed (dangerous!).
+
