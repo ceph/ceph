@@ -6844,9 +6844,21 @@ int BlueStore::_do_read(
   }
 
   // generate a resulting buffer
+  bl = _do_read_compose_result(ready_regions, offset, length);
+
+  assert(bl.length() == length);
+  return bl.length();
+}
+
+ceph::bufferlist BlueStore::_do_read_compose_result(
+  BlueStore::ready_regions_t& ready_regions,
+  const size_t offset,
+  const size_t length)
+{
   auto pr = ready_regions.begin();
-  auto pr_end = ready_regions.end();
+  const auto pr_end = ready_regions.end();
   uint64_t pos = 0;
+  ceph::bufferlist bl;
   while (pos < length) {
     if (pr != pr_end && pr->first == pos + offset) {
       dout(30) << __func__ << " assemble 0x" << std::hex << pos
@@ -6868,10 +6880,9 @@ int BlueStore::_do_read(
       pos += l;
     }
   }
-  assert(bl.length() == length);
   assert(pos == length);
   assert(pr == pr_end);
-  return bl.length();
+  return bl;
 }
 
 int BlueStore::RegionReader::_verify_csum(

@@ -2578,7 +2578,12 @@ private:
 
   // --------------------------------------------------------
   // read processing internal methods
-  bool _do_read_is_buffered(const uint32_t op_flags) const;
+  bool _do_read_is_buffered(
+    const uint32_t op_flags) const;
+  ceph::bufferlist _do_read_compose_result(
+    BlueStore::ready_regions_t& ready_regions,
+    size_t offset,
+    size_t length);
 
 
   // --------------------------------------------------------
