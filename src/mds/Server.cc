@@ -740,7 +740,7 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   bool deny = false;
-  if (!mds->is_reconnect()) {
+  if (!mds->is_reconnect() || mds->get_want_state() != CEPH_MDS_STATE_RECONNECT) {
     // XXX maybe in the future we can do better than this?
     dout(1) << " no longer in reconnect state, ignoring reconnect, sending close" << dendl;
     mds->clog->info() << "denied reconnect attempt (mds is "
