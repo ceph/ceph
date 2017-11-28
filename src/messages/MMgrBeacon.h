@@ -17,6 +17,7 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "mon/MonCommand.h"
+#include "mon/MgrMap.h"
 
 #include "include/types.h"
 
@@ -26,34 +27,6 @@ class MMgrBeacon : public PaxosServiceMessage {
 
   static const int HEAD_VERSION = 7;
   static const int COMPAT_VERSION = 1;
-
-  public:
-
-  class ModuleInfo
-  {
-    public:
-    std::string name;
-    bool can_run = true;
-    std::string error_string;
-
-    // We do not include the module's `failed` field in the beacon,
-    // because it is exposed via health checks.
-    void encode(bufferlist &bl) const {
-      ENCODE_START(1, 1, bl);
-      ::encode(name, bl);
-      ::encode(can_run, bl);
-      ::encode(error_string, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::iterator &bl) {
-      DECODE_START(1, bl);
-      ::decode(name, bl);
-      ::decode(can_run, bl);
-      ::decode(error_string, bl);
-      DECODE_FINISH(bl);
-    }
-  };
 
 protected:
   uint64_t gid;
@@ -69,7 +42,7 @@ protected:
   std::vector<MonCommand> command_descs;
 
   // Information about the modules found locally on this daemon
-  std::vector<ModuleInfo> modules;
+  std::vector<MgrMap::ModuleInfo> modules;
 
   map<string,string> metadata; ///< misc metadata about this osd
 
@@ -82,7 +55,7 @@ public:
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addr_t server_addr_, bool available_,
-	     std::vector<ModuleInfo>&& modules_,
+	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     map<string,string>&& metadata_)
     : PaxosServiceMessage(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addr(server_addr_), available(available_), name(name_),
@@ -95,7 +68,7 @@ public:
   bool get_available() const { return available; }
   const std::string& get_name() const { return name; }
   const uuid_d& get_fsid() const { return fsid; }
-  std::vector<ModuleInfo>& get_modules() { return modules; }
+  std::vector<MgrMap::ModuleInfo>& get_modules() { return modules; }
   const std::map<std::string,std::string>& get_metadata() const {
     return metadata;
   }
@@ -119,17 +92,10 @@ public:
     return command_descs;
   }
 
-  std::set<std::string> get_available_modules() const
+  const std::vector<MgrMap::ModuleInfo> &get_available_modules() const
   {
-    std::set<std::string> result;
-    for (const auto &i : modules) {
-      result.insert(i.name);
-    }
-
-    return result;
+    return modules;
   }
-
-
 
 private:
   ~MMgrBeacon() override {}
@@ -185,7 +151,7 @@ public:
       // ModuleInfo structures added in v7
       if (header.version < 7) {
         for (const auto &i : module_name_list) {
-          ModuleInfo info;
+          MgrMap::ModuleInfo info;
           info.name = i;
           modules.push_back(std::move(info));
         }
@@ -205,8 +171,6 @@ public:
     }
   }
 };
-
-WRITE_CLASS_ENCODER(MMgrBeacon::ModuleInfo);
 
 
 #endif

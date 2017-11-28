@@ -20,47 +20,113 @@
 #include "common/Formatter.h"
 #include "include/encoding.h"
 
-class StandbyInfo
-{
-public:
-  uint64_t gid;
-  std::string name;
-  std::set<std::string> available_modules;
-
-  StandbyInfo(uint64_t gid_, const std::string &name_,
-	      const std::set<std::string>& am)
-    : gid(gid_), name(name_), available_modules(am)
-  {}
-
-  StandbyInfo()
-    : gid(0)
-  {}
-
-  void encode(bufferlist& bl) const
-  {
-    ENCODE_START(2, 1, bl);
-    encode(gid, bl);
-    encode(name, bl);
-    encode(available_modules, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::iterator& p)
-  {
-    DECODE_START(2, p);
-    decode(gid, p);
-    decode(name, p);
-    if (struct_v >= 2) {
-      decode(available_modules, p);
-    }
-    DECODE_FINISH(p);
-  }
-};
-WRITE_CLASS_ENCODER(StandbyInfo)
 
 class MgrMap
 {
 public:
+  class ModuleInfo
+  {
+    public:
+    std::string name;
+    bool can_run = true;
+    std::string error_string;
+
+    // We do not include the module's `failed` field in the beacon,
+    // because it is exposed via health checks.
+    void encode(bufferlist &bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(name, bl);
+      encode(can_run, bl);
+      encode(error_string, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator &bl) {
+      DECODE_START(1, bl);
+      decode(name, bl);
+      decode(can_run, bl);
+      decode(error_string, bl);
+      DECODE_FINISH(bl);
+    }
+
+    bool operator==(const ModuleInfo &rhs) const
+    {
+      return (name == rhs.name) && (can_run == rhs.can_run);
+    }
+
+    void dump(Formatter *f) const {
+      f->open_object_section("module");
+      f->dump_string("name", name);
+      f->dump_bool("can_run", can_run);
+      f->dump_string("error_string", error_string);
+      f->close_section();
+    }
+  };
+
+  class StandbyInfo
+  {
+  public:
+    uint64_t gid;
+    std::string name;
+    std::vector<ModuleInfo> available_modules;
+
+    StandbyInfo(uint64_t gid_, const std::string &name_,
+                const std::vector<ModuleInfo>& am)
+      : gid(gid_), name(name_), available_modules(am)
+    {}
+
+    StandbyInfo()
+      : gid(0)
+    {}
+
+    void encode(bufferlist& bl) const
+    {
+      ENCODE_START(3, 1, bl);
+      encode(gid, bl);
+      encode(name, bl);
+      std::set<std::string> old_available_modules;
+      for (const auto &i : available_modules) {
+        old_available_modules.insert(i.name);
+      }
+      encode(old_available_modules, bl);  // version 2
+      encode(available_modules, bl);  // version 3
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::iterator& p)
+    {
+      DECODE_START(3, p);
+      decode(gid, p);
+      decode(name, p);
+      if (struct_v >= 2) {
+        std::set<std::string> old_available_modules;
+        decode(old_available_modules, p);
+        if (struct_v < 3) {
+          for (const auto &name : old_available_modules) {
+            MgrMap::ModuleInfo info;
+            info.name = name;
+            available_modules.push_back(std::move(info));
+          }
+        }
+      }
+      if (struct_v >= 3) {
+        decode(available_modules, p);
+      }
+      DECODE_FINISH(p);
+    }
+
+    bool have_module(const std::string &module_name) const
+    {
+      auto it = std::find_if(available_modules.begin(),
+          available_modules.end(),
+          [module_name](const ModuleInfo &m) -> bool {
+            return m.name == module_name;
+          });
+
+      return it != available_modules.end();
+    }
+  };
+
   epoch_t epoch = 0;
 
   /// global_id of the ceph-mgr instance selected as a leader
@@ -74,8 +140,11 @@ public:
 
   std::map<uint64_t, StandbyInfo> standbys;
 
+  // Modules which are enabled
   std::set<std::string> modules;
-  std::set<std::string> available_modules;
+
+  // Modules which are reported to exist
+  std::vector<ModuleInfo> available_modules;
 
   // Map of module name to URI, indicating services exposed by
   // running modules on the active mgr daemon.
@@ -88,15 +157,26 @@ public:
   const std::string &get_active_name() const { return active_name; }
 
   bool all_support_module(const std::string& module) {
-    if (!available_modules.count(module)) {
+    if (!have_module(module)) {
       return false;
     }
     for (auto& p : standbys) {
-      if (!p.second.available_modules.count(module)) {
+      if (!p.second.have_module(module)) {
 	return false;
       }
     }
     return true;
+  }
+
+  bool have_module(const std::string &module_name) const
+  {
+    for (const auto &i : available_modules) {
+      if (i.name == module_name) {
+        return true;
+      }
+    }
+
+    return false;
   }
 
   bool have_name(const string& name) const {
@@ -124,7 +204,7 @@ public:
 
   void encode(bufferlist& bl, uint64_t features) const
   {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(epoch, bl);
     encode(active_addr, bl, features);
     encode(active_gid, bl);
@@ -132,14 +212,23 @@ public:
     encode(active_name, bl);
     encode(standbys, bl);
     encode(modules, bl);
-    encode(available_modules, bl);
+
+    // Pre-version 4 string list of available modules
+    // (replaced by direct encode of ModuleInfo below)
+    std::set<std::string> old_available_modules;
+    for (const auto &i : available_modules) {
+      old_available_modules.insert(i.name);
+    }
+    encode(old_available_modules, bl);
+
     encode(services, bl);
+    encode(available_modules, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& p)
   {
-    DECODE_START(2, p);
+    DECODE_START(4, p);
     decode(epoch, p);
     decode(active_addr, p);
     decode(active_gid, p);
@@ -148,10 +237,25 @@ public:
     decode(standbys, p);
     if (struct_v >= 2) {
       decode(modules, p);
-      decode(available_modules, p);
+
+      // Reconstitute ModuleInfos from names
+      std::set<std::string> module_name_list;
+      decode(module_name_list, p);
+      // Only need to unpack this field if we won't have the full
+      // MgrMap::ModuleInfo structures added in v4
+      if (struct_v < 4) {
+        for (const auto &i : module_name_list) {
+          MgrMap::ModuleInfo info;
+          info.name = i;
+          available_modules.push_back(std::move(info));
+        }
+      }
     }
     if (struct_v >= 3) {
       decode(services, p);
+    }
+    if (struct_v >= 4) {
+      decode(available_modules, p);
     }
     DECODE_FINISH(p);
   }
@@ -168,8 +272,8 @@ public:
       f->dump_int("gid", i.second.gid);
       f->dump_string("name", i.second.name);
       f->open_array_section("available_modules");
-      for (auto& j : i.second.available_modules) {
-	f->dump_string("module", j);
+      for (const auto& j : i.second.available_modules) {
+        j.dump(f);
       }
       f->close_section();
       f->close_section();
@@ -181,8 +285,8 @@ public:
     }
     f->close_section();
     f->open_array_section("available_modules");
-    for (auto& j : available_modules) {
-      f->dump_string("module", j);
+    for (const auto& j : available_modules) {
+      j.dump(f);
     }
     f->close_section();
 
@@ -234,9 +338,18 @@ public:
     m.print_summary(nullptr, &ss);
     return out << ss.str();
   }
+
+  friend ostream& operator<<(ostream& out, const std::vector<ModuleInfo>& mi) {
+    for (const auto &i : mi) {
+      out << i.name << " ";
+    }
+    return out;
+  }
 };
 
 WRITE_CLASS_ENCODER_FEATURES(MgrMap)
+WRITE_CLASS_ENCODER(MgrMap::StandbyInfo)
+WRITE_CLASS_ENCODER(MgrMap::ModuleInfo);
 
 #endif
 

@@ -157,9 +157,9 @@ void MgrStandby::send_beacon()
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.
-  std::vector<MMgrBeacon::ModuleInfo> module_info;
+  std::vector<MgrMap::ModuleInfo> module_info;
   for (const auto &module : modules) {
-    MMgrBeacon::ModuleInfo info;
+    MgrMap::ModuleInfo info;
     info.name = module->get_name();
     info.error_string = module->get_error_string();
     info.can_run = module->get_can_run();

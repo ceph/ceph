@@ -295,7 +295,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 
   // See if we are seeing same name, new GID for any standbys
   for (const auto &i : pending_map.standbys) {
-    const StandbyInfo &s = i.second;
+    const MgrMap::StandbyInfo &s = i.second;
     if (s.name == m->get_name() && s.gid != m->get_gid()) {
       dout(4) << "Standby daemon restart (mgr." << m->get_name() << ")" << dendl;
       mon->clog->debug() << "Standby manager daemon " << m->get_name()
@@ -712,13 +712,17 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     {
       f->open_array_section("enabled_modules");
       for (auto& p : map.modules) {
+        // We only show the name for enabled modules.  The any errors
+        // etc will show up as a health checks.
         f->dump_string("module", p);
       }
       f->close_section();
       f->open_array_section("disabled_modules");
       for (auto& p : map.available_modules) {
-        if (map.modules.count(p) == 0) {
-          f->dump_string("module", p);
+        if (map.modules.count(p.name) == 0) {
+          // For disabled modules, we show the full info, to
+          // give a hint about whether enabling it will work
+          p.dump(f.get());
         }
       }
       f->close_section();
