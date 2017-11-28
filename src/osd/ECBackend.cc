@@ -2264,7 +2264,7 @@ struct CallClientContexts :
 	ec->ec_impl,
 	to_decode,
 	&bl);
-      if (r < 0) {
+      if (r < 0 || bl.length() == 0) {
         res.r = r;
         goto out;
       }
