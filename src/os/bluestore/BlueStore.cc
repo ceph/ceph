@@ -6749,16 +6749,16 @@ int BlueStore::CompressedRegionReader::postprocess(
     return -EIO;
   }
 
-  ceph::bufferlist raw_bl;
-  const auto r = _decompress(compressed_bl, &raw_bl);
-  if (r < 0) {
-    return r;
+  boost::optional<ceph::bufferlist> raw_bl = _decompress(compressed_bl);
+  if (!raw_bl) {
+    return -EIO;
   }
   if (buffered) {
-    bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0, raw_bl);
+    bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
+                                   0, *raw_bl);
   }
   for (auto& i : regions2read) {
-    ready_regions[i.logical_offset].substr_of(raw_bl, i.blob_xoffset,
+    ready_regions[i.logical_offset].substr_of(*raw_bl, i.blob_xoffset,
                                               i.length);
   }
   return 0;
@@ -6767,7 +6767,7 @@ int BlueStore::CompressedRegionReader::postprocess(
 int BlueStore::_do_read(
   Collection *c,
   OnodeRef o,
-  uint64_t offset,
+  const uint64_t offset,
   size_t length,
   ceph::bufferlist& bl,
   uint32_t op_flags)
@@ -6924,13 +6924,13 @@ int BlueStore::RegionReader::_verify_csum(
   return r;
 }
 
-int BlueStore::CompressedRegionReader::_decompress(
-  ceph::bufferlist& source,
-  ceph::bufferlist* result)
+boost::optional<ceph::bufferlist>
+BlueStore::CompressedRegionReader::_decompress(
+  ceph::bufferlist& source)
 {
-  int r = 0;
   PerfGuard(store->logger, l_bluestore_decompress_lat);
-  bufferlist::iterator i = source.begin();
+
+  ceph::bufferlist::iterator i = source.begin();
   bluestore_compression_header_t chdr;
   ::decode(chdr, i);
   int alg = int(chdr.type);
@@ -6944,16 +6944,18 @@ int BlueStore::CompressedRegionReader::_decompress(
     // decompressed data?
     pderr(store) << __func__ << " can't load decompressor " << alg
                  << pdendl;
-    r = -EIO;
+    return boost::none;
   } else {
-    r = cp->decompress(i, chdr.length, *result);
+    ceph::bufferlist result;
+    const auto r = cp->decompress(i, chdr.length, result);
     if (r < 0) {
       pderr(store) << __func__ << " decompression failed with exit code "
                    << r << pdendl;
-      r = -EIO;
+      return boost::none;
+    } else {
+      return result;
     }
   }
-  return r;
 }
 
 // this stores fiemap into interval_set, other variations

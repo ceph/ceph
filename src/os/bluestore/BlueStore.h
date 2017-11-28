@@ -1749,9 +1749,9 @@ public:
       regions2read.emplace_back(logical_offset, blob_offset, length);
     }
 
-    int _decompress(
-      ceph::bufferlist& source,
-      ceph::bufferlist* result);
+    boost::optional<ceph::bufferlist> _decompress(
+      ceph::bufferlist& source);
+
   public:
     using RegionReader::RegionReader;
     int issue_io(io_issuer_t) override;
