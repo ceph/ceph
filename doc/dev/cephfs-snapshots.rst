@@ -37,7 +37,7 @@ Before testing the cephfs snapshot function, you have to enable the setting "all
 
 .. code::
 
-       $ ceph fs set mycephfs allow_new_snaps true --yes-i-really-mean-it
+       $ ceph fs set <fs_name> allow_new_snaps true --yes-i-really-mean-it
 
 
 To make a snapshot on directory "/1/2/3/foo", the client invokes "mkdir" on
