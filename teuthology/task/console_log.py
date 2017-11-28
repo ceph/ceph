@@ -22,6 +22,8 @@ class ConsoleLog(Task):
             self.enabled = False
         if 'logfile_name' in self.config:
             self.logfile_name = self.config['logfile_name']
+        if 'remotes' in self.config:
+            self.remotes = self.config['remotes']
 
     def filter_hosts(self):
         super(ConsoleLog, self).filter_hosts()
@@ -40,6 +42,7 @@ class ConsoleLog(Task):
             else:
                 new_cluster.add(remote, roles)
         self.cluster = new_cluster
+        self.remotes = self.cluster.remotes.keys()
         return self.cluster
 
     def setup(self):
@@ -65,7 +68,7 @@ class ConsoleLog(Task):
         self.start_logging()
 
     def start_logging(self):
-        for remote in self.cluster.remotes.keys():
+        for remote in self.remotes:
             log_path = os.path.join(
                 self.archive_dir,
                 self.logfile_name.format(shortname=remote.shortname),
