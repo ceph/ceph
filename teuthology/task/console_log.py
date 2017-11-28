@@ -12,6 +12,7 @@ log = logging.getLogger(__name__)
 class ConsoleLog(Task):
     enabled = True
     name = 'console_log'
+    logfile_name = '{shortname}.log'
 
     def __init__(self, ctx=None, config=None):
         super(ConsoleLog, self).__init__(ctx, config)
@@ -19,6 +20,8 @@ class ConsoleLog(Task):
             self.enabled = False
         if not getattr(self.ctx, 'archive', None):
             self.enabled = False
+        if 'logfile_name' in self.config:
+            self.logfile_name = self.config['logfile_name']
 
     def filter_hosts(self):
         super(ConsoleLog, self).filter_hosts()
@@ -52,7 +55,8 @@ class ConsoleLog(Task):
             self.ctx.archive,
             'console_logs',
         )
-        os.makedirs(self.archive_dir)
+        if not os.path.isdir(self.archive_dir):
+            os.makedirs(self.archive_dir)
 
     def begin(self):
         if not self.enabled:
@@ -64,7 +68,7 @@ class ConsoleLog(Task):
         for remote in self.cluster.remotes.keys():
             log_path = os.path.join(
                 self.archive_dir,
-                "%s.log" % remote.shortname,
+                self.logfile_name.format(shortname=remote.shortname),
             )
             proc = remote.console.spawn_sol_log(log_path)
             self.processes[remote.shortname] = proc
