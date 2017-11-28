@@ -348,8 +348,6 @@ def task(ctx, config):
                 'git',
                 'clone',
                 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git',
-                '-b',
-                'wip_cop_file_err'
                 ])
 
         remote.run(args=['virtualenv', 'venv'])
