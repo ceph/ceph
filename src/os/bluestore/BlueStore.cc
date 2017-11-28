@@ -3486,6 +3486,40 @@ bufferlist BlueStore::OmapIteratorImpl::value()
 
 // =======================================================
 
+// AioReadBatch
+#undef dout_context
+#define dout_context store->cct
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore(" << store->path << ") "
+
+void BlueStore::AioReadBatch::aio_finish(BlueStore* const store)
+{
+  for (auto& ctx : read_ctx_batch) {
+    const bool buffered = store->_do_read_is_buffered(ctx.params.flags);
+
+    // enumerate and postprocess (i.e. decompress) desired blobs
+    for (auto& b2r : ctx.blobs2read) {
+      b2r.second->postprocess(ctx.ready_regions, buffered);
+    }
+
+    // generate a resulting buffer
+    *ctx.params.outbl = \
+      store->_do_read_compose_result(ctx.ready_regions, ctx.params.offset,
+                                     ctx.params.length);
+    dout(20) << __func__
+             << " got resbl.length() = " << ctx.params.outbl->length()
+             << ", requested length = " << ctx.params.length << dendl;
+
+    assert(ctx.params.outbl->length() == ctx.params.length);
+    ctx.params.on_complete->complete(ctx.params.length);
+  }
+
+  on_all_complete->complete(0);
+  delete this;
+}
+
+// =======================================================
+
 // RegionReader and descendants
 #undef dout_context
 #define dout_context store->cct
@@ -6730,6 +6764,23 @@ int BlueStore::read(
   return r;
 }
 
+std::unique_ptr<ObjectStore::ReadTransaction>
+BlueStore::create_read_transaction(
+  const CollectionHandle& ch,
+  const ghobject_t& oid)
+{
+  Collection *c = static_cast<Collection *>(ch.get());
+
+  OnodeRef o;
+  if (c->exists) {
+    RWLock::RLocker l(c->lock);
+    PerfGuard(logger, l_bluestore_read_onode_meta_lat);
+    o = c->get_onode(oid, false);
+  }
+
+  // ENOENTs will be handled later in BlueReadTrans::read().
+  return std::make_unique<BlueReadTrans>(this, std::move(c), std::move(o));
+}
 
 std::tuple<BlueStore::ready_regions_t,
            BlueStore::blobs2read_t,

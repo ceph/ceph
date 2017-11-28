@@ -1770,6 +1770,37 @@ public:
     const uint64_t offset,
     const size_t length);
 
+  struct AioReadBatch : public AioContext {
+    struct read_ctx_t {
+      async_read_params_t params;
+
+      ready_regions_t ready_regions;
+      blobs2read_t blobs2read;
+      size_t num_all_regions = 0;
+
+      read_ctx_t(async_read_params_t params)
+        : params(std::move(params)) {
+      }
+    };
+
+    std::vector<read_ctx_t> read_ctx_batch;
+    Context* const on_all_complete;
+    IOContext ioc;
+
+    AioReadBatch(CephContext* const cct,
+                 Context* const on_all_complete)
+      : on_all_complete(on_all_complete),
+        ioc(cct, this, true) { // allow EIO
+    }
+
+    read_ctx_t& create_read_ctx(async_read_params_t params) {
+      read_ctx_batch.push_back(std::move(params));
+      return read_ctx_batch.back();
+    }
+
+    void aio_finish(BlueStore *store) override;
+  };
+
   class OpSequencer : public Sequencer_impl {
   public:
     std::mutex qlock;
@@ -2375,6 +2406,10 @@ public:
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0);
+
+  bool has_async_read() const override {
+    return true;
+  }
 
 private:
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
