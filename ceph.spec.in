@@ -132,6 +132,7 @@ BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
+BuildRequires:	libuuid-devel
 BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
