@@ -33,6 +33,9 @@ Important Data Structures
 
 Creating a snapshot
 -------------------
+
+TODO
+
 To make a snapshot on directory "/1/2/3/foo", the client invokes "mkdir" on
 "/1/2/3/foo/.snap" directory. This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
