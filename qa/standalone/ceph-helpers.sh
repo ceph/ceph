@@ -430,6 +430,7 @@ function run_mon() {
 
     ceph-mon \
         --id $id \
+	--osd-failsafe-full-ratio=.99 \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --mon-data-avail-warn=5 \
@@ -520,6 +521,7 @@ function run_mgr() {
     ceph-mgr \
         --id $id \
         $EXTRA_OPTS \
+	--osd-failsafe-full-ratio=.99 \
         --debug-mgr 20 \
 	--debug-objecter 20 \
         --debug-ms 20 \
