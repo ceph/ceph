@@ -4,11 +4,13 @@ import os
 
 import requests
 
+import teuthology.orchestra.remote
 import teuthology.parallel
 import teuthology.provision
 from teuthology import misc
 from teuthology.config import config
 from teuthology.contextutil import safe_while
+from teuthology.task import console_log
 
 import util
 import keys
@@ -110,10 +112,17 @@ def lock_many(ctx, num, machine_type, user=None, description=None,
                 return ok_machs
             elif machine_type in reimage_types:
                 reimaged = dict()
-                with teuthology.parallel.parallel() as p:
-                    for machine in machines:
-                        p.spawn(teuthology.provision.reimage, ctx, machine)
-                        reimaged[machine] = machines[machine]
+                console_log_conf = dict(
+                    logfile_name='{shortname}_reimage.log',
+                    remotes=[teuthology.orchestra.remote.Remote(machine)
+                             for machine in machines],
+                )
+                with console_log.task(
+                        ctx, console_log_conf):
+                    with teuthology.parallel.parallel() as p:
+                        for machine in machines:
+                            p.spawn(teuthology.provision.reimage, ctx, machine)
+                            reimaged[machine] = machines[machine]
                 reimaged = keys.do_update_keys(reimaged.keys())[1]
                 return reimaged
             return machines
