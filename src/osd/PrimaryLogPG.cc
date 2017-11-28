@@ -3516,7 +3516,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
     if (pending_async_reads) {
-      assert(pool.info.is_erasure());
       in_progress_async_reads.push_back(make_pair(op, ctx));
       ctx->start_async_reads(this);
     }
