@@ -132,7 +132,7 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
         # no verification is being done for acls test cases right now.
 
         # copy_file_from(tclient, mclient)
-        
+
         io_info_fname = mclient.get_file('io_info.yaml', '/tmp')
         tclient.put_file(io_info_fname, 'io_info.yaml')
 
@@ -347,7 +347,9 @@ def task(ctx, config):
                 run.Raw(';'),
                 'git',
                 'clone',
-                'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'
+                'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git',
+                '-b',
+                'wip_cop_file_err'
                 ])
 
         remote.run(args=['virtualenv', 'venv'])
