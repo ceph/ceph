@@ -1651,13 +1651,14 @@ void PrimaryLogPG::do_request(
 
   // pg-wide backoffs
   const Message *m = op->get_req();
+  int msg_type = m->get_type();
   if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
     SessionRef session = static_cast<Session*>(m->get_connection()->get_priv());
     if (!session)
       return;  // drop it.
     session->put();  // get_priv takes a ref, and so does the SessionRef
 
-    if (op->get_req()->get_type() == CEPH_MSG_OSD_OP) {
+    if (msg_type == CEPH_MSG_OSD_OP) {
       if (session->check_backoff(cct, info.pgid,
 				 info.pgid.pgid.get_hobj_start(), m)) {
 	return;
@@ -1678,7 +1679,7 @@ void PrimaryLogPG::do_request(
       }
     }
     // pg backoff acks at pg-level
-    if (op->get_req()->get_type() == CEPH_MSG_OSD_BACKOFF) {
+    if (msg_type == CEPH_MSG_OSD_BACKOFF) {
       const MOSDBackoff *ba = static_cast<const MOSDBackoff*>(m);
       if (ba->begin != ba->end) {
 	handle_backoff(op);
@@ -1713,7 +1714,7 @@ void PrimaryLogPG::do_request(
   if (pgbackend->handle_message(op))
     return;
 
-  switch (op->get_req()->get_type()) {
+  switch (msg_type) {
   case CEPH_MSG_OSD_OP:
   case CEPH_MSG_OSD_BACKOFF:
     if (!is_active()) {
@@ -1722,7 +1723,7 @@ void PrimaryLogPG::do_request(
       op->mark_delayed("waiting for active");
       return;
     }
-    switch (op->get_req()->get_type()) {
+    switch (msg_type) {
     case CEPH_MSG_OSD_OP:
       // verify client features
       if ((pool.info.has_tiers() || pool.info.is_tier()) &&
