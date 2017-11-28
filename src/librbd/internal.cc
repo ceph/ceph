@@ -2364,9 +2364,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     std::list<obj_watch_t> obj_watchers;
 
     if (ictx->old_format) {
-      header_oid = ictx->name + RBD_SUFFIX;
+      header_oid = util::old_header_name(ictx->name);
     } else {
-      header_oid = RBD_HEADER_PREFIX + ictx->id;
+      header_oid = util::header_name(ictx->id);
     }
 
     r = ictx->md_ctx.list_watchers(header_oid, &obj_watchers);
