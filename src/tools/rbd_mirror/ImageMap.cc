@@ -327,9 +327,8 @@ void ImageMap<I>::schedule_add_action(const std::string &global_image_id) {
   Context *on_acquire = new FunctionContext([this, global_image_id](int r) {
       queue_acquire_image(global_image_id);
     });
-  Context *on_finish = new FunctionContext([this, global_image_id, on_update](int r) {
+  Context *on_finish = new FunctionContext([this, global_image_id](int r) {
       handle_add_action(global_image_id, r);
-      delete on_update;
     });
 
   if (m_policy->add_image(global_image_id, on_update, on_acquire, on_finish)) {
@@ -346,9 +345,8 @@ void ImageMap<I>::schedule_remove_action(const std::string &global_image_id) {
       queue_release_image(global_image_id);
     });
   Context *on_remove = new C_RemoveMap(this, global_image_id);
-  Context *on_finish = new FunctionContext([this, global_image_id, on_remove](int r) {
+  Context *on_finish = new FunctionContext([this, global_image_id](int r) {
       handle_remove_action(global_image_id, r);
-      delete on_remove;
     });
 
   if (m_policy->remove_image(global_image_id, on_release, on_remove, on_finish)) {
@@ -370,9 +368,8 @@ void ImageMap<I>::schedule_shuffle_action(const std::string &global_image_id) {
   Context *on_acquire = new FunctionContext([this, global_image_id](int r) {
       queue_acquire_image(global_image_id);
     });
-  Context *on_finish = new FunctionContext([this, global_image_id, on_update](int r) {
+  Context *on_finish = new FunctionContext([this, global_image_id](int r) {
       handle_shuffle_action(global_image_id, r);
-      delete on_update;
     });
 
   if (m_policy->shuffle_image(global_image_id, on_release, on_update, on_acquire, on_finish)) {
