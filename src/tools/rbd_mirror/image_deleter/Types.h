@@ -4,6 +4,10 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_DELETER_TYPES_H
 #define CEPH_RBD_MIRROR_IMAGE_DELETER_TYPES_H
 
+#include <string>
+
+struct utime_t;
+
 namespace rbd {
 namespace mirror {
 namespace image_deleter {
@@ -12,6 +16,20 @@ enum ErrorResult {
   ERROR_RESULT_COMPLETE,
   ERROR_RESULT_RETRY,
   ERROR_RESULT_RETRY_IMMEDIATELY
+};
+
+struct TrashListener {
+  TrashListener() {
+  }
+  TrashListener(const TrashListener&) = delete;
+  TrashListener& operator=(const TrashListener&) = delete;
+
+  virtual ~TrashListener() {
+  }
+
+  virtual void handle_trash_image(const std::string& image_id,
+                                  const utime_t& deferment_end_time) = 0;
+
 };
 
 } // namespace image_deleter
