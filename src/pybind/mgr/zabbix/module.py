@@ -54,7 +54,8 @@ class Module(MgrModule):
         'zabbix_sender': '/usr/bin/zabbix_sender',
         'zabbix_host': None,
         'zabbix_port': 10051,
-        'identifier': None, 'interval': 60
+        'identifier': "",
+        'interval': 60
     }
 
     COMMANDS = [
@@ -86,12 +87,12 @@ class Module(MgrModule):
         self.event = Event()
 
     def init_module_config(self):
+        self.fsid = self.get('mon_map')['fsid']
         for key, default in self.config_keys.items():
             value = self.get_localized_config(key, default)
             if value is None:
                 raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'config-key set mgr/zabbix/{0} '
-                                   '<value>"'.format(key))
+                                   'zabbix config-set {0} <value>"'.format(key))
 
             self.set_config_option(key, value)
 
@@ -210,15 +211,20 @@ class Module(MgrModule):
     def send(self):
         data = self.get_data()
 
-        self.log.debug('Sending data to Zabbix server %s',
-                       self.config['zabbix_host'])
+        identifier = self.config['identifier']
+        if identifier is None or len(identifier) == 0:
+            identifier = 'ceph-{0}'.format(self.fsid)
+
+        self.log.debug('Sending data to Zabbix server %s as host/identifier %s',
+                       self.config['zabbix_host'], identifier)
         self.log.debug(data)
 
         try:
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
                                   self.config['zabbix_port'], self.log)
-            zabbix.send(self.config['identifier'], data)
+
+            zabbix.send(identifier, data)
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
 
