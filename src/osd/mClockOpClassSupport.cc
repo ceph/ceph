@@ -24,21 +24,26 @@ namespace ceph {
   namespace mclock {
 
     OpClassClientInfoMgr::OpClassClientInfoMgr(CephContext *cct) :
-      client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
-		cct->_conf->osd_op_queue_mclock_client_op_wgt,
-		cct->_conf->osd_op_queue_mclock_client_op_lim),
-      osd_rep_op(cct->_conf->osd_op_queue_mclock_osd_rep_op_res,
-		 cct->_conf->osd_op_queue_mclock_osd_rep_op_wgt,
-		 cct->_conf->osd_op_queue_mclock_osd_rep_op_lim),
-      snaptrim(cct->_conf->osd_op_queue_mclock_snap_res,
-	       cct->_conf->osd_op_queue_mclock_snap_wgt,
-	       cct->_conf->osd_op_queue_mclock_snap_lim),
-      recov(cct->_conf->osd_op_queue_mclock_recov_res,
-	    cct->_conf->osd_op_queue_mclock_recov_wgt,
-	    cct->_conf->osd_op_queue_mclock_recov_lim),
-      scrub(cct->_conf->osd_op_queue_mclock_scrub_res,
-	    cct->_conf->osd_op_queue_mclock_scrub_wgt,
-	    cct->_conf->osd_op_queue_mclock_scrub_lim)
+      client_op(
+        cct->_conf->get_val<double>("osd_op_queue_mclock_client_op_res"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_client_op_wgt"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_client_op_lim")),
+      osd_rep_op(
+        cct->_conf->get_val<double>("osd_op_queue_mclock_osd_rep_op_res"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_osd_rep_op_wgt"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_osd_rep_op_lim")),
+      snaptrim(
+        cct->_conf->get_val<double>("osd_op_queue_mclock_snap_res"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_snap_wgt"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_snap_lim")),
+      recov(
+        cct->_conf->get_val<double>("osd_op_queue_mclock_recov_res"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_recov_wgt"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_recov_lim")),
+      scrub(
+        cct->_conf->get_val<double>("osd_op_queue_mclock_scrub_res"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_scrub_wgt"),
+        cct->_conf->get_val<double>("osd_op_queue_mclock_scrub_lim"))
     {
       constexpr int rep_ops[] = {
 	MSG_OSD_REPOP,
