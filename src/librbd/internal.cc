@@ -28,6 +28,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
+#include "librbd/TrashWatcher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
@@ -1408,6 +1409,15 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       return r;
     }
 
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_added(io_ctx, image_id, trash_image_spec,
+                                       &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
+    }
+
     return 0;
   }
 
@@ -1502,6 +1512,15 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
                  << " from rbd_trash object" << dendl;
       return r;
     }
+
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_removed(io_ctx, image_id, &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
+    }
+
     return 0;
   }
 
@@ -1572,6 +1591,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       lderr(cct) << "error removing image id " << image_id << " from trash: "
                  << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_removed(io_ctx, image_id, &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
     }
 
     return 0;
