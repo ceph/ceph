@@ -2074,6 +2074,14 @@ public:
   }
 };
 
+std::set<int> OSD::get_mapped_pools() {
+    std::set<int> pools;
+    RWLock::RLocker l(pg_map_lock);
+    for (const auto &i : pg_map)
+      pools.insert(i.first.pool());
+    return pools;
+}
+
 bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
 		       ostream& ss)
 {
@@ -2291,6 +2299,11 @@ will start to track new ops received afterwards.";
             << " seconds" << dendl;
     f->open_object_section("compact_result");
     f->dump_float("elapsed_time", duration);
+    f->close_section();
+  } else if (admin_command == "get_mapped_pools") {
+    f->open_object_section("mapped_pools");
+    set<int> poollist = get_mapped_pools();
+    f->dump_stream("pool_list") << poollist;
     f->close_section();
   } else {
     assert(0 == "broken asok registration");
@@ -2822,6 +2835,10 @@ void OSD::final_init()
                                      " WARNING: Compaction probably slows your requests");
   assert(r == 0);
 
+  r = admin_socket->register_command("get_mapped_pools", "get_mapped_pools",
+                                     asok_hook,
+                                     "dump pools whose PG(s) are mapped to this OSD.");
+
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
@@ -3307,6 +3324,7 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("flush_store_cache");
   cct->get_admin_socket()->unregister_command("dump_pgstate_history");
   cct->get_admin_socket()->unregister_command("compact");
+  cct->get_admin_socket()->unregister_command("get_mapped_pools");
   delete asok_hook;
   asok_hook = NULL;
 
