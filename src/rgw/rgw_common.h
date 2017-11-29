@@ -283,6 +283,11 @@ enum RGWObjCategory {
   RGW_OBJ_CATEGORY_MULTIMETA = 3,
 };
 
+enum HostStyle {
+  PathStyle = 0,
+  VirtualStyle = 1,
+};
+
 /** Store error returns for output at a different point in the program */
 struct rgw_err {
   rgw_err();
