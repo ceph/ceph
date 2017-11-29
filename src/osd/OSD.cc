@@ -7810,8 +7810,8 @@ void OSD::advance_pg(
     lastmap = nextmap;
     handle.reset_tp_timeout();
   }
-  service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
   pg->handle_activate_map(rctx);
+  service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
 }
 
 void OSD::consume_map()
