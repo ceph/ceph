@@ -670,13 +670,7 @@ void TrashImageSpec::decode(bufferlist::const_iterator &it) {
 }
 
 void TrashImageSpec::dump(Formatter *f) const {
-  switch(source) {
-    case TRASH_IMAGE_SOURCE_USER:
-      f->dump_string("source", "user");
-      break;
-    case TRASH_IMAGE_SOURCE_MIRRORING:
-      f->dump_string("source", "rbd_mirror");
-  }
+  f->dump_stream("source") << source;
   f->dump_string("name", name);
   f->dump_unsigned("deletion_time", deletion_time);
   f->dump_unsigned("deferment_end_time", deferment_end_time);
