@@ -231,10 +231,6 @@ class Module(MgrModule):
 
         return metrics
 
-    def shutdown(self):
-        self.serving = False
-        pass
-
     def get_health(self):
         health = json.loads(self.get('health')['json'])
         self.metrics['health_status'].set(
@@ -390,10 +386,13 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def metrics(self):
-                metrics = global_instance().collect()
-                cherrypy.response.headers['Content-Type'] = 'text/plain'
-                if metrics:
-                    return self.format_metrics(metrics)
+                if global_instance().have_mon_connection():
+                    metrics = global_instance().collect()
+                    cherrypy.response.headers['Content-Type'] = 'text/plain'
+                    if metrics:
+                        return self.format_metrics(metrics)
+                else:
+                    raise cherrypy.HTTPError(503, 'No MON connection')
 
         server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
         server_port = self.get_localized_config('server_port', DEFAULT_PORT)
@@ -417,6 +416,11 @@ class Module(MgrModule):
         cherrypy.tree.mount(Root(), "/")
         cherrypy.engine.start()
         cherrypy.engine.block()
+
+    def shutdown(self):
+        self.serving = False
+        pass
+
 
 class StandbyModule(MgrStandbyModule):
     def serve(self):
