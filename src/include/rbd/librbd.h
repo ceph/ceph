@@ -212,7 +212,8 @@ enum {
 
 typedef enum {
   RBD_TRASH_IMAGE_SOURCE_USER = 0,
-  RBD_TRASH_IMAGE_SOURCE_MIRRORING = 1
+  RBD_TRASH_IMAGE_SOURCE_MIRRORING = 1,
+  RBD_TRASH_IMAGE_SOURCE_MIGRATION = 2
 } rbd_trash_image_source_t;
 
 typedef struct {
