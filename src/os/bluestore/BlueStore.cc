@@ -9644,7 +9644,7 @@ void BlueStore::_do_write_small(
       auto bstart = ep->blob_start();
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
-      if (bstart >= end_offs) {
+      if (bstart >= offset) {
 	dout(20) << __func__ << " ignoring distant " << *b << dendl;
       } else if (!b->get_blob().is_mutable()) {
 	dout(20) << __func__ << " ignoring immutable " << *b << dendl;
