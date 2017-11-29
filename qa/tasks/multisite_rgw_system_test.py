@@ -346,7 +346,13 @@ def task(ctx, config):
     remotes = ctx.cluster.only(teuthology.is_type('client'))
     for remote, roles_for_host in remotes.remotes.iteritems():
 
-        remote.run(args=['sudo', 'rm', '-rf', 'rgw-tests'], check_status=False)
+        cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                '*.key.*', 'user_details', 'io_info.yaml', 'verify_io_info.yaml']
+
+        map(cleanup, soot)
+
         remote.run(args=['mkdir', 'rgw-tests'])
         remote.run(
             args=[
@@ -602,6 +608,7 @@ def task(ctx, config):
 
         data = dict(
             config=dict(
+                objects_count=test_config['objects_count'],
                 bucket_count=test_config['bucket_count'],
                 objects_size_range=dict(
                     min=test_config['min_file_size'],
@@ -636,6 +643,6 @@ def task(ctx, config):
             cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
 
             soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                    '*.key.*', 'user_details', 'io_info.yaml']
+                    '*.key.*', 'user_details', 'io_info.yaml', 'verify_io_info.yaml']
 
             map(cleanup, soot)
