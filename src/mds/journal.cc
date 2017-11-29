@@ -1016,11 +1016,8 @@ void EMetaBlob::get_paths(
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       std::string const &dentry = (*iter)->dn;
-      children[dir_ino].push_back(dentry);
-      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
       if (children.find((*iter)->inode.ino) == children.end()) {
         leaf_locations.push_back(Location(dir_ino, dentry));
-
       }
     }
 
@@ -1044,14 +1041,15 @@ void EMetaBlob::get_paths(
     Location const &loc = *i;
     std::string path = loc.second;
     inodeno_t ino = loc.first;
-    while(ino_locations.find(ino) != ino_locations.end()) {
-      Location const &loc = ino_locations[ino];
+    std::map<inodeno_t, Location>::iterator iter = ino_locations.find(ino);
+    while(iter != ino_locations.end()) {
+      Location const &loc = iter->second;
       if (!path.empty()) {
         path = loc.second + "/" + path;
       } else {
         path = loc.second + path;
       }
-      ino = loc.first;
+      iter = ino_locations.find(loc.first);
     }
 
     paths.push_back(path);
