@@ -1,6 +1,7 @@
 add_library(rbd_types STATIC
   journal/Types.cc
   mirroring_watcher/Types.cc
+  trash_watcher/Types.cc
   watcher/Types.cc
   WatchNotifyTypes.cc)
 
@@ -20,6 +21,7 @@ set(librbd_internal_srcs
   MirroringWatcher.cc
   ObjectMap.cc
   Operations.cc
+  TrashWatcher.cc
   Utils.cc
   Watcher.cc
   api/DiffIterate.cc

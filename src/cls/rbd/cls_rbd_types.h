@@ -363,6 +363,13 @@ struct TrashImageSpec {
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
+
+  inline bool operator==(const TrashImageSpec& rhs) const {
+    return (source == rhs.source &&
+            name == rhs.name &&
+            deletion_time == rhs.deletion_time &&
+            deferment_end_time == rhs.deferment_end_time);
+  }
 };
 WRITE_CLASS_ENCODER(TrashImageSpec);
 

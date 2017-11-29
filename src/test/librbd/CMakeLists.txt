@@ -33,6 +33,7 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
   test_mock_ObjectMap.cc
+  test_mock_TrashWatcher.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
   deep_copy/test_mock_ObjectCopyRequest.cc
