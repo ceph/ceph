@@ -657,23 +657,6 @@ OPTION(osd_op_queue, OPT_STR)
 
 OPTION(osd_op_queue_cut_off, OPT_STR) // Min priority to go to strict queue. (low, high)
 
-// mClock priority queue parameters for five types of ops
-OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_osd_rep_op_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_snap_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
-OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
-
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
 // Set to true for testing.  Users should NOT set this.

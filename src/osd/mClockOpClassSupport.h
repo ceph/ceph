@@ -46,6 +46,22 @@ namespace ceph {
 
       OpClassClientInfoMgr(CephContext *cct);
 
+      double osd_op_queue_mclock_client_op_res;
+      double osd_op_queue_mclock_client_op_wgt;
+      double osd_op_queue_mclock_client_op_lim;
+      double osd_op_queue_mclock_osd_rep_op_res;
+      double osd_op_queue_mclock_osd_rep_op_wgt;
+      double osd_op_queue_mclock_osd_rep_op_lim;
+      double osd_op_queue_mclock_snap_res;
+      double osd_op_queue_mclock_snap_wgt;
+      double osd_op_queue_mclock_snap_lim;
+      double osd_op_queue_mclock_recov_res;
+      double osd_op_queue_mclock_recov_wgt;
+      double osd_op_queue_mclock_recov_lim;
+      double osd_op_queue_mclock_scrub_res;
+      double osd_op_queue_mclock_scrub_wgt;
+      double osd_op_queue_mclock_scrub_lim;
+
       inline const crimson::dmclock::ClientInfo*
       get_client_info(osd_op_type_t type) {
 	switch(type) {

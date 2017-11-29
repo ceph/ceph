@@ -24,21 +24,56 @@ namespace ceph {
   namespace mclock {
 
     OpClassClientInfoMgr::OpClassClientInfoMgr(CephContext *cct) :
-      client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
-		cct->_conf->osd_op_queue_mclock_client_op_wgt,
-		cct->_conf->osd_op_queue_mclock_client_op_lim),
-      osd_rep_op(cct->_conf->osd_op_queue_mclock_osd_rep_op_res,
-		 cct->_conf->osd_op_queue_mclock_osd_rep_op_wgt,
-		 cct->_conf->osd_op_queue_mclock_osd_rep_op_lim),
-      snaptrim(cct->_conf->osd_op_queue_mclock_snap_res,
-	       cct->_conf->osd_op_queue_mclock_snap_wgt,
-	       cct->_conf->osd_op_queue_mclock_snap_lim),
-      recov(cct->_conf->osd_op_queue_mclock_recov_res,
-	    cct->_conf->osd_op_queue_mclock_recov_wgt,
-	    cct->_conf->osd_op_queue_mclock_recov_lim),
-      scrub(cct->_conf->osd_op_queue_mclock_scrub_res,
-	    cct->_conf->osd_op_queue_mclock_scrub_wgt,
-	    cct->_conf->osd_op_queue_mclock_scrub_lim)
+      osd_op_queue_mclock_client_op_res(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_client_op_res")),
+      osd_op_queue_mclock_client_op_wgt(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_client_op_wgt")),
+      osd_op_queue_mclock_client_op_lim(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_client_op_lim")),
+      osd_op_queue_mclock_osd_rep_op_res(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_osd_rep_op_res")),
+      osd_op_queue_mclock_osd_rep_op_wgt(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_osd_rep_op_wgt")),
+      osd_op_queue_mclock_osd_rep_op_lim(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_osd_rep_op_lim")),
+      osd_op_queue_mclock_snap_res(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_snap_res")),
+      osd_op_queue_mclock_snap_wgt(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_snap_wgt")),
+      osd_op_queue_mclock_snap_lim(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_snap_lim")),
+      osd_op_queue_mclock_recov_res(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_recov_res")),
+      osd_op_queue_mclock_recov_wgt(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_recov_wgt")),
+      osd_op_queue_mclock_recov_lim(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_recov_lim")),
+      osd_op_queue_mclock_scrub_res(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_scrub_res")),
+      osd_op_queue_mclock_scrub_wgt(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_scrub_wgt")),
+      osd_op_queue_mclock_scrub_lim(cct->_conf->get_val<double>(
+        "osd_op_queue_mclock_scrub_lim")),
+      client_op(
+        osd_op_queue_mclock_client_op_res,
+        osd_op_queue_mclock_client_op_wgt,
+        osd_op_queue_mclock_client_op_lim),
+      osd_rep_op(
+        osd_op_queue_mclock_osd_rep_op_res,
+        osd_op_queue_mclock_osd_rep_op_wgt,
+        osd_op_queue_mclock_osd_rep_op_lim),
+      snaptrim(
+        osd_op_queue_mclock_snap_res,
+        osd_op_queue_mclock_snap_wgt,
+        osd_op_queue_mclock_snap_lim),
+      recov(
+        osd_op_queue_mclock_recov_res,
+        osd_op_queue_mclock_recov_wgt,
+        osd_op_queue_mclock_recov_lim),
+      scrub(
+        osd_op_queue_mclock_scrub_res,
+        osd_op_queue_mclock_scrub_wgt,
+        osd_op_queue_mclock_scrub_lim)
     {
       constexpr int rep_ops[] = {
 	MSG_OSD_REPOP,
