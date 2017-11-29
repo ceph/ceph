@@ -11,15 +11,16 @@
  * Foundation.  See file COPYING.
  *
  */
-
-#include "common/hostname.h"
-
 #include <unistd.h>
+#include "common/hostname.h"
 
 std::string ceph_get_hostname()
 {
-  char buf[1024];
-  gethostname(buf, 1024);
+#ifndef HOST_NAME_MAX
+#define HOST_NAME_MAX 255
+#endif
+  char buf[HOST_NAME_MAX + 1];
+  gethostname(buf, sizeof(buf));
   return std::string(buf);
 }
 

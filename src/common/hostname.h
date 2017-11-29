@@ -14,9 +14,8 @@
 
 #ifndef CEPH_COMMON_HOSTNAME_H
 #define CEPH_COMMON_HOSTNAME_H
-
 #include <string>
 
-extern std::string ceph_get_hostname();
-extern std::string ceph_get_short_hostname();
+std::string ceph_get_hostname();
+std::string ceph_get_short_hostname();
 #endif
