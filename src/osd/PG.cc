@@ -4204,6 +4204,8 @@ int PG::build_scrub_map_chunk(
 
   map.valid_through = info.last_update;
 
+  osr->flush();
+
   // objects
   vector<hobject_t> ls;
   vector<ghobject_t> rollback_obs;
