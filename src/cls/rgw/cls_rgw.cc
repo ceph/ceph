@@ -159,38 +159,11 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
     /* nothing to see here, move along */
     return 0;
   }
-
-  map<string, bufferlist>::iterator first_element = pkeys->begin();
-  if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
-    return 0;
-  }
-
-  /* let's rebuild the list, only keep entries we're interested in */
-  map<string, bufferlist> old_keys;
-  old_keys.swap(*pkeys);
-
-  for (map<string, bufferlist>::iterator iter = old_keys.begin(); iter != old_keys.end(); ++iter) {
-    if ((unsigned char)iter->first[0] != BI_PREFIX_CHAR) {
-      (*pkeys)[iter->first] = iter->second;
-    }
-  }
-
-  if (num_entries == (int)pkeys->size())
-    return 0;
-
-  map<string, bufferlist> new_keys;
-  char c[] = { (char)(BI_PREFIX_CHAR + 1), 0 };
-  string new_start = c;
-
-  /* now get some more keys */
-  ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix, num_entries - pkeys->size(), &new_keys, pmore);
-  if (ret < 0)
-    return ret;
-
-  for (map<string, bufferlist>::iterator iter = new_keys.begin(); iter != new_keys.end(); ++iter) {
-    (*pkeys)[iter->first] = iter->second;
-  }
-
+  /* let's rebuild the list, only keep entries before BI_PREFIX_CHAR */
+  string key;
+  key.push_back(BI_PREFIX_CHAR);
+  pkeys->erase(pkeys->lower_bound(key),pkeys->end());
+  
   return 0;
 }
 
