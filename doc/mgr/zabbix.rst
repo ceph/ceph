@@ -45,10 +45,10 @@ You can enable the *zabbix* module with:
 Configuration
 -------------
 
-Two configuration keys are mandatory for the module to work:
+Two configuration keys are vital for the module to work:
 
 - zabbix_host
-- identifier
+- identifier (optional)
 
 The parameter *zabbix_host* controls the hostname of the Zabbix server to which
 *zabbix_sender* will send the items. This can be a IP-Address if required by
@@ -57,6 +57,9 @@ your installation.
 The *identifier* parameter controls the identifier/hostname to use as source
 when sending items to Zabbix. This should match the name of the *Host* in
 your Zabbix server.
+
+When the *identifier* parameter is not configured the (fs)id of the cluster
+will be used when sending data to Zabbix.
 
 Additional configuration keys which can be configured and their default values:
 
