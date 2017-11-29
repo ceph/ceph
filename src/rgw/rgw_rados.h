@@ -3416,12 +3416,32 @@ public:
 
   int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
+
+
+private:
+  int _get_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant,
+		       const string& bucket_name, RGWBucketInfo& info,
+		       real_time *pmtime,
+		       map<string, bufferlist> *pattrs,
+		       boost::optional<obj_version> refresh_version);
+public:
+
+
   int get_bucket_info(RGWObjectCtx& obj_ctx,
-                              const string& tenant_name, const string& bucket_name,
-                              RGWBucketInfo& info,
-                              ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+		      const string& tenant_name, const string& bucket_name,
+		      RGWBucketInfo& info,
+		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+
+  // Returns true on successful refresh. Returns false if there was an
+  // error or the version stored on the OSD is the same as that
+  // presented in the BucketInfo structure.
+  //
+  int try_refresh_bucket_info(RGWBucketInfo& info,
+			      ceph::real_time *pmtime,
+			      map<string, bufferlist> *pattrs = nullptr);
+
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
-                                     map<string, bufferlist> *pattrs, bool create_entry_point);
+			     map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
@@ -3736,25 +3756,32 @@ public:
 
 template <class T>
 class RGWChainedCacheImpl : public RGWChainedCache {
+  ceph::timespan expiry;
   RWLock lock;
 
-  map<string, T> entries;
+  map<string, std::pair<T, ceph::coarse_mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
   void init(RGWRados *store) {
     store->register_chained_cache(this);
+    expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
+				    "rgw_bucket_info_cache_expiry_interval"));
   }
 
   bool find(const string& key, T *entry) {
     RWLock::RLocker rl(lock);
-    typename map<string, T>::iterator iter = entries.find(key);
+    auto iter = entries.find(key);
     if (iter == entries.end()) {
       return false;
     }
+    if (expiry.count() &&
+	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
+      return false;
+    }
 
-    *entry = iter->second;
+    *entry = iter->second.first;
     return true;
   }
 
@@ -3768,7 +3795,10 @@ public:
   void chain_cb(const string& key, void *data) override {
     T *entry = static_cast<T *>(data);
     RWLock::WLocker wl(lock);
-    entries[key] = *entry;
+    entries[key].first = *entry;
+    if (expiry.count() > 0) {
+      entries[key].second = ceph::coarse_mono_clock::now();
+    }
   }
 
   void invalidate(const string& key) override {
