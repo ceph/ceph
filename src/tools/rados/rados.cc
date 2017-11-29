@@ -211,6 +211,8 @@ void usage(ostream& out)
 "        write contents to the omap\n"
 "   --write-xattr\n"
 "        write contents to the extended attributes\n"
+"   --num-keys\n"
+"        number of omap/xattr keys to write\n"
 "\n"
 "LOAD GEN OPTIONS:\n"
 "   --num-objects                    total number of objects\n"
@@ -878,6 +880,7 @@ class RadosBencher : public ObjBencher {
   librados::NObjectIterator oi;
   bool iterator_valid;
   OpWriteDest write_destination;
+  uint64_t num_keys = 1;
 
 protected:
   int completions_init(int concurrentios) override {
@@ -921,9 +924,33 @@ protected:
     }
 
     if (write_destination & OP_WRITE_DEST_OMAP) {
-      std::map<std::string, librados::bufferlist> omap;
-      omap[string("bench-omap-key-") + stringify(offset)] = bl;
-      op.omap_set(omap);
+      int ret;
+      constexpr uint64_t batch_size = 1000;
+      constexpr uint64_t min_val_len = 4;
+      int batch_count = num_keys/batch_size;
+      auto omap_val_len = std::max(data.op_size/num_keys, min_val_len);
+      bufferlist omap_val;
+      bl.copy(0, omap_val_len, omap_val);
+
+      while (batch_count >= 0) {
+        librados::ObjectWriteOperation op;
+        std::map<std::string, librados::bufferlist> omap;
+        auto omap_size = std::min(batch_size, num_keys);
+        for (unsigned i=0; i < omap_size; i++){
+          std::string omap_key = "bench-omap-key" + stringify(batch_count) + "-" + stringify(i) + stringify(offset);
+          omap[omap_key]=omap_val;
+        }
+        op.omap_set(omap);
+        ret = io_ctx.aio_operate(oid, completions[slot], &op);
+        if (ret < 0)
+          return ret;
+
+        batch_count--;
+      }
+      // now resetting the total write size stats to total size of omap vals
+      // not sure if we should consider the key size as well here.
+      data.op_size = omap_val_len * num_keys;
+      return ret;
     }
 
     if (write_destination & OP_WRITE_DEST_XATTR) {
@@ -997,6 +1024,10 @@ public:
 
   void set_write_destination(OpWriteDest dest) {
     write_destination = dest;
+  }
+
+  void set_num_keys(uint64_t _num_keys){
+    num_keys = _num_keys ? _num_keys: 1; // avoid getting a 0
   }
 };
 
@@ -1637,6 +1668,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   uint64_t target_throughput = 0;
   int64_t read_percent = -1;
   uint64_t num_objs = 0;
+  uint64_t num_keys = 1;
   int run_length = 0;
 
   bool show_time = false;
@@ -1789,6 +1821,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return -EINVAL;
     }
   }
+  i = opts.find("num-keys");
+  if (i != opts.end()) {
+    if (rados_sistrtoll(i, &num_keys)) {
+      return -EINVAL;
+    }
+  }
+
   i = opts.find("run-length");
   if (i != opts.end()) {
     if (rados_sistrtoll(i, &run_length)) {
@@ -3040,6 +3079,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     RadosBencher bencher(g_ceph_context, rados, io_ctx);
     bencher.set_show_time(show_time);
     bencher.set_write_destination(static_cast<OpWriteDest>(bench_write_dest));
+    bencher.set_num_keys(num_keys);
 
     ostream *outstream = NULL;
     if (formatter) {
@@ -3720,6 +3760,8 @@ int main(int argc, const char **argv)
       opts["read-percent"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--num-objects", (char*)NULL)) {
       opts["num-objects"] = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-keys", (char*)NULL)) {
+      opts["num-keys"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--run-length", (char*)NULL)) {
       opts["run-length"] = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--workers", (char*)NULL)) {
