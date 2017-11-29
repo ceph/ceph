@@ -102,9 +102,13 @@ def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
 
     # copies to /tmp dir and then puts it in destination machines
 
+    log.info('copy of io_info.yaml from initiated')
+
     io_info_file = src_node.get_file(file_name, '/tmp')
 
-    dest_node.put_file(io_info_file, file_name, sudo=True)
+    dest_node.put_file(io_info_file, file_name)
+
+    log.info('copy of io_info.yaml completed')
 
 
 def test_exec(ctx, config, user_data, data, tclient, mclient):
@@ -114,6 +118,9 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
     log.info('test name :%s' % config['test-name'])
 
     script_name = config['test-name']
+
+    log.info('script_name: %s' % script_name)
+
     # port_number = config['port_number']
 
     test = Test(script_name, user_data, data)
@@ -129,16 +136,11 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
 
     if not 'acls' in script_name:
 
+        log.info('no test with acls: %s' % script_name)
+
         # no verification is being done for acls test cases right now.
 
-        # copy_file_from(tclient, mclient)
-
-        log.info('copy file io_info.yaml from target node to master node initiated')
-
-        io_info_fname = tclient.get_file('io_info.yaml', '/tmp')
-        mclient.put_file(io_info_fname, 'io_info.yaml')
-
-        log.info('copy file io_info.yaml from target to master node completed')
+        copy_file_from(tclient, mclient)
 
         # start verify of io on master node.
 
