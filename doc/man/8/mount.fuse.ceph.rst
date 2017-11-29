@@ -27,7 +27,7 @@ To use mount.fuse.ceph, add an entry in ``/etc/fstab`` like::
   none      /mnt/ceph   fuse.ceph   ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netdev,defaults  0 0
 
 ceph-fuse options are specified in the ``OPTIONS`` column and must begin
-with ``ceph.`` prefix. This way ceph related fs options will be passed to
+with '``ceph.``' prefix. This way ceph related fs options will be passed to
 ceph-fuse and others will be ignored by ceph-fuse.
 
 Options
