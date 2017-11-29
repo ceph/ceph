@@ -462,8 +462,8 @@ void ReplicatedBackend::submit_transaction(
   InProgressOp &op = insert_res.first->second;
 
   op.waiting_for_commit.insert(
-    parent->get_actingbackfill_shards().begin(),
-    parent->get_actingbackfill_shards().end());
+    parent->get_acting_recovery_backfill_shards().begin(),
+    parent->get_acting_recovery_backfill_shards().end());
 
   issue_op(
     soid,
@@ -949,11 +949,11 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
-  if (parent->get_actingbackfill_shards().size() > 1) {
+  if (parent->get_acting_recovery_backfill_shards().size() > 1) {
     if (op->op) {
       op->op->pg_trace.event("issue replication ops");
       ostringstream ss;
-      set<pg_shard_t> replicas = parent->get_actingbackfill_shards();
+      set<pg_shard_t> replicas = parent->get_acting_recovery_backfill_shards();
       replicas.erase(parent->whoami_shard());
       ss << "waiting for subops from " << replicas;
       op->op->mark_sub_op_sent(ss.str());
@@ -963,7 +963,7 @@ void ReplicatedBackend::issue_op(
     bufferlist logs;
     encode(log_entries, logs);
 
-    for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+    for (const auto& shard : get_parent()->get_acting_recovery_backfill_shards()) {
       if (shard == parent->whoami_shard()) continue;
       const pg_info_t &pinfo = parent->get_shard_info().find(shard)->second;
 
@@ -2153,10 +2153,10 @@ int ReplicatedBackend::start_pushes(
 
   dout(20) << __func__ << " soid " << soid << dendl;
   // who needs it?
-  assert(get_parent()->get_actingbackfill_shards().size() > 0);
+  assert(get_parent()->get_acting_recovery_backfill_shards().size() > 0);
   for (set<pg_shard_t>::iterator i =
-	 get_parent()->get_actingbackfill_shards().begin();
-       i != get_parent()->get_actingbackfill_shards().end();
+	 get_parent()->get_acting_recovery_backfill_shards().begin();
+       i != get_parent()->get_acting_recovery_backfill_shards().end();
        ++i) {
     if (*i == get_parent()->whoami_shard()) continue;
     pg_shard_t peer = *i;
