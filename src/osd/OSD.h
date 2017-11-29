@@ -937,6 +937,12 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
+  /// newest map fully consumed by handle_osd_map (i.e., written to disk)
+  epoch_t map_cache_pinned_epoch = 0;
+
+  /// true if pg consumption affected our unpinning
+  std::atomic<bool> map_cache_pinned_low = {false};
+
   OSDMapRef try_get_map(epoch_t e);
   OSDMapRef get_map(epoch_t e) {
     OSDMapRef ret(try_get_map(e));
@@ -970,6 +976,7 @@ public:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
 
   void clear_map_bl_cache_pins(epoch_t e);
+  void check_map_bl_cache_pins();
 
   void need_heartbeat_peer_update();
 
