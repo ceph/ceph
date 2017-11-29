@@ -4,7 +4,7 @@ meta:
    mount ceph-fuse on client.3 before running workunit
 tasks:
 - sequential:
-  - ceph-fuse:
+  - ceph-fuse: [client.3]
   - print: "**** done ceph-fuse 5-final-workload"
   - workunit:
       clients:
