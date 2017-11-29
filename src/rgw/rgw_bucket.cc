@@ -34,7 +34,6 @@
 
 #define BUCKET_TAG_TIMEOUT 30
 
-using namespace std;
 
 static RGWMetadataHandler *bucket_meta_handler = NULL;
 static RGWMetadataHandler *bucket_instance_meta_handler = NULL;

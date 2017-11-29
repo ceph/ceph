@@ -18,7 +18,6 @@ const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
 
-using namespace std;
 
 #define RESHARD_SHARD_WINDOW 64
 #define RESHARD_MAX_AIO 128

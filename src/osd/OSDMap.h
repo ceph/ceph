@@ -35,7 +35,6 @@
 #include <map>
 #include "include/memory.h"
 #include "include/btree_map.h"
-using namespace std;
 
 // forward declaration
 class CephContext;

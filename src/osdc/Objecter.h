@@ -42,7 +42,6 @@
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
 
 class Context;
 class Messenger;

@@ -24,7 +24,6 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
-using namespace std;
 using namespace librados;
 
 bool LCRule::valid()

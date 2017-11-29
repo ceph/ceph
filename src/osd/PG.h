@@ -50,7 +50,6 @@
 #include <stack>
 #include <string>
 #include <tuple>
-using namespace std;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks

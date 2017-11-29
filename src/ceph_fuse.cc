@@ -16,7 +16,6 @@
 #include <sys/utsname.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 #include "common/errno.h"

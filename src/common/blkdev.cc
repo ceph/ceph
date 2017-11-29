@@ -17,7 +17,6 @@
 #include "include/uuid.h"
 #include "blkdev.h"
 
-using namespace std;
 
 #ifdef __linux__
 #include <linux/fs.h>

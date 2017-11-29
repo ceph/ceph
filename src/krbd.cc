@@ -40,7 +40,6 @@
 #include <blkid/blkid.h>
 #include <libudev.h>
 
-using namespace std;
 
 const static int POLL_TIMEOUT=120000;
 
