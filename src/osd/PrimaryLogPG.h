@@ -325,8 +325,8 @@ public:
   epoch_t get_last_peering_reset_epoch() const override {
     return get_last_peering_reset();
   }
-  const set<pg_shard_t> &get_actingbackfill_shards() const override {
-    return actingbackfill;
+  const set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
+    return acting_recovery_backfill;
   }
   const set<pg_shard_t> &get_acting_shards() const override {
     return actingset;
@@ -878,7 +878,7 @@ protected:
   void simple_opc_submit(OpContextUPtr ctx);
 
   /**
-   * Merge entries atomically into all actingbackfill osds
+   * Merge entries atomically into all acting_recovery_backfill osds
    * adjusting missing and recovery state as necessary.
    *
    * Also used to store error log entries for dup detection.

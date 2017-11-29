@@ -936,7 +936,9 @@ protected:
   pg_shard_t pg_whoami;
   pg_shard_t up_primary;
   vector<int> up, acting, want_acting;
-  set<pg_shard_t> actingbackfill, actingset, upset;
+  // acting_recovery_backfill contains shards that are acting,
+  // async recovery targets, or backfill targets.
+  set<pg_shard_t> acting_recovery_backfill, actingset, upset;
   map<pg_shard_t,eversion_t> peer_last_complete_ondisk;
   eversion_t  min_last_complete_ondisk;  // up: min over last_complete_ondisk, peer_last_complete_ondisk
   eversion_t  pg_trim_to;
@@ -1278,8 +1280,8 @@ protected:
 
   void clear_primary_state();
 
-  bool is_actingbackfill(pg_shard_t osd) const {
-    return actingbackfill.count(osd);
+  bool is_acting_recovery_backfill(pg_shard_t osd) const {
+    return acting_recovery_backfill.count(osd);
   }
   bool is_acting(pg_shard_t osd) const {
     return has_shard(pool.info.is_erasure(), acting, osd);
@@ -1334,9 +1336,9 @@ protected:
 
   bool calc_min_last_complete_ondisk() {
     eversion_t min = last_complete_ondisk;
-    assert(!actingbackfill.empty());
-    for (set<pg_shard_t>::iterator i = actingbackfill.begin();
-	 i != actingbackfill.end();
+    assert(!acting_recovery_backfill.empty());
+    for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
+	 i != acting_recovery_backfill.end();
 	 ++i) {
       if (*i == get_primary()) continue;
       if (peer_last_complete_ondisk.count(*i) == 0)
@@ -2930,7 +2932,7 @@ protected:
 
   /**
    * Merge entries updating missing as necessary on all
-   * actingbackfill logs and missings (also missing_loc)
+   * acting_recovery_backfill logs and missings (also missing_loc)
    */
   void merge_new_log_entries(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
