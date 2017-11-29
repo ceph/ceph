@@ -26,6 +26,9 @@ class Module(MgrModule):
         self.event = Event()
         self.run = True
 
+    def get_fsid(self):
+        return self.get('mon_map')['fsid']
+
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
@@ -55,7 +58,7 @@ class Module(MgrModule):
                         "pool_name": pool['name'],
                         "pool_id": pool['id'],
                         "type_instance": df_type,
-                        "mgr_id": self.get_mgr_id(),
+                        "fsid": self.get_fsid()
                     },
                     "time": datetime.utcnow().isoformat() + 'Z',
                     "fields": {
@@ -83,7 +86,8 @@ class Module(MgrModule):
                     "tags": {
                         "ceph_daemon": daemon,
                         "type_instance": path,
-                        "host": metadata['hostname']
+                        "host": metadata['hostname'],
+                        "fsid": self.get_fsid()
                     },
                     "time": datetime.utcnow().isoformat() + 'Z',
                     "fields": {
