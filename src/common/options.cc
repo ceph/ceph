@@ -1899,10 +1899,6 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("osd_map_max_advance", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(40)
-    .set_description(""),
-
     Option("osd_map_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(50)
     .set_description(""),

@@ -9275,7 +9275,6 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_op_history_slow_op_threshold",
     "osd_enable_op_tracker",
     "osd_map_cache_size",
-    "osd_map_max_advance",
     "osd_pg_epoch_persisted_max_stale",
     "osd_disk_thread_ioprio_class",
     "osd_disk_thread_ioprio_priority",
@@ -9410,11 +9409,6 @@ void OSD::update_log_config()
 void OSD::check_config()
 {
   // some sanity checks
-  if (cct->_conf->osd_map_cache_size <= cct->_conf->osd_map_max_advance + 2) {
-    clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
-		<< " is not > osd_map_max_advance ("
-		<< cct->_conf->osd_map_max_advance << ")";
-  }
   if (cct->_conf->osd_map_cache_size <= (int)cct->_conf->osd_pg_epoch_persisted_max_stale + 2) {
     clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
 		 << " is not > osd_pg_epoch_persisted_max_stale ("
