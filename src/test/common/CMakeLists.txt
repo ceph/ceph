@@ -277,3 +277,6 @@ add_executable(unittest_bounded_key_counter
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_bounded_key_counter global)
 add_ceph_unittest(unittest_bounded_key_counter)
+
+add_executable(unittest_static_ptr test_static_ptr.cc)
+add_ceph_unittest(unittest_static_ptr)
