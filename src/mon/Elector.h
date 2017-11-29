@@ -17,7 +17,6 @@
 #define CEPH_MON_ELECTOR_H
 
 #include <map>
-using namespace std;
 
 #include "include/types.h"
 #include "include/Context.h"

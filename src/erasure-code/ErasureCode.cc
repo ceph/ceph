@@ -25,7 +25,6 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
-using namespace std;
 
 const unsigned ErasureCode::SIMD_ALIGN = 32;
 

@@ -55,7 +55,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 using namespace librados;
 using ceph::crypto::MD5;
 using boost::optional;

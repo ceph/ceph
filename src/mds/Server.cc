@@ -61,7 +61,6 @@
 
 #include <list>
 #include <iostream>
-using namespace std;
 
 #include "common/config.h"
 

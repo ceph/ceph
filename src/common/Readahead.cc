@@ -3,7 +3,6 @@
 
 #include "Readahead.h"
 
-using namespace std;
 
 Readahead::Readahead()
   : m_trigger_requests(10),

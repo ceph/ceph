@@ -47,7 +47,6 @@
 #include <map>
 #include <memory>
 #include "include/memory.h"
-using namespace std;
 
 #include "include/unordered_map.h"
 

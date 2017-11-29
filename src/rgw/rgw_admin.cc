@@ -45,7 +45,6 @@
 #include "rgw_role.h"
 #include "rgw_reshard.h"
 
-using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

@@ -10,7 +10,6 @@
 #include "common/address_helper.h"
 #include "boost/regex.hpp"
 
-using namespace std;
 
 // decode strings like "tcp://<host>:<port>"
 int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)

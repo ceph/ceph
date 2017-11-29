@@ -20,7 +20,6 @@
 
 #include <map>
 #include <set>
-using namespace std;
 
 #include "include/types.h"
 #include "mds/FSMap.h"

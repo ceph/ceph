@@ -23,7 +23,6 @@
  */
 
 #include <map>
-using namespace std;
 
 //typedef int T;
 

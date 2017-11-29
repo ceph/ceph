@@ -28,8 +28,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "auth: "
 
-using namespace std;
-
 int KeyRing::from_ceph_context(CephContext *cct)
 {
   const md_config_t *conf = cct->_conf;

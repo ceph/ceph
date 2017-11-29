@@ -23,7 +23,6 @@
 #include <atomic>
 #include <fstream>
 
-using namespace std;
 
 #include <boost/scoped_ptr.hpp>
 
