@@ -135,8 +135,8 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
 
         log.info('copy file io_info.yaml from target node to master node initiated')
 
-        io_info_fname = mclient.get_file('io_info.yaml', '/tmp')
-        tclient.put_file(io_info_fname, 'io_info.yaml')
+        io_info_fname = tclient.get_file('io_info.yaml', '/tmp')
+        mclient.put_file(io_info_fname, 'io_info.yaml')
 
         log.info('copy file io_info.yaml from target to master node completed')
 
