@@ -45,11 +45,14 @@ it will fix).
 
 A single-device BlueStore OSD can be provisioned with::
 
-  ceph-disk prepare --bluestore <device>
+  ceph-volume lvm prepare --bluestore --data <device>
 
 To specify a WAL device and/or DB device, ::
 
-  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block.db <db-device>
+  ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
+
+.. note:: --data can be a Logical Volume using the vg/lv notation. Other
+          devices can be existing logical volumes or GPT partitions
 
 Cache size
 ==========
