@@ -1534,9 +1534,43 @@ void OSDService::pin_map_bl(epoch_t e, bufferlist &bl)
 
 void OSDService::clear_map_bl_cache_pins(epoch_t e)
 {
+  // do not rip cache out from under PGs who are processing maps
+  epoch_t min_pg_epoch = get_min_pg_epoch();
+  if (!min_pg_epoch) {
+    // no pgs, use latest osdmap epoch here
+    min_pg_epoch = osdmap->get_epoch();
+  }
+
   Mutex::Locker l(map_cache_lock);
-  map_bl_inc_cache.clear_pinned(e);
-  map_bl_cache.clear_pinned(e);
+  if (e) {
+    map_cache_pinned_epoch = e;
+  }
+  epoch_t actual;
+  if (map_cache_pinned_epoch > min_pg_epoch) {
+    dout(10) << __func__ << " adjusting pin bound " << map_cache_pinned_epoch
+	     << " -> min_pg_epoch " << min_pg_epoch
+	     << dendl;
+    actual = min_pg_epoch;
+    map_cache_pinned_low = true;
+  } else {
+    actual = map_cache_pinned_epoch;
+    if (map_cache_pinned_low) {
+      dout(10) << __func__ << " dropped min_pg_epoch adjustment, back to "
+	       << map_cache_pinned_epoch << dendl;
+      map_cache_pinned_low = false;
+    }
+  }
+  dout(20) << __func__ << " actual " << actual << dendl;
+  map_bl_inc_cache.clear_pinned(actual);
+  map_bl_cache.clear_pinned(actual);
+}
+
+void OSDService::check_map_bl_cache_pins()
+{
+  if (!map_cache_pinned_low) {
+    return;
+  }
+  clear_map_bl_cache_pins(0);
 }
 
 OSDMapRef OSDService::_add_map(OSDMap *o)
@@ -4926,6 +4960,11 @@ void OSD::tick()
 {
   assert(osd_lock.is_locked());
   dout(10) << "tick" << dendl;
+
+  // make sure map cache pin bound is properly adjusted (it may be set
+  // artificially low if the last maps were injested when pg map processing
+  // was behind).
+  service.check_map_bl_cache_pins();
 
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
