@@ -106,9 +106,7 @@ def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
 
     io_info_file = src_node.get_file(file_name, '/tmp')
 
-    verifiy_io_yaml = 'verify_'+ file_name
-
-    dest_node.put_file(io_info_file, verifiy_io_yaml)
+    dest_node.put_file(io_info_file, file_name)
 
     log.info('copy of io_info.yaml completed')
 
@@ -136,11 +134,15 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
     time.sleep(60)
     # wait for sync
 
+    # no verification is being done for acls test cases right now.
+
     if not 'acls' in script_name:
 
         log.info('no test with acls: %s' % script_name)
 
-        # no verification is being done for acls test cases right now.
+        # renaming the io_info.yaml in mater node to io_info_2.yaml
+
+        mclient.run(args=[run.Raw('sudo mv io_info.yaml io_info_2.yaml')])
 
         copy_file_from(tclient, mclient)
 
@@ -349,7 +351,7 @@ def task(ctx, config):
         cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
 
         soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                '*.key.*', 'user_details', 'io_info.yaml', 'verify_io_info.yaml']
+                '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
 
         map(cleanup, soot)
 
@@ -643,6 +645,6 @@ def task(ctx, config):
             cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
 
             soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                    '*.key.*', 'user_details', 'io_info.yaml', 'verify_io_info.yaml']
+                    '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
 
             map(cleanup, soot)
