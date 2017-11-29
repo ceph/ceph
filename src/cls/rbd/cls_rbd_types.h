@@ -513,8 +513,28 @@ struct GroupSnapshot {
 WRITE_CLASS_ENCODER(GroupSnapshot);
 enum TrashImageSource {
   TRASH_IMAGE_SOURCE_USER = 0,
-  TRASH_IMAGE_SOURCE_MIRRORING = 1
+  TRASH_IMAGE_SOURCE_MIRRORING = 1,
+  TRASH_IMAGE_SOURCE_MIGRATION = 2,
 };
+
+inline std::ostream& operator<<(std::ostream& os,
+                                const TrashImageSource& source) {
+  switch (source) {
+  case TRASH_IMAGE_SOURCE_USER:
+    os << "user";
+    break;
+  case TRASH_IMAGE_SOURCE_MIRRORING:
+    os << "mirroring";
+    break;
+  case TRASH_IMAGE_SOURCE_MIGRATION:
+    os << "migration";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(source) << ")";
+    break;
+  }
+  return os;
+}
 
 inline void encode(const TrashImageSource &source, bufferlist& bl,
 		   uint64_t features=0)
