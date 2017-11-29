@@ -3455,7 +3455,10 @@ void PG::update_snap_map(
 	int r = snap_mapper.remove_oid(
 	  i->soid,
 	  &_t);
-	assert(r == 0);
+	if (!(r == 0 || r == -ENOENT)) {
+	  derr << __func__ << ": remove_oid returned " << cpp_strerror(r) << dendl;
+	  ceph_abort();
+	}
       } else if (i->is_update()) {
 	assert(i->snaps.length() > 0);
 	vector<snapid_t> snaps;
