@@ -438,9 +438,24 @@ static void add_grants_headers(map<int, string>& grants, RGWEnv& env, map<string
 
 void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
 {
+  string resource_str;
   string resource;
-  url_encode(obj.bucket.name + "/" + obj.get_oid(), resource);
   string new_url = url;
+
+  if (host_style == VirtualStyle) {
+    resource_str = obj.get_oid();
+    new_url = obj.bucket.name + "."  + new_url;
+  } else {
+    resource_str = obj.bucket.name + "/" + obj.get_oid();
+  }
+
+  //do not encode slash in object key name
+  url_encode(resource_str, resource, false);
+
+  string uri;
+  //do not encode slash in object key name
+  url_encode(obj.bucket.name + "/" + obj.get_oid(), uri, false);
+
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
 
@@ -463,7 +478,7 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   new_info.method = "PUT";
 
   new_info.script_uri = "/";
-  new_info.script_uri.append(resource);
+  new_info.script_uri.append(uri);
   new_info.request_uri = new_info.script_uri;
 
   method = new_info.method;
@@ -610,7 +625,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   string new_url = url;
   if (new_url[new_url.size() - 1] != '/')
     new_url.append("/");
-
+  
   string date_str;
   get_gmt_date_str(date_str);
 
@@ -627,10 +642,32 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   }
 
   string new_resource;
+  string bucket_name;
+  string old_resource = resource;
+
   if (resource[0] == '/') {
     new_resource = resource.substr(1);
   } else {
     new_resource = resource;
+  }
+
+  string uri = new_resource;
+
+  size_t pos = new_resource.find("/");
+  bucket_name = new_resource.substr(0, pos);
+
+  //when dest is a bucket with out other params, uri should end up with '/'
+  if(pos == string::npos && params.size() == 0 && host_style == VirtualStyle) {
+    uri.append("/");
+  }
+
+  if (host_style == VirtualStyle) {
+    new_url = bucket_name + "." + new_url;
+    if(pos == string::npos) {
+      new_resource = "";
+    } else {
+      new_resource = new_resource.substr(pos+1);
+    }
   }
 
   new_url.append(new_resource + params_str);
@@ -645,7 +682,7 @@ int RGWRESTStreamRWRequest::do_send_prepare(RGWAccessKey *key, map<string, strin
   new_info.method = method.c_str();
 
   new_info.script_uri = "/";
-  new_info.script_uri.append(new_resource);
+  new_info.script_uri.append(uri);
   new_info.request_uri = new_info.script_uri;
 
   new_info.init_meta_info(NULL);

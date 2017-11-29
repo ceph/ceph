@@ -144,9 +144,11 @@ public:
 
 class RGWRESTStreamRWRequest : public RGWHTTPStreamRWRequest {
   bool send_data_hint{false};
+protected:
+  HostStyle host_style;
 public:
   RGWRESTStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, RGWHTTPStreamRWRequest::ReceiveCB *_cb,
-		param_vec_t *_headers, param_vec_t *_params) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params) {
+		param_vec_t *_headers, param_vec_t *_params, HostStyle _host_style = PathStyle) : RGWHTTPStreamRWRequest(_cct, _method, _url, _cb, _headers, _params), host_style(_host_style) {
   }
   virtual ~RGWRESTStreamRWRequest() override {}
 
@@ -168,7 +170,7 @@ private:
 class RGWRESTStreamReadRequest : public RGWRESTStreamRWRequest {
 public:
   RGWRESTStreamReadRequest(CephContext *_cct, const string& _url, ReceiveCB *_cb, param_vec_t *_headers,
-		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params) {}
+		param_vec_t *_params, HostStyle _host_style = PathStyle) : RGWRESTStreamRWRequest(_cct, "GET", _url, _cb, _headers, _params, _host_style) {}
 };
 
 class RGWRESTStreamHeadRequest : public RGWRESTStreamRWRequest {
@@ -183,7 +185,7 @@ class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
   req_info new_info;
 public:
   RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
-		param_vec_t *_params) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params),
+		param_vec_t *_params, HostStyle _host_style) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params, _host_style),
                 out_cb(NULL), new_info(cct, &new_env) {}
   ~RGWRESTStreamS3PutObj() override;
 

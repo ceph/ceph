@@ -29,7 +29,6 @@ static string aws_bucket_name(const RGWBucketInfo& bucket_info, bool user_bucket
 }
 
 static string aws_object_name(const RGWBucketInfo& bucket_info, const rgw_obj_key&key, bool user_buckets=false){
-  string bucket_name = aws_bucket_name(bucket_info, user_buckets);
   string object_name;
   object_name += bucket_info.owner.to_str() + "/";
   object_name += bucket_info.bucket.name + "/" + key.name;
@@ -44,6 +43,8 @@ static string obj_to_aws_path(const rgw_obj& obj)
 struct AWSSyncConfig {
   string s3_endpoint;
   RGWAccessKey key;
+  HostStyle host_style;
+
 
   uint64_t multipart_sync_threshold{DEFAULT_MULTIPART_SYNC_PART_SIZE};
   uint64_t multipart_min_part_size{DEFAULT_MULTIPART_SYNC_PART_SIZE};
@@ -757,7 +758,6 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   unordered_map <string, bool> bucket_created;
   string target_bucket_name;
   rgw_rest_obj rest_obj;
-  string obj_path;
   int ret{0};
 
   uint32_t src_zone_short_id{0};
@@ -798,8 +798,6 @@ public:
         ldout(sync_env->cct, 0) << "ERROR: cannot find http connection to zone " << sync_env->source_zone << dendl;
         return set_cr_error(-EINVAL);
       }
-
-      obj_path = bucket_info.bucket.name + "/" + key.name;
 
       target_bucket_name = aws_bucket_name(bucket_info);
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
@@ -918,7 +916,8 @@ public:
                                     sync_env->store,
                                     instance.id,
                                     { instance.conf.s3_endpoint },
-                                    instance.conf.key));
+                                    instance.conf.key,
+                                    instance.conf.host_style));
   }
 
   ~RGWAWSDataSyncModule() {}
@@ -970,6 +969,17 @@ int RGWAWSSyncModule::create_instance(CephContext *cct, const JSONFormattable& c
   AWSSyncConfig conf;
 
   conf.s3_endpoint = config["s3_endpoint"];
+
+  i = config.find("host_style");
+  string host_style_str = config["host_style"];
+
+  if (host_style_str != "virtual") {
+    conf.host_style = PathStyle;
+  } else {
+    conf.host_style = VirtualStyle;
+  }
+
+  conf.bucket_suffix = config["bucket_suffix"];
 
   string access_key = config["access_key"];
   string secret = config["secret"];
