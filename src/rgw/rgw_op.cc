@@ -1643,7 +1643,7 @@ void RGWGetBucketWebsite::pre_exec()
 void RGWGetBucketWebsite::execute()
 {
   if (!s->bucket_info.has_website) {
-    op_ret = -ENOENT;
+    op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
 }
 
