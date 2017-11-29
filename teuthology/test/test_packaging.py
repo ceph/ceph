@@ -384,7 +384,7 @@ class TestBuilderProject(object):
         expected = 'ref/v10.0.1'
         assert result == expected
         expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using tag'
-        assert expected_log in caplog.text()
+        assert expected_log in caplog.text
         return gp
 
     def test_init_from_config_branch_overrides_sha1(self, caplog):
@@ -399,7 +399,7 @@ class TestBuilderProject(object):
         expected = 'ref/jewel'
         assert result == expected
         expected_log = 'More than one of ref, tag, branch, or sha1 supplied; using branch'
-        assert expected_log in caplog.text()
+        assert expected_log in caplog.text
         return gp
 
     REFERENCE_MATRIX = [
