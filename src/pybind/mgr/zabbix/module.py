@@ -89,12 +89,7 @@ class Module(MgrModule):
     def init_module_config(self):
         self.fsid = self.get('mon_map')['fsid']
         for key, default in self.config_keys.items():
-            value = self.get_localized_config(key, default)
-            if value is None:
-                raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'zabbix config-set {0} <value>"'.format(key))
-
-            self.set_config_option(key, value)
+            self.set_config_option(key, self.get_config(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -112,6 +107,7 @@ class Module(MgrModule):
             raise RuntimeError('interval should be set to at least 10 seconds')
 
         self.config[option] = value
+        return True
 
     def get_data(self):
         data = dict()
@@ -215,18 +211,27 @@ class Module(MgrModule):
         if identifier is None or len(identifier) == 0:
             identifier = 'ceph-{0}'.format(self.fsid)
 
-        self.log.debug('Sending data to Zabbix server %s as host/identifier %s',
-                       self.config['zabbix_host'], identifier)
-        self.log.debug(data)
+        if not self.config['zabbix_host']:
+            self.log.error('Zabbix server not set, please configure using: '
+                           'ceph zabbix config-set zabbix_host <zabbix_host>')
+            return
 
         try:
+            self.log.debug(
+                'Sending data to Zabbix server %s as host/identifier %s',
+                self.config['zabbix_host'], identifier)
+            self.log.debug(data)
+
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
                                   self.config['zabbix_port'], self.log)
 
             zabbix.send(identifier, data)
+            return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+
+        return False
 
     def handle_command(self, command):
         if command['prefix'] == 'zabbix config-show':
@@ -238,12 +243,18 @@ class Module(MgrModule):
                 return -errno.EINVAL, '', 'Value should not be empty or None'
 
             self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_localized_config(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
+            if self.set_config_option(key, value):
+                self.set_config(key, value)
+                return 0, 'Configuration option {0} updated'.format(key), ''
+
+            return 1,\
+                'Failed to update configuration option {0}'.format(key), ''
+
         elif command['prefix'] == 'zabbix send':
-            self.send()
-            return 0, 'Sending data to Zabbix', ''
+            if self.send():
+                return 0, 'Sending data to Zabbix', ''
+
+            return 1, 'Failed to send data to Zabbix', ''
         elif command['prefix'] == 'zabbix self-test':
             self.self_test()
             return 0, 'Self-test succeeded', ''
