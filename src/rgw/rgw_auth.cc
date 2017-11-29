@@ -309,6 +309,15 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
 
 
 /* rgw::auth::RemoteAuthApplier */
+bool rgw::auth::RemoteApplier::is_user_type(uint32_t& type) const
+{
+  if (type != info.acct_type) {
+    return false;
+  }
+
+  return true;
+}
+
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const aclspec_t& aclspec) const
 {
   uint32_t perm = 0;
@@ -436,14 +445,22 @@ void rgw::auth::RemoteApplier::load_acct_info(RGWUserInfo& user_info) const     
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
     if (rgw_get_user_info_by_uid(store, tenanted_uid, user_info) >= 0) {
-      /* Succeeded. */
-      return;
+      if (cct->_conf->rgw_check_user_type && ! is_user_type(user_info.type)) {
+        throw -EPERM;
+      } else {
+        /* Succeeded. */
+        return;
+      }
     }
   }
 
   if (rgw_get_user_info_by_uid(store, acct_user, user_info) < 0) {
     ldout(cct, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
     create_account(acct_user, user_info);
+  } else {
+    if (cct->_conf->rgw_check_user_type && ! is_user_type(user_info.type)) {
+      throw -EPERM;
+    }
   }
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
@@ -513,6 +530,10 @@ uint32_t rgw::auth::LocalApplier::get_perm_mask(const std::string& subuser_name,
 
 void rgw::auth::LocalApplier::load_acct_info(RGWUserInfo& user_info) const /* out */
 {
+  if (cct->_conf->rgw_check_user_type && this->user_info.type != TYPE_RGW) {
+    throw -EPERM;
+  }
+
   /* Load the account that belongs to the authenticated identity. An extra call
    * to RADOS may be safely skipped in this case. */
   user_info = this->user_info;

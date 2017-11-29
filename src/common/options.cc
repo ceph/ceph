@@ -6064,6 +6064,9 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
+    Option("rgw_check_user_type", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .set_description("Should User Type(local/ ldap/ Keystome) be checked while authentication."),
   });
 }
 

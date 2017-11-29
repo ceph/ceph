@@ -352,6 +352,9 @@ class StrategyRegistry;
  * must be able to create it basing on data passed by an auth engine. Those
  * data will be used to fill RGWUserInfo structure. */
 class RemoteApplier : public IdentityApplier {
+
+  bool is_user_type(uint32_t& type) const;
+
 public:
   class AuthInfo {
     friend class RemoteApplier;
@@ -446,6 +449,7 @@ class LocalApplier : public IdentityApplier {
 protected:
   const RGWUserInfo user_info;
   const std::string subuser;
+  CephContext* const cct;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
@@ -457,7 +461,8 @@ public:
                const RGWUserInfo& user_info,
                std::string subuser)
     : user_info(user_info),
-      subuser(std::move(subuser)) {
+      subuser(std::move(subuser)),
+      cct(cct) {
   }
 
 
