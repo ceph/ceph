@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from threading import Event
 import json
@@ -12,29 +11,27 @@ try:
 except ImportError:
     InfluxDBClient = None
 
+
 class Module(MgrModule):
     COMMANDS = [
         {
             "cmd": "influx self-test",
             "desc": "debug the module",
-            "perm": "rw"  
+            "perm": "rw"
         },
     ]
-
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.event = Event()
-        self.run = True 
-
+        self.run = True
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
         if data:
             return data[-1][1]
-        else:
-            return 0
 
+        return 0
 
     def get_df_stats(self):
         df = self.get("df")
@@ -55,15 +52,15 @@ class Module(MgrModule):
                 point = {
                     "measurement": "ceph_pool_stats",
                     "tags": {
-                        "pool_name" : pool['name'],
-                        "pool_id" : pool['id'],
-                        "type_instance" : df_type,
-                        "mgr_id" : self.get_mgr_id(),
+                        "pool_name": pool['name'],
+                        "pool_id": pool['id'],
+                        "type_instance": df_type,
+                        "mgr_id": self.get_mgr_id(),
                     },
-                        "time" : datetime.utcnow().isoformat() + 'Z',
-                        "fields": {
-                            "value" : pool['stats'][df_type],
-                        }
+                    "time": datetime.utcnow().isoformat() + 'Z',
+                    "fields": {
+                        "value": pool['stats'][df_type],
+                    }
                 }
                 data.append(point)
         return data
@@ -113,13 +110,18 @@ class Module(MgrModule):
 
         client = InfluxDBClient(host, port, username, password, database)
 
-        # using influx client get_list_database requires admin privs, instead we'll catch the not found exception and inform the user if db can't be created
+        # using influx client get_list_database requires admin privs,
+        # instead we'll catch the not found exception and inform the user if
+        # db can not be created
         try:
             client.write_points(self.get_df_stats(), 'ms')
             client.write_points(self.get_daemon_stats(), 'ms')
         except InfluxDBClientError as e:
             if e.code == 404:
-                self.log.info("Database '{0}' not found, trying to create (requires admin privs).  You can also create manually and grant write privs to user '{1}'".format(database,username))
+                self.log.info("Database '%s' not found, trying to create "
+                              "(requires admin privs).  You can also create "
+                              "manually and grant write privs to user "
+                              "'%s'", database, username)
                 client.create_database(database)
             else:
                 raise
@@ -134,14 +136,16 @@ class Module(MgrModule):
             daemon_stats = self.get_daemon_stats()
             assert len(daemon_stats)
             df_stats = self.get_df_stats()
+
             result = {
                 'daemon_stats': daemon_stats,
                 'df_stats': df_stats
             }
+
             return 0, json.dumps(result, indent=2), 'Self-test OK'
-        else:
-            return (-errno.EINVAL, '',
-                    "Command not found '{0}'".format(cmd['prefix']))
+
+        return (-errno.EINVAL, '',
+                "Command not found '{0}'".format(cmd['prefix']))
 
     def serve(self):
         if InfluxDBClient is None:
@@ -155,8 +159,9 @@ class Module(MgrModule):
             self.send_to_influx()
             self.log.debug("Running interval loop")
             interval = self.get_config("interval")
+
             if interval is None:
                 interval = 5
-            self.log.debug("sleeping for %d seconds",interval)
+
+            self.log.debug("sleeping for %d seconds", interval)
             self.event.wait(interval)
-            
