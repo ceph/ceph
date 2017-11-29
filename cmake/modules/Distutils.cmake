@@ -56,7 +56,18 @@ function(distutils_add_cython_module name src)
 endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
+  get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
+  get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
+  set(PY_CC "${compiler_launcher} ${CMAKE_C_COMPILER}")
+  set(PY_LDSHARED "${link_launcher} ${CMAKE_C_COMPILER} -shared")
   install(CODE "
+    set(ENV{CC} \"${PY_CC}\")
+    set(ENV{LDSHARED} \"${PY_LDSHARED}\")
+    set(ENV{CPPFLAGS} \"-iquote${CMAKE_SOURCE_DIR}/src/include\")
+    set(ENV{LDFLAGS} \"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
+    set(ENV{CYTHON_BUILD_DIR} \"${CMAKE_CURRENT_BINARY_DIR}\")
+    set(ENV{CEPH_LIBDIR} \"${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\")
+
     set(options --prefix=${CMAKE_INSTALL_PREFIX})
     if(DEFINED ENV{DESTDIR})
       if(EXISTS /etc/debian_version)
@@ -67,12 +78,7 @@ function(distutils_install_cython_module name)
       list(APPEND options --root=/)
     endif()
     execute_process(
-       COMMAND env
-           CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
-           CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-           CC=${CMAKE_C_COMPILER}
-           CPPFLAGS=\"-iquote${CMAKE_SOURCE_DIR}/src/include\"
-           LDFLAGS=\"-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}\"
+       COMMAND
            ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
            build --verbose --build-base ${CYTHON_MODULE_DIR}
            --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
