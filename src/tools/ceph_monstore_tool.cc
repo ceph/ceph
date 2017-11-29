@@ -24,6 +24,7 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
+#include "mgr/mgr_commands.h"
 #include "mon/AuthMonitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
@@ -588,6 +589,36 @@ static int update_monitor(MonitorDBStore& st)
   return 0;
 }
 
+static int update_mgrmap(MonitorDBStore& st)
+{
+  auto t = make_shared<MonitorDBStore::Transaction>();
+
+  {
+    MgrMap map;
+    // mgr expects epoch > 1
+    map.epoch++;
+    auto initial_modules =
+      get_str_vec(g_ceph_context->_conf->get_val<string>("mgr_initial_modules"));
+    copy(begin(initial_modules),
+	 end(initial_modules),
+	 inserter(map.modules, end(map.modules)));
+    bufferlist bl;
+    map.encode(bl, CEPH_FEATURES_ALL);
+    t->put("mgr", map.epoch, bl);
+    t->put("mgr", "last_committed", map.epoch);
+  }
+  {
+    auto mgr_command_descs = mgr_commands;
+    for (auto& c : mgr_command_descs) {
+      c.set_flag(MonCommand::FLAG_MGR);
+    }
+    bufferlist bl;
+    ::encode(mgr_command_descs, bl);
+    t->put("mgr_command_desc", "", bl);
+  }
+  return st.apply_transaction(t);
+}
+
 static int update_paxos(MonitorDBStore& st)
 {
   // build a pending paxos proposal from all non-permanent k/v pairs. once the
@@ -598,6 +629,7 @@ static int update_paxos(MonitorDBStore& st)
   {
     MonitorDBStore::Transaction t;
     vector<string> prefixes = {"auth", "osdmap",
+			       "mgr", "mgr_command_desc",
 			       "pgmap", "pgmap_pg", "pgmap_meta"};
     for (const auto& prefix : prefixes) {
       for (auto i = st.get_iterator(prefix); i->valid(); i->next()) {
@@ -704,6 +736,9 @@ int rebuild_monstore(const char* progname,
     return r;
   }
   if ((r = update_monitor(st))) {
+    return r;
+  }
+  if ((r = update_mgrmap(st))) {
     return r;
   }
   return 0;
