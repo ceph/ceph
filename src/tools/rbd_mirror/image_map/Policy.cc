@@ -36,11 +36,11 @@ void Policy::init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_m
   RWLock::WLocker map_lock(m_map_lock);
 
   for (auto const &it : image_mapping) {
-    map(it.first, it.second.instance_id, utime_t(0, 0), m_map_lock);
+    map(it.first, it.second.instance_id, it.second.mapped_time, m_map_lock);
   }
 }
 
-std::string Policy::lookup(const std::string &global_image_id) {
+Policy::LookupInfo Policy::lookup(const std::string &global_image_id) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
   RWLock::RLocker map_lock(m_map_lock);
@@ -334,16 +334,19 @@ bool Policy::remove_pending(const std::string &global_image_id) {
   return r_it != it->second.actions.rend();
 }
 
-std::string Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
+Policy::LookupInfo Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
   assert(m_map_lock.is_locked());
+
+  LookupInfo info;
 
   for (auto it = m_map.begin(); it != m_map.end(); ++it) {
     if (it->second.find(global_image_id) != it->second.end()) {
-      return it->first;
+      info.instance_id = it->first;
+      info.mapped_time = get_image_mapped_timestamp(global_image_id);
     }
   }
 
-  return UNMAPPED_INSTANCE_ID;
+  return info;
 }
 
 void Policy::map(const std::string &global_image_id, const std::string &instance_id,
@@ -353,9 +356,7 @@ void Policy::map(const std::string &global_image_id, const std::string &instance
   auto ins = m_map[instance_id].emplace(global_image_id);
   assert(ins.second);
 
-  auto it = m_actions.find(global_image_id);
-  assert(it != m_actions.end());
-  it->second.map_time = map_time;
+  set_image_mapped_timestamp(global_image_id, map_time);
 }
 
 void Policy::unmap(const std::string &global_image_id, const std::string &instance_id,
@@ -375,7 +376,9 @@ void Policy::map(const std::string &global_image_id, utime_t map_time) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
   assert(m_map_lock.is_wlocked());
 
-  std::string instance_id = lookup(global_image_id, m_map_lock);
+  LookupInfo info = lookup(global_image_id, m_map_lock);
+  std::string instance_id = info.instance_id;
+
   if (instance_id != UNMAPPED_INSTANCE_ID && !is_dead_instance(instance_id)) {
     return;
   }
@@ -391,12 +394,12 @@ void Policy::unmap(const std::string &global_image_id) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
   assert(m_map_lock.is_wlocked());
 
-  std::string instance_id = lookup(global_image_id, m_map_lock);
-  if (instance_id == UNMAPPED_INSTANCE_ID) {
+  LookupInfo info = lookup(global_image_id, m_map_lock);
+  if (info.instance_id == UNMAPPED_INSTANCE_ID) {
     return;
   }
 
-  unmap(global_image_id, instance_id, m_map_lock);
+  unmap(global_image_id, info.instance_id, m_map_lock);
 }
 
 bool Policy::can_shuffle_image(const std::string &global_image_id) {
@@ -406,10 +409,7 @@ bool Policy::can_shuffle_image(const std::string &global_image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   int migration_throttle = cct->_conf->get_val<int64_t>("rbd_mirror_image_policy_migration_throttle");
 
-  auto it = m_actions.find(global_image_id);
-  assert(it != m_actions.end());
-
-  utime_t last_shuffled_time = it->second.map_time;
+  utime_t last_shuffled_time = get_image_mapped_timestamp(global_image_id);
   dout(10) << ": migration_throttle=" << migration_throttle << ", last_shuffled_time="
            << last_shuffled_time << dendl;
 

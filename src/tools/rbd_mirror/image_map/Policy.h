@@ -30,7 +30,11 @@ public:
   void init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping);
 
   // lookup an image from the map
-  std::string lookup(const std::string &global_image_id);
+  struct LookupInfo {
+    std::string instance_id = UNMAPPED_INSTANCE_ID;
+    utime_t mapped_time;
+  };
+  LookupInfo lookup(const std::string &global_image_id);
 
   // add, remove, shuffle
   bool add_image(const std::string &global_image_id,
@@ -67,6 +71,21 @@ private:
     utime_t map_time;                                                         // (re)mapped time
   };
 
+  void set_image_mapped_timestamp(const std::string &global_image_id, utime_t time) {
+    assert(m_map_lock.is_wlocked());
+
+    auto it = m_actions.find(global_image_id);
+    assert(it != m_actions.end());
+    it->second.map_time = time;
+  }
+  utime_t get_image_mapped_timestamp(const std::string &global_image_id) {
+    assert(m_map_lock.is_locked());
+
+    auto it = m_actions.find(global_image_id);
+    assert(it != m_actions.end());
+    return it->second.map_time;
+  }
+
   librados::IoCtx &m_ioctx;
   std::map<std::string, ActionState> m_actions;
   std::set<std::string> m_dead_instances;
@@ -98,7 +117,7 @@ private:
   bool actions_pending(const std::string &global_image_id, const RWLock &lock);
   bool remove_pending(const std::string &glolbal_image_id);
 
-  std::string lookup(const std::string &global_image_id, const RWLock &lock);
+  LookupInfo lookup(const std::string &global_image_id, const RWLock &lock);
   void map(const std::string &global_image_id,
            const std::string &instance_id, utime_t map_time, const RWLock &lock);
   void unmap(const std::string &global_image_id, const std::string &instance_id, const RWLock &lock);
