@@ -621,7 +621,6 @@ OPTION(osd_tier_promote_max_bytes_sec, OPT_U64)
 OPTION(osd_objecter_finishers, OPT_INT)
 
 OPTION(osd_map_dedup, OPT_BOOL)
-OPTION(osd_map_max_advance, OPT_INT) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT)
 OPTION(osd_map_message_max, OPT_INT)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT)  // cap on # of inc maps we send to peers, clients
