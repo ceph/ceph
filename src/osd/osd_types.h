@@ -883,25 +883,25 @@ inline ostream& operator<<(ostream& out, const eversion_t& e) {
  * current perf information about the osd
  */
 struct objectstore_perf_stat_t {
-  // cur_op_latency is in ms since double add/sub are not associative
-  uint32_t os_commit_latency;
-  uint32_t os_apply_latency;
+  // cur_op_latency is in ns since double add/sub are not associative
+  uint64_t os_commit_latency_ns;
+  uint64_t os_apply_latency_ns;
 
   objectstore_perf_stat_t() :
-    os_commit_latency(0), os_apply_latency(0) {}
+    os_commit_latency_ns(0), os_apply_latency_ns(0) {}
 
   bool operator==(const objectstore_perf_stat_t &r) const {
-    return os_commit_latency == r.os_commit_latency &&
-      os_apply_latency == r.os_apply_latency;
+    return os_commit_latency_ns == r.os_commit_latency_ns &&
+      os_apply_latency_ns == r.os_apply_latency_ns;
   }
 
   void add(const objectstore_perf_stat_t &o) {
-    os_commit_latency += o.os_commit_latency;
-    os_apply_latency += o.os_apply_latency;
+    os_commit_latency_ns += o.os_commit_latency_ns;
+    os_apply_latency_ns += o.os_apply_latency_ns;
   }
   void sub(const objectstore_perf_stat_t &o) {
-    os_commit_latency -= o.os_commit_latency;
-    os_apply_latency -= o.os_apply_latency;
+    os_commit_latency_ns -= o.os_commit_latency_ns;
+    os_apply_latency_ns -= o.os_apply_latency_ns;
   }
   void dump(Formatter *f) const;
   void encode(bufferlist &bl) const;

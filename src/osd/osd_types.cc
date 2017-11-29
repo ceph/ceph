@@ -276,23 +276,39 @@ void request_redirect_t::generate_test_instances(list<request_redirect_t*>& o)
 
 void objectstore_perf_stat_t::dump(Formatter *f) const
 {
-  f->dump_unsigned("commit_latency_ms", os_commit_latency);
-  f->dump_unsigned("apply_latency_ms", os_apply_latency);
+  // *_ms values just for compatibility.
+  f->dump_float("commit_latency_ms", os_commit_latency_ns / 1000000.0);
+  f->dump_float("apply_latency_ms", os_apply_latency_ns / 1000000.0);
+  f->dump_unsigned("commit_latency_ns", os_commit_latency_ns);
+  f->dump_unsigned("apply_latency_ns", os_apply_latency_ns);
 }
 
 void objectstore_perf_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
-  encode(os_commit_latency, bl);
-  encode(os_apply_latency, bl);
+  uint32_t commit_latency_ms = os_commit_latency_ns / 1000000;
+  uint32_t apply_latency_ms = os_apply_latency_ns / 1000000;
+  ENCODE_START(2, 1, bl);
+  encode(commit_latency_ms, bl); // for compatibility with older monitor.
+  encode(apply_latency_ms, bl); // for compatibility with older monitor.
+  encode(os_commit_latency_ns, bl);
+  encode(os_apply_latency_ns, bl);
   ENCODE_FINISH(bl);
 }
 
 void objectstore_perf_stat_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
-  decode(os_commit_latency, bl);
-  decode(os_apply_latency, bl);
+  DECODE_START(2, bl);
+  uint32_t commit_latency_ms;
+  uint32_t apply_latency_ms;
+  decode(commit_latency_ms, bl);
+  decode(apply_latency_ms, bl);
+  if (struct_v >= 2) {
+    decode(os_commit_latency_ns, bl);
+    decode(os_apply_latency_ns, bl);
+  } else {
+    os_commit_latency_ns = commit_latency_ms * (uint64_t) 1000000;
+    os_apply_latency_ns = apply_latency_ms * (uint64_t) 1000000;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -300,8 +316,8 @@ void objectstore_perf_stat_t::generate_test_instances(std::list<objectstore_perf
 {
   o.push_back(new objectstore_perf_stat_t());
   o.push_back(new objectstore_perf_stat_t());
-  o.back()->os_commit_latency = 20;
-  o.back()->os_apply_latency = 30;
+  o.back()->os_commit_latency_ns = 20000000;
+  o.back()->os_apply_latency_ns = 30000000;
 }
 
 // -- osd_stat_t --

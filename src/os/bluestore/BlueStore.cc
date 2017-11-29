@@ -8269,11 +8269,11 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 void BlueStore::BSPerfTracker::update_from_perfcounters(
   PerfCounters &logger)
 {
-  os_commit_latency.consume_next(
-    logger.get_tavg_ms(
+  os_commit_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_bluestore_commit_lat));
-  os_apply_latency.consume_next(
-    logger.get_tavg_ms(
+  os_apply_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_bluestore_commit_lat));
 }
 
