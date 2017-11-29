@@ -1340,6 +1340,8 @@ struct RGWZone {
   bool read_only;
   string tier_type;
 
+  string redirect_zone;
+
 /**
  * Represents the number of shards for the bucket index object, a value of zero
  * indicates there is no sharding. By default (no sharding, the name of the object
@@ -1356,7 +1358,7 @@ struct RGWZone {
               sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
@@ -1367,11 +1369,12 @@ struct RGWZone {
     ::encode(tier_type, bl);
     ::encode(sync_from_all, bl);
     ::encode(sync_from, bl);
+    ::encode(redirect_zone, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     ::decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -1394,6 +1397,9 @@ struct RGWZone {
     if (struct_v >= 6) {
       ::decode(sync_from_all, bl);
       ::decode(sync_from, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(redirect_zone, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1559,7 +1565,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<string>& endpoints, const string *ptier_type,
-               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
+               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
+               string *predirect_zone);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct);
@@ -2479,6 +2486,8 @@ public:
   }
 
   bool zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone);
+
+  bool get_redirect_zone_endpoint(string *endpoint);
 
   const RGWQuotaInfo& get_bucket_quota() {
     return current_period.get_config().bucket_quota;
