@@ -170,16 +170,16 @@ class Module(MgrModule):
         data['num_osd_in'] = num_in
 
         osd_fill = list()
-        osd_apply_latency = list()
-        osd_commit_latency = list()
+        osd_apply_latency_ns = list()
+        osd_commit_latency_ns = list()
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
             if osd['kb'] == 0:
                 continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
-            osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
-            osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
+            osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
+            osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
 
         try:
             data['osd_max_fill'] = max(osd_fill)
@@ -189,13 +189,13 @@ class Module(MgrModule):
             pass
 
         try:
-            data['osd_latency_apply_max'] = max(osd_apply_latency)
-            data['osd_latency_apply_min'] = min(osd_apply_latency)
-            data['osd_latency_apply_avg'] = avg(osd_apply_latency)
+            data['osd_latency_apply_max'] = max(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_min'] = min(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_avg'] = avg(osd_apply_latency_ns) / 1000000.0 # ns -> ms
 
-            data['osd_latency_commit_max'] = max(osd_commit_latency)
-            data['osd_latency_commit_min'] = min(osd_commit_latency)
-            data['osd_latency_commit_avg'] = avg(osd_commit_latency)
+            data['osd_latency_commit_max'] = max(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_min'] = min(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_avg'] = avg(osd_commit_latency_ns) / 1000000.0 # ns -> ms
         except ValueError:
             pass
 

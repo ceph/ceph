@@ -312,7 +312,7 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y)
   data.histogram->inc(x, y);
 }
 
-pair<uint64_t, uint64_t> PerfCounters::get_tavg_ms(int idx) const
+pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
 {
   if (!m_cct->_conf->perf)
     return make_pair(0, 0);
@@ -325,7 +325,7 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ms(int idx) const
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
   pair<uint64_t,uint64_t> a = data.read_avg();
-  return make_pair(a.second, a.first / 1000000ull);
+  return make_pair(a.second, a.first);
 }
 
 void PerfCounters::reset()

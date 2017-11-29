@@ -145,11 +145,11 @@ int FileStore::get_block_device_fsid(CephContext* cct, const string& path,
 void FileStore::FSPerfTracker::update_from_perfcounters(
   PerfCounters &logger)
 {
-  os_commit_latency.consume_next(
-    logger.get_tavg_ms(
+  os_commit_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_filestore_journal_latency));
-  os_apply_latency.consume_next(
-    logger.get_tavg_ms(
+  os_apply_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_filestore_apply_latency));
 }
 

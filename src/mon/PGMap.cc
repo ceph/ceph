@@ -1866,8 +1866,8 @@ void PGMap::print_osd_perf_stats(std::ostream *ss) const
        i != osd_stat.end();
        ++i) {
     tab << i->first;
-    tab << i->second.os_perf_stat.os_commit_latency;
-    tab << i->second.os_perf_stat.os_apply_latency;
+    tab << i->second.os_perf_stat.os_commit_latency_ns / 1000000ull;
+    tab << i->second.os_perf_stat.os_apply_latency_ns / 1000000ull;
     tab << TextTable::endrow;
   }
   (*ss) << tab;
