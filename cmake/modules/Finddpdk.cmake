@@ -11,7 +11,7 @@ find_path(DPDK_INCLUDE_DIR rte_config.h
   HINTS $ENV{DPDK_DIR}/include)
 
 set(components
-  cmdline eal ethdev hash kvargs mbuf
+  pci bus_pci cmdline eal ethdev hash kvargs mbuf
   mempool mempool_ring mempool_stack
   pmd_bond pmd_vmxnet3_uio pmd_ixgbe pmd_i40e pmd_ring pmd_af_packet
   ring)
