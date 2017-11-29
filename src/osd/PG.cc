@@ -1907,9 +1907,10 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     dout(10) << "_activate_committed " << epoch
 	     << ", that was an old interval" << dendl;
   } else if (is_primary()) {
+    assert(!peer_activated.count(pg_whoami));
     peer_activated.insert(pg_whoami);
     dout(10) << "_activate_committed " << epoch
-	     << " peer_activated now " << peer_activated 
+	     << " peer_activated now " << peer_activated
 	     << " last_interval_started " << info.history.last_interval_started
 	     << " last_epoch_started " << info.history.last_epoch_started
 	     << " same_interval_since " << info.history.same_interval_since << dendl;
@@ -7381,7 +7382,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
   // don't update history (yet) if we are active and primary; the replica
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
-  if (pg->is_actingbackfill(infoevt.from)) {
+  if (pg->is_actingbackfill(infoevt.from) &&
+      pg->peer_activated.count(infoevt.from) == 0) {
     ldout(pg->cct, 10) << " peer osd." << infoevt.from
 		       << " activated and committed" << dendl;
     pg->peer_activated.insert(infoevt.from);
