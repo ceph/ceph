@@ -411,6 +411,7 @@ public:
 
   int wait(bufferlist *pbl) {
     int ret = req.wait();
+    *pbl = bl;
     if (ret < 0) {
       return ret;
     }
@@ -418,7 +419,6 @@ public:
     if (req.get_status() < 0) {
       return req.get_status();
     }
-    *pbl = bl;
     return 0;
   }
 

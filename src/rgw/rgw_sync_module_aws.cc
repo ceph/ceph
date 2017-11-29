@@ -767,6 +767,16 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   uint32_t src_zone_short_id{0};
   uint64_t src_pg_ver{0};
 
+  bufferlist out_bl;
+
+  struct CreateBucketResult {
+    string code;
+
+    void decode_xml(XMLObj *obj) {
+      RGWXMLDecoder::decode_xml("Code", code, obj);
+    }
+  } result;
+
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
                             RGWBucketInfo& _bucket_info,
@@ -808,12 +818,34 @@ public:
         yield {
           ldout(sync_env->cct,0) << "AWS: creating bucket" << target_bucket_name << dendl;
           bufferlist bl;
-          call(new RGWPutRawRESTResourceCR <int> (sync_env->cct, instance.conn.get(),
+          call(new RGWPutRawRESTResourceCR <bufferlist> (sync_env->cct, instance.conn.get(),
                                                   sync_env->http_manager,
-                                                  target_bucket_name, nullptr, bl, nullptr));
+                                                  target_bucket_name, nullptr, bl, &out_bl));
         }
-        if (retcode < 0) {
-          return set_cr_error(retcode);
+        if (retcode < 0 ) {
+          RGWXMLDecoder::XMLParser parser;
+          if (!parser.init()) {
+            ldout(sync_env->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+            return set_cr_error(retcode);
+          }
+
+          if (!parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
+            string str(out_bl.c_str(), out_bl.length());
+            ldout(sync_env->cct, 5) << "ERROR: failed to parse xml: " << str << dendl;
+            return set_cr_error(retcode);
+          }
+
+          try {
+            RGWXMLDecoder::decode_xml("Error", result, &parser, true);
+          } catch (RGWXMLDecoder::err& err) {
+            string str(out_bl.c_str(), out_bl.length());
+            ldout(sync_env->cct, 5) << "ERROR: unexpected xml: " << str << dendl;
+            return set_cr_error(retcode);
+          }
+
+          if (result.code != "BucketAlreadyOwnedByYou") {
+            return set_cr_error(retcode);
+          }
         }
 
         bucket_created[target_bucket_name] = true;
