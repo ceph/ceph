@@ -28,6 +28,7 @@ tasks:
     - (OSDMAP_FLAGS)
     - (REQUEST_SLOW)
     - (PG_
+    - \(OBJECT_MISPLACED\)
     - (OSD_
 - thrashosds:
     op_delay: 30
