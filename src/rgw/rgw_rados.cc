@@ -355,7 +355,8 @@ int RGWZoneGroup::equals(const string& other_zonegroup) const
 
 int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                            const list<string>& endpoints, const string *ptier_type,
-                           bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm)
+                           bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
+                           string *predirect_zone)
 {
   auto& zone_id = zone_params.get_id();
   auto& zone_name = zone_params.get_name();
@@ -397,6 +398,10 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
 
   if (psync_from_all) {
     zone.sync_from_all = *psync_from_all;
+  }
+
+  if (predirect_zone) {
+    zone.redirect_zone = *predirect_zone;
   }
 
   for (auto add : sync_from) {
@@ -1094,6 +1099,29 @@ int RGWPeriod::get_zonegroup(RGWZoneGroup& zonegroup, const string& zonegroup_id
   }
 
   return -ENOENT;
+}
+
+bool RGWRados::get_redirect_zone_endpoint(string *endpoint)
+{
+  if (zone_public_config.redirect_zone.empty()) {
+    return false;
+  }
+
+  auto iter = zone_conn_map.find(zone_public_config.redirect_zone);
+  if (iter == zone_conn_map.end()) {
+    ldout(cct, 0) << "ERROR: cannot find entry for redirect zone: " << zone_public_config.redirect_zone << dendl;
+    return false;
+  }
+
+  RGWRESTConn *conn = iter->second;
+
+  int ret = conn->get_url(*endpoint);
+  if (ret < 0) {
+    ldout(cct, 0) << "ERROR: redirect zone, conn->get_endpoint() returned ret=" << ret << dendl;
+    return false;
+  }
+
+  return true;
 }
 
 const string& RGWPeriod::get_latest_epoch_oid()
