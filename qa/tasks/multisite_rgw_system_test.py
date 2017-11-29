@@ -106,7 +106,9 @@ def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
 
     io_info_file = src_node.get_file(file_name, '/tmp')
 
-    dest_node.put_file(io_info_file, file_name)
+    verifiy_io_yaml = 'verify_'+ file_name
+
+    dest_node.put_file(io_info_file, verifiy_io_yaml)
 
     log.info('copy of io_info.yaml completed')
 
