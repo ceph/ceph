@@ -268,6 +268,9 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
       case RBD_TRASH_IMAGE_SOURCE_MIRRORING:
         del_source = "MIRRORING";
         break;
+      case RBD_TRASH_IMAGE_SOURCE_MIGRATION:
+        del_source = "MIGRATION";
+        break;
     }
 
     std::string time_str = ctime(&entry.deletion_time);
