@@ -437,7 +437,9 @@ void RGWRESTSendResource::init_common(param_vec_t *extra_headers)
 
 int RGWRESTSendResource::send(bufferlist& outbl)
 {
+  req.set_send_length(outbl.length());
   req.set_outbl(outbl);
+
   int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
@@ -451,7 +453,9 @@ int RGWRESTSendResource::send(bufferlist& outbl)
 
 int RGWRESTSendResource::aio_send(bufferlist& outbl)
 {
+  req.set_send_length(outbl.length());
   req.set_outbl(outbl);
+
   int ret = req.send_request(&conn->get_key(), headers, resource, mgr);
   if (ret < 0) {
     ldout(cct, 5) << __func__ << ": send_request() resource=" << resource << " returned ret=" << ret << dendl;
@@ -460,4 +464,3 @@ int RGWRESTSendResource::aio_send(bufferlist& outbl)
 
   return 0;
 }
-
