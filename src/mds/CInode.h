@@ -526,11 +526,12 @@ private:
 public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
-    if (dirfrags.count(fg)) {
+    auto pi = dirfrags.find(fg);
+    if (pi != dirfrags.end()) {
       //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
-      return dirfrags[fg];
-    } else
-      return NULL;
+      return pi->second;
+    } 
+    return NULL;
   }
   bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
