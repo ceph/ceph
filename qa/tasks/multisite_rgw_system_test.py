@@ -102,9 +102,13 @@ def copy_file_from(src_node, dest_node, file_name = 'io_info.yaml'):
 
     # copies to /tmp dir and then puts it in destination machines
 
+    log.info('copy of io_info.yaml from initiated')
+
     io_info_file = src_node.get_file(file_name, '/tmp')
 
     dest_node.put_file(io_info_file, file_name)
+
+    log.info('copy of io_info.yaml completed')
 
 
 def test_exec(ctx, config, user_data, data, tclient, mclient):
@@ -114,6 +118,9 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
     log.info('test name :%s' % config['test-name'])
 
     script_name = config['test-name']
+
+    log.info('script_name: %s' % script_name)
+
     # port_number = config['port_number']
 
     test = Test(script_name, user_data, data)
@@ -127,9 +134,15 @@ def test_exec(ctx, config, user_data, data, tclient, mclient):
     time.sleep(60)
     # wait for sync
 
+    # no verification is being done for acls test cases right now.
+
     if not 'acls' in script_name:
 
-        # no verification is being done for acls test cases right now.
+        log.info('no test with acls: %s' % script_name)
+
+        # renaming the io_info.yaml in mater node to io_info_2.yaml
+
+        mclient.run(args=[run.Raw('sudo mv io_info.yaml io_info_2.yaml')])
 
         copy_file_from(tclient, mclient)
 
@@ -335,7 +348,13 @@ def task(ctx, config):
     remotes = ctx.cluster.only(teuthology.is_type('client'))
     for remote, roles_for_host in remotes.remotes.iteritems():
 
-        remote.run(args=['sudo', 'rm', '-rf', 'rgw-tests'], check_status=False)
+        cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
+
+        map(cleanup, soot)
+
         remote.run(args=['mkdir', 'rgw-tests'])
         remote.run(
             args=[
@@ -344,7 +363,7 @@ def task(ctx, config):
                 run.Raw(';'),
                 'git',
                 'clone',
-                'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'
+                'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git',
                 ])
 
         remote.run(args=['virtualenv', 'venv'])
@@ -591,6 +610,7 @@ def task(ctx, config):
 
         data = dict(
             config=dict(
+                objects_count=test_config['objects_count'],
                 bucket_count=test_config['bucket_count'],
                 objects_size_range=dict(
                     min=test_config['min_file_size'],
@@ -625,6 +645,6 @@ def task(ctx, config):
             cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
 
             soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                    '*.key.*', 'user_details', 'io_info.yaml']
+                    '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
 
             map(cleanup, soot)
