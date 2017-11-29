@@ -19,12 +19,15 @@
 
 // TODO: have various bucket naming schemes at a global/user and a bucket level
 
-static string aws_bucket_name(const RGWBucketInfo& bucket_info, bool user_buckets=false){
+static string aws_bucket_name(const RGWBucketInfo& bucket_info, const string& bucket_suffix, bool user_buckets=false){
   string bucket_name="rgwx" + bucket_info.zonegroup;
   if (user_buckets){
     bucket_name+=bucket_info.owner.tenant + bucket_info.owner.id;
   }
   bucket_name.erase(std::remove(bucket_name.begin(),bucket_name.end(),'-'));
+  if (!bucket_suffix.empty()) {
+    bucket_name = bucket_name + "-" + bucket_suffix;
+  }
   return bucket_name;
 }
 
@@ -42,6 +45,7 @@ static string obj_to_aws_path(const rgw_obj& obj)
 
 struct AWSSyncConfig {
   string s3_endpoint;
+  string bucket_suffix;
   RGWAccessKey key;
   HostStyle host_style;
 
@@ -799,7 +803,7 @@ public:
         return set_cr_error(-EINVAL);
       }
 
-      target_bucket_name = aws_bucket_name(bucket_info);
+      target_bucket_name = aws_bucket_name(bucket_info, instance.conf.bucket_suffix);
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
         yield {
           ldout(sync_env->cct,0) << "AWS: creating bucket" << target_bucket_name << dendl;
@@ -884,7 +888,7 @@ public:
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        string path = aws_bucket_name(bucket_info) + "/" + aws_object_name(bucket_info, key);
+        string path = aws_bucket_name(bucket_info, instance.conf.bucket_suffix) + "/" + aws_object_name(bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
         call(new RGWDeleteRESTResourceCR(sync_env->cct, instance.conn.get(),
                                          sync_env->http_manager,
@@ -970,9 +974,7 @@ int RGWAWSSyncModule::create_instance(CephContext *cct, const JSONFormattable& c
 
   conf.s3_endpoint = config["s3_endpoint"];
 
-  i = config.find("host_style");
   string host_style_str = config["host_style"];
-
   if (host_style_str != "virtual") {
     conf.host_style = PathStyle;
   } else {
