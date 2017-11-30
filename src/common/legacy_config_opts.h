@@ -350,7 +350,6 @@ OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_reconnect_stale, OPT_BOOL)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR)
-OPTION(client_mountpoint, OPT_STR)
 OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)
 OPTION(client_notify_timeout, OPT_INT) // in seconds
@@ -373,18 +372,6 @@ OPTION(client_metadata, OPT_STR)
 OPTION(client_acl_type, OPT_STR)
 OPTION(client_permissions, OPT_BOOL)
 OPTION(client_dirsize_rbytes, OPT_BOOL)
-
-// note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(fuse_use_invalidate_cb, OPT_BOOL) // use fuse 2.8+ invalidate callback to keep page cache consistent
-OPTION(fuse_disable_pagecache, OPT_BOOL)
-OPTION(fuse_allow_other, OPT_BOOL)
-OPTION(fuse_default_permissions, OPT_BOOL)
-OPTION(fuse_big_writes, OPT_BOOL)
-OPTION(fuse_atomic_o_trunc, OPT_BOOL)
-OPTION(fuse_debug, OPT_BOOL)
-OPTION(fuse_multithreaded, OPT_BOOL)
-OPTION(fuse_require_active_mds, OPT_BOOL) // if ceph_fuse requires active mds server
-OPTION(fuse_syncfs_on_mksnap, OPT_BOOL)
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
 OPTION(client_die_on_failed_remount, OPT_BOOL)

@@ -6542,9 +6542,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(true)
     .set_description(""),
 
+    // note: the max amount of "in flight" dirty data is roughly (max - target)
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("use fuse 2.8+ invalidate callback to keep page cache consistent"),
 
     Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
