@@ -670,6 +670,9 @@ OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
