@@ -360,7 +360,7 @@ protected:
   dirfrag_load_vec_t pop_auth_subtree;
   dirfrag_load_vec_t pop_auth_subtree_nested;
  
-  utime_t last_popularity_sample;
+  mono_time last_popularity_sample;
 
   load_spread_t pop_spread;
 
