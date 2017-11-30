@@ -201,25 +201,10 @@ public:
   C_Gather *m_extent_ops;
   Context *m_on_ops_persist;
   WriteLogOperations operations;
-  void complete(int r) {
-  }
   WriteLogOperationSet(CephContext *cct, SyncPoint *sync_point, bool persist_on_flush,
-		       BlockExtent extent, Context *on_finish)
-    : m_cct(cct), m_extent(extent), m_on_finish(on_finish), m_persist_on_flush(persist_on_flush) {
-    m_on_ops_persist = sync_point->m_prior_log_entries_persisted->new_sub();
-    m_extent_ops =
-      new C_Gather(cct,
-		   new FunctionContext( [this](int r) {
-		       //ldout(m_cct, 6) << "m_extent_ops completed" << dendl;
-		       m_on_ops_persist->complete(r);
-		       m_on_finish->complete(r);
-		       delete(this);
-		     }));
-  }
+		       BlockExtent extent, Context *on_finish);
+  ~WriteLogOperationSet();
   WriteLogOperationSet(const WriteLogOperationSet&) = delete;
-  ~WriteLogOperationSet() {
-    /* TODO: Will m_extent_ops always delete itself? */
-  }
   WriteLogOperationSet &operator=(const WriteLogOperationSet&) = delete;
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogOperationSet &s) {
@@ -237,10 +222,11 @@ public:
   GuardedRequestFunctionContext(boost::function<void(BlockGuardCell*)> &&callback)
     : m_callback_invoked(false), m_callback(std::move(callback)) { }
 
-  void finish(int r) override {
-    if (r < 0) {
-      acquired(NULL);
-    }
+  GuardedRequestFunctionContext(const GuardedRequestFunctionContext&) = delete;
+  GuardedRequestFunctionContext &operator=(const GuardedRequestFunctionContext&) = delete;
+
+  virtual void finish(int r) override {
+    assert(true == m_callback_invoked);
   }
   
   void acquired(BlockGuardCell *cell) {
@@ -297,6 +283,7 @@ struct WriteLogMapEntry {
     return os;
   };
 };
+
 typedef std::list<WriteLogMapEntry> WriteLogMapEntries;
 class WriteLogMap {
 public:

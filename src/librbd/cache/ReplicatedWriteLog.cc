@@ -58,9 +58,29 @@ WriteLogOperation::WriteLogOperation(WriteLogOperationSet *set, uint64_t image_o
   on_write_persist = set->m_extent_ops->new_sub();
 }
 
+WriteLogOperation::~WriteLogOperation() { }
+
 /* Called when the write log operation is completed in all log replicas */
 void WriteLogOperation::complete(int result) {
+  on_write_persist->complete(result);
+  delete(this);
 }
+
+WriteLogOperationSet::WriteLogOperationSet(CephContext *cct, SyncPoint *sync_point, bool persist_on_flush,
+					   BlockExtent extent, Context *on_finish)
+  : m_cct(cct), m_extent(extent), m_on_finish(on_finish), m_persist_on_flush(persist_on_flush) {
+  m_on_ops_persist = sync_point->m_prior_log_entries_persisted->new_sub();
+  m_extent_ops =
+    new C_Gather(cct,
+		 new FunctionContext( [this](int r) {
+		     //ldout(m_cct, 6) << "m_extent_ops completed" << dendl;
+		     m_on_ops_persist->complete(r);
+		     m_on_finish->complete(r);
+		     delete(this);
+		   }));
+}
+
+WriteLogOperationSet::~WriteLogOperationSet() { }
 
 /**
  * Add a write log entry to the map. Subsequent queries for blocks
@@ -278,15 +298,19 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
 }
 
 struct C_BlockIORequest : public Context {
-  CephContext *cct;
+  CephContext *m_cct;
   C_BlockIORequest *next_block_request;
 
   C_BlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
-    : cct(cct), next_block_request(next_block_request) {
+    : m_cct(cct), next_block_request(next_block_request) {
+    ldout(m_cct, 99) << this << dendl;
+  }
+  ~C_BlockIORequest() {
+    ldout(m_cct, 99) << this << dendl;
   }
 
   virtual void finish(int r) override {
-    ldout(cct, 20) << "(" << get_name() << "): r=" << r << dendl;
+    ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
 
     assert(NULL != next_block_request);
     if (r < 0) {
@@ -303,15 +327,31 @@ struct C_BlockIORequest : public Context {
 };
 
 struct C_GuardedBlockIORequest : public C_BlockIORequest {
-  BlockGuardCell *m_cell;
-
+private:
+  CephContext *m_cct;
+  BlockGuardCell* m_cell;
+public:
   C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
-    : C_BlockIORequest(cct, next_block_request), m_cell(NULL) {
-    ldout(cct, 6) << dendl;
+    : C_BlockIORequest(cct, next_block_request), m_cct(cct), m_cell(NULL) {
+    ldout(m_cct, 99) << this << dendl;
   }
+  ~C_GuardedBlockIORequest() {
+    ldout(m_cct, 99) << this << dendl;
+  }
+  C_GuardedBlockIORequest(const C_GuardedBlockIORequest&) = delete;
+  C_GuardedBlockIORequest &operator=(const C_GuardedBlockIORequest&) = delete;
 
   virtual void send() = 0;
   virtual const char *get_name() const = 0;
+  void set_cell(BlockGuardCell *cell) {
+    ldout(m_cct, 20) << this << dendl;
+    assert(NULL != cell);
+    m_cell = cell;
+  }
+  BlockGuardCell *get_cell(void) {
+    ldout(m_cct, 20) << this << dendl;
+    return m_cell;
+  }
 };
 
 } // namespace rwl
@@ -423,13 +463,13 @@ void ReplicatedWriteLog<I>::detain_guarded_request(GuardedRequest &&req)
     m_image_ctx.op_work_queue->queue(req.on_guard_acquire, r);
     return;
   } else if (r > 0) { 
-    ldout(cct, 20) << "detaining guarded request due to in-flight requests: "
+    ldout(cct, 6) << "detaining guarded request due to in-flight requests: "
                    << "start=" << req.first_block_num << ", "
 		   << "end=" << req.last_block_num << dendl;
     return;
   }
 
-  ldout(cct, 20) << "in-flight request cell: " << cell << dendl;
+  ldout(cct, 6) << "in-flight request cell: " << cell << dendl;
   req.on_guard_acquire->acquired(cell);
 }
 
@@ -437,7 +477,7 @@ template <typename I>
 void ReplicatedWriteLog<I>::release_guarded_request(BlockGuardCell *cell)
 {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "cell=" << cell << dendl;
+  ldout(cct, 6) << "cell=" << cell << dendl;
 
   WriteLogGuard::BlockOperations block_ops;
   m_write_log_guard.release(cell, &block_ops);
@@ -457,6 +497,7 @@ void ReplicatedWriteLog<I>::release_guarded_request(BlockGuardCell *cell)
  * will never see overlapping writes).
  */
 struct C_WriteRequest : public C_GuardedBlockIORequest {
+  CephContext *m_cct;
   ImageCache::Extents image_extents;
   bufferlist bl;
   int fadvise_flags;
@@ -465,27 +506,33 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
   std::atomic<bool> m_user_req_completed;
   C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
 		 bufferlist&& bl, int fadvise_flags, Context *user_req)
-    : C_GuardedBlockIORequest(cct, NULL), image_extents(std::move(image_extents)),
+    : C_GuardedBlockIORequest(cct, NULL), m_cct(cct), image_extents(std::move(image_extents)),
       bl(std::move(bl)), fadvise_flags(fadvise_flags),
       user_req(user_req), _on_finish(NULL), m_user_req_completed(false) {
+    ldout(m_cct, 99) << this << dendl;
+  }
+
+  ~C_WriteRequest() {
+    ldout(m_cct, 99) << this << dendl;
   }
 
   void complete_user_request(int r) {
     bool initial = false;
     if (m_user_req_completed.compare_exchange_strong(initial, true)) {
+      ldout(m_cct, 15) << this << " completing user req" << dendl;
       user_req->complete(r);
-      // TODO: Make a WQ addressable from here
-      //m_image_ctx.op_work_queue->queue(user_req, r)
+    } else {
+      ldout(m_cct, 20) << this << " user req already completed" << dendl;
     }
   }
   
   virtual void send() override {
     /* Should never be called */
-    ldout(cct, 6) << dendl;
+    ldout(m_cct, 6) << this << " unexpected" << dendl;
   }
   
   virtual void finish(int r) {
-    ldout(cct, 6) << dendl;
+    ldout(m_cct, 6) << this << dendl;
 
     complete_user_request(r);
     _on_finish->complete(0);
@@ -648,7 +695,7 @@ void ReplicatedWriteLog<I>::complete_op_log_entries(WriteLogOperations &ops, int
   for (auto &operation : ops) {
     WriteLogOperation *op = operation;
     m_on_persist_finisher.queue(new FunctionContext([this, op, result](int r) {
-	  op->on_write_persist->complete(result);
+	  op->complete(result);
 	}));
   }
 }
@@ -696,8 +743,10 @@ template <typename I>
 void ReplicatedWriteLog<I>::complete_write_req(C_WriteRequest *write_req, int result)
 {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 6) << "cell=" << write_req->m_cell << dendl;
-  release_guarded_request(write_req->m_cell);
+  ldout(cct, 6) << "write_req=" << write_req << dendl;
+  ldout(cct, 6) << "write_req=" << write_req << " cell=" << write_req->get_cell() << dendl;
+  assert(NULL != write_req->get_cell());
+  release_guarded_request(write_req->get_cell());
 }
 
 /**
@@ -714,16 +763,18 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
 
+  ldout(cct, 6) << "write_req=" << write_req << " cell=" << write_req->get_cell() << dendl;
   ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
   uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
 
   WriteLogEntries log_entries;
-  WriteLogOperationSet *set(new WriteLogOperationSet(
-    cct, m_current_sync_point, m_persist_on_flush,
-    BlockExtent(image_extents_summary.first_block,
-		image_extents_summary.last_block), write_req));
+  WriteLogOperationSet *set =
+    new WriteLogOperationSet(cct, m_current_sync_point, m_persist_on_flush,
+			     BlockExtent(image_extents_summary.first_block,
+					 image_extents_summary.last_block),
+			     new C_OnFinisher(write_req, &m_on_persist_finisher));
   {
     uint64_t buffer_offset = 0;
     Mutex::Locker locker(m_lock);
@@ -771,10 +822,10 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 
   m_async_op_tracker.start_op();
   write_req->_on_finish =
-    new C_OnFinisher(new FunctionContext([this, write_req](int r) {
-	  complete_write_req(write_req, r);
-	  m_async_op_tracker.finish_op();
-	}), &m_on_persist_finisher);
+    new FunctionContext([this, write_req](int r) {
+	complete_write_req(write_req, r);
+	m_async_op_tracker.finish_op();
+      });
 
   m_blocks_to_log_entries.add_entries(log_entries);
   
@@ -841,9 +892,10 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
   GuardedRequestFunctionContext *guarded_ctx =
     new GuardedRequestFunctionContext([this, write_req](BlockGuardCell *cell) {
       CephContext *cct = m_image_ctx.cct;
-      ldout(cct, 6) << "cell=" << cell << dendl;
+      ldout(cct, 6) << "write_req=" << write_req << " cell=" << cell << dendl;
 
-      write_req->m_cell = cell;
+      assert(NULL != cell);
+      write_req->set_cell(cell);
 
       /* TODO: Defer write_req until log resources available */
       dispatch_aio_write(write_req);
@@ -1020,7 +1072,9 @@ void ReplicatedWriteLog<I>::append_sync_point(SyncPoint *sync_point, int status)
 
   assert(m_lock.is_locked_by_me());
   sync_point->m_prior_log_entries_persisted_status = status;
-  // TODO: Write sync point, and complete this
+  /* TODO: Write sync point, complete and free
+     m_on_sync_point_persisted, and delete this sync point (log entry
+     object for sync point will remain until redired). */
 }
 
 /**
