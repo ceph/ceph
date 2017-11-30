@@ -2001,8 +2001,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_command_thread_suicide_timeout,
     &command_tp),
   remove_wq(
-    cct,
-    store,
+    this,
     cct->_conf->osd_remove_thread_timeout,
     cct->_conf->osd_remove_thread_suicide_timeout,
     &disk_tp),
@@ -5335,7 +5334,7 @@ void OSD::RemoveWQ::_process(
   if (!cont)
     return;
   if (!finished) {
-    if (item.second->pause_clearing())
+    if (item.second->pause_clearing() && !osd->is_stopping())
       queue_front(item);
     return;
   }

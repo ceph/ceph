@@ -2192,13 +2192,14 @@ protected:
   // -- removing --
   struct RemoveWQ :
     public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
+    OSD *osd;
     CephContext* cct;
     ObjectStore *&store;
     list<pair<PGRef, DeletingStateRef> > remove_queue;
-    RemoveWQ(CephContext* cct, ObjectStore *&o, time_t ti, time_t si,
+    RemoveWQ(OSD *o, time_t ti, time_t si,
 	     ThreadPool *tp)
       : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
-	"OSD::RemoveWQ", ti, si, tp), cct(cct), store(o) {}
+	"OSD::RemoveWQ", ti, si, tp), osd(o), cct(o->cct), store(o->store) {}
 
     bool _empty() override {
       return remove_queue.empty();
