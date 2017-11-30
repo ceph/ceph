@@ -279,7 +279,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
    `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
    and more specifically to **Section 3.4**. The bucket types are:
 
-	#. **Uniform:** Uniform buckets aggregate devices with **exactly** the same
+	#. **Uniform**: Uniform buckets aggregate devices with **exactly** the same
 	   weight. For example, when firms commission or decommission hardware, they
 	   typically do so with many machines that have exactly the same physical
 	   configuration (e.g., bulk purchases). When storage devices have exactly
@@ -303,7 +303,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   tree buckets reduce the placement time to O(log :sub:`n`), making them
 	   suitable for managing much larger sets of devices or nested buckets.
 
-	#. **Straw:** List and Tree buckets use a divide and conquer strategy
+	#. **Straw**: List and Tree buckets use a divide and conquer strategy
 	   in a way that either gives certain items precedence (e.g., those
 	   at the beginning of a list) or obviates the need to consider entire
 	   subtrees of items at all. That improves the performance of the replica
@@ -312,6 +312,12 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   or re-weighting of an item. The straw bucket type allows all items to
 	   fairly “compete” against each other for replica placement through a
 	   process analogous to a draw of straws.
+
+        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data 
+           movement between items when neighbor weights change.
+
+           For example the weight of item A including adding it anew or removing
+           it completely, there will be data movement only to or from item A.
 
 .. topic:: Hash
 
