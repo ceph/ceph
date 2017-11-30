@@ -94,10 +94,10 @@ public:
    */
   std::map<std::string, Option::value_t> values;
 
-   typedef enum {
-	OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-	OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
-   } opt_type_t;
+  typedef enum {
+    OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
+    OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
+  } opt_type_t;
 
   // Create a new md_config_t structure.
   md_config_t(bool is_daemon=false);
