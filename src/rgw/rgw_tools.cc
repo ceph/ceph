@@ -119,6 +119,8 @@ int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string
                .remove();
 }
 
+thread_local bool is_asio_thread = false;
+
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectReadOperation *op, bufferlist* pbl,
                       optional_yield y)
@@ -136,6 +138,10 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     }
     return -ec.value();
   }
+  // work on asio threads should be asynchronous, so warn when they block
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
+  }
 #endif
   return ioctx.operate(oid, op, nullptr);
 }
@@ -150,6 +156,9 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
     boost::system::error_code ec;
     librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
     return -ec.value();
+  }
+  if (is_asio_thread) {
+    dout(20) << "WARNING: blocking librados call" << dendl;
   }
 #endif
   return ioctx.operate(oid, op);
