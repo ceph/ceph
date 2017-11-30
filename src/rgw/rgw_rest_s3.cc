@@ -1683,11 +1683,13 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTagSet_S3 *obj_tags_s3;
+    RGWObjTagSet_S3 *obj_tags_s3 = nullptr;
     RGWObjTagging_S3 *tagging;
 
     tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
-    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+    if (tagging) {
+      obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
+    }
     if(!obj_tags_s3){
       return -ERR_MALFORMED_XML;
     }
