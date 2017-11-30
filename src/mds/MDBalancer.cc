@@ -340,7 +340,7 @@ void MDBalancer::send_heartbeat()
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    MHeartbeat *hb = new MHeartbeat(load, beat_epoch, last_epoch_under);
     hb->get_import_map() = import_map;
     messenger->send_message(hb,
                             mds->mdsmap->get_inst(*p));
@@ -397,6 +397,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     }
   }
   mds_import_map[ who ] = m->get_import_map();
+  mds_last_epoch_under_info[who] = m->get_last_epoch_under();
 
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
@@ -676,7 +677,8 @@ void MDBalancer::prep_rebalance(int beat)
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
-      } else {
+      } else if ((it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) && 
+        (it->second == whoami || !mds_last_epoch_under_info[it->second] || beat_epoch - mds_last_epoch_under_info[it->second] >= 2)){
 	dout(15) << "   mds." << it->second << " is exporter" << dendl;
 	exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
 	exporter_set.insert(it->second);
