@@ -2,6 +2,7 @@ try:
     import configparser
 except ImportError:
     import ConfigParser as configparser
+import contextlib
 import logging
 import os
 import re
@@ -31,14 +32,20 @@ class _TrimIndentFile(object):
 
 
 def load(abspath=None):
+    if not os.path.exists(abspath):
+        raise exceptions.ConfigurationError(abspath=abspath)
+
     parser = Conf()
     try:
-        parser.read_path(abspath)
-        return parser
+        ceph_file = open(abspath)
+        trimmed_conf = _TrimIndentFile(ceph_file)
+        with contextlib.closing(ceph_file):
+            parser.readfp(trimmed_conf)
+            return parser
     except configparser.ParsingError as error:
-        terminal.error('Unable to read configuration file: %s' % abspath)
-        terminal.error(str(error))
         logger.exception('Unable to parse INI-style file: %s' % abspath)
+        terminal.error(str(error))
+        raise RuntimeError('Unable to read configuration file: %s' % abspath)
 
 
 class Conf(configparser.SafeConfigParser):
@@ -52,9 +59,6 @@ class Conf(configparser.SafeConfigParser):
         return self.read(path)
 
     def is_valid(self):
-        if not os.path.exists(self.path):
-            raise exceptions.ConfigurationError(abspath=self.path)
-
         try:
             self.get('global', 'fsid')
         except (configparser.NoSectionError, configparser.NoOptionError):
