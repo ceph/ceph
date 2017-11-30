@@ -1345,6 +1345,29 @@ def created_pool(ctx, config):
 
 
 @contextlib.contextmanager
+def mon_health_to_clog(ctx, config):
+    """
+    disable mon_health_to_clog temporarily if `mon-health-to-clog` is False.
+    """
+    def set_config(remote, whom, opt):
+        args = ['sudo', 'ceph',
+                '--cluster', config['cluster'],
+                'tell', whom,
+                'injectargs', '--', opt]
+        remote.run(args=args)
+
+    enabled = config.get('mon-health-to-clog', True)
+    remote = None
+    if not enabled:
+        firstmon = teuthology.get_first_mon(ctx, config, cluster)
+        (remote,) = ctx.cluster.only(firstmon).remotes.keys()
+        set_config(remote, 'mon.*', '--no-mon-health-to-clog')
+    yield
+    if remote:
+        set_config(remote, 'mon.*', '--mon-health-to-clog')
+
+
+@contextlib.contextmanager
 def restart(ctx, config):
     """
    restart ceph daemons
@@ -1364,6 +1387,7 @@ def restart(ctx, config):
           daemons: [osd.0, mon.1]
           wait-for-healthy: false
           wait-for-osds-up: true
+          mon-health-to-clog: false
 
     :param ctx: Context
     :param config: Configuration
@@ -1375,10 +1399,11 @@ def restart(ctx, config):
 
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
     clusters = set()
-    for role in daemons:
-        cluster, type_, id_ = teuthology.split_role(role)
-        ctx.daemons.get_daemon(type_, id_, cluster).restart()
-        clusters.add(cluster)
+    with mon_health_to_clog(ctx, config):
+        for role in daemons:
+            cluster, type_, id_ = teuthology.split_role(role)
+            ctx.daemons.get_daemon(type_, id_, cluster).restart()
+            clusters.add(cluster)
 
     manager = ctx.managers['ceph']
     for dmon in daemons:
