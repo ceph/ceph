@@ -7,6 +7,11 @@ from textwrap import dedent
 import pytest
 from ceph_volume import configuration, exceptions
 
+tabbed_conf = """
+[global]
+            default = 0
+"""
+
 
 class TestConf(object):
 
@@ -64,6 +69,13 @@ class TestConf(object):
 
 class TestLoad(object):
 
+    def test_load_from_path(self, tmpdir):
+        conf_path = os.path.join(str(tmpdir), 'ceph.conf')
+        with open(conf_path, 'w') as conf:
+            conf.write(tabbed_conf)
+        result = configuration.load(conf_path)
+        assert result.get('global', 'default') == '0'
+
     def test_path_does_not_exist(self):
         with pytest.raises(exceptions.ConfigurationError):
             conf = configuration.load('/path/does/not/exist/ceph.con')
@@ -73,7 +85,7 @@ class TestLoad(object):
         ceph_conf = os.path.join(str(tmpdir), 'ceph.conf')
         with open(ceph_conf, 'w') as config:
             config.write(']broken] config\n[[')
-        configuration.load(ceph_conf)
+        with pytest.raises(RuntimeError):
+            configuration.load(ceph_conf)
         stdout, stderr = capsys.readouterr()
-        assert 'Unable to read configuration file' in stdout
         assert 'File contains no section headers' in stdout
