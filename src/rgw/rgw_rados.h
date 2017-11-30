@@ -3725,7 +3725,7 @@ public:
 
   /* mfa interfaces used by metadata engine */
   int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries, bool reset_obj,
-              RGWObjVersionTracker *objv_tracker);
+              RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
   int list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
                RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime);
  private:

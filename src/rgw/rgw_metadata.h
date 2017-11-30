@@ -99,9 +99,9 @@ protected:
    *
    * @return true if the update should proceed, false otherwise.
    */
-  bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
-                      const obj_version& incoming, const real_time& incoming_time,
-                      sync_type_t sync_mode) {
+  static bool check_versions(const obj_version& ondisk, const real_time& ondisk_time,
+                             const obj_version& incoming, const real_time& incoming_time,
+                             sync_type_t sync_mode) {
     switch (sync_mode) {
     case APPLY_UPDATES:
       if ((ondisk.tag != incoming.tag) ||
@@ -314,6 +314,11 @@ class RGWMetadataManager {
                     RGWObjVersionTracker *objv_tracker, real_time mtime,
                     map<string, bufferlist> *pattrs);
   int remove_from_heap(RGWMetadataHandler *handler, const string& key, RGWObjVersionTracker *objv_tracker);
+  int prepare_mutate(RGWRados *store, rgw_pool& pool, const string& oid,
+                     const real_time& mtime,
+                     RGWObjVersionTracker *objv_tracker,
+                     RGWMetadataHandler::sync_type_t sync_mode);
+
 public:
   RGWMetadataManager(CephContext *_cct, RGWRados *_store);
   ~RGWMetadataManager();
@@ -344,9 +349,11 @@ public:
   int register_handler(RGWMetadataHandler *handler);
 
   template <typename F>
-  int operate(RGWMetadataHandler *handler, const string& key,
-              RGWObjVersionTracker *objv_tracker, RGWMDLogStatus op_type,
-              F&& f);
+  int mutate(RGWMetadataHandler *handler, const string& key,
+             const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
+             RGWMDLogStatus op_type,
+             RGWMetadataHandler::sync_type_t sync_mode,
+             F&& f);
 
   RGWMetadataHandler *get_handler(const string& type);
 
@@ -376,20 +383,29 @@ public:
 };
 
 template <typename F>
-int RGWMetadataManager::operate(RGWMetadataHandler *handler, const string& key,
-                                RGWObjVersionTracker *objv_tracker, RGWMDLogStatus op_type,
-                                F&& f)
+int RGWMetadataManager::mutate(RGWMetadataHandler *handler, const string& key,
+                               const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
+                               RGWMDLogStatus op_type,
+                               RGWMetadataHandler::sync_type_t sync_mode,
+                               F&& f)
 {
-  string section;
-  RGWMetadataLogData log_data;
-  int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
-  if (ret < 0)
-    return ret;
-
   string oid;
   rgw_pool pool;
 
   handler->get_pool_and_oid(store, key, pool, oid);
+
+  int ret = prepare_mutate(store, pool, oid, mtime, objv_tracker, sync_mode);
+  if (ret < 0 ||
+      ret == STATUS_NO_APPLY) {
+    return ret;
+  }
+
+  string section;
+  RGWMetadataLogData log_data;
+  ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_WRITE);
+  if (ret < 0) {
+    return ret;
+  }
 
   ret = std::forward<F>(f)();
 

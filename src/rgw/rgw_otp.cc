@@ -68,22 +68,14 @@ public:
       return -EINVAL;
     }
 
-    bufferlist bl;
-    real_time orig_mtime;
-    RGWObjectCtx obj_ctx(store);
-    int ret = rgw_get_system_obj(store, obj_ctx, store->get_zone_params().otp_pool,
-                                 entry, bl, &objv_tracker, &orig_mtime, nullptr, nullptr);
-    if (ret < 0 && ret != -ENOENT) {
+    int ret = store->meta_mgr->mutate(this, entry, mtime, &objv_tracker,
+                                      MDLOG_STATUS_WRITE, sync_mode,
+                                      [&] {
+         return store->set_mfa(entry, devices, true, &objv_tracker, mtime);
+    });
+    if (ret < 0) {
       return ret;
     }
-    if (ret != -ENOENT &&
-        !check_versions(objv_tracker.read_version, orig_mtime,
-			objv_tracker.write_version, mtime, sync_mode)) {
-      return STATUS_NO_APPLY;
-    }
-    store->meta_mgr->operate(this, entry, &objv_tracker, MDLOG_STATUS_WRITE, [&] {
-         return store->set_mfa(entry, devices, true, &objv_tracker);
-    });
 
     return STATUS_APPLIED;
   }

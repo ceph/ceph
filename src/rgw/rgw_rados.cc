@@ -14263,7 +14263,8 @@ int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *
 }
 
 int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
-                      bool reset_obj, RGWObjVersionTracker *objv_tracker)
+                      bool reset_obj, RGWObjVersionTracker *objv_tracker,
+                      const real_time& mtime)
 {
   rgw_raw_obj obj(get_zone_params().otp_pool, oid);
   rgw_rados_ref ref;
@@ -14294,6 +14295,8 @@ int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>
     op.create(false);
   }
   ot.prepare_op_for_write(&op);
+  struct timespec mtime_ts = real_clock::to_timespec(mtime);
+  op.mtime2(&mtime_ts);
   rados::cls::otp::OTP::set(&op, entries);
   r = ref.ioctx.operate(ref.oid, &op);
   if (r < 0) {
