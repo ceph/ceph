@@ -4526,15 +4526,48 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 	     << " " << n.timeout << "s)";
 }
 
+struct chunk_info_t {
+  enum {
+    FLAG_DIRTY = 1, 
+    FLAG_MISSING = 2,
+  };
+  uint32_t offset;
+  uint32_t length;
+  hobject_t oid;
+  uint32_t flags;   // FLAG_*
+
+  chunk_info_t() : offset(0), length(0), flags(0) { }
+
+  static string get_flag_string(uint64_t flags) {
+    string r;
+    if (flags & FLAG_DIRTY) {
+      r += "|dirty";
+    }
+    if (flags & FLAG_MISSING) {
+      r += "|missing";
+    }
+    if (r.length())
+      return r.substr(1);
+    return r;
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  friend ostream& operator<<(ostream& out, const chunk_info_t& ci);
+};
+WRITE_CLASS_ENCODER(chunk_info_t)
+ostream& operator<<(ostream& out, const chunk_info_t& ci);
+
 struct object_info_t;
 struct object_manifest_t {
   enum {
     TYPE_NONE = 0,
-    TYPE_REDIRECT = 1,  // start with this
-    TYPE_CHUNKED = 2,   // do this later
+    TYPE_REDIRECT = 1, 
+    TYPE_CHUNKED = 2, 
   };
   uint8_t type;  // redirect, chunked, ...
   hobject_t redirect_target;
+  map <uint64_t, chunk_info_t> chunk_map;
 
   object_manifest_t() : type(0) { }
   object_manifest_t(uint8_t type, const hobject_t& redirect_target) 
@@ -4559,6 +4592,11 @@ struct object_manifest_t {
   }
   const char *get_type_name() const {
     return get_type_name(type);
+  }
+  void clear() {
+    type = 0;
+    redirect_target = hobject_t();
+    chunk_map.clear();
   }
   static void generate_test_instances(list<object_manifest_t*>& o);
   void encode(bufferlist &bl) const;
