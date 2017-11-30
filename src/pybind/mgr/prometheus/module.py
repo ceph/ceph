@@ -138,8 +138,6 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self.notified = False
-        self.serving = False
         self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
@@ -414,12 +412,16 @@ class Module(MgrModule):
             'engine.autoreload.on': False
         })
         cherrypy.tree.mount(Root(), "/")
+        self.log.info('Starting engine...')
         cherrypy.engine.start()
+        self.log.info('Engine started.')
         cherrypy.engine.block()
 
     def shutdown(self):
-        self.serving = False
-        pass
+        self.log.info('Stopping engine...')
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.exit()
+        self.log.info('Stopped engine')
 
 
 class StandbyModule(MgrStandbyModule):
@@ -432,7 +434,6 @@ class StandbyModule(MgrStandbyModule):
             'server.socket_port': int(server_port),
             'engine.autoreload.on': False
         })
-
 
         module = self
 
@@ -456,13 +457,14 @@ class StandbyModule(MgrStandbyModule):
                 return ''
 
         cherrypy.tree.mount(Root(), '/', {})
-        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
         self.log.info('Starting engine...')
         cherrypy.engine.start()
+        self.log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
         self.log.info('Engine started.')
-        cherrypy.engine.block()
 
     def shutdown(self):
-        self.log.info('Stopping engine...')
-        self.log.info('Stopped engine')
-        pass
+        self.log.info("Stopping engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        self.log.info("Stopped engine")
