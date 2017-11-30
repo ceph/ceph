@@ -3716,10 +3716,18 @@ public:
                      list<librados::AioCompletion *>& handles, bool keep_index_consistent);
 
   /* mfa/totp stuff */
+ private:
+  void prepare_mfa_write(librados::ObjectWriteOperation *op,
+                         RGWObjVersionTracker *objv_tracker,
+                         const ceph::real_time& mtime);
+ public:
+  string get_mfa_oid(const rgw_user& user);
   int get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref);
   int check_mfa(const rgw_user& user, const string& otp_id, const string& pin);
-  int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config);
-  int remove_mfa(const rgw_user& user, const string& id);
+  int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+                 RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
+  int remove_mfa(const rgw_user& user, const string& id,
+                 RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
   int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result);
   int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result);
 

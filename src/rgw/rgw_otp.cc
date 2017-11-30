@@ -146,6 +146,11 @@ public:
   }
 };
 
+RGWMetadataHandler *rgw_otp_get_handler()
+{
+  return otp_meta_handler;
+}
+
 void rgw_otp_init(RGWRados *store)
 {
   otp_meta_handler = new RGWOTPMetadataHandler;
