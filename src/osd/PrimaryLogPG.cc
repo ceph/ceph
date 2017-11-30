@@ -259,15 +259,22 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 }
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 {
+  // We're called under PG::lock.
   assert(inflightreads > 0);
   --inflightreads;
   if (async_reads_complete()) {
     assert(pg->in_progress_async_reads.size());
-    assert(pg->in_progress_async_reads.front().second == this);
-    pg->in_progress_async_reads.pop_front();
+    // Async reads on replicated pools aren't strictly ordered
+    // anymore.
+    assert(!pg->pool.info.is_erasure() ||
+           pg->in_progress_async_reads.front().second == this);
+    pg->in_progress_async_reads.remove_if(
+      [this](const std::pair<OpRequestRef, OpContext*>& v) {
+      return v.second == this;
+    });
 
     // Restart the op context now that all reads have been
-    // completed. Read failures will be handled by the op finisher
+    // completed. Read failures will be handled by the op finisher.
     pg->execute_ctx(this);
   }
 }

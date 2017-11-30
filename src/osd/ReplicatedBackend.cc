@@ -265,15 +265,44 @@ int ReplicatedBackend::objects_read_sync(
 struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
   int r;
   Context *c;
-  AsyncReadCallback(int r, Context *c) : r(r), c(c) {}
-  void finish(ThreadPool::TPHandle&) override {
-    c->complete(r);
-    c = NULL;
+
+  AsyncReadCallback(int r, Context *c)
+    : r(r),
+      c(c) {
   }
   ~AsyncReadCallback() override {
     delete c;
   }
+
+  void finish(ThreadPool::TPHandle&) override {
+    c->complete(r);
+    c = nullptr;
+  }
 };
+
+struct AsyncReadEnqueuer : public Context {
+  ReplicatedBackend* const pg;
+  Context* on_singleop_complete;
+  GenContext<ThreadPool::TPHandle&>* const on_complete;
+
+  AsyncReadEnqueuer(ReplicatedBackend* const pg,
+                    Context* const on_singleop_complete,
+                    Context* const on_complete)
+    : pg(pg),
+      on_singleop_complete(on_singleop_complete),
+      on_complete(pg->get_parent()->bless_gencontext(
+        new AsyncReadCallback(0, on_complete))) {
+  }
+  ~AsyncReadEnqueuer() override = default;
+
+  void finish(const int r) override {
+    on_singleop_complete->complete(r);
+    on_singleop_complete = nullptr;
+
+    pg->get_parent()->schedule_recovery_work(on_complete);
+  }
+};
+
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -290,20 +319,16 @@ void ReplicatedBackend::objects_read_async(
 	   to_read.begin();
        i != to_read.end() && r >= 0;
        ++i) {
-    int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
+    int _r = store->async_read(ch, ghobject_t(hoid), i->first.get<0>(),
 			 i->first.get<1>(), *(i->second.first),
+                         // FIXME(rzarzynski): we shouldn't call on_complete
+                         // on each single operation. This will be fixed by
+                         // having batch-aware ObjectStore::async_read().
+                         new AsyncReadEnqueuer(this, i->second.second, on_complete),
 			 i->first.get<2>());
-    if (i->second.second) {
-      get_parent()->schedule_recovery_work(
-	get_parent()->bless_gencontext(
-	  new AsyncReadCallback(_r, i->second.second)));
-    }
     if (_r < 0)
       r = _r;
   }
-  get_parent()->schedule_recovery_work(
-    get_parent()->bless_gencontext(
-      new AsyncReadCallback(r, on_complete)));
 }
 
 class C_OSD_OnOpCommit : public Context {
