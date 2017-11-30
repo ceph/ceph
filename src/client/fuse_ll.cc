@@ -15,6 +15,7 @@
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -907,7 +908,7 @@ static int remount_cb(void *handle)
 {
   // used for trimming kernel dcache. when remounting a file system, linux kernel
   // trims all unused dentries in the file system
-  char cmd[1024];
+  char cmd[128+PATH_MAX];
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   snprintf(cmd, sizeof(cmd), "mount -i -o remount %s", cfuse->mountpoint);
   int r = system(cmd);
