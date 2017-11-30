@@ -7,11 +7,11 @@ from . import ops, query
 log = logging.getLogger(__name__)
 
 
-def do_update_keys(machines, all_=False):
+def do_update_keys(machines, all_=False, _raise=True):
     reference = query.list_locks(keyed_by_name=True)
     if all_:
         machines = reference.keys()
-    keys_dict = misc.ssh_keyscan(machines)
+    keys_dict = misc.ssh_keyscan(machines, _raise=_raise)
     return push_new_keys(keys_dict, reference), keys_dict
 
 

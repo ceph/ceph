@@ -1129,11 +1129,12 @@ def get_valgrind_args(testdir, name, preamble, v):
     return args
 
 
-def ssh_keyscan(hostnames):
+def ssh_keyscan(hostnames, _raise=True):
     """
     Fetch the SSH public key of one or more hosts
 
     :param hostnames: A list of hostnames, or a dict keyed by hostname
+    :param _raise: Whether to raise an exception if not all keys are retrieved
     :returns: A dict keyed by hostname, with the host keys as values
     """
     if isinstance(hostnames, basestring):
@@ -1143,7 +1144,11 @@ def ssh_keyscan(hostnames):
     keys_dict = dict()
     for hostname in hostnames:
         with safe_while(
-                sleep=1, tries=5, action="ssh_keyscan " + hostname) as proceed:
+            sleep=1,
+            tries=5 if _raise else 1,
+            _raise=_raise,
+            action="ssh_keyscan " + hostname,
+        ) as proceed:
             while proceed():
                 key = _ssh_keyscan(hostname)
                 if key:
@@ -1151,7 +1156,11 @@ def ssh_keyscan(hostnames):
                     break
     if len(keys_dict) != len(hostnames):
         missing = set(hostnames) - set(keys_dict.keys())
-        raise RuntimeError("Unable to scan these host keys: %s" % missing)
+        msg = "Unable to scan these host keys: %s" % ' '.join(missing)
+        if not _raise:
+            log.warn(msg)
+        else:
+            raise RuntimeError(msg)
     return keys_dict
 
 

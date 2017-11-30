@@ -87,7 +87,7 @@ def main(ctx):
                 vmachines.append(machine['name'])
         if vmachines:
             log.info("updating host keys for %s", ' '.join(sorted(vmachines)))
-            keys.do_update_keys(vmachines)
+            keys.do_update_keys(vmachines, _raise=False)
             # get statuses again to refresh any updated keys
             statuses = query.get_statuses(machines)
         if statuses:
