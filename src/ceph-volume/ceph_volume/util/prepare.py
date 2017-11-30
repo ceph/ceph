@@ -6,6 +6,7 @@ the single-call helper
 """
 import os
 import logging
+import tempfile
 from ceph_volume import process, conf
 from ceph_volume.util import system, constants
 
@@ -204,8 +205,13 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
         '--setgroup', 'ceph'
     ]
 
+    temp = None
     if keyring is not None:
-        base_command.extend(['--key', keyring])
+        temp = tempfile.NamedTemporaryFile()
+        os.chmod(temp.name, 0600)
+        temp.write(keyring)
+        temp.flush()
+        base_command.extend(['--keyfile', temp.name])
 
     if wal:
         base_command.extend(
@@ -221,7 +227,9 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     command = base_command + supplementary_command
 
-    process.run(command, obfuscate='--key')
+    process.run(command, obfuscate='--keyfile')
+    if temp:
+        temp.close()
 
 
 def osd_mkfs_filestore(osd_id, fsid):
