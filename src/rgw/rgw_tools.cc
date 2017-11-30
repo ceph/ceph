@@ -5,6 +5,8 @@
 
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "librados/librados_asio.h"
+#include "common/async/yield_context.h"
 
 #include "include/types.h"
 
@@ -15,6 +17,7 @@
 #include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 #define READ_CHUNK_LEN (512 * 1024)
 
@@ -114,6 +117,42 @@ int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string
   return sysobj.wop()
                .set_objv_tracker(objv_tracker)
                .remove();
+}
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  // given a yield_context, call async_operate() to yield the coroutine instead
+  // of blocking
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    auto bl = librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    if (pbl) {
+      *pbl = std::move(bl);
+    }
+    return -ec.value();
+  }
+#endif
+  return ioctx.operate(oid, op, nullptr);
+}
+
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  if (y) {
+    auto& context = y.get_io_context();
+    auto& yield = y.get_yield_context();
+    boost::system::error_code ec;
+    librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
+    return -ec.value();
+  }
+#endif
+  return ioctx.operate(oid, op);
 }
 
 void parse_mime_map_line(const char *start, const char *end)
