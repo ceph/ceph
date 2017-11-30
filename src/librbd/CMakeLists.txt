@@ -118,6 +118,9 @@ add_library(rbd_internal STATIC
 if(WITH_LTTNG)
   add_dependencies(rbd_internal librbd-tp)
 endif()
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  add_dependencies(rbd_internal eventtrace_tp)
+endif()
 target_link_libraries(rbd_internal PRIVATE
   osdc)
 
