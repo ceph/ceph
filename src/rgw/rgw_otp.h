@@ -6,6 +6,9 @@
 
 class RGWRados;
 
+class RGWMetadataHandler;
+
+RGWMetadataHandler *rgw_otp_get_handler(void);
 void rgw_otp_init(RGWRados *store);
 
 #endif

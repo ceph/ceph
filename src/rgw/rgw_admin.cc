@@ -6240,7 +6240,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->meta_mgr->put(metadata_key, bl, RGWMetadataHandler::APPLY_ALWAYS);
+    ret = store->meta_mgr->put(metadata_key, bl, RGWMetadataHandler::RGWMetadataHandler::APPLY_ALWAYS);
     if (ret < 0) {
       cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7325,7 +7325,14 @@ next:
       config.window = totp_window;
     }
 
-    int ret = store->create_mfa(user_id, config);
+    real_time mtime = real_clock::now();
+    string oid = store->get_mfa_oid(user_id);
+
+    int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      [&] {
+      return store->create_mfa(user_id, config, &objv_tracker, mtime);
+    });
     if (ret < 0) {
       cerr << "MFA creation failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7353,7 +7360,14 @@ next:
       return EINVAL;
     }
 
-    int ret = store->remove_mfa(user_id, totp_serial);
+    real_time mtime = real_clock::now();
+    string oid = store->get_mfa_oid(user_id);
+
+    int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+                                      MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                      [&] {
+      return store->remove_mfa(user_id, totp_serial, &objv_tracker, mtime);
+    });
     if (ret < 0) {
       cerr << "MFA removal failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
