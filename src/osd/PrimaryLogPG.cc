@@ -5097,7 +5097,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   ++ctx->num_read;
-  if (pool.info.is_erasure()) {
+  if (pool.info.is_erasure() || osd->store->has_async_read()) {
     // translate sparse read to a normal one if not supported
     uint64_t offset = op.extent.offset;
     uint64_t length = op.extent.length;
