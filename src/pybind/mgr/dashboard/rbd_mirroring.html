@@ -78,8 +78,8 @@
                     <table id="daemons" class="table table-condensed">
                         <thead>
                         <tr>
-                            <th>ID</th>
                             <th>Instance</th>
+                            <th>ID</th>
                             <th>Hostname</th>
                             <th>Version</th>
                             <th>Health</th>
@@ -87,8 +87,8 @@
                         </thead>
                         <tbody>
                             <tr rv-each-daemon="daemons">
-                                <td>{daemon.id}</td>
                                 <td>{daemon.instance_id}</td>
+                                <td>{daemon.id}</td>
                                 <td>{daemon.server_hostname}</td>
                                 <td>{daemon.version | short_version}</td>
                                 <td><span rv-class="daemon.health_color | mirror_health_color">{daemon.health}</span></td>
