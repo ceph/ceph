@@ -1878,7 +1878,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddr() << " --> "
 		      << get_peer_addr() << " -- "
@@ -2170,7 +2170,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   assert(center->in_thread());
   m->set_seq(++out_seq);
 
