@@ -558,6 +558,8 @@ int AsioFrontend::run()
 
   for (int i = 0; i < thread_count; i++) {
     threads.emplace_back([=] {
+      // request warnings on synchronous librados calls in this thread
+      is_asio_thread = true;
       boost::system::error_code ec;
       context.run(ec);
     });
