@@ -1373,7 +1373,7 @@ protected:
 
   friend class C_ExtentCmpRead;
 
-  int do_read(OpContext *ctx, OSDOp& osd_op);
+  int do_read(OpContext *ctx, OSDOp& osd_op, bool sync);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 

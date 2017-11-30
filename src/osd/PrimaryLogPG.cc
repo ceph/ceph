@@ -5000,7 +5000,7 @@ int PrimaryLogPG::finish_extent_cmp(OSDOp& osd_op, const bufferlist &read_bl)
   return 0;
 }
 
-int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
+int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op, bool sync) {
   dout(20) << __func__ << dendl;
   auto& op = osd_op.op;
   auto& oi = ctx->new_obs.oi;
@@ -5031,7 +5031,8 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     // read size was trimmed to zero and it is expected to do nothing
     // a read operation of 0 bytes does *not* do nothing, this is why
     // the trimmed_read boolean is needed
-  } else if (pool.info.is_erasure()) {
+  } else if (pool.info.is_erasure() ||
+             (osd->store->has_async_read() && !sync)) {
     boost::optional<uint32_t> maybe_crc;
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.  FillInVerifyExtent will
@@ -5341,7 +5342,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = -EOPNOTSUPP;
 	break;
       }
-      // fall through
+      ++ctx->num_read;
+      if (!ctx->data_off) {
+	ctx->data_off = op.extent.offset;
+      }
+      result = do_read(ctx, osd_op, /* sync = */true);
+      break;
+
     case CEPH_OSD_OP_READ:
       ++ctx->num_read;
       tracepoint(osd, do_osd_op_pre_read, soid.oid.name.c_str(),
@@ -5352,7 +5359,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (!ctx->data_off) {
 	  ctx->data_off = op.extent.offset;
 	}
-	result = do_read(ctx, osd_op);
+	result = do_read(ctx, osd_op, /* sync = */false);
       } else {
 	result = op_finisher->execute();
       }
