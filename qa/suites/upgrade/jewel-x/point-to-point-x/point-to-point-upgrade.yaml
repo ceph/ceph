@@ -18,8 +18,9 @@ overrides:
     - wrongly marked
     fs: xfs
     conf:
-      mon:
+      global:
         mon debug unsafe allow tier with nonempty snaps: true
+      mon:
         mon warn on pool no app: false
       osd:
         osd map max advance: 1000
