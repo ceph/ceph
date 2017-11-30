@@ -49,10 +49,12 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
-    for (auto p = in.caps.begin(); p != in.caps.end(); ++p) {
-      if (p != in.caps.begin())
+    bool first = true;
+    for (const auto &pair : in.caps) {
+      if (first)
         out << ',';
-      out << p->first << '=' << ccap_string(p->second->issued);
+      out << pair.first << '=' << ccap_string(pair.second.issued);
+      first = false;
     }
     out << ")";
   }
@@ -171,14 +173,14 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
-bool Inode::cap_is_valid(Cap* cap) const
+bool Inode::cap_is_valid(const Cap &cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
-  if ((cap->session->cap_gen <= cap->gen)
-      && (ceph_clock_now() < cap->session->cap_ttl)) {
+  if ((cap.session->cap_gen <= cap.gen)
+      && (ceph_clock_now() < cap.session->cap_ttl)) {
     return true;
   }
   return false;
@@ -188,28 +190,24 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (map<mds_rank_t,Cap*>::const_iterator it = caps.begin();
-       it != caps.end();
-       ++it)
-    if (cap_is_valid(it->second)) {
-      c |= it->second->issued;
-      i |= it->second->implemented;
+  for (const auto &pair : caps) {
+    const Cap &cap = pair.second;
+    if (cap_is_valid(cap)) {
+      c |= cap.issued;
+      i |= cap.implemented;
     }
+  }
   if (implemented)
     *implemented = i;
   return c;
 }
 
-void Inode::touch_cap(Cap *cap)
-{
-  // move to back of LRU
-  cap->session->caps.push_back(&cap->cap_item);
-}
-
 void Inode::try_touch_cap(mds_rank_t mds)
 {
-  if (caps.count(mds))
-    touch_cap(caps[mds]);
+  auto it = caps.find(mds);
+  if (it != caps.end()) {
+    it->second.touch();
+  }
 }
 
 bool Inode::caps_issued_mask(unsigned mask)
@@ -219,29 +217,27 @@ bool Inode::caps_issued_mask(unsigned mask)
     return true;
   // prefer auth cap
   if (auth_cap &&
-      cap_is_valid(auth_cap) &&
+      cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
-    touch_cap(auth_cap);
+    auth_cap->touch();
     return true;
   }
   // try any cap
-  for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
-       it != caps.end();
-       ++it) {
-    if (cap_is_valid(it->second)) {
-      if ((it->second->issued & mask) == mask) {
-	touch_cap(it->second);
+  for (auto &pair : caps) {
+    Cap &cap = pair.second;
+    if (cap_is_valid(cap)) {
+      if ((cap.issued & mask) == mask) {
+        cap.touch();
 	return true;
       }
-      c |= it->second->issued;
+      c |= cap.issued;
     }
   }
   if ((c & mask) == mask) {
     // bah.. touch them all
-    for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
-	 it != caps.end();
-	 ++it)
-      touch_cap(it->second);
+    for (auto &pair : caps) {
+      pair.second.touch();
+    }
     return true;
   }
   return false;
@@ -280,8 +276,9 @@ int Inode::caps_wanted()
 int Inode::caps_mds_wanted()
 {
   int want = 0;
-  for (auto it = caps.begin(); it != caps.end(); ++it)
-    want |= it->second->wanted;
+  for (const auto &pair : caps) {
+    want |= pair.second.wanted;
+  }
   return want;
 }
 
@@ -293,8 +290,8 @@ int Inode::caps_dirty()
 const UserPerm* Inode::get_best_perms()
 {
   const UserPerm *perms = NULL;
-  for (const auto ci : caps) {
-    const UserPerm& iperm = ci.second->latest_perms;
+  for (const auto &pair : caps) {
+    const UserPerm& iperm = pair.second.latest_perms;
     if (!perms) { // we don't have any, take what's present
       perms = &iperm;
     } else if (iperm.uid() == uid) {
@@ -420,12 +417,12 @@ void Inode::dump(Formatter *f) const
   }
 
   f->open_array_section("caps");
-  for (map<mds_rank_t,Cap*>::const_iterator p = caps.begin(); p != caps.end(); ++p) {
+  for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", p->first);
-    if (p->second == auth_cap)
+    f->dump_int("mds", pair.first);
+    if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
-    p->second->dump(f);
+    pair.second.dump(f);
     f->close_section();
   }
   f->close_section();
