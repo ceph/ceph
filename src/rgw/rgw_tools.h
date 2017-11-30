@@ -13,6 +13,7 @@
 class RGWRados;
 class RGWSysObjectCtx;
 struct RGWObjVersionTracker;
+class optional_yield;
 
 struct obj_version;
 
@@ -29,6 +30,13 @@ const char *rgw_find_mime_by_ext(string& ext);
 
 void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
                         map<string, bufferlist> *attrset);
+
+/// perform the rados operation, using the yield context when given
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectReadOperation *op, bufferlist* pbl,
+                      optional_yield y);
+int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
+                      librados::ObjectWriteOperation *op, optional_yield y);
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
