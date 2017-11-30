@@ -14,6 +14,7 @@
  */
 
 #include <ctime>
+#include <thread>
 
 #include "common/ceph_time.h"
 #include "include/rados.h"

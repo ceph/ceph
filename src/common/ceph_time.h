@@ -237,6 +237,10 @@ namespace ceph {
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
 
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
       // A monotonic clock's timepoints are only meaningful to the
       // computer on which they were generated. Thus having an
       // optional skew is meaningless.
