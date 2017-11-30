@@ -314,7 +314,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   if (s->enable_usage_log)
     log_usage(s, op_name);
 
-  if (!s->enable_ops_log)
+  if (!s->enable_ops_log || !(s->cct->_conf->rgw_ops_log_rados || olog))
     return 0;
 
   if (s->bucket_name.empty()) {
