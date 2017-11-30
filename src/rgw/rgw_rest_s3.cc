@@ -1192,8 +1192,6 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
 void RGWCreateBucket_ObjStore_S3::send_response()
 {
-  if (op_ret == -ERR_BUCKET_EXISTS)
-    op_ret = 0;
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
