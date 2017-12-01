@@ -459,7 +459,7 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
       new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
       new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
     }
-    new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
+    new_snap->current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
   }
 }
 
@@ -2538,7 +2538,7 @@ snapid_t CInode::get_oldest_snap()
   snapid_t t = first;
   if (!old_inodes.empty())
     t = old_inodes.begin()->second.first;
-  return MIN(t, oldest_snap);
+  return std::min(t, oldest_snap);
 }
 
 old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
@@ -3235,7 +3235,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // max_size is min of projected, actual
   uint64_t max_size =
-    MIN(oi->client_ranges.count(client) ?
+    std::min(oi->client_ranges.count(client) ?
 	oi->client_ranges[client].range.last : 0,
 	pi->client_ranges.count(client) ?
 	pi->client_ranges[client].range.last : 0);
@@ -3503,7 +3503,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   // max_size is min of projected, actual.
   uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
   uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
-  m->max_size = MIN(oldms, newms);
+  m->max_size = std::min(oldms, newms);
 
   i = pauth ? pi:oi;
   m->head.mode = i->mode;

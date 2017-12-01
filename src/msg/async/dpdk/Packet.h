@@ -125,7 +125,7 @@ class Packet {
     pseudo_vector fragments() { return { frags, _nr_frags }; }
 
     static std::unique_ptr<impl> allocate(size_t nr_frags) {
-      nr_frags = MAX(nr_frags, default_nr_frags);
+      nr_frags = std::max(nr_frags, default_nr_frags);
       return std::unique_ptr<impl>(new (nr_frags) impl(nr_frags));
     }
 

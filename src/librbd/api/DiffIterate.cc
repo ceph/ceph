@@ -457,7 +457,7 @@ int DiffIterate<I>::diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
     }
     object_map.resize(num_objs);
 
-    uint64_t overlap = MIN(object_map.size(), prev_object_map.size());
+    uint64_t overlap = std::min(object_map.size(), prev_object_map.size());
     for (uint64_t i = 0; i < overlap; ++i) {
       ldout(cct, 20) << __func__ << ": object state: " << i << " "
                      << static_cast<uint32_t>(prev_object_map[i])

@@ -749,7 +749,7 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
   uint64_t bytes_remaining = length;
   uint64_t event_offset = 0;
   do {
-    uint64_t event_length = MIN(bytes_remaining, max_write_data_size);
+    uint64_t event_length = std::min(bytes_remaining, max_write_data_size);
 
     bufferlist event_bl;
     event_bl.substr_of(bl, event_offset, event_length);

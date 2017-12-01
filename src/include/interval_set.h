@@ -600,8 +600,8 @@ class interval_set {
         continue;
       }
 
-      T start = MAX(pa->first, pb->first);
-      T en = MIN(pa->first+pa->second, pb->first+pb->second);
+      T start = std::max(pa->first, pb->first);
+      T en = std::min(pa->first+pa->second, pb->first+pb->second);
       assert(en > start);
       typename decltype(m)::value_type i{start, en - start};
       mi = m.insert(mi, i);

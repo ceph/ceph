@@ -139,7 +139,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       }
 
       for (auto object_position : client.commit_position.object_positions) {
-        minimum_tag_tid = MIN(minimum_tag_tid, object_position.tag_tid);
+        minimum_tag_tid = std::min(minimum_tag_tid, object_position.tag_tid);
       }
     }
     if (!vals.empty()) {
@@ -1018,7 +1018,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   }
 
   for (auto object_position : client.commit_position.object_positions) {
-    minimum_tag_tid = MIN(minimum_tag_tid, object_position.tag_tid);
+    minimum_tag_tid = std::min(minimum_tag_tid, object_position.tag_tid);
   }
 
   // compute minimum tags in use per-class

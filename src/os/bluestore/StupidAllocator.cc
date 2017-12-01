@@ -93,7 +93,7 @@ int64_t StupidAllocator::allocate_int(
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
 	   	 << dendl;
-  uint64_t want = MAX(alloc_unit, want_size);
+  uint64_t want = std::max(alloc_unit, want_size);
   int bin = _choose_bin(want);
   int orig_bin = bin;
 
@@ -159,7 +159,7 @@ int64_t StupidAllocator::allocate_int(
   if (skew)
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
-  *length = MIN(MAX(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
+  *length = std::min(std::max(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
   if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
       alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
@@ -222,7 +222,7 @@ int64_t StupidAllocator::allocate(
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
   while (allocated_size < want_size) {
-    res = allocate_int(MIN(max_alloc_size, (want_size - allocated_size)),
+    res = allocate_int(std::min(max_alloc_size, (want_size - allocated_size)),
        alloc_unit, hint, &offset, &length);
     if (res != 0) {
       /*
