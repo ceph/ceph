@@ -3268,21 +3268,6 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
     return -EACCES;
   }
 
-#warning clean me up
-#if 0
-  string& seed = i->second;
-
-  utime_t now = ceph_clock_now();
-
-  int result = oath_totp_validate3(seed.c_str(), seed.size(), now.sec(),
-                                   30 /* step size */, 0, 2 /* window */,
-                                   NULL, NULL, otp.c_str());
-  if (result == OATH_INVALID_OTP) {
-    ldout(cct, 5) << "NOTICE: totp token failed to validate" << dendl;
-    return -EACCES;
-  }
-#endif
-
   *verified = true;
 
   return 0;
