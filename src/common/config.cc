@@ -50,6 +50,28 @@ static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluste
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
+enum {
+  CONF_DEFAULT,
+  CONF_MON,
+  CONF_CONFFILE,
+  CONF_ENV,
+  CONF_OVERRIDE,
+  CONF_FINAL
+};
+
+const char *ceph_conf_level_name(int level)
+{
+  switch (level) {
+  case CONF_DEFAULT: return "default";
+  case CONF_MON: return "mon";
+  case CONF_ENV: return "env";
+  case CONF_CONFFILE: return "conffile";
+  case CONF_OVERRIDE: return "override";
+  case CONF_FINAL: return "final";
+  default: return "???";
+  }
+}
+
 int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
@@ -72,7 +94,24 @@ int ceph_resolve_file_search(const std::string& filename_list,
   return ret;
 }
 
-
+static int conf_stringify(const Option::value_t& v, string *out)
+{
+  if (boost::get<boost::blank>(&v)) {
+    return -ENOENT;
+  }
+  if (const bool *flag = boost::get<const bool>(&v)) {
+    *out = *flag ? "true" : "false";
+    return 0;
+  }
+  ostringstream oss;
+  if (const double *dp = boost::get<const double>(&v)) {
+    oss << std::fixed << *dp;
+  } else {
+    oss << v;
+  }
+  *out = oss.str();
+  return 0;
+}
 
 md_config_t::md_config_t(bool is_daemon)
   : is_daemon(is_daemon),
@@ -152,18 +191,17 @@ md_config_t::md_config_t(bool is_daemon)
 
   validate_schema();
 
-  // Load default values from the schema
+  // Validate default values from the schema
   for (const auto &i : schema) {
     const Option &opt = i.second;
-    bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
-    Option::value_t default_val;
-    if (is_daemon && has_daemon_default) {
-      default_val = opt.daemon_value;
-    } else {
-      default_val = opt.value;
-    }
-
     if (opt.type == Option::TYPE_STR) {
+      bool has_daemon_default = !boost::get<boost::blank>(&opt.daemon_value);
+      Option::value_t default_val;
+      if (is_daemon && has_daemon_default) {
+	default_val = opt.daemon_value;
+      } else {
+	default_val = opt.value;
+      }
       // We call pre_validate as a sanity check, but also to get any
       // side effect (value modification) from the validator.
       std::string *def_str = boost::get<std::string>(&default_val);
@@ -178,18 +216,14 @@ md_config_t::md_config_t(bool is_daemon)
         ceph_abort();
       }
     }
-
-    values[i.first] = default_val;
   }
 
   // Copy out values (defaults) into any legacy (C struct member) fields
-  for (const auto &i : legacy_values) {
-    const auto &name = i.first;
-    const auto &option = schema.at(name);
-    auto ptr = i.second;
+  update_legacy_vals();
+}
 
-    update_legacy_val(option, ptr);
-  }
+md_config_t::~md_config_t()
+{
 }
 
 /**
@@ -227,59 +261,22 @@ const Option *md_config_t::find_option(const string& name) const
   return nullptr;
 }
 
-Option::value_t md_config_t::get_val_default(
-  const string& name,
-  bool meta) const
-{
-  Mutex::Locker l(lock);
-  const Option *o = find_option(name);
-  return _get_val_default(*o, meta);
-}
-
-Option::value_t md_config_t::_get_val_default(const Option& o, bool meta) const
-{
-  Option::value_t v;
-
-  auto p = default_values.find(o.name);
-  if (p != default_values.end()) {
-    // custom default
-    v = p->second;
-  } else {
-    // schema default
-    bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
-    if (is_daemon && has_daemon_default) {
-      v = o.daemon_value;
-    } else {
-      v = o.value;
-    }
-  }
-
-  if (meta) {
-    // expand meta fields
-    string *s = boost::get<std::string>(&v);
-    if (s) {
-      ostringstream oss;
-      expand_meta(*s, &oss);
-    }
-  }
-  return v;
-}
-
 void md_config_t::set_val_default(const string& name, const std::string& val)
 {
   Mutex::Locker l(lock);
   const Option *o = find_option(name);
   assert(o);
   string err;
-  Option::value_t v;
-  int r = o->parse_value(val, &v, &err);
-  assert(r == 0);
-  values[name] = v;
-  default_values[name] = v;
+  set_val_impl(val, *o, CONF_DEFAULT, &err);
 }
 
-md_config_t::~md_config_t()
+void md_config_t::set_val_mon(const string& name, const std::string& val)
 {
+  Mutex::Locker l(lock);
+  const Option *o = find_option(name);
+  assert(o);
+  string err;
+  set_val_impl(val, *o, CONF_MON, &err);
 }
 
 void md_config_t::add_observer(md_config_obs_t* observer_)
@@ -308,7 +305,7 @@ void md_config_t::remove_observer(md_config_obs_t* observer_)
   assert(found_obs);
 }
 
-int md_config_t::parse_config_files(const char *conf_files,
+int md_config_t::parse_config_files(const char *conf_files_str,
 				    std::ostream *warnings,
 				    int flags)
 {
@@ -317,7 +314,7 @@ int md_config_t::parse_config_files(const char *conf_files,
   if (safe_to_start_threads)
     return -ENOSYS;
 
-  if (!cluster.size() && !conf_files) {
+  if (!cluster.size() && !conf_files_str) {
     /*
      * set the cluster name to 'ceph' when neither cluster name nor
      * configuration file are specified.
@@ -325,51 +322,39 @@ int md_config_t::parse_config_files(const char *conf_files,
     cluster = "ceph";
   }
 
-  if (!conf_files) {
+  if (!conf_files_str) {
     const char *c = getenv("CEPH_CONF");
     if (c) {
-      conf_files = c;
+      conf_files_str = c;
     }
     else {
       if (flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)
 	return 0;
-      conf_files = CEPH_CONF_FILE_DEFAULT;
+      conf_files_str = CEPH_CONF_FILE_DEFAULT;
     }
   }
 
-  std::list<std::string> cfl;
-  get_str_list(conf_files, cfl);
-
-  auto p = cfl.begin();
-  while (p != cfl.end()) {
-    // expand $data_dir?
+  std::list<std::string> conf_files;
+  get_str_list(conf_files_str, conf_files);
+  auto p = conf_files.begin();
+  while (p != conf_files.end()) {
     string &s = *p;
-    if (s.find("$data_dir") != string::npos) {
-      if (data_dir_option.length()) {
-	list<const Option *> stack;
-	expand_meta(s, NULL, stack, warnings);
-	p++;
-      } else {
-	cfl.erase(p++);  // ignore this item
-      }
+    if (s.find("$data_dir") != string::npos &&
+	data_dir_option.empty()) {
+      // useless $data_dir item, skip
+      p = conf_files.erase(p);
     } else {
+      early_expand_meta(s, warnings);
       ++p;
     }
   }
-  return parse_config_files_impl(cfl, warnings);
-}
-
-int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_files,
-					 std::ostream *warnings)
-{
-  assert(lock.is_locked());
 
   // open new conf
   list<string>::const_iterator c;
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-    expand_meta(fn, warnings);
+
     int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
     if (ret == 0)
       break;
@@ -404,10 +389,10 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   for (const auto &i : schema) {
     const auto &opt = i.second;
     std::string val;
-    int ret = _get_val_from_conf_file(my_sections, opt.name, val, false);
+    int ret = _get_val_from_conf_file(my_sections, opt.name, val);
     if (ret == 0) {
       std::string error_message;
-      int r = set_val_impl(val, opt, &error_message);
+      int r = set_val_impl(val, opt, CONF_CONFFILE, &error_message);
       if (warnings != nullptr && (r != 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
@@ -440,6 +425,9 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
     }
     cerr << ". Please use the new style section names that include a period.";
   }
+
+  update_legacy_vals();
+
   return 0;
 }
 
@@ -449,7 +437,8 @@ void md_config_t::parse_env()
   if (safe_to_start_threads)
     return;
   if (getenv("CEPH_KEYRING")) {
-    set_val_or_die("keyring", getenv("CEPH_KEYRING"));
+    string k = getenv("CEPH_KEYRING");
+    values["keyring"][CONF_ENV] = Option::value_t(k);
   }
 }
 
@@ -488,13 +477,14 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
   }
   for (const auto& i: schema) {
     const Option &opt = i.second;
-    char *buf;
-    _get_val(opt.name, &buf, -1);
-    if (out)
-      *out << opt.name << " = " << buf << std::endl;
-    if (f)
-      f->dump_string(opt.name.c_str(), buf);
-    free(buf);
+    string val;
+    conf_stringify(_get_val(opt), &val);
+    if (out) {
+      *out << opt.name << " = " << val << std::endl;
+    }
+    if (f) {
+      f->dump_string(opt.name.c_str(), val);
+    }
   }
 }
 
@@ -571,26 +561,24 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
   }
 
   if (show_config) {
-    expand_all_meta();
     _show_config(&cout, NULL);
     _exit(0);
   }
 
   if (show_config_value) {
-    char *buf = 0;
-    int r = _get_val(show_config_value_arg.c_str(), &buf, -1);
+    string val;
+    int r = conf_stringify(_get_val(show_config_value_arg), &val);
     if (r < 0) {
       if (r == -ENOENT)
-	std::cerr << "failed to get config option '" <<
-	  show_config_value_arg << "': option not found" << std::endl;
+	std::cerr << "failed to get config option '"
+		  << show_config_value_arg << "': option not found" << std::endl;
       else
-	std::cerr << "failed to get config option '" <<
-	  show_config_value_arg << "': " << cpp_strerror(r) << std::endl;
+	std::cerr << "failed to get config option '"
+		  << show_config_value_arg << "': " << cpp_strerror(r)
+		  << std::endl;
       _exit(1);
     }
-    string s = buf;
-    expand_meta(s, &std::cerr);
-    std::cout << s << std::endl;
+    std::cout << val << std::endl;
     _exit(0);
   }
 
@@ -619,9 +607,9 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  ret = set_val_impl("false", opt, &error_message);
+	  ret = set_val_impl("false", opt, CONF_OVERRIDE, &error_message);
 	else if (res == 1)
-	  ret = set_val_impl("true", opt, &error_message);
+	  ret = set_val_impl("true", opt, CONF_OVERRIDE, &error_message);
 	else
 	  ret = res;
 	break;
@@ -629,7 +617,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	std::string no("--no-");
 	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  ret = set_val_impl("false", opt, &error_message);
+	  ret = set_val_impl("false", opt, CONF_OVERRIDE, &error_message);
 	  break;
 	}
       }
@@ -645,7 +633,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	*oss << "You cannot change " << opt.name << " using injectargs.\n";
         return -ENOSYS;
       }
-      ret = set_val_impl(val, opt, &error_message);
+      ret = set_val_impl(val, opt, CONF_OVERRIDE, &error_message);
       break;
     }
     ++o;
@@ -706,31 +694,21 @@ void md_config_t::_apply_changes(std::ostream *oss)
    * have changed. */
   typedef std::map < md_config_obs_t*, std::set <std::string> > rev_obs_map_t;
 
-  expand_all_meta();
-
-  // expand_all_meta could have modified anything.  Copy it all out again.
-  for (const auto &i : legacy_values) {
-    const auto &name = i.first;
-    const auto &option = schema.at(name);
-    auto ptr = i.second;
-
-    update_legacy_val(option, ptr);
-  }
+  // meta expands could have modified anything.  Copy it all out again.
+  update_legacy_vals();
 
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
   rev_obs_map_t robs;
   std::set <std::string> empty_set;
-  char buf[128];
-  char *bufptr = (char*)buf;
+  string val;
   for (changed_set_t::const_iterator c = changed.begin();
        c != changed.end(); ++c) {
     const std::string &key(*c);
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
-    if ((oss) &&
-	!_get_val(key.c_str(), &bufptr, sizeof(buf))) {
-      (*oss) << key << " = '" << buf << "' ";
+    if ((oss) && !conf_stringify(_get_val(key), &val)) {
+      (*oss) << key << " = '" << val << "' ";
       if (range.first == range.second) {
 	(*oss) << "(not observed, change may require restart) ";
       }
@@ -766,9 +744,6 @@ void md_config_t::call_all_observers()
   // by reference and lock as appropriate.
   Mutex::Locker l(lock);
   {
-
-    expand_all_meta();
-
     for (auto r = observers.begin(); r != observers.end(); ++r) {
       obs[r->second].insert(r->first);
     }
@@ -823,11 +798,10 @@ int md_config_t::injectargs(const std::string& s, std::ostream *oss)
 }
 
 void md_config_t::set_val_or_die(const std::string &key,
-                                 const std::string &val,
-                                 bool meta)
+                                 const std::string &val)
 {
   std::stringstream err;
-  int ret = set_val(key, val, meta, &err);
+  int ret = set_val(key, val, &err);
   if (ret != 0) {
     std::cerr << "set_val_or_die(" << key << "): " << err.str();
   }
@@ -835,7 +809,7 @@ void md_config_t::set_val_or_die(const std::string &key,
 }
 
 int md_config_t::set_val(const std::string &key, const char *val,
-    bool meta, std::stringstream *err_ss)
+			 std::stringstream *err_ss)
 {
   Mutex::Locker l(lock);
   if (key.empty()) {
@@ -847,8 +821,6 @@ int md_config_t::set_val(const std::string &key, const char *val,
   }
 
   std::string v(val);
-  if (meta)
-    expand_meta(v, &std::cerr);
 
   string k(ConfFile::normalize_key_name(key));
 
@@ -867,7 +839,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
     }
 
     std::string error_message;
-    int r = set_val_impl(v, opt, &error_message);
+    int r = set_val_impl(v, opt, CONF_OVERRIDE, &error_message);
     if (r == 0) {
       if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
     } else {
@@ -884,26 +856,27 @@ int md_config_t::set_val(const std::string &key, const char *val,
 int md_config_t::get_val(const std::string &key, char **buf, int len) const
 {
   Mutex::Locker l(lock);
-  return _get_val(key, buf,len);
+  return _get_val_cstr(key, buf, len);
 }
 
-int md_config_t::get_val_as_string(const std::string &key,
-				   std::string *val) const
+int md_config_t::get_val(
+  const std::string &key,
+  std::string *val) const
 {
-  Mutex::Locker l(lock);
-  return _get_val_as_string(key, val);
+  return conf_stringify(get_val_generic(key), val);
 }
 
 Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
-  return _get_val_generic(key);
+  return _get_val(key);
 }
 
-Option::value_t md_config_t::_get_val_generic(const std::string &key) const
+Option::value_t md_config_t::_get_val(
+  const std::string &key,
+  expand_stack_t *stack) const
 {
   assert(lock.is_locked());
-
   if (key.empty()) {
     return Option::value_t(boost::blank());
   }
@@ -911,43 +884,190 @@ Option::value_t md_config_t::_get_val_generic(const std::string &key) const
   // In key names, leading and trailing whitespace are not significant.
   string k(ConfFile::normalize_key_name(key));
 
-  auto p = values.find(k);
-  if (p != values.end()) {
-    return p->second;
+  const Option *o = find_option(key);
+  if (!o) {
+    // not a valid config option
+    return Option::value_t(boost::blank());
   }
 
-  return Option::value_t(boost::blank());
+  return _get_val(*o, stack);
 }
 
-int md_config_t::_get_val_as_string(const std::string &key,
-				    std::string *value) const {
-  assert(lock.is_locked());
+Option::value_t md_config_t::_get_val(
+  const Option& o,
+  expand_stack_t *stack,
+  std::ostream *err) const
+{
+  expand_stack_t a_stack;
+  if (!stack) {
+    stack = &a_stack;
+  }
 
-  auto config_value = _get_val_generic(key);
-  if (!boost::get<boost::blank>(&config_value)) {
-    ostringstream oss;
-    if (bool *flag = boost::get<bool>(&config_value)) {
-      oss << (*flag ? "true" : "false");
-    } else if (double *dp = boost::get<double>(&config_value)) {
-      oss << std::fixed << *dp;
-    } else {
-      oss << config_value;
+  auto p = values.find(o.name);
+  if (p != values.end() && !p->second.empty()) {
+    // use highest-priority value available (see CONF_*)
+    return _expand_meta(p->second.rbegin()->second, &o, stack, err);
+  }
+
+  return _expand_meta(_get_val_default(o), &o, stack, err);
+}
+
+const Option::value_t& md_config_t::_get_val_default(const Option& o) const
+{
+  bool has_daemon_default = !boost::get<boost::blank>(&o.daemon_value);
+  if (is_daemon && has_daemon_default) {
+    return o.daemon_value;
+  } else {
+    return o.value;
+  }
+}
+
+void md_config_t::early_expand_meta(
+  std::string &val,
+  std::ostream *err) const
+{
+  Mutex::Locker l(lock);
+  expand_stack_t stack;
+  Option::value_t v = _expand_meta(Option::value_t(val), nullptr, &stack, err);
+  conf_stringify(v, &val);
+}
+
+Option::value_t md_config_t::_expand_meta(
+  const Option::value_t& in,
+  const Option *o,
+  expand_stack_t *stack,
+  std::ostream *err) const
+{
+  //cout << __func__ << " in '" << in << "' stack " << stack << std::endl;
+  if (!stack) {
+    return in;
+  }
+  const std::string *str = boost::get<const std::string>(&in);
+  if (!str) {
+    // strings only!
+    return in;
+  }
+
+  auto pos = str->find('$');
+  if (pos == std::string::npos) {
+    // no substitutions!
+    return in;
+  }
+
+  if (o) {
+    stack->push_back(make_pair(o, &in));
+  }
+  string out;
+  decltype(pos) last_pos = 0;
+  while (pos != std::string::npos) {
+    assert((*str)[pos] == '$');
+    if (pos > last_pos) {
+      out += str->substr(last_pos, pos - last_pos);
     }
-    *value = oss.str();
-    return 0;
+
+    // try to parse the variable name into var, either \$\{(.+)\} or
+    // \$[a-z\_]+
+    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
+    string var;
+    size_t endpos = 0;
+    if ((*str)[pos+1] == '{') {
+      // ...${foo_bar}...
+      endpos = str->find_first_not_of(valid_chars, pos + 2);
+      if (endpos != std::string::npos &&
+	  (*str)[endpos] == '}') {
+	var = str->substr(pos + 2, endpos - pos - 2);
+	endpos++;
+      }
+    } else {
+      // ...$foo...
+      endpos = str->find_first_not_of(valid_chars, pos + 1);
+      if (endpos != std::string::npos)
+	var = str->substr(pos + 1, endpos - pos - 1);
+      else
+	var = str->substr(pos + 1);
+    }
+    last_pos = endpos;
+
+    if (!var.size()) {
+      out += '$';
+    } else {
+      //cout << " found var " << var << std::endl;
+      // special metavariable?
+      if (var == "type") {
+	out += name.get_type_name();
+      } else if (var == "cluster") {
+	out += cluster;
+      } else if (var == "name") {
+	out += name.to_cstr();
+      } else if (var == "host") {
+	if (host == "") {
+	  out += ceph_get_short_hostname();
+	} else {
+	  out += host;
+	}
+      } else if (var == "num") {
+	out += name.get_id().c_str();
+      } else if (var == "id") {
+	out += name.get_id();
+      } else if (var == "pid") {
+	out += stringify(getpid());
+      } else if (var == "cctid") {
+	out += stringify((unsigned long long)this);
+      } else {
+	if (var == "data_dir") {
+	  var = data_dir_option;
+	}
+	const Option *o = find_option(var);
+	if (!o) {
+	  out += str->substr(pos, endpos - pos);
+	} else {
+	  auto match = std::find_if(
+	    stack->begin(), stack->end(),
+	    [o](pair<const Option *,const Option::value_t*>& item) {
+	      return item.first == o;
+	    });
+	  if (match != stack->end()) {
+	    // substitution loop; break the cycle
+	    if (err) {
+	      *err << "variable expansion loop at " << var << "="
+		   << *match->second << "\n"
+		   << "expansion stack:\n";
+	      for (auto i = stack->rbegin(); i != stack->rend(); ++i) {
+		*err << i->first->name << "=" << *i->second << "\n";
+	      }
+	    }
+	    return Option::value_t(std::string("$") + o->name);
+	  } else {
+	    // recursively evaluate!
+	    string n;
+	    conf_stringify(_get_val(*o, stack, err), &n);
+	    out += n;
+	  }
+	}
+      }
+    }
+    pos = str->find('$', last_pos);
   }
-  return -ENOENT;
+  if (last_pos != std::string::npos) {
+    out += str->substr(last_pos);
+  }
+  if (o) {
+    stack->pop_back();
+  }
+
+  return Option::value_t(out);
 }
 
-int md_config_t::_get_val(const std::string &key, char **buf, int len) const
+int md_config_t::_get_val_cstr(
+  const std::string &key, char **buf, int len) const
 {
   assert(lock.is_locked());
 
   if (key.empty())
     return -EINVAL;
 
-  string val ;
-  if (_get_val_as_string(key, &val) == 0) {
+  string val;
+  if (conf_stringify(_get_val(key), &val) == 0) {
     int l = val.length() + 1;
     if (len == -1) {
       *buf = (char*)malloc(l);
@@ -1012,15 +1132,29 @@ int md_config_t::get_all_sections(std::vector <std::string> &sections) const
   return 0;
 }
 
-int md_config_t::get_val_from_conf_file(const std::vector <std::string> &sections,
-		    const std::string &key, std::string &out, bool emeta) const
+int md_config_t::get_val_from_conf_file(
+  const std::vector <std::string> &sections,
+  const std::string &key,
+  std::string &out,
+  bool emeta) const
 {
   Mutex::Locker l(lock);
-  return _get_val_from_conf_file(sections, key, out, emeta);
+  int r = _get_val_from_conf_file(sections, key, out);
+  if (r < 0) {
+    return r;
+  }
+  if (emeta) {
+    expand_stack_t stack;
+    auto v = _expand_meta(Option::value_t(out), nullptr, &stack, nullptr);
+    conf_stringify(v, &out);
+  }
+  return 0;
 }
 
-int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sections,
-					 const std::string &key, std::string &out, bool emeta) const
+int md_config_t::_get_val_from_conf_file(
+  const std::vector <std::string> &sections,
+  const std::string &key,
+  std::string &out) const
 {
   assert(lock.is_locked());
   std::vector <std::string>::const_iterator s = sections.begin();
@@ -1028,18 +1162,19 @@ int md_config_t::_get_val_from_conf_file(const std::vector <std::string> &sectio
   for (; s != s_end; ++s) {
     int ret = cf.read(s->c_str(), key, out);
     if (ret == 0) {
-      if (emeta)
-	expand_meta(out, &std::cerr);
       return 0;
-    }
-    else if (ret != -ENOENT)
+    } else if (ret != -ENOENT) {
       return ret;
+    }
   }
   return -ENOENT;
 }
 
-int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
-                              std::string *error_message)
+int md_config_t::set_val_impl(
+  const std::string &raw_val,
+  const Option &opt,
+  int level,
+  std::string *error_message)
 {
   assert(lock.is_locked());
 
@@ -1050,7 +1185,7 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
   }
 
   // Apply the value to its entry in the `values` map
-  values[opt.name] = new_value;
+  values[opt.name][level] = new_value;
 
   // Apply the value to its legacy field, if it has one
   auto legacy_ptr_iter = legacy_values.find(std::string(opt.name));
@@ -1060,8 +1195,10 @@ int md_config_t::set_val_impl(const std::string &raw_val, const Option &opt,
 
   // Was this a debug_* option update?
   if (opt.subsys >= 0) {
+    string actual_val;
+    conf_stringify(_get_val(opt), &actual_val);
     int log, gather;
-    int r = sscanf(raw_val.c_str(), "%d/%d", &log, &gather);
+    int r = sscanf(actual_val.c_str(), "%d/%d", &log, &gather);
     if (r >= 1) {
       if (r < 2) {
 	gather = log;
@@ -1099,249 +1236,52 @@ class assign_visitor : public boost::static_visitor<>
   }
 };
 
+void md_config_t::update_legacy_vals()
+{
+  for (const auto &i : legacy_values) {
+    const auto &name = i.first;
+    const auto &option = schema.at(name);
+    auto ptr = i.second;
+    update_legacy_val(option, ptr);
+  }
+}
+
 void md_config_t::update_legacy_val(const Option &opt,
                                     md_config_t::member_ptr_t member_ptr)
 {
-  if (boost::get<boost::blank>(&values.at(opt.name))) {
-    // This shouldn't happen, but if it does then just don't even
-    // try to assign to the legacy field.
-    return;
-  }
-
-  boost::apply_visitor(assign_visitor(this, values.at(opt.name)), member_ptr);
+  Option::value_t v = _get_val(opt);
+  boost::apply_visitor(assign_visitor(this, v), member_ptr);
 }
 
-
-static const char *CONF_METAVARIABLES[] = {
-  "data_dir", // put this first: it may contain some of the others
-  "cluster", "type", "name", "host", "num", "id", "pid", "cctid"
-};
-static const int NUM_CONF_METAVARIABLES =
-      (sizeof(CONF_METAVARIABLES) / sizeof(CONF_METAVARIABLES[0]));
-
-void md_config_t::expand_all_meta()
+static void dump(Formatter *f, int level, Option::value_t in)
 {
-  // Expand all metavariables
-  ostringstream oss;
-  for (const auto &i : schema) {
-    const Option &opt = i.second;
-
-    if (opt.type == Option::TYPE_STR) {
-      list<const Option*> stack;
-      std::string *str = boost::get<std::string>(&(values.at(opt.name)));
-      assert(str != nullptr);  // Non-string values should never get in
-      expand_meta(*str, &opt, stack, &oss);
-    }
+  if (const bool *v = boost::get<const bool>(&in)) {
+    f->dump_bool(ceph_conf_level_name(level), *v);
+  } else if (const int64_t *v = boost::get<const int64_t>(&in)) {
+    f->dump_int(ceph_conf_level_name(level), *v);
+  } else if (const uint64_t *v = boost::get<const uint64_t>(&in)) {
+    f->dump_unsigned(ceph_conf_level_name(level), *v);
+  } else if (const double *v = boost::get<const double>(&in)) {
+    f->dump_float(ceph_conf_level_name(level), *v);
+  } else {
+    f->dump_stream(ceph_conf_level_name(level)) << in;
   }
-  cerr << oss.str();
-}
-
-bool md_config_t::expand_meta(std::string &val,
-			      std::ostream *oss) const
-{
-  list<const Option*> stack;
-  return expand_meta(val, NULL, stack, oss);
-}
-
-bool md_config_t::expand_meta(std::string &origval,
-			      const Option *opt,
-			      std::list<const Option *> stack,
-			      std::ostream *oss) const
-{
-  assert(lock.is_locked());
-
-  // no $ means no variable expansion is necessary
-  if (origval.find("$") == string::npos)
-    return false;
-
-  // ignore an expansion loop and create a human readable
-  // message about it
-  if (opt) {
-    for (const auto stack_ptr : stack) {
-      if (opt->name == stack_ptr->name) {
-	*oss << "variable expansion loop at "
-	     << opt->name << "=" << origval << std::endl;
-	*oss << "expansion stack: " << std::endl;
-	for (const auto j : stack) {
-          std::string val;
-          _get_val_as_string(j->name, &val);
-	  *oss << j->name << "=" << val << std::endl;
-	}
-	return false;
-      }
-    }
-
-    stack.push_front(opt);
-  }
-
-  bool found_meta = false;
-  string out;
-  string val = origval;
-  for (string::size_type s = 0; s < val.size(); ) {
-    if (val[s] != '$') {
-      out += val[s++];
-      continue;
-    }
-
-    // try to parse the variable name into var, either \$\{(.+)\} or
-    // \$[a-z\_]+
-    const char *valid_chars = "abcdefghijklmnopqrstuvwxyz_";
-    string var;
-    size_t endpos = 0;
-    if (val[s+1] == '{') {
-      // ...${foo_bar}...
-      endpos = val.find_first_not_of(valid_chars, s+2);
-      if (endpos != std::string::npos &&
-	  val[endpos] == '}') {
-	var = val.substr(s+2, endpos-s-2);
-	endpos++;
-      }
-    } else {
-      // ...$foo...
-      endpos = val.find_first_not_of(valid_chars, s+1);
-      if (endpos != std::string::npos)
-	var = val.substr(s+1, endpos-s-1);
-      else
-	var = val.substr(s+1);
-    }
-
-    bool expanded = false;
-    if (var.length()) {
-      // special metavariable?
-      for (int i = 0; i < NUM_CONF_METAVARIABLES; ++i) {
-	if (var != CONF_METAVARIABLES[i])
-	  continue;
-	//cout << "  meta match of " << var << " " << CONF_METAVARIABLES[i] << std::endl;
-	if (var == "type")
-	  out += name.get_type_name();
-	else if (var == "cluster")
-	  out += cluster;
-	else if (var == "name")
-          out += name.to_cstr();
-	else if (var == "host")
-        {
-          if (host == "")
-            out += ceph_get_short_hostname();
-          else
-	    out += host;
-        }
-	else if (var == "num")
-	  out += name.get_id().c_str();
-	else if (var == "id")
-	  out += name.get_id().c_str();
-	else if (var == "pid")
-	  out += stringify(getpid());
-	else if (var == "cctid")
-	  out += stringify((unsigned long long)this);
-	else if (var == "data_dir") {
-	  if (data_dir_option.length()) {
-	    char *vv = NULL;
-	    _get_val(data_dir_option.c_str(), &vv, -1);
-	    string tmp = vv;
-	    free(vv);
-	    expand_meta(tmp, NULL, stack, oss);
-	    out += tmp;
-	  } else {
-	    // this isn't really right, but it'll result in a mangled
-	    // non-existent path that will fail any search list
-	    out += "$data_dir";
-	  }
-	} else
-	  ceph_abort(); // unreachable
-	expanded = true;
-      }
-
-      if (!expanded) {
-	// config option?
-        const auto other_opt_iter = schema.find(var);
-        if (other_opt_iter != schema.end()) {
-          const Option &other_opt = other_opt_iter->second;
-          if (other_opt.type == Option::TYPE_STR) {
-            // The referenced option is a string, it may need substitution
-            // before inserting.
-            Option::value_t *other_val_ptr = const_cast<Option::value_t*>(&(values.at(other_opt.name)));
-            std::string *other_opt_val = boost::get<std::string>(other_val_ptr);
-            expand_meta(*other_opt_val, &other_opt, stack, oss);
-            out += *other_opt_val;
-          } else {
-            // The referenced option is not a string: retrieve and insert
-            // its stringized form.
-            char *vv = NULL;
-            _get_val(other_opt.name, &vv, -1);
-            out += vv;
-            free(vv);
-          }
-          expanded = true;
-	}
-      }
-    }
-
-    if (expanded) {
-      found_meta = true;
-      s = endpos;
-    } else {
-      out += val[s++];
-    }
-  }
-  // override the original value with the expanded value
-  origval = out;
-  return found_meta;
 }
 
 void md_config_t::diff(
-  const md_config_t *other,
-  map<string, pair<string, string> > *diff,
-  set<string> *unknown) 
-{
-  diff_helper(other, diff, unknown);
-}
-void md_config_t::diff(
-  const md_config_t *other,
-  map<string, pair<string, string> > *diff,
-  set<string> *unknown, const string& setting) 
-{
-  diff_helper(other, diff, unknown, setting);
-}
-
-void md_config_t::diff_helper(
-    const md_config_t *other,
-    map<string,pair<string,string> > *diff,
-    set<string> *unknown, const string& setting)
+  Formatter *f,
+  string name) const
 {
   Mutex::Locker l(lock);
-
-  char local_buf[4096];
-  char other_buf[4096];
-  for (const auto &i : schema) {
-    const Option &opt = i.second;
-    if (!setting.empty()) {
-      if (setting != opt.name) {
-        continue;
-      }
+  for (auto& i : values) {
+    f->open_object_section(i.first.c_str());
+    const Option *o = find_option(i.first);
+    dump(f, CONF_DEFAULT, _get_val_default(*o));
+    for (auto& j : i.second) {
+      dump(f, j.first, j.second);
     }
-    memset(local_buf, 0, sizeof(local_buf));
-    memset(other_buf, 0, sizeof(other_buf));
-
-    char *other_val = other_buf;
-    int err = other->get_val(opt.name, &other_val, sizeof(other_buf));
-    if (err < 0) {
-      if (err == -ENOENT) {
-        unknown->insert(opt.name);
-      }
-      continue;
-    }
-
-    char *local_val = local_buf;
-    err = _get_val(opt.name, &local_val, sizeof(local_buf));
-    if (err != 0)
-      continue;
-
-    if (strcmp(local_val, other_val))
-      diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
-    else if (!setting.empty()) {
-        diff->insert(make_pair(opt.name, make_pair(local_val, other_val)));
-        break;
-    }
+    dump(f, CONF_FINAL, _get_val(*o));
+    f->close_section();
   }
 }
 

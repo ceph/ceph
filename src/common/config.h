@@ -16,6 +16,7 @@
 #define CEPH_CONFIG_H
 
 #include <map>
+#include <boost/container/small_vector.hpp>
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -86,13 +87,10 @@ public:
    */
   std::map<std::string, const Option&> schema;
 
-  /// default values (if they vary from the schema)
-  std::map<std::string, Option::value_t> default_values;
-
   /**
    * The current values of all settings described by the schema
    */
-  std::map<std::string, Option::value_t> values;
+  std::map<std::string, map<int,Option::value_t>> values;
 
   typedef enum {
     OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
@@ -142,37 +140,32 @@ public:
   /// Look up an option in the schema
   const Option *find_option(const string& name) const;
 
-  /// Look up the default value for an option by name
-  Option::value_t get_val_default(const string& name, bool meta) const;
-
-  /// Look up the default value for an option
-  Option::value_t _get_val_default(const Option& o, bool meta) const;
-
   /// Set a default value
   void set_val_default(const std::string& key, const std::string &val);
+
+  /// Set a value from mon
+  void set_val_mon(const std::string& key, const std::string &val);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
   // Set a configuration value, or crash
   // Metavariables will be expanded.
-  void set_val_or_die(const std::string &key, const std::string &val,
-                      bool meta=true);
+  void set_val_or_die(const std::string &key, const std::string &val);
 
   // Set a configuration value.
   // Metavariables will be expanded.
-  int set_val(const std::string &key, const char *val, bool meta=true,
+  int set_val(const std::string &key, const char *val,
               std::stringstream *err_ss=nullptr);
-  int set_val(const std::string &key, const string& s, bool meta=true,
+  int set_val(const std::string &key, const string& s,
               std::stringstream *err_ss=nullptr) {
-    return set_val(key, s.c_str(), meta, err_ss);
+    return set_val(key, s.c_str(), err_ss);
   }
 
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
-  int get_val_as_string(const std::string &key, std::string *val) const;
-  int _get_val(const std::string &key, char **buf, int len) const;
+  int get_val(const std::string &key, std::string *val) const;
   Option::value_t get_val_generic(const std::string &key) const;
   template<typename T> const T get_val(const std::string &key) const;
   template<typename T, typename Callback, typename...Args>
@@ -204,68 +197,66 @@ public:
   /// dump all config settings to a formatter
   void config_options(Formatter *f);
 
-  /// obtain a diff between our config values and another md_config_t values
-  void diff(const md_config_t *other,
-            map<string,pair<string,string> > *diff, set<string> *unknown);
-
-  /// obtain a diff between config values and another md_config_t 
-  /// values for a specific setting. 
-  void diff(const md_config_t *other,
-            map<string,pair<string,string>> *diff, set<string> *unknown, 
-            const string& setting);
+  /// dump config diff from default, conf, mon, etc.
+  void diff(Formatter *f, std::string name=string{}) const;
 
   /// print/log warnings/errors from parsing the config
   void complain_about_parse_errors(CephContext *cct);
 
 private:
+  // we use this to avoid variable expansion loops
+  typedef boost::container::small_vector<pair<const Option*,
+					      const Option::value_t*>,
+					 4> expand_stack_t;
+
   void validate_schema();
   void validate_default_settings();
 
-  int _get_val_as_string(const std::string &key, std::string *value) const;
-  Option::value_t _get_val_generic(const std::string &key) const;
+  int _get_val_cstr(const std::string &key, char **buf, int len) const;
+  Option::value_t _get_val(const std::string &key,
+			   expand_stack_t *stack=0) const;
+  Option::value_t _get_val(const Option& o,
+			   expand_stack_t *stack=0,
+			   std::ostream *err=0) const;
+  const Option::value_t& _get_val_default(const Option& o) const;
+
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
 
   int _get_val_from_conf_file(const std::vector <std::string> &sections,
-			      const std::string &key, std::string &out, bool emeta) const;
+			      const std::string &key, std::string &out) const;
 
   int parse_option(std::vector<const char*>& args,
 		   std::vector<const char*>::iterator& i,
 		   std::ostream *oss);
   int parse_injectargs(std::vector<const char*>& args,
 		      std::ostream *oss);
-  int parse_config_files_impl(const std::list<std::string> &conf_files,
-			      std::ostream *warnings);
 
-  int set_val_impl(const std::string &val, const Option &opt,
-                   std::string *error_message);
+  int set_val_impl(
+    const std::string &val,
+    const Option &opt,
+    int level,  // CONF_*
+    std::string *error_message);
 
   template <typename T>
   void assign_member(member_ptr_t ptr, const Option::value_t &val);
 
 
+  void update_legacy_vals();
   void update_legacy_val(const Option &opt,
       md_config_t::member_ptr_t member);
 
-  bool expand_meta(std::string &val,
-		   std::ostream *oss) const;
-
-  void diff_helper(const md_config_t* other,
-                   map<string, pair<string, string>>* diff,
-                   set<string>* unknown, const string& setting = string{});
+  Option::value_t _expand_meta(
+    const Option::value_t& in,
+    const Option *o,
+    expand_stack_t *stack,
+    std::ostream *err) const;
 
 public:  // for global_init
-  bool early_expand_meta(std::string &val,
-			 std::ostream *oss) const {
-    Mutex::Locker l(lock);
-    return expand_meta(val, oss);
-  }
+  void early_expand_meta(std::string &val,
+			 std::ostream *oss) const;
 private:
-  bool expand_meta(std::string &val,
-		   const Option *opt,
-		   std::list<const Option*> stack,
-		   std::ostream *oss) const;
 
   /// expand all metavariables in config structure.
   void expand_all_meta();

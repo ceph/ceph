@@ -47,7 +47,7 @@ TEST(DaemonConfig, Substitution) {
   g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar$host.baz", false);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar$host.baz");
   ASSERT_EQ(0, ret);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
@@ -63,7 +63,7 @@ TEST(DaemonConfig, SubstitutionTrailing) {
   g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar$host", false);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar$host");
   ASSERT_EQ(0, ret);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
@@ -79,7 +79,7 @@ TEST(DaemonConfig, SubstitutionBraces) {
   g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}baz", false);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}baz");
   ASSERT_EQ(0, ret);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
@@ -94,7 +94,7 @@ TEST(DaemonConfig, SubstitutionBracesTrailing) {
   g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
-  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}", false);
+  ret = g_ceph_context->_conf->set_val("public_network", "bar${host}");
   ASSERT_EQ(0, ret);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[128];
@@ -108,9 +108,9 @@ TEST(DaemonConfig, SubstitutionBracesTrailing) {
 // config: variable substitution happen only once http://tracker.ceph.com/issues/7103
 TEST(DaemonConfig, SubstitutionMultiple) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("mon_host", "localhost", false);
+  ret = g_ceph_context->_conf->set_val("mon_host", "localhost");
   ASSERT_EQ(0, ret);
-  ret = g_ceph_context->_conf->set_val("keyring", "$mon_host/$cluster.keyring,$mon_host/$cluster.mon.keyring", false);
+  ret = g_ceph_context->_conf->set_val("keyring", "$mon_host/$cluster.keyring,$mon_host/$cluster.mon.keyring");
   ASSERT_EQ(0, ret);
   g_ceph_context->_conf->apply_changes(NULL);
   char buf[512];

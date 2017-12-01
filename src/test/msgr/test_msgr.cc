@@ -1329,7 +1329,7 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "30");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0.1");
   g_ceph_context->_conf->set_val("ms_inject_delay_probability", "1");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd", false);
+  g_ceph_context->_conf->set_val("ms_inject_delay_type", "client osd");
   g_ceph_context->_conf->set_val("ms_inject_delay_max", "5");
   SyntheticWorkload test_msg(16, 32, GetParam(), 100,
                              Messenger::Policy::lossless_peer(0),
@@ -1360,7 +1360,7 @@ TEST_P(MessengerTest, SyntheticInjectTest4) {
   g_ceph_context->_conf->set_val("ms_inject_socket_failures", "0");
   g_ceph_context->_conf->set_val("ms_inject_internal_delays", "0");
   g_ceph_context->_conf->set_val("ms_inject_delay_probability", "0");
-  g_ceph_context->_conf->set_val("ms_inject_delay_type", "", false);
+  g_ceph_context->_conf->set_val("ms_inject_delay_type", "");
   g_ceph_context->_conf->set_val("ms_inject_delay_max", "0");
 }
 

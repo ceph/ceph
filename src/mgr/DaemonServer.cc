@@ -803,7 +803,7 @@ bool DaemonServer::handle_command(MCommand *m)
     std::string val;
     cmd_getval(cct, cmdctx->cmdmap, "key", key);
     cmd_getval(cct, cmdctx->cmdmap, "value", val);
-    r = cct->_conf->set_val(key, val, true, &ss);
+    r = cct->_conf->set_val(key, val, &ss);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
