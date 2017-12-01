@@ -16,6 +16,7 @@ namespace librbd {
 
 class ImageCtx;
 
+
 namespace util {
 
 namespace detail {
@@ -189,6 +190,7 @@ private:
   std::atomic<uint64_t> m_refs = { 0 };
   Context *m_on_finish = nullptr;
 };
+
 
 uint64_t get_rbd_default_features(CephContext* cct);
 
