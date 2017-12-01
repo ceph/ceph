@@ -345,7 +345,7 @@ int main(int argc, char** argv) {
  *   valgrind --tool=memcheck --leak-check=full \
  *      ./ceph_erasure_code_benchmark \
  *      --plugin jerasure \
- *      --parameter directory=.libs \
+ *      --parameter directory=lib \
  *      --parameter technique=reed_sol_van \
  *      --parameter k=2 \
  *      --parameter m=2 \

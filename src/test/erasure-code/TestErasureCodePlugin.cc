@@ -83,7 +83,7 @@ TEST_F(ErasureCodePluginRegistryTest, all)
 {
   ErasureCodeProfile profile;
   const char* env = getenv("CEPH_LIB");
-  string directory(env ? env : ".libs");
+  string directory(env ? env : "lib");
   ErasureCodeInterfaceRef erasure_code;
   ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
   EXPECT_FALSE(erasure_code);

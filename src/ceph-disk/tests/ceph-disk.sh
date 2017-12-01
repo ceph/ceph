@@ -23,7 +23,7 @@
 if [ -z "$CEPH_ROOT" ] || [ -z "$CEPH_BIN" ] || [ -z "$CEPH_LIB" ]; then
     CEPH_ROOT=`readlink -f $(dirname $0)/../../..`
     CEPH_BIN=$CEPH_ROOT
-    CEPH_LIB=$CEPH_ROOT/.libs
+    CEPH_LIB=$CEPH_ROOT/build/lib
 fi
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
