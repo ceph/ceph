@@ -155,8 +155,8 @@ class Prepare(object):
                 tags={'ceph.type': device_type})
         else:
             error = [
-                'Cannot use device (%s).',
-                'A vg/lv path or an existing device is needed' % arg]
+                'Cannot use device (%s).' % arg,
+                'A vg/lv path or an existing device is needed']
             raise RuntimeError(' '.join(error))
 
         raise RuntimeError('no data logical volume found with: %s' % arg)
