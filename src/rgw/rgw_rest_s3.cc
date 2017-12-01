@@ -3289,13 +3289,13 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 }
 
 enum class AwsVersion {
-  UNKOWN,
+  UNKNOWN,
   V2,
   V4
 };
 
 enum class AwsRoute {
-  UNKOWN,
+  UNKNOWN,
   QUERY_STRING,
   HEADERS
 };
@@ -3305,8 +3305,8 @@ discover_aws_flavour(const req_info& info)
 {
   using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
 
-  AwsVersion version = AwsVersion::UNKOWN;
-  AwsRoute route = AwsRoute::UNKOWN;
+  AwsVersion version = AwsVersion::UNKNOWN;
+  AwsRoute route = AwsRoute::UNKNOWN;
 
   const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
   if (http_auth && http_auth[0]) {
@@ -4204,5 +4204,5 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
-  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN;
+  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }

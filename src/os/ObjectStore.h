@@ -719,7 +719,7 @@ public:
         break;
 
       default:
-        assert(0 == "Unkown OP");
+        assert(0 == "Unknown OP");
       }
     }
     void _update_op_bl(
