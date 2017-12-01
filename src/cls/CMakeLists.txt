@@ -72,6 +72,7 @@ list(APPEND cls_embedded_srcs ${cls_lock_srcs} ${cls_lock_client_srcs})
 # cls_otp
 set(cls_otp_srcs otp/cls_otp.cc)
 add_library(cls_otp SHARED ${cls_otp_srcs})
+target_link_libraries(cls_otp oath)
 set_target_properties(cls_otp PROPERTIES
   VERSION "1.0.0"
   SOVERSION "1"
