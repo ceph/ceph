@@ -800,6 +800,14 @@ int RGWMetadataManager::prepare_mutate(RGWRados *store,
     return STATUS_NO_APPLY;
   }
 
+  if (objv_tracker->write_version.tag.empty()) {
+    if (objv_tracker->read_version.tag.empty()) {
+      objv_tracker->generate_new_write_ver(store->ctx());
+    } else {
+      objv_tracker->write_version = objv_tracker->read_version;
+      objv_tracker->write_version.ver++;
+    }
+  }
   return 0;
 }
 
