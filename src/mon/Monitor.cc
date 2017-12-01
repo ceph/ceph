@@ -3170,7 +3170,7 @@ void Monitor::handle_command(MonOpRequestRef op)
     cmd_getval(cct, cmdmap, "key", key);
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
-    r = g_conf->set_val(key, val, true, &ss);
+    r = g_conf->set_val(key, val, &ss);
     if (r == 0) {
       g_conf->apply_changes(nullptr);
     }

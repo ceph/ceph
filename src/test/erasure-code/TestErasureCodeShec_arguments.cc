@@ -401,7 +401,7 @@ int main(int argc, char **argv)
 
   const char* env = getenv("CEPH_LIB");
   std::string directory(env ? env : ".libs");
-  g_conf->set_val_or_die("erasure_code_dir", directory, false);
+  g_conf->set_val_or_die("erasure_code_dir", directory);
 
   ::testing::InitGoogleTest(&argc, argv);
 

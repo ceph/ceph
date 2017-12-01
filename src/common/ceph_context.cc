@@ -491,66 +491,14 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
         f->close_section();
       }
     } else if (command == "config diff") {
-      md_config_t def_conf;
-      def_conf.set_val("cluster", _conf->cluster);
-      def_conf.name = _conf->name;
-      def_conf.set_val("host", _conf->host);
-      def_conf.apply_changes(NULL);
-
-      map<string,pair<string,string> > diff;
-      set<string> unknown;
-      def_conf.diff(_conf, &diff, &unknown);
       f->open_object_section("diff");
-
-      f->open_object_section("current");
-      for (map<string,pair<string,string> >::iterator p = diff.begin();
-           p != diff.end(); ++p) {
-        f->dump_string(p->first.c_str(), p->second.second);
-      }
-      f->close_section(); // current
-      f->open_object_section("defaults");
-      for (map<string,pair<string,string> >::iterator p = diff.begin();
-           p != diff.end(); ++p) {
-        f->dump_string(p->first.c_str(), p->second.first);
-      }
-      f->close_section(); // defaults
-      f->close_section(); // diff
-
-      f->open_array_section("unknown");
-      for (set<string>::iterator p = unknown.begin();
-           p != unknown.end(); ++p) {
-        f->dump_string("option", *p);
-      }
+      _conf->diff(f);
       f->close_section(); // unknown
     } else if (command == "config diff get") {
       std::string setting;
-      if (!cmd_getval(this, cmdmap, "var", setting)) {
-        f->dump_string("error", "syntax error: 'config diff get <var>'");
-      } else {
-        md_config_t def_conf;
-        def_conf.set_val("cluster", _conf->cluster);
-        def_conf.name = _conf->name;
-        def_conf.set_val("host", _conf->host);
-        def_conf.apply_changes(NULL);
-
-        map<string, pair<string, string>> diff;
-        set<string> unknown;
-        def_conf.diff(_conf, &diff, &unknown, setting);
-        f->open_object_section("diff");
-        f->open_object_section("current");
-
-        for (const auto& p : diff) {
-          f->dump_string(p.first.c_str(), p.second.second);
-        } 
-        f->close_section();   //-- current
-
-        f->open_object_section("defaults");
-        for (const auto& p : diff) {
-          f->dump_string(p.first.c_str(), p.second.first);
-        } 
-        f->close_section();   //-- defaults
-        f->close_section();   //-- diff
-      } 
+      f->open_object_section("diff");
+      _conf->diff(f, setting);
+      f->close_section(); // unknown
     } else if (command == "log flush") {
       _log->flush();
     }

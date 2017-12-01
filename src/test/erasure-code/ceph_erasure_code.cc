@@ -91,7 +91,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
   g_ceph_context->_conf->apply_changes(NULL);
   const char* env = getenv("CEPH_LIB");
   string directory(env ? env : ".libs");
-  g_conf->set_val_or_die("erasure_code_dir", directory, false);
+  g_conf->set_val_or_die("erasure_code_dir", directory);
 
   if (vm.count("help")) {
     cout << desc << std::endl;
