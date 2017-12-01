@@ -433,35 +433,40 @@ class Module(MgrModule):
             "versions": mds_versions
         }
 
+    def _prime_log(self):
+        def load_buffer(buf, channel_name):
+            result = CommandResult("")
+            self.send_command(result, "mon", "", json.dumps({
+                "prefix": "log last",
+                "format": "json",
+                "channel": channel_name,
+                "num": LOG_BUFFER_SIZE
+                }), "")
+            r, outb, outs = result.wait()
+            if r != 0:
+                # Oh well.  We won't let this stop us though.
+                self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
+                    r, outs))
+            else:
+                try:
+                    lines = json.loads(outb)
+                except ValueError:
+                    self.log.error("Error decoding log history")
+                else:
+                    for l in lines:
+                        buf.appendleft(l)
+
+        load_buffer(self.log_buffer, "cluster")
+        load_buffer(self.audit_buffer, "audit")
+        self.log_primed = True
+
     def serve(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
 
         jinja_loader = jinja2.FileSystemLoader(current_dir)
         env = jinja2.Environment(loader=jinja_loader)
 
-        result = CommandResult("")
-        self.send_command(result, "mon", "", json.dumps({
-            "prefix":"log last",
-            "format": "json"
-            }), "")
-        r, outb, outs = result.wait()
-        if r != 0:
-            # Oh well.  We won't let this stop us though.
-            self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
-                r, outs))
-        else:
-            try:
-                lines = json.loads(outb)
-            except ValueError:
-                self.log.error("Error decoding log history")
-            else:
-                for l in lines:
-                    if l['channel'] == 'audit':
-                        self.audit_buffer.appendleft(l)
-                    else:
-                        self.log_buffer.appendleft(l)
-
-        self.log_primed = True
+        self._prime_log()
 
         class EndPoint(object):
             def _health_data(self):
