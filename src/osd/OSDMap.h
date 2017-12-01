@@ -667,6 +667,8 @@ public:
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
+  void get_flag_set(set<string> *flagset) const;
+
   static void calc_state_set(int state, set<string>& st);
 
   int get_state(int o) const {

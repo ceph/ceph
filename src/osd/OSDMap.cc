@@ -1224,6 +1224,15 @@ void OSDMap::get_out_osds(set<int32_t>& ls) const
   }
 }
 
+void OSDMap::get_flag_set(set<string> *flagset) const
+{
+  for (unsigned i = 0; i < sizeof(flags) * 8; ++i) {
+    if (flags & (1<<i)) {
+      flagset->insert(get_flag_string(flags & (1<<i)));
+    }
+  }
+}
+
 void OSDMap::calc_state_set(int state, set<string>& st)
 {
   unsigned t = state;
@@ -2752,6 +2761,14 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
   f->dump_string("flags", get_flag_string());
+  f->dump_unsigned("flags_num", flags);
+  f->open_array_section("flags_set");
+  set<string> flagset;
+  get_flag_set(&flagset);
+  for (auto p : flagset) {
+    f->dump_string("flag", p);
+  }
+  f->close_section();
   f->dump_unsigned("crush_version", get_crush_version());
   f->dump_float("full_ratio", full_ratio);
   f->dump_float("backfillfull_ratio", backfillfull_ratio);
