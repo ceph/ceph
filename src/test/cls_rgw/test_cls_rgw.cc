@@ -375,6 +375,70 @@ TEST(cls_rgw, index_suggest)
   test_stats(ioctx, bucket_oid, 0, num_objs / 2, total_size);
 }
 
+/*
+ * This case is used to test whether get_obj_vals will
+ * return all validate utf8 objnames and filter out those
+ * in BI_PREFIX_CHAR private namespace.
+ */
+TEST(cls_rgw, index_list)
+{
+  string bucket_oid = str_int("bucket", 4);
+
+  OpMgr mgr;
+
+  ObjectWriteOperation *op = mgr.write_op();
+  cls_rgw_bucket_init(*op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, op));
+
+  uint64_t epoch = 1;
+  uint64_t obj_size = 1024;
+  const int num_objs = 5;
+  const string keys[num_objs] = {
+    /* single byte utf8 character */
+    { static_cast<char>(0x41) },
+    /* double byte utf8 character */
+    { static_cast<char>(0xCF), static_cast<char>(0x8F) },
+    /* treble byte utf8 character */
+    { static_cast<char>(0xDF), static_cast<char>(0x8F), static_cast<char>(0x8F) },
+    /* quadruble byte utf8 character */
+    { static_cast<char>(0xF7), static_cast<char>(0x8F), static_cast<char>(0x8F), static_cast<char>(0x8F) },
+    /* BI_PREFIX_CHAR private namespace, for test only */
+    { static_cast<char>(0x80), static_cast<char>(0x41) }
+  };
+
+  for (int i = 0; i < num_objs; i++) {
+    string obj = keys[i];
+    string tag = str_int("tag", i);
+    string loc = str_int("loc", i);
+
+    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+
+    op = mgr.write_op();
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = 0;
+    meta.size = obj_size;
+    index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta);
+  }
+
+  test_stats(ioctx, bucket_oid, 0, num_objs, obj_size * num_objs);
+
+  map<int, string> oids = { {0, bucket_oid} };
+  map<int, struct rgw_cls_list_ret> list_results;
+  cls_rgw_obj_key start_key("", "");
+  int r = CLSRGWIssueBucketList(ioctx, start_key, "", 1000, true, oids, list_results, 1)();
+
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(1, list_results.size());
+
+  auto it = list_results.begin();
+  auto m = (it->second).dir.m;
+
+  ASSERT_EQ(4, m.size());
+  int i = 0;
+  for(auto it2 = m.begin(); it2 != m.end(); it2++, i++)
+    ASSERT_EQ(it2->first.compare(keys[i]), 0);
+}
+
 /* test garbage collection */
 static void create_obj(cls_rgw_obj& obj, int i, int j)
 {
