@@ -1483,7 +1483,7 @@ void ECBackend::submit_transaction(
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->roll_forward_to = MAX(roll_forward_to, committed_to);
+  op->roll_forward_to = std::max(roll_forward_to, committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
@@ -2272,7 +2272,7 @@ struct CallClientContexts :
       trimmed.substr_of(
 	bl,
 	read.get<0>() - adjusted.first,
-	MIN(read.get<1>(),
+	std::min(read.get<1>(),
 	    bl.length() - (read.get<0>() - adjusted.first)));
       result.insert(
 	read.get<0>(), trimmed.length(), std::move(trimmed));

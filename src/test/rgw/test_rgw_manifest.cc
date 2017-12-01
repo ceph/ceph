@@ -157,7 +157,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
     rgw_raw_obj test_raw = rgw_obj_select(*iter).get_raw_obj(env.zonegroup, env.zone_params);
     ASSERT_TRUE(obj == test_raw);
 
-    ofs = MIN(ofs + gen->cur_stripe_max_size(), obj_size);
+    ofs = std::min(ofs + gen->cur_stripe_max_size(), obj_size);
     gen->create_next(ofs);
 
   cout << "obj=" << obj << " *iter=" << *iter << std::endl;
@@ -174,7 +174,7 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   }
   ASSERT_TRUE(iter == test_objs->end());
   ASSERT_EQ(manifest->get_obj_size(), obj_size);
-  ASSERT_EQ(manifest->get_head_size(), MIN(obj_size, head_max_size));
+  ASSERT_EQ(manifest->get_head_size(), std::min(obj_size, head_max_size));
   ASSERT_EQ(manifest->has_tail(), (obj_size > head_max_size));
 }
 

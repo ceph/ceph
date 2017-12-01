@@ -776,7 +776,7 @@ int DataScan::scan_inodes()
                 + (i % guessed_layout.stripe_count)
                 * guessed_layout.stripe_unit + (osize - 1)
                 % guessed_layout.stripe_unit + 1;
-              incomplete_size = MAX(incomplete_size, upper_size);
+              incomplete_size = std::max(incomplete_size, upper_size);
             }
           } else if (r == -ENOENT) {
             // Absent object, treat as size 0 and ignore.

@@ -2293,7 +2293,7 @@ uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
   uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
   if (max_inc > 0) {
     max_inc *= pi->get_layout_size_increment();
-    new_max = MIN(new_max, size + max_inc);
+    new_max = std::min(new_max, size + max_inc);
   }
   return ROUND_UP_TO(new_max, pi->get_layout_size_increment());
 }
@@ -2323,7 +2323,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
 	client_writeable_range_t& oldr = latest->client_ranges[p->first];
 	if (ms > oldr.range.last)
 	  *max_increased = true;
-	nr.range.last = MAX(ms, oldr.range.last);
+	nr.range.last = std::max(ms, oldr.range.last);
 	nr.follows = oldr.follows;
       } else {
 	*max_increased = true;
@@ -2349,8 +2349,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   bool max_increased = false;
 
   if (update_size) {
-    new_size = size = MAX(size, new_size);
-    new_mtime = MAX(new_mtime, latest->mtime);
+    new_size = size = std::max(size, new_size);
+    new_mtime = std::max(new_mtime, latest->mtime);
     if (latest->size == new_size && latest->mtime == new_mtime)
       update_size = false;
   }

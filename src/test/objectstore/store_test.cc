@@ -62,7 +62,7 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
          << "expected 0x" << expected.length() << " != actual 0x"
          << actual.length() << std::dec << dendl;
   }
-  auto len = MIN(expected.length(), actual.length());
+  auto len = std::min(expected.length(), actual.length());
   while ( first<len && expected[first] == actual[first])
     ++first;
   unsigned last = len;
