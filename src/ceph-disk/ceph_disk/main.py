@@ -1258,7 +1258,8 @@ def get_fsid(cluster):
     :return: The fsid or raises Error.
     """
     fsid = get_conf_with_default(cluster=cluster, variable='fsid')
-    if fsid is None:
+    # uuids from boost always default to 'the empty uuid'
+    if fsid == '00000000-0000-0000-0000-000000000000':
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
 
