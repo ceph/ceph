@@ -122,8 +122,13 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
 
-  k = atoi(profile["k"].c_str());
-  m = atoi(profile["m"].c_str());
+  k = std::stoi(profile["k"].c_str());
+  m = std::stoi(profile["m"].c_str());
+
+  if ("lrc" == plugin)
+    l = std::stoi(profile["l"].c_str());
+  else
+    l = 0;
   
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
@@ -131,7 +136,11 @@ int ErasureCodeBench::setup(int argc, char** argv) {
   } else if ( m < 0 ) {
     cout << "parameter m is " << m << ". But m needs to be >= 0." << endl;
     return -EINVAL;
-  } 
+  } else if ((l != 0) && (k+m) % l) {
+    cout << "parameter l is " << l << ". But k+m needs to be multiple of l."
+      << endl;
+    return -EINVAL;
+  }
 
   verbose = vm.count("verbose") > 0 ? true : false;
 
@@ -163,7 +172,7 @@ int ErasureCodeBench::encode()
 
   if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
       (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
+       - (l > 0 ? ((k+m)/l) : l) != (unsigned int)m)) {
     cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
       << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
       << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
@@ -266,7 +275,7 @@ int ErasureCodeBench::decode()
   }
   if (erasure_code->get_data_chunk_count() != (unsigned int)k ||
       (erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count()
-       != (unsigned int)m)) {
+       - (l > 0 ? ((k+m)/l) : l) != (unsigned int)m)) {
     cout << "parameter k is " << k << "/m is " << m << ". But data chunk count is "
       << erasure_code->get_data_chunk_count() <<"/parity chunk count is "
       << erasure_code->get_chunk_count() - erasure_code->get_data_chunk_count() << endl;
