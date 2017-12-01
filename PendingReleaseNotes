@@ -57,3 +57,10 @@
 * The RBD C API's rbd_discard method now enforces a maximum length of
   2GB to match the C++ API's Image::discard method. This restriction
   prevents overflow of the result code.
+
+13.0.1
+------
+
+* The format of the 'config diff' output via the admin socket has changed.  It
+  now reflects the source of each config option (e.g., default, config file,
+  command line) as well as the final (active) value.
