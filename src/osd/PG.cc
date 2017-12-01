@@ -5542,37 +5542,9 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
 
   update_history(oinfo.history);
 
-  if (last_complete_ondisk.epoch >= info.history.last_epoch_started) {
-    // DEBUG: verify that the snaps are empty in snap_mapper
-    if (cct->_conf->osd_debug_verify_snaps_on_info) {
-      interval_set<snapid_t> p;
-      p.union_of(oinfo.purged_snaps, info.purged_snaps);
-      p.subtract(info.purged_snaps);
-      if (!p.empty()) {
-	for (interval_set<snapid_t>::iterator i = p.begin();
-	     i != p.end();
-	     ++i) {
-	  for (snapid_t snap = i.get_start();
-	       snap != i.get_len() + i.get_start();
-	       ++snap) {
-	    vector<hobject_t> hoids;
-	    int r = snap_mapper.get_next_objects_to_trim(snap, 1, &hoids);
-	    if (r != 0 && r != -ENOENT) {
-	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
-		   << cpp_strerror(r) << dendl;
-	      ceph_abort();
-	    } else if (r != -ENOENT) {
-	      assert(!hoids.empty());
-	      derr << __func__ << ": snap_mapper get_next_object_to_trim returned "
-		   << cpp_strerror(r) << " for object "
-		   << hoids[0] << " on snap " << snap
-		   << " which should have been fully trimmed " << dendl;
-	      ceph_abort();
-	    }
-	  }
-	}
-      }
-    }
+  if (!(info.purged_snaps == oinfo.purged_snaps)) {
+    dout(10) << __func__ << " updating purged_snaps to " << oinfo.purged_snaps
+	     << dendl;
     info.purged_snaps = oinfo.purged_snaps;
     dirty_info = true;
     dirty_big_info = true;
