@@ -22,7 +22,4 @@ plugin dir = lib
 erasure code dir = lib
 EOF
 
-# give vstart a (hopefully) unique mon port to start with
-echo $(( RANDOM % 1000 + 40000 )) > .ceph_port
-
 echo done.
