@@ -1859,11 +1859,25 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
     return r;
 
   string key = cct->_conf->get_val<string>("key");
-  lderr(cct) << "key " << key << dendl;
   if (key.size()) {
     r = store->write_meta("osd_key", key);
     if (r < 0)
       return r;
+  } else {
+    string keyfile = cct->_conf->get_val<string>("keyfile");
+    if (keyfile.size()) {
+      bufferlist keybl;
+      string err;
+      int r = keybl.read_file(keyfile.c_str(), &err);
+      if (r < 0) {
+	derr << __func__ << " failed to read keyfile " << keyfile << ": "
+	     << err << ": " << cpp_strerror(r) << dendl;
+	return r;
+      }
+      r = store->write_meta("osd_key", keybl.to_str());
+      if (r < 0)
+	return r;
+    }
   }
 
   r = store->write_meta("ready", "ready");
