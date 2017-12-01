@@ -805,9 +805,13 @@ if [ -n "$MON_ADDR" ]; then
 	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
-if [ -z "$CEPH_PORT" ]; then
-    CEPH_PORT=6789
-    [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
+if [ -z "$CEPH_PORT" ]
+then
+  while [ true ]
+  do
+    CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
+    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
+  done
 fi
 
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
