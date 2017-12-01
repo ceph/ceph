@@ -229,3 +229,10 @@ Here is a sample configuration with many of the options set and documented::
     # Settings for [nsupdate-web](https://github.com/zmc/nsupdate-web)
     # Used by the [libcloud](https://libcloud.apache.org/) backend
     nsupdate_url: http://nsupdate.front.sepia.ceph.com/update
+
+    # Settings for https://fogproject.org/
+    fog:
+      endpoint: http://fog.example.com/fog
+      api_token: your_api_token
+      user_token: your_user_token
+      machine_types: ['mira', 'smithi']

@@ -7,6 +7,7 @@ import re
 import yaml
 
 import teuthology
+import teuthology.parallel
 import teuthology.provision
 from teuthology import misc
 from teuthology.config import set_config_attr
@@ -144,21 +145,40 @@ def main(ctx):
         return 0
 
     elif ctx.lock:
-        if not util.vps_version_or_type_valid(ctx.machine_type, ctx.os_type,
-                                         ctx.os_version):
+        if not util.vps_version_or_type_valid(
+                ctx.machine_type, ctx.os_type, ctx.os_version):
             log.error('Invalid os-type or version detected -- lock failed')
             return 1
+        reimage_types = teuthology.provision.fog.get_types()
+        reimage_machines = list()
+        updatekeys_machines = list()
         for machine in machines:
-            if not ops.lock_one(machine, user, ctx.desc):
+            resp = ops.lock_one(machine, user, ctx.desc)
+            if resp.ok:
+                machine_status = resp.json()
+                machine_type = machine_status['machine_type']
+            if not resp.ok:
                 ret = 1
                 if not ctx.f:
                     return ret
+            elif not query.is_vm(machine, machine_status):
+                if machine_type in reimage_types:
+                    # Reimage in parallel just below here
+                    reimage_machines.append(machine)
+                # Update keys last
+                updatekeys_machines = list()
             else:
                 machines_to_update.append(machine)
                 teuthology.provision.create_if_vm(
                     ctx,
                     misc.canonicalize_hostname(machine),
                 )
+        with teuthology.parallel.parallel() as p:
+            for machine in reimage_machines:
+                p.spawn(teuthology.provision.reimage, ctx, machine)
+        for machine in updatekeys_machines:
+            keys.do_update_keys([machine])
+
     elif ctx.unlock:
         if ctx.owner is None and user is None:
             user = misc.get_user()

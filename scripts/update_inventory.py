@@ -3,6 +3,7 @@ import docopt
 import teuthology
 import teuthology.lock
 import teuthology.lock.ops
+import teuthology.misc
 import teuthology.orchestra.remote
 
 import logging
@@ -28,7 +29,7 @@ def main():
 
     remotes = args.get('REMOTE')
     for rem_name in remotes:
+        rem_name = teuthology.misc.canonicalize_hostname(rem_name)
         remote = teuthology.orchestra.remote.Remote(rem_name)
         inventory_info = remote.inventory_info
         teuthology.lock.ops.update_inventory(inventory_info)
-

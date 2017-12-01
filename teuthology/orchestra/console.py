@@ -194,14 +194,16 @@ class PhysicalConsole():
                 s=self.shortname, e=e))
             return False
 
-    def power_cycle(self):
+    def power_cycle(self, timeout=300):
         """
         Power cycle and wait for login.
+
+        :param timeout: How long to wait for login
         """
         log.info('Power cycling {s}'.format(s=self.shortname))
         child = self._pexpect_spawn_ipmi('power cycle')
         child.expect('Chassis Power Control: Cycle', timeout=self.timeout)
-        self._wait_for_login(timeout=300)
+        self._wait_for_login(timeout=timeout)
         log.info('Power cycle for {s} completed'.format(s=self.shortname))
 
     def hard_reset(self):
