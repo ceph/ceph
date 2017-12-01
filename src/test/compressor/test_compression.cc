@@ -384,7 +384,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
 TEST(CompressionPlugin, all)
 {
   const char* env = getenv("CEPH_LIB");
-  std::string directory(env ? env : ".libs");
+  std::string directory(env ? env : "lib");
   CompressorRef compressor;
   PluginRegistry *reg = g_ceph_context->get_plugin_registry();
   EXPECT_TRUE(reg);
