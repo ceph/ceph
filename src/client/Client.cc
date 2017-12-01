@@ -2989,10 +2989,15 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
     dn->dir = dir;
     dir->dentries[dn->name] = dn;
     lru.lru_insert_mid(dn);    // mid or top?
+    if (!in)
+      dir->num_null_dentries++;
 
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (new dn)" << dendl;
   } else {
+    assert(!dn->inode);
+    if (in)
+      dir->num_null_dentries--;
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
   }
@@ -3049,11 +3054,15 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   if (keepdentry) {
     dn->lease_mds = -1;
+    if (in)
+      dn->dir->num_null_dentries++;
   } else {
     ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
 
     // unlink from dir
     dn->dir->dentries.erase(dn->name);
+    if (!in)
+      dn->dir->num_null_dentries--;
     if (dn->dir->is_empty() && !keepdir)
       close_dir(dn->dir);
     dn->dir = 0;
@@ -4102,6 +4111,31 @@ void Client::_invalidate_kernel_dcache()
   }
 }
 
+void Client::_trim_negative_child_dentries(InodeRef& in)
+{
+  if (!in->is_dir())
+    return;
+
+  Dir* dir = in->dir;
+  if (dir && dir->dentries.size() == dir->num_null_dentries) {
+    for (auto p = dir->dentries.begin(); p != dir->dentries.end(); ) {
+      Dentry *dn = p->second;
+      ++p;
+      assert(!dn->inode);
+      if (dn->lru_is_expireable())
+	unlink(dn, true, false);  // keep dir, drop dentry
+    }
+    if (dir->dentries.empty()) {
+      close_dir(dir);
+    }
+  }
+
+  if (in->flags & I_SNAPDIR_OPEN) {
+    InodeRef snapdir = open_snapdir(in.get());
+    _trim_negative_child_dentries(snapdir);
+  }
+}
+
 void Client::trim_caps(MetaSession *s, uint64_t max)
 {
   mds_rank_t mds = s->mds_num;
@@ -4132,6 +4166,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
       }
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
+      _trim_negative_child_dentries(in);
       bool all = true;
       set<Dentry*>::iterator q = in->dn_set.begin();
       while (q != in->dn_set.end()) {
