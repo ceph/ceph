@@ -1514,7 +1514,11 @@ private:
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
     bool can_trim() {
-      return pg->is_clean() && !pg->scrubber.active && !pg->snap_trimq.empty();
+      return
+	pg->is_clean() &&
+	!pg->scrubber.active &&
+	!pg->snap_trimq.empty() &&
+	!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM);
     }
   } snap_trimmer_machine;
 

@@ -3056,6 +3056,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",nodeep-scrub";
   if (f & CEPH_OSDMAP_NOTIERAGENT)
     s += ",notieragent";
+  if (f & CEPH_OSDMAP_NOSNAPTRIM)
+    s += ",nosnaptrim";
   if (f & CEPH_OSDMAP_SORTBITWISE)
     s += ",sortbitwise";
   if (f & CEPH_OSDMAP_REQUIRE_JEWEL)
@@ -4712,6 +4714,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
       CEPH_OSDMAP_NOSCRUB |
       CEPH_OSDMAP_NODEEP_SCRUB |
       CEPH_OSDMAP_NOTIERAGENT |
+      CEPH_OSDMAP_NOSNAPTRIM |
       CEPH_OSDMAP_NOREBALANCE;
     if (test_flag(warn_flags)) {
       ostringstream ss;
