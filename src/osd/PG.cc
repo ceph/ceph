@@ -5028,7 +5028,7 @@ void PG::share_pg_info()
 	  get_osdmap()->get_epoch(),
 	  get_osdmap()->get_epoch(),
 	  info),
-	PastIntervals()));
+	past_intervals));
     osd->send_message_osd_cluster(peer.osd, m, get_osdmap()->get_epoch());
   }
 }
