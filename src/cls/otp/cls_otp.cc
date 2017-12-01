@@ -14,6 +14,8 @@
 
 #include <boost/range/adaptor/reversed.hpp>
 
+#include <liboath/oath.h>
+
 #include "include/types.h"
 #include "include/utime.h"
 #include "objclass/objclass.h"
@@ -58,7 +60,7 @@ struct otp_instance {
   otp_info_t otp;
 
   list<otp_check_t> last_checks; 
-  uint32_t last_success{0}; /* otp counter/step of last successful check */
+  uint64_t last_success{0}; /* otp counter/step of last successful check */
 
   otp_instance() {}
 
@@ -119,31 +121,34 @@ void otp_instance::check(const string& token, const string& val, bool *update)
 
 bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
 {
-#warning FIXME should be based on result from library
+  size_t slen = otp.seed.size() / 2 + 1;
+  char secret[slen];
+  uint64_t index;
   uint32_t secs = (uint32_t)ceph::real_clock::to_time_t(timestamp);
-  int step_size = (otp.step_size ? otp.step_size : 1);
-  int step_window = otp.window * step_size;
-
-  if ((uint32_t)step_window > secs / 2) {
-    step_window = secs / 2;
+  int result = oath_hex2bin(otp.seed.c_str(), secret, &slen);
+  if (result != OATH_OK) {
+    CLS_LOG(20, "failed to parse seed");
+    return result;
   }
 
-  for (int s = -step_window / 2; s <= step_window / 2; s += step_size) {
-    uint32_t index = (secs + s) / step_size;
-    if (index <= last_success) { /* already used value */
-      continue;
-    }
-
-#warning FIXME check here is temporary
-    char buf[otp.seed.size() + 16];
-    snprintf(buf, sizeof(buf), "%s:%d", otp.seed.c_str(), (int)index);
-    if (val == buf) {
-      last_success = index;
-      return true;
-    }
+  result = oath_totp_validate3(secret, slen,
+                                   secs, otp.step_size, 0, otp.window,
+                                   nullptr /* otp pos */, &index,
+                                   val.c_str());
+  if (result == OATH_INVALID_OTP ||
+      result < 0) {
+    CLS_LOG(20, "otp check failed, result=%d", result);
+    return false;
   }
 
-  return false;
+  if (index <= last_success) { /* already used value */
+    CLS_LOG(20, "otp, use of old token: index=%lld last_success=%lld", (long long)index, (long long)last_success);
+    return false;
+  }
+
+  last_success = index;
+
+  return true;
 }
 
 void otp_instance::find(const string& token, otp_check_t *result)
@@ -464,6 +469,8 @@ static int otp_get_result(cls_method_context_t hctx,
 CLS_INIT(otp)
 {
   CLS_LOG(20, "Loaded otp class!");
+
+  oath_init();
 
   cls_handle_t h_class;
   cls_method_handle_t h_set_otp_op;
