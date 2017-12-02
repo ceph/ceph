@@ -151,6 +151,12 @@ else
     alpine)
         # for now we need the testing repo for leveldb
         TESTREPO="http://nl.alpinelinux.org/alpine/edge/testing"
+        IS_VALID=$(wget --spider -nv --timeout 60 -t 1 ${url} 2>&1 | grep -c '200 OK')
+        if [ ${IS_VALID} -eq 1 ]
+        then
+          echo "Invalid url: ${TESTREPO}"
+          exit 1
+        fi
         if ! grep -qF "$TESTREPO" /etc/apk/repositories ; then
             $SUDO echo "$TESTREPO" | sudo tee -a /etc/apk/repositories > /dev/null
         fi
