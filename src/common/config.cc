@@ -22,18 +22,19 @@
 #include "osd/osd_types.h"
 #include "common/errno.h"
 #include "common/hostname.h"
+#include "common/dout.h"
 
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
  * initialization happens here.
  */
 #undef dout
-#undef ldout
 #undef pdout
 #undef derr
-#undef lderr
 #undef generic_dout
-#undef dendl
+
+// set set_mon_vals()
+#define dout_subsys ceph_subsys_monc
 
 using std::map;
 using std::list;
@@ -271,13 +272,45 @@ void md_config_t::set_val_default(const string& name, const std::string& val)
   assert(r >= 0);
 }
 
-void md_config_t::set_val_mon(const string& name, const std::string& val)
+int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
 {
   Mutex::Locker l(lock);
-  const Option *o = find_option(name);
-  assert(o);
-  string err;
-  set_val_impl(val, *o, CONF_MON, &err);
+  for (auto& i : kv) {
+    const Option *o = find_option(i.first);
+    if (!o) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second
+		    << " (unrecognized option)" << dendl;
+      continue;
+    }
+    if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      continue;
+    }
+    std::string err;
+    int r = _set_val(i.second, *o, CONF_MON, &err);
+    if (r < 0) {
+      lderr(cct) << __func__ << " failed to set " << i.first << " = "
+		 << i.second << ": " << err << dendl;
+    } else if (r == 0) {
+      ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
+		    << " (no change)" << dendl;
+    } else if (r == 1) {
+      ldout(cct,10) << __func__ << " " << i.first << " = " << i.second << dendl;
+    } else {
+      ceph_abort();
+    }
+  }
+  for (auto& i : values) {
+    auto j = i.second.find(CONF_MON);
+    if (j != i.second.end()) {
+      if (kv.find(i.first) == kv.end()) {
+	ldout(cct,10) << __func__ << " " << i.first
+		      << " cleared (was " << j->second << ")"
+		      << dendl;
+	_rm_val(i.first, CONF_MON);
+      }
+    }
+  }
+  return 0;
 }
 
 void md_config_t::add_observer(md_config_obs_t* observer_)
