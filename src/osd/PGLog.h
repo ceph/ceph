@@ -757,10 +757,9 @@ public:
 	log.complete_to = log.log.end();
 	info.last_complete = info.last_update;
       }
+      auto oldest_need = missing.get_oldest_need();
       while (log.complete_to != log.log.end()) {
-	if (missing.get_items().at(
-	      missing.get_rmissing().begin()->second
-	      ).need <= log.complete_to->version)
+	if (oldest_need <= log.complete_to->version)
 	  break;
 	if (info.last_complete < log.complete_to->version)
 	  info.last_complete = log.complete_to->version;
@@ -773,12 +772,12 @@ public:
 
   void reset_complete_to(pg_info_t *info) {
     log.complete_to = log.log.begin();
-    while (!missing.get_items().empty() && log.complete_to->version <
-	   missing.get_items().at(
-	     missing.get_rmissing().begin()->second
-	     ).need) {
-      assert(log.complete_to != log.log.end());
-      ++log.complete_to;
+    auto oldest_need = missing.get_oldest_need();
+    if (oldest_need != eversion_t()) {
+      while (log.complete_to->version < oldest_need) {
+        assert(log.complete_to != log.log.end());
+        ++log.complete_to;
+      }
     }
     assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {

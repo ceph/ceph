@@ -3835,6 +3835,14 @@ public:
       return false;
     return true;
   }
+  eversion_t get_oldest_need() const {
+    if (missing.empty()) {
+      return eversion_t();
+    }
+    auto it = missing.find(rmissing.begin()->second);
+    assert(it != missing.end());
+    return it->second.need;
+  }
 
   void claim(pg_missing_set& o) {
     static_assert(!TrackChanges, "Can't use claim with TrackChanges");
