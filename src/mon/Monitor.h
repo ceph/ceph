@@ -639,6 +639,10 @@ public:
     return (class HealthMonitor*) paxos_service[PAXOS_HEALTH];
   }
 
+  class ConfigMonitor *configmon() {
+    return (class ConfigMonitor*) paxos_service[PAXOS_CONFIG];
+  }
+
   friend class Paxos;
   friend class OSDMonitor;
   friend class MDSMonitor;
