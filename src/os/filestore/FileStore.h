@@ -439,7 +439,6 @@ public:
     FDRef *outfd,
     Index *index = nullptr);
 
-  void lfn_close(FDRef fd);
   int lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t& o, const ghobject_t& newoid) ;
   int lfn_unlink(const coll_t& cid, const ghobject_t& o, const SequencerPosition &spos,
 		 bool force_clear_omap=false);
