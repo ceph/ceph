@@ -7627,6 +7627,15 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     }
     delta_stats.num_bytes += oi.extents.size();
   }
+  
+  if (oi.has_manifest() && oi.manifest.is_chunked()) {
+    for (auto &p : oi.manifest.chunk_map) {
+      if ((p.first <= offset && p.first + p.second.length > offset) ||
+	  (p.first > offset && p.first <= offset + length)) {
+	p.second.flags = chunk_info_t::FLAG_DIRTY;
+      }
+    }
+  }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
 }
