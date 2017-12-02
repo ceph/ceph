@@ -13,8 +13,9 @@ using namespace rgw::asio;
 
 ClientIO::ClientIO(tcp::socket& socket,
                    parser_type& parser,
-                   beast::flat_buffer& buffer)
-  : socket(socket), parser(parser), buffer(buffer), txbuf(*this)
+                   beast::flat_buffer& buffer,
+                   boost::asio::yield_context yield)
+  : socket(socket), parser(parser), buffer(buffer), yield(yield), txbuf(*this)
 {
 }
 
@@ -85,7 +86,8 @@ int ClientIO::init_env(CephContext *cct)
 size_t ClientIO::write_data(const char* buf, size_t len)
 {
   boost::system::error_code ec;
-  auto bytes = boost::asio::write(socket, boost::asio::buffer(buf, len), ec);
+  auto bytes = boost::asio::async_write(socket, boost::asio::buffer(buf, len),
+                                        yield[ec]);
   if (ec) {
     derr << "write_data failed: " << ec.message() << dendl;
     throw rgw::io::Exception(ec.value(), std::system_category());
@@ -108,7 +110,7 @@ size_t ClientIO::read_data(char* buf, size_t max)
 
   while (body_remaining.size && !parser.is_done()) {
     boost::system::error_code ec;
-    beast::http::read_some(socket, buffer, parser, ec);
+    beast::http::async_read_some(socket, buffer, parser, yield[ec]);
     if (ec == beast::http::error::partial_message ||
         ec == beast::http::error::need_buffer) {
       break;
