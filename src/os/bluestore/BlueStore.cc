@@ -5700,12 +5700,6 @@ int BlueStore::_fsck(bool deep, bool repair)
         }
 	);
     }
-    r = bluefs->fsck();
-    if (r < 0) {
-      goto out_scan;
-    }
-    if (r > 0)
-      errors += r;
   }
 
   // get expected statfs; fill unaffected fields to be able to compare
