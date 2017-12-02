@@ -228,11 +228,13 @@ std::vector<Option> get_global_options() {
     Option("host", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("local hostname")
     .set_long_description("if blank, ceph assumes the short hostname (hostname -s)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("network"),
 
     Option("fsid", Option::TYPE_UUID, Option::LEVEL_BASIC)
     .set_description("cluster fsid (uuid)")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("service"),
 

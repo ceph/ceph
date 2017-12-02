@@ -143,8 +143,8 @@ public:
   /// Set a default value
   void set_val_default(const std::string& key, const std::string &val);
 
-  /// Set a value from mon
-  void set_val_mon(const std::string& key, const std::string &val);
+  /// Set a values from mon
+  int set_mon_vals(CephContext *cct, const map<std::string,std::string>& kv);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
