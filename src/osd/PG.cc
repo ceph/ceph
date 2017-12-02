@@ -7360,7 +7360,18 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
 	  lderr(pg->cct) << __func__ << " purged_snaps does not contain "
 			 << rm << ", only " << overlap << dendl;
 	  pg->info.purged_snaps.subtract(overlap);
-	  bad = true;
+	  // This can currently happen in the normal (if unlikely) course of
+	  // events.  Because adding snaps to purged_snaps does not increase
+	  // the pg version or add a pg log entry, we don't reliably propagate
+	  // purged_snaps additions to other OSDs.
+	  // One example:
+	  //  - purge S
+	  //  - primary and replicas update purged_snaps
+	  //  - no object updates
+	  //  - pg mapping changes, new primary on different node
+	  //  - new primary pg version == eversion_t(), so info is not
+	  //    propagated.
+     	  //bad = true;
 	} else {
 	  pg->info.purged_snaps.erase(k.first, k.second);
 	}
