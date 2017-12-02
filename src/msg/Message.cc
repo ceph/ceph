@@ -34,6 +34,7 @@
 #include "messages/MMonCommand.h"
 #include "messages/MMonCommandAck.h"
 #include "messages/MMonPaxos.h"
+#include "messages/MConfig.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MMonJoin.h"
@@ -360,6 +361,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_MON_PAXOS:
     m = new MMonPaxos;
+    break;
+  case MSG_CONFIG:
+    m = new MConfig;
     break;
 
   case MSG_MON_PROBE:
