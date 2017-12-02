@@ -27,6 +27,7 @@
 
 
 class MMonMap;
+class MConfig;
 class MMonGetVersionReply;
 struct MMonSubscribeAck;
 class MMonCommandAck;
@@ -177,6 +178,7 @@ private:
   bool ms_handle_refused(Connection *con) override { return false; }
 
   void handle_monmap(MMonMap *m);
+  void handle_config(MConfig *m);
 
   void handle_auth(MAuthReply *m);
 
