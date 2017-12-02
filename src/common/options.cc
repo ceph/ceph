@@ -1208,7 +1208,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_reweight_max_osds", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("max osds to change per reweight-by-* command"),
 
     Option("mon_reweight_max_change", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.05)
