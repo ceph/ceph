@@ -543,6 +543,7 @@ rocksdb::Status BlueRocksEnv::UnlockFile(rocksdb::FileLock* lock)
   if (r < 0)
     return err_to_status(r);
   delete lock;
+  lock = nullptr;
   return rocksdb::Status::OK();
 }
 
