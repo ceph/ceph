@@ -36,19 +36,22 @@ template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
+  boost::asio::yield_context yield;
   boost::beast::flat_buffer& buffer;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
+           boost::asio::yield_context yield,
            boost::beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        cct(cct), stream(stream), buffer(buffer)
+        cct(cct), stream(stream), yield(yield), buffer(buffer)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
-    auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    auto bytes = boost::asio::async_write(stream, boost::asio::buffer(buf, len),
+                                          yield[ec]);
     if (ec) {
       ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       throw rgw::io::Exception(ec.value(), std::system_category());
@@ -64,7 +67,7 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
-      http::read_some(stream, buffer, parser, ec);
+      http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == http::error::partial_message ||
           ec == http::error::need_buffer) {
         break;
@@ -142,7 +145,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
-      StreamIO real_client{cct, stream, parser, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
                            socket.local_endpoint(),
                            socket.remote_endpoint()};
 
