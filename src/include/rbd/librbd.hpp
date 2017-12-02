@@ -208,8 +208,8 @@ public:
 
 private:
   /* We don't allow assignment or copying */
-  RBD(const RBD& rhs);
-  const RBD& operator=(const RBD& rhs);
+  RBD(const RBD& rhs) = delete;
+  const RBD& operator=(const RBD& rhs) = delete;
 };
 
 class CEPH_RBD_API ImageOptions {
