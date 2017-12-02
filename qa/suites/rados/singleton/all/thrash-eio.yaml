@@ -30,6 +30,7 @@ tasks:
     - \(SLOW_OPS\)
     - \(PG_
     - \(OSD_
+    - \(OBJECT_
 - thrashosds:
     op_delay: 30
     clean_interval: 120
