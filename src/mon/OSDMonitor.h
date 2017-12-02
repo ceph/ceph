@@ -450,6 +450,11 @@ protected:
   // the epoch when the pg mapping was calculated
   epoch_t creating_pgs_epoch = 0;
   creating_pgs_t creating_pgs;
+
+  uint64_t get_creating_pgs_size(pg_t pgid) {
+    return creating_pgs.pgs.count(pgid);
+  }
+
   mutable std::mutex creating_pgs_lock;
 
   creating_pgs_t update_pending_pgs(const OSDMap::Incremental& inc);

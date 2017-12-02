@@ -831,8 +831,7 @@ void OSDMonitor::prime_pg_temp(
   const OSDMap& next,
   pg_t pgid)
 {
-  // TODO: remove this creating_pgs direct access?
-  if (creating_pgs.pgs.count(pgid)) {
+  if (get_creating_pgs_size(pgid)) {
     return;
   }
   if (!osdmap.pg_exists(pgid)) {
