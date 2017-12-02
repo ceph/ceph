@@ -162,6 +162,9 @@ public:
     return set_val(key, s.c_str(), err_ss);
   }
 
+  /// clear override value
+  int rm_val(const std::string& key);
+
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
@@ -220,6 +223,10 @@ private:
 			   std::ostream *err=0) const;
   const Option::value_t& _get_val_default(const Option& o) const;
 
+  int _rm_val(const std::string& key, int level);
+
+  void _refresh(const Option& opt);
+
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -233,7 +240,7 @@ private:
   int parse_injectargs(std::vector<const char*>& args,
 		      std::ostream *oss);
 
-  int set_val_impl(
+  int _set_val(
     const std::string &val,
     const Option &opt,
     int level,  // CONF_*

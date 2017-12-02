@@ -267,7 +267,8 @@ void md_config_t::set_val_default(const string& name, const std::string& val)
   const Option *o = find_option(name);
   assert(o);
   string err;
-  set_val_impl(val, *o, CONF_DEFAULT, &err);
+  int r = _set_val(val, *o, CONF_DEFAULT, &err);
+  assert(r >= 0);
 }
 
 void md_config_t::set_val_mon(const string& name, const std::string& val)
@@ -392,8 +393,8 @@ int md_config_t::parse_config_files(const char *conf_files_str,
     int ret = _get_val_from_conf_file(my_sections, opt.name, val);
     if (ret == 0) {
       std::string error_message;
-      int r = set_val_impl(val, opt, CONF_CONFFILE, &error_message);
-      if (warnings != nullptr && (r != 0 || !error_message.empty())) {
+      int r = _set_val(val, opt, CONF_CONFFILE, &error_message);
+      if (warnings != nullptr && (r < 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
         if (!error_message.empty()) {
@@ -607,9 +608,9 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  ret = set_val_impl("false", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("false", opt, CONF_OVERRIDE, &error_message);
 	else if (res == 1)
-	  ret = set_val_impl("true", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("true", opt, CONF_OVERRIDE, &error_message);
 	else
 	  ret = res;
 	break;
@@ -617,7 +618,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	std::string no("--no-");
 	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  ret = set_val_impl("false", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("false", opt, CONF_OVERRIDE, &error_message);
 	  break;
 	}
       }
@@ -633,13 +634,13 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	*oss << "You cannot change " << opt.name << " using injectargs.\n";
         return -ENOSYS;
       }
-      ret = set_val_impl(val, opt, CONF_OVERRIDE, &error_message);
+      ret = _set_val(val, opt, CONF_OVERRIDE, &error_message);
       break;
     }
     ++o;
   }
 
-  if (ret != 0 || !error_message.empty()) {
+  if (ret < 0 || !error_message.empty()) {
     assert(!option_name.empty());
     if (oss) {
       *oss << "Parse error setting " << option_name << " to '"
@@ -662,7 +663,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
     // ignore
     ++i;
   }
-  return ret;
+  return ret >= 0 ? 0 : ret;
 }
 
 int md_config_t::parse_injectargs(std::vector<const char*>& args,
@@ -839,9 +840,10 @@ int md_config_t::set_val(const std::string &key, const char *val,
     }
 
     std::string error_message;
-    int r = set_val_impl(v, opt, CONF_OVERRIDE, &error_message);
-    if (r == 0) {
+    int r = _set_val(v, opt, CONF_OVERRIDE, &error_message);
+    if (r >= 0) {
       if (err_ss) *err_ss << "Set " << opt.name << " to " << v;
+      r = 0;
     } else {
       if (err_ss) *err_ss << error_message;
     }
@@ -852,6 +854,11 @@ int md_config_t::set_val(const std::string &key, const char *val,
   return -ENOENT;
 }
 
+int md_config_t::rm_val(const std::string& key)
+{
+  Mutex::Locker l(lock);
+  return _rm_val(key, CONF_OVERRIDE);
+}
 
 int md_config_t::get_val(const std::string &key, char **buf, int len) const
 {
@@ -1170,7 +1177,7 @@ int md_config_t::_get_val_from_conf_file(
   return -ENOENT;
 }
 
-int md_config_t::set_val_impl(
+int md_config_t::_set_val(
   const std::string &raw_val,
   const Option &opt,
   int level,
@@ -1185,8 +1192,32 @@ int md_config_t::set_val_impl(
   }
 
   // Apply the value to its entry in the `values` map
-  values[opt.name][level] = new_value;
+  auto p = values.find(opt.name);
+  if (p != values.end()) {
+    auto q = p->second.find(level);
+    if (q != p->second.end()) {
+      if (new_value == q->second) {
+	// no change!
+	return 0;
+      }
+      q->second = new_value;
+    } else {
+      p->second[level] = new_value;
+    }
+    if (p->second.rbegin()->first > level) {
+      // there was a higher priority value; no effect
+      return 0;
+    }
+  } else {
+    values[opt.name][level] = new_value;
+  }
 
+  _refresh(opt);
+  return 1;
+}
+
+void md_config_t::_refresh(const Option& opt)
+{
   // Apply the value to its legacy field, if it has one
   auto legacy_ptr_iter = legacy_values.find(std::string(opt.name));
   if (legacy_ptr_iter != legacy_values.end()) {
@@ -1210,7 +1241,23 @@ int md_config_t::set_val_impl(
     // normal option, advertise the change.
     changed.insert(opt.name);
   }
+}
 
+int md_config_t::_rm_val(const std::string& key, int level)
+{
+  auto i = values.find(key);
+  if (i == values.end()) {
+    return -ENOENT;
+  }
+  auto j = i->second.find(level);
+  if (j == i->second.end()) {
+    return -ENOENT;
+  }
+  bool matters = (j->first == i->second.rbegin()->first);
+  i->second.erase(j);
+  if (matters) {
+    _refresh(*find_option(key));
+  }
   return 0;
 }
 
