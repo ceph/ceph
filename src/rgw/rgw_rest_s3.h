@@ -911,17 +911,15 @@ public:
                              rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
                              const rgw::auth::RemoteApplier::AuthInfo info
                             ) const override {
-    return aplptr_t(
-      new rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                                   cct->_conf->rgw_keystone_implicit_tenants));
+    return ceph::make_static<RemoteApplier>(cct, store, std::move(acl_alg), info,
+                                            cct->_conf->rgw_keystone_implicit_tenants);
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser) const override {
-      return aplptr_t(
-        new rgw::auth::LocalApplier(cct, user_info, subuser));
+      return ceph::make_static<LocalApplier>(cct, user_info, subuser);
   }
 };
 

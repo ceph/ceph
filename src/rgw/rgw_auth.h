@@ -77,7 +77,7 @@ inline std::ostream& operator<<(std::ostream& out,
 }
 
 
-std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
+IdentityPtr transform_old_authinfo(const req_state* const s);
 
 
 /* Interface for classes applying changes to request state/RADOS store
@@ -91,7 +91,7 @@ std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
  * policy (ACLs, account's ownership and entitlement). */
 class IdentityApplier : public Identity {
 public:
-  typedef std::unique_ptr<IdentityApplier> aplptr_t;
+  using aplptr_t = ceph::static_ptr<IdentityApplier, MaxIdentitySize>;
 
   virtual ~IdentityApplier() {};
 

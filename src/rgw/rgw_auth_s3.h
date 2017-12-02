@@ -47,8 +47,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
                                cct->_conf->rgw_keystone_implicit_tenants));
-    /* TODO(rzarzynski): replace with static_ptr. */
-    return aplptr_t(new decltype(apl)(std::move(apl)));
+    return ceph::make_static<decltype(apl)>(std::move(apl));
   }
 
 public:
@@ -105,8 +104,7 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
                             const std::string& subuser) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::LocalApplier(cct, user_info, subuser));
-    /* TODO(rzarzynski): replace with static_ptr. */
-    return aplptr_t(new decltype(apl)(std::move(apl)));
+    return ceph::make_static<decltype(apl)>(std::move(apl));
   }
 
 public:

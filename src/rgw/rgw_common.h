@@ -22,6 +22,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
+#include "common/static_ptr.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -1435,6 +1436,11 @@ class RGWEnv;
 /* Namespaced forward declarations. */
 namespace rgw {
   namespace auth {
+    class Identity;
+    // size of static storage needed to fit any derived Identity
+    static constexpr size_t MaxIdentitySize = 704;
+    using IdentityPtr = ceph::static_ptr<Identity, MaxIdentitySize>;
+
     namespace s3 {
       class AWSBrowserUploadAbstractor;
     }
@@ -1816,13 +1822,11 @@ struct req_state {
   RGWUserInfo *user;
 
   struct {
-    /* TODO(rzarzynski): switch out to the static_ptr for both members. */
-
     /* Object having the knowledge about an authenticated identity and allowing
      * to apply it during the authorization phase (verify_permission() methods
      * of a given RGWOp). Thus, it bounds authentication and authorization steps
      * through a well-defined interface. For more details, see rgw_auth.h. */
-    std::unique_ptr<rgw::auth::Identity> identity;
+    rgw::auth::IdentityPtr identity;
 
     std::shared_ptr<rgw::auth::Completer> completer;
 
