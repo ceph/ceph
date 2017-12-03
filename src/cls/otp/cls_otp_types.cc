@@ -28,7 +28,7 @@ void otp_info_t::dump(Formatter *f) const
   encode_json("type", (int)type, f);
   encode_json("id", id, f);
   encode_json("seed", seed, f);
-  encode_json("time_ofs", utime_t(time_ofs), f);
+  encode_json("time_ofs", time_ofs, f);
   encode_json("step_size", step_size, f);
   encode_json("window", window, f);
 }
@@ -40,9 +40,7 @@ void otp_info_t::decode_json(JSONObj *obj)
   type = (OTPType)t;
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("seed", seed, obj);
-  utime_t to;
-  JSONDecoder::decode_json("time_ofs", to, obj);
-  time_ofs = to.to_real_time();
+  JSONDecoder::decode_json("time_ofs", time_ofs, obj);
   JSONDecoder::decode_json("step_size", step_size, obj);
   JSONDecoder::decode_json("window", window, obj);
 }

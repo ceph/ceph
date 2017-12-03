@@ -8,6 +8,8 @@
 
 #include <boost/optional.hpp>
 
+#include <liboath/oath.h>
+
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
@@ -508,6 +510,7 @@ enum {
   OPT_MFA_GET,
   OPT_MFA_LIST,
   OPT_MFA_CHECK,
+  OPT_MFA_RESYNC,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -974,6 +977,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_MFA_LIST;
     if (strcmp(cmd, "check") == 0)
       return OPT_MFA_CHECK;
+    if (strcmp(cmd, "resync") == 0)
+      return OPT_MFA_RESYNC;
   }
 
   return -EINVAL;
@@ -2395,6 +2400,60 @@ int create_new_bucket_instance(RGWRados *store,
   return 0;
 }
 
+static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::otp_info_t& totp, vector<string>& pins,
+                     time_t *pofs)
+{
+#define MAX_TOTP_SKEW_HOURS (24 * 7)
+  assert(pins.size() == 2);
+
+  size_t slen = totp.seed.size() / 2 + 1;
+  char seed[slen];
+  int rc = oath_hex2bin(totp.seed.c_str(), seed, &slen);
+  if (rc != OATH_OK) {
+    cerr << "ERROR: failed to parse seed" << std::endl;
+    return -EINVAL;
+  }
+
+  time_t start_time = ceph::real_clock::to_time_t(now);
+  time_t time_ofs = 0, time_ofs_abs = 0;
+  time_t step_size = totp.step_size;
+  if (step_size == 0) {
+    step_size = OATH_TOTP_DEFAULT_TIME_STEP_SIZE;
+  }
+  uint32_t count = 0;
+  int sign = 1;
+
+  uint32_t max_skew = MAX_TOTP_SKEW_HOURS * 3600;
+
+  while (time_ofs_abs < max_skew) {
+    rc = oath_totp_validate2(seed, slen,
+                             start_time, 
+                             step_size,
+                             time_ofs,
+                             1,
+                             nullptr,
+                             pins[0].c_str());
+    if (rc != OATH_INVALID_OTP) {
+      rc = oath_totp_validate2(seed, slen,
+                               start_time, 
+                               step_size,
+                               time_ofs - step_size, /* smaller time_ofs moves time forward */
+                               1,
+                               nullptr,
+                               pins[1].c_str());
+      if (rc != OATH_INVALID_OTP) {
+        *pofs = time_ofs - step_size + step_size * totp.window / 2;
+        ldout(cct, 20) << "found at time=" << start_time - time_ofs << " time_ofs=" << time_ofs << dendl;
+        return 0;
+      }
+    }
+    sign = -sign;
+    time_ofs_abs = (++count) * step_size;
+    time_ofs = sign * time_ofs_abs;
+  }
+
+  return -ENOENT;
+}
 
 #ifdef BUILDING_FOR_EMBEDDED
 extern "C" int cephd_rgw_admin(int argc, const char **argv)
@@ -2566,7 +2625,7 @@ int main(int argc, const char **argv)
 
   string totp_serial;
   string totp_seed;
-  string totp_pin;
+  vector<string> totp_pin;
   int totp_seconds = 0;
   int totp_window = 0;
 
@@ -2894,7 +2953,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
-      totp_pin = val;
+      totp_pin.push_back(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed", (char*)NULL)) {
       totp_seed = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seconds", (char*)NULL)) {
@@ -3054,6 +3113,7 @@ int main(int argc, const char **argv)
   rgw_bucket_init(store->meta_mgr);
   rgw_otp_init(store);
 
+
   struct rgw_curl_setup {
     rgw_curl_setup() {
       rgw::curl::setup_curl(boost::none);
@@ -3062,6 +3122,8 @@ int main(int argc, const char **argv)
       rgw::curl::cleanup_curl();
     }
   } curl_cleanup;
+
+  oath_init();
 
   StoreDestructor store_destructor(store);
 
@@ -7446,13 +7508,71 @@ next:
     }
 
     list<rados::cls::otp::otp_info_t> result;
-    int ret = store->check_mfa(user_id, totp_serial, totp_pin);
+    int ret = store->check_mfa(user_id, totp_serial, totp_pin.front());
     if (ret < 0) {
       cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     cout << "ok" << std::endl;
+  }
+
+ if (opt_cmd == OPT_MFA_RESYNC) {
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_serial.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-serial)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_pin.size() != 2) {
+      cerr << "ERROR: missing two --totp-pin params (--totp-pin=<first> --totp-pin=<second>)" << std::endl;
+    }
+
+    rados::cls::otp::otp_info_t config;
+    int ret = store->get_mfa(user_id, totp_serial, &config);
+    if (ret < 0) {
+      if (ret == -ENOENT || ret == -ENODATA) {
+        cerr << "MFA serial id not found" << std::endl;
+      } else {
+        cerr << "MFA retrieval failed, error: " << cpp_strerror(-ret) << std::endl;
+      }
+      return -ret;
+    }
+
+    ceph::real_time now = real_clock::now(); // need to get it from the osd
+
+    time_t time_ofs;
+
+    ret = scan_totp(store->ctx(), now, config, totp_pin, &time_ofs);
+    if (ret < 0) {
+      if (ret == -ENOENT) {
+        cerr << "failed to resync, TOTP values not found in range" << std::endl;
+      } else {
+        cerr << "ERROR: failed to scan for TOTP values: " << cpp_strerror(-ret) << std::endl;
+      }
+      return -ret;
+    }
+
+    config.time_ofs = time_ofs;
+
+    /* now update the backend */
+    real_time mtime = real_clock::now();
+    string oid = store->get_mfa_oid(user_id);
+
+    ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
+                                  MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
+                                  [&] {
+      return store->create_mfa(user_id, config, &objv_tracker, mtime);
+    });
+    if (ret < 0) {
+      cerr << "MFA update failed, error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
   }
 
   return 0;

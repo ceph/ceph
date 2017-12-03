@@ -132,7 +132,7 @@ bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
   }
 
   result = oath_totp_validate3(secret, slen,
-                                   secs, otp.step_size, 0, otp.window,
+                                   secs, otp.step_size, otp.time_ofs, otp.window,
                                    nullptr /* otp pos */, &index,
                                    val.c_str());
   if (result == OATH_INVALID_OTP ||
