@@ -3730,6 +3730,7 @@ public:
                  RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime);
   int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result);
   int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result);
+  int otp_get_current_time(const rgw_user& user, ceph::real_time *result);
 
   /* mfa interfaces used by metadata engine */
   int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries, bool reset_obj,

@@ -7543,8 +7543,13 @@ next:
       return -ret;
     }
 
-    ceph::real_time now = real_clock::now(); // need to get it from the osd
+    ceph::real_time now;
 
+    ret = store->otp_get_current_time(user_id, &now);
+    if (ret < 0) {
+      cerr << "ERROR: failed to fetch current time from osd: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
     time_t time_ofs;
 
     ret = scan_totp(store->ctx(), now, config, totp_pin, &time_ofs);

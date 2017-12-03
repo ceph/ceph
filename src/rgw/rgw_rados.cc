@@ -14296,6 +14296,23 @@ int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *
   return 0;
 }
 
+int RGWRados::otp_get_current_time(const rgw_user& user, ceph::real_time *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get_current_time(ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 int RGWRados::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
                       bool reset_obj, RGWObjVersionTracker *objv_tracker,
                       const real_time& mtime)
