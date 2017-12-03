@@ -1676,9 +1676,9 @@ create_image()
                         features |= (RBD_FEATURE_EXCLUSIVE_LOCK |
                                      RBD_FEATURE_JOURNALING);
                 }
-		r = rbd_create2(ioctx, iname, 0, features, &order);
+		r = rbd_create2(ioctx, iname, file_size, features, &order);
 	} else {
-		r = rbd_create(ioctx, iname, 0, &order);
+		r = rbd_create(ioctx, iname, file_size, &order);
 	}
 	if (r < 0) {
 		simple_err("Error creating image", r);
@@ -2882,8 +2882,7 @@ main(int argc, char **argv)
 			break;
 #endif
 		case 'L':
-			prt("lite mode not supported for rbd\n");
-			exit(1);
+			lite = 1;
 			break;
 		case 'N':
 			numops = getnum(optarg, &endp);
@@ -2961,6 +2960,10 @@ main(int argc, char **argv)
 	signal(SIGUSR2,	cleanup);
 
 	random_generator.seed(seed);
+
+	if (lite) {
+		file_size = maxfilelen;
+	}
 
 	ret = create_image();
 	if (ret < 0) {
