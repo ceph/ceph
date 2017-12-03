@@ -466,6 +466,26 @@ static int otp_get_result(cls_method_context_t hctx,
   return 0;
 }
 
+static int otp_get_current_time_op(cls_method_context_t hctx,
+                        bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+  cls_otp_get_current_time_op op;
+  try {
+    auto iter = in->begin();
+    ::decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_otp_get_current_time_reply reply;
+  reply.time = real_clock::now();
+  ::encode(reply, *out);
+
+  return 0;
+}
+
 CLS_INIT(otp)
 {
   CLS_LOG(20, "Loaded otp class!");
@@ -488,6 +508,7 @@ CLS_INIT(otp)
                                         * to authenticate.
                                         */
   cls_method_handle_t h_remove_otp_op;
+  cls_method_handle_t h_get_current_time_op;
 
   cls_register("otp", &h_class);
   cls_register_cxx_method(h_class, "otp_set",
@@ -505,6 +526,9 @@ CLS_INIT(otp)
   cls_register_cxx_method(h_class, "otp_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           otp_remove_op, &h_remove_otp_op);
+  cls_register_cxx_method(h_class, "get_current_time",
+                          CLS_METHOD_RD,
+                          otp_get_current_time_op, &h_get_current_time_op);
 
   return;
 }
