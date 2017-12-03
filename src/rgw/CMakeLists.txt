@@ -155,7 +155,8 @@ target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_clie
   cls_replica_log_client cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
+  ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
+  oath)
 
 if (WITH_RADOSGW_BEAST_FRONTEND)
   target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
