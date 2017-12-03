@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <string>
 
 #include <boost/optional.hpp>
@@ -2839,6 +2840,26 @@ int main(int argc, const char **argv)
     ceph_abort();
   }
   else {
+    std::fstream conf("/etc/ceph/ceph.conf");
+    if (!conf.good()) {
+      int i = 0;
+      bool found = false;
+      while (i < argc-1) {
+        if (strcmp(argv[i+1], "-c") == 0 || strcmp(argv[i+1], "--conf") == 0) {
+          found = true;
+          break;
+        } else {
+          ++i;
+        }
+      }
+      if (!found) {
+        std::cerr << "ERROR: Failed to find ceph.conf\n"
+                  << "If you use customized name or save conf file in "
+                  << "different location, it must be specified following "
+                  << "-c or --conf" << std::endl;
+        return EINVAL;
+      }
+    }
     const char *prev_cmd = NULL;
     const char *prev_prev_cmd = NULL;
     std::vector<const char*>::iterator i ;
