@@ -46,7 +46,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                               cct->_conf->rgw_keystone_implicit_tenants));
+                               cct->_conf->get_val<bool>("rgw_keystone_implicit_tenants")));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -59,8 +59,8 @@ public:
       ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
-    if (cct->_conf->rgw_s3_auth_use_keystone &&
-        ! cct->_conf->rgw_keystone_url.empty()) {
+    if (cct->_conf->get_val<bool>("rgw_s3_auth_use_keystone") &&
+        ! cct->_conf->get_val<std::string>("rgw_keystone_url").empty()) {
 
       keystone_engine.emplace(cct, ver_abstractor,
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
@@ -70,8 +70,8 @@ public:
 
     }
 
-    if (cct->_conf->rgw_s3_auth_use_ldap &&
-        ! cct->_conf->rgw_ldap_uri.empty()) {
+    if (cct->_conf->get_val<bool>("rgw_s3_auth_use_ldap") &&
+        ! cct->_conf->get_val<std::string>("rgw_ldap_uri").empty()) {
       add_engine(Control::SUFFICIENT, ldap_engine);
     }
   }
@@ -135,7 +135,7 @@ public:
     }
 
     /* The local auth. */
-    if (cct->_conf->rgw_s3_auth_use_rados) {
+    if (cct->_conf->get_val<bool>("rgw_s3_auth_use_rados")) {
       add_engine(local_engine_mode, local_engine);
     }
   }

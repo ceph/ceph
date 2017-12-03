@@ -16,7 +16,7 @@
 std::string parse_rgw_ldap_bindpw(CephContext* ctx)
 {
   string ldap_bindpw;
-  string ldap_secret = ctx->_conf->rgw_ldap_secret;
+  string ldap_secret = ctx->_conf->get_val<std::string>("rgw_ldap_secret");
 
   if (ldap_secret.empty()) {
     ldout(ctx, 10)

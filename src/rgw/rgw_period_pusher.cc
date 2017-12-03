@@ -33,8 +33,8 @@ class PushAndRetryCR : public RGWCoroutine {
                  RGWHTTPManager* http, RGWPeriod& period)
     : RGWCoroutine(cct), zone(zone), conn(conn), http(http), period(period),
       epoch(std::to_string(period.get_epoch())),
-      timeout(cct->_conf->rgw_period_push_interval),
-      timeout_max(cct->_conf->rgw_period_push_interval_max),
+      timeout(cct->_conf->get_val<double>("rgw_period_push_interval")),
+      timeout_max(cct->_conf->get_val<double>("rgw_period_push_interval_max")),
       counter(0)
   {}
 

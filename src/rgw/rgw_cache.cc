@@ -219,7 +219,7 @@ void ObjectCache::remove(string& name)
 
 void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter)
 {
-  while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
+  while (lru_size > (size_t)cct->_conf->get_val<int64_t>("rgw_cache_lru_size")) {
     list<string>::iterator iter = lru.begin();
     if ((*iter).compare(name) == 0) {
       /*

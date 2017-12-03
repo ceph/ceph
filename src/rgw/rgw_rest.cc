@@ -235,7 +235,7 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
   }
 
   list<string> extended_http_attrs;
-  get_str_list(cct->_conf->rgw_extended_http_attrs, extended_http_attrs);
+  get_str_list(cct->_conf->get_val<std::string>("rgw_extended_http_attrs"), extended_http_attrs);
 
   list<string>::iterator iter;
   for (iter = extended_http_attrs.begin(); iter != extended_http_attrs.end(); ++iter) {
@@ -254,7 +254,7 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
     http_status_names[h->code] = h->name;
   }
 
-  hostnames_set.insert(cct->_conf->rgw_dns_name);
+  hostnames_set.insert(cct->_conf->get_val<std::string>("rgw_dns_name"));
   hostnames_set.insert(zone_group.hostnames.begin(), zone_group.hostnames.end());
   hostnames_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW hostnames: " << hostnames_set << dendl;
@@ -268,7 +268,7 @@ void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group)
    * X.B.A ambigously splits to both {X, B.A} and {X.B, A}
    */
 
-  hostnames_s3website_set.insert(cct->_conf->rgw_dns_s3website_name);
+  hostnames_s3website_set.insert(cct->_conf->get_val<std::string>("rgw_dns_s3website_name"));
   hostnames_s3website_set.insert(zone_group.hostnames_s3website.begin(), zone_group.hostnames_s3website.end());
   hostnames_s3website_set.erase(""); // filter out empty hostnames
   ldout(cct, 20) << "RGW S3website hostnames: " << hostnames_s3website_set << dendl;
@@ -482,7 +482,7 @@ void dump_etag(struct req_state* const s,
 
 void dump_bucket_from_state(struct req_state *s)
 {
-  if (g_conf->rgw_expose_bucket && ! s->bucket_name.empty()) {
+  if (g_conf->get_val<bool>("rgw_expose_bucket") && ! s->bucket_name.empty()) {
     if (! s->bucket_tenant.empty()) {
       dump_header(s, "Bucket",
                   url_encode(s->bucket_tenant + "/" + s->bucket_name));
@@ -899,7 +899,7 @@ int RGWGetObj_ObjStore::get_params()
 
   /* start gettorrent */
   bool is_torrent = s->info.args.exists(GET_TORRENT);
-  bool torrent_flag = s->cct->_conf->rgw_torrent_flag;
+  bool torrent_flag = s->cct->_conf->get_val<bool>("rgw_torrent_flag");
   if (torrent_flag && is_torrent)
   {
     int ret = 0;
@@ -1111,7 +1111,7 @@ int RGWPutObj_ObjStore::verify_params()
 {
   if (s->length) {
     off_t len = atoll(s->length);
-    if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
+    if (len > (off_t)(s->cct->_conf->get_val<uint64_t>("rgw_max_put_size"))) {
       return -ERR_TOO_LARGE;
     }
   }
@@ -1122,7 +1122,7 @@ int RGWPutObj_ObjStore::verify_params()
 int RGWPutObj_ObjStore::get_params()
 {
   /* start gettorrent */
-  if (s->cct->_conf->rgw_torrent_flag)
+  if (s->cct->_conf->get_val<bool>("rgw_torrent_flag"))
   {
     int ret = 0;
     ret = torrent.get_params();
@@ -1142,7 +1142,7 @@ int RGWPutObj_ObjStore::get_params()
 int RGWPutObj_ObjStore::get_data(bufferlist& bl)
 {
   size_t cl;
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  uint64_t chunk_size = s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
   if (s->length) {
     cl = atoll(s->length) - ofs;
     if (cl > chunk_size)
@@ -1167,7 +1167,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     ACCOUNTING_IO(s)->set_account(false);
   }
 
-  if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
+  if ((uint64_t)ofs + len > s->cct->_conf->get_val<uint64_t>("rgw_max_put_size")) {
     return -ERR_TOO_LARGE;
   }
 
@@ -1385,7 +1385,7 @@ int RGWPostObj_ObjStore::read_form_part_header(struct post_form_part* const part
 {
   bufferlist bl;
   bool reached_boundary;
-  uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  uint64_t chunk_size = s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
   int r = read_line(bl, chunk_size, reached_boundary, done);
   if (r < 0) {
     return r;
@@ -1491,7 +1491,7 @@ int RGWPostObj_ObjStore::verify_params()
     return -ERR_LENGTH_REQUIRED;
   }
   off_t len = atoll(s->length);
-  if (len > (off_t)(s->cct->_conf->rgw_max_put_size)) {
+  if (len > (off_t)(s->cct->_conf->get_val<uint64_t>("rgw_max_put_size"))) {
     return -ERR_TOO_LARGE;
   }
 
@@ -1547,14 +1547,14 @@ int RGWPostObj_ObjStore::get_params()
 
 int RGWPutACLs_ObjStore::get_params()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
 
 int RGWPutLC_ObjStore::get_params()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
@@ -1722,7 +1722,7 @@ int RGWDeleteMultiObj_ObjStore::get_params()
   // everything is probably fine, set the bucket
   bucket = s->bucket;
 
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   return op_ret;
 }
@@ -2086,7 +2086,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   // Map the listing of rgw_enable_apis in REVERSE order, so that items near
   // the front of the list have a higher number assigned (and -1 for items not in the list).
   list<string> apis;
-  get_str_list(g_conf->rgw_enable_apis, apis);
+  get_str_list(g_conf->get_val<std::string>("rgw_enable_apis"), apis);
   int api_priority_s3 = -1;
   int api_priority_s3website = -1;
   auto api_s3website_priority_rawpos = std::find(apis.begin(), apis.end(), "s3website");
@@ -2130,7 +2130,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
       << " in_hosted_domain_s3website=" << in_hosted_domain_s3website 
       << dendl;
 
-    if (g_conf->rgw_resolve_cname
+    if (g_conf->get_val<bool>("rgw_resolve_cname")
 	&& !in_hosted_domain
 	&& !in_hosted_domain_s3website) {
       string cname;
@@ -2223,7 +2223,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   }
 
   if (s->info.domain.empty()) {
-    s->info.domain = s->cct->_conf->rgw_dns_name;
+    s->info.domain = s->cct->_conf->get_val<std::string>("rgw_dns_name");
   }
 
   s->decoded_uri = url_decode(s->info.request_uri);
@@ -2252,7 +2252,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
   if (!http_content_length != !content_length) {
     /* Easy case: one or the other is missing */
     s->length = (content_length ? content_length : http_content_length);
-  } else if (s->cct->_conf->rgw_content_length_compat &&
+  } else if (s->cct->_conf->get_val<bool>("rgw_content_length_compat") &&
 	     content_length && http_content_length) {
     /* Hard case: Both are set, we have to disambiguate */
     int64_t content_length_i, http_content_length_i;
@@ -2311,7 +2311,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
     }
   }
 
-  if (g_conf->rgw_print_continue) {
+  if (g_conf->get_val<bool>("rgw_print_continue")) {
     const char *expect = info.env->get("HTTP_EXPECT");
     s->expect_cont = (expect && !strcasecmp(expect, "100-continue"));
   }

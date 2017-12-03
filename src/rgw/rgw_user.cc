@@ -44,7 +44,7 @@ void rgw_get_anon_user(RGWUserInfo& info)
 int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  size_t max_entries = cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
   bool is_truncated = false;
   string marker;
   int ret;
@@ -97,7 +97,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
 int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map)
 {
   CephContext *cct = store->ctx();
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  size_t max_entries = cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
   bool done;
   bool is_truncated;
   string marker;
@@ -1956,7 +1956,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.max_buckets_specified) {
     user_info.max_buckets = op_state.get_max_buckets();
   } else {
-    user_info.max_buckets = cct->_conf->rgw_user_max_buckets;
+    user_info.max_buckets = cct->_conf->get_val<int64_t>("rgw_user_max_buckets");
   }
 
   user_info.suspended = op_state.get_suspension_status();
@@ -1969,12 +1969,14 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
-    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
+    if (cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_objects")
+      >= 0) {
+      user_info.bucket_quota.max_objects =
+        cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_objects");
       user_info.bucket_quota.enabled = true;
     }
-    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
+    if (cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_size") >= 0) {
+      user_info.bucket_quota.max_size = cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_size");
       user_info.bucket_quota.enabled = true;
     }
   }
@@ -1990,12 +1992,12 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
   } else {
-    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
+    if (cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_objects") >= 0) {
+      user_info.user_quota.max_objects = cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_objects");
       user_info.user_quota.enabled = true;
     }
-    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
+    if (cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_size") >= 0) {
+      user_info.user_quota.max_size = cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_size");
       user_info.user_quota.enabled = true;
     }
   }
@@ -2072,7 +2074,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
   bool is_truncated = false;
   string marker;
   CephContext *cct = store->ctx();
-  size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+  size_t max_buckets = cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
   do {
     RGWUserBuckets buckets;
     ret = rgw_read_user_buckets(store, uid, buckets, marker, string(),
@@ -2233,7 +2235,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
     bool is_truncated = false;
     string marker;
     CephContext *cct = store->ctx();
-    size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
+    size_t max_buckets = cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
     do {
       ret = rgw_read_user_buckets(store, user_id, buckets, marker, string(),
 				  max_buckets, false, &is_truncated);

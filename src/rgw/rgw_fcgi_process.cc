@@ -26,7 +26,7 @@ void RGWFCGXProcess::run()
   conf->get_val("socket_path", "", &socket_path);
   conf->get_val("socket_port", g_conf->rgw_port, &socket_port);
   conf->get_val("socket_host", g_conf->rgw_host, &socket_host);
-  socket_backlog = g_conf->rgw_fcgi_socket_backlog;
+  socket_backlog = g_conf->get_val<int64_t>("rgw_fcgi_socket_backlog");
 
   if (socket_path.empty() && socket_port.empty() && socket_host.empty()) {
     socket_path = g_conf->rgw_socket_path;

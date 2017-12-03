@@ -401,7 +401,7 @@ int RGWPutObjTags_ObjStore_S3::get_params()
   char *data=nullptr;
   int len=0;
 
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
 
   if (r < 0)
@@ -606,7 +606,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->close_section(); // user
      }
 
-     if (s->cct->_conf->rgw_rest_getusage_op_compat) {
+     if (s->cct->_conf->get_val<bool>("rgw_rest_getusage_op_compat")) {
        formatter->open_object_section("Stats");
      }
 
@@ -614,7 +614,7 @@ void RGWGetUsage_ObjStore_S3::send_response()
      formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
      formatter->dump_int("TotalEntries", header.stats.total_entries);
 
-     if (s->cct->_conf->rgw_rest_getusage_op_compat) {
+     if (s->cct->_conf->get_val<bool>("rgw_rest_getusage_op_compat")) {
        formatter->close_section(); //Stats
      }
 
@@ -919,7 +919,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
   char *data = nullptr;
   int len = 0;
   int r =
-    rgw_rest_read_all_input(s, &data, &len, s->cct->_conf->rgw_max_put_param_size, false);
+    rgw_rest_read_all_input(s, &data, &len, s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size"), false);
   if (r < 0) {
     return r;
   }
@@ -967,7 +967,7 @@ int RGWSetBucketWebsite_ObjStore_S3::get_params()
 {
   char *data = nullptr;
   int len = 0;
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
 
   if (r < 0) {
@@ -1140,7 +1140,7 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   int len = 0;
   char *data = nullptr;
 
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);
 
   if ((op_ret < 0) && (op_ret != -ERR_LENGTH_REQUIRED))
@@ -1372,9 +1372,9 @@ void RGWPutObj_ObjStore_S3::send_response()
     set_req_state_err(s, op_ret);
     dump_errno(s);
   } else {
-    if (s->cct->_conf->rgw_s3_success_create_obj_status) {
+    if (s->cct->_conf->get_val<int64_t>("rgw_s3_success_create_obj_status")) {
       op_ret = get_success_retcode(
-	s->cct->_conf->rgw_s3_success_create_obj_status);
+	s->cct->_conf->get_val<int64_t>("rgw_s3_success_create_obj_status"));
       set_req_state_err(s, op_ret);
     }
     if (!copy_source) {
@@ -1579,7 +1579,7 @@ int RGWPostObj_ObjStore_S3::get_params()
     }
 
     bool boundary;
-    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    uint64_t chunk_size = s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
     r = read_data(part.data, chunk_size, boundary, done);
     if (r < 0 || !boundary) {
       err_msg = "Couldn't find boundary";
@@ -1852,7 +1852,7 @@ int RGWPostObj_ObjStore_S3::complete_get_params()
 
     ceph::bufferlist part_data;
     bool boundary;
-    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    uint64_t chunk_size = s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
     r = read_data(part.data, chunk_size, boundary, done);
     if (r < 0 || !boundary) {
       return -EINVAL;
@@ -1869,7 +1869,7 @@ int RGWPostObj_ObjStore_S3::get_data(ceph::bufferlist& bl, bool& again)
   bool boundary;
   bool done;
 
-  const uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+  const uint64_t chunk_size = s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
   int r = read_data(bl, chunk_size, boundary, done);
   if (r < 0) {
     return r;
@@ -1971,7 +1971,7 @@ done:
     for (auto &it : crypt_http_responses)
       dump_header(s, it.first, it.second);
     s->formatter->open_object_section("PostResponse");
-    if (g_conf->rgw_dns_name.length())
+    if (g_conf->get_val<std::string>("rgw_dns_name").length())
       s->formatter->dump_format("Location", "%s/%s",
 				s->info.script_uri.c_str(),
 				s->object.name.c_str());
@@ -2307,7 +2307,7 @@ int RGWPutCORS_ObjStore_S3::get_params()
   RGWCORSXMLParser_S3 parser(s->cct);
   RGWCORSConfiguration_S3 *cors_config;
 
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
   if (r < 0) {
     return r;
@@ -2444,7 +2444,7 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
 {
   char *data;
   int len = 0;
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   int r = rgw_rest_read_all_input(s, &data, &len, max_size, false);
 
   if (r < 0) {
@@ -2966,7 +2966,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetBucketVersioning_ObjStore_S3;
 
   if (s->info.args.sub_resource_exists("website")) {
-    if (!s->cct->_conf->rgw_enable_static_website) {
+    if (!s->cct->_conf->get_val<bool>("rgw_enable_static_website")) {
       return NULL;
     }
     return new RGWGetBucketWebsite_ObjStore_S3;
@@ -3009,7 +3009,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
-    if (!s->cct->_conf->rgw_enable_static_website) {
+    if (!s->cct->_conf->get_val<bool>("rgw_enable_static_website")) {
       return NULL;
     }
     return new RGWSetBucketWebsite_ObjStore_S3;
@@ -3039,7 +3039,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
   }
 
   if (s->info.args.sub_resource_exists("website")) {
-    if (!s->cct->_conf->rgw_enable_static_website) {
+    if (!s->cct->_conf->get_val<bool>("rgw_enable_static_website")) {
       return NULL;
     }
     return new RGWDeleteBucketWebsite_ObjStore_S3;
@@ -3213,7 +3213,7 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
 int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+  bool relaxed_names = s->cct->_conf->get_val<bool>("rgw_relaxed_s3_bucket_names");
 
   rgw_parse_url_bucket(t->url_bucket, s->user->user_id.tenant,
 		      s->bucket_tenant, s->bucket_name);
@@ -3257,7 +3257,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+  bool relaxed_names = s->cct->_conf->get_val<bool>("rgw_relaxed_s3_bucket_names");
   if (!s->bucket_name.empty()) {
     ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
     if (ret)
@@ -3348,9 +3348,9 @@ int RGW_Auth_S3::authorize(RGWRados* const store,
 {
 
   /* neither keystone and rados enabled; warn and exit! */
-  if (!store->ctx()->_conf->rgw_s3_auth_use_rados &&
-      !store->ctx()->_conf->rgw_s3_auth_use_keystone &&
-      !store->ctx()->_conf->rgw_s3_auth_use_ldap) {
+  if (!store->ctx()->_conf->get_val<bool>("rgw_s3_auth_use_rados") &&
+      !store->ctx()->_conf->get_val<bool>("rgw_s3_auth_use_keystone") &&
+      !store->ctx()->_conf->get_val<bool>("rgw_s3_auth_use_ldap")) {
     dout(0) << "WARNING: no authorization backend enabled! Users will never authenticate." << dendl;
     return -EPERM;
   }
@@ -4056,11 +4056,11 @@ void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
   if (! ldh) {
     std::lock_guard<std::mutex> lck(mtx);
     if (! ldh) {
-      const string& ldap_uri = cct->_conf->rgw_ldap_uri;
-      const string& ldap_binddn = cct->_conf->rgw_ldap_binddn;
-      const string& ldap_searchdn = cct->_conf->rgw_ldap_searchdn;
-      const string& ldap_searchfilter = cct->_conf->rgw_ldap_searchfilter;
-      const string& ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
+      const string& ldap_uri = cct->_conf->get_val<std::string>("rgw_ldap_uri");
+      const string& ldap_binddn = cct->_conf->get_val<std::string>("rgw_ldap_binddn");
+      const string& ldap_searchdn = cct->_conf->get_val<std::string>("rgw_ldap_searchdn");
+      const string& ldap_searchfilter = cct->_conf->get_val<std::string>("rgw_ldap_searchfilter");
+      const string& ldap_dnattr = cct->_conf->get_val<std::string>("rgw_ldap_dnattr");
       std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
 
       ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,

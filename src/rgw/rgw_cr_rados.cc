@@ -58,8 +58,8 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
 RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(RGWRados *_store, int num_threads)
   : store(_store), m_tp(store->ctx(), "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
     req_throttle(store->ctx(), "rgw_async_rados_ops", num_threads * 2),
-    req_wq(this, g_conf->rgw_op_thread_timeout,
-    g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+    req_wq(this, g_conf->get_val<int64_t>("rgw_op_thread_timeout"),
+    g_conf->get_val<int64_t>("rgw_op_thread_suicide_timeout"), &m_tp) {
 }
 
 void RGWAsyncRadosProcessor::start() {

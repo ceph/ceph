@@ -17,7 +17,7 @@ const char* dollar_x_amz_server_side_encryption_customer_key = "$x-amz-server-si
 const char* suppression_message = "=suppressed due to key presence=";
 
 std::ostream& operator<<(std::ostream& out, const env& e) {
-  if (g_ceph_context->_conf->rgw_crypt_suppress_logs) {
+  if (g_ceph_context->_conf->get_val<bool>("rgw_crypt_suppress_logs")) {
     if (boost::algorithm::iequals(
         e.name,
         HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY))
@@ -39,7 +39,7 @@ std::ostream& operator<<(std::ostream& out, const env& e) {
 }
 
 std::ostream& operator<<(std::ostream& out, const x_meta_map& x) {
-  if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
+  if (g_ceph_context->_conf->get_val<bool>("rgw_crypt_suppress_logs") &&
       boost::algorithm::iequals(x.name, x_amz_server_side_encryption_customer_key))
   {
     out << suppression_message;
@@ -50,7 +50,7 @@ std::ostream& operator<<(std::ostream& out, const x_meta_map& x) {
 }
 
 std::ostream& operator<<(std::ostream& out, const s3_policy& x) {
-  if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
+  if (g_ceph_context->_conf->get_val<bool>("rgw_crypt_suppress_logs") &&
       boost::algorithm::iequals(x.name, dollar_x_amz_server_side_encryption_customer_key))
   {
     out << suppression_message;
@@ -61,7 +61,7 @@ std::ostream& operator<<(std::ostream& out, const s3_policy& x) {
 }
 
 std::ostream& operator<<(std::ostream& out, const auth& x) {
-  if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
+  if (g_ceph_context->_conf->get_val<bool>("rgw_crypt_suppress_logs") &&
       x.s->info.env->get(HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_KEY, nullptr) != nullptr)
   {
     out << suppression_message;
@@ -72,7 +72,7 @@ std::ostream& operator<<(std::ostream& out, const auth& x) {
 }
 
 std::ostream& operator<<(std::ostream& out, const log_content& x) {
-  if (g_ceph_context->_conf->rgw_crypt_suppress_logs &&
+  if (g_ceph_context->_conf->get_val<bool>("rgw_crypt_suppress_logs") &&
       boost::algorithm::ifind_first(x.buf, x_amz_server_side_encryption_customer_key)) {
     out << suppression_message;
     return out;

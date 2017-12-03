@@ -192,7 +192,7 @@ const char *rgw_find_mime_by_ext(string& ext)
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  int ret = ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  int ret = ext_mime_map_init(cct, cct->_conf->get_val<std::string>("rgw_mime_types_file").c_str());
   if (ret < 0)
     return ret;
 

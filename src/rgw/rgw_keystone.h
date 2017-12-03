@@ -76,27 +76,27 @@ public:
   ApiVersion get_api_version() const noexcept override;
 
   boost::string_ref get_admin_token() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_token;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_token");
   }
 
   boost::string_ref get_admin_user() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_user;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_user");
   }
 
   boost::string_ref get_admin_password() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_password;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_password");
   }
 
   boost::string_ref get_admin_tenant() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_tenant;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_tenant");
   }
 
   boost::string_ref get_admin_project() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_project;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_project");
   }
 
   boost::string_ref get_admin_domain() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_domain;
+    return g_ceph_context->_conf->get_val<std::string>("rgw_keystone_admin_domain");
   }
 };
 
@@ -111,7 +111,7 @@ public:
     RGWKeystoneHTTPTransceiver(CephContext * const cct,
                                bufferlist * const token_body_bl)
       : RGWHTTPTransceiver(cct, token_body_bl,
-                           cct->_conf->rgw_keystone_verify_ssl,
+                           cct->_conf->get_val<bool>("rgw_keystone_verify_ssl"),
                            { "X-Subject-Token" }) {
     }
 
@@ -261,14 +261,14 @@ class TokenCache {
     : revocator(g_ceph_context, this, config),
       cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
-      max(cct->_conf->rgw_keystone_token_cache_size) {
+      max(cct->_conf->get_val<int64_t>("rgw_keystone_token_cache_size")) {
     /* revocation logic needs to be smarter, but meanwhile,
      *  make it optional.
      * see http://tracker.ceph.com/issues/9493
      *     http://tracker.ceph.com/issues/19499
      */
-    if (cct->_conf->rgw_keystone_revocation_interval > 0
-        && cct->_conf->rgw_keystone_token_cache_size ) {
+    if (cct->_conf->get_val<int64_t>("rgw_keystone_revocation_interval") > 0
+        && cct->_conf->get_val<int64_t>("rgw_keystone_token_cache_size") ) {
       /* The thread name has been kept for backward compliance. */
       revocator.create("rgw_swift_k_rev");
     }

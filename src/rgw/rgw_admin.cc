@@ -2353,8 +2353,8 @@ int main(int argc, const char **argv)
                          CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
-  if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
-    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+  if (!g_conf->get_val<std::string>("rgw_region").empty() && g_conf->get_val<std::string>("rgw_zonegroup").empty()) {
+    g_conf->set_val_or_die("rgw_zonegroup", g_conf->get_val<std::string>("rgw_region").c_str());
   }
 
   common_init_finish(g_ceph_context);
@@ -2923,9 +2923,9 @@ int main(int argc, const char **argv)
     ceph_abort();
   }
 
-  realm_name = g_conf->rgw_realm;
-  zone_name = g_conf->rgw_zone;
-  zonegroup_name = g_conf->rgw_zonegroup;
+  realm_name = g_conf->get_val<std::string>("rgw_realm");
+  zone_name = g_conf->get_val<std::string>("rgw_zone");
+  zonegroup_name = g_conf->get_val<std::string>("rgw_zonegroup");
 
   RGWStreamFlusher f(formatter, cout);
 
@@ -5726,7 +5726,7 @@ next:
       max_entries = 1000;
     }
 
-    int num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
+    int num_logshards = store->ctx()->_conf->get_val<int64_t>("rgw_reshard_num_logs");
 
     RGWReshard reshard(store);
 
@@ -6232,7 +6232,7 @@ next:
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
     formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+    for (; i < g_ceph_context->_conf->get_val<int64_t>("rgw_md_log_max_shards"); i++) {
       void *handle;
       list<cls_log_entry> entries;
 
@@ -6279,7 +6279,7 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+    for (; i < g_ceph_context->_conf->get_val<int64_t>("rgw_md_log_max_shards"); i++) {
       RGWMetadataLogInfo info;
       meta_log->get_info(i, &info);
 
@@ -6306,7 +6306,7 @@ next:
       return -ret;
     }
 
-    auto num_shards = g_conf->rgw_md_log_max_shards;
+    auto num_shards = g_conf->get_val<int64_t>("rgw_md_log_max_shards");
     ret = crs.run(create_admin_meta_log_trim_cr(store, &http, num_shards));
     if (ret < 0) {
       cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
@@ -6856,7 +6856,7 @@ next:
     int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
+    for (; i < g_ceph_context->_conf->get_val<int64_t>("rgw_data_log_num_shards"); i++) {
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;

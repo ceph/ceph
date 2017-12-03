@@ -192,7 +192,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
       rgw::auth::add_3rdparty(store, s->account_name,
         rgw::auth::add_sysreq(cct, store, s,
           rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy), info,
-                                   cct->_conf->rgw_keystone_implicit_tenants)));
+                                   cct->_conf->get_val<bool>("rgw_keystone_implicit_tenants"))));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -245,7 +245,7 @@ public:
 
     /* The auth strategy is responsible for deciding whether a parcular
      * engine is disabled or not. */
-    if (! cct->_conf->rgw_keystone_url.empty()) {
+    if (! cct->_conf->get_val<std::string>("rgw_keystone_url").empty()) {
       keystone_engine.emplace(cct,
                               static_cast<rgw::auth::TokenExtractor*>(this),
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
@@ -254,7 +254,7 @@ public:
 
       add_engine(Control::SUFFICIENT, *keystone_engine);
     }
-    if (! cct->_conf->rgw_swift_auth_url.empty()) {
+    if (! cct->_conf->get_val<std::string>("rgw_swift_auth_url").empty()) {
       add_engine(Control::SUFFICIENT, external_engine);
     }
 

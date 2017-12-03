@@ -455,12 +455,12 @@ public:
 
   RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
                                                            lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
-                                                           changes(cct->_conf->rgw_data_log_changes_size) {
-    num_shards = cct->_conf->rgw_data_log_num_shards;
+                                                           changes(cct->_conf->get_val<int64_t>("rgw_data_log_changes_size")) {
+    num_shards = cct->_conf->get_val<int64_t>("rgw_data_log_num_shards");
 
     oids = new string[num_shards];
 
-    string prefix = cct->_conf->rgw_data_log_obj_prefix;
+    string prefix = cct->_conf->get_val<std::string>("rgw_data_log_obj_prefix");
 
     if (prefix.empty()) {
       prefix = "data_log";

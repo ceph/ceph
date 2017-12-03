@@ -88,7 +88,7 @@ void RGWOp_User_Create::execute()
   bool exclusive;
 
   int32_t max_buckets;
-  int32_t default_max_buckets = s->cct->_conf->rgw_user_max_buckets;
+  int32_t default_max_buckets = s->cct->_conf->get_val<int64_t>("rgw_user_max_buckets");
 
   RGWUserAdminOpState op_state;
 
@@ -154,23 +154,25 @@ void RGWOp_User_Create::execute()
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  if (s->cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-    bucket_quota.max_objects = s->cct->_conf->rgw_bucket_default_quota_max_objects;
+  if (s->cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_objects")
+    >= 0) {
+    bucket_quota.max_objects =
+      s->cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_objects");
     bucket_quota.enabled = true;
   }
 
-  if (s->cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-    bucket_quota.max_size = s->cct->_conf->rgw_bucket_default_quota_max_size;
+  if (s->cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_size") >= 0) {
+    bucket_quota.max_size = s->cct->_conf->get_val<int64_t>("rgw_bucket_default_quota_max_size");
     bucket_quota.enabled = true;
   }
 
-  if (s->cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-    user_quota.max_objects = s->cct->_conf->rgw_user_default_quota_max_objects;
+  if (s->cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_objects") >= 0) {
+    user_quota.max_objects = s->cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_objects");
     user_quota.enabled = true;
   }
 
-  if (s->cct->_conf->rgw_user_default_quota_max_size >= 0) {
-    user_quota.max_size = s->cct->_conf->rgw_user_default_quota_max_size;
+  if (s->cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_size") >= 0) {
+    user_quota.max_size = s->cct->_conf->get_val<int64_t>("rgw_user_default_quota_max_size");
     user_quota.enabled = true;
   }
 

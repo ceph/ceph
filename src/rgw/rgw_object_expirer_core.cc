@@ -154,9 +154,9 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
   bool done = true;
 
   CephContext *cct = store->ctx();
-  int num_entries = cct->_conf->rgw_objexp_chunk_size;
+  int num_entries = cct->_conf->get_val<uint64_t>("rgw_objexp_chunk_size");
 
-  int max_secs = cct->_conf->rgw_objexp_gc_interval;
+  int max_secs = cct->_conf->get_val<uint64_t>("rgw_objexp_gc_interval");
   utime_t end = ceph_clock_now();
   end += max_secs;
 
@@ -210,7 +210,7 @@ bool RGWObjectExpirer::inspect_all_shards(const utime_t& last_run,
                                           const utime_t& round_start)
 {
   CephContext * const cct = store->ctx();
-  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+  int num_shards = cct->_conf->get_val<uint64_t>("rgw_objexp_hints_num_shards");
   bool all_done = true;
 
   for (int i = 0; i < num_shards; i++) {
@@ -267,7 +267,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
 
     utime_t end = ceph_clock_now();
     end -= start;
-    int secs = cct->_conf->rgw_objexp_gc_interval;
+    int secs = cct->_conf->get_val<uint64_t>("rgw_objexp_gc_interval");
 
     if (secs <= end.sec())
       continue; // next round

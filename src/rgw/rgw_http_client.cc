@@ -523,7 +523,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   wait_fd.events = CURL_WAIT_POLLIN;
   wait_fd.revents = 0;
 
-  int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
+  int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf->get_val<int64_t>("rgw_curl_wait_timeout_ms"), &num_fds);
   if (ret) {
     ldout(cct, 0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
     return -EIO;
@@ -567,7 +567,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   }
 
   /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
-  uint64_t to = cct->_conf->rgw_curl_wait_timeout_ms;
+  uint64_t to = cct->_conf->get_val<int64_t>("rgw_curl_wait_timeout_ms");
 #define RGW_CURL_TIMEOUT 1000
   if (!to)
     to = RGW_CURL_TIMEOUT;

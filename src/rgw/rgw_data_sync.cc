@@ -1218,7 +1218,7 @@ public:
 
   void init_lease_cr() {
     set_status("acquiring sync lock");
-    uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+    uint32_t lock_duration = cct->_conf->get_val<int64_t>("rgw_sync_lease_period");
     string lock_name = "sync_lock";
     if (lease_cr) {
       lease_cr->abort();
@@ -2352,7 +2352,7 @@ public:
                                                               SSTR(key)));
 
     tn->log(20, SSTR("bucket sync single entry (source_zone=" << sync_env->source_zone << ") b=" << ss.str() << " log_entry=" << entry_marker << " op=" << (int)op << " op_state=" << (int)op_state));
-    error_injection = (sync_env->cct->_conf->rgw_sync_data_inject_err_probability > 0);
+    error_injection = (sync_env->cct->_conf->get_val<double>("rgw_sync_data_inject_err_probability") > 0);
 
     data_sync_module = sync_env->sync_module->get_data_handler();
     
@@ -2377,7 +2377,7 @@ public:
             goto done;
           }
           if (error_injection &&
-              rand() % 10000 < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
+              rand() % 10000 < cct->_conf->get_val<double>("rgw_sync_data_inject_err_probability") * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
             retcode = -EIO;
           } else if (op == CLS_RGW_OP_ADD ||
@@ -2892,7 +2892,7 @@ int RGWRunBucketSyncCoroutine::operate()
       lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
                                               rgw_raw_obj(store->get_zone_params().log_pool, status_oid),
                                               "sync_lock",
-                                              cct->_conf->rgw_sync_lease_period,
+                                              cct->_conf->get_val<int64_t>("rgw_sync_lease_period"),
                                               this));
       lease_stack.reset(spawn(lease_cr.get(), false));
     }

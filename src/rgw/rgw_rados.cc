@@ -238,11 +238,11 @@ void RGWDefaultZoneGroupInfo::decode_json(JSONObj *obj) {
 
 rgw_pool RGWZoneGroup::get_pool(CephContext *cct_)
 {
-  if (cct_->_conf->rgw_zonegroup_root_pool.empty()) {
+  if (cct_->_conf->get_val<std::string>("rgw_zonegroup_root_pool").empty()) {
     return rgw_pool(RGW_DEFAULT_ZONEGROUP_ROOT_POOL);
   }
 
-  return rgw_pool(cct_->_conf->rgw_zonegroup_root_pool);
+  return rgw_pool(cct_->_conf->get_val<std::string>("rgw_zonegroup_root_pool"));
 }
 
 int RGWZoneGroup::create_default(bool old_format)
@@ -311,15 +311,15 @@ int RGWZoneGroup::create_default(bool old_format)
 const string RGWZoneGroup::get_default_oid(bool old_region_format)
 {
   if (old_region_format) {
-    if (cct->_conf->rgw_default_region_info_oid.empty()) {
+    if (cct->_conf->get_val<std::string>("rgw_default_region_info_oid").empty()) {
       return default_region_info_oid;
     }
-    return cct->_conf->rgw_default_region_info_oid;
+    return cct->_conf->get_val<std::string>("rgw_default_region_info_oid");
   }
 
-  string default_oid = cct->_conf->rgw_default_zonegroup_info_oid;
+  string default_oid = cct->_conf->get_val<std::string>("rgw_default_zonegroup_info_oid");
 
-  if (cct->_conf->rgw_default_zonegroup_info_oid.empty()) {
+  if (cct->_conf->get_val<std::string>("rgw_default_zonegroup_info_oid").empty()) {
     default_oid = default_zone_group_info_oid;
   }
 
@@ -342,7 +342,8 @@ const string& RGWZoneGroup::get_names_oid_prefix()
 }
 
 const string& RGWZoneGroup::get_predefined_name(CephContext *cct) {
-  return cct->_conf->rgw_zonegroup;
+  const auto& rgw_zonegroup = cct->_conf->get_val<std::string>("rgw_zonegroup");
+  return rgw_zonegroup;
 }
 
 int RGWZoneGroup::equals(const string& other_zonegroup) const
@@ -821,7 +822,8 @@ int RGWSystemMetaObj::write(bool exclusive)
 
 
 const string& RGWRealm::get_predefined_name(CephContext *cct) {
-  return cct->_conf->rgw_realm;
+  const auto& rgw_realm = cct->_conf->get_val<std::string>("rgw_realm");
+  return rgw_realm;
 }
 
 int RGWRealm::create(bool exclusive)
@@ -898,18 +900,18 @@ int RGWRealm::delete_control()
 
 rgw_pool RGWRealm::get_pool(CephContext *cct)
 {
-  if (cct->_conf->rgw_realm_root_pool.empty()) {
+  if (cct->_conf->get_val<std::string>("rgw_realm_root_pool").empty()) {
     return rgw_pool(RGW_DEFAULT_REALM_ROOT_POOL);
   }
-  return rgw_pool(cct->_conf->rgw_realm_root_pool);
+  return rgw_pool(cct->_conf->get_val<std::string>("rgw_realm_root_pool"));
 }
 
 const string RGWRealm::get_default_oid(bool old_format)
 {
-  if (cct->_conf->rgw_default_realm_info_oid.empty()) {
+  if (cct->_conf->get_val<std::string>("rgw_default_realm_info_oid").empty()) {
     return default_realm_info_oid;
   }
-  return cct->_conf->rgw_default_realm_info_oid;
+  return cct->_conf->get_val<std::string>("rgw_default_realm_info_oid");
 }
 
 const string& RGWRealm::get_names_oid_prefix()
@@ -1001,7 +1003,7 @@ std::string RGWPeriodConfig::get_oid(const std::string& realm_id)
 
 rgw_pool RGWPeriodConfig::get_pool(CephContext *cct)
 {
-  const auto& pool_name = cct->_conf->rgw_period_root_pool;
+  const auto& pool_name = cct->_conf->get_val<std::string>("rgw_period_root_pool");
   if (pool_name.empty()) {
     return {RGW_DEFAULT_PERIOD_ROOT_POOL};
   }
@@ -1126,10 +1128,11 @@ bool RGWRados::get_redirect_zone_endpoint(string *endpoint)
 
 const string& RGWPeriod::get_latest_epoch_oid()
 {
-  if (cct->_conf->rgw_period_latest_epoch_info_oid.empty()) {
+  const auto& rgw_period_latest_epoch_info_oid = cct->_conf->get_val<std::string>("rgw_period_latest_epoch_info_oid");
+  if (rgw_period_latest_epoch_info_oid.empty()) {
     return period_latest_epoch_info_oid;
   }
-  return cct->_conf->rgw_period_latest_epoch_info_oid;
+  return rgw_period_latest_epoch_info_oid;
 }
 
 const string& RGWPeriod::get_info_oid_prefix()
@@ -1357,10 +1360,10 @@ int RGWPeriod::store_info(bool exclusive)
 
 rgw_pool RGWPeriod::get_pool(CephContext *cct)
 {
-  if (cct->_conf->rgw_period_root_pool.empty()) {
+  if (cct->_conf->get_val<std::string>("rgw_period_root_pool").empty()) {
     return rgw_pool(RGW_DEFAULT_PERIOD_ROOT_POOL);
   }
-  return rgw_pool(cct->_conf->rgw_period_root_pool);
+  return rgw_pool(cct->_conf->get_val<std::string>("rgw_period_root_pool"));
 }
 
 int RGWPeriod::add_zonegroup(const RGWZoneGroup& zonegroup)
@@ -1790,20 +1793,20 @@ int RGWZoneParams::create(bool exclusive)
 
 rgw_pool RGWZoneParams::get_pool(CephContext *cct)
 {
-  if (cct->_conf->rgw_zone_root_pool.empty()) {
+  if (cct->_conf->get_val<std::string>("rgw_zone_root_pool").empty()) {
     return rgw_pool(RGW_DEFAULT_ZONE_ROOT_POOL);
   }
 
-  return rgw_pool(cct->_conf->rgw_zone_root_pool);
+  return rgw_pool(cct->_conf->get_val<std::string>("rgw_zone_root_pool"));
 }
 
 const string RGWZoneParams::get_default_oid(bool old_format)
 {
   if (old_format) {
-    return cct->_conf->rgw_default_zone_info_oid;
+    return cct->_conf->get_val<std::string>("rgw_default_zone_info_oid");
   }
 
-  return cct->_conf->rgw_default_zone_info_oid + "." + realm_id;
+  return cct->_conf->get_val<std::string>("rgw_default_zone_info_oid") + "." + realm_id;
 }
 
 const string& RGWZoneParams::get_names_oid_prefix()
@@ -1817,13 +1820,14 @@ const string& RGWZoneParams::get_info_oid_prefix(bool old_format)
 }
 
 const string& RGWZoneParams::get_predefined_name(CephContext *cct) {
-  return cct->_conf->rgw_zone;
+  const auto& rgw_zone = cct->_conf->get_val<std::string>("rgw_zone");
+  return rgw_zone;
 }
 
 int RGWZoneParams::init(CephContext *cct, RGWRados *store, bool setup_obj, bool old_format)
 {
   if (name.empty()) {
-    name = cct->_conf->rgw_zone;
+    name = cct->_conf->get_val<std::string>("rgw_zone");
   }
 
   return RGWSystemMetaObj::init(cct, store, setup_obj, old_format);
@@ -2579,8 +2583,8 @@ int RGWPutObjProcessor_Aio::throttle_data(void *handle, const rgw_raw_obj& obj, 
 
   /* resize window in case messages are draining too fast */
   if (orig_size - pending_size >= window_size) {
-    window_size += store->ctx()->_conf->rgw_max_chunk_size;
-    uint64_t max_window_size = store->ctx()->_conf->rgw_put_obj_max_window_size;
+    window_size += store->ctx()->_conf->get_val<int64_t>("rgw_max_chunk_size");
+    uint64_t max_window_size = store->ctx()->_conf->get_val<int64_t>("rgw_put_obj_max_window_size");
     if (window_size > max_window_size) {
       window_size = max_window_size;
     }
@@ -2618,7 +2622,7 @@ int RGWPutObjProcessor_Aio::prepare(RGWRados *store, string *oid_rand)
 {
   RGWPutObjProcessor::prepare(store, oid_rand);
 
-  window_size = store->ctx()->_conf->rgw_put_obj_min_window_size;
+  window_size = store->ctx()->_conf->get_val<int64_t>("rgw_put_obj_min_window_size");
 
   return 0;
 }
@@ -2692,7 +2696,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
     }
   }
 
-  manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
+  manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->get_val<int64_t>("rgw_obj_stripe_size"));
 
   r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
   if (r < 0) {
@@ -3057,7 +3061,7 @@ class RGWMetaNotifier : public RGWRadosThread {
   RGWMetadataLog *const log;
 
   uint64_t interval_msec() override {
-    return cct->_conf->rgw_md_notify_interval_msec;
+    return cct->_conf->get_val<int64_t>("rgw_md_notify_interval_msec");
   }
 public:
   RGWMetaNotifier(RGWRados *_store, RGWMetadataLog* log)
@@ -3245,13 +3249,13 @@ public:
     list<RGWCoroutinesStack*> stacks;
     auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
     meta->call(create_meta_log_trim_cr(store, &http,
-                                       cct->_conf->rgw_md_log_max_shards,
+                                       cct->_conf->get_val<int64_t>("rgw_md_log_max_shards"),
                                        trim_interval));
     stacks.push_back(meta);
 
     auto data = new RGWCoroutinesStack(store->ctx(), &crs);
     data->call(create_data_log_trim_cr(store, &http,
-                                       cct->_conf->rgw_data_log_num_shards,
+                                       cct->_conf->get_val<int64_t>("rgw_data_log_num_shards"),
                                        trim_interval));
     stacks.push_back(data);
 
@@ -3350,7 +3354,7 @@ int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
     return r;
   }
 
-  uint64_t config_chunk_size = cct->_conf->rgw_max_chunk_size;
+  uint64_t config_chunk_size = cct->_conf->get_val<int64_t>("rgw_max_chunk_size");
 
   if (alignment == 0) {
     *max_chunk_size = config_chunk_size;
@@ -3493,7 +3497,7 @@ class RGWIndexCompletionManager {
 
 public:
   RGWIndexCompletionManager(RGWRados *_store) : store(_store) {
-    num_shards = store->ctx()->_conf->rgw_thread_pool_size;
+    num_shards = store->ctx()->_conf->get_val<int64_t>("rgw_thread_pool_size");
 
     for (int i = 0; i < num_shards; i++) {
       char buf[64];
@@ -3747,7 +3751,7 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
-  auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
+  auto handles = std::vector<librados::Rados>{cct->_conf->get_val<uint64_t>("rgw_num_rados_handles")};
 
   for (auto& r : handles) {
     ret = r.init_with_context(cct);
@@ -3835,7 +3839,7 @@ int RGWRados::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
 
-  string pool_name = cct->_conf->rgw_zone_root_pool;
+  string pool_name = cct->_conf->get_val<std::string>("rgw_zone_root_pool");
   if (pool_name.empty()) {
     pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
   }
@@ -3902,7 +3906,7 @@ int RGWRados::replace_region_with_zonegroup()
 {
   /* copy default region */
   /* convert default region to default zonegroup */
-  string default_oid = cct->_conf->rgw_default_region_info_oid;
+  string default_oid = cct->_conf->get_val<std::string>("rgw_default_region_info_oid");
   if (default_oid.empty()) {
     default_oid = default_region_info_oid;
   }
@@ -4244,7 +4248,7 @@ int RGWRados::init_zg_from_period(bool *initialized)
 int RGWRados::init_zg_from_local(bool *creating_defaults)
 {
   int ret = zonegroup.init(cct, this);
-  if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
+  if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->get_val<std::string>("rgw_zonegroup").empty())) {
     ldout(cct, 0) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   } else if (ret == -ENOENT) {
@@ -4359,7 +4363,7 @@ int RGWRados::init_complete()
   }
 
   ldout(cct, 10) << "Cannot find current period zone using local zone" << dendl;
-  if (creating_defaults && cct->_conf->rgw_zone.empty()) {
+  if (creating_defaults && cct->_conf->get_val<std::string>("rgw_zone").empty()) {
     ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
     zone_params.set_name(default_zone_name);
   }
@@ -4501,7 +4505,7 @@ int RGWRados::init_complete()
     meta_mgr->init_oldest_log_period();
   }
 
-  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
+  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->get_val<int64_t>("rgw_num_async_rados_threads"));
   async_rados->start();
 
   ret = meta_mgr->init(current_period.get_id());
@@ -4518,7 +4522,7 @@ int RGWRados::init_complete()
   }
 
   /* init it anyway, might run sync through radosgw-admin explicitly */
-  sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->rgw_sync_trace_history_size);
+  sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->get_val<int64_t>("rgw_sync_trace_history_size"));
   sync_tracer->init(this);
   ret = sync_tracer->hook_to_admin_command();
   if (ret < 0) {
@@ -4559,7 +4563,7 @@ int RGWRados::init_complete()
       thread->start();
       data_sync_processor_threads[iter.first] = thread;
     }
-    auto interval = cct->_conf->rgw_sync_log_trim_interval;
+    auto interval = cct->_conf->get_val<int64_t>("rgw_sync_log_trim_interval");
     if (interval > 0) {
       sync_log_trimmer = new RGWSyncLogTrimThread(this, &*bucket_trim, interval);
       ret = sync_log_trimmer->init();
@@ -4581,7 +4585,7 @@ int RGWRados::init_complete()
 
   quota_handler = RGWQuotaHandler::generate_handler(this, quota_threads);
 
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+  bucket_index_max_shards = (cct->_conf->get_val<uint64_t>("rgw_override_bucket_index_max_shards") ? cct->_conf->get_val<uint64_t>("rgw_override_bucket_index_max_shards") :
                              get_zone().bucket_index_max_shards);
   if (bucket_index_max_shards > get_max_bucket_shards()) {
     bucket_index_max_shards = get_max_bucket_shards();
@@ -4596,7 +4600,7 @@ int RGWRados::init_complete()
   bool need_tombstone_cache = !zone_data_notify_to_map.empty(); /* have zones syncing from us */
 
   if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->get_val<int64_t>("rgw_obj_tombstone_cache_size"));
   }
 
   reshard_wait = std::make_shared<RGWReshardWait>(this);
@@ -4770,7 +4774,7 @@ int RGWRados::init_watch()
     return r;
   }
 
-  num_watchers = cct->_conf->rgw_num_control_oids;
+  num_watchers = cct->_conf->get_val<int64_t>("rgw_num_control_oids");
 
   bool compat_oid = (num_watchers == 0);
 
@@ -5048,12 +5052,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = cct->_conf->rgw_usage_max_user_shards;
+    int max_user_shards = cct->_conf->get_val<int64_t>("rgw_usage_max_user_shards");
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[17];
-  int max_shards = cct->_conf->rgw_usage_max_shards;
+  int max_shards = cct->_conf->get_val<int64_t>("rgw_usage_max_shards");
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
@@ -5351,7 +5355,7 @@ string RGWRados::objexp_hint_get_shardname(int shard_num)
 int RGWRados::objexp_key_shard(const rgw_obj_index_key& key)
 {
   string obj_key = key.name + key.instance;
-  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+  int num_shards = cct->_conf->get_val<uint64_t>("rgw_objexp_hints_num_shards");
   return rgw_bucket_shard_index(obj_key, num_shards);
 }
 
@@ -5562,7 +5566,7 @@ int RGWRados::Bucket::List::list_objects(int64_t max,
 
   int count = 0;
   bool truncated = true;
-  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,max);
+  int read_ahead = std::max(cct->_conf->get_val<int64_t>("rgw_list_bucket_min_readahead"),max);
 
   result->clear();
 
@@ -5762,7 +5766,8 @@ int RGWRados::init_bucket_index(RGWBucketInfo& bucket_info, int num_shards)
   map<int, string> bucket_objs;
   get_bucket_index_objects(dir_oid, num_shards, bucket_objs);
 
-  return CLSRGWIssueBucketIndexInit(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketIndexInit(index_ctx, bucket_objs,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 }
 
 void RGWRados::create_bucket_id(string *bucket_id)
@@ -7684,7 +7689,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.key.name,
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->get_val<int64_t>("rgw_obj_stripe_size"), tag, dest_bucket_info.versioning_enabled());
   if (version_id && *version_id != "null") {
     processor.set_version_id(*version_id);
   }
@@ -8233,7 +8238,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   RGWPutObjProcessor_Atomic processor(obj_ctx,
                                       dest_bucket_info, dest_obj.bucket, dest_obj.get_oid(),
-                                      cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
+                                      cct->_conf->get_val<int64_t>("rgw_obj_stripe_size"), tag, dest_bucket_info.versioning_enabled());
   if (version_id) {
     processor.set_version_id(*version_id);
   }
@@ -8653,7 +8658,8 @@ int RGWRados::bucket_check_index(RGWBucketInfo& bucket_info,
       return ret;
   }
 
-  ret = CLSRGWIssueBucketCheck(index_ctx, oids, bucket_objs_ret, cct->_conf->rgw_bucket_index_max_aio)();
+  ret = CLSRGWIssueBucketCheck(index_ctx, oids, bucket_objs_ret,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
   if (ret < 0) {
       return ret;
   }
@@ -8678,7 +8684,8 @@ int RGWRados::bucket_rebuild_index(RGWBucketInfo& bucket_info)
     return r;
   }
 
-  return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketRebuild(index_ctx, bucket_objs,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 }
 
 int RGWRados::bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucket_instance_entry& entry)
@@ -8691,7 +8698,8 @@ int RGWRados::bucket_set_reshard(RGWBucketInfo& bucket_info, const cls_rgw_bucke
     return r;
   }
 
-  return CLSRGWIssueSetBucketResharding(index_ctx, bucket_objs, entry, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueSetBucketResharding(index_ctx, bucket_objs, entry,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 }
 
 int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj)
@@ -10327,7 +10335,7 @@ struct get_obj_data : public RefCountedObject {
       rados(NULL), ctx(NULL),
       total_read(0), lock("get_obj_data"), data_lock("get_obj_data::data_lock"),
       client_cb(NULL),
-      throttle(cct, "get_obj_data", cct->_conf->rgw_get_obj_window_size, false) {}
+      throttle(cct, "get_obj_data", cct->_conf->get_val<int64_t>("rgw_get_obj_window_size"), false) {}
   ~get_obj_data() override { } 
   void set_cancelled(int r) {
     cancelled = true;
@@ -10658,7 +10666,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   data->io_ctx.dup(state.io_ctx);
   data->client_cb = cb;
 
-  int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);
+  int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->get_val<int64_t>("rgw_get_obj_max_req_size"), _get_obj_iterate_cb, (void *)data);
   if (r < 0) {
     data->cancel_all_io();
     goto done;
@@ -11460,7 +11468,7 @@ void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entrie
 
     map<string, bufferlist>::iterator cur_iter = iter;
     ++iter;
-    if (now - pending_info.time >= make_timespan(cct->_conf->rgw_olh_pending_timeout_sec)) {
+    if (now - pending_info.time >= make_timespan(cct->_conf->get_val<int64_t>("rgw_olh_pending_timeout_sec"))) {
       (*rm_pending_entries)[cur_iter->first] = cur_iter->second;
       pending_entries.erase(cur_iter);
     } else {
@@ -11569,7 +11577,7 @@ int RGWRados::raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime,
     op.stat2(&size, &mtime_ts, NULL);
   }
   if (first_chunk) {
-    op.read(0, cct->_conf->rgw_max_chunk_size, first_chunk, NULL);
+    op.read(0, cct->_conf->get_val<int64_t>("rgw_max_chunk_size"), first_chunk, NULL);
   }
   bufferlist outbl;
   r = ref.ioctx.operate(ref.oid, &op, &outbl);
@@ -12415,7 +12423,8 @@ int RGWRados::list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   if (r < 0)
     return r;
  
-  r = CLSRGWIssueBILogList(index_ctx, marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueBILogList(index_ctx, marker_mgr, max, oids, bi_log_lists,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
   if (r < 0)
     return r;
 
@@ -12513,8 +12522,8 @@ int RGWRados::trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
     return r;
   }
 
-  return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
-			      cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr,
+    bucket_objs, cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 
   return r;
 }
@@ -12527,7 +12536,8 @@ int RGWRados::resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   if (r < 0)
     return r;
 
-  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueResyncBucketBILog(index_ctx, bucket_objs,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 }
 
 int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
@@ -12538,7 +12548,8 @@ int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   if (r < 0)
     return r;
 
-  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
 }
 
 int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent)
@@ -12799,7 +12810,8 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_
   if (r < 0)
     return r;
 
-  return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio, timeout)();
+  return CLSRGWIssueSetTagTimeout(index_ctx, bucket_objs,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"), timeout)();
 }
 
 int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_index_key& start, const string& prefix,
@@ -12819,8 +12831,9 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
     return r;
 
   cls_rgw_obj_key start_key(start.name, start.instance);
-  r = CLSRGWIssueBucketList(index_ctx, start_key, prefix, num_entries, list_versions,
-                            oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueBucketList(index_ctx, start_key, prefix, num_entries,
+    list_versions, oids, list_results,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
   if (r < 0)
     return r;
 
@@ -13109,7 +13122,8 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
   if (r < 0)
     return r;
 
-  r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
+  r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results,
+    cct->_conf->get_val<uint64_t>("rgw_bucket_index_max_aio"))();
   if (r < 0)
     return r;
 
@@ -13347,7 +13361,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 				  RGWQuotaInfo& bucket_quota)
 {
-  if (!cct->_conf->rgw_dynamic_resharding) {
+  if (!cct->_conf->get_val<bool>("rgw_dynamic_resharding")) {
       return 0;
   }
 
@@ -13355,7 +13369,7 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   uint32_t suggested_num_shards;
 
-  int ret =  quota_handler->check_bucket_shards((uint64_t)cct->_conf->rgw_max_objs_per_shard,
+  int ret =  quota_handler->check_bucket_shards((uint64_t)cct->_conf->get_val<int64_t>("rgw_max_objs_per_shard"),
 						num_source_shards,  bucket_info.owner, bucket, bucket_quota,
 						1, need_resharding, &suggested_num_shards);
   if (ret < 0) {
@@ -13681,7 +13695,7 @@ void RGWStateLog::dump_entry(const cls_statelog_entry& entry, Formatter *f)
   f->close_section();
 }
 
-RGWOpState::RGWOpState(RGWRados *_store) : RGWStateLog(_store, _store->ctx()->_conf->rgw_num_zone_opstate_shards, string("obj_opstate"))
+RGWOpState::RGWOpState(RGWRados *_store) : RGWStateLog(_store, _store->ctx()->_conf->get_val<int64_t>("rgw_num_zone_opstate_shards"), string("obj_opstate"))
 {
 }
 
@@ -13763,7 +13777,7 @@ int RGWOpStateSingleOp::set_state(RGWOpState::OpState state) {
 int RGWOpStateSingleOp::renew_state() {
   real_time now = real_clock::now();
 
-  int rate_limit_sec = cct->_conf->rgw_opstate_ratelimit_sec;
+  int rate_limit_sec = cct->_conf->get_val<int64_t>("rgw_opstate_ratelimit_sec");
 
   if (rate_limit_sec && now - last_update < make_timespan(rate_limit_sec)) {
     return 0;
@@ -13787,7 +13801,7 @@ uint64_t RGWRados::next_bucket_id()
 
 RGWRados *RGWStoreManager::init_storage_provider(CephContext *cct, bool use_gc_thread, bool use_lc_thread, bool quota_threads, bool run_sync_thread, bool run_reshard_thread)
 {
-  int use_cache = cct->_conf->rgw_cache_enabled;
+  int use_cache = cct->_conf->get_val<bool>("rgw_cache_enabled");
   RGWRados *store = NULL;
   if (!use_cache) {
     store = new RGWRados;

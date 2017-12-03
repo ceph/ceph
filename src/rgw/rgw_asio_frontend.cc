@@ -268,7 +268,7 @@ void AsioFrontend::accept(boost::system::error_code ec)
 int AsioFrontend::run()
 {
   auto cct = ctx();
-  const int thread_count = cct->_conf->rgw_thread_pool_size;
+  const int thread_count = cct->_conf->get_val<int64_t>("rgw_thread_pool_size");
   threads.reserve(thread_count);
 
   ldout(cct, 4) << "frontend spawning " << thread_count << " threads" << dendl;

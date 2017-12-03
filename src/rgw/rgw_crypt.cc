@@ -848,7 +848,7 @@ std::string create_random_key_selector(CephContext * const cct) {
 static int get_barbican_url(CephContext * const cct,
                      std::string& url)
 {
-  url = cct->_conf->rgw_barbican_url;
+  url = cct->_conf->get_val<std::string>("rgw_barbican_url");
   if (url.empty()) {
     ldout(cct, 0) << "ERROR: conf rgw_barbican_url is not set" << dendl;
     return -EINVAL;
@@ -913,7 +913,7 @@ static int get_actual_key_from_kms(CephContext *cct,
   int res = 0;
   ldout(cct, 20) << "Getting KMS encryption key for key=" << key_id << dendl;
   static map<string,string> str_map = get_str_map(
-      cct->_conf->rgw_crypt_s3_kms_encryption_keys);
+      cct->_conf->get_val<std::string>("rgw_crypt_s3_kms_encryption_keys"));
 
   map<string, string>::iterator it = str_map.find(std::string(key_id));
   if (it != str_map.end() ) {
@@ -1049,7 +1049,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         s->err.message = "The requested encryption algorithm is not valid, must be AES256.";
         return -ERR_INVALID_ENCRYPTION_ALGORITHM;
       }
-      if (s->cct->_conf->rgw_crypt_require_ssl &&
+      if (s->cct->_conf->get_val<bool>("rgw_crypt_require_ssl") &&
           !s->info.env->exists("SERVER_PORT_SECURE")) {
         ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
@@ -1155,7 +1155,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
                          "HTTP header x-amz-server-side-encryption : aws:kms";
         return -EINVAL;
       }
-      if (s->cct->_conf->rgw_crypt_require_ssl &&
+      if (s->cct->_conf->get_val<bool>("rgw_crypt_require_ssl") &&
           !s->info.env->exists("SERVER_PORT_SECURE")) {
         ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
@@ -1211,10 +1211,10 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
     }
 
     /* no other encryption mode, check if default encryption is selected */
-    if (s->cct->_conf->rgw_crypt_default_encryption_key != "") {
+    if (s->cct->_conf->get_val<std::string>("rgw_crypt_default_encryption_key") != "") {
       std::string master_encryption_key;
       try {
-        master_encryption_key = from_base64(s->cct->_conf->rgw_crypt_default_encryption_key);
+        master_encryption_key = from_base64(s->cct->_conf->get_val<std::string>("rgw_crypt_default_encryption_key"));
       } catch (...) {
         ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_encrypt invalid default encryption key "
                          << "which contains character that is not base64 encoded."
@@ -1271,7 +1271,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   }
 
   if (stored_mode == "SSE-C-AES256") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
+    if (s->cct->_conf->get_val<bool>("rgw_crypt_require_ssl") &&
         !s->info.env->exists("SERVER_PORT_SECURE")) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
@@ -1353,7 +1353,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   }
 
   if (stored_mode == "SSE-KMS") {
-    if (s->cct->_conf->rgw_crypt_require_ssl &&
+    if (s->cct->_conf->get_val<bool>("rgw_crypt_require_ssl") &&
         !s->info.env->exists("SERVER_PORT_SECURE")) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
@@ -1388,7 +1388,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
   if (stored_mode == "RGW-AUTO") {
     std::string master_encryption_key;
     try {
-      master_encryption_key = from_base64(std::string(s->cct->_conf->rgw_crypt_default_encryption_key));
+      master_encryption_key = from_base64(std::string(s->cct->_conf->get_val<std::string>("rgw_crypt_default_encryption_key")));
     } catch (...) {
       ldout(s->cct, 5) << "ERROR: rgw_s3_prepare_decrypt invalid default encryption key "
                        << "which contains character that is not base64 encoded."

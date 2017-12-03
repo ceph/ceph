@@ -713,7 +713,7 @@ TEST(TestRGWAdmin, datalog_list) {
   const char *cname = "datalog",
              *perm = "*";
   string rest_req;
-  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
+  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->get_val<int64_t>("rgw_data_log_num_shards"));
   stringstream ss;
   list<rgw_data_change> entries;
 
@@ -728,7 +728,7 @@ TEST(TestRGWAdmin, datalog_list) {
   int num_objects;
   EXPECT_EQ (parse_json_resp(parser), 0);
   JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
-  ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_data_log_num_shards);
+  ASSERT_EQ(num_objects,g_ceph_context->_conf->get_val<int64_t>("rgw_data_log_num_shards"));
  
   sleep(1);
   ASSERT_EQ(0, create_bucket());
@@ -946,7 +946,7 @@ TEST(TestRGWAdmin, datalog_trim) {
   const char *cname = "datalog",
              *perm = "*";
   string rest_req;
-  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->rgw_data_log_num_shards);
+  unsigned shard_id = get_datalog_shard_id(TEST_BUCKET_NAME, g_ceph_context->_conf->get_val<int64_t>("rgw_data_log_num_shards"));
   stringstream ss;
   list<rgw_data_change> entries;
 
@@ -1041,7 +1041,7 @@ TEST(TestRGWAdmin, mdlog_list) {
   const char *cname = "mdlog",
              *perm = "*";
   string rest_req;
-  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->get_val<int64_t>("rgw_md_log_max_shards"));
   stringstream ss;
 
   sleep(2);
@@ -1056,7 +1056,7 @@ TEST(TestRGWAdmin, mdlog_list) {
   int num_objects;
   EXPECT_EQ (parse_json_resp(parser), 0);
   JSONDecoder::decode_json("num_objects", num_objects, (JSONObj *)&parser);
-  ASSERT_EQ(num_objects,g_ceph_context->_conf->rgw_md_log_max_shards);
+  ASSERT_EQ(num_objects,g_ceph_context->_conf->get_val<int64_t>("rgw_md_log_max_shards"));
 
   ss.str("");
   ss << "/admin/log?type=metadata&id=" << shard_id << "&start-time=" << start_time;
@@ -1216,7 +1216,7 @@ TEST(TestRGWAdmin, mdlog_trim) {
              *perm = "*";
   string rest_req;
   list<cls_log_entry_json> entries;
-  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->rgw_md_log_max_shards);
+  unsigned shard_id = get_mdlog_shard_id(uid, g_ceph_context->_conf->get_val<int64_t>("rgw_md_log_max_shards"));
   ostringstream ss;
 
   sleep(1);

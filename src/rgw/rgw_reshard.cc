@@ -194,7 +194,7 @@ RGWBucketReshard::RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucke
   const rgw_bucket& b = bucket_info.bucket;
   reshard_oid = b.tenant + (b.tenant.empty() ? "" : ":") + b.name + ":" + b.bucket_id;
 
-  utime_t lock_duration(store->ctx()->_conf->rgw_reshard_bucket_lock_duration, 0);
+  utime_t lock_duration(store->ctx()->_conf->get_val<int64_t>("rgw_reshard_bucket_lock_duration"), 0);
 #define COOKIE_LEN 16
   char cookie_buf[COOKIE_LEN + 1];
   gen_rand_alphanumeric(store->ctx(), cookie_buf, sizeof(cookie_buf) - 1);
@@ -570,7 +570,7 @@ RGWReshard::RGWReshard(RGWRados* _store, bool _verbose, ostream *_out,
                        Formatter *_formatter) : store(_store), instance_lock(bucket_instance_lock_name),
                                                 verbose(_verbose), out(_out), formatter(_formatter)
 {
-  num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
+  num_logshards = store->ctx()->_conf->get_val<int64_t>("rgw_reshard_num_logs");
 }
 
 string RGWReshard::get_logshard_key(const string& tenant, const string& bucket_name)
@@ -918,7 +918,7 @@ void *RGWReshard::ReshardWorker::entry() {
 
     utime_t end = ceph_clock_now();
     end -= start;
-    int secs = cct->_conf->rgw_reshard_thread_interval;
+    int secs = cct->_conf->get_val<uint64_t>("rgw_reshard_thread_interval");
 
     if (secs <= end.sec())
       continue; // next round

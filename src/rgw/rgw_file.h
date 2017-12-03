@@ -866,10 +866,10 @@ namespace rgw {
 	    const char* _key, const char *root)
       : cct(_cct), root_fh(this), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
-	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
-		 cct->_conf->rgw_nfs_fhcache_size),
-	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
-	       cct->_conf->rgw_nfs_lru_lane_hiwat),
+	fh_cache(cct->_conf->get_val<int64_t>("rgw_nfs_fhcache_partitions"),
+		 cct->_conf->get_val<int64_t>("rgw_nfs_fhcache_size")),
+	fh_lru(cct->_conf->get_val<int64_t>("rgw_nfs_lru_lanes"),
+	       cct->_conf->get_val<int64_t>("rgw_nfs_lru_lane_hiwat")),
 	uid(_uid), key(_user_id, _key) {
 
       if (!root || !strcmp(root, "/")) {
@@ -1809,7 +1809,7 @@ public:
   void send_response() override {}
 
   int verify_params() override {
-    if (bl.length() > cct->_conf->rgw_max_put_size)
+    if (bl.length() > cct->_conf->get_val<uint64_t>("rgw_max_put_size"))
       return -ERR_TOO_LARGE;
     return 0;
   }
@@ -2315,7 +2315,7 @@ public:
   RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx,
                                        bool *is_multipart) override {
     struct req_state* s = get_state();
-    uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+    uint64_t part_size = s->cct->_conf->get_val<int64_t>("rgw_obj_stripe_size");
     RGWPutObjProcessor_Atomic *processor =
       new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket,
 				    s->object.name, part_size, s->req_id,

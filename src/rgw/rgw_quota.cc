@@ -107,7 +107,7 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
 {
   if (quota.max_size >= 0) {
     if (quota.max_size_soft_threshold < 0) {
-      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->get_val<double>("rgw_bucket_quota_soft_threshold");
     }
 
     if (cached_stats.size_rounded  >= (uint64_t)quota.max_size_soft_threshold) {
@@ -119,7 +119,7 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
 
   if (quota.max_objects >= 0) {
     if (quota.max_objs_soft_threshold < 0) {
-      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf->get_val<double>("rgw_bucket_quota_soft_threshold");
     }
 
     if (cached_stats.num_objects >= (uint64_t)quota.max_objs_soft_threshold) {
@@ -185,8 +185,8 @@ void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket,
   qs.stats = stats;
   qs.expiration = ceph_clock_now();
   qs.async_refresh_time = qs.expiration;
-  qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
-  qs.async_refresh_time += store->ctx()->_conf->rgw_bucket_quota_ttl / 2;
+  qs.expiration += store->ctx()->_conf->get_val<int64_t>("rgw_bucket_quota_ttl");
+  qs.async_refresh_time += store->ctx()->_conf->get_val<int64_t>("rgw_bucket_quota_ttl") / 2;
 
   map_add(user, bucket, qs);
 }
@@ -350,7 +350,7 @@ protected:
   int fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats) override;
 
 public:
-  explicit RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  explicit RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->get_val<int64_t>("rgw_bucket_quota_cache_size")) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
@@ -472,7 +472,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
           break;
 
         lock.Lock();
-        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_bucket_sync_interval, 0));
+        cond.WaitInterval(lock, utime_t(cct->_conf->get_val<int64_t>("rgw_user_quota_bucket_sync_interval"), 0));
         lock.Unlock();
       } while (!stats->going_down());
       ldout(cct, 20) << "BucketsSyncThread: done" << dendl;
@@ -515,7 +515,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
           break;
 
         lock.Lock();
-        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
+        cond.WaitInterval(lock, utime_t(cct->_conf->get_val<int64_t>("rgw_user_quota_sync_interval"), 0));
         lock.Unlock();
       } while (!stats->going_down());
       ldout(cct, 20) << "UserSyncThread: done" << dendl;
@@ -570,7 +570,7 @@ protected:
   }
 
 public:
-  RGWUserStatsCache(RGWRados *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
+  RGWUserStatsCache(RGWRados *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->get_val<int64_t>("rgw_bucket_quota_cache_size")),
                                         rwlock("RGWUserStatsCache::rwlock") {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
@@ -652,14 +652,14 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
     return ret;
   }
 
-  if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
+  if (!store->ctx()->_conf->get_val<bool>("rgw_user_quota_sync_idle_users") &&
       header.last_stats_update < header.last_stats_sync) {
     ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
   }
 
   real_time when_need_full_sync = header.last_stats_sync;
-  when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
+  when_need_full_sync += make_timespan(store->ctx()->_conf->get_val<int64_t>("rgw_user_quota_sync_wait_time"));
   
   // check if enough time passed since last full sync
   /* FIXME: missing check? */

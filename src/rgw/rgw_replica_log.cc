@@ -158,7 +158,7 @@ RGWReplicaBucketLogger::RGWReplicaBucketLogger(RGWRados *_store) :
   RGWReplicaLogger(_store)
 {
   store->get_log_pool(pool);
-  prefix = _store->ctx()->_conf->rgw_replica_log_obj_prefix;
+  prefix = _store->ctx()->_conf->get_val<std::string>("rgw_replica_log_obj_prefix");
   prefix.append(".");
 }
 

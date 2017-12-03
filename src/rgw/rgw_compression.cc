@@ -106,9 +106,9 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
       return cr;
     }
     ++first_block;
-    while (out_bl.length() - q_ofs >= cct->_conf->rgw_max_chunk_size)
+    while (out_bl.length() - q_ofs >= cct->_conf->get_val<int64_t>("rgw_max_chunk_size"))
     {
-      off_t ch_len = std::min<off_t>(cct->_conf->rgw_max_chunk_size, q_len);
+      off_t ch_len = std::min<off_t>(cct->_conf->get_val<int64_t>("rgw_max_chunk_size"), q_len);
       q_len -= ch_len;
       r = next->handle_data(out_bl, q_ofs, ch_len);
       if (r < 0) {

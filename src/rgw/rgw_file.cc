@@ -839,10 +839,10 @@ namespace rgw {
     /* dirent invalidate timeout--basically, the upper-bound on
      * inconsistency with the S3 namespace */
     auto expire_s
-      = get_context()->_conf->rgw_nfs_namespace_expire_secs;
+      = get_context()->_conf->get_val<int64_t>("rgw_nfs_namespace_expire_secs");
 
     /* max events to gc in one cycle */
-    uint32_t max_ev = get_context()->_conf->rgw_nfs_max_gc;
+    uint32_t max_ev = get_context()->_conf->get_val<int64_t>("rgw_nfs_max_gc");
 
     struct timespec now, expire_ts;
     event_vector ve;

@@ -103,7 +103,7 @@ int RGWMetadataLog::add_entry(RGWMetadataHandler *handler, const string& section
   handler->get_hash_key(section, key, hash_key);
 
   int shard_id;
-  store->shard_name(prefix, cct->_conf->rgw_md_log_max_shards, hash_key, oid, &shard_id);
+  store->shard_name(prefix, cct->_conf->get_val<int64_t>("rgw_md_log_max_shards"), hash_key, oid, &shard_id);
   mark_modified(shard_id);
   real_time now = real_clock::now();
   return store->time_log_add(oid, now, section, key, bl);
@@ -1113,6 +1113,6 @@ int RGWMetadataManager::get_log_shard_id(const string& section,
   }
   string hash_key;
   handler->get_hash_key(section, key, hash_key);
-  *shard_id = store->key_to_shard_id(hash_key, cct->_conf->rgw_md_log_max_shards);
+  *shard_id = store->key_to_shard_id(hash_key, cct->_conf->get_val<int64_t>("rgw_md_log_max_shards"));
   return 0;
 }

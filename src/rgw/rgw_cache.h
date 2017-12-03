@@ -158,7 +158,7 @@ public:
   void remove(std::string& name);
   void set_ctx(CephContext *_cct) {
     cct = _cct;
-    lru_window = cct->_conf->rgw_cache_lru_size / 2;
+    lru_window = cct->_conf->get_val<int64_t>("rgw_cache_lru_size") / 2;
   }
   bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry);
 

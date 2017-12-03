@@ -89,7 +89,7 @@ namespace rgw {
   {
     /* write completion interval */
     RGWLibFS::write_completion_interval_s =
-      cct->_conf->rgw_nfs_write_completion_interval_s;
+      cct->_conf->get_val<int64_t>("rgw_nfs_write_completion_interval_s");
 
     /* start write timer */
     RGWLibFS::write_timer.resume();
@@ -100,7 +100,7 @@ namespace rgw {
 
       /* dirent invalidate timeout--basically, the upper-bound on
        * inconsistency with the S3 namespace */
-      auto expire_s = cct->_conf->rgw_nfs_namespace_expire_secs;
+      auto expire_s = cct->_conf->get_val<int64_t>("rgw_nfs_namespace_expire_secs");
 
       /* delay between gc cycles */
       auto delay_s = std::max(int64_t(1), std::min(int64_t(MIN_EXPIRE_S), expire_s/2));
@@ -446,7 +446,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf->rgw_thread_pool_size, conf);
+				 g_conf->get_val<int64_t>("rgw_thread_pool_size"), conf);
     return 0;
   }
 
@@ -475,7 +475,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf->get_val<int64_t>("rgw_init_timeout"), new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);
@@ -485,11 +485,11 @@ namespace rgw {
     rgw_init_resolver();
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_lc_threads,
-					 g_conf->rgw_enable_quota_threads,
-					 g_conf->rgw_run_sync_thread,
-					 g_conf->rgw_dynamic_resharding);
+					 g_conf->get_val<bool>("rgw_enable_gc_threads"),
+					 g_conf->get_val<bool>("rgw_enable_lc_threads"),
+					 g_conf->get_val<bool>("rgw_enable_quota_threads"),
+					 g_conf->get_val<bool>("rgw_run_sync_thread"),
+					 g_conf->get_val<bool>("rgw_dynamic_resharding"));
 
     if (!store) {
       mutex.Lock();
@@ -513,12 +513,12 @@ namespace rgw {
     if (r)
       return -EIO;
 
-    const string& ldap_uri = store->ctx()->_conf->rgw_ldap_uri;
-    const string& ldap_binddn = store->ctx()->_conf->rgw_ldap_binddn;
-    const string& ldap_searchdn = store->ctx()->_conf->rgw_ldap_searchdn;
-    const string& ldap_searchfilter = store->ctx()->_conf->rgw_ldap_searchfilter;
+    const string& ldap_uri = store->ctx()->_conf->get_val<std::string>("rgw_ldap_uri");
+    const string& ldap_binddn = store->ctx()->_conf->get_val<std::string>("rgw_ldap_binddn");
+    const string& ldap_searchdn = store->ctx()->_conf->get_val<std::string>("rgw_ldap_searchdn");
+    const string& ldap_searchfilter = store->ctx()->_conf->get_val<std::string>("rgw_ldap_searchfilter");
     const string& ldap_dnattr =
-      store->ctx()->_conf->rgw_ldap_dnattr;
+      store->ctx()->_conf->get_val<std::string>("rgw_ldap_dnattr");
     std::string ldap_bindpw = parse_rgw_ldap_bindpw(store->ctx());
 
     ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw.c_str(),
@@ -532,9 +532,9 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
-    if (!g_conf->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-      olog->init(g_conf->rgw_ops_log_socket_path);
+    if (!g_conf->get_val<std::string>("rgw_ops_log_socket_path").empty()) {
+      olog = new OpsLogSocket(g_ceph_context, g_conf->get_val<int64_t>("rgw_ops_log_data_backlog"));
+      olog->init(g_conf->get_val<std::string>("rgw_ops_log_socket_path"));
     }
 
     int port = 80;

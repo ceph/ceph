@@ -154,7 +154,7 @@ TEST(Compress, LimitedChunkSize)
     decompress.handle_data(c_sink.get_sink(), 0, c_sink.get_sink().length());
     decompress.handle_data(empty, 0, 0);
 
-    ASSERT_LE(d_sink.get_size(), (size_t)g_ceph_context->_conf->rgw_max_chunk_size);
+    ASSERT_LE(d_sink.get_size(), (size_t)g_ceph_context->_conf->get_val<int64_t>("rgw_max_chunk_size"));
   }
 }
 

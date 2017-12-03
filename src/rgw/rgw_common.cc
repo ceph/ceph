@@ -222,8 +222,8 @@ static string get_abs_path(const string& request_uri) {
 
 req_info::req_info(CephContext *cct, const class RGWEnv *env) : env(env) {
   method = env->get("REQUEST_METHOD", "");
-  script_uri = env->get("SCRIPT_URI", cct->_conf->rgw_script_uri.c_str());
-  request_uri = env->get("REQUEST_URI", cct->_conf->rgw_request_uri.c_str());
+  script_uri = env->get("SCRIPT_URI", cct->_conf->get_val<std::string>("rgw_script_uri").c_str());
+  request_uri = env->get("REQUEST_URI", cct->_conf->get_val<std::string>("rgw_request_uri").c_str());
   if (request_uri[0] != '/') {
     request_uri = get_abs_path(request_uri);
   }
@@ -1244,7 +1244,7 @@ bool verify_object_permission(struct req_state * const s,
     return true;
   }
 
-  if (!s->cct->_conf->rgw_enforce_swift_acls)
+  if (!s->cct->_conf->get_val<bool>("rgw_enforce_swift_acls"))
     return ret;
 
   if ((perm & (int)s->perm_mask) != perm)
@@ -1291,7 +1291,7 @@ bool verify_object_permission_no_policy(struct req_state * const s,
     return true;
   }
 
-  if (!s->cct->_conf->rgw_enforce_swift_acls)
+  if (!s->cct->_conf->get_val<bool>("rgw_enforce_swift_acls"))
     return ret;
 
   if ((perm & (int)s->perm_mask) != perm)

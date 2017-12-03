@@ -621,7 +621,7 @@ public:
     reenter(this) {
       yield {
         set_status("acquiring sync lock");
-	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+	uint32_t lock_duration = cct->_conf->get_val<int64_t>("rgw_sync_lease_period");
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
@@ -860,7 +860,7 @@ public:
     reenter(this) {
       yield {
         set_status(string("acquiring lock (") + sync_env->status_oid() + ")");
-	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+	uint32_t lock_duration = cct->_conf->get_val<int64_t>("rgw_sync_lease_period");
         string lock_name = "sync_lock";
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados,
                                                 sync_env->store,
@@ -1206,7 +1206,7 @@ RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
                                                       op_status(_op_status),
                                                       pos(0), sync_status(0),
                                                       marker_tracker(_marker_tracker), tries(0) {
-  error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
+  error_injection = (sync_env->cct->_conf->get_val<double>("rgw_sync_meta_inject_err_probability") > 0);
   tn = sync_env->sync_tracer->add_node(new RGWSyncTraceNode(sync_env->cct,
                                                             sync_env->sync_tracer, 
                                                             _tn_parent,
@@ -1219,7 +1219,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
 #define NUM_TRANSIENT_ERROR_RETRIES 10
 
     if (error_injection &&
-        rand() % 10000 < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
+        rand() % 10000 < cct->_conf->get_val<double>("rgw_sync_meta_inject_err_probability") * 10000.0) {
       ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << ": injecting meta sync error on key=" << raw_key << dendl;
       return set_cr_error(-EIO);
     }
@@ -1508,7 +1508,7 @@ public:
       can_adjust_marker = true;
       /* grab lock */
       yield {
-	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+	uint32_t lock_duration = cct->_conf->get_val<int64_t>("rgw_sync_lease_period");
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
         lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
@@ -1652,7 +1652,7 @@ public:
       /* grab lock */
       if (!lease_cr) { /* could have had  a lease_cr lock from previous state */
         yield {
-          uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
+          uint32_t lock_duration = cct->_conf->get_val<int64_t>("rgw_sync_lease_period");
           string lock_name = "sync_lock";
           RGWRados *store = sync_env->store;
           lease_cr.reset( new RGWContinuousLeaseCR(sync_env->async_rados, store,
@@ -2494,7 +2494,7 @@ int PurgePeriodLogsCR::operate()
       yield {
         const auto mdlog = metadata->get_log(cursor.get_period().get_id());
         const auto& pool = store->get_zone_params().log_pool;
-        auto num_shards = cct->_conf->rgw_md_log_max_shards;
+        auto num_shards = cct->_conf->get_val<int64_t>("rgw_md_log_max_shards");
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
       }
       if (retcode < 0) {
@@ -2574,7 +2574,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
   if (first == last) {
     return -EINVAL;
   }
-  const size_t num_shards = cct->_conf->rgw_md_log_max_shards;
+  const size_t num_shards = cct->_conf->get_val<int64_t>("rgw_md_log_max_shards");
 
   status->sync_info.realm_epoch = std::numeric_limits<epoch_t>::max();
   for (auto p = first; p != last; ++p) {

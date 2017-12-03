@@ -35,7 +35,7 @@ namespace keystone {
 bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
 {
-  return ! token.empty() && ! cct->_conf->rgw_keystone_url.empty();
+  return ! token.empty() && ! cct->_conf->get_val<std::string>("rgw_keystone_url").empty();
 }
 
 TokenEngine::token_envelope_t
@@ -213,8 +213,8 @@ TokenEngine::authenticate(const std::string& token,
    * also thread-safe. */
   static const struct RolesCacher {
     RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->get_val<std::string>("rgw_keystone_accepted_roles"), plain);
+      get_str_vec(cct->_conf->get_val<std::string>("rgw_keystone_accepted_admin_roles"), admin);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -282,7 +282,7 @@ TokenEngine::authenticate(const std::string& token,
   }
 
   ldout(cct, 0) << "user does not hold a matching role; required roles: "
-                << g_conf->rgw_keystone_accepted_roles << dendl;
+                << g_conf->get_val<std::string>("rgw_keystone_accepted_roles") << dendl;
 
   return result_t::deny(-EPERM);
 }
@@ -332,7 +332,7 @@ EC2Engine::get_from_keystone(const boost::string_view& access_key_id,
   validate.append_header("Content-Type", "application/json");
 
   /* check if we want to verify keystone's ssl certs */
-  validate.set_verify_ssl(cct->_conf->rgw_keystone_verify_ssl);
+  validate.set_verify_ssl(cct->_conf->get_val<bool>("rgw_keystone_verify_ssl"));
 
   /* create json credentials request body */
   JSONFormatter credentials(false);
@@ -429,8 +429,8 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
    * also thread-safe. */
   static const struct RolesCacher {
     RolesCacher(CephContext* const cct) {
-      get_str_vec(cct->_conf->rgw_keystone_accepted_roles, plain);
-      get_str_vec(cct->_conf->rgw_keystone_accepted_admin_roles, admin);
+      get_str_vec(cct->_conf->get_val<std::string>("rgw_keystone_accepted_roles"), plain);
+      get_str_vec(cct->_conf->get_val<std::string>("rgw_keystone_accepted_admin_roles"), admin);
 
       /* Let's suppose that having an admin role implies also a regular one. */
       plain.insert(std::end(plain), std::begin(admin), std::end(admin));
@@ -468,7 +468,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   if (! found) {
     ldout(cct, 5) << "s3 keystone: user does not hold a matching role;"
                      " required roles: "
-                  << cct->_conf->rgw_keystone_accepted_roles << dendl;
+                  << cct->_conf->get_val<std::string>("rgw_keystone_accepted_roles") << dendl;
     return result_t::deny();
   } else {
     /* everything seems fine, continue with this user */

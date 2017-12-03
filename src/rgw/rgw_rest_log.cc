@@ -130,7 +130,7 @@ void RGWOp_MDLog_List::send_response() {
 }
 
 void RGWOp_MDLog_Info::execute() {
-  num_objects = s->cct->_conf->rgw_md_log_max_shards;
+  num_objects = s->cct->_conf->get_val<int64_t>("rgw_md_log_max_shards");
   period = store->meta_mgr->read_oldest_log_period();
   http_ret = period.get_error();
 }
@@ -644,7 +644,7 @@ void RGWOp_DATALog_List::send_response() {
 
 
 void RGWOp_DATALog_Info::execute() {
-  num_objects = s->cct->_conf->rgw_data_log_num_shards;
+  num_objects = s->cct->_conf->get_val<int64_t>("rgw_data_log_num_shards");
   http_ret = 0;
 }
 

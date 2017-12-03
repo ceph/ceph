@@ -93,7 +93,7 @@ int main(const int argc, const char **argv)
   RGWObjectExpirer objexp(store);
   objexp.start_processor();
 
-  const utime_t interval(g_ceph_context->_conf->rgw_objexp_gc_interval, 0);
+  const utime_t interval(g_ceph_context->_conf->get_val<uint64_t>("rgw_objexp_gc_interval"), 0);
   while (true) {
     interval.sleep();
   }

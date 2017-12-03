@@ -145,14 +145,14 @@ namespace keystone {
 
 ApiVersion CephCtxConfig::get_api_version() const noexcept
 {
-  switch (g_ceph_context->_conf->rgw_keystone_api_version) {
+  switch (g_ceph_context->_conf->get_val<int64_t>("rgw_keystone_api_version")) {
   case 3:
     return ApiVersion::VER_3;
   case 2:
     return ApiVersion::VER_2;
   default:
     dout(0) << "ERROR: wrong Keystone API version: "
-            << g_ceph_context->_conf->rgw_keystone_api_version
+            << g_ceph_context->_conf->get_val<int64_t>("rgw_keystone_api_version")
             << "; falling back to v2" <<  dendl;
     return ApiVersion::VER_2;
   }
@@ -160,7 +160,7 @@ ApiVersion CephCtxConfig::get_api_version() const noexcept
 
 std::string CephCtxConfig::get_endpoint_url() const noexcept
 {
-  static const std::string url = g_ceph_context->_conf->rgw_keystone_url;
+  static const std::string url = g_ceph_context->_conf->get_val<std::string>("rgw_keystone_url");
 
   if (url.empty() || boost::algorithm::ends_with(url, "/")) {
     return url;
@@ -632,7 +632,7 @@ void* TokenCache::RevokeThread::entry()
 
     lock.Lock();
     cond.WaitInterval(lock,
-		      utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
+		      utime_t(cct->_conf->get_val<int64_t>("rgw_keystone_revocation_interval"), 0));
     lock.Unlock();
   } while (!cache->going_down());
 

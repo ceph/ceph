@@ -1563,7 +1563,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
       dout(0) << "WARNING: could not defer gc entry for obj" << dendl;
     }
     gc_invalidate_time = start_time;
-    gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+    gc_invalidate_time += (s->cct->_conf->get_val<int64_t>("rgw_gc_obj_min_wait") / 2);
   }
   return send_response_data(bl, bl_ofs, bl_len);
 }
@@ -1588,7 +1588,7 @@ bool RGWGetObj::prefetch_data()
       range_parsed = true;
     }
     /* range get goes to shadown objects, stop prefetch */
-    if (ofs >= s->cct->_conf->rgw_max_chunk_size) {
+    if (ofs >= s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size")) {
       prefetch_first_chunk = false;
     }
   }
@@ -1624,7 +1624,7 @@ void RGWGetObj::execute()
   utime_t start_time = s->time;
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
-  gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  gc_invalidate_time += (s->cct->_conf->get_val<int64_t>("rgw_gc_obj_min_wait") / 2);
 
   bool need_decompress;
   int64_t ofs_x, end_x;
@@ -1846,7 +1846,7 @@ void RGWListBuckets::execute()
   bool started = false;
   uint64_t total_count = 0;
 
-  const uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  const uint64_t max_buckets = s->cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -2010,7 +2010,7 @@ void RGWStatAccount::execute()
 {
   string marker;
   bool is_truncated = false;
-  uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  uint64_t max_buckets = s->cct->_conf->get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   do {
     RGWUserBuckets buckets;
@@ -3049,7 +3049,7 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_prefix(upload_prefix);
 
-  manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
+  manifest.set_multipart_part_rule(store->ctx()->_conf->get_val<int64_t>("rgw_obj_stripe_size"), num);
 
   int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
   if (r < 0) {
@@ -3148,7 +3148,7 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
 
   bool multipart = s->info.args.exists("uploadId");
 
-  uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
+  uint64_t part_size = s->cct->_conf->get_val<int64_t>("rgw_obj_stripe_size");
 
   if (!multipart) {
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
@@ -3428,7 +3428,7 @@ void RGWPutObj::execute()
     if (!copy_source) {
       len = get_data(data);
     } else {
-      uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+      uint64_t cur_lst = min(fst + s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size") - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
       if (op_ret < 0)
         goto done;
@@ -3627,7 +3627,7 @@ void RGWPutObj::execute()
     version_id = (static_cast<RGWPutObjProcessor_Atomic *>(processor))->get_version_id();
 
   /* produce torrent */
-  if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
+  if (s->cct->_conf->get_val<bool>("rgw_torrent_flag") && (ofs == torrent.get_data_len()))
   {
     torrent.init(s, store);
     torrent.set_create_date(mtime);
@@ -3749,7 +3749,7 @@ void RGWPostObj::execute()
                                         s->bucket,
                                         get_current_filename(),
                                         /* part size */
-                                        s->cct->_conf->rgw_obj_stripe_size,
+                                        s->cct->_conf->get_val<int64_t>("rgw_obj_stripe_size"),
                                         s->req_id,
                                         s->bucket_info.versioning_enabled());
     /* No filters by default. */
@@ -4511,10 +4511,10 @@ static void copy_obj_progress_cb(off_t ofs, void *param)
 
 void RGWCopyObj::progress_cb(off_t ofs)
 {
-  if (!s->cct->_conf->rgw_copy_obj_progress)
+  if (!s->cct->_conf->get_val<bool>("rgw_copy_obj_progress"))
     return;
 
-  if (ofs - last_ofs < s->cct->_conf->rgw_copy_obj_progress_every_bytes)
+  if (ofs - last_ofs < s->cct->_conf->get_val<int64_t>("rgw_copy_obj_progress_every_bytes"))
     return;
 
   send_partial_response(ofs);
@@ -4715,7 +4715,7 @@ void RGWPutACLs::execute()
                        << s->length << dendl;
       op_ret = -ERR_MALFORMED_XML;
       s->err.message = "The XML you provided was larger than the maximum " +
-                       std::to_string(s->cct->_conf->rgw_max_put_param_size) +
+                       std::to_string(s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size")) +
                        " bytes allowed.";
     }
     return;
@@ -4752,7 +4752,7 @@ void RGWPutACLs::execute()
   const RGWAccessControlList& req_acl = policy->get_acl();
   const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
 #define ACL_GRANTS_MAX_NUM      100
-  int max_num = s->cct->_conf->rgw_acl_grants_max_num;
+  int max_num = s->cct->_conf->get_val<int64_t>("rgw_acl_grants_max_num");
   if (max_num < 0) {
     max_num = ACL_GRANTS_MAX_NUM;
   }
@@ -4821,7 +4821,7 @@ void RGWPutACLs::execute()
 static void get_lc_oid(struct req_state *s, string& oid)
 {
   string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
-  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
+  int max_objs = (s->cct->_conf->get_val<int64_t>("rgw_lc_max_objs") > HASH_PRIME)?HASH_PRIME:s->cct->_conf->get_val<int64_t>("rgw_lc_max_objs");
   int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
   oid = lc_oid_prefix;
   char buf[32];
@@ -4914,7 +4914,7 @@ void RGWPutLC::execute()
   string oid; 
   get_lc_oid(s, oid);
   pair<string, int> entry(shard_id, lc_uninitial);
-  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  int max_lock_secs = s->cct->_conf->get_val<int64_t>("rgw_lc_lock_max_time");
   rados::cls::lock::Lock l(lc_index_lock_name); 
   utime_t time(max_lock_secs, 0);
   l.set_duration(time);
@@ -4965,7 +4965,7 @@ void RGWDeleteLC::execute()
   pair<string, int> entry(shard_id, lc_uninitial);
   string oid; 
   get_lc_oid(s, oid);
-  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  int max_lock_secs = s->cct->_conf->get_val<int64_t>("rgw_lc_lock_max_time");
   librados::IoCtx *ctx = store->get_lc_pool_ctx();
   rados::cls::lock::Lock l(lc_index_lock_name);
   utime_t time(max_lock_secs, 0);
@@ -5368,7 +5368,7 @@ void RGWCompleteMultipart::execute()
   }
 
   if ((int)parts->parts.size() >
-      s->cct->_conf->rgw_multipart_part_upload_limit) {
+      s->cct->_conf->get_val<int64_t>("rgw_multipart_part_upload_limit")) {
     op_ret = -ERANGE;
     return;
   }
@@ -5385,7 +5385,7 @@ void RGWCompleteMultipart::execute()
   bool compressed = false;
   uint64_t accounted_size = 0;
 
-  uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
+  uint64_t min_part_size = s->cct->_conf->get_val<int64_t>("rgw_multipart_min_part_size");
 
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
@@ -5752,8 +5752,8 @@ void RGWListBucketMultiparts::execute()
 
 void RGWGetHealthCheck::execute()
 {
-  if (!g_conf->rgw_healthcheck_disabling_path.empty() &&
-      (::access(g_conf->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
+  if (!g_conf->get_val<std::string>("rgw_healthcheck_disabling_path").empty() &&
+      (::access(g_conf->get_val<std::string>("rgw_healthcheck_disabling_path").c_str(), F_OK) == 0)) {
     /* Disabling path specified & existent in the filesystem. */
     op_ret = -ERR_SERVICE_UNAVAILABLE; /* 503 */
   } else {
@@ -6361,7 +6361,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   RGWPutObjDataProcessor *filter = nullptr;
   boost::optional<RGWPutObj_Compress> compressor;
 
-  if (size > static_cast<const size_t>(s->cct->_conf->rgw_max_put_size)) {
+  if (size > static_cast<const size_t>(s->cct->_conf->get_val<uint64_t>("rgw_max_put_size"))) {
     op_ret = -ERR_TOO_LARGE;
     return op_ret;
   }
@@ -6407,7 +6407,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
                                       binfo.bucket,
                                       object.name,
                                       /* part size */
-                                      s->cct->_conf->rgw_obj_stripe_size,
+                                      s->cct->_conf->get_val<int64_t>("rgw_obj_stripe_size"),
                                       s->req_id,
                                       binfo.versioning_enabled());
 
@@ -6441,7 +6441,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   MD5 hash;
   do {
     ceph::bufferlist data;
-    len = body.get_at_most(s->cct->_conf->rgw_max_chunk_size, data);
+    len = body.get_at_most(s->cct->_conf->get_val<int64_t>("rgw_max_chunk_size"), data);
 
     ldout(s->cct, 20) << "bulk upload: body=" << data.c_str() << dendl;
     if (len < 0) {
@@ -6857,7 +6857,7 @@ int RGWPutBucketPolicy::verify_permission()
 
 int RGWPutBucketPolicy::get_params()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf->get_val<uint64_t>("rgw_max_put_param_size");
   // At some point when I have more time I want to make a version of
   // rgw_rest_read_all_input that doesn't use malloc.
   op_ret = rgw_rest_read_all_input(s, &data, &len, max_size, false);

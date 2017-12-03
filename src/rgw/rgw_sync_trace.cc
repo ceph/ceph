@@ -19,7 +19,7 @@ RGWSyncTraceNode::RGWSyncTraceNode(CephContext *_cct, RGWSyncTraceManager *_mana
                                                                              manager(_manager),
                                                                              parent(_parent),
                                                                              type(_type),
-                                                                             id(_id), history(cct->_conf->rgw_sync_trace_per_node_log_size)
+                                                                             id(_id), history(cct->_conf->get_val<int64_t>("rgw_sync_trace_per_node_log_size"))
 {
   if (parent.get()) {
     prefix = parent->get_prefix();
@@ -58,7 +58,7 @@ class RGWSyncTraceServiceMapThread : public RGWRadosThread {
   RGWSyncTraceManager *manager;
 
   uint64_t interval_msec() override {
-    return cct->_conf->rgw_sync_trace_servicemap_update_interval * 1000;
+    return cct->_conf->get_val<int64_t>("rgw_sync_trace_servicemap_update_interval") * 1000;
   }
 public:
   RGWSyncTraceServiceMapThread(RGWRados *_store, RGWSyncTraceManager *_manager)

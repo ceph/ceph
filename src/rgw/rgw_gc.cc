@@ -23,7 +23,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
+  max_objs = min(static_cast<int>(cct->_conf->get_val<int64_t>("rgw_gc_max_objs")), rgw_shards_max());
 
   obj_names = new string[max_objs];
 
@@ -51,7 +51,7 @@ void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const 
   info.chain = chain;
   info.tag = tag;
 
-  cls_rgw_gc_set_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
+  cls_rgw_gc_set_entry(op, cct->_conf->get_val<int64_t>("rgw_gc_obj_min_wait"), info);
 }
 
 int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
@@ -70,7 +70,7 @@ int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
 int RGWGC::defer_chain(const string& tag, bool sync)
 {
   ObjectWriteOperation op;
-  cls_rgw_gc_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, tag);
+  cls_rgw_gc_defer_entry(op, cct->_conf->get_val<int64_t>("rgw_gc_obj_min_wait"), tag);
 
   int i = tag_index(tag);
 
@@ -237,7 +237,7 @@ done:
 
 int RGWGC::process()
 {
-  int max_secs = cct->_conf->rgw_gc_processor_max_time;
+  int max_secs = cct->_conf->get_val<int64_t>("rgw_gc_processor_max_time");
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
@@ -288,7 +288,7 @@ void *RGWGC::GCWorker::entry() {
 
     utime_t end = ceph_clock_now();
     end -= start;
-    int secs = cct->_conf->rgw_gc_processor_period;
+    int secs = cct->_conf->get_val<int64_t>("rgw_gc_processor_period");
 
     if (secs <= end.sec())
       continue; // next round
