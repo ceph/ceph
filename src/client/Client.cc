@@ -727,6 +727,7 @@ void Client::update_inode_file_bits(Inode *in,
         in->inline_data.splice(size, len - size);
     }
   }
+  // ERROR
   if (truncate_seq >= in->truncate_seq &&
       in->truncate_size != truncate_size) {
     if (in->is_file()) {
