@@ -52,6 +52,7 @@ namespace rados {
           ::decode(window, bl);
           DECODE_FINISH(bl);
         }
+        void dump(Formatter *f) const;
       };
       WRITE_CLASS_ENCODER(rados::cls::otp::otp_info_t)
 
