@@ -2617,6 +2617,7 @@ int main(int argc, const char **argv)
 
   string totp_serial;
   string totp_seed;
+  string totp_seed_type = "hex";
   vector<string> totp_pin;
   int totp_seconds = 0;
   int totp_window = 0;
@@ -2948,6 +2949,8 @@ int main(int argc, const char **argv)
       totp_pin.push_back(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed", (char*)NULL)) {
       totp_seed = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed-type", (char*)NULL)) {
+      totp_seed_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-seconds", (char*)NULL)) {
       totp_seconds = atoi(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-window", (char*)NULL)) {
@@ -7368,8 +7371,20 @@ next:
       return EINVAL;
     }
 
+
+    rados::cls::otp::SeedType seed_type;
+    if (totp_seed_type == "hex") {
+      seed_type = rados::cls::otp::OTP_SEED_HEX;
+    } else if (totp_seed_type == "base32") {
+      seed_type = rados::cls::otp::OTP_SEED_BASE32;
+    } else {
+      cerr << "ERROR: invalid seed type: " << totp_seed_type << std::endl;
+      return EINVAL;
+    }
+
     config.id = totp_serial;
     config.seed = totp_seed;
+    config.seed_type = seed_type;
 
     if (totp_seconds > 0) {
       config.step_size = totp_seconds;
