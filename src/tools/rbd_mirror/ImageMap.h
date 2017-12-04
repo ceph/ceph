@@ -155,6 +155,25 @@ private:
     }
   };
 
+  struct C_AcquireImage : Context {
+    ImageMap *image_map;
+    std::string global_image_id;
+
+    C_AcquireImage(ImageMap *image_map, const std::string &global_image_id)
+      : image_map(image_map),
+        global_image_id(global_image_id) {
+    }
+
+    void finish(int r) override {
+      image_map->queue_acquire_image(global_image_id);
+    }
+
+    // maybe called more than once
+    void complete(int r) override {
+      finish(r);
+    }
+  };
+
   // async op-tracker helper routines
   void start_async_op() {
     m_async_op_tracker.start_op();
