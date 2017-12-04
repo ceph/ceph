@@ -136,3 +136,8 @@ COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
 	"mgr", "rw", "cli,rest")
+
+COMMAND("config show " \
+	"name=who,type=CephString",
+	"Show running configuration",
+	"mgr", "r", "cli,rest")
