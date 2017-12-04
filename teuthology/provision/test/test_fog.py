@@ -213,7 +213,7 @@ class TestFOG(object):
             obj = self.klass('name.fqdn', 'type', '1.0')
             result = obj.schedule_deploy_task(host_id)
             assert local_mocks['get_deploy_tasks'].called_once_with()
-        assert len(self.mocks['m_requests_Session_send'].call_args_list) == 2
+        assert len(self.mocks['m_requests_Session_send'].call_args_list) == 3
         assert result == task_id
 
     def test_get_deploy_tasks(self):
