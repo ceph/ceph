@@ -40,6 +40,7 @@
 #include "cls/timeindex/cls_timeindex_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/user/cls_user_client.h"
+#include "cls/otp/cls_otp_client.h"
 #include "osd/osd_types.h"
 
 #include "rgw_tools.h"
@@ -1696,6 +1697,7 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.user_email_pool);
       pool_names.insert(zone.user_swift_pool);
       pool_names.insert(zone.user_uid_pool);
+      pool_names.insert(zone.otp_pool);
       pool_names.insert(zone.roles_pool);
       pool_names.insert(zone.reshard_pool);
       for(auto& iter : zone.placement_pools) {
@@ -1769,6 +1771,7 @@ int RGWZoneParams::fix_pool_names()
   user_uid_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:users.uid", user_uid_pool);
   roles_pool = fix_zone_pool_dup(pools, name, ".rgw.meta:roles", roles_pool);
   reshard_pool = fix_zone_pool_dup(pools, name, ".rgw.log:reshard", reshard_pool);
+  otp_pool = fix_zone_pool_dup(pools, name, ".rgw.otp", otp_pool);
 
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
@@ -14158,21 +14161,64 @@ void RGWRados::call_zap() {
   return;
 }
 
-int RGWRados::check_mfa(const rgw_user& user, const string& otp_id, const string& pin)
+int RGWRados::get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref)
 {
   string oid = string("user:") + user.to_str();
   rgw_raw_obj obj(get_zone_params().otp_pool, oid);
+  return get_system_obj_ref(obj, ref);
+}
 
+int RGWRados::check_mfa(const rgw_user& user, const string& otp_id, const string& pin)
+{
   rgw_rados_ref ref;
-  int r = get_system_obj_ref(obj, &ref);
+
+  int r = get_mfa_ref(user, &ref);
   if (r < 0) {
     return r;
   }
 
-  otp_check_t result;
+  rados::cls::otp::otp_check_t result;
+
+  r = rados::cls::otp::OTP::check(cct, ref.ioctx, ref.oid, otp_id, pin, &result);
+  if (r < 0)
+    return r;
+
+  ldout(cct, 20) << "OTP check, otp_id=" << otp_id << " result=" << (int)result.result << dendl;
+
+  return (result.result == rados::cls::otp::OTP_CHECK_SUCCESS ? 0 : -EACCES);
+}
+
+int RGWRados::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
 
   librados::ObjectWriteOperation op;
-  rados::cls::otp::OTP::check(ref.io_ctx, obj.get_oid(), otp_id, pin, &result);
+  rados::cls::otp::OTP::create(&op, config);
+  r = ref.ioctx.operate(ref.oid, &op);
+  if (r < 0) {
+    ldout(cct, 20) << "OTP create, otp_id=" << config.id << " result=" << (int)r << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWRados::remove_mfa(const rgw_user& user, const string& id)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  rados::cls::otp::OTP::remove(&op, id);
   r = ref.ioctx.operate(ref.oid, &op);
   if (r < 0) {
     ldout(cct, 20) << "OTP remove, otp_id=" << id << " result=" << (int)r << dendl;
@@ -14196,8 +14242,23 @@ int RGWRados::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::o
     return r;
   }
 
-  ldout(cct, 20) << "OTP check, otp_id=" << otp_id << " result=" << (int)result << dendl;
+  return 0;
+}
 
-  return (result.result == rados::cls::otp::OTP_CHECK ? 0 : -EACCES);
+int RGWRados::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result)
+{
+  rgw_rados_ref ref;
+
+  int r = get_mfa_ref(user, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  r = rados::cls::otp::OTP::get_all(ref.ioctx, ref.oid, result);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
 }
 
