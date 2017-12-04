@@ -799,12 +799,16 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 
 int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     ::ObjectOperation *o, AioCompletionImpl *c,
-				     const SnapContext& snap_context, int flags,
+				     const SnapContext& snap_context,
+                                     ceph::real_time *pmtime,
+                                     int flags,
                                      const blkin_trace_info *trace_info)
 {
   FUNCTRACE();
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
-  auto ut = ceph::real_clock::now();
+  ceph::real_time ut = (pmtime ? *pmtime :
+    ceph::real_clock::now());
+
   /* can't write to a snapshot */
   if (snap_seq != CEPH_NOSNAP)
     return -EROFS;
@@ -1185,7 +1189,7 @@ int librados::IoCtxImpl::aio_rmxattr(const object_t& oid, AioCompletionImpl *c,
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.rmxattr(name);
-  return aio_operate(oid, &op, c, snapc, 0);
+  return aio_operate(oid, &op, c, snapc, NULL, 0);
 }
 
 int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
@@ -1194,7 +1198,7 @@ int librados::IoCtxImpl::aio_setxattr(const object_t& oid, AioCompletionImpl *c,
   ::ObjectOperation op;
   prepare_assert_ops(&op);
   op.setxattr(name, bl);
-  return aio_operate(oid, &op, c, snapc, 0);
+  return aio_operate(oid, &op, c, snapc, NULL, 0);
 }
 
 namespace {
@@ -2244,4 +2248,3 @@ int librados::IoCtxImpl::application_metadata_list(const std::string& app_name,
     });
   return r;
 }
-
