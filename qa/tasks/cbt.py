@@ -53,10 +53,10 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
          
         # install fio
