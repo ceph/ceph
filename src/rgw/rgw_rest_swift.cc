@@ -871,9 +871,9 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
 
 #define MAX_SLO_ENTRY_SIZE (1024 + 128) // 1024 - max obj name, 128 - enough extra for other info
     uint64_t max_len = s->cct->_conf->rgw_max_slo_entries * MAX_SLO_ENTRY_SIZE;
-    
+
     slo_info = new RGWSLOInfo;
-    
+
     int r = rgw_rest_get_json_input_keep_data(s->cct, s, slo_info->entries, max_len, &slo_info->raw_data, &slo_info->raw_data_len);
     if (r < 0) {
       ldout(s->cct, 5) << "failed to read input for slo r=" << r << dendl;
@@ -2748,15 +2748,6 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 
   if (check_utf8(bucket.c_str(), len))
     return -ERR_INVALID_UTF8;
-
-  const char *s = bucket.c_str();
-
-  for (size_t i = 0; i < len; ++i, ++s) {
-    if (*(unsigned char *)s == 0xff)
-      return -ERR_INVALID_BUCKET_NAME;
-    if (*(unsigned char *)s == '/')
-      return -ERR_INVALID_BUCKET_NAME;
-  }
 
   return 0;
 }
