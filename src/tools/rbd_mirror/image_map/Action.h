@@ -21,7 +21,7 @@ public:
                                       Context *on_finish);
 
   void execute_state_callback(StateTransition::State state);
-  void state_callback_complete(StateTransition::State state, bool delete_context);
+  void state_callback_complete(StateTransition::State state);
   void execute_completion_callback(int r);
 
   StateTransition::ActionType get_action_type() const;
