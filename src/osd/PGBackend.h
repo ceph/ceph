@@ -397,8 +397,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual void on_change() = 0;
    virtual void clear_recovery_state() = 0;
 
-   virtual void on_flushed() = 0;
-
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
 

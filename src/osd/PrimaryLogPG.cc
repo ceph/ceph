@@ -10704,7 +10704,6 @@ void PrimaryLogPG::on_flushed()
     }
     assert(object_contexts.empty());
   }
-  pgbackend->on_flushed();
 }
 
 void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
