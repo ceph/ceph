@@ -63,6 +63,8 @@ def parse_tags(lv_tags):
     tag_mapping = {}
     tags = lv_tags.split(',')
     for tag_assignment in tags:
+        if not tag_assignment.startswith('ceph.'):
+            continue
         key, value = tag_assignment.split('=', 1)
         tag_mapping[key] = value
 
