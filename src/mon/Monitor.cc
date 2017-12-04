@@ -472,6 +472,7 @@ const char** Monitor::get_tracked_conf_keys() const
     "mon_osdmap_full_prune_txsize",
     // debug options - observed, not handled
     "mon_debug_extra_checks",
+    "mon_debug_block_osdmap_trim",
     NULL
   };
   return KEYS;

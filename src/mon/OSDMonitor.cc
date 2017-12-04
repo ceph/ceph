@@ -1664,6 +1664,14 @@ void OSDMonitor::prime_pg_temp(
 	    return 0;
 	  }
 
+	  if (g_conf->get_val<bool>("mon_debug_block_osdmap_trim")) {
+    	    dout(0) << __func__
+                    << " blocking osdmap trim"
+                       " ('mon_debug_block_osdmap_trim' set to 'true')"
+                    << dendl;
+            return 0;
+	  }
+
 	  epoch_t floor;
 	  if (mon->monmap->get_required_features().contains_all(
 		ceph::features::mon::FEATURE_LUMINOUS)) {
