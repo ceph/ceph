@@ -502,6 +502,11 @@ enum {
   OPT_RESHARD_STATUS,
   OPT_RESHARD_PROCESS,
   OPT_RESHARD_CANCEL,
+  OPT_MFA_CREATE,
+  OPT_MFA_REMOVE,
+  OPT_MFA_GET,
+  OPT_MFA_LIST,
+  OPT_MFA_CHECK,
 };
 
 static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
@@ -524,6 +529,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       strcmp(cmd, "lc") == 0 ||
       strcmp(cmd, "mdlog") == 0 ||
       strcmp(cmd, "metadata") == 0 ||
+      strcmp(cmd, "mfa") == 0 ||
       strcmp(cmd, "object") == 0 ||
       strcmp(cmd, "objects") == 0 ||
       strcmp(cmd, "olh") == 0 ||
@@ -956,6 +962,17 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
+  } else if (strcmp(prev_cmd, "mfa") == 0) {
+    if (strcmp(cmd, "create") == 0)
+      return OPT_MFA_CREATE;
+    if (strcmp(cmd, "remove") == 0)
+      return OPT_MFA_REMOVE;
+    if (strcmp(cmd, "get") == 0)
+      return OPT_MFA_GET;
+    if (strcmp(cmd, "list") == 0)
+      return OPT_MFA_LIST;
+    if (strcmp(cmd, "check") == 0)
+      return OPT_MFA_CHECK;
   }
 
   return -EINVAL;
@@ -2546,6 +2563,12 @@ int main(int argc, const char **argv)
 
   boost::optional<std::string> compression_type;
 
+  string totp_serial;
+  string totp_seed;
+  string totp_pin;
+  int totp_seconds = 0;
+  int totp_window = 0;
+
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
@@ -2867,6 +2890,16 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
+      totp_serial = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
+      totp_pin = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-seed", (char*)NULL)) {
+      totp_seed = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-seconds", (char*)NULL)) {
+      totp_seconds = atoi(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--totp-window", (char*)NULL)) {
+      totp_window = atoi(val.c_str());
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -7259,6 +7292,151 @@ next:
         return EINVAL;
       }
     }
+  }
+
+  if (opt_cmd == OPT_MFA_CREATE) {
+    rados::cls::otp::otp_info_t config;
+
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_serial.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-serial)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_seed.empty()) {
+      cerr << "ERROR: TOTP device seed was not provided (via --totp-seed)" << std::endl;
+      return EINVAL;
+    }
+
+    config.id = totp_serial;
+    config.seed = totp_seed;
+
+    if (totp_seconds > 0) {
+      config.step_size = totp_seconds;
+    }
+
+    if (totp_window > 0) {
+      config.window = totp_window;
+    }
+
+    int ret = store->create_mfa(user_id, config);
+    if (ret < 0) {
+      cerr << "MFA creation failed, error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    
+    RGWUserInfo& user_info = user_op.get_user_info();
+    user_info.mfa_ids.insert(totp_serial);
+    user_op.set_mfa_ids(user_info.mfa_ids);
+    string err;
+    ret = user.modify(user_op, &err);
+    if (ret < 0) {
+      cerr << "ERROR: failed storing user info, error: " << err << std::endl;
+      return -ret;
+    }
+  }
+
+ if (opt_cmd == OPT_MFA_REMOVE) {
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_serial.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-serial)" << std::endl;
+      return EINVAL;
+    }
+
+    int ret = store->remove_mfa(user_id, totp_serial);
+    if (ret < 0) {
+      cerr << "MFA removal failed, error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    RGWUserInfo& user_info = user_op.get_user_info();
+    user_info.mfa_ids.erase(totp_serial);
+    user_op.set_mfa_ids(user_info.mfa_ids);
+    string err;
+    ret = user.modify(user_op, &err);
+    if (ret < 0) {
+      cerr << "ERROR: failed storing user info, error: " << err << std::endl;
+      return -ret;
+    }
+  }
+
+ if (opt_cmd == OPT_MFA_GET) {
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_serial.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-serial)" << std::endl;
+      return EINVAL;
+    }
+
+    rados::cls::otp::otp_info_t result;
+    int ret = store->get_mfa(user_id, totp_serial, &result);
+    if (ret < 0) {
+      if (ret == -ENOENT || ret == -ENODATA) {
+        cerr << "MFA serial id not found" << std::endl;
+      } else {
+        cerr << "MFA retrieval failed, error: " << cpp_strerror(-ret) << std::endl;
+      }
+      return -ret;
+    }
+    formatter->open_object_section("result");
+    encode_json("entry", result, formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+ if (opt_cmd == OPT_MFA_LIST) {
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    list<rados::cls::otp::otp_info_t> result;
+    int ret = store->list_mfa(user_id, &result);
+    if (ret < 0) {
+      cerr << "MFA listing failed, error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+    formatter->open_object_section("result");
+    encode_json("entries", result, formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+  }
+
+ if (opt_cmd == OPT_MFA_CHECK) {
+    if (user_id.empty()) {
+      cerr << "ERROR: user id was not provided (via --uid)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_serial.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-serial)" << std::endl;
+      return EINVAL;
+    }
+
+    if (totp_pin.empty()) {
+      cerr << "ERROR: TOTP device serial number was not provided (via --totp-pin)" << std::endl;
+      return EINVAL;
+    }
+
+    list<rados::cls::otp::otp_info_t> result;
+    int ret = store->check_mfa(user_id, totp_serial, totp_pin);
+    if (ret < 0) {
+      cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    cout << "ok" << std::endl;
   }
 
   return 0;
