@@ -1642,15 +1642,18 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
-    s->bucket_info.flags |= BUCKET_VERSIONED;
-    s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
-    s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      if (enable_versioning) {
+	s->bucket_info.flags |= BUCKET_VERSIONED;
+	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+      } else {
+	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+      }
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					  &s->bucket_attrs);
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+					       &s->bucket_attrs);
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
 		     << " returned err=" << op_ret << dendl;
