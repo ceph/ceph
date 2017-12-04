@@ -2406,14 +2406,6 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
 #define MAX_TOTP_SKEW_HOURS (24 * 7)
   assert(pins.size() == 2);
 
-  size_t slen = totp.seed.size() / 2 + 1;
-  char seed[slen];
-  int rc = oath_hex2bin(totp.seed.c_str(), seed, &slen);
-  if (rc != OATH_OK) {
-    cerr << "ERROR: failed to parse seed" << std::endl;
-    return -EINVAL;
-  }
-
   time_t start_time = ceph::real_clock::to_time_t(now);
   time_t time_ofs = 0, time_ofs_abs = 0;
   time_t step_size = totp.step_size;
@@ -2426,7 +2418,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   uint32_t max_skew = MAX_TOTP_SKEW_HOURS * 3600;
 
   while (time_ofs_abs < max_skew) {
-    rc = oath_totp_validate2(seed, slen,
+    int rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                              start_time, 
                              step_size,
                              time_ofs,
@@ -2434,7 +2426,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
                              nullptr,
                              pins[0].c_str());
     if (rc != OATH_INVALID_OTP) {
-      rc = oath_totp_validate2(seed, slen,
+      rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                                start_time, 
                                step_size,
                                time_ofs - step_size, /* smaller time_ofs moves time forward */

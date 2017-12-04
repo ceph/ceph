@@ -121,25 +121,19 @@ void otp_instance::check(const string& token, const string& val, bool *update)
 
 bool otp_instance::verify(const ceph::real_time& timestamp, const string& val)
 {
-  size_t slen = otp.seed.size() / 2 + 1;
-  char secret[slen];
   uint64_t index;
   uint32_t secs = (uint32_t)ceph::real_clock::to_time_t(timestamp);
-  int result = oath_hex2bin(otp.seed.c_str(), secret, &slen);
-  if (result != OATH_OK) {
-    CLS_LOG(20, "failed to parse seed");
-    return result;
-  }
-
-  result = oath_totp_validate3(secret, slen,
+  int result = oath_totp_validate2(otp.seed_bin.c_str(), otp.seed_bin.length(),
                                    secs, otp.step_size, otp.time_ofs, otp.window,
-                                   nullptr /* otp pos */, &index,
+                                   nullptr /* otp pos */,
                                    val.c_str());
   if (result == OATH_INVALID_OTP ||
       result < 0) {
     CLS_LOG(20, "otp check failed, result=%d", result);
     return false;
   }
+
+  index = result + (secs - otp.time_ofs) / otp.step_size;
 
   if (index <= last_success) { /* already used value */
     CLS_LOG(20, "otp, use of old token: index=%lld last_success=%lld", (long long)index, (long long)last_success);
@@ -264,6 +258,22 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
   return 0;
 }
 
+static int parse_seed(const string& seed, bufferlist *seed_bin)
+{
+  size_t slen = seed.size() / 2 + 1;
+  char secret[slen];
+  int result = oath_hex2bin(seed.c_str(), secret, &slen);
+  if (result != OATH_OK) {
+    CLS_LOG(20, "failed to parse seed");
+    return -EINVAL;
+  }
+
+  seed_bin->clear();
+  seed_bin->append(secret, slen);
+
+  return 0;
+}
+
 static int otp_set_op(cls_method_context_t hctx,
                        bufferlist *in, bufferlist *out)
 {
@@ -291,6 +301,11 @@ static int otp_set_op(cls_method_context_t hctx,
       return r;
     }
     instance.otp = entry;
+
+    r = parse_seed(instance.otp.seed, &instance.otp.seed_bin);
+    if (r < 0) {
+      return r;
+    }
 
     r = write_otp_instance(hctx, instance);
     if (r < 0) {
