@@ -258,18 +258,35 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
   return 0;
 }
 
-static int parse_seed(const string& seed, bufferlist *seed_bin)
+static int parse_seed(const string& seed, SeedType seed_type, bufferlist *seed_bin)
 {
-  size_t slen = seed.size() / 2 + 1;
-  char secret[slen];
-  int result = oath_hex2bin(seed.c_str(), secret, &slen);
+  size_t slen = seed.length();
+  char secret[seed.length()];
+  char *psecret = secret;
+  int result;
+  bool need_free = false;
+
+  seed_bin->clear();
+
+  switch (seed_type) {
+    case OTP_SEED_BASE32:
+      need_free = true; /* oath_base32_decode allocates dest buffer */
+      result = oath_base32_decode(seed.c_str(), seed.length(),
+                                  &psecret, &slen);
+      break;
+    default: /* just assume hex is the default */
+      result = oath_hex2bin(seed.c_str(), psecret, &slen);
+  }
   if (result != OATH_OK) {
     CLS_LOG(20, "failed to parse seed");
     return -EINVAL;
   }
 
-  seed_bin->clear();
-  seed_bin->append(secret, slen);
+  seed_bin->append(psecret, slen);
+
+  if (need_free) {
+    free(psecret);
+  }
 
   return 0;
 }
@@ -302,7 +319,7 @@ static int otp_set_op(cls_method_context_t hctx,
     }
     instance.otp = entry;
 
-    r = parse_seed(instance.otp.seed, &instance.otp.seed_bin);
+    r = parse_seed(instance.otp.seed, instance.otp.seed_type, &instance.otp.seed_bin);
     if (r < 0) {
       return r;
     }

@@ -19,10 +19,17 @@ namespace rados {
         OTP_TOTP = 2,
       };
 
+      enum SeedType {
+        OTP_SEED_UNKNOWN = 0,
+        OTP_SEED_HEX = 1,
+        OTP_SEED_BASE32 = 2,
+      };
+
       struct otp_info_t {
         OTPType type{OTP_TOTP};
         string id;
         string seed;
+        SeedType seed_type{OTP_SEED_UNKNOWN};
         bufferlist seed_bin; /* parsed seed, built automatically by otp_set_op,
                               * not being json encoded/decoded on purpose
                               */
@@ -39,6 +46,7 @@ namespace rados {
            * then we'll need to branch here */
           ::encode(id, bl);
           ::encode(seed, bl);
+          ::encode((uint8_t)seed_type, bl);
           ::encode(seed_bin, bl);
           ::encode(time_ofs, bl);
           ::encode(step_size, bl);
@@ -52,6 +60,9 @@ namespace rados {
           type = (OTPType)t;
           ::decode(id, bl);
           ::decode(seed, bl);
+          uint8_t st;
+          ::decode(st, bl);
+          seed_type = (SeedType)st;
           ::decode(seed_bin, bl);
           ::decode(time_ofs, bl);
           ::decode(step_size, bl);
