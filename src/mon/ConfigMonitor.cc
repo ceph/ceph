@@ -101,8 +101,10 @@ void ConfigMonitor::tick()
   if (changed) {
     propose_pending();
   }
+}
 
-#warning temp hack
+void ConfigMonitor::on_active()
+{
   check_all_subs();
 }
 

@@ -34,6 +34,7 @@ public:
 
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 
+  void on_active() override;
   void tick() override;
 
   bool refresh_config(MonSession *s);
