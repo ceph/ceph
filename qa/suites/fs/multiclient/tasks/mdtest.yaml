@@ -1,7 +1,4 @@
 # make sure we get the same MPI version on all hosts
-os_type: ubuntu
-os_version: "14.04"
-
 tasks:
 - pexec:
     clients:
