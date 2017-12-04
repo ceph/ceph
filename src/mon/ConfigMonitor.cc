@@ -170,6 +170,21 @@ void ConfigMonitor::load_config()
   jf.close_section();
   jf.flush(*_dout);
   *_dout << dendl;
+
+  // refresh our own config
+  {
+    const OSDMap& osdmap = mon->osdmon()->osdmap;
+    map<string,string> crush_location;
+    osdmap.crush->get_full_location(g_conf->host, &crush_location);
+    map<string,string> out;
+    config_map.generate_entity_map(
+      g_conf->name,
+      crush_location,
+      osdmap.crush.get(),
+      string(), // no device class
+      &out);
+    g_conf->set_mon_vals(g_ceph_context, out);
+  }
 }
 
 bool ConfigMonitor::refresh_config(MonSession *s)
