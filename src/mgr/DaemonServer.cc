@@ -378,6 +378,12 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon->metadata = m->daemon_metadata;
     daemon->service_status = m->daemon_status;
 
+    auto p = m->config_bl.begin();
+    if (p != m->config_bl.end()) {
+      ::decode(daemon->config, p);
+      dout(20) << " got config " << daemon->config << dendl;
+    }
+
     utime_t now = ceph_clock_now();
     auto d = pending_service_map.get_daemon(m->service_name,
 					    m->daemon_name);
@@ -492,6 +498,12 @@ bool DaemonServer::handle_report(MMgrReport *m)
     Mutex::Locker l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
     daemon_counters.update(m);
+
+    auto p = m->config_bl.begin();
+    if (p != m->config_bl.end()) {
+      ::decode(daemon->config, p);
+      dout(20) << " got config " << daemon->config << dendl;
+    }
 
     if (daemon->service_daemon) {
       utime_t now = ceph_clock_now();
