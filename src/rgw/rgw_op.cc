@@ -2846,6 +2846,18 @@ void RGWDeleteBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+static void get_lc_oid(struct req_state *s, string& oid)
+{
+  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
+  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
+  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
+  oid = lc_oid_prefix;
+  char buf[32];
+  snprintf(buf, 32, ".%d", index);
+  oid.append(buf);
+  return;
+}
+
 void RGWDeleteBucket::execute()
 {
   op_ret = -EINVAL;
@@ -2945,7 +2957,33 @@ void RGWDeleteBucket::execute()
     return;
   }
 
-
+  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;
+  pair<string, int> entry(shard_id, lc_uninitial);
+  string oid; 
+  get_lc_oid(s, oid);
+  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
+  librados::IoCtx *ctx = store->get_lc_pool_ctx();
+  rados::cls::lock::Lock l(lc_index_lock_name);
+  utime_t time(max_lock_secs, 0);
+  l.set_duration(time);
+  do {
+    op_ret = l.lock_exclusive(ctx, oid);
+    if (op_ret == -EBUSY) {
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      sleep(5);
+      continue;
+    }
+    if (op_ret < 0) {
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock " << oid << op_ret << dendl;
+      break;
+    }
+    op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
+    if (op_ret < 0) {
+      // Ignore this error, the bucket may not configure lifecycle.
+    }
+    break;
+  } while(1);
+  l.unlock(ctx, oid);
 }
 
 int RGWPutObj::verify_permission()
@@ -4816,18 +4854,6 @@ void RGWPutACLs::execute()
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
   }
-}
-
-static void get_lc_oid(struct req_state *s, string& oid)
-{
-  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
-  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
-  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
-  oid = lc_oid_prefix;
-  char buf[32];
-  snprintf(buf, 32, ".%d", index);
-  oid.append(buf);
-  return;
 }
 
 void RGWPutLC::execute()
