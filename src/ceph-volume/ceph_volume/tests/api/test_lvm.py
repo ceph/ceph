@@ -13,6 +13,14 @@ class TestParseTags(object):
         result = api.parse_tags('ceph.osd_something=1')
         assert result == {'ceph.osd_something': '1'}
 
+    def test_non_ceph_tags_are_skipped(self):
+        result = api.parse_tags('foo')
+        assert result == {}
+
+    def test_mixed_non_ceph_tags(self):
+        result = api.parse_tags('foo,ceph.bar=1')
+        assert result == {'ceph.bar': '1'}
+
     def test_multiple_csv_expands_in_dict(self):
         result = api.parse_tags('ceph.osd_something=1,ceph.foo=2,ceph.fsid=0000')
         # assert them piecemeal to avoid the un-ordered dict nature
