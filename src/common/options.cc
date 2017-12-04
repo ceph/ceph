@@ -323,10 +323,6 @@ std::vector<Option> get_global_options() {
     .add_service("common")
     .add_see_also("admin_socket"),
 
-    Option("crushtool", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_description("name of the 'crushtool' utility")
-    .add_service("mon"),
-
     // daemon
     Option("daemonize", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
