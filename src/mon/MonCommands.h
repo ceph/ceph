@@ -1058,7 +1058,8 @@ COMMAND("config-key exists " \
 COMMAND_WITH_FLAG("config-key list ", "list keys", "config-key", "r", "cli,rest",
 		  FLAG(DEPRECATED))
 COMMAND("config-key ls ", "list keys", "config-key", "r", "cli,rest")
-COMMAND("config-key dump", "dump keys and values", "config-key", "r", "cli,rest")
+COMMAND("config-key dump " \
+	"name=key,type=CephString,req=false", "dump keys and values (with optional prefix)", "config-key", "r", "cli,rest")
 
 
 /*

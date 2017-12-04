@@ -35,7 +35,7 @@ class ConfigKeyService : public QuorumService
       MonitorDBStore::TransactionRef t,
       const string &prefix);
   void store_list(stringstream &ss);
-  void store_dump(stringstream &ss);
+  void store_dump(stringstream &ss, const string& prefix);
   bool store_exists(const string &key);
   bool store_has_prefix(const string &prefix);
 

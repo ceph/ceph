@@ -108,15 +108,24 @@ bool ConfigKeyService::store_has_prefix(const string &prefix)
   return false;
 }
 
-void ConfigKeyService::store_dump(stringstream &ss)
+void ConfigKeyService::store_dump(stringstream &ss, const string& prefix)
 {
   KeyValueDB::Iterator iter =
     mon->store->get_iterator(CONFIG_PREFIX);
+
+  dout(10) << __func__ << " prefix '" << prefix << "'" << dendl;
+  if (prefix.size()) {
+    iter->lower_bound(prefix);
+  }
 
   JSONFormatter f(true);
   f.open_object_section("config-key store");
 
   while (iter->valid()) {
+    if (prefix.size() &&
+	iter->key().find(prefix) != 0) {
+      break;
+    }
     f.dump_string(iter->key().c_str(), iter->value().to_str());
     iter->next();
   }
@@ -250,8 +259,10 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
     ret = 0;
 
   } else if (prefix == "config-key dump") {
+    string prefix;
+    cmd_getval(g_ceph_context, cmdmap, "key", prefix);
     stringstream tmp_ss;
-    store_dump(tmp_ss);
+    store_dump(tmp_ss, prefix);
     rdata.append(tmp_ss);
     ret = 0;
 
