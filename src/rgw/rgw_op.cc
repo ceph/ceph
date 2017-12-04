@@ -4010,32 +4010,35 @@ void RGWInitMultipart::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  do {
-    char buf[33];
-    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
-    upload_id.append(buf);
+  op_ret = retry_raced_bucket_write(store, s, [&obj, &attrs, this] {
+      do {
+	char buf[33];
+	gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+	upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
+	upload_id.append(buf);
 
-    string tmp_obj_name;
-    RGWMPObj mp(s->object.name, upload_id);
-    tmp_obj_name = mp.get_meta();
+	string tmp_obj_name;
+	RGWMPObj mp(s->object.name, upload_id);
+	tmp_obj_name = mp.get_meta();
 
-    obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
-    // the meta object will be indexed with 0 size, we c
-    obj.set_in_extra_data(true);
-    obj.index_hash_source = s->object.name;
+	obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
+	// the meta object will be indexed with 0 size, we c
+	obj.set_in_extra_data(true);
+	obj.index_hash_source = s->object.name;
 
-    RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+	RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+	op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
 
-    RGWRados::Object::Write obj_op(&op_target);
+	RGWRados::Object::Write obj_op(&op_target);
 
-    obj_op.meta.owner = s->owner.get_id();
-    obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
-    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+	obj_op.meta.owner = s->owner.get_id();
+	obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
+	obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
 
-    op_ret = obj_op.write_meta(0, attrs);
-  } while (op_ret == -EEXIST);
+	op_ret = obj_op.write_meta(0, attrs);
+      } while (op_ret == -EEXIST);
+      return op_ret;
+    });
 }
 
 static int get_multipart_info(RGWRados *store, struct req_state *s,
