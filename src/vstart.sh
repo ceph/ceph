@@ -422,24 +422,16 @@ prepare_conf() {
 
 [global]
         fsid = $(uuidgen)
-        osd pg bits = 3
-        osd pgp bits = 5  ; (invalid, but ceph should cope!)
-        osd pool default size = $OSD_POOL_DEFAULT_SIZE
-        osd crush chooseleaf type = 0
-        osd pool default min size = 1
         osd failsafe full ratio = .99
+        mon osd full ratio = .99
         mon osd nearfull ratio = .99
         mon osd backfillfull ratio = .99
-        mon osd reporter subtree level = osd
-        mon osd full ratio = .99
-        mon data avail warn = 2
-        mon data avail crit = 1
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
-        osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
+	osd_crush_chooseleaf_type = 0
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
@@ -474,9 +466,6 @@ $extra_conf
 [mds]
 $DAEMONOPTS
 $CMDSDEBUG
-        mds debug frag = true
-        mds debug auth pins = true
-        mds debug subtrees = true
         mds data = $CEPH_DEV_DIR/mds.\$id
         mds root ino uid = `id -u`
         mds root ino gid = `id -g`
@@ -484,8 +473,6 @@ $extra_conf
 [mgr]
         mgr data = $CEPH_DEV_DIR/mgr.\$id
         mgr module path = $MGR_PYTHON_PATH
-        mon reweight min pgs per osd = 4
-        mon pg warn min per osd = 3
 $DAEMONOPTS
 $CMGRDEBUG
 $extra_conf
@@ -499,16 +486,13 @@ $DAEMONOPTS
         osd class dir = $OBJCLASS_PATH
         osd class load list = *
         osd class default list = *
-        osd scrub load threshold = 2000.0
-        osd debug op order = true
-        osd debug misdirected ops = true
+
         filestore wbthrottle xfs ios start flusher = 10
         filestore wbthrottle xfs ios hard limit = 20
         filestore wbthrottle xfs inodes hard limit = 30
         filestore wbthrottle btrfs ios start flusher = 10
         filestore wbthrottle btrfs ios hard limit = 20
         filestore wbthrottle btrfs inodes hard limit = 30
-        osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
 	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
@@ -523,11 +507,6 @@ $COSDSHORT
 $extra_conf
 [mon]
         mgr initial modules = restful status dashboard balancer
-        mon pg warn min per osd = 3
-        mon osd allow primary affinity = true
-        mon reweight min pgs per osd = 4
-        mon osd prime pg temp = true
-        mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
 $extra_conf
@@ -899,6 +878,25 @@ fi
 
 if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
+
+    $CEPH_BIN/ceph config set global osd_pool_default_size $OSD_POOL_DEFAULT_SIZE
+    $CEPH_BIN/ceph config set global osd_pool_default_min_size 1
+    $CEPH_BIN/ceph config set global mon_pg_warn_min_per_osd 3
+
+    $CEPH_BIN/ceph config set mon mon_osd_reporter_subtree_level osd
+    $CEPH_BIN/ceph config set mon mon_data_avail_warn 2
+    $CEPH_BIN/ceph config set mon mon_data_avail_crit 1
+    $CEPH_BIN/ceph config set mon osd_pool_default_erasure_code_profile 'plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd'
+    $CEPH_BIN/ceph config set mon mon_allow_pool_delete true
+
+    $CEPH_BIN/ceph config set osd osd_scrub_load_threshold 2000
+    $CEPH_BIN/ceph config set osd osd_debug_op_order true
+    $CEPH_BIN/ceph config set osd osd_debug_misdirected_ops true
+    $CEPH_BIN/ceph config set osd osd_copyfrom_max_chunk 524288
+
+    $CEPH_BIN/ceph config set mds mds_debug_frag true
+    $CEPH_BIN/ceph config set mds mds_debug_auth_pins true
+    $CEPH_BIN/ceph config set mds mds_debug_subtrees true
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
