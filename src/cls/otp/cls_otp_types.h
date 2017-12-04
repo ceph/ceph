@@ -23,6 +23,9 @@ namespace rados {
         OTPType type{OTP_TOTP};
         string id;
         string seed;
+        bufferlist seed_bin; /* parsed seed, built automatically by otp_set_op,
+                              * not being json encoded/decoded on purpose
+                              */
         int32_t time_ofs{0};
         uint32_t step_size{30}; /* num of seconds foreach otp to test */
         uint32_t window{2}; /* num of otp after/before start otp to test */
@@ -36,6 +39,7 @@ namespace rados {
            * then we'll need to branch here */
           ::encode(id, bl);
           ::encode(seed, bl);
+          ::encode(seed_bin, bl);
           ::encode(time_ofs, bl);
           ::encode(step_size, bl);
           ::encode(window, bl);
@@ -48,6 +52,7 @@ namespace rados {
           type = (OTPType)t;
           ::decode(id, bl);
           ::decode(seed, bl);
+          ::decode(seed_bin, bl);
           ::decode(time_ofs, bl);
           ::decode(step_size, bl);
           ::decode(window, bl);
