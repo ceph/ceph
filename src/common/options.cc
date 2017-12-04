@@ -1616,6 +1616,14 @@ std::vector<Option> get_global_options() {
         "to run on production systems, or would only be relevant while "
         "testing or debugging."),
 
+    Option("mon_debug_block_osdmap_trim", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Block OSDMap trimming while the option is enabled.")
+    .set_long_description(
+        "Blocking OSDMap trimming may be quite helpful to easily reproduce "
+        "states in which the monitor keeps (hundreds of) thousands of "
+        "osdmaps."),
+
     Option("mon_debug_deprecated_as_obsolete", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
