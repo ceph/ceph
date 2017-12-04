@@ -13609,7 +13609,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     delete f;
     *_dout << dendl;
 
-    if (1000000 - temp_upper >= agent_state->evict_effort)
+    if (temp_lower >= agent_state->evict_effort)
       return false;
   }
 
