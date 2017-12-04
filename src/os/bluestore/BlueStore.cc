@@ -3506,6 +3506,9 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     deferred_finisher(cct, "defered_finisher", "dfin"),
+    seq_io(cct->_conf->bluestore_sequential_io_max_cutoff_bytes,
+           cct->_conf->bluestore_sequential_io_max_queue_size,
+           cct->_conf->bluestore_sequential_io_max_deferred_ops),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     mempool_thread(this)
@@ -3525,6 +3528,9 @@ BlueStore::BlueStore(CephContext *cct,
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
     deferred_finisher(cct, "defered_finisher", "dfin"),
+    seq_io(cct->_conf->bluestore_sequential_io_max_cutoff_bytes,
+           cct->_conf->bluestore_sequential_io_max_queue_size,
+           cct->_conf->bluestore_sequential_io_max_deferred_ops),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
@@ -3617,7 +3623,10 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
       changed.count("bluestore_max_alloc_size") ||
       changed.count("bluestore_deferred_batch_ops") ||
       changed.count("bluestore_deferred_batch_ops_hdd") ||
-      changed.count("bluestore_deferred_batch_ops_ssd")) {
+      changed.count("bluestore_deferred_batch_ops_ssd") ||
+      changed.count("bluestore_sequential_io_max_cutoff_bytes") ||
+      changed.count("bluestore_sequential_io_max_queue_size") ||
+      changed.count("bluestore_sequential_io_max_deferred_ops")) {
     if (bdev) {
       // only after startup
       _set_alloc_sizes();
@@ -4161,6 +4170,10 @@ void BlueStore::_set_alloc_sizes(void)
       deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_ssd;
     }
   }
+
+  seq_io.max_cutoff_bytes = cct->_conf->bluestore_sequential_io_max_cutoff_bytes;
+  seq_io.max_queue_size = cct->_conf->bluestore_sequential_io_max_queue_size;
+  seq_io.max_deferred_ops = cct->_conf->bluestore_sequential_io_max_deferred_ops;
 
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	   << std::dec << " order " << min_alloc_size_order
@@ -9596,10 +9609,24 @@ void BlueStore::_do_write_small(
     bufferlist::iterator& blp,
     WriteContext *wctx)
 {
-  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   << std::dec << dendl;
   assert(length < min_alloc_size);
+  uint64_t sequential = 0;
   uint64_t end_offs = offset + length;
+
+  sequential = seq_io.find(offset, length);
+  dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
+	  << "~" << sequential << std::dec << dendl;
+  if (sequential) {
+     // judge the coming small io is sequential
+    if (seq_io.is_sequential_io(sequential)) {
+      deferred_batch_ops = seq_io.max_deferred_ops;
+    } else if(seq_io.past_midpoint(sequential)) {
+      deferred_batch_ops = seq_io.max_deferred_ops/2;
+    }
+  } else {
+    // just let rand io submit fast, also let the pre deferred io submit
+    deferred_batch_ops = 0;
+  }
 
   logger->inc(l_bluestore_write_small);
   logger->inc(l_bluestore_write_small_bytes, length);
