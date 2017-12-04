@@ -106,6 +106,9 @@ class DaemonState
   std::map<std::string, std::string> service_status;
   utime_t last_service_beacon;
 
+  // running config
+  std::map<std::string,std::map<int32_t,std::string>> config;
+
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
