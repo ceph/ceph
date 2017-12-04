@@ -182,7 +182,10 @@ class FOG(object):
         self.log.info(
             "Scheduling deploy of %s %s",
             self.os_type, self.os_version)
-        # First, we need to find the right tasktype ID
+        # First, let's find and cancel any existing deploy tasks for the host.
+        for task in self.get_deploy_tasks():
+            self.cancel_deploy_task(task['id'])
+        # Next, we need to find the right tasktype ID
         resp = self.do_request(
             '/tasktype',
             data=json.dumps(dict(name='deploy')),
@@ -213,7 +216,11 @@ class FOG(object):
         :returns: A list of deploy tasks which are active on our host
         """
         resp = self.do_request('/task/active')
-        tasks = resp.json()['tasks']
+        try:
+            tasks = resp.json()['tasks']
+        except Exception:
+            self.log.exception("Failed to get deploy tasks!")
+            return list()
         host_tasks = [obj for obj in tasks
                       if obj['host']['name'] == self.shortname]
         return host_tasks
