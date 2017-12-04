@@ -51,15 +51,6 @@ static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluste
 #define _STR(x) #x
 #define STRINGIFY(x) _STR(x)
 
-enum {
-  CONF_DEFAULT,
-  CONF_MON,
-  CONF_CONFFILE,
-  CONF_ENV,
-  CONF_OVERRIDE,
-  CONF_FINAL
-};
-
 const char *ceph_conf_level_name(int level)
 {
   switch (level) {
@@ -310,6 +301,7 @@ int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
       }
     }
   }
+  values_bl.clear();
   return 0;
 }
 
@@ -893,6 +885,23 @@ int md_config_t::rm_val(const std::string& key)
   return _rm_val(key, CONF_OVERRIDE);
 }
 
+void md_config_t::get_config_bl(bufferlist *bl)
+{
+  Mutex::Locker l(lock);
+  if (values_bl.length() == 0) {
+    ::encode((uint32_t)values.size(), values_bl);
+    for (auto& i : values) {
+      ::encode(i.first, values_bl);
+      ::encode((uint32_t)i.second.size(), values_bl);
+      for (auto& j : i.second) {
+	::encode(j.first, values_bl);
+	::encode(stringify(j.second), values_bl);
+      }
+    }
+  }
+  *bl = values_bl;
+}
+
 int md_config_t::get_val(const std::string &key, char **buf, int len) const
 {
   Mutex::Locker l(lock);
@@ -1237,11 +1246,13 @@ int md_config_t::_set_val(
     } else {
       p->second[level] = new_value;
     }
+    values_bl.clear();
     if (p->second.rbegin()->first > level) {
       // there was a higher priority value; no effect
       return 0;
     }
   } else {
+    values_bl.clear();
     values[opt.name][level] = new_value;
   }
 
@@ -1291,6 +1302,7 @@ int md_config_t::_rm_val(const std::string& key, int level)
   if (matters) {
     _refresh(*find_option(key));
   }
+  values_bl.clear();
   return 0;
 }
 
