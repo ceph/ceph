@@ -430,13 +430,7 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -eq 1 ] ; then
-		wconf <<EOF
-        auth cluster required = cephx
-        auth service required = cephx
-        auth client required = cephx
-EOF
-	else
+	if [ "$cephx" -ne 1 ] ; then
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
