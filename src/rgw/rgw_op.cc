@@ -2152,6 +2152,7 @@ void RGWGetBucketVersioning::execute()
 {
   versioned = s->bucket_info.versioned();
   versioning_enabled = s->bucket_info.versioning_enabled();
+  mfa_enabled = s->bucket_info.mfa_enabled();
 }
 
 int RGWSetBucketVersioning::verify_permission()
