@@ -30,11 +30,29 @@ class CrushWrapper;
 // is less precise than host, because the crush limiters are only
 // resolved within a section (global, per-daemon, per-instance).
 
+struct OptionMask {
+  std::string location_type, location_value; ///< matches crush_location
+  std::string device_class;                  ///< matches device class
+
+  std::string to_str() const {
+    std::string r;
+    if (location_type.size()) {
+      r += location_type + ":" + location_value;
+    }
+    if (device_class.size()) {
+      if (r.size()) {
+	r += "/";
+      }
+      r += "class:" + device_class;
+    }
+    return r;
+  }
+};
+
 struct MaskedOption {
   string raw_value;                          ///< raw, unparsed, unvalidated value
   Option opt;                                ///< the option
-  std::string location_type, location_value; ///< matches crush_location
-  std::string device_class;                  ///< matches device class
+  OptionMask mask;
 
   MaskedOption(const Option& o) : opt(o) {}
 
@@ -72,4 +90,9 @@ struct ConfigMap {
     const CrushWrapper *crush,
     const std::string& device_class,
     std::map<std::string,std::string> *out);
+
+  static bool parse_mask(
+    const std::string& in,
+    std::string *section,
+    OptionMask *mask);
 };
