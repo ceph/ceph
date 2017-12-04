@@ -26,6 +26,8 @@ public:
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
+  bool prepare_command(MonOpRequestRef op);
+
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
