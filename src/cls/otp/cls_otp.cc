@@ -90,7 +90,7 @@ WRITE_CLASS_ENCODER(otp_instance)
 
 void otp_instance::trim_expired(const ceph::real_time& now)
 {
-  ceph::real_time window_start = now - make_timespan(otp.step_size);
+  ceph::real_time window_start = now - std::chrono::seconds(otp.step_size);
 
   while (!last_checks.empty() &&
          last_checks.front().timestamp < window_start) {
@@ -150,7 +150,7 @@ void otp_instance::find(const string& token, otp_check_t *result)
   ceph::real_time now = real_clock::now();
   trim_expired(now);
 
-  for (auto entry : boost::adaptors::reverse(last_checks)) {
+  for (auto& entry : boost::adaptors::reverse(last_checks)) {
     if (entry.token == token) {
       *result = entry;
       return;
@@ -166,7 +166,7 @@ static int get_otp_instance(cls_method_context_t hctx, const string& id, otp_ins
   bufferlist bl;
   string key = otp_key_prefix + id;
  
-  int r = cls_cxx_map_get_val(hctx, key.c_str(), &bl);
+  int r = cls_cxx_map_get_val(hctx, key, &bl);
   if (r < 0) {
     if (r != -ENOENT) {
       CLS_ERR("error reading key %s: %d", key.c_str(), r);
@@ -192,7 +192,7 @@ static int write_otp_instance(cls_method_context_t hctx, const otp_instance& ins
   bufferlist bl;
   ::encode(instance, bl);
 
-  int r = cls_cxx_map_set_val(hctx, key.c_str(), &bl);
+  int r = cls_cxx_map_set_val(hctx, key, &bl);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to store key (otp id=%s, r=%d)", __func__, instance.otp.id.c_str(), r);
     return r;
@@ -205,7 +205,7 @@ static int remove_otp_instance(cls_method_context_t hctx, const string& id)
 {
   string key = otp_key_prefix + id;
 
-  int r = cls_cxx_map_remove_key(hctx, key.c_str());
+  int r = cls_cxx_map_remove_key(hctx, key);
   if (r < 0) {
     CLS_ERR("ERROR: %s(): failed to remove key (otp id=%s, r=%d)", __func__, id.c_str(), r);
     return r;
@@ -218,7 +218,7 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
 {
   bufferlist bl;
   ::encode(h, bl);
-  int r = cls_cxx_map_get_val(hctx, otp_header_key.c_str(), &bl);
+  int r = cls_cxx_map_get_val(hctx, otp_header_key, &bl);
   if (r == -ENOENT || r == -ENODATA) {
     *h = otp_header();
     return 0;
@@ -249,7 +249,7 @@ static int write_header(cls_method_context_t hctx, const otp_header& h)
   bufferlist bl;
   ::encode(h, bl);
 
-  int r = cls_cxx_map_set_val(hctx, otp_header_key.c_str(), &bl);
+  int r = cls_cxx_map_set_val(hctx, otp_header_key, &bl);
   if (r < 0) {
     CLS_ERR("failed to store header (r=%d)", r);
     return r;

@@ -9,8 +9,6 @@ struct cls_otp_set_otp_op
 {
   list<rados::cls::otp::otp_info_t> entries;
 
-  cls_otp_set_otp_op() = default;
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(entries, bl);
@@ -29,8 +27,6 @@ struct cls_otp_check_otp_op
   string id;
   string val;
   string token;
-
-  cls_otp_check_otp_op() = default;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -53,8 +49,6 @@ struct cls_otp_get_result_op
 {
   string token;
 
-  cls_otp_get_result_op() = default;
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(token, bl);
@@ -72,8 +66,6 @@ struct cls_otp_get_result_reply
 {
   rados::cls::otp::otp_check_t result;
 
-  cls_otp_get_result_reply() = default;
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(result, bl);
@@ -90,8 +82,6 @@ WRITE_CLASS_ENCODER(cls_otp_get_result_reply)
 struct cls_otp_remove_otp_op
 {
   list<string> ids;
-
-  cls_otp_remove_otp_op() = default;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
@@ -111,8 +101,6 @@ struct cls_otp_get_otp_op
   bool get_all{false};
   list<string> ids;
 
-  cls_otp_get_otp_op() = default;
-
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     ::encode(get_all, bl);
@@ -131,8 +119,6 @@ WRITE_CLASS_ENCODER(cls_otp_get_otp_op)
 struct cls_otp_get_otp_reply
 {
   list<rados::cls::otp::otp_info_t> found_entries;
-
-  cls_otp_get_otp_reply() = default;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
