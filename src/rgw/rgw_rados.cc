@@ -5165,6 +5165,22 @@ int RGWRados::trim_usage(rgw_user& user, uint64_t start_epoch, uint64_t end_epoc
   return 0;
 }
 
+
+int RGWRados::clear_usage()
+{
+  auto max_shards = cct->_conf->rgw_usage_max_shards;
+  int ret=0;
+  for (unsigned i=0; i < max_shards; i++){
+    string oid = RGW_USAGE_OBJ_PREFIX + to_string(i);
+    ret = cls_obj_usage_log_clear(oid);
+    if (ret < 0){
+      ldout(cct,0) << "usage clear on oid="<< oid << "failed with ret=" << ret << dendl;
+      return ret;
+    }
+  }
+  return ret;
+}
+
 int RGWRados::key_to_shard_id(const string& key, int max_shards)
 {
   return rgw_shard_id(key, max_shards);
@@ -12963,6 +12979,22 @@ int RGWRados::cls_obj_usage_log_trim(string& oid, string& user, uint64_t start_e
   r = cls_rgw_usage_log_trim(ref.ioctx, ref.oid, user, start_epoch, end_epoch);
   return r;
 }
+
+int RGWRados::cls_obj_usage_log_clear(string& oid)
+{
+  rgw_raw_obj obj(get_zone_params().usage_log_pool, oid);
+
+  rgw_rados_ref ref;
+  int r = get_raw_obj_ref(obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  librados::ObjectWriteOperation op;
+  cls_rgw_usage_log_clear(op);
+  r = ref.ioctx.operate(ref.oid, &op);
+  return r;
+}
+
 
 int RGWRados::remove_objs_from_index(RGWBucketInfo& bucket_info, list<rgw_obj_index_key>& oid_list)
 {
