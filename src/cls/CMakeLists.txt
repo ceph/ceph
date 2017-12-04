@@ -80,8 +80,7 @@ install(TARGETS cls_otp DESTINATION ${cls_dir})
 
 set(cls_otp_client_srcs
   otp/cls_otp_client.cc
-#  otp/cls_otp_types.cc
-#  otp/cls_otp_ops.cc
+  otp/cls_otp_types.cc
   )
 add_library(cls_otp_client STATIC ${cls_otp_client_srcs})
 list(APPEND cls_embedded_srcs ${cls_otp_srcs} ${cls_otp_client_srcs})
