@@ -1510,6 +1510,15 @@ version_t OSDMonitor::get_trim_to() const
       return 0;
     }
   }
+
+  if (g_conf->get_val<bool>("mon_debug_block_osdmap_trim")) {
+    dout(0) << __func__
+            << " blocking osdmap trim"
+               " ('mon_debug_block_osdmap_trim' set to 'true')"
+            << dendl;
+    return 0;
+  }
+
   {
     epoch_t floor = get_min_last_epoch_clean();
     dout(10) << " min_last_epoch_clean " << floor << dendl;
