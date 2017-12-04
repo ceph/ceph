@@ -447,13 +447,7 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -eq 1 ] ; then
-		wconf <<EOF
-        auth cluster required = cephx
-        auth service required = cephx
-        auth client required = cephx
-EOF
-	else
+	if [ "$cephx" -ne 1 ] ; then
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -533,7 +527,6 @@ $extra_conf
         mon osd allow primary affinity = true
         mon reweight min pgs per osd = 4
         mon osd prime pg temp = true
-        crushtool = $CEPH_BIN/crushtool
         mon allow pool delete = true
 $DAEMONOPTS
 $CMONDEBUG
