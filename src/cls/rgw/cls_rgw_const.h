@@ -39,6 +39,7 @@
 #define RGW_USER_USAGE_LOG_ADD "user_usage_log_add"
 #define RGW_USER_USAGE_LOG_READ "user_usage_log_read"
 #define RGW_USER_USAGE_LOG_TRIM "user_usage_log_trim"
+#define RGW_USAGE_LOG_CLEAR "usage_log_clear"
 
 /* garbage collection */
 #define RGW_GC_SET_ENTRY "gc_set_entry"
