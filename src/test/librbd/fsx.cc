@@ -20,6 +20,9 @@
 #include <limits.h>
 #include <time.h>
 #include <strings.h>
+#if defined(__FreeBSD__)
+#include <sys/disk.h>
+#endif
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <sys/mman.h>
@@ -1302,6 +1305,267 @@ const struct rbd_operations nbd_operations = {
 	NULL,
 };
 #endif // __linux__
+
+#if defined(__FreeBSD__)
+int
+ggate_open(const char *name, struct rbd_ctx *ctx)
+{
+	int r;
+	int fd;
+	char dev[4096];
+	char *devnode;
+
+	SubProcess process("rbd-ggate", SubProcess::KEEP, SubProcess::PIPE,
+			   SubProcess::KEEP);
+	process.add_cmd_arg("map");
+	std::string img;
+	img.append(pool);
+	img.append("/");
+	img.append(name);
+	process.add_cmd_arg(img.c_str());
+
+	r = __librbd_open(name, ctx);
+	if (r < 0) {
+		return r;
+	}
+
+	r = process.spawn();
+	if (r < 0) {
+		prt("ggate_open failed to run rbd-ggate: %s\n",
+		    process.err().c_str());
+		return r;
+	}
+	r = safe_read(process.get_stdout(), dev, sizeof(dev));
+	if (r < 0) {
+		prt("ggate_open failed to get ggate device path\n");
+		return r;
+	}
+	for (int i = 0; i < r; ++i) {
+		if (dev[i] == '\r' || dev[i] == '\n') {
+			dev[i] = 0;
+		}
+	}
+	dev[r] = 0;
+	r = process.join();
+	if (r) {
+		prt("rbd-ggate failed with error: %s", process.err().c_str());
+		return -EINVAL;
+	}
+
+	devnode = strdup(dev);
+	if (!devnode) {
+		return -ENOMEM;
+	}
+
+	for (int i = 0; i < 100; i++) {
+		fd = open(devnode, O_RDWR | o_direct);
+		if (fd >= 0 || errno != ENOENT) {
+			break;
+		}
+		usleep(100000);
+	}
+	if (fd < 0) {
+		r = -errno;
+		prt("open(%s) failed\n", devnode);
+		return r;
+	}
+
+	ctx->krbd_name = devnode;
+	ctx->krbd_fd = fd;
+
+	return 0;
+}
+
+int
+ggate_close(struct rbd_ctx *ctx)
+{
+	int r;
+
+	assert(ctx->krbd_name && ctx->krbd_fd >= 0);
+
+	if (close(ctx->krbd_fd) < 0) {
+		r = -errno;
+		prt("close(%s) failed\n", ctx->krbd_name);
+		return r;
+	}
+
+	SubProcess process("rbd-ggate");
+	process.add_cmd_arg("unmap");
+	process.add_cmd_arg(ctx->krbd_name);
+
+        r = process.spawn();
+        if (r < 0) {
+		prt("ggate_close failed to run rbd-nbd: %s\n",
+		    process.err().c_str());
+		return r;
+        }
+	r = process.join();
+	if (r) {
+		prt("rbd-ggate failed with error: %d", process.err().c_str());
+		return -EINVAL;
+	}
+
+	free((void *)ctx->krbd_name);
+
+	ctx->krbd_name = NULL;
+	ctx->krbd_fd = -1;
+
+	return __librbd_close(ctx);
+}
+
+ssize_t
+ggate_read(struct rbd_ctx *ctx, uint64_t off, size_t len, char *buf)
+{
+	ssize_t n;
+
+	n = pread(ctx->krbd_fd, buf, len, off);
+	if (n < 0) {
+		n = -errno;
+		prt("pread(%llu, %zu) failed\n", off, len);
+		return n;
+	}
+
+	return n;
+}
+
+ssize_t
+ggate_write(struct rbd_ctx *ctx, uint64_t off, size_t len, const char *buf)
+{
+	ssize_t n;
+
+	n = pwrite(ctx->krbd_fd, buf, len, off);
+	if (n < 0) {
+		n = -errno;
+		prt("pwrite(%llu, %zu) failed\n", off, len);
+		return n;
+	}
+
+	return n;
+}
+
+int
+__ggate_flush(struct rbd_ctx *ctx, bool invalidate)
+{
+	int ret;
+
+	if (o_direct) {
+		return 0;
+	}
+
+	if (invalidate) {
+		ret = ioctl(ctx->krbd_fd, DIOCGFLUSH, NULL);
+	} else {
+		ret = fsync(ctx->krbd_fd);
+	}
+	if (ret < 0) {
+		ret = -errno;
+		prt("%s failed\n", invalidate ? "DIOCGFLUSH" : "fsync");
+		return ret;
+	}
+
+	return 0;
+}
+
+int
+ggate_flush(struct rbd_ctx *ctx)
+{
+	return __ggate_flush(ctx, false);
+}
+
+int
+ggate_discard(struct rbd_ctx *ctx, uint64_t off, uint64_t len)
+{
+	off_t range[2] = {static_cast<off_t>(off), static_cast<off_t>(len)};
+	int ret;
+
+	ret = __ggate_flush(ctx, true);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (ioctl(ctx->krbd_fd, DIOCGDELETE, &range) < 0) {
+		ret = -errno;
+		prt("DIOCGDELETE(%llu, %llu) failed\n", off, len);
+		return ret;
+	}
+
+	return 0;
+}
+
+int
+ggate_get_size(struct rbd_ctx *ctx, uint64_t *size)
+{
+	off_t bytes;
+
+	if (ioctl(ctx->krbd_fd, DIOCGMEDIASIZE, &bytes) < 0) {
+		int ret = -errno;
+		prt("DIOCGMEDIASIZE failed\n");
+		return ret;
+	}
+
+	*size = bytes;
+
+	return 0;
+}
+
+int
+ggate_resize(struct rbd_ctx *ctx, uint64_t size)
+{
+	int ret;
+
+	assert(size % truncbdy == 0);
+
+	ret = __ggate_flush(ctx, false);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_resize(ctx, size);
+}
+
+int
+ggate_clone(struct rbd_ctx *ctx, const char *src_snapname,
+	    const char *dst_imagename, int *order, int stripe_unit,
+	    int stripe_count)
+{
+	int ret;
+
+	ret = __ggate_flush(ctx, false);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_clone(ctx, src_snapname, dst_imagename, order,
+			      stripe_unit, stripe_count, false);
+}
+
+int
+ggate_flatten(struct rbd_ctx *ctx)
+{
+	int ret;
+
+	ret = __ggate_flush(ctx, false);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return __librbd_flatten(ctx);
+}
+
+const struct rbd_operations ggate_operations = {
+	ggate_open,
+	ggate_close,
+	ggate_read,
+	ggate_write,
+	ggate_flush,
+	ggate_discard,
+	ggate_get_size,
+	ggate_resize,
+	ggate_clone,
+	ggate_flatten,
+	NULL,
+};
+#endif // __FreeBSD__
 
 struct rbd_ctx ctx = RBD_CTX_INIT;
 const struct rbd_operations *ops = &librbd_operations;
@@ -2617,6 +2881,9 @@ usage(void)
 #ifdef FALLOCATE
 "	-F: Do not use fallocate (preallocation) calls\n"
 #endif
+#if defined(__FreeBSD__)
+"	-G: enable rbd-ggate mode (use -L, -r and -w too)\n"
+#endif
 "	-H: do not use punch hole calls\n"
 #if defined(WITH_KRBD)
 "	-K: enable krbd mode (use -t and -h too)\n"
@@ -2751,7 +3018,7 @@ main(int argc, char **argv)
 
 	setvbuf(stdout, (char *)0, _IOLBF, 0); /* line buffered stdout */
 
-	while ((ch = getopt(argc, argv, "b:c:dfgh:jkl:m:no:p:qr:s:t:w:xyCD:FHKMLN:OP:RS:UWZ"))
+	while ((ch = getopt(argc, argv, "b:c:dfgh:jkl:m:no:p:qr:s:t:w:xyCD:FGHKMLN:OP:RS:UWZ"))
 	       != EOF)
 		switch (ch) {
 		case 'b':
@@ -2866,6 +3133,12 @@ main(int argc, char **argv)
 		case 'F':
 			fallocate_calls = 0;
 			break;
+#if defined(__FreeBSD__)
+		case 'G':
+			prt("rbd-ggate mode enabled\n");
+			ops = &ggate_operations;
+			break;
+#endif
 		case 'H':
 			punch_hole_calls = 0;
 			break;
