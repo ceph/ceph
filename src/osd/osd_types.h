@@ -5256,4 +5256,43 @@ struct store_statfs_t
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
 
+
+/**
+* Collection's statistics uncommitted delta
+*/
+struct collection_stats_delta_t {
+  int64_t logical_size = 0;
+  int64_t allocated_size = 0;
+
+  DENC(collection_stats_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.logical_size, p);
+    denc(v.allocated_size, p);
+    DENC_FINISH(p);
+  }
+  collection_stats_delta_t() {}
+  collection_stats_delta_t(const collection_stats_delta_t& from)
+    : logical_size(from.logical_size),
+    allocated_size(from.allocated_size) {
+  }
+  collection_stats_delta_t(int64_t lsz, int64_t asz)
+    : logical_size(lsz), allocated_size(asz) {
+  }
+
+  collection_stats_delta_t operator -=(const collection_stats_delta_t& sub) {
+    logical_size -= sub.logical_size;
+    allocated_size -= sub.allocated_size;
+    return *this;
+  }
+
+  int operator !=(const collection_stats_delta_t& other) const{
+    return logical_size != other.logical_size ||
+      allocated_size != other.allocated_size;
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<collection_stats_delta_t*>& o);
+};
+WRITE_CLASS_DENC(collection_stats_delta_t)
+ostream &operator<<(ostream &lhs, const collection_stats_delta_t &s);
+
 #endif

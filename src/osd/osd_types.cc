@@ -5922,6 +5922,26 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
   return out;
 }
 
+void collection_stats_delta_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("logical_size", logical_size);
+  f->dump_unsigned("allocated_size", allocated_size);
+}
+
+void collection_stats_delta_t::generate_test_instances(
+  list<collection_stats_delta_t*>& o)
+{
+  o.push_back(new collection_stats_delta_t);
+  o.back()->logical_size = 1234;
+  o.back()->allocated_size = 4321;
+}
+
+ostream &operator<<(ostream &out, const collection_stats_delta_t &s)
+{
+  out << " " << s.logical_size << "/" << s.allocated_size;
+  return out;
+}
+
 void OSDOp::clear_data(vector<OSDOp>& ops)
 {
   for (unsigned i = 0; i < ops.size(); i++) {

@@ -1351,6 +1351,9 @@ public:
     //pool options
     pool_opts_t pool_opts;
 
+    collection_stats_delta_t uncommitted_stats,
+                             uncommitted_stats_new;
+
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
     // the terminology is confusing here, sorry!
@@ -1393,6 +1396,20 @@ public:
     void split_cache(Collection *dest);
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
+
+/*    bool check_reset_stats_changed() {
+      bool b = stats_changed;
+      stats_changed = false;
+      return b;
+    }
+    const collection_stats_delta_t& get_stats() const {
+      return uncommitted_stats;
+    }
+    collection_stats_delta_t& dirty_stats() {
+     stats_changed = true;
+      return uncommitted_stats;
+    }
+  protected:*/
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
@@ -1557,6 +1574,7 @@ public:
     Context *onreadable_sync = nullptr;  ///< signal on readable
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
+    vector<CollectionRef> collections;    ///< colls we operated on
 
     boost::intrusive::list_member_hook<> deferred_queue_item;
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
@@ -2282,6 +2300,9 @@ public:
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
 
+  int collection_uncommitted_stats(const coll_t& c,
+				   collection_stats_delta_t& res ) override;
+
   int collection_list(const coll_t& cid,
 		      const ghobject_t& start,
 		      const ghobject_t& end,
@@ -2657,6 +2678,7 @@ private:
   int _omap_setkeys(TransContext *txc,
 		    CollectionRef& c,
 		    OnodeRef& o,
+		    uint32_t flags,
 		    bufferlist& bl);
   int _omap_setheader(TransContext *txc,
 		      CollectionRef& c,

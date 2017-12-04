@@ -113,7 +113,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void apply_stats(
        const hobject_t &soid,
-       const object_stat_sum_t &delta_stats) = 0;
+       const object_stat_sum_t &delta_stats,
+       const collection_stats_delta_t &coll_delta_stats) = 0;
 
      /**
       * Called when a read on the primary fails when pushing
