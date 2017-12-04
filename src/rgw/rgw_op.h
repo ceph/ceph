@@ -750,10 +750,11 @@ public:
 
 class RGWGetBucketVersioning : public RGWOp {
 protected:
-  bool versioned;
-  bool versioning_enabled;
+  bool versioned{false};
+  bool versioning_enabled{false};
+  bool mfa_enabled{false};
 public:
-  RGWGetBucketVersioning() : versioned(false), versioning_enabled(false) {}
+  RGWGetBucketVersioning() = default;
 
   int verify_permission() override;
   void pre_exec() override;
