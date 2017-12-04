@@ -313,6 +313,10 @@ namespace ceph {
   // std::chrono::steady_clock time and ceph::mono_clock time.
   typedef mono_clock::time_point mono_time;
 
+  // And likewise for coarseness
+  typedef coarse_real_clock::time_point coarse_real_time;
+  typedef coarse_mono_clock::time_point coarse_mono_time;
+
   template<typename Rep1, typename Ratio1, typename Rep2, typename Ratio2>
   auto floor(const std::chrono::duration<Rep1, Ratio1>& duration,
 	     const std::chrono::duration<Rep2, Ratio2>& precision) ->
