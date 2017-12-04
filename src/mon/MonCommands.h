@@ -1092,3 +1092,11 @@ COMMAND("mgr count-metadata name=property,type=CephString",
 COMMAND("mgr versions", \
 	"check running versions of ceph-mgr daemons",
 	"mgr", "r", "cli,rest")
+
+// ConfigMonitor
+COMMAND("config set" \
+	" name=who,type=CephString" \
+	" name=name,type=CephString" \
+	" name=value,type=CephString", \
+	"set a config option",
+	"config", "rw", "cli,rest")

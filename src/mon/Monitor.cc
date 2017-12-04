@@ -3045,6 +3045,10 @@ void Monitor::handle_command(MonOpRequestRef op)
     osdmon()->dispatch(op);
     return;
   }
+  if (module == "config") {
+    configmon()->dispatch(op);
+    return;
+  }
 
   if (module == "mon" &&
       /* Let the Monitor class handle the following commands:
