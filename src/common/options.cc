@@ -3629,6 +3629,21 @@ std::vector<Option> get_global_options() {
     .set_safe()
     .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media"),
 
+    Option("bluestore_sequential_io_max_cutoff_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(131072)
+    .set_safe()
+    .set_description("Max sequential io bytes we regard is sequential"),
+
+    Option("bluestore_sequential_io_max_queue_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_safe()
+    .set_description("Max number of io we queue to judge sequential io"),
+
+    Option("bluestore_sequential_io_max_deferred_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(256)
+    .set_safe()
+    .set_description("Max number of ops we queue in the deferred write queue when the write io is likely sequential"),
+
     Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1024)
     .set_description("Number of unique object ids to preallocate at a time"),

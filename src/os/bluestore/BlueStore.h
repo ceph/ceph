@@ -1814,6 +1814,61 @@ public:
     void dump(Formatter *f);
   };
 
+  struct SequentialIo {
+    std::atomic<uint64_t> max_cutoff_bytes = {0};
+    std::atomic<uint64_t> max_queue_size = {0};
+    std::atomic<uint64_t> max_deferred_ops = {0};
+    
+    struct io_unit {
+      uint64_t offset;
+      uint64_t len;
+      uint64_t sequential;
+      uint64_t last;
+
+      io_unit(
+        uint64_t offset,
+        uint64_t len,
+        uint64_t sequential,
+        uint64_t last)
+       :
+         offset(offset),
+         len(len),
+         sequential(sequential),
+         last(last) {}
+    };
+    vector<io_unit> io_list;
+  
+    explicit SequentialIo(uint64_t max_cutoff_bytes, uint64_t max_queue_size,
+        uint64_t max_deferred_ops)
+      : max_cutoff_bytes(max_cutoff_bytes),
+        max_queue_size(max_queue_size),
+        max_deferred_ops(max_deferred_ops){}
+    
+    uint64_t find(uint64_t offset, uint64_t len) {
+      uint64_t sequential = 0;
+      // record io sequence, record 0 when not find in pre ios
+      for (auto& io : io_list) {
+        if (io.last == offset) {
+          sequential = io.sequential + len;
+        }
+      }
+      // keep max_queue_size io
+      if (io_list.size() >= max_queue_size) {
+        io_list.erase(io_list.begin());
+      }
+      io_list.emplace_back(offset, len, sequential, offset+len);
+      return sequential;
+    }
+
+    bool past_midpoint(uint64_t sequential) {
+      return sequential >= max_cutoff_bytes/2;
+    }
+
+    bool is_sequential_io(uint64_t sequential) {
+      return sequential >= max_cutoff_bytes;
+    }
+  };
+
   // --------------------------------------------------------
   // members
 private:
@@ -1860,6 +1915,8 @@ private:
 
   int m_finisher_num = 1;
   vector<Finisher*> finishers;
+
+  SequentialIo seq_io;
 
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
