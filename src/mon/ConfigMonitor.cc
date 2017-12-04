@@ -1,12 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <boost/algorithm/string/split.hpp>
-
 #include "mon/Monitor.h"
 #include "mon/ConfigMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "messages/MConfig.h"
+#include "messages/MMonCommand.h"
 #include "common/Formatter.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -88,7 +87,76 @@ bool ConfigMonitor::prepare_update(MonOpRequestRef op)
   Message *m = op->get_req();
   dout(7) << "prepare_update " << *m
 	  << " from " << m->get_orig_source_inst() << dendl;
+  switch (m->get_type()) {
+  case MSG_MON_COMMAND:
+    return prepare_command(op);
+  }
   return false;
+}
+
+bool ConfigMonitor::prepare_command(MonOpRequestRef op)
+{
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  stringstream ss;
+  int err = -EINVAL;
+
+  map<string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    return true;
+  }
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  if (prefix == "config set") {
+    string who;
+    string name, value;
+    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval(g_ceph_context, cmdmap, "value", value);
+
+    OptionMask mask;
+    string section;
+    if (!ConfigMap::parse_mask(who, &section, &mask)) {
+      ss << "unrecognized config target '" << who << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    string key = KEY_PREFIX;
+    if (section.size()) {
+      key += section + "/";
+    }
+    string mask_str = mask.to_str();
+    if (mask_str.size()) {
+      key += mask_str + "/";
+    }
+    key += name;
+    bufferlist bl;
+    bl.append(value);
+
+    MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
+    t->put(CONFIG_PREFIX, key, bl);
+    goto update;
+  } else {
+    ss << "unknown command " << prefix;
+    err = -EINVAL;
+  }
+
+reply:
+  mon->reply_command(op, err, ss.str(), get_last_committed());
+  return false;
+
+update:
+  force_immediate_propose();  // faster response
+  wait_for_finished_proposal(
+    op,
+    new Monitor::C_Command(
+      mon, op, 0, ss.str(),
+      get_last_committed() + 1));
+  return true;
 }
 
 void ConfigMonitor::tick()
