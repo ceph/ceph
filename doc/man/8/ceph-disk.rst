@@ -1,7 +1,7 @@
 :orphan:
 
 ===================================================================
- [DEPRECATED] ceph-disk -- Ceph disk utility for OSD
+ ceph-disk -- Ceph disk utility for OSD
 ===================================================================
 
 .. program:: ceph-disk
