@@ -285,6 +285,11 @@ static int otp_set_op(cls_method_context_t hctx,
 
   for (auto entry : op.entries) {
     otp_instance instance;
+    r = get_otp_instance(hctx, entry.id, &instance);
+    if (r < 0 &&
+        r != -ENOENT) {
+      return r;
+    }
     instance.otp = entry;
 
     r = write_otp_instance(hctx, instance);
