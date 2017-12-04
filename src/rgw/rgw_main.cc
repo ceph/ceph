@@ -521,11 +521,11 @@ int main(int argc, const char **argv)
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
   RGWFrontendPauser pauser(fes, &pusher);
-  RGWRealmReloader reloader(store, service_map_meta, &pauser);
+  RGWRealmReloader *reloader = new RGWRealmReloader(store, service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->realm);
-  realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
-  realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
+  RGWRealmWatcher *realm_watcher = new RGWRealmWatcher(g_ceph_context, store->realm);
+  realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
+  realm_watcher->add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 
 #if defined(HAVE_SYS_PRCTL_H)
   if (prctl(PR_SET_DUMPABLE, 1) == -1) {
@@ -536,6 +536,9 @@ int main(int argc, const char **argv)
   wait_shutdown();
 
   derr << "shutting down" << dendl;
+
+  delete realm_watcher;   // stop watcher
+  delete reloader;        // wait reloader finish
 
   for (list<RGWFrontend *>::iterator liter = fes.begin(); liter != fes.end();
        ++liter) {
