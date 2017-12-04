@@ -1,21 +1,24 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/algorithm/string/split.hpp>
+
 #include "ConfigMap.h"
 #include "crush/CrushWrapper.h"
+#include "common/entity_name.h"
 
 int MaskedOption::get_precision(const CrushWrapper *crush)
 {
   // 0 = most precise
-  if (location_type.size()) {
-    int r = crush->get_type_id(location_type);
+  if (mask.location_type.size()) {
+    int r = crush->get_type_id(mask.location_type);
     if (r >= 0) {
       return r;
     }
     // bad type name, ignore it
   }
   int num_types = crush->get_num_type_names();
-  if (device_class.size()) {
+  if (mask.device_class.size()) {
     return num_types;
   }
   return num_types + 1;
@@ -25,23 +28,23 @@ void MaskedOption::dump(Formatter *f) const
 {
   f->dump_string("name", opt.name);
   f->dump_string("value", raw_value);
-  if (location_type.size()) {
-    f->dump_string("location_type", location_type);
-    f->dump_string("location_value", location_value);
+  if (mask.location_type.size()) {
+    f->dump_string("location_type", mask.location_type);
+    f->dump_string("location_value", mask.location_value);
   }
-  if (device_class.size()) {
-    f->dump_string("device_class", device_class);
+  if (mask.device_class.size()) {
+    f->dump_string("device_class", mask.device_class);
   }
 }
 
 ostream& operator<<(ostream& out, const MaskedOption& o)
 {
   out << o.opt.name;
-  if (o.location_type.size()) {
-    out << "@" << o.location_type << '=' << o.location_value;
+  if (o.mask.location_type.size()) {
+    out << "@" << o.mask.location_type << '=' << o.mask.location_value;
   }
-  if (o.device_class.size()) {
-    out << "@class=" << o.device_class;
+  if (o.mask.device_class.size()) {
+    out << "@class=" << o.mask.device_class;
   }
   return out;
 }
@@ -94,14 +97,14 @@ void ConfigMap::generate_entity_map(
     for (auto& i : s->options) {
       auto& o = i.second;
       // match against crush location, class
-      if (o.device_class.size() &&
-	  o.device_class != device_class) {
+      if (o.mask.device_class.size() &&
+	  o.mask.device_class != device_class) {
 	continue;
       }
-      if (o.location_type.size()) {
-	auto p = crush_location.find(o.location_type);
+      if (o.mask.location_type.size()) {
+	auto p = crush_location.find(o.mask.location_type);
 	if (p == crush_location.end() ||
-	    p->second != o.location_value) {
+	    p->second != o.mask.location_value) {
 	  continue;
 	}
       }
@@ -116,4 +119,43 @@ void ConfigMap::generate_entity_map(
       prev = &o;
     }
   }
+}
+
+bool ConfigMap::parse_mask(
+  const std::string& who,
+  std::string *section,
+  OptionMask *mask)
+{
+  vector<std::string> split;
+  boost::split(split, who, [](char c){ return c == '/'; });
+  for (unsigned j = 0; j < split.size(); ++j) {
+    auto& i = split[j];
+    if (i == "global") {
+      continue;
+    }
+    size_t delim = i.find(':');
+    if (delim != std::string::npos) {
+      string k = i.substr(0, delim);
+      if (k == "class") {
+	mask->device_class = i.substr(delim + 1);
+      } else {
+	mask->location_type = k;
+	mask->location_value = i.substr(delim + 1);
+      }
+      continue;
+    }
+    string type, id;
+    auto dotpos = i.find('.');
+    if (dotpos != std::string::npos) {
+      type = i.substr(0, dotpos);
+      id = i.substr(dotpos + 1);
+    } else {
+      type = i;
+    }
+    if (str_to_ceph_entity_type(type.c_str()) == CEPH_ENTITY_TYPE_ANY) {
+      return false;
+    }
+    *section = i;
+  }
+  return true;
 }

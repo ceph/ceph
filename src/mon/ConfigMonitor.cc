@@ -118,11 +118,17 @@ void ConfigMonitor::load_config()
 	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
     string key = it->key().substr(KEY_PREFIX.size());
     string value = it->value().to_str();
-    vector<string> split;
-    boost::split(split, key, [](char c){return c == '/';});
-    string name = split.back();
-    split.pop_back();
-    Section *section = &config_map.global;
+
+    auto last_slash = key.rfind('/');
+    string name;
+    string who;
+    if (last_slash == std::string::npos) {
+      name = key;
+    } else {
+      name = key.substr(last_slash + 1);
+      who = key.substr(0, last_slash);
+    }
+    string section_name;
 
     Option fake_opt(name, Option::TYPE_STR, Option::LEVEL_DEV);
     const Option *opt = g_conf->find_option(name);
@@ -134,34 +140,26 @@ void ConfigMonitor::load_config()
     int r = opt->pre_validate(&value, &err);
     if (r < 0) {
       dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
-	       << value << "' for " << split << dendl;
+	       << value << "' for " << name << dendl;
     }
 
     MaskedOption mopt(*opt);
     mopt.raw_value = value;
-    string device_class;
-    string loc_type, loc_value;
-    for (unsigned j = 0; j < split.size(); ++j) {
-      auto& i = split[j];
-      size_t delim = i.find(':');
-      if (delim != std::string::npos) {
-	string k = i.substr(0, delim);
-	if (k == "class") {
-	  mopt.device_class = i.substr(delim + 1);
+
+    if (ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+      Section *section = &config_map.global;;
+      if (section_name.size()) {
+	if (section_name.find('.') != std::string::npos) {
+	  section = &config_map.by_id[section_name];
 	} else {
-	  mopt.location_type = k;
-	  mopt.location_value = i.substr(delim + 1);
+	  section = &config_map.by_type[section_name];
 	}
-	continue;
       }
-      if (split.front().find('.') != std::string::npos) {
-	section = &config_map.by_id[i];
-      } else {
-	section = &config_map.by_type[i];
-      }
+      section->options.insert(make_pair(name, mopt));
+      ++num;
+    } else {
+      derr << __func__ << " ignoring key " << key << dendl;
     }
-    section->options.insert(make_pair(name, mopt));
-    ++num;
     it->next();
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
