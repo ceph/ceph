@@ -1342,7 +1342,78 @@ bool DaemonServer::handle_command(MCommand *m)
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
+  } else if (prefix == "config show") {
+    string who;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
+    int r = 0;
+    auto dot = who.find('.');
+    DaemonKey key;
+    key.first = who.substr(0, dot);
+    key.second = who.substr(dot + 1);
+    DaemonStatePtr daemon = daemon_state.get(key);
+    if (daemon) {
+      Mutex::Locker l(daemon->lock);
+      if (f) {
+	f->open_array_section("config");
+	for (auto& i : daemon->config) {
+	  dout(20) << " " << i.first << " -> " << i.second << dendl;
+	  if (i.second.empty()) {
+	    continue;
+	  }
+	  f->open_object_section("value");
+	  f->dump_string("name", i.first);
+	  f->dump_string("value", i.second.rbegin()->second);
+	  f->dump_string("source", ceph_conf_level_name(
+			   i.second.rbegin()->first));
+	  if (i.second.size() > 1) {
+	    f->open_array_section("overrides");
+	    auto j = i.second.rend();
+	    for (--j; j != i.second.rbegin(); --j) {
+	      f->open_object_section("value");
+	      f->dump_string("source", ceph_conf_level_name(j->first));
+	      f->dump_string("value", j->second);
+	      f->close_section();
+	    }
+	    f->close_section();
+	  }
+	  f->close_section();
+	}
+	f->close_section();
+	f->flush(cmdctx->odata);
+      } else {
+	TextTable tbl;
+	tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+	for (auto& i : daemon->config) {
+	  if (i.second.empty()) {
+	    continue;
+	  }
+	  dout(20) << " " << i.first << " -> " << i.second << dendl;
+	  tbl << i.first;
+	  tbl << i.second.rbegin()->second;
+	  tbl << ceph_conf_level_name(i.second.rbegin()->first);
+	  if (i.second.size() > 1) {
+	    list<string> ov;
+	    auto j = i.second.rend();
+	    for (--j; j != i.second.rbegin(); --j) {
+	      ov.push_front(ceph_conf_level_name(j->first));
+	    }
+	    tbl << ov;
+	  }
+	  tbl << TextTable::endrow;
+	}
+	cmdctx->odata.append(stringify(tbl));
+      }
+    } else {
+      ss << "no state for daemon " << who;
+      r = -ENOENT;
+    }
+    cmdctx->reply(r, ss);
+    return true;
   } else {
+    // fall back to feeding command to PGMap
     r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
 	return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	    return process_pg_map_command(prefix, cmdctx->cmdmap, pg_map, osdmap,
