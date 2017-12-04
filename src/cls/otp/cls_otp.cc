@@ -228,6 +228,11 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
     return r;
   }
 
+  if (bl.length() == 0) {
+    *h = otp_header();
+    return 0;
+  }
+
   auto iter = bl.begin();
   try {
     ::decode(*h, iter);
