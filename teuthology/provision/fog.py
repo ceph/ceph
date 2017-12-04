@@ -244,7 +244,7 @@ class FOG(object):
         resp = self.do_request(
             '/task/cancel',
             method='DELETE',
-            data='{"id": %i}' % task_id,
+            data='{"id": %s}' % task_id,
         )
         resp.raise_for_status()
 
