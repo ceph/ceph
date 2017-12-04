@@ -75,17 +75,21 @@ class DeepSea(Task):
             if key not in config or not config[key]:
                 config[key] = default_value
 
-        _check_config_key('repo', 'https://github.com/SUSE/DeepSea.git')
+        _check_config_key('repo', '')
         _check_config_key('branch', 'master')
 
         log.debug("Munged config is {}".format(config))
 
         # prepare the list of commands to be executed on the master node
         self.exec_cmd = []
+        qa='DeepSea/qa'
+        if self.config['repo'] is '':
+            qa = '/usr/lib/deepsea/qa'
+
         assert len(self.config["exec"]) > 0, \
             'deepsea exec list must have at least one element'
         for cmd in self.config["exec"]:
-            self.exec_cmd.append('cd DeepSea/qa ; ' + cmd)
+            self.exec_cmd.append('cd %s ; %s' % (qa, cmd))
 
         # determine the role id of the master role
         if(misc.num_instances_of_type(self.cluster, 'master') != 1):
@@ -104,6 +108,20 @@ class DeepSea(Task):
     def setup(self):
         super(DeepSea, self).setup()
 
+        if self.config["repo"] is '':
+            self.salt.master_remote.run(args=[
+                'sudo',
+                'zypper',
+                '--non-interactive',
+                'install',
+                'deepsea',
+                'deepsea-qa'
+                ])
+        else:
+            self.make_install()
+        self.setup_salt()
+
+    def make_install(self):
         self.log.info("DeepSea repo: {}".format(self.config["repo"]))
         self.log.info("DeepSea branch: {}".format(self.config["branch"]))
 
@@ -151,7 +169,9 @@ class DeepSea(Task):
             '--no-recommends',
             run.Raw('$(rpmspec --requires -q -v DeepSea/deepsea.spec | grep manual | awk \'{print $2}\')')
             ])
+        self.setup_salt()
 
+    def setup_salt(self):
         self.log.info("listing minion keys...")
         self.salt.master_remote.run(args = ['sudo', 'salt-key', '-L'])
 
