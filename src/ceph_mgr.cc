@@ -47,14 +47,16 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_MGR,
+  map<string,string> defaults = {
+    { "keyring", "$mgr_data/keyring" }
+  };
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_MGR,
 			 CODE_ENVIRONMENT_DAEMON, 0,
 			 "mgr_data");
-  // For consumption by KeyRing::from_ceph_context in MonClient
-  g_conf->set_val_or_die("keyring", "$mgr_data/keyring");
 
   // Handle --help
-  if ((args.size() == 1 && (std::string(args[0]) == "--help" || std::string(args[0]) == "-h"))) {
+  if ((args.size() == 1 && (std::string(args[0]) == "--help" ||
+			    std::string(args[0]) == "-h"))) {
     usage();
   }
 

@@ -242,6 +242,9 @@ int main(int argc, const char **argv)
     }
   }
 
+  // don't try to get config from mon cluster during startup
+  flags |= CINIT_FLAG_NO_MON_CONFIG;
+
   auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_MON, CODE_ENVIRONMENT_DAEMON,
 			 flags, "mon_data");

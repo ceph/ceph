@@ -77,6 +77,13 @@ public:
 
     int ret;
 
+    {
+      MonClient mc_bootstrap(cct);
+      ret = mc_bootstrap.get_monmap_and_config();
+      if (ret < 0)
+	return ret;
+    }
+
     //monmap
     monclient = new MonClient(cct);
     ret = -CEPHFS_ERROR_MON_MAP_BUILD; //defined in libcephfs.h;

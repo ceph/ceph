@@ -190,6 +190,7 @@ private:
   bool want_monmap;
   Cond map_cond;
   bool passthrough_monmap = false;
+  bool got_config = false;
 
   // authenticate
   std::unique_ptr<AuthClientHandler> auth;
@@ -344,7 +345,7 @@ public:
 
   int build_initial_monmap();
   int get_monmap();
-  int get_monmap_privately();
+  int get_monmap_and_config();
   /**
    * If you want to see MonMap messages, set this and
    * the MonClient will tell the Messenger it hasn't
