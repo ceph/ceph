@@ -22,14 +22,14 @@
 #include "os/ObjectStore.h"
 #include <list>
 
-#define PGLOG_INDEXED_OBJECTS          (1 << 0)
-#define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
-#define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
-#define PGLOG_INDEXED_DUPS             (1 << 3)
-#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | \
-					PGLOG_INDEXED_CALLER_OPS | \
-					PGLOG_INDEXED_EXTRA_CALLER_OPS | \
-					PGLOG_INDEXED_DUPS)
+constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
+constexpr auto PGLOG_INDEXED_CALLER_OPS       = 1 << 1;
+constexpr auto PGLOG_INDEXED_EXTRA_CALLER_OPS = 1 << 2;
+constexpr auto PGLOG_INDEXED_DUPS             = 1 << 3;
+constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS 
+                                              | PGLOG_INDEXED_CALLER_OPS 
+                                              | PGLOG_INDEXED_EXTRA_CALLER_OPS 
+                                              | PGLOG_INDEXED_DUPS;
 
 class CephContext;
 
