@@ -2684,7 +2684,7 @@ written." % (self.name, ret, length))
                     break
             if ret != 0:
                 raise make_ex(ret, 'error getting metadata %s for image %s' %
-                              (self.key, self.name,))
+                              (key, self.name,))
             return decode_cstr(value)
         finally:
             free(value)
@@ -2708,7 +2708,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error setting metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
 
     def metadata_remove(self, key):
@@ -2726,7 +2726,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error removing metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
     def metadata_list(self):
         """
