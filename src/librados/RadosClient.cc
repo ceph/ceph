@@ -248,6 +248,13 @@ int librados::RadosClient::connect()
     return -EISCONN;
   state = CONNECTING;
 
+  {
+    MonClient mc_bootstrap(cct);
+    err = mc_bootstrap.get_monmap_and_config();
+    if (err < 0)
+      return err;
+  }
+
   // get monmap
   err = monclient.build_initial_monmap();
   if (err < 0)

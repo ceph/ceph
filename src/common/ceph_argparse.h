@@ -37,6 +37,8 @@ public:
 
   uint32_t module_type;
   EntityName name;
+
+  bool no_mon_config = false;
 };
 
 /////////////////////// Functions ///////////////////////

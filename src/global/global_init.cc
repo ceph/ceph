@@ -26,6 +26,7 @@
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
+#include "mon/MonClient.h"
 
 #include <pwd.h>
 #include <grp.h>
@@ -88,8 +89,15 @@ void global_pre_init(
 {
   std::string conf_file_list;
   std::string cluster = "";
-  CephInitParameters iparams = ceph_argparse_early_args(args, module_type,
-							&cluster, &conf_file_list);
+
+  CephInitParameters iparams = ceph_argparse_early_args(
+    args, module_type,
+    &cluster, &conf_file_list);
+  if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+	       CINIT_FLAG_NO_MON_CONFIG)) {
+    iparams.no_mon_config = true;
+  }
+
   CephContext *cct = common_preinit(iparams, code_env, flags);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
@@ -129,6 +137,15 @@ void global_pre_init(
   conf->parse_env(); // environment variables override
 
   conf->parse_argv(args); // argv override
+
+  if (!iparams.no_mon_config) {
+    MonClient mc_bootstrap(g_ceph_context);
+    if (mc_bootstrap.get_monmap_and_config() < 0) {
+      derr << "failed to fetch mon config (--no-mon-config to skip)" << dendl;
+      cct->_log->flush();
+      _exit(1);
+    }
+  }
 
   // Now we're ready to complain about config file parse errors
   g_conf->complain_about_parse_errors(g_ceph_context);
