@@ -41,6 +41,8 @@ class Task(object):
         dict with the same name as this task. Override any settings in
         self.config with those overrides
         """
+        if not hasattr(self.ctx, 'config'):
+            return
         all_overrides = self.ctx.config.get('overrides', dict())
         if not all_overrides:
             return
