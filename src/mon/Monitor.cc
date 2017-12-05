@@ -4049,6 +4049,11 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       handle_mon_get_map(op);
       break;
 
+      // unauthenticated clients can fetch config
+    case MSG_GET_CONFIG:
+      configmon()->handle_get_config(op);
+      break;
+
     case CEPH_MSG_MON_METADATA:
       return handle_mon_metadata(op);
 

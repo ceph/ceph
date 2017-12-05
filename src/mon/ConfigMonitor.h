@@ -28,6 +28,8 @@ public:
 
   bool prepare_command(MonOpRequestRef op);
 
+  void handle_get_config(MonOpRequestRef op);
+
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;
