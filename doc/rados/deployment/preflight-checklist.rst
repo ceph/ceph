@@ -16,7 +16,7 @@ daemons.
 Install an Operating System
 ===========================
 
-Install a recent release of Debian or Ubuntu (e.g., 12.04 LTS, 14.04 LTS) on
+Install a recent release of Debian or Ubuntu (e.g., 16.04 LTS) on
 your nodes. For additional details on operating systems or to use other
 operating systems other than Debian or Ubuntu, see `OS Recommendations`_.
 
