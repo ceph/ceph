@@ -8032,7 +8032,7 @@ struct C_CopyChunk : public Context {
   epoch_t last_peering_reset;
   ceph_tid_t tid;
   PrimaryLogPG::CopyOpRef cop;
-  uint64_t offset;
+  uint64_t offset = 0;
   C_CopyChunk(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 	     const PrimaryLogPG::CopyOpRef& c)
     : pg(p), oid(o), last_peering_reset(lpr),

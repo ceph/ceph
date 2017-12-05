@@ -155,8 +155,8 @@ public:
     map<uint64_t, CopyOpRef> chunk_cops;
     int num_chunk;
     bool failed;
-    uint64_t start_offset;
-    uint64_t last_offset;
+    uint64_t start_offset = 0;
+    uint64_t last_offset = 0;
     vector<OSDOp> chunk_ops;
   
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
