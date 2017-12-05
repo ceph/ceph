@@ -228,9 +228,10 @@ class PhysicalConsole():
                              timeout=self.timeout)
             if r == 0:
                 break
-        if not self.check_power('on'):
+        if self.check_power('on'):
+            log.info('Power on for {s} completed'.format(s=self.shortname))
+        else:
             log.error('Failed to power on {s}'.format(s=self.shortname))
-        log.info('Power on for {s} completed'.format(s=self.shortname))
 
     def power_off(self):
         """
