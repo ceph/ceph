@@ -1411,7 +1411,7 @@ protected:
 			   ObjectContextRef obc, bool write_ordered);
   void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 			     uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
-			     uint64_t req_total_len);
+			     uint64_t req_total_len, bool write_ordered);
   bool can_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc);
   void _copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint64_t start_offset);
   void process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, int r, uint64_t offset);

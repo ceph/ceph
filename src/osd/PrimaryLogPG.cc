@@ -2383,6 +2383,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   case object_manifest_t::TYPE_CHUNKED: 
     {
       if (can_proxy_chunked_read(op, obc)) {
+	map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
+        if (p != flush_ops.end()) {
+          do_proxy_chunked_op(op, obc->obs.oi.soid, obc, true);
+          return cache_result_t::HANDLED_PROXY;
+        }
 	do_proxy_chunked_op(op, obc->obs.oi.soid, obc, write_ordered);
 	return cache_result_t::HANDLED_PROXY;
       }
@@ -3311,14 +3316,14 @@ void PrimaryLogPG::do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing
       dout(20) << __func__ << " chunk_index: " << chunks->first 
 	      << " next_length: " << chunks->second << " cursor: " 
 	      << p.first << dendl;
-      do_proxy_chunked_read(op, obc, i, chunks->first, p.first, chunks->second, req_len);
+      do_proxy_chunked_read(op, obc, i, chunks->first, p.first, chunks->second, req_len, write_ordered);
     }
   } 
 }
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
-					 uint64_t req_total_len)
+					 uint64_t req_total_len, bool write_ordered)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   object_manifest_t *manifest = &obc->obs.oi.manifest;
@@ -3330,6 +3335,9 @@ void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, 
   hobject_t ori_soid = m->get_hobj();
   object_locator_t oloc(soid);
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (write_ordered) {
+    flags |= CEPH_OSD_FLAG_RWORDERED;
+  }
   
   if (!chunk_length || soid == hobject_t()) {
     return;
