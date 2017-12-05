@@ -162,6 +162,13 @@ PTYPE = {
     },
 }
 
+try:
+    # see https://bugs.python.org/issue23098
+    os.major(0x80002b00)
+except OverflowError:
+    os.major = lambda devid: ((devid >> 8) & 0xfff) | ((devid >> 32) & ~0xfff)
+    os.minor = lambda devid: (devid & 0xff) | ((devid >> 12) & ~0xff)
+
 
 class Ptype(object):
 
