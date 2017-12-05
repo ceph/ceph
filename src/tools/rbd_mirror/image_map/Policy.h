@@ -114,8 +114,8 @@ private:
   void post_execute_state_callback(const std::string &global_image_id, StateTransition::State state);
 
   bool is_transition_complete(StateTransition::ActionType action_type, StateTransition::State *state);
-  bool perform_transition(ActionState *action_state, StateTransition::ActionType action_type);
-  bool abort_or_retry(ActionState *action_state);
+  bool perform_transition(ActionState *action_state, Action *action);
+  bool abort_or_retry(ActionState *action_state, Action *action);
 
 protected:
   typedef std::map<std::string, std::set<std::string> > InstanceToImageMap;

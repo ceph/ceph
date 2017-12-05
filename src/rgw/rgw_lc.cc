@@ -24,7 +24,6 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
-using namespace std;
 using namespace librados;
 
 bool LCRule::valid()
@@ -807,5 +806,10 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   nt = mktime(&bdt);
 
   return (nt+24*60*60 - tt);
+}
+
+void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
+{
+  o.push_back(new RGWLifecycleConfiguration);
 }
 

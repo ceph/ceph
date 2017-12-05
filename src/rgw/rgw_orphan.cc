@@ -3,7 +3,6 @@
 
 #include <string>
 
-using namespace std;
 
 #include "common/config.h"
 #include "common/Formatter.h"

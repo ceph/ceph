@@ -7,7 +7,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {

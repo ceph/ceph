@@ -133,7 +133,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
     dout(10) << " current parent [" << srnode.current_parent_since << ",head] is " << *parent
 	     << " on " << *parent->inode << dendl;
     if (last >= srnode.current_parent_since &&
-	!parent->_open_parents(finish, MAX(first, srnode.current_parent_since), last))
+	!parent->_open_parents(finish, std::max(first, srnode.current_parent_since), last))
       return false;
   }
 
@@ -197,8 +197,8 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
       return false;
     }
     SnapRealm *parent_realm = open_past_parents[p->second.ino].first;
-    if (!parent_realm->have_past_parents_open(MAX(first, p->second.first),
-					      MIN(last, p->first)))
+    if (!parent_realm->have_past_parents_open(std::max(first, p->second.first),
+					      std::min(last, p->first)))
       return false;
   }
 
@@ -248,12 +248,12 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
-					 MAX(first, p->second.first),
-					 MIN(last, p->first));
+					 std::max(first, p->second.first),
+					 std::min(last, p->first));
   }
   if (srnode.current_parent_since <= last && parent)
     parent->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
-			   MAX(first, srnode.current_parent_since), last);
+			   std::max(first, srnode.current_parent_since), last);
 }
 
 
@@ -331,11 +331,11 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     oldparent->snaprealm->get_snap_info(infomap,
-					MAX(first, p->second.first),
-					MIN(last, p->first));
+					std::max(first, p->second.first),
+					std::min(last, p->first));
   }
   if (srnode.current_parent_since <= last && parent)
-    parent->get_snap_info(infomap, MAX(first, srnode.current_parent_since), last);
+    parent->get_snap_info(infomap, std::max(first, srnode.current_parent_since), last);
 }
 
 const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
@@ -402,13 +402,13 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
-							MAX(first, p->second.first),
-							MIN(last, p->first));
+							std::max(first, p->second.first),
+							std::min(last, p->first));
     if (r)
       return r;
   }
   if (parent && srnode.current_parent_since <= last)
-    return parent->resolve_snapname(n, atino, MAX(first, srnode.current_parent_since), last);
+    return parent->resolve_snapname(n, atino, std::max(first, srnode.current_parent_since), last);
   return 0;
 }
 

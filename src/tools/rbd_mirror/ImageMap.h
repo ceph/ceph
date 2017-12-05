@@ -109,6 +109,8 @@ private:
     }
   };
 
+  // context callbacks which are retry-able get deleted after
+  // transiting to the next state.
   struct C_UpdateMap : Context {
     ImageMap *image_map;
     std::string global_image_id;

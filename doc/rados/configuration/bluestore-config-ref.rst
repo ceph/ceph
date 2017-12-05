@@ -14,7 +14,7 @@ device.  The storage device is normally partitioned into two parts:
 #. A small partition is formatted with XFS and contains basic metadata
    for the OSD.  This *data directory* includes information about the
    OSD (its identifier, which cluster it belongs to, and its private
-   keyring.
+   keyring).
 
 #. The rest of the device is normally a large partition occupying the
    rest of the device that is managed directly by BlueStore contains
@@ -45,11 +45,14 @@ it will fix).
 
 A single-device BlueStore OSD can be provisioned with::
 
-  ceph-disk prepare --bluestore <device>
+  ceph-volume lvm prepare --bluestore --data <device>
 
 To specify a WAL device and/or DB device, ::
 
-  ceph-disk prepare --bluestore <device> --block.wal <wal-device> --block.db <db-device>
+  ceph-volume lvm prepare --bluestore --data <device> --block.wal <wal-device> --block.db <db-device>
+
+.. note:: --data can be a Logical Volume using the vg/lv notation. Other
+          devices can be existing logical volumes or GPT partitions
 
 Cache size
 ==========
@@ -143,8 +146,8 @@ value (usually 4 bytes) for every 4 kilobyte block of data.
 It is possible to use a smaller checksum value by truncating the
 checksum to two or one byte, reducing the metadata overhead.  The
 trade-off is that the probability that a random error will not be
-detected is higher with a smaller checksum, going from about one if
-four billion with a 32-bit (4 byte) checksum to one is 65,536 for a
+detected is higher with a smaller checksum, going from about one in
+four billion with a 32-bit (4 byte) checksum to one in 65,536 for a
 16-bit (2 byte) checksum or one in 256 for an 8-bit (1 byte) checksum.
 The smaller checksum values can be used by selecting `crc32c_16` or
 `crc32c_8` as the checksum algorithm.

@@ -244,13 +244,9 @@ void ReplicatedBackend::clear_recovery_state()
 void ReplicatedBackend::on_change()
 {
   dout(10) << __func__ << dendl;
-  for (map<ceph_tid_t, InProgressOp>::iterator i = in_progress_ops.begin();
-       i != in_progress_ops.end();
-       i++) {
-    if (i->second.on_commit)
-      delete i->second.on_commit;
-    if (i->second.on_applied)
-      delete i->second.on_applied;
+  for (auto& op : in_progress_ops) {
+    delete op.second.on_commit;
+    delete op.second.on_applied;
   }
   in_progress_ops.clear();
   clear_recovery_state();
@@ -1046,7 +1042,7 @@ void ReplicatedBackend::issue_op(
       op_t,
       peer,
       pinfo);
-    if (op->op)
+    if (op->op && op->op->pg_trace)
       wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());

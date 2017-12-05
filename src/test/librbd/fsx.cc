@@ -2309,7 +2309,7 @@ check_clone(int clonenum, bool replay_image)
 
 	good_buf = NULL;
 	ret = posix_memalign((void **)&good_buf,
-			     MAX(writebdy, (int)sizeof(void *)),
+			     std::max(writebdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(good_buf)", -ret);
@@ -2318,7 +2318,7 @@ check_clone(int clonenum, bool replay_image)
 
 	temp_buf = NULL;
 	ret = posix_memalign((void **)&temp_buf,
-			     MAX(readbdy, (int)sizeof(void *)),
+			     std::max(readbdy, (int)sizeof(void *)),
 			     file_info.st_size);
 	if (ret > 0) {
 		prterrcode("check_clone: posix_memalign(temp_buf)", -ret);
@@ -2994,7 +2994,7 @@ main(int argc, char **argv)
 		original_buf[i] = get_random() % 256;
 
 	ret = posix_memalign((void **)&good_buf,
-			     MAX(writebdy, (int)sizeof(void *)), maxfilelen);
+			     std::max(writebdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("writebdy is not a suitable power of two\n");
@@ -3005,7 +3005,7 @@ main(int argc, char **argv)
 	memset(good_buf, '\0', maxfilelen);
 
 	ret = posix_memalign((void **)&temp_buf,
-			     MAX(readbdy, (int)sizeof(void *)), maxfilelen);
+			     std::max(readbdy, (int)sizeof(void *)), maxfilelen);
 	if (ret > 0) {
 		if (ret == EINVAL)
 			prt("readbdy is not a suitable power of two\n");

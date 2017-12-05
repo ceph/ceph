@@ -436,7 +436,7 @@ int parse_credentials(const req_info& info,                     /* in */
     return ret;
   }
 
-  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+  /* access_key/YYYYMMDD/region/service/aws4_request */
   dout(10) << "v4 credential format = " << credential << dendl;
 
   if (std::count(credential.begin(), credential.end(), '/') != 4) {

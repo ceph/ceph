@@ -5522,7 +5522,6 @@ int BlueStore::umount()
     mempool_thread.shutdown();
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    _reap_collections();
     _flush_cache();
     dout(20) << __func__ << " closing" << dendl;
 
@@ -6295,23 +6294,26 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-  std::lock_guard<std::mutex> l(reap_lock);
+  // _reap_collections and this in the same thread,
+  // so no need a lock.
   removed_collections.push_back(c);
 }
 
 void BlueStore::_reap_collections()
 {
+
   list<CollectionRef> removed_colls;
   {
-    std::lock_guard<std::mutex> l(reap_lock);
-    removed_colls.swap(removed_collections);
+    // _queue_reap_collection and this in the same thread.
+    // So no need a lock.
+    if (!removed_collections.empty())
+      removed_colls.swap(removed_collections);
+    else
+      return;
   }
 
-  bool all_reaped = true;
-
-  for (list<CollectionRef>::iterator p = removed_colls.begin();
-       p != removed_colls.end();
-       ++p) {
+  list<CollectionRef>::iterator p = removed_colls.begin();
+  while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
@@ -6323,15 +6325,17 @@ void BlueStore::_reap_collections()
 	  }
 	  return false;
 	})) {
-      all_reaped = false;
+      ++p;
       continue;
     }
     c->onode_map.clear();
+    p = removed_colls.erase(p);
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
-
-  if (all_reaped) {
+  if (removed_colls.empty()) {
     dout(10) << __func__ << " all reaped" << dendl;
+  } else {
+    removed_collections.splice(removed_collections.begin(), removed_colls);
   }
 }
 
@@ -8459,6 +8463,7 @@ void BlueStore::_kv_stop()
   }
   kv_sync_thread.join();
   kv_finalize_thread.join();
+  assert(removed_collections.empty());
   {
     std::lock_guard<std::mutex> l(kv_lock);
     kv_stop = false;

@@ -117,6 +117,9 @@ public:
     {}
   };
 
+  struct CopyOp;
+  typedef ceph::shared_ptr<CopyOp> CopyOpRef;
+
   struct CopyOp {
     CopyCallback *cb;
     ObjectContextRef obc;
@@ -149,6 +152,13 @@ public:
     unsigned src_obj_fadvise_flags;
     unsigned dest_obj_fadvise_flags;
 
+    map<uint64_t, CopyOpRef> chunk_cops;
+    int num_chunk;
+    bool failed;
+    uint64_t start_offset;
+    uint64_t last_offset;
+    vector<OSDOp> chunk_ops;
+  
     CopyOp(CopyCallback *cb_, ObjectContextRef _obc, hobject_t s,
 	   object_locator_t l,
            version_t v,
@@ -162,13 +172,14 @@ public:
 	objecter_tid2(0),
 	rval(-1),
 	src_obj_fadvise_flags(src_obj_fadvise_flags),
-	dest_obj_fadvise_flags(dest_obj_fadvise_flags)
+	dest_obj_fadvise_flags(dest_obj_fadvise_flags),
+	num_chunk(0),
+	failed(false)
     {
       results.user_version = v;
       results.mirror_snapset = mirror_snapset;
     }
   };
-  typedef ceph::shared_ptr<CopyOp> CopyOpRef;
 
   /**
    * The CopyCallback class defines an interface for completions to the
@@ -1134,6 +1145,7 @@ protected:
     HANDLED_PROXY,
     HANDLED_REDIRECT,
     REPLIED_WITH_EAGAIN,
+    BLOCKED_RECOVERY,
   };
   cache_result_t maybe_handle_cache_detail(OpRequestRef op,
 					   bool write_ordered,
@@ -1385,6 +1397,22 @@ protected:
   void cancel_proxy_write(ProxyWriteOpRef pwop);
 
   friend struct C_ProxyWrite_Commit;
+
+  // -- chunkop --
+  void do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing_oid, 
+			   ObjectContextRef obc, bool write_ordered);
+  void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
+			     uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
+			     uint64_t req_total_len);
+  bool can_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc);
+  void _copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint64_t start_offset);
+  void process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, int r, uint64_t offset);
+  void finish_promote_manifest(int r, CopyResults *results, ObjectContextRef obc);
+  void cancel_and_requeue_proxy_ops(hobject_t oid);
+
+  friend struct C_ProxyChunkRead;
+  friend class PromoteManifestCallback;
+  friend class C_CopyChunk;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,

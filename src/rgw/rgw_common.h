@@ -22,7 +22,6 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
-#include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -1537,6 +1536,10 @@ struct rgw_obj_key {
     instance = i;
   }
 
+  const string& get_instance() const {
+    return instance;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1800,6 +1803,7 @@ struct req_state {
   string zonegroup_endpoint;
   string bucket_instance_id;
   int bucket_instance_shard_id;
+  string redirect_zone_endpoint;
 
   string redirect;
 

@@ -11,7 +11,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 bool LCExpiration_S3::xml_end(const char * el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));

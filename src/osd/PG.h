@@ -50,7 +50,6 @@
 #include <stack>
 #include <string>
 #include <tuple>
-using namespace std;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
@@ -1254,11 +1253,11 @@ protected:
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
     const pg_info_t &info,
     epoch_t oldest_map) {
-    epoch_t start = MAX(
+    epoch_t start = std::max(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
        info.history.epoch_pool_created,
       oldest_map);
-    epoch_t end = MAX(
+    epoch_t end = std::max(
       info.history.same_interval_since,
       info.history.epoch_pool_created);
     return make_pair(start, end);
@@ -1965,6 +1964,36 @@ protected:
     friend class RecoveryMachine;
 
     /* States */
+    // Initial
+    // Reset
+    // Start
+    //   Started
+    //     Primary
+    //       WaitActingChange
+    //       Peering
+    //         GetInfo
+    //         GetLog
+    //         GetMissing
+    //         WaitUpThru
+    //         Incomplete
+    //       Active
+    //         Activating
+    //         Clean
+    //         Recovered
+    //         Backfilling
+    //         WaitRemoteBackfillReserved
+    //         WaitLocalBackfillReserved
+    //         NotBackfilling
+    //         NotRecovering
+    //         Recovering
+    //         WaitRemoteRecoveryReserved
+    //         WaitLocalRecoveryReserved
+    //     ReplicaActive
+    //       RepNotRecovering
+    //       RepRecovering
+    //       RepWaitBackfillReserved
+    //       RepWaitRecoveryReserved
+    //     Stray
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       explicit Crashed(my_context ctx);
@@ -2130,7 +2159,8 @@ protected:
 	boost::statechart::custom_reaction< UnfoundRecovery >,
 	boost::statechart::custom_reaction< UnfoundBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
-	boost::statechart::custom_reaction< RemoteReservationRevoked>
+	boost::statechart::custom_reaction< RemoteReservationRevoked>,
+	boost::statechart::custom_reaction< DoRecovery>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -2158,6 +2188,9 @@ protected:
 	return discard_event();
       }
       boost::statechart::result react(const RemoteReservationRevoked&) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DoRecovery&) {
 	return discard_event();
       }
     };

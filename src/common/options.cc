@@ -1169,6 +1169,10 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description(""),
 
+    Option("mon_max_mgrmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(500)
+    .set_description(""),
+
     Option("mon_max_osd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
     .set_description(""),
@@ -4300,7 +4304,7 @@ std::vector<Option> get_global_options() {
     Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
-      
+
     Option("debug_asserts_on_shutdown", Option::TYPE_BOOL,Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738"),
@@ -5540,6 +5544,26 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
     .set_description(""),
+
+    Option("rgw_bucket_info_cache_expiry_interval", Option::TYPE_UINT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(15_min)
+    .set_description("Number of seconds before entries in the bucket info "
+		     "cache are assumed stale and re-fetched. Zero is never.")
+    .add_tag("performance")
+    .add_service("rgw")
+    .set_long_description("The Rados Gateway stores metadata about buckets in "
+			  "an internal cache. This should be kept consistent "
+			  "by the OSD's relaying notify events between "
+			  "multiple watching RGW processes. In the event "
+			  "that this notification protocol fails, bounding "
+			  "the length of time that any data in the cache will "
+			  "be assumed valid will ensure that any RGW instance "
+			  "that falls out of sync will eventually recover. "
+			  "This seems to be an issue mostly for large numbers "
+			  "of RGW instances under heavy use. If you would like "
+			  "to turn off cache expiry, set this value to zero."),
+
   });
 }
 
@@ -6522,9 +6546,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(true)
     .set_description(""),
 
+    // note: the max amount of "in flight" dirty data is roughly (max - target)
     Option("fuse_use_invalidate_cb", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("use fuse 2.8+ invalidate callback to keep page cache consistent"),
 
     Option("fuse_disable_pagecache", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)

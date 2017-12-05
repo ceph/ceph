@@ -15,6 +15,7 @@
 #include <sys/file.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -400,9 +401,12 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   UserPerm perm(ctx->uid, ctx->gid);
   GET_GROUPS(perm, req);
 #ifdef HAVE_SYS_SYNCFS
+  auto fuse_multithreaded = cfuse->client->cct->_conf->get_val<bool>(
+    "fuse_multithreaded");
+  auto fuse_syncfs_on_mksnap = cfuse->client->cct->_conf->get_val<bool>(
+    "fuse_syncfs_on_mksnap");
   if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
-      cfuse->client->cct->_conf->fuse_multithreaded &&
-      cfuse->client->cct->_conf->fuse_syncfs_on_mksnap) {
+      fuse_multithreaded && fuse_syncfs_on_mksnap) {
     int err = 0;
     int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
     if (fd < 0) {
@@ -562,9 +566,13 @@ static void fuse_ll_open(fuse_req_t req, fuse_ino_t ino,
   if (r == 0) {
     fi->fh = (uint64_t)fh;
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+    auto fuse_disable_pagecache = cfuse->client->cct->_conf->get_val<bool>(
+      "fuse_disable_pagecache");
+    auto fuse_use_invalidate_cb = cfuse->client->cct->_conf->get_val<bool>(
+      "fuse_use_invalidate_cb");
+    if (fuse_disable_pagecache)
       fi->direct_io = 1;
-    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+    else if (fuse_use_invalidate_cb)
       fi->keep_cache = 1;
 #endif
     fuse_reply_open(req, fi);
@@ -771,9 +779,13 @@ static void fuse_ll_create(fuse_req_t req, fuse_ino_t parent, const char *name,
     fi->fh = (uint64_t)fh;
     fe.ino = cfuse->make_fake_ino(fe.attr.st_ino, fe.attr.st_dev);
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 8)
-    if (cfuse->client->cct->_conf->fuse_disable_pagecache)
+    auto fuse_disable_pagecache = cfuse->client->cct->_conf->get_val<bool>(
+      "fuse_disable_pagecache");
+    auto fuse_use_invalidate_cb = cfuse->client->cct->_conf->get_val<bool>(
+      "fuse_use_invalidate_cb");
+    if (fuse_disable_pagecache)
       fi->direct_io = 1;
-    else if (cfuse->client->cct->_conf->fuse_use_invalidate_cb)
+    else if (fuse_use_invalidate_cb)
       fi->keep_cache = 1;
 #endif
     fuse_reply_create(req, &fe, fi);
@@ -822,8 +834,9 @@ static void fuse_ll_setlk(fuse_req_t req, fuse_ino_t ino,
   Fh *fh = reinterpret_cast<Fh*>(fi->fh);
 
   // must use multithread if operation may block
-  if (!cfuse->client->cct->_conf->fuse_multithreaded &&
-      sleep && lock->l_type != F_UNLCK) {
+  auto fuse_multithreaded = cfuse->client->cct->_conf->get_val<bool>(
+    "fuse_multithreaded");
+  if (!fuse_multithreaded && sleep && lock->l_type != F_UNLCK) {
     fuse_reply_err(req, EDEADLK);
     return;
   }
@@ -857,8 +870,9 @@ static void fuse_ll_flock(fuse_req_t req, fuse_ino_t ino,
   Fh *fh = (Fh*)fi->fh;
 
   // must use multithread if operation may block
-  if (!cfuse->client->cct->_conf->fuse_multithreaded &&
-      !(cmd & (LOCK_NB | LOCK_UN))) {
+  auto fuse_multithreaded = cfuse->client->cct->_conf->get_val<bool>(
+    "fuse_multithreaded");
+  if (!fuse_multithreaded && !(cmd & (LOCK_NB | LOCK_UN))) {
     fuse_reply_err(req, EDEADLK);
     return;
   }
@@ -907,7 +921,7 @@ static int remount_cb(void *handle)
 {
   // used for trimming kernel dcache. when remounting a file system, linux kernel
   // trims all unused dentries in the file system
-  char cmd[1024];
+  char cmd[128+PATH_MAX];
   CephFuse::Handle *cfuse = (CephFuse::Handle *)handle;
   snprintf(cmd, sizeof(cmd), "mount -i -o remount %s", cfuse->mountpoint);
   int r = system(cmd);
@@ -924,8 +938,9 @@ static void do_init(void *data, fuse_conn_info *conn)
   Client *client = cfuse->client;
 
 #if !defined(__APPLE__)
-  if (!client->cct->_conf->fuse_default_permissions &&
-      client->ll_handle_umask()) {
+  auto fuse_default_permissions = client->cct->_conf->get_val<bool>(
+    "fuse_default_permissions");
+  if (!fuse_default_permissions && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
     if(conn->capable & FUSE_CAP_DONT_MASK)
       conn->want |= FUSE_CAP_DONT_MASK;
@@ -1058,25 +1073,36 @@ int CephFuse::Handle::init(int argc, const char *argv[])
   newargv[newargc++] = argv[0];
   newargv[newargc++] = "-f";  // stay in foreground
 
-  if (client->cct->_conf->fuse_allow_other) {
+  auto fuse_allow_other = client->cct->_conf->get_val<bool>(
+    "fuse_allow_other");
+  auto fuse_default_permissions = client->cct->_conf->get_val<bool>(
+    "fuse_default_permissions");
+  auto fuse_big_writes = client->cct->_conf->get_val<bool>(
+    "fuse_big_writes");
+  auto fuse_atomic_o_trunc = client->cct->_conf->get_val<bool>(
+    "fuse_atomic_o_trunc");
+  auto fuse_debug = client->cct->_conf->get_val<bool>(
+    "fuse_debug");
+
+  if (fuse_allow_other) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "allow_other";
   }
-  if (client->cct->_conf->fuse_default_permissions) {
+  if (fuse_default_permissions) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "default_permissions";
   }
 #if defined(__linux__)
-  if (client->cct->_conf->fuse_big_writes) {
+  if (fuse_big_writes) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "big_writes";
   }
-  if (client->cct->_conf->fuse_atomic_o_trunc) {
+  if (fuse_atomic_o_trunc) {
     newargv[newargc++] = "-o";
     newargv[newargc++] = "atomic_o_trunc";
   }
 #endif
-  if (client->cct->_conf->fuse_debug)
+  if (fuse_debug)
     newargv[newargc++] = "-d";
 
   for (int argctr = 1; argctr < argc; argctr++)
@@ -1124,7 +1150,8 @@ int CephFuse::Handle::start()
 
   struct client_callback_args args = {
     handle: this,
-    ino_cb: client->cct->_conf->fuse_use_invalidate_cb ? ino_invalidate_cb : NULL,
+    ino_cb: client->cct->_conf->get_val<bool>("fuse_use_invalidate_cb") ?
+      ino_invalidate_cb : NULL,
     dentry_cb: dentry_invalidate_cb,
     switch_intr_cb: switch_interrupt_cb,
 #if defined(__linux__)
@@ -1142,7 +1169,9 @@ int CephFuse::Handle::start()
 
 int CephFuse::Handle::loop()
 {
-  if (client->cct->_conf->fuse_multithreaded) {
+  auto fuse_multithreaded = client->cct->_conf->get_val<bool>(
+    "fuse_multithreaded");
+  if (fuse_multithreaded) {
     return fuse_session_loop_mt(se);
   } else {
     return fuse_session_loop(se);

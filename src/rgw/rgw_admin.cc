@@ -45,7 +45,6 @@
 #include "rgw_role.h"
 #include "rgw_reshard.h"
 
-using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -258,6 +257,7 @@ void usage()
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
+  cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
@@ -2250,6 +2250,24 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
+static int check_pool_support_omap(rgw_pool pool) 
+{
+  librados::IoCtx io_ctx;
+  int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
+  if (ret < 0) {
+     // the pool may not exist at this moment, we have no way to check if it supports omap.
+     return 0;
+  }
+
+  ret = io_ctx.omap_clear("__omap_test_not_exist_oid__");
+  if (ret == -EOPNOTSUPP) {
+    io_ctx.close();
+    return ret;
+  }
+  io_ctx.close();
+  return 0;
+}
+
 int check_reshard_bucket_params(RGWRados *store,
 				const string& bucket_name,
 				const string& tenant,
@@ -2356,6 +2374,8 @@ int main(int argc, const char **argv)
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
+  std::string redirect_zone;
+  bool redirect_zone_set = false;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
@@ -2717,6 +2737,9 @@ int main(int argc, const char **argv)
       is_master_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &set_default, NULL, "--default", (char*)NULL)) {
       /* do nothing */
+    } else if (ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*)NULL)) {
+      redirect_zone = val;
+      redirect_zone_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
@@ -3483,12 +3506,14 @@ int main(int argc, const char **argv)
         zone.tier_config = tier_config_add;
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -3903,13 +3928,15 @@ int main(int argc, const char **argv)
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
           string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+          string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 	  ret = zonegroup.add_zone(zone,
                                    (is_master_set ? &is_master : NULL),
                                    (is_read_only_set ? &read_only : NULL),
                                    endpoints,
                                    ptier_type,
                                    psync_from_all,
-                                   sync_from, sync_from_rm);
+                                   sync_from, sync_from_rm,
+                                   predirect_zone);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -4180,12 +4207,14 @@ int main(int argc, const char **argv)
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4286,6 +4315,13 @@ int main(int argc, const char **argv)
           if (compression_type) {
             info.compression_type = *compression_type;
           }
+
+          ret = check_pool_support_omap(info.get_data_extra_pool());
+          if (ret < 0) {
+             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+                 << "' does not support omap" << std::endl;
+             return ret;
+          }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
           auto p = zone.placement_pools.find(placement_id);
           if (p == zone.placement_pools.end()) {
@@ -4308,6 +4344,13 @@ int main(int argc, const char **argv)
           }
           if (compression_type) {
             info.compression_type = *compression_type;
+          }
+          
+          ret = check_pool_support_omap(info.get_data_extra_pool());
+          if (ret < 0) {
+             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+                 << "' does not support omap" << std::endl;
+             return ret;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
           zone.placement_pools.erase(placement_id);

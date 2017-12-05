@@ -120,6 +120,7 @@ protected:
   int do_aws4_auth_completion();
 
   virtual int init_quota();
+
 public:
   RGWOp()
     : s(nullptr),
@@ -1602,6 +1603,7 @@ class RGWCompleteMultipart : public RGWOp {
 protected:
   string upload_id;
   string etag;
+  string version_id;
   char *data;
   int len;
 
