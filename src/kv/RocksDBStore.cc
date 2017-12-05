@@ -339,17 +339,17 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   }
 
   opt.create_if_missing = create_if_missing;
-  if (g_conf->rocksdb_separate_wal_dir) {
+  if (kv_options.count("separate_wal_dir")) {
     opt.wal_dir = path + ".wal";
   }
-  if (g_conf->get_val<std::string>("rocksdb_db_paths").length()) {
+  if (kv_options.count("db_paths")) {
     list<string> paths;
-    get_str_list(g_conf->get_val<std::string>("rocksdb_db_paths"), "; \t", paths);
+    get_str_list(kv_options["db_paths"], "; \t", paths);
     for (auto& p : paths) {
       size_t pos = p.find(',');
       if (pos == std::string::npos) {
 	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+	     << kv_options["db_paths"] << dendl;
 	return -EINVAL;
       }
       string path = p.substr(0, pos);
@@ -357,7 +357,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
       uint64_t size = atoll(size_str.c_str());
       if (!size) {
 	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+	     << kv_options["db_paths"] << dendl;
 	return -EINVAL;
       }
       opt.db_paths.push_back(rocksdb::DbPath(path, size));

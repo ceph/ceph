@@ -73,6 +73,8 @@ public:
                          bool md_config_t::*,
                          entity_addr_t md_config_t::*,
                          uuid_d md_config_t::*> member_ptr_t;
+  /// true if we are a daemon (as per CephContext::code_env)
+  const bool is_daemon;
 
   /* Maps configuration options to the observer listening for them. */
   typedef std::multimap <std::string, md_config_obs_t*> obs_map_t;
@@ -91,6 +93,9 @@ public:
    * possible settings.
    */
   std::map<std::string, const Option &> schema;
+
+  /// default values (if they vary from the schema)
+  std::map<std::string, Option::value_t> default_values;
 
   /**
    * The current values of all settings described by the schema
@@ -142,6 +147,18 @@ public:
   void set_safe_to_start_threads();
   void _clear_safe_to_start_threads();  // this is only used by the unit test
 
+  /// Look up an option in the schema
+  const Option *find_option(const string& name) const;
+
+  /// Look up the default value for an option by name
+  Option::value_t get_val_default(const string& name, bool meta) const;
+
+  /// Look up the default value for an option
+  Option::value_t _get_val_default(const Option& o, bool meta) const;
+
+  /// Set a default value
+  void set_val_default(const std::string& key, const std::string &val);
+
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
@@ -162,6 +179,7 @@ public:
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
+  int get_val_as_string(const std::string &key, std::string *val) const;
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
   template<typename T> const T get_val(const std::string &key) const;
@@ -201,7 +219,7 @@ private:
   void validate_schema();
   void validate_default_settings();
 
-  int _get_val(const std::string &key, std::string *value) const;
+  int _get_val_as_string(const std::string &key, std::string *value) const;
   Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
@@ -264,6 +282,8 @@ private:
 
   obs_map_t observers;
   changed_set_t changed;
+
+  vector<Option> subsys_options;
 
 public:
   ceph::logging::SubsystemMap subsys;

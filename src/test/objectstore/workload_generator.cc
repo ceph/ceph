@@ -562,15 +562,16 @@ int main(int argc, const char *argv[])
 
   our_name = argv[0];
 
-  def_args.push_back("--osd-journal-size");
-  def_args.push_back("400");
+  map<string,string> defaults = {
+    { "osd_journal_size", "400" }
+  };
 //  def_args.push_back("--osd-data");
 //  def_args.push_back("workload_gen_dir");
 //  def_args.push_back("--osd-journal");
 //  def_args.push_back("workload_gen_dir/journal");
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(&def_args, args,
+  auto cct = global_init(&defaults, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
