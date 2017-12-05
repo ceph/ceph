@@ -301,6 +301,6 @@ class Prepare(object):
         args = parser.parse_args(self.argv)
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if args.bluestore is None and args.filestore is None:
+        if not args.bluestore and not args.filestore:
             args.bluestore = True
         self.safe_prepare(args)
