@@ -28,3 +28,12 @@ class TestVolume(object):
         stdout, stderr = capsys.readouterr()
         assert '--cluster' in stdout
         assert '--log-path' in stdout
+
+    def test_log_ignoring_missing_ceph_conf(self, caplog):
+        with pytest.raises(SystemExit) as error:
+            main.Volume(argv=['ceph-volume', '--cluster', 'barnacle', 'lvm', '--help'])
+        # make sure we aren't causing an actual error
+        assert error.value.code == 0
+        log = caplog.records[0]
+        assert log.message == 'ignoring inability to load ceph.conf'
+        assert log.levelname == 'ERROR'
