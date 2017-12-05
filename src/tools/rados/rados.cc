@@ -115,7 +115,7 @@ void usage(ostream& out)
 "                                    in the object's object map\n"
 "   setomapval <obj-name> <key> <val>\n"
 "   rmomapkey <obj-name> <key>\n"
-"   clearomap <obj-name>             clear all the omap keys for this object\n"
+"   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
 "   getomapheader <obj-name> [file]\n"
 "   setomapheader <obj-name> <val>\n"
 "   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
@@ -2595,15 +2595,16 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage_exit();
     }
 
-    string oid(nargs[1]);
-    ret = io_ctx.omap_clear(oid);
-    if (ret < 0) {
-      cerr << "error removing omap key " << pool_name << "/" << oid << "/"
-           << cpp_strerror(ret) << std::endl;
-      goto out;
-    } else {
-      ret = 0;
+    for (unsigned i=1; i < nargs.size(); i++){
+      string oid(nargs[i]);
+      ret = io_ctx.omap_clear(oid);
+      if (ret < 0) {
+        cerr << "error clearing omap keys " << pool_name << "/" << oid << "/"
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
     }
+    ret = 0;
   } else if (strcmp(nargs[0], "listomapvals") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
