@@ -227,7 +227,7 @@ struct Task {
   IORequest io_request;
   std::mutex lock;
   std::condition_variable cond;
-  SharedDriverQueueData *queue;
+  SharedDriverQueueData *queue = nullptr;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
     : device(dev), command(c), offset(off), len(l),
       return_code(rc),
