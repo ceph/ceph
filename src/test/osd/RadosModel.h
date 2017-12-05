@@ -2133,7 +2133,6 @@ public:
 
     for (int i = 0; i < 2; i++) {
       assert(completions[i]->is_complete()); 
-      uint64_t version = completions[i]->get_version64();
       int err = completions[i]->get_return_value();
       if (err != retval) {
         cerr << num << ": Error: oid " << oid << " read returned different error codes: "
@@ -2146,11 +2145,6 @@ public:
                << err << std::endl;
           ceph_abort();
         }
-      }
-      if (version != tgt_value.version) {
-	cerr << num << ": oid " << oid << " version is " << version
-	     << " and expected " << tgt_value.version << std::endl;
-	assert(version == tgt_value.version);
       }
     }
 
