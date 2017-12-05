@@ -167,7 +167,12 @@ else
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
-                    $SUDO yum install centos-release-scl
+		    case $(uname -m) in
+			x86_64)
+			    $SUDO yum install centos-release-scl;;
+			aarch64)
+			    $SUDO yum install centos-release-scl-rh;;
+		    esac
                 elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                 elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
