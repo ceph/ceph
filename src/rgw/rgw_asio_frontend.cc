@@ -64,7 +64,7 @@ namespace beast = boost::beast;
 
 class Connection {
   RGWProcessEnv& env;
-  boost::asio::strand strand;
+  boost::asio::io_service::strand strand;
   tcp::socket socket;
 
   // references are bound to callbacks for async operations. if a callback
@@ -169,7 +169,7 @@ class Connection {
     process_request(env.store, env.rest, &req, env.uri_prefix,
                     *env.auth_registry, &client, env.olog);
 
-    if (parser->is_keep_alive()) {
+    if (parser->keep_alive()) {
       // parse any unread bytes from the previous message (in case we replied
       // before reading the entire body) before reading the next
       discard_unread_message();
