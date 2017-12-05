@@ -26,12 +26,14 @@ namespace ceph {
   namespace mclock {
 
     using op_item_type_t = OpQueueItem::OpQueueable::op_type_t;
+    using ClientInfoPtr = crimson::dmclock::ClientInfo*;
     
     enum class osd_op_type_t {
       client_op, osd_rep_op, bg_snaptrim, bg_recovery, bg_scrub, bg_pg_delete,
       peering_event
     };
 
+    template <typename ClientKey=uint64_t>
     class OpClassClientInfoMgr {
       crimson::dmclock::ClientInfo client_op;
       crimson::dmclock::ClientInfo osd_rep_op;
@@ -41,13 +43,18 @@ namespace ceph {
       crimson::dmclock::ClientInfo pg_delete;
       crimson::dmclock::ClientInfo peering_event;
 
+      crimson::dmclock::ClientInfo pool_default;
+
       static constexpr std::size_t rep_op_msg_bitset_size = 128;
       std::bitset<rep_op_msg_bitset_size> rep_op_msg_bitset;
       void add_rep_op_msg(int message_code);
+      mutable Mutex lock;
 
     public:
+      std::map<ClientKey, ClientInfoPtr> cli_info_map;
 
       OpClassClientInfoMgr(CephContext *cct);
+      ~OpClassClientInfoMgr();
 
       inline const crimson::dmclock::ClientInfo*
       get_client_info(osd_op_type_t type) {
@@ -98,6 +105,10 @@ namespace ceph {
       // used for debugging since faster implementation can be done
       // with rep_op_msg_bitmap
       static bool is_rep_op(uint16_t);
+      Mutex& get_lock() const { return lock; };
+      inline const crimson::dmclock::ClientInfo* get_pool_default() {
+	return &pool_default;
+      };
     }; // OpClassClientInfoMgr
   } // namespace mclock
 } // namespace ceph

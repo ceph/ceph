@@ -100,6 +100,7 @@ target_link_libraries(unittest_ec_transaction osd global ${BLKID_LIBRARIES})
 # unittest_mclock_op_class_queue
 add_executable(unittest_mclock_op_class_queue
   TestMClockOpClassQueue.cc
+  $<TARGET_OBJECTS:unit-main>
 )
 add_ceph_unittest(unittest_mclock_op_class_queue)
 target_link_libraries(unittest_mclock_op_class_queue
@@ -109,8 +110,19 @@ target_link_libraries(unittest_mclock_op_class_queue
 # unittest_mclock_client_queue
 add_executable(unittest_mclock_client_queue
   TestMClockClientQueue.cc
+  $<TARGET_OBJECTS:unit-main>
 )
 add_ceph_unittest(unittest_mclock_client_queue)
 target_link_libraries(unittest_mclock_client_queue
+  global osd dmclock os
+)
+
+# unittest_mclock_pool_queue
+add_executable(unittest_mclock_pool_queue
+  TestMClockPoolQueue.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mclock_pool_queue)
+target_link_libraries(unittest_mclock_pool_queue
   global osd dmclock os
 )

@@ -57,6 +57,7 @@
 #include "common/PrioritizedQueue.h"
 #include "osd/mClockOpClassQueue.h"
 #include "osd/mClockClientQueue.h"
+#include "osd/mClockPoolQueue.h"
 #include "messages/MOSDOp.h"
 #include "common/EventTrace.h"
 
@@ -1033,6 +1034,7 @@ enum class io_queue {
   weightedpriority,
   mclock_opclass,
   mclock_client,
+  mclock_pool,
 };
 
 
@@ -1222,6 +1224,8 @@ struct OSDShard {
       pqueue = std::make_unique<ceph::mClockOpClassQueue>(cct);
     } else if (opqueue == io_queue::mclock_client) {
       pqueue = std::make_unique<ceph::mClockClientQueue>(cct);
+    } else if (opqueue == io_queue::mclock_pool) {
+      pqueue = std::make_unique<ceph::mClockPoolQueue>(cct);
     }
   }
 };
@@ -2144,7 +2148,8 @@ private:
       static io_queue index_lookup[] = { io_queue::prioritized,
 					 io_queue::weightedpriority,
 					 io_queue::mclock_opclass,
-					 io_queue::mclock_client };
+					 io_queue::mclock_client,
+					 io_queue::mclock_pool };
       srand(time(NULL));
       unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
       return index_lookup[which];
@@ -2154,6 +2159,8 @@ private:
       return io_queue::mclock_opclass;
     } else if (cct->_conf->osd_op_queue == "mclock_client") {
       return io_queue::mclock_client;
+    } else if (cct->_conf->osd_op_queue == "mclock_pool") {
+      return io_queue::mclock_pool;
     } else {
       // default / catch-all is 'wpq'
       return io_queue::weightedpriority;

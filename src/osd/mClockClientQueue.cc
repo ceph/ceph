@@ -48,52 +48,52 @@ namespace ceph {
   }
 
   mClockClientQueue::InnerClient
-  inline mClockClientQueue::get_inner_client(const Client& cl,
-					     const Request& request) {
+  mClockClientQueue::get_inner_client(const Client& cl,
+				      const Request& request) {
     return InnerClient(cl, client_info_mgr.osd_op_type(request));
   }
 
   // Formatted output of the queue
-  inline void mClockClientQueue::dump(ceph::Formatter *f) const {
+  void mClockClientQueue::dump(ceph::Formatter *f) const {
     queue.dump(f);
   }
 
-  inline void mClockClientQueue::enqueue_strict(Client cl,
-						unsigned priority,
-						Request&& item) {
+  void mClockClientQueue::enqueue_strict(Client cl,
+					 unsigned priority,
+					 Request&& item) {
     queue.enqueue_strict(get_inner_client(cl, item), priority,
 			 std::move(item));
   }
 
   // Enqueue op in the front of the strict queue
-  inline void mClockClientQueue::enqueue_strict_front(Client cl,
-						      unsigned priority,
-						      Request&& item) {
+  void mClockClientQueue::enqueue_strict_front(Client cl,
+					       unsigned priority,
+					       Request&& item) {
     queue.enqueue_strict_front(get_inner_client(cl, item), priority,
 			       std::move(item));
   }
 
   // Enqueue op in the back of the regular queue
-  inline void mClockClientQueue::enqueue(Client cl,
-					 unsigned priority,
-					 unsigned cost,
-					 Request&& item) {
+  void mClockClientQueue::enqueue(Client cl,
+				  unsigned priority,
+				  unsigned cost,
+				  Request&& item) {
     auto qos_params = item.get_qos_params();
     queue.enqueue_distributed(get_inner_client(cl, item), priority, cost,
 			      std::move(item), qos_params);
   }
 
   // Enqueue the op in the front of the regular queue
-  inline void mClockClientQueue::enqueue_front(Client cl,
-					       unsigned priority,
-					       unsigned cost,
-					       Request&& item) {
+  void mClockClientQueue::enqueue_front(Client cl,
+					unsigned priority,
+					unsigned cost,
+					Request&& item) {
     queue.enqueue_front(get_inner_client(cl, item), priority, cost,
 			std::move(item));
   }
 
   // Return an op to be dispatched
-  inline Request mClockClientQueue::dequeue() {
+  Request mClockClientQueue::dequeue() {
     std::pair<Request, dmc::PhaseType> retn = queue.dequeue_distributed();
 
     if (boost::optional<OpRequestRef> _op = retn.first.maybe_get_op()) {

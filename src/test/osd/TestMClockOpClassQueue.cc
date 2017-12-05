@@ -3,24 +3,7 @@
 #include <iostream>
 
 #include "gtest/gtest.h"
-
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "common/common_init.h"
-
 #include "osd/mClockOpClassQueue.h"
-
-
-int main(int argc, char **argv) {
-  std::vector<const char*> args(argv, argv+argc);
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_UTILITY,
-			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
-  common_init_finish(g_ceph_context);
-
-  ::testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
 
 
 class MClockOpClassQueueTest : public testing::Test {

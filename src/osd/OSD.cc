@@ -1974,6 +1974,11 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
       cct->_conf->osd_op_pq_max_tokens_per_priority,
       cct->_conf->osd_op_pq_min_cost,
       op_queue);
+    if (op_queue == io_queue::mclock_pool) {
+      ceph::mClockPoolQueue* pq =
+        dynamic_cast<ceph::mClockPoolQueue *>(one_shard->pqueue.get());
+      pq->set_osd_service(&service);
+    }
     shards.push_back(one_shard);
   }
 }
@@ -10010,6 +10015,9 @@ std::ostream& operator<<(std::ostream& out, const io_queue& q) {
     break;
   case io_queue::mclock_client:
     out << "mclock_client";
+    break;
+  case io_queue::mclock_pool:
+    out << "mclock_pool";
     break;
   }
   return out;

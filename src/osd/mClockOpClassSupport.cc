@@ -23,7 +23,8 @@ namespace ceph {
 
   namespace mclock {
 
-    OpClassClientInfoMgr::OpClassClientInfoMgr(CephContext *cct) :
+    template <typename ClientKey>
+    OpClassClientInfoMgr<ClientKey>::OpClassClientInfoMgr(CephContext *cct) :
       client_op(cct->_conf->osd_op_queue_mclock_client_op_res,
 		cct->_conf->osd_op_queue_mclock_client_op_wgt,
 		cct->_conf->osd_op_queue_mclock_client_op_lim),
@@ -44,7 +45,11 @@ namespace ceph {
 	    cct->_conf->osd_op_queue_mclock_pg_delete_lim),
       peering_event(cct->_conf->osd_op_queue_mclock_peering_event_res,
 		    cct->_conf->osd_op_queue_mclock_peering_event_wgt,
-		    cct->_conf->osd_op_queue_mclock_peering_event_lim)
+		    cct->_conf->osd_op_queue_mclock_peering_event_lim),
+      pool_default(cct->_conf->get_val<double>("osd_pool_default_mclock_res"),
+		   cct->_conf->get_val<double>("osd_pool_default_mclock_wgt"),
+		   cct->_conf->get_val<double>("osd_pool_default_mclock_lim")),
+      lock("OpClassClientInfoMgr::lock")
     {
       constexpr int rep_ops[] = {
 	MSG_OSD_REPOP,
@@ -74,13 +79,24 @@ namespace ceph {
 	rep_op_msg_bitset.to_string() << dendl;
     }
 
-    void OpClassClientInfoMgr::add_rep_op_msg(int message_code) {
+    template <typename ClientKey>
+    OpClassClientInfoMgr<ClientKey>::~OpClassClientInfoMgr()
+    {
+      for (auto i : cli_info_map) {
+	delete i.second;
+	i.second = nullptr;
+      }
+      cli_info_map.clear();
+    }
+
+    template <typename ClientKey>
+    void OpClassClientInfoMgr<ClientKey>::add_rep_op_msg(int message_code) {
       assert(message_code >= 0 && message_code < int(rep_op_msg_bitset_size));
       rep_op_msg_bitset.set(message_code);
     }
 
-    osd_op_type_t
-    OpClassClientInfoMgr::osd_op_type(const OpQueueItem& op) const {
+    template <typename ClientKey>
+    osd_op_type_t OpClassClientInfoMgr<ClientKey>::osd_op_type(const OpQueueItem& op) const {
       osd_op_type_t type = convert_op_type(op.get_op_type());
       if (osd_op_type_t::client_op != type) {
 	return type;
@@ -102,7 +118,8 @@ namespace ceph {
 
     // used for debugging since faster implementation can be done
     // with rep_op_msg_bitmap
-    bool OpClassClientInfoMgr::is_rep_op(uint16_t mtype) {
+    template <typename ClientKey>
+    bool OpClassClientInfoMgr<ClientKey>::is_rep_op(uint16_t mtype) {
       return
 	MSG_OSD_REPOP == mtype ||
 	MSG_OSD_REPOPREPLY == mtype ||
@@ -115,3 +132,6 @@ namespace ceph {
     }
   } // namespace mclock
 } // namespace ceph
+
+template class ceph::mclock::OpClassClientInfoMgr<uint64_t>;
+template class ceph::mclock::OpClassClientInfoMgr<int64_t>;

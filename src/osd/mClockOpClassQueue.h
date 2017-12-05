@@ -15,8 +15,6 @@
 
 #pragma once
 
-#include <ostream>
-
 #include "boost/variant.hpp"
 #include "boost/container/flat_set.hpp"
 
@@ -36,14 +34,14 @@ namespace ceph {
   // as the client, and the queue, where the class is
   // osd_op_type_t. So this adapter class will transform calls
   // appropriately.
-  class mClockOpClassQueue : public OpQueue<Request, Client> {
+  class mClockOpClassQueue final : public OpQueue<Request, Client> {
 
     using osd_op_type_t = ceph::mclock::osd_op_type_t;
-
     using queue_t = mClockQueue<Request, osd_op_type_t>;
+
     queue_t queue;
 
-    ceph::mclock::OpClassClientInfoMgr client_info_mgr;
+    ceph::mclock::OpClassClientInfoMgr<> client_info_mgr;
 
   public:
 
@@ -52,13 +50,13 @@ namespace ceph {
     const crimson::dmclock::ClientInfo*
     op_class_client_info_f(const osd_op_type_t& op_type);
 
-    inline unsigned length() const override final {
+    unsigned length() const override final {
       return queue.length();
     }
 
     // Ops of this priority should be deleted immediately
-    inline void remove_by_class(Client cl,
-				std::list<Request> *out) override final {
+    void remove_by_class(Client cl,
+			 std::list<Request> *out) override final {
       queue.remove_by_filter(
 	[&cl, out] (Request&& r) -> bool {
 	  if (cl == r.get_owner()) {
@@ -70,28 +68,28 @@ namespace ceph {
 	});
     }
 
-    inline void enqueue_strict(Client cl,
-			       unsigned priority,
-			       Request&& item) override final {
+    void enqueue_strict(Client cl,
+			unsigned priority,
+			Request&& item) override final {
       queue.enqueue_strict(client_info_mgr.osd_op_type(item),
 			   priority,
 			   std::move(item));
     }
 
     // Enqueue op in the front of the strict queue
-    inline void enqueue_strict_front(Client cl,
-				     unsigned priority,
-				     Request&& item) override final {
+    void enqueue_strict_front(Client cl,
+			      unsigned priority,
+			      Request&& item) override final {
       queue.enqueue_strict_front(client_info_mgr.osd_op_type(item),
 				 priority,
 				 std::move(item));
     }
 
     // Enqueue op in the back of the regular queue
-    inline void enqueue(Client cl,
-			unsigned priority,
-			unsigned cost,
-			Request&& item) override final {
+    void enqueue(Client cl,
+		 unsigned priority,
+		 unsigned cost,
+		 Request&& item) override final {
       queue.enqueue(client_info_mgr.osd_op_type(item),
 		    priority,
 		    cost,
@@ -99,10 +97,10 @@ namespace ceph {
     }
 
     // Enqueue the op in the front of the regular queue
-    inline void enqueue_front(Client cl,
-			      unsigned priority,
-			      unsigned cost,
-			      Request&& item) override final {
+    void enqueue_front(Client cl,
+		       unsigned priority,
+		       unsigned cost,
+		       Request&& item) override final {
       queue.enqueue_front(client_info_mgr.osd_op_type(item),
 			  priority,
 			  cost,
@@ -110,12 +108,12 @@ namespace ceph {
     }
 
     // Returns if the queue is empty
-    inline bool empty() const override final {
+    bool empty() const override final {
       return queue.empty();
     }
 
     // Return an op to be dispatch
-    inline Request dequeue() override final {
+    Request dequeue() override final {
       return queue.dequeue();
     }
 

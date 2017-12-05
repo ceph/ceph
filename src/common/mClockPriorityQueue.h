@@ -35,7 +35,7 @@ namespace ceph {
   namespace dmc = crimson::dmclock;
 
   template <typename T, typename K>
-  class mClockQueue : public OpQueue <T, K> {
+  class mClockQueue final : public OpQueue <T, K> {
 
     using priority_t = unsigned;
     using cost_t = unsigned;
@@ -229,7 +229,7 @@ namespace ceph {
       // empty
     }
 
-    unsigned length() const override final {
+    inline unsigned length() const override final {
       unsigned total = 0;
       total += queue_front.size();
       total += queue.request_count();
@@ -268,7 +268,7 @@ namespace ceph {
       }
     }
 
-    void remove_by_class(K k, std::list<T> *out = nullptr) override final {
+    inline void remove_by_class(K k, std::list<T> *out = nullptr) override final {
       if (out) {
 	queue.remove_by_client(k,
 			       true,
@@ -298,37 +298,37 @@ namespace ceph {
       }
     }
 
-    void enqueue_strict(K cl, unsigned priority, T&& item) override final {
+    inline void enqueue_strict(K cl, unsigned priority, T&& item) override final {
       high_queue[priority].enqueue(cl, 0, std::move(item));
     }
 
-    void enqueue_strict_front(K cl, unsigned priority, T&& item) override final {
+    inline void enqueue_strict_front(K cl, unsigned priority, T&& item) override final {
       high_queue[priority].enqueue_front(cl, 0, std::move(item));
     }
 
-    void enqueue(K cl, unsigned priority, unsigned cost, T&& item) override final {
+    inline void enqueue(K cl, unsigned priority, unsigned cost, T&& item) override final {
       // priority is ignored
       queue.add_request(std::move(item), cl, cost);
     }
 
-    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
+    inline void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
 			     const dmc::ReqParams& req_params) {
       // priority is ignored
       queue.add_request(std::move(item), cl, req_params, cost);
     }
 
-    void enqueue_front(K cl,
+    inline void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
 		       T&& item) override final {
       queue_front.emplace_front(std::pair<K,T>(cl, std::move(item)));
     }
 
-    bool empty() const override final {
+    inline bool empty() const override final {
       return queue.empty() && high_queue.empty() && queue_front.empty();
     }
 
-    T dequeue() override final {
+    inline T dequeue() override final {
       assert(!empty());
 
       if (!high_queue.empty()) {
@@ -352,7 +352,7 @@ namespace ceph {
       return std::move(*(retn.request));
     }
 
-    Retn dequeue_distributed() {
+    inline Retn dequeue_distributed() {
       assert(!empty());
       dmc::PhaseType resp_params = dmc::PhaseType();
 
