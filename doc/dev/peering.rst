@@ -256,4 +256,5 @@ The high level process is for the current PG primary to:
 State Model
 -----------
 
-.. graphviz:: peering_graph.generated.dot
+.. image:: peering_graph.generated.svg
+   :target: peering_graph.generated.svg
