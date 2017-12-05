@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:8; indent-tabs-mode:t -*-
 #
 # Ceph distributed storage system
 #
@@ -23,6 +24,30 @@ export LC_ALL=C # the following is vulnerable to i18n
 function munge_ceph_spec_in {
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
+}
+
+function ensure_decent_gcc {
+    # point gcc to the one offered by g++-7 if the used one is not
+    # new enough
+    old=$(gcc -dumpversion)
+    new=$1
+    if dpkg --compare-versions $old ge 5.1; then
+	return
+    fi
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-\${new} 20 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-\${new}
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-\${old} 10 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-\${old}
+
+    $SUDO update-alternatives --auto gcc
+
+    # cmake uses the latter by default
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
 }
 
 if [ x`uname`x = xFreeBSDx ]; then
@@ -80,7 +105,18 @@ else
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
-        $SUDO apt-get install -y dpkg-dev gcc
+        $SUDO apt-get install -y dpkg-dev
+        case "$VERSION" in
+            *Trusty*)
+                $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
+                $SUDO apt-get update
+                $SUDO apt-get install -y gcc-7
+                ensure_decent_gcc 7
+                ;;
+            *)
+                $SUDO apt-get install -y gcc
+                ;;
+        esac
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
@@ -123,8 +159,7 @@ else
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
                 if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum install subscription-manager
-                    $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
+                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
                 $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
@@ -132,8 +167,10 @@ else
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
-                fi
-                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum install centos-release-scl
+                elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
+                elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;
