@@ -9,6 +9,7 @@ import time
 import teuthology.lock.query
 import teuthology.lock.util
 from teuthology.config import config
+from teuthology.contextutil import safe_while
 
 from ..exceptions import ConsoleError
 
@@ -160,25 +161,18 @@ class PhysicalConsole():
         Check power.  Retry if EOF encountered on power check read.
         """
         timeout = timeout or self.timeout
-        t = 1
-        total = t
-        ta = time.time()
-        while total < timeout:
-            c = self._pexpect_spawn_ipmi('power status')
-            r = c.expect(['Chassis Power is {s}'.format(
-                s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=t)
-            tb = time.time()
-            if r == 0:
-                return True
-            elif r == 1:
-                # keep trying if EOF is reached, first sleep for remaining
-                # timeout interval
-                if tb - ta < t:
-                    time.sleep(t - (tb - ta))
-            # go around again if EOF or TIMEOUT
-            ta = tb
-            t *= 2
-            total += t
+        sleep_time = 4.0
+        with safe_while(
+                sleep=sleep_time,
+                tries=int(timeout / sleep_time),
+                _raise=False,
+                action='wait for power %s' % state) as proceed:
+            while proceed():
+                c = self._pexpect_spawn_ipmi('power status')
+                r = c.expect(['Chassis Power is {s}'.format(
+                    s=state), pexpect.EOF, pexpect.TIMEOUT], timeout=1)
+                if r == 0:
+                    return True
         return False
 
     def check_status(self, timeout=None):
