@@ -17,7 +17,7 @@ namespace crimson {
   namespace dmclock {
     using Counter = uint64_t;
 
-    enum class PhaseType { reservation, priority };
+    enum class PhaseType : uint8_t { reservation, priority };
 
     inline std::ostream& operator<<(std::ostream& out, const PhaseType& phase) {
       out << (PhaseType::reservation == phase ? "reservation" : "priority");
