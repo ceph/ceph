@@ -9,7 +9,7 @@ import yaml
 
 import teuthology
 from teuthology import provision
-from teuthology.lock.ops import unlock_one, update_inventory
+from teuthology.lock.ops import unlock_one
 from teuthology.lock.query import is_vm, list_locks, \
     find_stale_locks, get_status
 from teuthology.lock.util import locked_since_seconds
@@ -304,10 +304,8 @@ def nuke_helper(ctx, should_unlock):
         check_lock.check_lock(ctx, None, check_up=False)
     status = get_status(host)
     if status['machine_type'] in provision.fog.get_types():
-        fog_obj = provision.fog.FOG(
-            host, status['os_type'], status['os_version'])
-        fog_obj.create()
-        update_inventory(fog_obj.remote.inventory_info)
+        remote = Remote(host)
+        remote.console.power_off()
         return
     if (not ctx.noipmi and 'ipmi_user' in config and
             'vpm' not in shortname):
