@@ -2349,6 +2349,9 @@ private:
 
   float get_osd_recovery_sleep();
 
+  void probe_smart(ostream& ss);
+  int probe_smart_device(const char *device, int timeout, std::string *result);
+
 public:
   static int peek_meta(ObjectStore *store, string& magic,
 		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
