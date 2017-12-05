@@ -586,6 +586,7 @@ void PrimaryLogPG::maybe_kick_recovery(
 void PrimaryLogPG::wait_for_unreadable_object(
   const hobject_t& soid, OpRequestRef op)
 {
+  dout(20) << __func__ << dendl;
   assert(is_unreadable_object(soid));
   maybe_kick_recovery(soid);
   waiting_for_unreadable_object[soid].push_back(op);
@@ -594,6 +595,7 @@ void PrimaryLogPG::wait_for_unreadable_object(
 
 bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 {
+  dout(20) << __func__ << dendl;
   /* The conditions below may clear (on_local_recover, before we queue
    * the transaction) before we actually requeue the degraded waiters
    * in on_global_recover after the transaction completes.
@@ -626,6 +628,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
 
 void PrimaryLogPG::wait_for_degraded_object(const hobject_t& soid, OpRequestRef op)
 {
+  dout(20) << __func__ << dendl;
   assert(is_degraded_or_backfilling_object(soid));
 
   maybe_kick_recovery(soid);
@@ -680,6 +683,7 @@ bool PrimaryLogPG::maybe_await_blocked_head(
   const hobject_t &hoid,
   OpRequestRef op)
 {
+  dout(20) << __func__ << dendl;
   ObjectContextRef obc;
   obc = object_contexts.lookup(hoid.get_head());
   if (obc) {
