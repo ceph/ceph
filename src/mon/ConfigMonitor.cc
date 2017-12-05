@@ -5,6 +5,7 @@
 #include "mon/ConfigMonitor.h"
 #include "mon/OSDMonitor.h"
 #include "messages/MConfig.h"
+#include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
 #include "common/Formatter.h"
 
@@ -80,6 +81,25 @@ version_t ConfigMonitor::get_trim_to() const
 bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
 {
   return false;
+}
+
+void ConfigMonitor::handle_get_config(MonOpRequestRef op)
+{
+  MGetConfig *m = static_cast<MGetConfig*>(op->get_req());
+  dout(10) << __func__ << " " << m->name << " host " << m->host << dendl;
+
+  const OSDMap& osdmap = mon->osdmon()->osdmap;
+  map<string,string> crush_location;
+  osdmap.crush->get_full_location(m->host, &crush_location);
+  map<string,string> out;
+  config_map.generate_entity_map(
+    m->name,
+    crush_location,
+    osdmap.crush.get(),
+    m->device_class,
+    &out);
+  dout(20) << " config is " << out << dendl;
+  m->get_connection()->send_message(new MConfig(out));
 }
 
 bool ConfigMonitor::prepare_update(MonOpRequestRef op)
