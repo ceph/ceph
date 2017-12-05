@@ -173,7 +173,9 @@ if(CMAKE_COMPILER_IS_GNUCXX AND
   # use old gcc with new libstdc++, but it covers the most cases.
   #
   # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
-  message(WARNING "performance regression is expected due to an O(n) implementation of 'std::list::size()' in libstdc++ older than 5.1.0")
+  message(SEND_ERROR "performance regression is expected due to an O(n) "
+    "implementation of 'std::list::size()' in libstdc++ older than 5.1.0, "
+    "Please use GCC 5.1 and up.")
 endif()
 
 ## Handle diagnostics color if compiler supports them.
