@@ -1718,22 +1718,22 @@ public:
    * @param op_flags is CEPH_OSD_OP_FLAG_*
    * @returns number of bytes read on success, or negative error code on failure.
    */
-   virtual int read(
-    const coll_t& cid,
+  virtual int read(
+   const coll_t& cid,
+   const ghobject_t& oid,
+   uint64_t offset,
+   size_t len,
+   bufferlist& bl,
+   uint32_t op_flags = 0) = 0;
+  virtual int read(
+    CollectionHandle &c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
     bufferlist& bl,
-    uint32_t op_flags = 0) = 0;
-   virtual int read(
-     CollectionHandle &c,
-     const ghobject_t& oid,
-     uint64_t offset,
-     size_t len,
-     bufferlist& bl,
-     uint32_t op_flags = 0) {
-     return read(c->get_cid(), oid, offset, len, bl, op_flags);
-   }
+    uint32_t op_flags = 0) {
+    return read(c->get_cid(), oid, offset, len, bl, op_flags);
+  }
 
   /*********************************
    * ReadTransaction
@@ -1830,19 +1830,19 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) = 0;
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len,
- 		     map<uint64_t, uint64_t>& destmap) = 0;
-   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) {
-     return fiemap(c->get_cid(), oid, offset, len, bl);
-   }
-   virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
-     return fiemap(c->get_cid(), oid, offset, len, destmap);
-   }
+  virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+       	     uint64_t offset, size_t len, bufferlist& bl) = 0;
+  virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
+       	     uint64_t offset, size_t len,
+       	     map<uint64_t, uint64_t>& destmap) = 0;
+  virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+       	     uint64_t offset, size_t len, bufferlist& bl) {
+    return fiemap(c->get_cid(), oid, offset, len, bl);
+  }
+  virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
+       	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
+    return fiemap(c->get_cid(), oid, offset, len, destmap);
+  }
 
   /**
    * getattr -- get an xattr of an object
