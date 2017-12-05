@@ -136,10 +136,18 @@ Ceph Conf: {ceph_path}
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
         log.setup()
+        logger = logging.getLogger(__name__)
         # set all variables from args and load everything needed according to
         # them
         self.load_ceph_conf_path(cluster_name=args.cluster)
-        conf.ceph = configuration.load(conf.path)
+        try:
+            conf.ceph = configuration.load(conf.path)
+        except exceptions.ConfigurationError as error:
+            # we warn only here, because it is possible that the configuration
+            # file is not needed, or that it will be loaded by some other means
+            # (like reading from lvm tags)
+            logger.exception('ignoring inability to load ceph.conf')
+            terminal.red(error)
         # dispatch to sub-commands
         terminal.dispatch(self.mapper, subcommand_args)
 
