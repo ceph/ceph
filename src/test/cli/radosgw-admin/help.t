@@ -261,6 +261,7 @@
      --min-rewrite-size        min object size for bucket rewrite (default 4M)
      --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)
      --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
+     --user-type               type of user (rgw/ldap/keystone)
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   

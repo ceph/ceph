@@ -318,6 +318,7 @@ void usage()
   cout << "   --min-rewrite-size        min object size for bucket rewrite (default 4M)\n";
   cout << "   --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)\n";
   cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
+  cout << "   --user-type               type of user (rgw/ldap/keystone)\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
@@ -2395,7 +2396,7 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
-  std::string access_key, secret_key, user_email, display_name;
+  std::string access_key, secret_key, user_email, display_name, user_type;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
   std::string date, subuser, access, format;
@@ -2428,6 +2429,7 @@ int main(int argc, const char **argv)
   int key_type = KEY_TYPE_UNDEFINED;
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
+  uint32_t type = 0;
   RGWUserInfo info;
   int opt_cmd = OPT_NO_CMD;
   bool need_more;
@@ -2860,6 +2862,10 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--user-type", (char*)NULL)) {
+      user_type = val;
+      type = rgw_str_to_user_type(user_type.c_str());
+      user_op.set_user_type(type);
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;

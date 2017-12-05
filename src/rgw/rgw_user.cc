@@ -572,6 +572,18 @@ uint32_t rgw_str_to_perm(const char *str)
   return RGW_PERM_INVALID;
 }
 
+uint32_t rgw_str_to_user_type(const char *str)
+{
+  if (strcasecmp(str, "rgw") == 0)
+    return TYPE_RGW;
+  else if (strcasecmp(str, "ldap") == 0)
+    return TYPE_LDAP;
+  else if (strcasecmp(str, "keystone") == 0)
+    return TYPE_KEYSTONE;
+
+  return TYPE_NONE;
+}
+
 int rgw_validate_tenant_name(const string& t)
 {
   struct tench {
@@ -2181,6 +2193,11 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
       return ret;
     }
     user_info.user_email = "";
+  }
+
+  // update user type, if given by user
+  if (op_state.has_user_type()) {
+    user_info.type = op_state.get_user_type();
   }
 
   // update the remaining user info

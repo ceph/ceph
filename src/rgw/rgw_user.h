@@ -128,6 +128,7 @@ extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
+extern uint32_t rgw_str_to_user_type(const char *str);
 
 extern int rgw_validate_tenant_name(const string& t);
 
@@ -222,6 +223,9 @@ struct RGWUserAdminOpState {
 
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
+
+  uint32_t user_type;
+  bool user_type_specified = false;
 
   void set_access_key(std::string& access_key) {
     if (access_key.empty())
@@ -389,6 +393,11 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
+  void set_user_type(uint32_t type) {
+    user_type = type;
+    user_type_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -409,6 +418,7 @@ struct RGWUserAdminOpState {
   bool will_generate_subuser() { return gen_subuser; }
   bool has_bucket_quota() { return bucket_quota_specified; }
   bool has_user_quota() { return user_quota_specified; }
+  bool has_user_type() {return user_type_specified; }
   void set_populated() { populated = true; }
   void clear_populated() { populated = false; }
   void set_initialized() { initialized = true; }
@@ -433,6 +443,7 @@ struct RGWUserAdminOpState {
   std::string get_caps() { return caps; }
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
+  uint32_t get_user_type() { return user_type; }
   map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
   RGWUserInfo&  get_user_info() { return info; }
