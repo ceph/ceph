@@ -8,7 +8,7 @@ from ..exceptions import UnsupportedPackageTypeError
 
 log = logging.getLogger(__name__)
 
-HADOOP_2x_URL = "http://apache.osuosl.org/hadoop/common/hadoop-2.5.2/hadoop-2.5.2.tar.gz"
+HADOOP_2x_URL = "https://archive.apache.org/dist/hadoop/core/hadoop-2.5.2/hadoop-2.5.2.tar.gz"
 
 def dict_to_hadoop_conf(items):
     out = "<configuration>\n"
