@@ -31,6 +31,8 @@ tasks:
     - \(OBJECT_MISPLACED\)
     - \(OSD_
     - slow request
+    - \(OBJECT_
+    - \(TOO_FEW_PGS\)
 - thrashosds:
     op_delay: 30
     clean_interval: 120
