@@ -31,9 +31,6 @@ using std::vector;
 
 using boost::container::flat_set;
 using boost::intrusive_ptr;
-using boost::make_optional;
-using boost::none;
-using boost::optional;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
@@ -127,7 +124,7 @@ public:
 };
 
 TEST_F(PolicyTest, Parse1) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example1)));
@@ -160,17 +157,17 @@ TEST_F(PolicyTest, Eval1) {
 		   bufferlist::static_from_string(example1));
   Environment e;
 
-  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+  EXPECT_EQ(p.eval(e, boost::none, s3ListBucket,
 		   ARN(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket")),
 	    Effect::Allow);
 
-  EXPECT_EQ(p.eval(e, none, s3PutBucketAcl,
+  EXPECT_EQ(p.eval(e, boost::none, s3PutBucketAcl,
 		   ARN(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "example_bucket")),
 	    Effect::Pass);
 
-  EXPECT_EQ(p.eval(e, none, s3ListBucket,
+  EXPECT_EQ(p.eval(e, boost::none, s3ListBucket,
 		   ARN(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "erroneous_bucket")),
 	    Effect::Pass);
@@ -178,7 +175,7 @@ TEST_F(PolicyTest, Eval1) {
 }
 
 TEST_F(PolicyTest, Parse2) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example2)));
@@ -259,7 +256,7 @@ TEST_F(PolicyTest, Eval2) {
 }
 
 TEST_F(PolicyTest, Parse3) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example3)));
@@ -377,12 +374,12 @@ TEST_F(PolicyTest, Eval3) {
 		  s3GetReplicationConfiguration |
 		  s3GetObjectTagging | s3GetObjectVersionTagging);
 
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
+  EXPECT_EQ(p.eval(em, boost::none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket")),
 	    Effect::Allow);
 
-  EXPECT_EQ(p.eval(em, none, s3PutBucketPolicy,
+  EXPECT_EQ(p.eval(em, boost::none, s3PutBucketPolicy,
 		   ARN(Partition::aws, Service::s3,
 		       "", arbitrary_tenant, "mybucket")),
 	    Effect::Allow);
@@ -394,54 +391,54 @@ TEST_F(PolicyTest, Eval3) {
       continue;
     }
 
-    EXPECT_EQ(p.eval(em, none, op,
+    EXPECT_EQ(p.eval(em, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(tr, none, op,
+    EXPECT_EQ(p.eval(tr, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
 	      op & s3allow ? Effect::Allow : Effect::Pass);
-    EXPECT_EQ(p.eval(fa, none, op,
+    EXPECT_EQ(p.eval(fa, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data")),
 	      Effect::Pass);
 
-    EXPECT_EQ(p.eval(em, none, op,
+    EXPECT_EQ(p.eval(em, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(tr, none, op,
+    EXPECT_EQ(p.eval(tr, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
 	      op & s3allow ? Effect::Allow : Effect::Pass);
-    EXPECT_EQ(p.eval(fa, none, op,
+    EXPECT_EQ(p.eval(fa, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "confidential-data/moo")),
 	      Effect::Pass);
 
-    EXPECT_EQ(p.eval(em, none, op,
+    EXPECT_EQ(p.eval(em, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(tr, none, op,
+    EXPECT_EQ(p.eval(tr, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data")),
 	      Effect::Pass);
-    EXPECT_EQ(p.eval(fa, none, op,
+    EXPECT_EQ(p.eval(fa, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "really-confidential-data")),
 	      Effect::Pass);
 
-    EXPECT_EQ(p.eval(em, none, op,
+    EXPECT_EQ(p.eval(em, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo")), Effect::Pass);
-    EXPECT_EQ(p.eval(tr, none, op,
+    EXPECT_EQ(p.eval(tr, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo")), Effect::Pass);
-    EXPECT_EQ(p.eval(fa, none, op,
+    EXPECT_EQ(p.eval(fa, boost::none, op,
 		     ARN(Partition::aws, Service::s3,
 			 "", arbitrary_tenant,
 			 "really-confidential-data/moo")), Effect::Pass);
