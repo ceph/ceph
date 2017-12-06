@@ -850,7 +850,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   }
 
   // do my exports!
-  set<CDir*> already_exporting;
+  map<mds_rank_t, double> export_pop_map;
 
   for (auto &it : state.targets) {
     mds_rank_t target = it.first;
@@ -865,7 +865,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
       //<< " .. " << (*it).second << " * " << load_fac
 	    << " -> " << amount
 	    << dendl;//" .. fudge is " << fudge << dendl;
-    double have = 0.0;
+
+    double& have = export_pop_map[target];
 
     mds->mdcache->show_subtrees();
 
@@ -904,9 +905,53 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	  break;
       }
     }
-    if (amount-have < MIN_OFFLOAD) {
+  }
+
+  // any other imports
+  for (auto &it : state.targets) {
+    mds_rank_t target = it.first;
+    double amount = it.second;
+
+    if (!export_pop_map.count(target))
       continue;
+    double& have = export_pop_map[target];
+    if (amount-have < MIN_OFFLOAD)
+      continue;
+
+    for (auto p = import_pop_map.begin();
+	 p != import_pop_map.end(); ) {
+      CDir *dir = p->second;
+      if (dir->inode->is_base()) {
+	++p;
+	continue;
+      }
+
+      double pop = p->first;
+      if (pop <= amount-have && pop > MIN_REEXPORT) {
+	dout(0) << "reexporting " << *dir << " pop " << pop
+		<< " to mds." << target << dendl;
+	have += pop;
+	mds->mdcache->migrator->export_dir_nicely(dir, target);
+	import_pop_map.erase(p++);
+      } else {
+	++p;
+      }
+      if (amount-have < MIN_OFFLOAD)
+	break;
     }
+  }
+
+  set<CDir*> already_exporting;
+
+  for (auto &it : state.targets) {
+    mds_rank_t target = it.first;
+    double amount = it.second;
+
+    if (!export_pop_map.count(target))
+      continue;
+    double& have = export_pop_map[target];
+    if (amount-have < MIN_OFFLOAD)
+      continue;
 
     // okay, search for fragments of my workload
     list<CDir*> exports;
