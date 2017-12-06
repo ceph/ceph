@@ -118,6 +118,8 @@ class CBT(Task):
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
             ],
         )
+        preserve_file = os.path.join(self.ctx.archive, '.preserve')
+        open(preserve_file, 'a').close()
 
     def end(self):
         super(CBT, self).end()
