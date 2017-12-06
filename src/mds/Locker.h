@@ -49,7 +49,7 @@ private:
   MDCache *mdcache;
  
  public:
-  Locker(MDSRank *m, MDCache *c) : mds(m), mdcache(c) {}  
+  Locker(MDSRank *m, MDCache *c);
 
   SimpleLock *get_lock(int lock_type, MDSCacheObjectInfo &info);
   
@@ -187,7 +187,7 @@ public:
   void get_late_revoking_clients(std::list<client_t> *result) const;
   bool any_late_revoking_caps(xlist<Capability*> const &revoking) const;
 
- protected:
+protected:
   bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
   void handle_client_caps(class MClientCaps *m);
@@ -204,6 +204,11 @@ public:
   xlist<Capability*> revoking_caps;
   // Maintain a per-client list to find clients responsible for late ones quickly
   std::map<client_t, xlist<Capability*> > revoking_caps_by_client;
+
+  elist<CInode*> need_snapflush_inodes;
+public:
+  void snapflush_nudge(CInode *in);
+  void mark_need_snapflush_inode(CInode *in);
 
   // local
 public:

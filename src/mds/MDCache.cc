@@ -308,10 +308,12 @@ void MDCache::remove_inode(CInode *o)
     export_pin_queue.erase(o);
 
   // remove from inode map
-  if (o->last == CEPH_NOSNAP)
+  if (o->last == CEPH_NOSNAP) {
     inode_map.erase(o->ino());
-  else
+  } else {
+    o->item_caps.remove_myself();
     snap_inode_map.erase(o->vino());
+  }
 
   if (o->ino() < MDS_INO_SYSTEM_BASE) {
     if (o == root) root = 0;
@@ -1493,8 +1495,8 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
 
   CInode *oldin = new CInode(this, true, in->first, last);
   oldin->inode = *in->get_previous_projected_inode();
-  oldin->symlink = in->symlink;
   oldin->xattrs = *in->get_previous_projected_xattrs();
+  oldin->symlink = in->symlink;
   oldin->inode.trim_client_ranges(last);
 
   if (in->first < in->oldest_snap)
@@ -1531,7 +1533,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     for (auto p : in->client_caps) {
       client_t client = p.first;
       Capability *cap = p.second;
-      int issued = cap->issued();
+      int issued = cap->need_snapflush() ? CEPH_CAP_ANY_WR : cap->issued();
       if ((issued & CEPH_CAP_ANY_WR) &&
 	  cap->client_follows < last) {
 	// note in oldin
@@ -1581,15 +1583,20 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     dnl = dn->get_projected_linkage();
   assert(!dnl->is_null());
 
-  if (dnl->is_primary() && dnl->get_inode()->is_multiversion()) {
+  CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+  bool cow_head = false;
+  if (in && in->state_test(CInode::STATE_AMBIGUOUSAUTH)) {
+    assert(in->is_frozen_inode());
+    cow_head = true;
+  }
+  if (in && (in->is_multiversion() || cow_head)) {
     // multiversion inode.
-    CInode *in = dnl->get_inode();
     SnapRealm *realm = NULL;
 
     if (in->get_projected_parent_dn() != dn) {
       assert(follows == CEPH_NOSNAP);
       realm = dn->dir->inode->find_snaprealm();
-      snapid_t dir_follows = realm->get_newest_snap();
+      snapid_t dir_follows = realm->get_newest_seq();
 
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
@@ -1604,7 +1611,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	  // FIXME: adjust link count here?  hmm.
 
 	  if (dir_follows+1 > in->first)
-	    in->cow_old_inode(dir_follows, false);
+	    in->cow_old_inode(dir_follows, cow_head);
 	}
       }
 
@@ -1631,7 +1638,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       return;
     }
 
-    in->cow_old_inode(follows, false);
+    in->cow_old_inode(follows, cow_head);
 
   } else {
     SnapRealm *realm = dn->dir->inode->find_snaprealm();
@@ -1647,8 +1654,6 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     // update dn.first before adding old dentry to cdir's map
     snapid_t oldfirst = dn->first;
     dn->first = follows+1;
-
-    CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
 
     if (!realm->has_snaps_in_range(oldfirst, follows)) {
       dout(10) << "journal_cow_dentry no snapshot follows " << follows << " on " << *dn << dendl;
@@ -1667,8 +1672,10 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       oldin->inode.version = olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
       bool need_snapflush = !oldin->client_snap_caps.empty();
-      if (need_snapflush)
+      if (need_snapflush) {
 	mut->ls->open_files.push_back(&oldin->item_open_file);
+	mds->locker->mark_need_snapflush_inode(oldin);
+      }
       metablob->add_primary_dentry(olddn, 0, true, false, false, need_snapflush);
       mut->add_cow_dentry(olddn);
     } else {
@@ -4169,6 +4176,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
 	 p != dir->items.end();
 	 ++p) {
       CDentry *dn = p->second;
+      assert(dn->last == CEPH_NOSNAP);
       CDentry::linkage_t *dnl = dn->get_linkage();
       dout(15) << " add_weak_primary_dentry " << *dn << dendl;
       assert(dnl->is_primary());
@@ -4188,10 +4196,39 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
     dir->state_set(CDir::STATE_REJOINING);
 
     for (CDir::map_t::iterator p = dir->items.begin();
-	 p != dir->items.end();
-	 ++p) {
+	 p != dir->items.end(); ) {
       CDentry *dn = p->second;
+      ++p;
+      dn->state_set(CDentry::STATE_REJOINING);
       CDentry::linkage_t *dnl = dn->get_linkage();
+      CInode *in = dnl->is_primary() ? dnl->get_inode() : NULL;
+
+      // trim snap dentries. because they may have been pruned by
+      // their auth mds (snap deleted)
+      if (dn->last != CEPH_NOSNAP) {
+	if (in && !in->remote_parents.empty()) {
+	  // unlink any stale remote snap dentry.
+	  for (compact_set<CDentry*>::iterator q = in->remote_parents.begin();
+	       q != in->remote_parents.end(); ) {
+	    CDentry *remote_dn = *q;
+	    ++q;
+	    assert(remote_dn->last != CEPH_NOSNAP);
+	    remote_dn->unlink_remote(remote_dn->get_linkage());
+	  }
+	}
+	if (dn->lru_is_expireable()) {
+	  if (!dnl->is_null())
+	    dir->unlink_inode(dn, false);
+	  if (in)
+	    remove_inode(in);
+	  dir->remove_dentry(dn);
+	  continue;
+	} else {
+	  // Inventing null/remote dentry shouldn't cause problem
+	  assert(!dnl->is_primary());
+	}
+      }
+
       dout(15) << " add_strong_dentry " << *dn << dendl;
       rejoin->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
@@ -5416,6 +5453,9 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
 {
   dout(10) << "rebuild_need_snapflush " << snap_follows << " on " << *head_in << dendl;
 
+  if (!realm->has_snaps_in_range(snap_follows + 1, head_in->first - 1))
+    return;
+
   const set<snapid_t>& snaps = realm->get_snaps();
   snapid_t follows = snap_follows;
 
@@ -5423,9 +5463,21 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
     CInode *in = pick_inode_snap(head_in, follows);
     if (in == head_in)
       break;
+
+    bool need_snapflush = false;
+    for (auto p = snaps.lower_bound(MAX(in->first, (snapid_t)(follows + 1)));
+	 p != snaps.end() && *p <= in->last;
+	 ++p) {
+      head_in->add_need_snapflush(in, *p, client);
+      need_snapflush = true;
+    }
+    follows = in->last;
+    if (!need_snapflush)
+      continue;
+
     dout(10) << " need snapflush from client." << client << " on " << *in << dendl;
 
-    /* TODO: we can check the reconnected/flushing caps to find 
+    /* TODO: we can check the reconnected/flushing caps to find
      *       which locks need gathering */
     for (int i = 0; i < num_cinode_locks; i++) {
       int lockid = cinode_lock_info[i].lock;
@@ -5436,14 +5488,7 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
       lock->set_state(LOCK_SNAP_SYNC);
       lock->get_wrlock(true);
     }
-
-    for (auto p = snaps.lower_bound(in->first);
-	 p != snaps.end() && *p <= in->last;
-	 ++p) {
-      head_in->add_need_snapflush(in, *p, client);
-    }
-
-    follows = in->last;
+    mds->locker->mark_need_snapflush_inode(in);
   }
 }
 
@@ -5749,8 +5794,17 @@ void MDCache::open_snap_parents()
 	auto q = reconnected_caps.find(child->ino());
 	assert(q != reconnected_caps.end());
 	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	  if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
-	    rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	  if (r->second.snap_follows > 0) {
+	    if (r->second.snap_follows < child->first - 1) {
+	      rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	    } else if (r->second.snapflush) {
+	      // When processing a cap flush message that is re-sent, it's possble
+	      // that the sender has already released all WR caps. So we should
+	      // force MDCache::cow_inode() to setup CInode::client_need_snapflush.
+	      Capability *cap = child->get_client_cap(r->first);
+	      if (cap)
+		cap->mark_needsnapflush();
+	    }
 	  }
 	  // make sure client's cap is in the correct snaprealm.
 	  if (r->second.realm_ino != in->ino()) {
@@ -8044,7 +8098,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       if (curdir->is_complete() ||
 	  (snapid == CEPH_NOSNAP &&
 	   curdir->has_bloom() &&
-	   !curdir->is_in_bloom(path[depth]))){
+	   !curdir->is_in_bloom(path[depth]))) {
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?
@@ -8090,7 +8144,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       mds_authority_t dauth = curdir->authority();
 
       if (forward &&
-	  snapid && mdr && mdr->client_request &&
+	  mdr && mdr->client_request &&
 	  (int)depth < mdr->client_request->get_num_fwd()) {
 	dout(7) << "traverse: snap " << snapid << " and depth " << depth
 		<< " < fwd " << mdr->client_request->get_num_fwd()
@@ -8623,9 +8677,10 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
 {
   set<mds_rank_t> all, active;
   mds->mdsmap->get_mds_set(all);
-  mds->mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
   if (mds->get_state() == MDSMap::STATE_REJOIN)
-    mds->mdsmap->get_mds_set(active, MDSMap::STATE_REJOIN);
+    mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_REJOIN);
+  else
+    mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
 
   dout(10) << "do_open_ino_peer " << ino << " active " << active
 	   << " all " << all << " checked " << info.checked << dendl;
@@ -8837,7 +8892,7 @@ void MDCache::_do_find_ino_peer(find_ino_peer_info_t& fip)
 {
   set<mds_rank_t> all, active;
   mds->mdsmap->get_mds_set(all);
-  mds->mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
+  mds->mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
 
   dout(10) << "_do_find_ino_peer " << fip.tid << " " << fip.ino
 	   << " active " << active << " all " << all
@@ -9911,7 +9966,9 @@ void MDCache::handle_discover(MDiscover *dis)
     // incomplete dir?
     if (!dn) {
       if (!curdir->is_complete() &&
-	  (!curdir->has_bloom() || curdir->is_in_bloom(dis->get_dentry(i)))) {
+	  !(snapid == CEPH_NOSNAP &&
+	    curdir->has_bloom() &&
+	    !curdir->is_in_bloom(dis->get_dentry(i)))) {
 	// readdir
 	dout(7) << "incomplete dir contents for " << *curdir << ", fetching" << dendl;
 	if (reply->is_empty()) {
@@ -9927,10 +9984,19 @@ void MDCache::handle_discover(MDiscover *dis)
 	}
       }
 
+      if (snapid != CEPH_NOSNAP && !reply->is_empty()) {
+	dout(7) << "dentry " << dis->get_dentry(i) << " snap " << snapid
+		<< " dne, non-empty reply, stopping" << dendl;
+	break;
+      }
+
       // send null dentry
       dout(7) << "dentry " << dis->get_dentry(i) << " dne, returning null in "
 	      << *curdir << dendl;
-      dn = curdir->add_null_dentry(dis->get_dentry(i));
+      if (snapid == CEPH_NOSNAP)
+	dn = curdir->add_null_dentry(dis->get_dentry(i));
+      else
+	dn = curdir->add_null_dentry(dis->get_dentry(i), snapid, snapid);
     }
     assert(dn);
 

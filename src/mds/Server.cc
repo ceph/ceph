@@ -2513,7 +2513,7 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string&
         respond_to_request(mdr, -EEXIST);
         return 0;
       }
-    } else {
+    } else if (!dir->inode->is_stray()) {
       dn->first = dir->inode->find_snaprealm()->get_newest_seq() + 1;
     }
 
@@ -4251,7 +4251,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   if (cmode & CEPH_FILE_MODE_WR) {
     pi->client_ranges[client].range.first = 0;
     pi->client_ranges[client].range.last = pi->get_layout_size_increment();
-    pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
+    pi->client_ranges[client].follows = realm->get_newest_seq();
     changed_ranges = true;
   }
   
@@ -5963,6 +5963,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       return;
   }
 
+  SnapRealm *realm = in->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
+  if (straydn)
+    straydn->first = MAX((uint64_t)in->first, follows + 1);
+
   // yay!
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
@@ -5990,7 +5995,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
     _link_remote(mdr, false, dn, dnl->get_inode());
   else
-    _unlink_local(mdr, dn, straydn);
+    _unlink_local(mdr, dn, straydn, follows);
 }
 
 class C_MDS_unlink_local_finish : public ServerLogContext {
@@ -6007,15 +6012,13 @@ public:
   }
 };
 
-void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
+void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, snapid_t follows)
 {
   dout(10) << "_unlink_local " << *dn << dendl;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
 
-  SnapRealm *realm = in->find_snaprealm();
-  snapid_t follows = realm->get_newest_seq();
 
   // ok, let's do it.
   mdr->ls = mdlog->get_current_segment();
@@ -6034,7 +6037,6 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   if (straydn) {
     assert(dnl->is_primary());
     straydn->push_projected_linkage(in);
-    straydn->first = follows + 1;
   }
 
   // the unlinked dentry
@@ -6078,6 +6080,11 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   }
 
   dn->push_projected_linkage();
+
+  if (straydn) {
+    assert(in->first <= straydn->first);
+    in->first = straydn->first;
+  }
 
   if (in->is_dir()) {
     assert(straydn);
@@ -7279,7 +7286,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-  snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
+  snapid_t next_dest_snap = MAX(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
 
   // add it all to the metablob
   // target inode
@@ -7290,7 +7297,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
-	straydn->first = MAX(oldin->first, next_dest_snap);
+	straydn->first = MAX((uint64_t)oldin->first, dest_realm->get_newest_seq() + 1);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
@@ -7314,7 +7321,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = MAX(destdn->first, next_dest_snap);
+	destdn->first = next_dest_snap;
 
       if (destdn->is_auth())
         metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
@@ -7327,6 +7334,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
+	// FIXME: stray reintegration, do we need to update destdn->first?
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
       if (destdn->is_auth())
@@ -7340,8 +7348,8 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
-    else
-      destdn->first = MAX(destdn->first, next_dest_snap);
+
+    destdn->first = MAX(srci->first, next_dest_snap);
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);
@@ -7376,8 +7384,15 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
 
   // make renamed inode first track the dn
-  if (srcdnl->is_primary() && destdn->is_auth())
-    srci->first = destdn->first;  
+  if (srcdnl->is_primary() && destdn->is_auth()) {
+    assert(srci->first <= destdn->first);
+    srci->first = destdn->first;
+  }
+  // make stray inode first track the straydn
+  if (straydn && straydn->is_auth()) {
+    assert(oldin->first <= straydn->first);
+    oldin->first = straydn->first;
+  }
 
   if (oldin && oldin->is_dir()) {
     assert(straydn);
@@ -8871,16 +8886,13 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
     // prepare
   if (!mdr->more()->stid) {
     mds->snapclient->prepare_update(diri->ino(), snapid, dstname, utime_t(),
-				    &mdr->more()->stid, &mdr->more()->snapidbl,
+				    &mdr->more()->stid,
 				    new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
   version_t stid = mdr->more()->stid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  snapid_t seq;
-  ::decode(seq, p);
-  dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
+  dout(10) << " stid is " << stid << dendl;
 
   // journal
   inode_t *pi = diri->project_inode();

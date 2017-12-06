@@ -109,6 +109,7 @@ public:
   const static unsigned STATE_STALE		= (1<<0);
   const static unsigned STATE_NEW		= (1<<1);
   const static unsigned STATE_IMPORTING		= (1<<2);
+  const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
 
 
   Capability(CInode *i = NULL, uint64_t id = 0, client_t c = 0) :
@@ -242,6 +243,9 @@ public:
   bool is_importing() { return state & STATE_IMPORTING; }
   void mark_importing() { state |= STATE_IMPORTING; }
   void clear_importing() { state &= ~STATE_IMPORTING; }
+  bool need_snapflush() { return state & STATE_NEEDSNAPFLUSH; }
+  void mark_needsnapflush() { state |= STATE_NEEDSNAPFLUSH; }
+  void clear_needsnapflush() { state &= ~STATE_NEEDSNAPFLUSH; }
 
   CInode *get_inode() { return inode; }
   client_t get_client() const { return client; }

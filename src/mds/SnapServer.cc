@@ -72,15 +72,12 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
   switch (op) {
   case TABLE_OP_CREATE:
     {
-      version++;
-
       SnapInfo info;
       ::decode(info.ino, p);
       if (!p.end()) {
 	::decode(info.name, p);
 	::decode(info.stamp, p);
 	info.snapid = ++last_snap;
-	info.long_name = "create";
 	pending_update[version] = info;
 	dout(10) << "prepare v" << version << " create " << info << dendl;
       } else {
@@ -98,7 +95,6 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       snapid_t snapid;
       ::decode(ino, p);    // not used, currently.
       ::decode(snapid, p);
-      version++;
 
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
@@ -118,16 +114,13 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       ::decode(info.snapid, p);
       ::decode(info.name, p);
       ::decode(info.stamp, p);
-      info.long_name = "update";
 
-      version++;
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
       pending_update[version] = info;
       dout(10) << "prepare v" << version << " update " << info << dendl;
 
       bl.clear();
-      ::encode(last_snap, bl);
     }
     break;
 
@@ -137,24 +130,41 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
   //dump();
 }
 
-bool SnapServer::_is_prepared(version_t tid) const
+void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
 {
-  return 
-    pending_update.count(tid) ||
-    pending_destroy.count(tid);
+  auto p = pending_update.find(tid);
+  if (p != pending_update.end()) {
+    if (pbl && !snaps.count(p->second.snapid)) // create
+      ::encode(p->second.snapid, *pbl);
+    return;
+  }
+  auto q = pending_destroy.find(tid);
+  if (q != pending_destroy.end()) {
+    if (pbl)
+      ::encode(q->second.second, *pbl);
+    return;
+  }
+  auto r = pending_noop.find(tid);
+  if (r != pending_noop.end()) {
+    if (pbl)
+      ::encode(last_snap, *pbl);
+    return;
+  }
+  assert (0 == "tid not found");
 }
 
-bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
+void SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 {
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
     string opname;
-    if (info.long_name.empty())
+    if (snaps.count(info.snapid)) {
+      opname = "update";
+      if (info.stamp == utime_t())
+	info.stamp = snaps[info.snapid].stamp;
+    } else {
       opname = "create";
-    else
-      opname.swap(info.long_name);
-    if (info.stamp == utime_t() && snaps.count(info.snapid))
-      info.stamp = snaps[info.snapid].stamp;
+    }
     dout(7) << "commit " << tid << " " << opname << " " << info << dendl;
     snaps[info.snapid] = info;
     pending_update.erase(tid);
@@ -180,10 +190,7 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
   else
     ceph_abort();
 
-  // bump version.
-  version++;
   //dump();
-  return true;
 }
 
 void SnapServer::_rollback(version_t tid) 
@@ -191,10 +198,10 @@ void SnapServer::_rollback(version_t tid)
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];
     string opname;
-    if (info.long_name.empty())
-      opname = "create";
+    if (snaps.count(info.snapid))
+      opname = "update";
     else
-      opname.swap(info.long_name);
+      opname = "create";
     dout(7) << "rollback " << tid << " " << opname << " " << info << dendl;
     pending_update.erase(tid);
   } 
@@ -212,8 +219,6 @@ void SnapServer::_rollback(version_t tid)
   else
     ceph_abort();
 
-  // bump version.
-  version++;
   //dump();
 }
 
@@ -234,8 +239,6 @@ void SnapServer::_server_update(bufferlist& bl)
     if (need_to_purge[p->first].empty())
       need_to_purge.erase(p->first);
   }
-
-  version++;
 }
 
 void SnapServer::handle_query(MMDSTableRequest *req)
@@ -373,5 +376,4 @@ void SnapServer::generate_test_instances(list<SnapServer*>& ls)
   populated->pending_noop.insert(890);
 
   ls.push_back(populated);
-
 }
