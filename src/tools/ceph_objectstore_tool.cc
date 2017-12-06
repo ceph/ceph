@@ -350,8 +350,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
   formatter->open_object_section("pg_missing_t");
   missing.dump(formatter);
   formatter->close_section();
-  formatter->flush(out);
-  formatter->open_object_section("map");
   formatter->open_array_section("divergent_priors");
   for (map<eversion_t, hobject_t>::iterator it = divergent_priors.begin();
        it != divergent_priors.end(); ++ it) {
@@ -360,7 +358,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
       formatter->dump_stream("hobject") << it->second;
       formatter->close_section();
   }
-  formatter->close_section();
   formatter->close_section();
   formatter->close_section();
   formatter->flush(out);
