@@ -1213,7 +1213,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "Pool exports cannot be imported into a PG" << std::endl;
     return -EINVAL;
   } else if (type != TYPE_PG_BEGIN) {
-    cerr << "Invalid first section type " << type << std::endl;
+    cerr << "Invalid first section type " << std::to_string(type) << std::endl;
     return -EFAULT;
   }
 
@@ -1328,7 +1328,9 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     if (ret)
       return ret;
 
-    //cout << "do_import: Section type " << hex << type << dec << std::endl;
+    if (debug) {
+      cout << __func__ << ": Section type " << std::to_string(type) << std::endl;
+    }
     if (type >= END_OF_TYPES) {
       cout << "Skipping unknown section type" << std::endl;
       continue;
@@ -1347,7 +1349,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       done = true;
       break;
     default:
-      cerr << "Unknown section type " << type << std::endl;
+      cerr << "Unknown section type " << std::to_string(type) << std::endl;
       return -EFAULT;
     }
   }
