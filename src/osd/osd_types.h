@@ -5211,9 +5211,9 @@ WRITE_CLASS_ENCODER(obj_list_snap_response_t)
 // PromoteCounter
 
 struct PromoteCounter {
-  std::atomic_ullong  attempts{0};
-  std::atomic_ullong  objects{0};
-  std::atomic_ullong  bytes{0};
+  std::atomic<unsigned long long>  attempts{0};
+  std::atomic<unsigned long long>  objects{0};
+  std::atomic<unsigned long long>  bytes{0};
 
   void attempt() {
     attempts++;
