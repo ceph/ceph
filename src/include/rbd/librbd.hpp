@@ -35,6 +35,14 @@ namespace librbd {
   typedef void (*callback_t)(completion_t cb, void *arg);
 
   typedef struct {
+    int64_t group_pool;
+    std::string group_name;
+    std::string group_snap_name;
+  } group_snap_t;
+
+  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
+
+  typedef struct {
     uint64_t id;
     uint64_t size;
     std::string name;
@@ -83,6 +91,13 @@ namespace librbd {
     std::string name;
     int64_t pool;
   } group_spec_t;
+
+  typedef rbd_group_snap_state_t group_snap_state_t;
+
+  typedef struct {
+    std::string name;
+    group_snap_state_t state;
+  } group_snap_spec_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -205,6 +220,13 @@ public:
                                IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
+
+  int group_snap_create(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_remove(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_list(IoCtx& group_ioctx, const char *group_name,
+		      std::vector<group_snap_spec_t> *snaps);
 
 private:
   /* We don't allow assignment or copying */
@@ -475,6 +497,9 @@ public:
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
+
+  int snap_get_namespace_type(uint64_t snap_id, snap_namespace_type_t *namespace_type);
+  int snap_get_group(uint64_t snap_id, group_snap_t *group_snap);
 
 private:
   friend class RBD;

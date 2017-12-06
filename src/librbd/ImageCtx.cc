@@ -476,6 +476,17 @@ struct C_InvalidateCache : public Context {
     return CEPH_NOSNAP;
   }
 
+  snap_t ImageCtx::get_snap_id_from_namespace(cls::rbd::SnapshotNamespace in_snap_namespace) const
+  {
+    assert(snap_lock.is_locked());
+    map<pair<cls::rbd::SnapshotNamespace, std::string>, snap_t>::const_iterator it =
+      snap_ids.lower_bound({in_snap_namespace, ""});
+    if (it != snap_ids.end()) {
+      return it->second;
+    }
+    return CEPH_NOSNAP;
+  }
+
   const SnapInfo* ImageCtx::get_snap_info(snap_t in_snap_id) const
   {
     assert(snap_lock.is_locked());
@@ -483,7 +494,7 @@ struct C_InvalidateCache : public Context {
       snap_info.find(in_snap_id);
     if (it != snap_info.end())
       return &it->second;
-    return NULL;
+    return nullptr;
   }
 
   int ImageCtx::get_snap_name(snap_t in_snap_id,
