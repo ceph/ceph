@@ -21,18 +21,6 @@
 // Library code from C++14 that can be implemented in C++11.
 
 namespace ceph {
-template<typename T>
-using remove_extent_t = typename std::remove_extent<T>::type;
-template<typename T>
-using remove_reference_t = typename std::remove_reference<T>::type;
-template<typename T>
-using result_of_t = typename std::result_of<T>::type;
-
-template<typename T>
-using decay_t = typename std::decay<T>::type;
-
-template<bool T, typename F = void>
-using enable_if_t = typename std::enable_if<T,F>::type;
 
 namespace _backport14 {
 template<typename T>
@@ -57,7 +45,7 @@ inline typename uniquity<T>::datum make_unique(Args&&... args) {
 
 template<typename T>
 inline typename uniquity<T>::array make_unique(std::size_t n) {
-  return std::unique_ptr<T>(new remove_extent_t<T>[n]());
+  return std::unique_ptr<T>(new std::remove_extent_t<T>[n]());
 }
 
 template<typename T, class... Args>
@@ -87,7 +75,7 @@ constexpr std::size_t size(const T (&array)[N]) noexcept {
 // invoke_result_t, and so may not behave correctly when SFINAE is required
 template <typename F>
 class not_fn_result {
-  using DecayF = decay_t<F>;
+  using DecayF = std::decay_t<F>;
   DecayF fn;
  public:
   explicit not_fn_result(F&& f) : fn(std::forward<F>(f)) {}
@@ -96,23 +84,23 @@ class not_fn_result {
 
   template<class... Args>
   auto operator()(Args&&... args) &
-  -> decltype(!std::declval<result_of_t<DecayF&(Args...)>>()) {
+    -> decltype(!std::declval<std::result_of_t<DecayF&(Args...)>>()) {
     return !fn(std::forward<Args>(args)...);
   }
   template<class... Args>
   auto operator()(Args&&... args) const&
-  -> decltype(!std::declval<result_of_t<DecayF const&(Args...)>>()) {
+    -> decltype(!std::declval<std::result_of_t<DecayF const&(Args...)>>()) {
     return !fn(std::forward<Args>(args)...);
   }
 
   template<class... Args>
   auto operator()(Args&&... args) &&
-  -> decltype(!std::declval<result_of_t<DecayF(Args...)>>()) {
+    -> decltype(!std::declval<std::result_of_t<DecayF(Args...)>>()) {
     return !std::move(fn)(std::forward<Args>(args)...);
   }
   template<class... Args>
   auto operator()(Args&&... args) const&&
-  -> decltype(!std::declval<result_of_t<DecayF const(Args...)>>()) {
+    -> decltype(!std::declval<std::result_of_t<DecayF const(Args...)>>()) {
     return !std::move(fn)(std::forward<Args>(args)...);
   }
 };
@@ -186,11 +174,11 @@ private:
 };
 
 template <class CharT, class Traits, class DelimT>
-ostream_joiner<decay_t<DelimT>, CharT, Traits>
+ostream_joiner<std::decay_t<DelimT>, CharT, Traits>
 make_ostream_joiner(std::basic_ostream<CharT, Traits>& os,
                     DelimT&& delimiter) {
-    return ostream_joiner<decay_t<DelimT>,
-                          CharT, Traits>(os, std::forward<DelimT>(delimiter));
+  return ostream_joiner<std::decay_t<DelimT>,
+			CharT, Traits>(os, std::forward<DelimT>(delimiter));
 }
 
 } // namespace _backport_ts
