@@ -292,7 +292,6 @@ int file_fd = fd_none;
 bool debug;
 bool force = false;
 super_header sh;
-uint64_t testalign;
 
 static int get_fd_data(int fd, bufferlist &bl)
 {
@@ -2640,10 +2639,9 @@ int main(int argc, char **argv)
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd, "
      "for apply-layout-settings: target hash level split to")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
-    ("test-align", po::value<uint64_t>(&testalign)->default_value(0), "hidden align option for testing")
     ;
 
-  po::options_description all("All options");
+  po::options_description all;
   all.add(desc).add(positional);
 
   po::positional_options_description pd;
@@ -2664,7 +2662,7 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("help")) {
-    usage(all);
+    usage(desc);
     return 1;
   }
 
