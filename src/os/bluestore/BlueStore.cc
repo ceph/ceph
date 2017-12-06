@@ -62,15 +62,15 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
 
 
 // kv store prefixes
-const string PREFIX_SUPER = "S";   // field -> value
-const string PREFIX_STAT = "T";    // field -> value(int64 array)
-const string PREFIX_COLL = "C";    // collection name -> cnode_t
-const string PREFIX_OBJ = "O";     // object name -> onode_t
-const string PREFIX_OMAP = "M";    // u64 + keyname -> value
-const string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value (for meta coll)
-const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
-const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
-const string PREFIX_ALLOC_BITMAP = "b"; // (see BitmapFreelistManager)
+const string PREFIX_SUPER = "S";       // field -> value
+const string PREFIX_STAT = "T";        // field -> value(int64 array)
+const string PREFIX_COLL = "C";        // collection name -> cnode_t
+const string PREFIX_OBJ = "O";         // object name -> onode_t
+const string PREFIX_OMAP = "M";        // u64 + keyname -> value
+const string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value(for meta coll)
+const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
+const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
+const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
 
 // write a label in the first block.  always use this size.  note that
@@ -537,6 +537,20 @@ static void get_deferred_key(uint64_t seq, string *out)
   _key_encode_u64(seq, out);
 }
 
+static void get_pool_stat_key(int64_t pool_id, string *key)
+{
+  key->clear();
+  _key_encode_u64(pool_id, key);
+}
+
+static int get_key_pool_stat(const string& key, uint64_t* pool_id)
+{
+  const char *p = key.c_str();
+  if (key.length() < sizeof(uint64_t))
+    return -1;
+  _key_decode_u64(p, pool_id);
+  return 0;
+}
 
 // merge operators
 
@@ -5523,6 +5537,7 @@ int BlueStore::_open_collections(int *errors)
 	       << " " << c->cnode << dendl;
       _osr_attach(c.get());
       coll_map[cid] = c;
+
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
       if (errors)
@@ -5534,19 +5549,49 @@ int BlueStore::_open_collections(int *errors)
 
 void BlueStore::_open_statfs()
 {
+  // for sure
+  per_pool_stat_collection = true;
+  osd_pools.clear();
+  vstatfs.reset();
+
   bufferlist bl;
   int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
   if (r >= 0) {
     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
       auto it = bl.cbegin();
       vstatfs.decode(it);
+      per_pool_stat_collection = false;
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
+  } else {
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT);
+    for (it->upper_bound(string());
+	 it->valid();
+	 it->next()) {
+
+      uint64_t pool_id;
+      int r = get_key_pool_stat(it->key(), &pool_id);
+      ceph_assert(r == 0);
+
+      bufferlist bl;
+      bl = it->value();
+      auto p = bl.cbegin();
+      auto& st = osd_pools[pool_id];
+      try {
+        st.decode(p);
+        vstatfs += st;
+
+        dout(30) << __func__ << " pool " << pool_id
+		 << " statfs " << st << dendl;
+      } catch (buffer::error& e) {
+        derr << __func__ << " failed to decode pool stats, key:"
+             << pretty_binary_string(it->key()) << dendl;
+      }   
+    }
   }
-  else {
-    dout(10) << __func__ << " store_statfs missed, using empty" << dendl;
-  }
+  dout(30) << __func__ << " statfs " << vstatfs << dendl;
+
 }
 
 int BlueStore::_setup_block_symlink_or_file(
@@ -9183,15 +9228,25 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
   logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
-  {
-    std::lock_guard l(vstatfs_lock);
-    vstatfs += txc->statfs_delta;
-  }
-
   bufferlist bl;
   txc->statfs_delta.encode(bl);
+  if (per_pool_stat_collection) {
+    string key;
+    get_pool_stat_key(txc->osd_pool_id, &key);
+    txc->t->merge(PREFIX_STAT, key, bl);
 
-  txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
+    std::lock_guard l(vstatfs_lock);
+    auto& stats = osd_pools[txc->osd_pool_id];
+    stats += txc->statfs_delta;
+    
+    vstatfs += txc->statfs_delta; //non-persistent in this mode
+
+  } else {
+    txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
+
+    std::lock_guard l(vstatfs_lock);
+    vstatfs += txc->statfs_delta;
+  } 
   txc->statfs_delta.reset();
 }
 
@@ -10417,7 +10472,9 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
+    
   }
+  
   vector<OnodeRef> ovec(i.objects.size());
 
   for (int pos = 0; i.have_op(); ++pos) {
@@ -10428,8 +10485,17 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     if (op->op == Transaction::OP_NOP)
       continue;
 
+
     // collection operations
     CollectionRef &c = cvec[op->cid];
+    // initialize osd_pool_id and do a smoke test that all collections belong
+    // to the same pool
+    spg_t pgid;
+    if (!!c ? c->cid.is_pg(&pgid) : false) {
+      ceph_assert(txc->osd_pool_id == -1 ||
+                  txc->osd_pool_id == (int64_t)pgid.pool());
+      txc->osd_pool_id = (int64_t)pgid.pool();
+    }
     switch (op->op) {
     case Transaction::OP_RMCOLL:
       {
