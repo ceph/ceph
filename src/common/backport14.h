@@ -21,69 +21,6 @@
 // Library code from C++14 that can be implemented in C++11.
 
 namespace ceph {
-namespace _backport17 {
-template <class C>
-constexpr auto size(const C& c) -> decltype(c.size()) {
-  return c.size();
-}
-
-template <typename T, std::size_t N>
-constexpr std::size_t size(const T (&array)[N]) noexcept {
-  return N;
-}
-
-/// http://en.cppreference.com/w/cpp/utility/functional/not_fn
-// this implementation uses c++14's result_of_t (above) instead of the c++17
-// invoke_result_t, and so may not behave correctly when SFINAE is required
-template <typename F>
-class not_fn_result {
-  using DecayF = std::decay_t<F>;
-  DecayF fn;
- public:
-  explicit not_fn_result(F&& f) : fn(std::forward<F>(f)) {}
-  not_fn_result(not_fn_result&& f) = default;
-  not_fn_result(const not_fn_result& f) = default;
-
-  template<class... Args>
-  auto operator()(Args&&... args) &
-    -> decltype(!std::declval<std::result_of_t<DecayF&(Args...)>>()) {
-    return !fn(std::forward<Args>(args)...);
-  }
-  template<class... Args>
-  auto operator()(Args&&... args) const&
-    -> decltype(!std::declval<std::result_of_t<DecayF const&(Args...)>>()) {
-    return !fn(std::forward<Args>(args)...);
-  }
-
-  template<class... Args>
-  auto operator()(Args&&... args) &&
-    -> decltype(!std::declval<std::result_of_t<DecayF(Args...)>>()) {
-    return !std::move(fn)(std::forward<Args>(args)...);
-  }
-  template<class... Args>
-  auto operator()(Args&&... args) const&&
-    -> decltype(!std::declval<std::result_of_t<DecayF const(Args...)>>()) {
-    return !std::move(fn)(std::forward<Args>(args)...);
-  }
-};
-
-template <typename F>
-not_fn_result<F> not_fn(F&& fn) {
-  return not_fn_result<F>(std::forward<F>(fn));
-}
-
-struct in_place_t {};
-constexpr in_place_t in_place{};
-
-template<typename T>
-struct in_place_type_t {};
-
-#ifdef __cpp_variable_templates
-template<typename T>
-constexpr in_place_type_t<T> in_place_type{};
-#endif // __cpp_variable_templates
-} // namespace _backport17
-
 namespace _backport_ts {
 template <class DelimT,
           class CharT = char,
@@ -145,14 +82,6 @@ make_ostream_joiner(std::basic_ostream<CharT, Traits>& os,
 
 } // namespace _backport_ts
 
-using _backport17::size;
-using _backport17::not_fn;
-using _backport17::in_place_t;
-using _backport17::in_place;
-using _backport17::in_place_type_t;
-#ifdef __cpp_variable_templates
-using _backport17::in_place_type;
-#endif // __cpp_variable_templates
 using _backport_ts::ostream_joiner;
 using _backport_ts::make_ostream_joiner;
 } // namespace ceph
