@@ -23,6 +23,7 @@
 #include <iostream>
 #include <sstream>
 #include <boost/program_options.hpp>
+#include <json_spirit/json_spirit.h>
 
 namespace rbd {
 namespace action {
@@ -31,13 +32,17 @@ namespace trash {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+//Optional arguments used only by this set of commands (rbd trash *)
+static const std::string EXPIRES_AT("expires-at");
+static const std::string EXPIRED_BEFORE("expired-before");
+static const std::string THRESHOLD("threshold");
 
 void get_move_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
-    (at::DELAY.c_str(), po::value<uint64_t>(),
-     "time delay in seconds until effectively remove the image");
+    (EXPIRES_AT.c_str(), po::value<std::string>()->default_value("now"),
+     "set the expiration time of an image so it can be purged when it is stale");
 }
 
 int execute_move(const po::variables_map &vm,
@@ -61,20 +66,34 @@ int execute_move(const po::variables_map &vm,
     return r;
   }
 
-  uint64_t delay = 0;
-  if (vm.find(at::DELAY) != vm.end()) {
-    delay = vm[at::DELAY].as<uint64_t>();
+  utime_t now = ceph_clock_now();
+  utime_t exp_time = now;
+  std::string expires_at;
+  if (vm.find(EXPIRES_AT) != vm.end()) {
+    expires_at = vm[EXPIRES_AT].as<std::string>();
+    r = utime_t::invoke_date(expires_at, &exp_time);
+    if (r < 0) {
+      std::cerr << "rbd: error calling /bin/date: " << cpp_strerror(r)
+                << std::endl;
+      return r;
+    }
+  }
+
+  time_t dt = exp_time.sec() - now.sec();
+  if(dt < 0) {
+    std::cerr << "rbd: cannot use a date in the past as an expiration date"
+              << std::endl;
+    return -EINVAL;
   }
 
   librbd::RBD rbd;
-  r = rbd.trash_move(io_ctx, image_name.c_str(), delay);
+  r = rbd.trash_move(io_ctx, image_name.c_str(), dt);
   if (r < 0) {
     std::cerr << "rbd: deferred delete error: " << cpp_strerror(r)
               << std::endl;
   }
 
   return r;
-
 }
 
 void get_remove_arguments(po::options_description *positional,
@@ -87,6 +106,32 @@ void get_remove_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
   options->add_options()
       ("force", po::bool_switch(), "force remove of non-expired delayed images");
+}
+
+void remove_error_check(int r) {
+    if (r == -ENOTEMPTY) {
+      std::cerr << "rbd: image has snapshots - these must be deleted"
+                << " with 'rbd snap purge' before the image can be removed."
+                << std::endl;
+    } else if (r == -EBUSY) {
+      std::cerr << "rbd: error: image still has watchers"
+                << std::endl
+                << "This means the image is still open or the client using "
+                << "it crashed. Try again after closing/unmapping it or "
+                << "waiting 30s for the crashed client to timeout."
+                << std::endl;
+    } else if (r == -EMLINK) {
+      std::cerr << std::endl
+		<< "Remove the image from the consistency group and try again."
+		<< std::endl;
+    } else if (r == -EPERM) {
+      std::cerr << std::endl
+                << "Deferment time has not expired, please use --force if you "
+                << "really want to remove the image"
+                << std::endl;
+    } else {
+      std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
+    }
 }
 
 int execute_remove(const po::variables_map &vm,
@@ -112,29 +157,7 @@ int execute_remove(const po::variables_map &vm,
   r = rbd.trash_remove_with_progress(io_ctx, image_id.c_str(),
                                      vm["force"].as<bool>(), pc);
   if (r < 0) {
-    if (r == -ENOTEMPTY) {
-      std::cerr << "rbd: image has snapshots - these must be deleted"
-                << " with 'rbd snap purge' before the image can be removed."
-                << std::endl;
-    } else if (r == -EBUSY) {
-      std::cerr << "rbd: error: image still has watchers"
-                << std::endl
-                << "This means the image is still open or the client using "
-                << "it crashed. Try again after closing/unmapping it or "
-                << "waiting 30s for the crashed client to timeout."
-                << std::endl;
-    } else if (r == -EMLINK) {
-      std::cerr << std::endl
-		<< "Remove the image from the consistency group and try again."
-		<< std::endl;
-    } else if (r == -EPERM) {
-      std::cerr << std::endl
-                << "Deferment time has not expired, please use --force if you "
-                << "really want to remove the image"
-                << std::endl;
-    } else {
-      std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
-    }
+    remove_error_check(r); 
     pc.fail();
     return r;
   }
@@ -153,6 +176,8 @@ std::string delete_status(time_t deferment_end_time) {
   std::stringstream ss;
   if (now < deferment_end_time) {
     ss << "protected until " << time_str;
+  } else {
+    ss << "expired at " << time_str;
   }
 
   return ss.str();
@@ -325,6 +350,163 @@ int execute_list(const po::variables_map &vm,
   return 0;
 }
 
+void get_purge_arguments(po::options_description *positional,
+                            po::options_description *options) {
+  at::add_pool_options(positional, options);
+  at::add_no_progress_option(options);
+  
+  options->add_options()
+      (EXPIRED_BEFORE.c_str(), po::value<std::string>()->value_name("date"), 
+       "purges images that expired before the given date");
+  options->add_options()
+      (THRESHOLD.c_str(), po::value<double>(), 
+       "purges images until the current pool data usage is reduced to X%, "
+       "value range: 0.0-1.0");
+}
+
+
+int execute_purge (const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
+  size_t arg_index = 0;
+  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+
+  librados::Rados rados;
+  librados::IoCtx io_ctx;
+  int r = utils::init(pool_name, &rados, &io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::RBD rbd;
+  
+  std::vector<librbd::trash_image_info_t> trash_entries;
+  r = rbd.trash_list(io_ctx, trash_entries);
+  if (r < 0) { 
+    return r;
+  }
+
+  std::remove_if(trash_entries.begin(), trash_entries.end(),
+    [](librbd::trash_image_info_t info) {
+      return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+    }
+  );
+
+  std::vector<const char *> to_be_removed;
+
+  if (vm.find(THRESHOLD) != vm.end()) {
+    double threshold = vm[THRESHOLD].as<double>();
+    if (threshold < 0 || threshold > 1) {
+      std::cerr << "rbd: argument 'threshold' is out of valid range"
+                << std::endl;
+      return -EINVAL;
+    }
+
+    librados::bufferlist inbl;
+    librados::bufferlist outbl;
+    rados.mon_command("{\"prefix\": \"df\", \"format\": \"json\"}", inbl,
+                      &outbl, NULL);
+   
+
+    json_spirit::mValue json;
+    if(!json_spirit::read(outbl.to_str(), json)) {
+      std::cerr << "rbd: ceph df json output could not be parsed"
+                << std::endl;
+      return -EBADMSG;
+    }
+
+    json_spirit::mArray arr = json.get_obj()["pools"].get_array();
+    
+    double pool_percent_used = 0;
+    uint64_t pool_total_bytes = 0;
+    for(uint8_t i = 0; i < arr.size(); ++i) {
+      if(arr[i].get_obj()["name"] == pool_name) {
+        json_spirit::mObject stats =  arr[i].get_obj()["stats"].get_obj();
+        pool_percent_used = stats["percent_used"].get_real() / 100;
+        if(pool_percent_used <= threshold) {
+          std::cout << "rbd: pool usage is lower than or equal to "
+                    << (threshold*100)
+                    << "%" << endl;
+          std::cout << "Nothing to do" << std::endl;
+          return 0;
+        }
+            
+        pool_total_bytes = stats["max_avail"].get_uint64() +
+                           stats["bytes_used"].get_uint64();
+        break;
+      }
+    }
+    
+    std::sort(trash_entries.begin(), trash_entries.end(),
+      [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) { 
+        return a.deferment_end_time < b.deferment_end_time;
+      }
+    );
+
+    uint64_t bytes_to_free = 0;
+    auto bytes_threshold = (uint64_t)(pool_total_bytes * 
+                           (pool_percent_used - threshold));
+    
+    librbd::Image curr_img;
+    for (const auto& entry : trash_entries) {
+      r = utils::open_image_by_id(io_ctx, entry.id, true, &curr_img);
+      if(r < 0) continue;
+      
+      uint64_t img_size; curr_img.size(&img_size);
+      r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true, 
+        [](uint64_t offset, size_t len, int exists, void *arg) {
+          auto *to_free = reinterpret_cast<uint64_t*>(arg);
+          if (exists) (*to_free) += len;
+          return 0;
+        }, &bytes_to_free
+      );
+      if(r < 0) continue;
+      to_be_removed.push_back(entry.id.c_str());
+      if(bytes_to_free >= bytes_threshold) break;
+    }
+  } else {
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+
+    time_t expire_ts = now.tv_sec;
+    if (vm.find(EXPIRED_BEFORE) != vm.end()) { 
+      utime_t new_time;
+      r = utime_t::invoke_date(vm[EXPIRED_BEFORE].as<std::string>(), &new_time);
+      if (r < 0) {
+        std::cerr << "rbd: error calling /bin/date: " << cpp_strerror(r)
+                  << std::endl;
+        return r;
+      }
+      expire_ts = new_time.sec();
+    }
+
+    for(const auto &entry : trash_entries) {    
+      if (expire_ts >= entry.deferment_end_time) {
+        to_be_removed.push_back(entry.id.c_str());
+      }
+    }
+  }
+
+  uint64_t list_size = to_be_removed.size(), i = 0;
+
+  if(list_size == 0) {
+    std::cout << "rbd: nothing to remove" << std::endl;
+  } else {
+    utils::ProgressContext pc("Removing images", vm[at::NO_PROGRESS].as<bool>());
+    for(const auto &entry_id : to_be_removed) {
+      r = rbd.trash_remove(io_ctx, entry_id, true);
+      if (r < 0) {
+        remove_error_check(r);
+        pc.fail();
+        return r;
+      }
+      pc.update_progress(++i, list_size);
+    }
+    pc.finish();
+  }
+
+  return 0;
+}
+
 void get_restore_arguments(po::options_description *positional,
                             po::options_description *options) {
   positional->add_options()
@@ -377,12 +559,16 @@ int execute_restore(const po::variables_map &vm,
 
 
 Shell::Action action_move(
-    {"trash", "move"}, {"trash", "mv"}, "Move an image to the trash.", "",
-    &get_move_arguments, &execute_move);
+  {"trash", "move"}, {"trash", "mv"}, "Move an image to the trash.", "",
+  &get_move_arguments, &execute_move);
 
 Shell::Action action_remove(
   {"trash", "remove"}, {"trash", "rm"}, "Remove an image from trash.", "",
   &get_remove_arguments, &execute_remove);
+
+Shell::Action action_purge(
+  {"trash", "purge"}, {}, "Remove all expired images from trash.", "",
+  &get_purge_arguments, &execute_purge);
 
 Shell::SwitchArguments switched_arguments({"long", "l"});
 Shell::Action action_list(
@@ -390,8 +576,8 @@ Shell::Action action_list(
   &get_list_arguments, &execute_list);
 
 Shell::Action action_restore(
-    {"trash", "restore"}, {}, "Restore an image from trash.", "",
-    &get_restore_arguments, &execute_restore);
+  {"trash", "restore"}, {}, "Restore an image from trash.", "",
+  &get_restore_arguments, &execute_restore);
 
 } // namespace trash
 } // namespace action
