@@ -263,7 +263,7 @@ def build_ceph_cluster(ctx, config):
         no_of_osds = 0
         for remote in osds.remotes.iterkeys():
             # all devs should be lvm
-            osd_create_cmd = './ceph-deploy osd create ' + remote.shortname + ' '
+            osd_create_cmd = './ceph-deploy osd create --debug ' + remote.shortname + ' '
             # default is bluestore so we just need config item for filestore
             roles = ctx.cluster.remotes[remote]
             dev_needed = len([role for role in roles
