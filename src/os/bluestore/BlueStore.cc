@@ -7608,6 +7608,14 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     if (shared_available > 0) {
       bfree += shared_available;
     }
+    // include dedicated db, too, if that isn't the shared device.
+    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
+    }
+    // call any non-omap bluefs space "internal metadata"
+    buf->internal_metadata =
+      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      - buf->omap_allocated;
   }
 
   {
@@ -7629,23 +7637,34 @@ int BlueStore::statfs(struct store_statfs_t *buf)
 
     buf->allocated = thin_total - thin_avail;
   } else {
-    buf->total = bdev->get_size();
+    buf->total += bdev->get_size();
   }
-  buf->available += bfree;
-
-  if (bluefs) {
-    // include dedicated db, too, if that isn't the shared device.
-    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
-      buf->total += bluefs->get_total(BlueFS::BDEV_DB);
-    }
-
-    // call any non-omap bluefs space "internal metadata"
-    buf->internal_metadata =
-      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
-      - buf->omap_allocated;
-  }
+  buf->available = bfree;
 
   dout(20) << __func__ << " " << *buf << dendl;
+  return 0;
+}
+
+int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  dout(20) << __func__ << " pool " << pool_id<< dendl;
+  if (!per_pool_stat_collection) {
+    dout(20) << __func__ << " not supported in a legacy mode " << dendl;
+    return -ENOTSUP;
+  }
+  buf->reset();
+
+  {
+    std::lock_guard l(vstatfs_lock);
+    auto& pool_stat = osd_pools[pool_id];
+    buf->allocated = pool_stat.allocated();
+    buf->data_stored = pool_stat.stored();
+    buf->data_compressed = pool_stat.compressed();
+    buf->data_compressed_original = pool_stat.compressed_original();
+    buf->data_compressed_allocated = pool_stat.compressed_allocated();
+  }
+
+  dout(20) << __func__ << *buf << dendl;
   return 0;
 }
 
@@ -10472,7 +10491,6 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
-    
   }
   
   vector<OnodeRef> ovec(i.objects.size());
@@ -10488,6 +10506,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     // collection operations
     CollectionRef &c = cvec[op->cid];
+
     // initialize osd_pool_id and do a smoke test that all collections belong
     // to the same pool
     spg_t pgid;
@@ -10496,6 +10515,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
                   txc->osd_pool_id == (int64_t)pgid.pool());
       txc->osd_pool_id = (int64_t)pgid.pool();
     }
+
     switch (op->op) {
     case Transaction::OP_RMCOLL:
       {

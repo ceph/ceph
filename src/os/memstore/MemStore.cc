@@ -231,6 +231,11 @@ int MemStore::statfs(struct store_statfs_t *st)
   return 0;
 }
 
+int MemStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
+
 objectstore_perf_stat_t MemStore::get_cur_stats()
 {
   // fixme

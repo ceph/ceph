@@ -778,6 +778,10 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   return 0;
 }
 
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
 
 void FileStore::new_journal()
 {
