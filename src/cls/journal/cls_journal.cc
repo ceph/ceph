@@ -388,7 +388,7 @@ int journal_get_order(cls_method_context_t hctx, bufferlist *in,
  * none
  *
  * Output:
- * order (uint8_t)
+ * splay_width (uint8_t)
  * @returns 0 on success, negative error code on failure
  */
 int journal_get_splay_width(cls_method_context_t hctx, bufferlist *in,
