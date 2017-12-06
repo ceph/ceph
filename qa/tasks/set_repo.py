@@ -27,9 +27,16 @@ repos_20 = ['rhel-7-server-rhceph-2-mon-rpms',
              'rhel-7-server-rhscon-2-installer-rpms',
              'rhel-7-server-rhscon-2-main-rpms']
 
+repos_30 = [ 
+             'rhel-7-server-rhceph-3-mon-rpms',
+             'rhel-7-server-rhceph-3-osd-rpms',
+             'rhel-7-server-rhceph-3-tools-rpms',
+           ]
+
 GA_BUILDS = ['1.3.2',
              '1.3.3',
-             '2.0']
+             '2.0',
+             '3.0']
 
 @contextlib.contextmanager
 def task(ctx, config):
@@ -71,6 +78,8 @@ def task(ctx, config):
                 enable_cdn_repo(remote, repos_13x)
             elif build == '2.0':
                 enable_cdn_repo(remote, repos_20)
+            elif build == '3.0':
+                enable_cdn_repo(remote, repos_30)
             else:
                 remote.run(
                     args=[
@@ -104,6 +113,8 @@ def set_cdn_repo(ctx, config):
                         p.spawn(enable_cdn_repo, remote, repos_13x)
                     elif build == '2.0':
                         p.spawn(enable_cdn_repo, remote, repos_20)
+                    elif build == '3.0':
+                        p.spawn(enable_cdn_repo, remote, repos_30)
 
 def enable_cdn_repo(remote, repos):
     remote.run(args=['sudo', 'subscription-manager', 'repos', run.Raw('--disable=*')])
