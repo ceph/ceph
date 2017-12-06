@@ -827,7 +827,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
   for (auto dir : fullauthsubs) {
     CInode *diri = dir->get_inode();
-    if (diri->is_stray()) continue;
+    if (diri->is_mdsdir())
+      continue;
 
     mds_rank_t from = diri->authority().first;
     double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
@@ -877,10 +878,10 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	dout(5) << "considering " << *dir << " from " << (*p.first).first << dendl;
 	multimap<mds_rank_t,CDir*>::iterator plast = p.first++;
 
-	if (dir->inode->is_base() ||
-	    dir->inode->is_stray())
+	if (dir->inode->is_base())
 	  continue;
-	if (dir->is_freezing() || dir->is_frozen()) continue;  // export pbly already in progress
+	if (dir->is_freezing() || dir->is_frozen())
+	  continue;  // export pbly already in progress
 	double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
@@ -906,7 +907,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     list<CDir*> exports;
 
     for (auto dir : fullauthsubs) {
-      if (dir->get_inode()->is_stray())
+      if (dir->get_inode()->is_mdsdir())
 	continue;
       find_exports(dir, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD)
