@@ -73,7 +73,7 @@ struct Backoff : public RefCountedObject {
     STATE_ACKED = 2,   ///< backoff acked
     STATE_DELETING = 3 ///< backoff deleted, but un-acked
   };
-  std::atomic_int state = {STATE_NEW};
+  std::atomic<int> state = {STATE_NEW};
   spg_t pgid;          ///< owning pgid
   uint64_t id = 0;     ///< unique id (within the Session)
 
@@ -144,7 +144,7 @@ struct Session : public RefCountedObject {
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
-  std::atomic_int backoff_count= {0};  ///< simple count of backoffs
+  std::atomic<int> backoff_count= {0};  ///< simple count of backoffs
   map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
