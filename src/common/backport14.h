@@ -21,44 +21,6 @@
 // Library code from C++14 that can be implemented in C++11.
 
 namespace ceph {
-
-namespace _backport14 {
-template<typename T>
-struct uniquity {
-  using datum = std::unique_ptr<T>;
-};
-
-template<typename T>
-struct uniquity<T[]> {
-  using array = std::unique_ptr<T[]>;
-};
-
-template<typename T, std::size_t N>
-struct uniquity<T[N]> {
-  using verboten = void;
-};
-
-template<typename T, typename... Args>
-inline typename uniquity<T>::datum make_unique(Args&&... args) {
-  return std::unique_ptr<T>(new T(std::forward<Args>(args)...));
-}
-
-template<typename T>
-inline typename uniquity<T>::array make_unique(std::size_t n) {
-  return std::unique_ptr<T>(new std::remove_extent_t<T>[n]());
-}
-
-template<typename T, class... Args>
-typename uniquity<T>::verboten
-make_unique(Args&&...) = delete;
-
-// The constexpr variant of std::max().
-template<class T>
-constexpr const T& max(const T& a, const T& b) {
-  return a < b ? b : a;
-}
-} // namespace _backport14
-
 namespace _backport17 {
 template <class C>
 constexpr auto size(const C& c) -> decltype(c.size()) {
@@ -183,9 +145,7 @@ make_ostream_joiner(std::basic_ostream<CharT, Traits>& os,
 
 } // namespace _backport_ts
 
-using _backport14::make_unique;
 using _backport17::size;
-using _backport14::max;
 using _backport17::not_fn;
 using _backport17::in_place_t;
 using _backport17::in_place;

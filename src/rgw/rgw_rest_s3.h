@@ -699,7 +699,7 @@ public:
      * avoid dynamic allocations. The multiplier comes from representing digest
      * in the base64-encoded form. */
     static constexpr size_t SIGNATURE_MAX_SIZE = \
-      ceph::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
+      std::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
 
   public:
     virtual ~VersionAbstractor() {};
