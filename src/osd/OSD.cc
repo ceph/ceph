@@ -8518,7 +8518,7 @@ void OSD::handle_pg_notify(OpRequestRef op)
       PGPeeringEventRef(
 	new PGPeeringEvent(
 	  it->first.epoch_sent, it->first.query_epoch,
-	  PG::MNotifyRec(pg_shard_t(from, it->first.from), it->first,
+	  MNotifyRec(pg_shard_t(from, it->first.from), it->first,
           op->get_req()->get_connection()->get_features())))
       );
   }
@@ -8544,7 +8544,7 @@ void OSD::handle_pg_log(OpRequestRef op)
     PGPeeringEventRef(
       new PGPeeringEvent(
 	m->get_epoch(), m->get_query_epoch(),
-	PG::MLogRec(pg_shard_t(from, m->from), m)))
+	MLogRec(pg_shard_t(from, m->from), m)))
     );
 }
 
@@ -8572,7 +8572,7 @@ void OSD::handle_pg_info(OpRequestRef op)
       PGPeeringEventRef(
 	new PGPeeringEvent(
 	  p->first.epoch_sent, p->first.query_epoch,
-	  PG::MInfoRec(
+	  MInfoRec(
 	    pg_shard_t(
 	      from, p->first.from), p->first.info, p->first.epoch_sent)))
       );
@@ -8620,13 +8620,13 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RequestBackfillPrio(m->priority)));
+	RequestBackfillPrio(m->priority)));
   } else if (m->type == MBackfillReserve::GRANT) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteBackfillReserved()));
+	RemoteBackfillReserved()));
   } else if (m->type == MBackfillReserve::REJECT) {
     // NOTE: this is replica -> primary "i reject your request"
     //      and also primary -> replica "cancel my previously-granted request"
@@ -8637,25 +8637,25 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteReservationRejected()));
+	RemoteReservationRejected()));
   } else if (m->type == MBackfillReserve::RELEASE) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteReservationCanceled()));
+	RemoteReservationCanceled()));
   } else if (m->type == MBackfillReserve::TOOFULL) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteReservationRevokedTooFull()));
+	RemoteReservationRevokedTooFull()));
   } else if (m->type == MBackfillReserve::REVOKE) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteReservationRevoked()));
+	RemoteReservationRevoked()));
   } else {
     ceph_abort();
   }
@@ -8679,25 +8679,25 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RequestRecoveryPrio(m->priority)));
+	RequestRecoveryPrio(m->priority)));
   } else if (m->type == MRecoveryReserve::GRANT) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RemoteRecoveryReserved()));
+	RemoteRecoveryReserved()));
   } else if (m->type == MRecoveryReserve::RELEASE) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::RecoveryDone()));
+	RecoveryDone()));
   } else if (m->type == MRecoveryReserve::REVOKE) {
     evt = PGPeeringEventRef(
       new PGPeeringEvent(
 	m->query_epoch,
 	m->query_epoch,
-	PG::DeferRecovery(0.0)));
+	DeferRecovery(0.0)));
   } else {
     ceph_abort();
   }
@@ -8767,7 +8767,7 @@ void OSD::handle_pg_query(OpRequestRef op)
 	PGPeeringEventRef(
 	  new PGPeeringEvent(
 	    it->second.epoch_sent, it->second.epoch_sent,
-	    PG::MQuery(pg_shard_t(from, it->second.from),
+	    MQuery(pg_shard_t(from, it->second.from),
 		       it->second, it->second.epoch_sent))));
       continue;
     }

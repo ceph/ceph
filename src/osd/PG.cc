@@ -90,8 +90,6 @@ static ostream& _prefix(std::ostream *_dout, T *t)
   return *_dout << t->gen_prefix();
 }
 
-MEMPOOL_DEFINE_OBJECT_FACTORY(PGPeeringEvent, pg_peering_evt, osd);
-
 void PGStateHistory::enter(PG* pg, const utime_t entime, const char* state)
 {
   // Ignore trimming state machine for now
