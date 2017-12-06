@@ -1017,7 +1017,7 @@ def main():
             childargs = injectargs
         if not len(childargs):
             print('"{0} tell" requires additional arguments.'.format(sys.argv[0]),
-                  'Try "{0} tell <name> <command> [options...]" instead.'.format(sys.argv[0]),
+                  'Try "{0} tell <name|pgid> <command> [options...]" instead.'.format(sys.argv[0]),
                   file=sys.stderr)
             return errno.EINVAL
 
