@@ -17,8 +17,6 @@
 
 #include <utility>
 
-#include "common/backport14.h"
-
 template <typename F>
 struct scope_guard {
   F f;

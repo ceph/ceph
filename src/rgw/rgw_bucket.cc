@@ -12,7 +12,6 @@
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
-#include "common/backport14.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"

@@ -15,7 +15,6 @@
 #include "QueueStrategy.h"
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
-#include "common/backport14.h"
 
 QueueStrategy::QueueStrategy(int _n_threads)
   : lock("QueueStrategy::lock"),
