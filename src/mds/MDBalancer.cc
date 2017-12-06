@@ -824,6 +824,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     CInode *diri = dir->get_inode();
     if (diri->is_mdsdir())
       continue;
+    if (diri->get_export_pin(false) != MDS_RANK_NONE)
+      continue;
     if (dir->is_freezing() || dir->is_frozen())
       continue;  // export pbly already in progress
 
