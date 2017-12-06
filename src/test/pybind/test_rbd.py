@@ -862,6 +862,35 @@ class TestImage(object):
         # watcher.
         eq(len(watchers), 1)
 
+class TestImageId(object):
+
+    def setUp(self):
+        self.rbd = RBD()
+        create_image()
+        self.image = Image(ioctx, image_name)
+        self.image2 = Image(ioctx, None, None, False, self.image.id())
+
+    def tearDown(self):
+        self.image.close()
+        self.image2.close()
+        remove_image()
+        self.image = None
+        self.image2 = None
+
+    def test_read(self):
+        data = self.image2.read(0, 20)
+        eq(data, b'\0' * 20)
+
+    def test_write(self):
+        data = rand_data(256)
+        self.image2.write(data, 0)
+
+    def test_resize(self):
+        new_size = IMG_SIZE * 2
+        self.image2.resize(new_size)
+        info = self.image2.stat()
+        check_stat(info, new_size, IMG_ORDER)
+
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
     def cb(offset, length, exists):
