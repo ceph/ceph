@@ -374,7 +374,6 @@ OPTION(client_permissions, OPT_BOOL)
 OPTION(client_dirsize_rbytes, OPT_BOOL)
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
-OPTION(client_die_on_failed_remount, OPT_BOOL)
 OPTION(client_check_pool_perm, OPT_BOOL)
 OPTION(client_use_faked_inos, OPT_BOOL)
 OPTION(client_mds_namespace, OPT_STR)
