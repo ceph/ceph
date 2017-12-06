@@ -2701,9 +2701,11 @@ written." % (self.name, ret, length))
                     ret = rbd_metadata_get(self.image, _key, value, &size)
                 if ret != -errno.ERANGE:
                     break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for image %s' % (key, self.name))
             if ret != 0:
                 raise make_ex(ret, 'error getting metadata %s for image %s' %
-                              (self.key, self.name,))
+                              (key, self.name,))
             return decode_cstr(value)
         finally:
             free(value)
@@ -2727,7 +2729,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error setting metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
 
     def metadata_remove(self, key):
@@ -2743,9 +2745,11 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_metadata_remove(self.image, _key)
 
+        if ret == -errno.ENOENT:
+            raise KeyError('no metadata %s for image %s' % (key, self.name))
         if ret != 0:
             raise make_ex(ret, 'error removing metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
     def metadata_list(self):
         """
