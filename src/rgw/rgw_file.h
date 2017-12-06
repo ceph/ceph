@@ -1291,6 +1291,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -1427,6 +1428,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1596,6 +1598,7 @@ public:
     s->info.domain = ""; /* XXX ? */
 
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -1683,6 +1686,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -1746,6 +1750,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -1811,6 +1816,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -1900,6 +1906,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -1985,6 +1992,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -2065,6 +2073,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -2145,6 +2154,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -2215,6 +2225,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     prefix = rgw_fh->relative_object_name();
     if (prefix.length() > 0)
@@ -2337,6 +2348,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -2466,6 +2478,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
@@ -2526,6 +2539,7 @@ public:
 
     // woo
     s->user = user;
+    s->bucket_tenant = user->user_id.tenant;
 
     return 0;
   }
