@@ -820,28 +820,25 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   set<CDir*> fullauthsubs;
 
   mds->mdcache->get_fullauth_subtrees(fullauthsubs);
-  for (set<CDir*>::iterator it = fullauthsubs.begin();
-       it != fullauthsubs.end();
-       ++it) {
-    CDir *im = *it;
-    if (im->get_inode()->is_stray()) continue;
+  for (auto dir : fullauthsubs) {
+    CInode *diri = dir->get_inode();
+    if (diri->is_stray()) continue;
 
-    double pop = im->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
+    mds_rank_t from = diri->authority().first;
+    double pop = dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
     if (g_conf->mds_bal_idle_threshold > 0 &&
 	pop < g_conf->mds_bal_idle_threshold &&
-	im->inode != mds->mdcache->get_root() &&
-	im->inode->authority().first != mds->get_nodeid()) {
-      dout(5) << " exporting idle (" << pop << ") import " << *im
-	      << " back to mds." << im->inode->authority().first
-	      << dendl;
-      mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
+	diri != mds->mdcache->get_root() &&
+	from != mds->get_nodeid()) {
+      dout(5) << " exporting idle (" << pop << ") import " << *dir
+	      << " back to mds." << from << dendl;
+      mds->mdcache->migrator->export_dir_nicely(dir, from);
       continue;
     }
 
-    import_pop_map[ pop ] = im;
-    mds_rank_t from = im->inode->authority().first;
-    dout(15) << "  map: i imported " << *im << " from " << from << dendl;
-    import_from_map.insert(pair<mds_rank_t,CDir*>(from, im));
+    import_pop_map[pop] = dir;
+    dout(15) << "  map: i imported " << *dir << " from " << from << dendl;
+    import_from_map.insert(pair<mds_rank_t,CDir*>(from, dir));
   }
 
 
@@ -900,57 +897,23 @@ void MDBalancer::try_rebalance(balance_state_t& state)
       continue;
     }
 
-    // any other imports
-    if (false)
-      for (map<double,CDir*>::iterator import = import_pop_map.begin();
-	   import != import_pop_map.end();
-	   import++) {
-	CDir *imp = (*import).second;
-	if (imp->inode->is_base() ||
-	    imp->inode->is_stray())
-	  continue;
-
-	double pop = (*import).first;
-	if (pop < amount-have || pop < MIN_REEXPORT) {
-	  dout(5) << "reexporting " << *imp
-		  << " pop " << pop
-		  << " back to mds." << imp->inode->authority()
-		  << dendl;
-	  have += pop;
-	  mds->mdcache->migrator->export_dir_nicely(imp, imp->inode->authority().first);
-	}
-	if (amount-have < MIN_OFFLOAD) break;
-      }
-    if (amount-have < MIN_OFFLOAD) {
-      //fudge = amount-have;
-      continue;
-    }
-
     // okay, search for fragments of my workload
-    set<CDir*> candidates;
-    mds->mdcache->get_fullauth_subtrees(candidates);
-
     list<CDir*> exports;
 
-    for (set<CDir*>::iterator pot = candidates.begin();
-	 pot != candidates.end();
-	 ++pot) {
-      if ((*pot)->get_inode()->is_stray()) continue;
-      find_exports(*pot, amount, exports, have, already_exporting);
+    for (auto dir : fullauthsubs) {
+      if (dir->get_inode()->is_stray())
+	continue;
+      find_exports(dir, amount, exports, have, already_exporting);
       if (have > amount-MIN_OFFLOAD)
 	break;
     }
     //fudge = amount - have;
 
-    for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
-      dout(5) << "   - exporting "
-	       << (*it)->pop_auth_subtree
-	       << " "
-	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
-	       << " to mds." << target
-	       << " " << **it
-	       << dendl;
-      mds->mdcache->migrator->export_dir_nicely(*it, target);
+    for (auto dir : exports) {
+      dout(5) << "   - exporting " << dir->pop_auth_subtree
+	      << " " << dir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
+	      << " to mds." << target << " " << *dir << dendl;
+      mds->mdcache->migrator->export_dir_nicely(dir, target);
     }
   }
 
