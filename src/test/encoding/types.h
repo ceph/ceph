@@ -405,6 +405,8 @@ TYPE(rgw_data_sync_info)
 TYPE(rgw_data_sync_marker)
 TYPE(rgw_data_sync_status)
 
+#endif
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
@@ -414,8 +416,6 @@ TYPE(cls_rbd_snap)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
-#endif
-
 #endif
 
 #include "cls/lock/cls_lock_types.h"
