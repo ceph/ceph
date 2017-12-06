@@ -5492,6 +5492,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
+    case CEPH_OSD_OP_TIER_PROMOTE:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -6680,6 +6681,35 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
 		 << " chunk_info: " << chunk_info << dendl;
+      }
+
+      break;
+
+    case CEPH_OSD_OP_TIER_PROMOTE:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (!obs.oi.has_manifest()) {
+	  result = 0;
+	  break;
+	}
+
+	object_locator_t tgt_oloc(obs.oi.soid);
+	promote_object(ctx->obc, obs.oi.soid, tgt_oloc, ctx->op, NULL);
+
+	dout(10) << "tier-promote oid:" << oi.soid << " manifest: " << obs.oi.manifest << dendl;
+	result = -EAGAIN;
       }
 
       break;
