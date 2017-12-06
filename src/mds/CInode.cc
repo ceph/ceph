@@ -809,14 +809,32 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-bool CInode::is_projected_ancestor_of(CInode *other)
+bool CInode::is_ancestor_of(const CInode *other) const
 {
   while (other) {
     if (other == this)
       return true;
-    if (!other->get_projected_parent_dn())
+    const CDentry *pdn = other->get_oldest_parent_dn();
+    if (!pdn) {
+      assert(other->is_base());
       break;
-    other = other->get_projected_parent_dn()->get_dir()->get_inode();
+    }
+    other = pdn->get_dir()->get_inode();
+  }
+  return false;
+}
+
+bool CInode::is_projected_ancestor_of(const CInode *other) const
+{
+  while (other) {
+    if (other == this)
+      return true;
+    const CDentry *pdn = other->get_projected_parent_dn();
+    if (!pdn) {
+      assert(other->is_base());
+      break;
+    }
+    other = pdn->get_dir()->get_inode();
   }
   return false;
 }
@@ -1400,6 +1418,8 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   ::encode(first, bl);
+  if (!is_base())
+    ::encode(parent->first, bl);
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
@@ -1568,15 +1588,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   snapid_t newfirst;
   ::decode(newfirst, p);
-
   if (!is_auth() && newfirst != first) {
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
-    assert(newfirst > first);
-    if (!is_multiversion() && parent) {
-      assert(parent->first == first);
+    first = newfirst;
+  }
+  if (!is_base()) {
+    ::decode(newfirst, p);
+    if (!parent->is_auth() && newfirst != parent->first) {
+      dout(10) << "decode_lock_state parent first " << first << " -> " << newfirst << dendl;
       parent->first = newfirst;
     }
-    first = newfirst;
   }
 
   switch (type) {
@@ -2679,12 +2700,10 @@ SnapRealm *CInode::find_snaprealm() const
 {
   const CInode *cur = this;
   while (!cur->snaprealm) {
-    if (cur->get_parent_dn())
-      cur = cur->get_parent_dn()->get_dir()->get_inode();
-    else if (get_projected_parent_dn())
-      cur = cur->get_projected_parent_dn()->get_dir()->get_inode();
-    else
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn)
       break;
+    cur = pdn->get_dir()->get_inode();
   }
   return cur->snaprealm;
 }
@@ -2848,6 +2867,7 @@ void CInode::choose_lock_states(int dirty_caps)
 
 Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
+  assert(last == CEPH_NOSNAP);
   if (client_caps.empty()) {
     get(PIN_CAPS);
     if (conrealm)

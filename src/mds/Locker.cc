@@ -82,6 +82,10 @@ public:
   }
 };
 
+Locker::Locker(MDSRank *m, MDCache *c) :
+  mds(m), mdcache(c), need_snapflush_inodes(member_offset(CInode, item_caps)) {}
+
+
 /* This function DOES put the passed message before returning */
 void Locker::dispatch(Message *m)
 {
@@ -1871,8 +1875,10 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bo
       }
     }
     if (gather) {
-      if (in->client_snap_caps.empty())
+      if (in->client_snap_caps.empty()) {
 	in->item_open_file.remove_myself();
+	in->item_caps.remove_myself();
+      }
       eval_cap_gather(in, &need_issue);
     }
   } else {
@@ -2560,7 +2566,47 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
   }
 }
 
+void Locker::snapflush_nudge(CInode *in)
+{
+  assert(in->last != CEPH_NOSNAP);
+  if (in->client_snap_caps.empty())
+    return;
 
+  CInode *head = mdcache->get_inode(in->ino());
+  assert(head);
+  assert(head->is_auth());
+  if (head->client_need_snapflush.empty())
+    return;
+
+  SimpleLock *hlock = head->get_lock(CEPH_LOCK_IFILE);
+  if (hlock->get_state() == LOCK_SYNC || !hlock->is_stable()) {
+    hlock = NULL;
+    for (int i = 0; i < num_cinode_locks; i++) {
+      SimpleLock *lock = head->get_lock(cinode_lock_info[i].lock);
+      if (lock->get_state() != LOCK_SYNC && lock->is_stable()) {
+	hlock = lock;
+	break;
+      }
+    }
+  }
+  if (hlock) {
+    _rdlock_kick(hlock, true);
+  } else {
+    // also, requeue, in case of unstable lock
+    need_snapflush_inodes.push_back(&in->item_caps);
+  }
+}
+
+void Locker::mark_need_snapflush_inode(CInode *in)
+{
+  assert(in->last != CEPH_NOSNAP);
+  if (!in->item_caps.is_on_list()) {
+    need_snapflush_inodes.push_back(&in->item_caps);
+    utime_t now = ceph_clock_now();
+    in->last_dirstat_prop = now;
+    dout(10) << "mark_need_snapflush_inode " << *in << " - added at " << now << dendl;
+  }
+}
 
 void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
 {
@@ -2629,10 +2675,11 @@ void Locker::handle_client_caps(MClientCaps *m)
       m->put();
       return;
     }
-    if (mds->is_reconnect() &&
+    if ((mds->is_reconnect() || mds->get_want_state() == MDSMap::STATE_RECONNECT) &&
 	m->get_dirty() && m->get_client_tid() > 0 &&
 	!session->have_completed_flush(m->get_client_tid())) {
-      mdcache->set_reconnected_dirty_caps(client, m->get_ino(), m->get_dirty());
+      mdcache->set_reconnected_dirty_caps(client, m->get_ino(), m->get_dirty(),
+					  m->get_op() == CEPH_CAP_OP_FLUSHSNAP);
     }
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -2846,6 +2893,8 @@ void Locker::handle_client_caps(MClientCaps *m)
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
     }
+    if (cap->need_snapflush() && (m->flags & MClientCaps::FLAG_NO_CAPSNAP))
+      cap->clear_needsnapflush();
     
     if (m->get_dirty() && in->is_auth()) {
       dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty()) 
@@ -3568,9 +3617,28 @@ void Locker::caps_tick()
 {
   utime_t now = ceph_clock_now();
 
+  if (!need_snapflush_inodes.empty()) {
+    // snap inodes that needs flush are auth pinned, they affect
+    // subtree/difrarg freeze.
+    utime_t cutoff = now;
+    cutoff -= g_conf->mds_freeze_tree_timeout / 3;
+
+    CInode *last = need_snapflush_inodes.back();
+    while (!need_snapflush_inodes.empty()) {
+      CInode *in = need_snapflush_inodes.front();
+      if (in->last_dirstat_prop >= cutoff)
+	break;
+      in->item_caps.remove_myself();
+      snapflush_nudge(in);
+      if (in == last)
+	break;
+    }
+  }
+
   dout(20) << __func__ << " " << revoking_caps.size() << " revoking caps" << dendl;
 
-  int i = 0;
+  now = ceph_clock_now();
+  int n = 0;
   for (xlist<Capability*>::iterator p = revoking_caps.begin(); !p.end(); ++p) {
     Capability *cap = *p;
 
@@ -3580,8 +3648,8 @@ void Locker::caps_tick()
       dout(20) << __func__ << " age below timeout " << g_conf->mds_session_timeout << dendl;
       break;
     } else {
-      ++i;
-      if (i > MAX_WARN_CAPS) {
+      ++n;
+      if (n > MAX_WARN_CAPS) {
         dout(1) << __func__ << " more than " << MAX_WARN_CAPS << " caps are late"
           << "revoking, ignoring subsequent caps" << dendl;
         break;
