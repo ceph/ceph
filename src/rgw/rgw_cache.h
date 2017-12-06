@@ -420,9 +420,18 @@ int RGWCache<T>::put_system_obj_impl(rgw_raw_obj& obj, uint64_t size, real_time 
   string name = normal_name(pool, oid);
   if (ret >= 0) {
     cache.put(name, info, NULL);
-    int r = distribute_cache(name, obj, info, UPDATE_OBJ);
-    if (r < 0)
-      mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+    // Only distribute the cache information if we did not just create
+    // the object with the exclusive flag. Note: PUT_OBJ_EXCL implies
+    // PUT_OBJ_CREATE. Generally speaking, when successfully creating
+    // a system object with the exclusive flag it is not necessary to
+    // call distribute_cache, as a) it's unclear whether other RGWs
+    // will need that system object in the near-term and b) it
+    // generates additional network traffic.
+    if (!(flags & PUT_OBJ_EXCL)) {
+      int r = distribute_cache(name, obj, info, UPDATE_OBJ);
+      if (r < 0)
+	mydout(0) << "ERROR: failed to distribute cache for " << obj << dendl;
+    }
   } else {
     cache.remove(name);
   }
