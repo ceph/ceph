@@ -2376,7 +2376,35 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
   }
 
+  int list_watchers(ImageCtx *ictx,
+		    std::list<librbd::image_watcher_t> &watchers)
+  {
+    int r;
+    std::string header_oid;
+    std::list<obj_watch_t> obj_watchers;
 
+    if (ictx->old_format) {
+      header_oid = util::old_header_name(ictx->name);
+    } else {
+      header_oid = util::header_name(ictx->id);
+    }
+
+    r = ictx->md_ctx.list_watchers(header_oid, &obj_watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    for (auto i = obj_watchers.begin(); i != obj_watchers.end(); ++i) {
+      librbd::image_watcher_t watcher;
+      watcher.addr = i->addr;
+      watcher.id = i->watcher_id;
+      watcher.cookie = i->cookie;
+
+      watchers.push_back(watcher);
+    }
+
+    return 0;
+  }
 
 }
 
