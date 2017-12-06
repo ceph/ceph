@@ -738,7 +738,7 @@ TEST(LibRGW, READF_DIRS1) {
       ofstream of;
       of.open(readf_out_name, ios::out|ios::app|ios::binary);
       int bufsz = 1024 * 1024 * sizeof(char);
-      auto buffer = ceph::make_unique<char[]>(bufsz);
+      auto buffer = std::make_unique<char[]>(bufsz);
 
       uint64_t offset = 0;
       uint64_t length = bufsz;

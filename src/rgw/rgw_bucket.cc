@@ -2162,7 +2162,7 @@ public:
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
-    auto info = ceph::make_unique<list_keys_info>();
+    auto info = std::make_unique<list_keys_info>();
 
     info->store = store;
 
@@ -2361,7 +2361,7 @@ public:
   }
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override {
-    auto info = ceph::make_unique<list_keys_info>();
+    auto info = std::make_unique<list_keys_info>();
 
     info->store = store;
 
