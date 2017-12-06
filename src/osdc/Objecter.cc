@@ -4057,7 +4057,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized) {
     sul.unlock();

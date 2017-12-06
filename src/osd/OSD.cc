@@ -5322,7 +5322,7 @@ void OSD::RemoveWQ::_process(
   pair<PGRef, DeletingStateRef> item,
   ThreadPool::TPHandle &handle)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   PGRef pg(item.first);
   coll_t coll = coll_t(pg->pg_id);
   pg->osr->flush();
@@ -6553,7 +6553,7 @@ void OSD::dispatch_session_waiting(Session *session, OSDMapRef osdmap)
 
 void OSD::ms_fast_dispatch(Message *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   if (service.is_stopping()) {
     m->put();
     return;
@@ -9194,7 +9194,7 @@ void OSD::dequeue_op(
   PGRef pg, OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG(op->get_req(), "DEQUEUE_OP_BEGIN", false);
 
   utime_t now = ceph_clock_now();
