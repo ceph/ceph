@@ -2410,6 +2410,7 @@ public:
 
 public:
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   void collect_metadata(map<string,string> *pm) override;
 
