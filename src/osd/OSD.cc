@@ -105,6 +105,8 @@
 #include "messages/MOSDPGUpdateLogMissing.h"
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 
+#include "messages/MOSDPeeringOp.h"
+
 #include "messages/MOSDAlive.h"
 
 #include "messages/MOSDScrub.h"
@@ -6548,6 +6550,19 @@ void OSD::ms_fast_dispatch(Message *m)
     m->put();
     return;
   }
+
+  // peering event?
+  switch (m->get_type()) {
+  case MSG_OSD_BACKFILL_RESERVE:
+  case MSG_OSD_RECOVERY_RESERVE:
+    {
+      MOSDPeeringOp *pm = static_cast<MOSDPeeringOp*>(m);
+      return enqueue_peering_evt(
+	pm->get_spg(),
+	PGPeeringEventRef(pm->get_event()));
+    }
+  }
+
   OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
   {
 #ifdef WITH_LTTNG
@@ -6752,12 +6767,6 @@ void OSD::dispatch_op(OpRequestRef op)
     break;
   case MSG_OSD_PG_TRIM:
     handle_pg_trim(op);
-    break;
-  case MSG_OSD_BACKFILL_RESERVE:
-    handle_pg_backfill_reserve(op);
-    break;
-  case MSG_OSD_RECOVERY_RESERVE:
-    handle_pg_recovery_reserve(op);
     break;
   }
 }
@@ -8602,36 +8611,6 @@ void OSD::handle_pg_trim(OpRequestRef op)
   }
   pg->handle_pg_trim(m->epoch, from, m->pgid.shard, m->trim_to);
   pg->unlock();
-}
-
-void OSD::handle_pg_backfill_reserve(OpRequestRef op)
-{
-  MBackfillReserve *m = static_cast<MBackfillReserve*>(op->get_nonconst_req());
-  assert(m->get_type() == MSG_OSD_BACKFILL_RESERVE);
-
-  if (!require_osd_peer(op->get_req()))
-    return;
-  if (!require_same_or_newer_map(op, m->query_epoch, false))
-    return;
-
-  PGPeeringEventRef evt(m->get_event());
-
-  enqueue_peering_evt(m->pgid, evt);
-}
-
-void OSD::handle_pg_recovery_reserve(OpRequestRef op)
-{
-  MRecoveryReserve *m = static_cast<MRecoveryReserve*>(op->get_nonconst_req());
-  assert(m->get_type() == MSG_OSD_RECOVERY_RESERVE);
-
-  if (!require_osd_peer(op->get_req()))
-    return;
-  if (!require_same_or_newer_map(op, m->query_epoch, false))
-    return;
-
-  PGPeeringEventRef evt(m->get_event());
-
-  enqueue_peering_evt(m->pgid, evt);
 }
 
 void OSD::handle_force_recovery(Message *m)
