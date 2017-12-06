@@ -1677,17 +1677,17 @@ private:
 	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
 				 false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
-	  pqueue = ceph::make_unique<
+	  pqueue = std::make_unique<
 	    WeightedPriorityQueue<OpQueueItem,uint64_t>>(
 	        max_tok_per_prio, min_cost);
 	} else if (opqueue == io_queue::prioritized) {
-	  pqueue = ceph::make_unique<
+	  pqueue = std::make_unique<
 	    PrioritizedQueue<OpQueueItem,uint64_t>>(
 		max_tok_per_prio, min_cost);
 	} else if (opqueue == io_queue::mclock_opclass) {
-	  pqueue = ceph::make_unique<ceph::mClockOpClassQueue>(cct);
+	  pqueue = std::make_unique<ceph::mClockOpClassQueue>(cct);
 	} else if (opqueue == io_queue::mclock_client) {
-	  pqueue = ceph::make_unique<ceph::mClockClientQueue>(cct);
+	  pqueue = std::make_unique<ceph::mClockClientQueue>(cct);
 	}
       }
     }; // struct ShardData

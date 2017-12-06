@@ -2361,7 +2361,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       update_size = false;
   }
 
-  calc_new_client_ranges(in, ceph::max(new_max_size, size), &new_ranges, &max_increased);
+  calc_new_client_ranges(in, std::max(new_max_size, size), &new_ranges, &max_increased);
 
   if (max_increased || latest->client_ranges != new_ranges)
     update_max = true;

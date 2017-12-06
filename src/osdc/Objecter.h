@@ -2046,7 +2046,7 @@ private:
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   {
     if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
+      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
     }
   }
   ~Objecter() override;
