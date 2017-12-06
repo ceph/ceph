@@ -128,6 +128,7 @@ void usage(ostream& out)
 "                                    set redirect target\n"
 "   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset>\n"
 "                                    convert an object to chunked object\n"
+"   tier-promote <obj-name>	     promote the object to the base tier\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -3578,6 +3579,19 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cerr << "error set-chunk " << pool_name << "/" << nargs[1] << " " << " offset " << offset
 	    << " length " << length << " target_pool " << target 
 	    << "tgt_offset: " << tgt_offset << " : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "tier-promote") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+
+    ObjectWriteOperation op;
+    op.tier_promote();
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << "error tier-promote " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "export") == 0) {
