@@ -215,7 +215,7 @@ struct Inode {
 
   int       _ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
-  set<Dentry*> dn_set;      // if i'm linked to a dentry.
+  xlist<Dentry *> dentries; // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
@@ -225,8 +225,8 @@ struct Inode {
   list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
-    assert(!dn_set.empty());
-    return *dn_set.begin();
+    assert(!dentries.empty());
+    return *dentries.begin();
   }
 
   void make_long_path(filepath& p);
@@ -272,7 +272,7 @@ struct Inode {
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), dn_set()
+      _ref(0), ll_ref(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));

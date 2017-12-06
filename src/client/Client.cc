@@ -1433,7 +1433,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
       while (in->snapid != CEPH_NOSNAP) {
         if (in->snapid == CEPH_SNAPDIR)
 	  in = in->snapdir_parent.get();
-        else if (!in->dn_set.empty())
+        else if (!in->dentries.empty())
           /* In most cases there will only be one dentry, so getting it
            * will be the correct action. If there are multiple hard links,
            * I think the MDS should be able to redirect as needed*/
@@ -2940,8 +2940,8 @@ void Client::close_dir(Dir *dir)
   ldout(cct, 15) << "close_dir dir " << dir << " on " << in << dendl;
   assert(dir->is_empty());
   assert(in->dir == dir);
-  assert(in->dn_set.size() < 2);     // dirs can't be hard-linked
-  if (!in->dn_set.empty())
+  assert(in->dentries.size() < 2);     // dirs can't be hard-linked
+  if (!in->dentries.empty())
     in->get_first_parent()->put();   // unpin dentry
   
   delete in->dir;
@@ -2958,9 +2958,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 {
   if (!dn) {
     // create a new Dentry
-    dn = new Dentry;
-    dn->name = name;
-    
+    dn = new Dentry(name);
+
     // link to dir
     dn->dir = dir;
     dir->dentries[dn->name] = dn;
@@ -2974,18 +2973,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
   }
 
   if (in) {    // link to inode
-    dn->inode = in;
-    if (in->is_dir()) {
-      if (in->dir)
-	dn->get(); // dir -> dn pin
-      if (in->ll_ref)
-	dn->get(); // ll_ref -> dn pin
-    }
-
-    assert(in->dn_set.count(dn) == 0);
-
     // only one parent for directories!
-    if (in->is_dir() && !in->dn_set.empty()) {
+    if (in->is_dir() && !in->dentries.empty()) {
       Dentry *olddn = in->get_first_parent();
       assert(olddn->dir != dir || olddn->name != name);
       Inode *old_diri = olddn->dir->parent_inode;
@@ -2994,9 +2983,8 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
       unlink(olddn, true, true);  // keep dir, dentry
     }
 
-    in->dn_set.insert(dn);
-
-    ldout(cct, 20) << "link  inode " << in << " parents now " << in->dn_set << dendl; 
+    dn->link(in);
+    ldout(cct, 20) << "link  inode " << in << " parents now " << in->dentries << dendl;
   }
   
   return dn;
@@ -3004,23 +2992,14 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 
 void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 {
-  InodeRef in;
-  in.swap(dn->inode);
+  InodeRef in(dn->inode);
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
 		 << " inode " << dn->inode << dendl;
 
   // unlink from inode
-  if (in) {
-    if (in->is_dir()) {
-      if (in->dir)
-	dn->put(); // dir -> dn pin
-      if (in->ll_ref)
-	dn->put(); // ll_ref -> dn pin
-    }
-    dn->inode = 0;
-    assert(in->dn_set.count(dn));
-    in->dn_set.erase(dn);
-    ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dn_set << dendl; 
+  if (dn->inode) {
+    dn->unlink();
+    ldout(cct, 20) << "unlink  inode " << in << " parents now " << in->dentries << dendl;
   }
 
   if (keepdentry) {
@@ -4095,9 +4074,10 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
-      set<Dentry*>::iterator q = in->dn_set.begin();
-      while (q != in->dn_set.end()) {
-	Dentry *dn = *q++;
+      auto q = in->dentries.begin();
+      while (q != in->dentries.end()) {
+        Dentry *dn = *q;
+        ++q;
 	if (dn->lru_is_expireable()) {
 	  if (can_invalidate_dentries &&
 	      dn->dir->parent_inode->ino == MDS_INO_ROOT) {
@@ -4994,11 +4974,12 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
   }
 
   if (ref > 0 && in->ll_ref > 0 && sched_inval) {
-    set<Dentry*>::iterator q = in->dn_set.begin();
-    while (q != in->dn_set.end()) {
-      Dentry *dn = *q++;
+    auto q = in->dentries.begin();
+    while (q != in->dentries.end()) {
+      Dentry *dn = *q;
+      ++q;
       // FIXME: we play lots of unlink/link tricks when handling MDS replies,
-      //        so in->dn_set doesn't always reflect the state of kernel's dcache.
+      //        so in->dentries doesn't always reflect the state of kernel's dcache.
       _schedule_invalidate_dentry_callback(dn, true);
       unlink(dn, true, true);
     }
@@ -6094,7 +6075,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   }
 
   if (dname == "..") {
-    if (dir->dn_set.empty())
+    if (dir->dentries.empty())
       *target = dir;
     else
       *target = dir->get_first_parent()->dir->parent_inode; //dirs can't be hard-linked
@@ -7764,7 +7745,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
   if (dirp->offset == 0) {
     ldout(cct, 15) << " including ." << dendl;
-    assert(diri->dn_set.size() < 2); // can't have multiple hard-links to a dir
+    assert(diri->dentries.size() < 2); // can't have multiple hard-links to a dir
     uint64_t next_off = 1;
 
     int r;
@@ -7795,7 +7776,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
     ldout(cct, 15) << " including .." << dendl;
     uint64_t next_off = 2;
     InodeRef in;
-    if (diri->dn_set.empty())
+    if (diri->dentries.empty())
       in = diri;
     else
       in = diri->get_first_parent()->dir->parent_inode;
@@ -8277,7 +8258,7 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   if (unmounting)
     return -ENOTCONN;
 
-  if (!ino->dn_set.empty()) {
+  if (!ino->dentries.empty()) {
     // if we exposed the parent here, we'd need to check permissions,
     // but right now we just rely on the MDS doing so in make_request
     ldout(cct, 3) << "lookup_parent dentry already present" << dendl;
@@ -9579,10 +9560,10 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
   Inode *in = cwd.get();
   while (in != root) {
-    assert(in->dn_set.size() < 2); // dirs can't be hard-linked
+    assert(in->dentries.size() < 2); // dirs can't be hard-linked
 
     // A cwd or ancester is unlinked
-    if (in->dn_set.empty()) {
+    if (in->dentries.empty()) {
       return;
     }
 
@@ -10403,8 +10384,8 @@ void Client::_ll_get(Inode *in)
 {
   if (in->ll_ref == 0) {
     in->get();
-    if (in->is_dir() && !in->dn_set.empty()) {
-      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+    if (in->is_dir() && !in->dentries.empty()) {
+      assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->get(); // pin dentry
     }
   }
@@ -10417,8 +10398,8 @@ int Client::_ll_put(Inode *in, int num)
   in->ll_put(num);
   ldout(cct, 20) << "_ll_put " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
-    if (in->is_dir() && !in->dn_set.empty()) {
-      assert(in->dn_set.size() == 1); // dirs can't be hard-linked
+    if (in->is_dir() && !in->dentries.empty()) {
+      assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->put(); // unpin dentry
     }
     put_inode(in);
@@ -11471,10 +11452,8 @@ int Client::ll_readlink(Inode *in, char *buf, size_t buflen, const UserPerm& per
   tout(cct) << "ll_readlink" << std::endl;
   tout(cct) << vino.ino.val << std::endl;
 
-  set<Dentry*>::iterator dn = in->dn_set.begin();
-  while (dn != in->dn_set.end()) {
-    touch_dn(*dn);
-    ++dn;
+  for (auto dn : in->dentries) {
+    touch_dn(dn);
   }
 
   int r = _readlink(in, buf, buflen); // FIXME: no permission checking!
@@ -13529,9 +13508,8 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
       break;
 
     Inode *parent_in = NULL;
-    if (!cur->dn_set.empty()) {
-      for (auto p = cur->dn_set.begin(); p != cur->dn_set.end(); ++p) {
-	Dentry *dn = *p;
+    if (!cur->dentries.empty()) {
+      for (auto dn : cur->dentries) {
 	if (dn->lease_mds >= 0 &&
 	    dn->lease_ttl > now &&
 	    mds_sessions.count(dn->lease_mds)) {
