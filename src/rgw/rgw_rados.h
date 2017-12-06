@@ -3258,16 +3258,6 @@ public:
                                    map<string, bufferlist>* rmattrs,
                                    RGWObjVersionTracker *objv_tracker);
 
-  /**
-   * Set an attr on an object.
-   * bucket: name of the bucket holding the object
-   * obj: name of the object to set the attr on
-   * name: the attr to set
-   * bl: the contents of the attr
-   * Returns: 0 on success, -ERR# otherwise.
-   */
-  int set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj, const char *name, bufferlist& bl);
-
   int set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs);

@@ -9641,21 +9641,6 @@ int RGWRados::system_obj_set_attrs(void *ctx, rgw_raw_obj& obj,
   return 0;
 }
 
-/**
- * Set an attr on an object.
- * bucket: name of the bucket holding the object
- * obj: name of the object to set the attr on
- * name: the attr to set
- * bl: the contents of the attr
- * Returns: 0 on success, -ERR# otherwise.
- */
-int RGWRados::set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj, const char *name, bufferlist& bl)
-{
-  map<string, bufferlist> attrs;
-  attrs[name] = bl;
-  return set_attrs(ctx, bucket_info, obj, attrs, NULL);
-}
-
 int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj,
                         map<string, bufferlist>& attrs,
                         map<string, bufferlist>* rmattrs)

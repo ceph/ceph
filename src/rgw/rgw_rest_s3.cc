@@ -1421,20 +1421,6 @@ static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
   return read_op.prepare();
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
-{
-  bufferlist bl;
-  ::encode(value,bl);
-  attrs.emplace(key, std::move(bl));
-}
-
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
-{
-  bufferlist bl;
-  ::encode(value,bl);
-  attrs.emplace(key, std::move(bl));
-}
-
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     std::unique_ptr<RGWGetDataCB>* filter,
     RGWGetDataCB* cb,
