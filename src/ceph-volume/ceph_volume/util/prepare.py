@@ -59,7 +59,6 @@ def create_id(fsid, json_secrets):
 
 def mount_tmpfs(path):
     process.run([
-        'sudo',
         'mount',
         '-t',
         'tmpfs', 'tmpfs',
@@ -76,7 +75,7 @@ def create_osd_path(osd_id, tmpfs=False):
 
 def format_device(device):
     # only supports xfs
-    command = ['sudo', 'mkfs', '-t', 'xfs']
+    command = ['mkfs', '-t', 'xfs']
 
     # get the mkfs options if any for xfs,
     # fallback to the default options defined in constants.mkfs
@@ -98,7 +97,7 @@ def format_device(device):
 
 def mount_osd(device, osd_id):
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
-    command = ['sudo', 'mount', '-t', 'xfs', '-o']
+    command = ['mount', '-t', 'xfs', '-o']
     flags = conf.ceph.get_list(
         'osd',
         'osd_mount_options_xfs',
@@ -122,7 +121,7 @@ def _link_device(device, device_type, osd_id):
         osd_id,
         device_type
     )
-    command = ['sudo', 'ln', '-s', device, device_path]
+    command = ['ln', '-s', device, device_path]
     system.chown(device)
 
     process.run(command)
@@ -158,7 +157,6 @@ def get_monmap(osd_id):
     monmap_destination = os.path.join(path, 'activate.monmap')
 
     process.run([
-        'sudo',
         'ceph',
         '--cluster', conf.cluster,
         '--name', 'client.bootstrap-osd',
@@ -187,7 +185,6 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
     system.chown(path)
 
     base_command = [
-        'sudo',
         'ceph-osd',
         '--cluster', conf.cluster,
         # undocumented flag, sets the `type` file to contain 'bluestore'
@@ -245,7 +242,6 @@ def osd_mkfs_filestore(osd_id, fsid):
     system.chown(path)
 
     process.run([
-        'sudo',
         'ceph-osd',
         '--cluster', conf.cluster,
         # undocumented flag, sets the `type` file to contain 'filestore'
