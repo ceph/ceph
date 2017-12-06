@@ -980,7 +980,7 @@ class RBD(object):
         with nogil:
             ret = rbd_trash_get(_ioctx, _image_id, &c_info)
         if ret != 0:
-            raise make_ex(ret, 'error restoring image from trash')
+            raise make_ex(ret, 'error retrieving image from trash')
 
         __source_string = ['USER', 'MIRRORING']
         info = {
