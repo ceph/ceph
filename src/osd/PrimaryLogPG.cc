@@ -249,12 +249,11 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
 void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 {
   inflightreads = 1;
-  list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-	    pair<bufferlist*, Context*> > > in;
+  std::vector<async_read_params_t> in;
   in.swap(pending_async_reads);
   pg->pgbackend->objects_read_async(
     obc->obs.oi.soid,
-    in,
+    std::move(in),
     new OnReadComplete(pg, this), pg->get_pool().fast_read);
 }
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
@@ -4795,9 +4794,12 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
 					   std::move(init_value_bl), maybe_crc,
 					   oi.size, osd, soid, op.flags);
 
-    ctx->pending_async_reads.push_back({
-      {op.checksum.offset, op.checksum.length, op.flags},
-      {&checksum_ctx->read_bl, checksum_ctx}});
+    ctx->pending_async_reads.emplace_back(
+      op.checksum.offset,
+      op.checksum.length,
+      &checksum_ctx->read_bl,
+      checksum_ctx,
+      op.flags);
 
     dout(10) << __func__ << ": async_read noted for " << soid << dendl;
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
@@ -4965,9 +4967,12 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     auto& soid = oi.soid;
     auto extent_cmp_ctx = new C_ExtentCmpRead(this, osd_op, maybe_crc, oi.size,
 					      osd, soid, op.flags);
-    ctx->pending_async_reads.push_back({
-      {op.extent.offset, op.extent.length, op.flags},
-      {&extent_cmp_ctx->read_bl, extent_cmp_ctx}});
+    ctx->pending_async_reads.emplace_back(
+      op.extent.offset,
+      op.extent.length,
+      &extent_cmp_ctx->read_bl,
+      extent_cmp_ctx,
+      op.flags);
 
     dout(10) << __func__ << ": async_read noted for " << soid << dendl;
 
@@ -5046,13 +5051,14 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op, bool sync) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.push_back(
-      make_pair(
-        boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
-        make_pair(&osd_op.outdata,
-		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
+    ctx->pending_async_reads.emplace_back(
+      op.extent.offset,
+      op.extent.length,
+      &osd_op.outdata,
+      new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
+                             &osd_op.outdata, maybe_crc, oi.size,
+                             osd, soid, op.flags),
+      op.flags);
     dout(10) << " async_read noted for " << soid << dendl;
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
@@ -5114,13 +5120,13 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     }
 
     if (length > 0) {
-      ctx->pending_async_reads.push_back(
-        make_pair(
-          boost::make_tuple(offset, length, op.flags),
-          make_pair(
-	    &osd_op.outdata,
-	    new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-				   &op.extent.length))));
+      ctx->pending_async_reads.emplace_back(
+        offset,
+        length,
+        &osd_op.outdata,
+        new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
+                               &op.extent.length),
+        op.flags);
       dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
@@ -8143,10 +8149,8 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
       uint64_t max_read = MIN(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
 	async_read_started = true;
-	ctx->pending_async_reads.push_back(
-	  make_pair(
-	    boost::make_tuple(cursor.data_offset, max_read, osd_op.op.flags),
-	    make_pair(&bl, cb)));
+	ctx->pending_async_reads.emplace_back(cursor.data_offset, max_read,
+                                              &bl, cb, osd_op.op.flags);
 	cb->len = max_read;
 
         ctx->op_finishers[ctx->current_osd_subop_num].reset(

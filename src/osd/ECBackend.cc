@@ -2106,8 +2106,7 @@ int ECBackend::objects_read_sync(
 
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-             pair<bufferlist*, Context*> > > &to_read,
+  std::vector<async_read_params_t> to_read,
   Context *on_complete,
   bool fast_read)
 {
@@ -2116,19 +2115,15 @@ void ECBackend::objects_read_async(
 
   uint32_t flags = 0;
   extent_set es;
-  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-	 pair<bufferlist*, Context*> > >::const_iterator i =
-	 to_read.begin();
-       i != to_read.end();
-       ++i) {
+  for (auto i = to_read.begin(); i != to_read.end(); ++i) {
     pair<uint64_t, uint64_t> tmp =
       sinfo.offset_len_to_stripe_bounds(
-	make_pair(i->first.get<0>(), i->first.get<1>()));
+	make_pair(i->offset, i->length));
 
     extent_set esnew;
     esnew.insert(tmp.first, tmp.second);
     es.union_of(esnew);
-    flags |= i->first.get<2>();
+    flags |= i->flags;
   }
 
   if (!es.empty()) {
@@ -2147,19 +2142,17 @@ void ECBackend::objects_read_async(
   struct cb {
     ECBackend *ec;
     hobject_t hoid;
-    list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-	      pair<bufferlist*, Context*> > > to_read;
+    std::vector<async_read_params_t> to_read;
     unique_ptr<Context> on_complete;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackend *ec,
        const hobject_t &hoid,
-       const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-                  pair<bufferlist*, Context*> > > &to_read,
+       std::vector<async_read_params_t> to_read,
        Context *on_complete)
       : ec(ec),
 	hoid(hoid),
-	to_read(to_read),
+	to_read(std::move(to_read)),
 	on_complete(on_complete) {}
     void operator()(map<hobject_t,pair<int, extent_map> > &&results) {
       auto dpp = ec->get_parent()->get_dpp();
@@ -2173,28 +2166,28 @@ void ECBackend::objects_read_async(
       int r = 0;
       for (auto &&read: to_read) {
 	if (got.first < 0) {
-	  if (read.second.second) {
-	    read.second.second->complete(got.first);
+	  if (read.on_complete) {
+	    read.on_complete->complete(got.first);
 	  }
 	  if (r == 0)
 	    r = got.first;
 	} else {
-	  assert(read.second.first);
-	  uint64_t offset = read.first.get<0>();
-	  uint64_t length = read.first.get<1>();
+	  assert(read.outbl);
+	  uint64_t offset = read.offset;
+	  uint64_t length = read.length;
 	  auto range = got.second.get_containing_range(offset, length);
 	  assert(range.first != range.second);
 	  assert(range.first.get_off() <= offset);
 	  assert(
 	    (offset + length) <=
 	    (range.first.get_off() + range.first.get_len()));
-	  read.second.first->substr_of(
+	  read.outbl->substr_of(
 	    range.first.get_val(),
 	    offset - range.first.get_off(),
 	    length);
-	  if (read.second.second) {
-	    read.second.second->complete(length);
-	    read.second.second = nullptr;
+	  if (read.on_complete) {
+	    read.on_complete->complete(length);
+	    read.on_complete = nullptr;
 	  }
 	}
       }
@@ -2205,7 +2198,7 @@ void ECBackend::objects_read_async(
     }
     ~cb() {
       for (auto &&i: to_read) {
-	delete i.second.second;
+	delete i.on_complete;
       }
       to_read.clear();
     }
@@ -2217,7 +2210,7 @@ void ECBackend::objects_read_async(
       map<hobject_t,pair<int, extent_map> > &&, cb>(
 	cb(this,
 	   hoid,
-	   to_read,
+	   std::move(to_read),
 	   on_complete)));
 }
 

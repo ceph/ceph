@@ -27,6 +27,7 @@
 #include "common/sharedptr_registry.hpp"
 #include "ReplicatedBackend.h"
 #include "PGTransaction.h"
+#include "os/ObjectStore.h"
 
 class CopyFromCallback;
 class PromoteCallback;
@@ -603,8 +604,8 @@ public:
     bool sent_reply = false;
 
     // pending async reads <off, len, op_flags> -> <outbl, outr>
-    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-	      pair<bufferlist*, Context*> > > pending_async_reads;
+    using async_read_params_t = ObjectStore::async_read_params_t;
+    std::vector<async_read_params_t> pending_async_reads;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -667,12 +668,10 @@ public:
       assert(!op_t);
       if (reply)
 	reply->put();
-      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-		     pair<bufferlist*, Context*> > >::iterator i =
-	     pending_async_reads.begin();
+      for (auto i = pending_async_reads.begin();
 	   i != pending_async_reads.end();
 	   pending_async_reads.erase(i++)) {
-	delete i->second.second;
+	delete i->on_complete;
       }
     }
     uint64_t get_features() {
