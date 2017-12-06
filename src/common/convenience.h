@@ -14,11 +14,11 @@
 
 #include <mutex>
 #include <memory>
+#include <shared_mutex>
 #include <type_traits>
 #include <utility>
 
 #include <boost/optional.hpp>
-#include <boost/thread/shared_mutex.hpp>
 
 #include "common/backport_std.h"
 #include "common/shunique_lock.h"
@@ -53,9 +53,9 @@ inline auto uniquely_lock(Mutex&& m, Args&& ...args)
 
 template<typename Mutex, typename ...Args>
 inline auto sharingly_lock(Mutex&& m, Args&& ...args)
-  -> boost::shared_lock<std::remove_reference_t<Mutex> > {
+  -> std::shared_lock<std::remove_reference_t<Mutex> > {
   return
-    boost::shared_lock<std::remove_reference_t<Mutex> >(
+    std::shared_lock<std::remove_reference_t<Mutex> >(
       std::forward<Mutex>(m), std::forward<Args>(args)...);
 }
 
@@ -67,10 +67,10 @@ inline auto shuniquely_lock(std::unique_lock<Mutex>&& m, Args&& ...args)
 }
 
 template<typename Mutex, typename ...Args>
-inline auto shuniquely_lock(boost::shared_lock<Mutex>&& m, Args&& ...args)
+inline auto shuniquely_lock(std::shared_lock<Mutex>&& m, Args&& ...args)
   -> shunique_lock<std::remove_reference_t<Mutex> > {
   return shunique_lock<std::remove_reference_t<Mutex> >(
-    std::forward<boost::shared_lock<Mutex> >(m),
+    std::forward<std::shared_lock<Mutex> >(m),
     std::forward<Args>(args)...);
 }
 
