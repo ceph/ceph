@@ -473,6 +473,7 @@ namespace librados
 		      uint64_t tgt_version);
     void set_chunk(uint64_t src_offset, uint64_t src_length, const IoCtx& tgt_ioctx,
                    std::string tgt_oid, uint64_t tgt_offset);
+    void tier_promote();
 
 
     friend class IoCtx;
