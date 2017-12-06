@@ -979,9 +979,12 @@ void MDBalancer::find_exports(CDir *dir,
                               double& have,
                               set<CDir*>& already_exporting)
 {
+  assert(dir->is_auth());
+
   double need = amount - have;
   if (need < amount * g_conf->mds_bal_min_start)
     return;   // good enough!
+
   double needmax = need * g_conf->mds_bal_need_max;
   double needmin = need * g_conf->mds_bal_need_min;
   double midchunk = need * g_conf->mds_bal_midchunk;
@@ -1000,15 +1003,19 @@ void MDBalancer::find_exports(CDir *dir,
     if (!in->is_dir()) continue;
 
     list<CDir*> dfls;
-    in->get_dirfrags(dfls);
+    in->get_nested_dirfrags(dfls);
     for (list<CDir*>::iterator p = dfls.begin();
 	 p != dfls.end();
 	 ++p) {
       CDir *subdir = *p;
-      if (!subdir->is_auth()) continue;
-      if (already_exporting.count(subdir)) continue;
+      if (already_exporting.count(subdir))
+	continue;
 
-      if (subdir->is_frozen() || subdir->is_freezing()) continue;  // can't export this right now!
+      // we know all ancestor dirfrags up to subtree root are not freezing or frozen.
+      // It's more efficient to use CDir::is_{freezing,frozen}_tree_root()
+      if (subdir->is_frozen_dir() || subdir->is_frozen_tree_root() ||
+	  subdir->is_freezing_dir() || subdir->is_freezing_tree_root())
+	continue;  // can't export this right now!
 
       // how popular?
       double pop = subdir->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate);
@@ -1086,7 +1093,6 @@ void MDBalancer::find_exports(CDir *dir,
     if (have > needmin)
       return;
   }
-
 }
 
 void MDBalancer::hit_inode(const utime_t& now, CInode *in, int type, int who)
