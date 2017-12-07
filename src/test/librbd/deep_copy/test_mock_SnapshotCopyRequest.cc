@@ -6,6 +6,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
+#include "librbd/deep_copy/SetHeadRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCreateRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
@@ -25,6 +26,28 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 } // anonymous namespace
 
 namespace deep_copy {
+
+template <>
+class SetHeadRequest<librbd::MockTestImageCtx> {
+public:
+  static SetHeadRequest* s_instance;
+  Context *on_finish;
+
+  static SetHeadRequest* create(librbd::MockTestImageCtx *image_ctx,
+                                uint64_t size,
+                                const librbd::ParentSpec &parent_spec,
+                                uint64_t parent_overlap, Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  SetHeadRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
 
 template <>
 struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
@@ -50,6 +73,7 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
   MOCK_METHOD0(send, void());
 };
 
+SetHeadRequest<librbd::MockTestImageCtx>* SetHeadRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 SnapshotCreateRequest<librbd::MockTestImageCtx>* SnapshotCreateRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace deep_copy
@@ -76,6 +100,7 @@ using ::testing::WithArg;
 
 class TestMockDeepCopySnapshotCopyRequest : public TestMockFixture {
 public:
+  typedef SetHeadRequest<librbd::MockTestImageCtx> MockSetHeadRequest;
   typedef SnapshotCopyRequest<librbd::MockTestImageCtx> MockSnapshotCopyRequest;
   typedef SnapshotCreateRequest<librbd::MockTestImageCtx> MockSnapshotCreateRequest;
 
@@ -180,6 +205,13 @@ public:
                                   Return(r)));
   }
 
+  void expect_set_head(MockSetHeadRequest &mock_set_head_request, int r) {
+    EXPECT_CALL(mock_set_head_request, send())
+      .WillOnce(Invoke([this, &mock_set_head_request, r]() {
+            mock_set_head_request.on_finish->complete(r);
+          }));
+  }
+
   static void inject_snap(librbd::MockTestImageCtx &mock_image_ctx,
                           uint64_t snap_id, const std::string &snap_name) {
     mock_image_ctx.snap_ids[{cls::rbd::UserSnapshotNamespace(),
@@ -188,9 +220,10 @@ public:
 
   MockSnapshotCopyRequest *create_request(
       librbd::MockTestImageCtx &mock_src_image_ctx,
-      librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish) {
+      librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish,
+      librados::snap_t snap_id_end = CEPH_NOSNAP) {
     return new MockSnapshotCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
-                                       CEPH_NOSNAP, m_work_queue, &m_snap_seqs,
+                                       snap_id_end, m_work_queue, &m_snap_seqs,
                                        on_finish);
   }
 
@@ -225,6 +258,7 @@ public:
 TEST_F(TestMockDeepCopySnapshotCopyRequest, Empty) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -232,6 +266,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, Empty) {
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -254,6 +289,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreate) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockSnapshotCreateRequest mock_snapshot_create_request;
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -269,6 +305,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreate) {
   expect_snap_create(mock_dst_image_ctx, mock_snapshot_create_request, "snap2", 14, 0);
   expect_snap_is_protected(mock_src_image_ctx, src_snap_id1, false, 0);
   expect_snap_is_protected(mock_src_image_ctx, src_snap_id2, false, 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -352,6 +389,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapRemoveAndCreate) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockSnapshotCreateRequest mock_snapshot_create_request;
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -370,6 +408,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapRemoveAndCreate) {
   expect_start_op(mock_exclusive_lock);
   expect_snap_create(mock_dst_image_ctx, mock_snapshot_create_request, "snap1", 12, 0);
   expect_snap_is_protected(mock_src_image_ctx, src_snap_id1, false, 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -424,6 +463,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotect) {
 
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -438,6 +478,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotect) {
   expect_get_snap_namespace(mock_dst_image_ctx, dst_snap_id1);
   expect_get_snap_namespace(mock_src_image_ctx, src_snap_id1);
   expect_snap_is_protected(mock_src_image_ctx, src_snap_id1, false, 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -535,6 +576,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotectRemove) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockSnapshotCreateRequest mock_snapshot_create_request;
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -556,6 +598,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapUnprotectRemove) {
   expect_snap_create(mock_dst_image_ctx, mock_snapshot_create_request, "snap1",
                      12, 0);
   expect_snap_is_protected(mock_src_image_ctx, src_snap_id1, false, 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -577,6 +620,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateProtect) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockSnapshotCreateRequest mock_snapshot_create_request;
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -592,6 +636,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapCreateProtect) {
   expect_snap_is_protected(mock_dst_image_ctx, 12, false, 0);
   expect_start_op(mock_exclusive_lock);
   expect_snap_protect(mock_dst_image_ctx, "snap1", 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -616,6 +661,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtect) {
 
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSetHeadRequest mock_set_head_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
   prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
@@ -630,6 +676,7 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtect) {
   expect_snap_is_protected(mock_dst_image_ctx, dst_snap_id1, false, 0);
   expect_start_op(mock_exclusive_lock);
   expect_snap_protect(mock_dst_image_ctx, "snap1", 0);
+  expect_set_head(mock_set_head_request, 0);
 
   C_SaferCond ctx;
   MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
@@ -717,6 +764,60 @@ TEST_F(TestMockDeepCopySnapshotCopyRequest, SnapProtectCancel) {
 
   request->send();
   ASSERT_EQ(-ECANCELED, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopySnapshotCopyRequest, SetHeadError) {
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSetHeadRequest mock_set_head_request;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  expect_test_features(mock_dst_image_ctx);
+
+  InSequence seq;
+  expect_set_head(mock_set_head_request, -EINVAL);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
+                                                    mock_dst_image_ctx, &ctx);
+  request->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+}
+
+TEST_F(TestMockDeepCopySnapshotCopyRequest, NoSetHead) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  ASSERT_EQ(0, create_snap(m_src_image_ctx, "snap1", true));
+
+  uint64_t src_snap_id1 = m_src_image_ctx->snap_ids[
+    {cls::rbd::UserSnapshotNamespace(), "snap1"}];
+
+  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
+  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
+  MockSnapshotCreateRequest mock_snapshot_create_request;
+
+  librbd::MockExclusiveLock mock_exclusive_lock;
+  prepare_exclusive_lock(mock_dst_image_ctx, mock_exclusive_lock);
+
+  expect_test_features(mock_dst_image_ctx);
+
+  InSequence seq;
+  expect_get_snap_namespace(mock_src_image_ctx, src_snap_id1);
+  expect_start_op(mock_exclusive_lock);
+  expect_snap_create(mock_dst_image_ctx, mock_snapshot_create_request, "snap1",
+                     12, 0);
+  expect_snap_is_protected(mock_src_image_ctx, src_snap_id1, false, 0);
+
+  C_SaferCond ctx;
+  MockSnapshotCopyRequest *request = create_request(mock_src_image_ctx,
+                                                    mock_dst_image_ctx, &ctx,
+                                                    src_snap_id1);
+  request->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  validate_snap_seqs({{src_snap_id1, 12}});
 }
 
 } // namespace deep_copy
