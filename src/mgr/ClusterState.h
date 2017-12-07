@@ -103,6 +103,14 @@ public:
     return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
   }
 
+  template<typename Callback, typename...Args>
+  auto with_mutable_pgmap(Callback&& cb, Args&&...args) ->
+    decltype(cb(pg_map, std::forward<Args>(args)...))
+  {
+    Mutex::Locker l(lock);
+    return std::forward<Callback>(cb)(pg_map, std::forward<Args>(args)...);
+  }
+
   template<typename... Args>
   void with_monmap(Args &&... args) const
   {

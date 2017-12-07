@@ -82,6 +82,7 @@
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
 static const string OSD_METADATA_PREFIX("osd_metadata");
+static const string OSD_SNAP_PREFIX("osd_snap");
 
 namespace {
 
@@ -270,6 +271,7 @@ void OSDMonitor::get_store_prefixes(std::set<string>& s) const
   s.insert(service_name);
   s.insert(OSD_PG_CREATING_PREFIX);
   s.insert(OSD_METADATA_PREFIX);
+  s.insert(OSD_SNAP_PREFIX);
 }
 
 void OSDMonitor::update_from_paxos(bool *need_bootstrap)
@@ -343,6 +345,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     get_version_full(latest_full, latest_bl);
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading latest full map e" << latest_full << dendl;
+    osdmap = OSDMap();
     osdmap.decode(latest_bl);
   }
 
@@ -570,6 +573,8 @@ void OSDMonitor::create_pending()
 {
   pending_inc = OSDMap::Incremental(osdmap.epoch+1);
   pending_inc.fsid = mon->monmap->fsid;
+  pending_metadata.clear();
+  pending_metadata_rm.clear();
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
@@ -1122,6 +1127,70 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 			<< "required " << ceph_release_name(mv);
       pending_inc.new_require_min_compat_client = mv;
     }
+
+    // upgrade to mimic?
+    if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC &&
+	tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
+      dout(10) << __func__ << " first mimic epoch" << dendl;
+      // record this epoch as the deletion for all legacy removed_snaps
+      for (auto& p : tmp.get_pools()) {
+	// update every pool
+	if (pending_inc.new_pools.count(p.first) == 0) {
+	  pending_inc.new_pools[p.first] = p.second;
+	}
+	auto& pi = pending_inc.new_pools[p.first];
+	if (pi.snap_seq == 0) {
+	  // no snaps on this pool
+	  continue;
+	}
+	if ((pi.flags & (pg_pool_t::FLAG_SELFMANAGED_SNAPS |
+			 pg_pool_t::FLAG_POOL_SNAPS)) == 0) {
+	  if (!pi.removed_snaps.empty()) {
+	    pi.flags |= pg_pool_t::FLAG_SELFMANAGED_SNAPS;
+	  } else {
+	    pi.flags |= pg_pool_t::FLAG_POOL_SNAPS;
+	  }
+	}
+
+	// Make all previously removed snaps appear to be removed in this
+	// epoch.  this populates removed_snaps_queue.  The OSD will subtract
+	// off its purged_snaps, as before, and this set will shrink over the
+	// following epochs as the purged snaps are reported back through the
+	// mgr.
+	OSDMap::snap_interval_set_t removed;
+	if (!p.second.removed_snaps.empty()) {
+	  // different flavor of interval_set :(
+	  for (auto q = p.second.removed_snaps.begin();
+	       q != p.second.removed_snaps.end();
+	       ++q) {
+	    removed.insert(q.get_start(), q.get_len());
+	  }
+	} else {
+	  for (snapid_t s = 1; s <= pi.get_snap_seq(); s = s + 1) {
+	    if (pi.snaps.count(s) == 0) {
+	      removed.insert(s);
+	    }
+	  }
+	}
+	pending_inc.new_removed_snaps[p.first].union_of(removed);
+
+	dout(10) << __func__ << " converting pool " << p.first
+		 << " with " << p.second.removed_snaps.size()
+		 << " legacy removed_snaps" << dendl;
+	string k = make_snap_epoch_key(p.first, pending_inc.epoch);
+	bufferlist v;
+	::encode(p.second.removed_snaps, v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+	for (auto q = p.second.removed_snaps.begin();
+	     q != p.second.removed_snaps.end();
+	     ++q) {
+	  bufferlist v;
+	  string k = make_snap_key_value(p.first, q.get_start(),
+					 q.get_len(), pending_inc.epoch, &v);
+	  t->put(OSD_SNAP_PREFIX, k, v);
+	}
+      }
+    }
   }
 
   // tell me about it
@@ -1222,6 +1291,38 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist creatings_bl;
   ::encode(pending_creatings, creatings_bl);
   t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
+
+  // removed_snaps
+  if (tmp.require_osd_release >= CEPH_RELEASE_MIMIC) {
+    for (auto& i : pending_inc.new_removed_snaps) {
+      {
+	// all snaps removed this epoch
+	string k = make_snap_epoch_key(i.first, pending_inc.epoch);
+	bufferlist v;
+	::encode(i.second, v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+      }
+      for (auto q = i.second.begin();
+	   q != i.second.end();
+	   ++q) {
+	bufferlist v;
+	string k = make_snap_key_value(i.first, q.get_start(),
+				       q.get_len(), pending_inc.epoch, &v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+      }
+    }
+    for (auto& i : pending_inc.new_purged_snaps) {
+      for (auto q = i.second.begin();
+	   q != i.second.end();
+	   ++q) {
+	bufferlist v;
+	string k = make_snap_purged_key_value(i.first, q.get_start(),
+					      q.get_len(), pending_inc.epoch,
+					      &v);
+	t->put(OSD_SNAP_PREFIX, k, v);
+      }
+    }
+  }
 
   // health
   health_check_map_t next;
@@ -2781,10 +2882,12 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	dout(10) << " pool " << p->first << " removed_snaps added " << *q
 		 << " (now " << newpi->removed_snaps << ")" << dendl;
 	if (*q > newpi->get_snap_seq()) {
-	  dout(10) << " pool " << p->first << " snap_seq " << newpi->get_snap_seq() << " -> " << *q << dendl;
+	  dout(10) << " pool " << p->first << " snap_seq "
+		   << newpi->get_snap_seq() << " -> " << *q << dendl;
 	  newpi->set_snap_seq(*q);
 	}
 	newpi->set_snap_epoch(pending_inc.epoch);
+	pending_inc.new_removed_snaps[p->first].insert(*q);
       }
     }
   }
@@ -2938,18 +3041,20 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   if (first < get_first_committed()) {
+    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
+    m->oldest_map = get_first_committed();
+    m->newest_map = osdmap.get_epoch();
+
+    // share removed snaps during the gap
+    get_removed_snaps_range(first, m->oldest_map, &m->gap_removed_snaps);
+
     first = get_first_committed();
     bufferlist bl;
     int err = get_version_full(first, bl);
     assert(err == 0);
     assert(bl.length());
-
     dout(20) << "send_incremental starting with base full "
 	     << first << " " << bl.length() << " bytes" << dendl;
-
-    MOSDMap *m = new MOSDMap(osdmap.get_fsid());
-    m->oldest_map = get_first_committed();
-    m->newest_map = osdmap.get_epoch();
     m->maps[first] = bl;
 
     if (req) {
@@ -2979,6 +3084,28 @@ void OSDMonitor::send_incremental(epoch_t first,
     session->osd_epoch = last;
     if (onetime || req)
       break;
+  }
+}
+
+void OSDMonitor::get_removed_snaps_range(
+  epoch_t start, epoch_t end,
+  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
+{
+  // we only care about pools that exist now.
+  for (auto& p : osdmap.get_pools()) {
+    auto& t = (*gap_removed_snaps)[p.first];
+    for (epoch_t epoch = start; epoch < end; ++epoch) {
+      string k = make_snap_epoch_key(p.first, epoch);
+      bufferlist v;
+      mon->store->get(OSD_SNAP_PREFIX, k, v);
+      if (v.length()) {
+	auto q = v.begin();
+	OSDMap::snap_interval_set_t snaps;
+	::decode(snaps, q);
+	t.union_of(snaps);
+      }
+    }
+    dout(10) << __func__ << " " << p.first << " " << t << dendl;
   }
 }
 
@@ -3353,6 +3480,10 @@ void OSDMonitor::tick()
       pending_inc.old_blacklist.push_back(p->first);
       do_propose = true;
     }
+  }
+
+  if (try_prune_purged_snaps()) {
+    do_propose = true;
   }
 
   if (update_pools_status())
@@ -4823,6 +4954,159 @@ void OSDMonitor::clear_pool_flags(int64_t pool_id, uint64_t flags)
     osdmap.get_pg_pool(pool_id));
   assert(pool);
   pool->unset_flag(flags);
+}
+
+string OSDMonitor::make_snap_epoch_key(int64_t pool, epoch_t epoch)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "removed_epoch_%lld_%08lx",
+	   (unsigned long long)pool, (unsigned long)epoch);
+  return k;
+}
+
+string OSDMonitor::make_snap_key(int64_t pool, snapid_t snap)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "removed_snap_%lld_%016llx",
+	   (unsigned long long)pool, (unsigned long long)snap);
+  return k;
+}
+
+
+string OSDMonitor::make_snap_key_value(
+  int64_t pool, snapid_t snap, snapid_t num,
+  epoch_t epoch, bufferlist *v)
+{
+  // encode the *last* epoch in the key so that we can use forward
+  // iteration only to search for an epoch in an interval.
+  ::encode(snap, *v);
+  ::encode(snap + num, *v);
+  ::encode(epoch, *v);
+  return make_snap_key(pool, snap + num - 1);
+}
+
+string OSDMonitor::make_snap_purged_key(int64_t pool, snapid_t snap)
+{
+  char k[80];
+  snprintf(k, sizeof(k), "purged_snap_%lld_%016llx",
+	   (unsigned long long)pool, (unsigned long long)snap);
+  return k;
+}
+string OSDMonitor::make_snap_purged_key_value(
+  int64_t pool, snapid_t snap, snapid_t num,
+  epoch_t epoch, bufferlist *v)
+{
+  // encode the *last* epoch in the key so that we can use forward
+  // iteration only to search for an epoch in an interval.
+  ::encode(snap, *v);
+  ::encode(snap + num, *v);
+  ::encode(epoch, *v);
+  return make_snap_purged_key(pool, snap + num - 1);
+}
+
+int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
+				   snapid_t *begin, snapid_t *end)
+{
+  string k = make_snap_key(pool, snap);
+  auto it = mon->store->get_iterator(OSD_SNAP_PREFIX);
+  it->lower_bound(k);
+  if (!it->valid()) {
+    return -ENOENT;
+  }
+  if (it->key().find(OSD_SNAP_PREFIX) != 0) {
+    return -ENOENT;
+  }
+  bufferlist v = it->value();
+  auto p = v.begin();
+  ::decode(*begin, p);
+  ::decode(*end, p);
+  if (snap < *begin || snap >= *end) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+bool OSDMonitor::try_prune_purged_snaps()
+{
+  if (!mon->mgrstatmon()->is_readable()) {
+    return false;
+  }
+  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC) {
+    return false;
+  }
+  if (!pending_inc.new_purged_snaps.empty()) {
+    return false;  // we already pruned for this epoch
+  }
+
+  unsigned max_prune = cct->_conf->get_val<uint64_t>(
+    "mon_max_snap_prune_per_epoch");
+  if (!max_prune) {
+    max_prune = 100000;
+  }
+  dout(10) << __func__ << " max_prune " << max_prune << dendl;
+
+  unsigned actually_pruned = 0;
+  auto& purged_snaps = mon->mgrstatmon()->get_digest().purged_snaps;
+  for (auto& p : osdmap.get_pools()) {
+    auto q = purged_snaps.find(p.first);
+    if (q == purged_snaps.end()) {
+      continue;
+    }
+    auto& purged = q->second;
+    if (purged.empty()) {
+      dout(20) << __func__ << " " << p.first << " nothing purged" << dendl;
+      continue;
+    }
+    dout(20) << __func__ << " pool " << p.first << " purged " << purged << dendl;
+    OSDMap::snap_interval_set_t to_prune;
+    unsigned maybe_pruned = actually_pruned;
+    for (auto i = purged.begin(); i != purged.end(); ++i) {
+      snapid_t begin = i.get_start();
+      auto end = i.get_start() + i.get_len();
+      snapid_t pbegin = 0, pend = 0;
+      int r = lookup_pruned_snap(p.first, begin, &pbegin, &pend);
+      if (r == 0) {
+	// already purged.
+	// be a bit aggressive about backing off here, because the mon may
+	// do a lot of work going through this set, and if we know the
+	// purged set from the OSDs is at least *partly* stale we may as
+	// well wait for it to be fresh.
+	dout(20) << __func__ << "  we've already pruned " << pbegin
+		 << "~" << (pend - pbegin) << dendl;
+	break;  // next pool
+      }
+      if (pbegin && pbegin < end) {
+	// the tail of [begin,end) is purged; shorten the range
+	assert(pbegin > begin);
+	end = pbegin;
+      }
+      to_prune.insert(begin, end - begin);
+      maybe_pruned += end - begin;
+      if (maybe_pruned >= max_prune) {
+	break;
+      }
+    }
+    if (!to_prune.empty()) {
+      // PGs may still be reporting things as purged that we have already
+      // pruned from removed_snaps_queue.
+      OSDMap::snap_interval_set_t actual;
+      auto r = osdmap.removed_snaps_queue.find(p.first);
+      if (r != osdmap.removed_snaps_queue.end()) {
+	actual.intersection_of(to_prune, r->second);
+      }
+      actually_pruned += actual.size();
+      dout(10) << __func__ << " pool " << p.first << " reports pruned " << to_prune
+	       << ", actual pruned " << actual << dendl;
+      if (!actual.empty()) {
+	pending_inc.new_purged_snaps[p.first].swap(actual);
+      }
+    }
+    if (actually_pruned >= max_prune) {
+      break;
+    }
+  }
+  dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  return !!actually_pruned;
 }
 
 bool OSDMonitor::update_pools_status()
@@ -8443,6 +8727,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_set_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
+    else if (key == "nosnaptrim")
+      return prepare_set_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
     else if (key == "sortbitwise") {
       return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
     } else if (key == "recovery_deletes") {
@@ -8539,6 +8825,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NODEEP_SCRUB);
     else if (key == "notieragent")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
+    else if (key == "nosnaptrim")
+      return prepare_unset_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
     else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
@@ -10820,7 +11108,8 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
   case POOL_OP_CREATE_SNAP:
     if (!pp.snap_exists(m->name.c_str())) {
       pp.add_snap(m->name.c_str(), ceph_clock_now());
-      dout(10) << "create snap in pool " << m->pool << " " << m->name << " seq " << pp.get_snap_epoch() << dendl;
+      dout(10) << "create snap in pool " << m->pool << " " << m->name
+	       << " seq " << pp.get_snap_epoch() << dendl;
       changed = true;
     }
     break;
@@ -10830,6 +11119,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
       snapid_t s = pp.snap_exists(m->name.c_str());
       if (s) {
 	pp.remove_snap(s);
+	pending_inc.new_removed_snaps[m->pool].insert(s);
 	changed = true;
       }
     }
@@ -10847,6 +11137,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
   case POOL_OP_DELETE_UNMANAGED_SNAP:
     if (!pp.is_removed_snap(m->snapid)) {
       pp.remove_unmanaged_snap(m->snapid);
+      pending_inc.new_removed_snaps[m->pool].insert(m->snapid);
       changed = true;
     }
     break;

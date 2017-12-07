@@ -728,11 +728,11 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r", "cli,rest")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds " \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"set <key>", "osd", "rw", "cli,rest")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim", \
 	"unset <key>", "osd", "rw", "cli,rest")
 COMMAND("osd require-osd-release "\
 	"name=release,type=CephChoices,strings=luminous|mimic " \

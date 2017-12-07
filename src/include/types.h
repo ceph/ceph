@@ -54,6 +54,8 @@ extern "C" {
 #include <string>
 #include <list>
 #include <set>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 #include <map>
 #include <vector>
 #include <iostream>
@@ -105,6 +107,10 @@ template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset);
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset);
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& iset);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const multiset<A,Comp,Alloc>& iset);
 template<class A, class B, class Comp, class Alloc>
@@ -162,6 +168,28 @@ inline ostream& operator<<(ostream& out, const set<A, Comp, Alloc>& iset) {
        ++it) {
     if (it != iset.begin()) out << ",";
     out << *it;
+  }
+  return out;
+}
+
+template<class A, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_set<A, Comp, Alloc>& iset) {
+  for (auto it = iset.begin();
+       it != iset.end();
+       ++it) {
+    if (it != iset.begin()) out << ",";
+    out << *it;
+  }
+  return out;
+}
+
+template<class A, class B, class Comp, class Alloc>
+inline ostream& operator<<(ostream& out, const boost::container::flat_map<A, B, Comp, Alloc>& m) {
+  for (auto it = m.begin();
+       it != m.end();
+       ++it) {
+    if (it != m.begin()) out << ",";
+    out << it->first << "=" << it->second;
   }
   return out;
 }

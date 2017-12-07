@@ -1153,6 +1153,10 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable POOL_APP_NOT_ENABLED health check"),
 
+    Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("Max number of pruned snaps we will process in a single OSDMap epoch"),
+
     Option("mon_min_osdmap_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
     .set_description(""),
@@ -2456,6 +2460,10 @@ std::vector<Option> get_global_options() {
     Option("osd_stats_ack_timeout_decay", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.9)
     .set_description(""),
+
+    Option("osd_max_snap_prune_intervals_per_epoch", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(512)
+    .set_description("Max number of snap intervals to report to mgr in pg_stat_t"),
 
     Option("osd_default_data_pool_replay_window", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(45)

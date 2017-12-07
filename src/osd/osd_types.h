@@ -1157,6 +1157,8 @@ struct pg_pool_t {
     FLAG_FULL_QUOTA = 1<<10, // pool is currently running out of quota, will set FLAG_FULL too
     FLAG_NEARFULL = 1<<11, // pool is nearfull
     FLAG_BACKFILLFULL = 1<<12, // pool is backfillfull
+    FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
+    FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
   };
 
   static const char *get_flag_name(int f) {
@@ -1174,6 +1176,8 @@ struct pg_pool_t {
     case FLAG_FULL_QUOTA: return "full_quota";
     case FLAG_NEARFULL: return "nearfull";
     case FLAG_BACKFILLFULL: return "backfillfull";
+    case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
+    case FLAG_POOL_SNAPS: return "pool_snaps";
     default: return "???";
     }
   }
@@ -1218,6 +1222,10 @@ struct pg_pool_t {
       return FLAG_NEARFULL;
     if (name == "backfillfull")
       return FLAG_BACKFILLFULL;
+    if (name == "selfmanaged_snaps")
+      return FLAG_SELFMANAGED_SNAPS;
+    if (name == "pool_snaps")
+      return FLAG_POOL_SNAPS;
     return 0;
   }
 
@@ -1945,6 +1953,8 @@ struct pg_stat_t {
   epoch_t mapping_epoch;
 
   vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
+
+  interval_set<snapid_t> purged_snaps;  ///< recently removed snaps that we've purged
 
   utime_t last_became_active;
   utime_t last_became_peered;
@@ -4473,16 +4483,6 @@ struct SnapSet {
     return out;
   }
 
-  // return min element of snaps > after, return max if no such element
-  snapid_t get_first_snap_after(snapid_t after, snapid_t max) const {
-    for (vector<snapid_t>::const_reverse_iterator i = snaps.rbegin();
-	 i != snaps.rend();
-	 ++i) {
-      if (*i > after)
-	return *i;
-    }
-    return max;
-  }
 
   SnapSet get_filtered(const pg_pool_t &pinfo) const;
   void filter(const pg_pool_t &pinfo);
