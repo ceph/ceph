@@ -2958,21 +2958,14 @@ Dentry* Client::link(Dir *dir, const string& name, Inode *in, Dentry *dn)
 {
   if (!dn) {
     // create a new Dentry
-    dn = new Dentry(name);
+    dn = new Dentry(dir, name);
 
-    // link to dir
-    dn->dir = dir;
-    dir->dentries[dn->name] = dn;
     lru.lru_insert_mid(dn);    // mid or top?
-    if (!in)
-      dir->num_null_dentries++;
 
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (new dn)" << dendl;
   } else {
     assert(!dn->inode);
-    if (in)
-      dir->num_null_dentries--;
     ldout(cct, 15) << "link dir " << dir->parent_inode << " '" << name << "' to inode " << in
 		   << " dn " << dn << " (old dn)" << dendl;
   }
@@ -3009,22 +3002,19 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
 
   if (keepdentry) {
     dn->lease_mds = -1;
-    if (in)
-      dn->dir->num_null_dentries++;
   } else {
     ldout(cct, 15) << "unlink  removing '" << dn->name << "' dn " << dn << dendl;
 
     // unlink from dir
-    dn->dir->dentries.erase(dn->name);
-    if (!in)
-      dn->dir->num_null_dentries--;
-    if (dn->dir->is_empty() && !keepdir)
-      close_dir(dn->dir);
-    dn->dir = 0;
+    Dir *dir = dn->dir;
+    dn->detach();
 
     // delete den
     lru.lru_remove(dn);
     dn->put();
+
+    if (dir->is_empty() && !keepdir)
+      close_dir(dir);
   }
 }
 
