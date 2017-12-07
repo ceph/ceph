@@ -44,7 +44,7 @@ class Activate(object):
         )
 
         if not system.device_is_mounted(data_device, destination=osd_dir):
-            process.run(['sudo', 'mount', '-v', data_device, osd_dir])
+            process.run(['mount', '-v', data_device, osd_dir])
 
         device_map = {
             'journal': journal_device,
@@ -59,7 +59,7 @@ class Activate(object):
             # always re-do the symlink regardless if it exists, so that the journal
             # device path that may have changed can be mapped correctly every time
             destination = os.path.join(osd_dir, name)
-            process.run(['sudo', 'ln', '-snf', device, destination])
+            process.run(['ln', '-snf', device, destination])
 
             # make sure that the journal has proper permissions
             system.chown(device)
