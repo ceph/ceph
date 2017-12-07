@@ -67,7 +67,8 @@ enum TestOpType {
   TEST_OP_APPEND_EXCL,
   TEST_OP_SET_REDIRECT,
   TEST_OP_UNSET_REDIRECT,
-  TEST_OP_CHUNK_READ
+  TEST_OP_CHUNK_READ,
+  TEST_OP_TIER_PROMOTE
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -2530,6 +2531,77 @@ public:
   string getType() override
   {
     return "UnsetRedirectOp";
+  }
+};
+
+class TierPromoteOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  ceph::shared_ptr<int> in_use;
+
+  TierPromoteOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+						      &write_callback);
+    context->state_lock.Unlock();
+
+    op.tier_promote();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+
+    ObjectDesc oid_value;
+    context->find_object(oid, &oid_value);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // sucess
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->update_object_version(oid, completion->get_version64());
+    context->find_object(oid, &oid_value);
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierPromoteOp";
   }
 };
 
