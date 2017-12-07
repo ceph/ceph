@@ -10,7 +10,6 @@
 #include "librbd/Utils.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
-#include "librbd/deep_copy/SetHeadRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "librbd/internal.h"
 
@@ -119,54 +118,6 @@ void DeepCopyRequest<I>::handle_copy_snapshots(int r) {
   } else if (r < 0) {
     lderr(m_cct) << "failed to copy snapshot metadata: " << cpp_strerror(r)
                  << dendl;
-    finish(r);
-    return;
-  }
-
-  send_set_head();
-}
-
-template <typename I>
-void DeepCopyRequest<I>::send_set_head() {
-  if (m_snap_id_end != CEPH_NOSNAP) {
-    send_copy_image();
-    return;
-  }
-
-  ldout(m_cct, 20) << dendl;
-
-  uint64_t size;
-  ParentSpec parent_spec;
-  uint64_t parent_overlap;
-  {
-    RWLock::RLocker src_locker(m_src_image_ctx->snap_lock);
-    size = m_src_image_ctx->size;
-    parent_spec = m_src_image_ctx->parent_md.spec;
-    parent_overlap = m_src_image_ctx->parent_md.overlap;
-  }
-
-  auto ctx = create_context_callback<
-    DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_set_head>(this);
-  auto req = SetHeadRequest<I>::create(m_dst_image_ctx, size, parent_spec,
-                                       parent_overlap, ctx);
-  req->send();
-}
-
-template <typename I>
-void DeepCopyRequest<I>::handle_set_head(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  {
-    Mutex::Locker locker(m_lock);
-    if (r == 0 && m_canceled) {
-      r = -ECANCELED;
-    }
-  }
-
-  if (r < 0) {
-    if (r != -ECANCELED) {
-      lderr(m_cct) << "failed to set head: " << cpp_strerror(r) << dendl;
-    }
     finish(r);
     return;
   }

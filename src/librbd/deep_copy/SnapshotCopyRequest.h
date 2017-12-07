@@ -67,6 +67,9 @@ private:
    * PROTECT_SNAP ------/
    *    |
    *    v
+   * SET_HEAD (skip if not needed)
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -106,6 +109,9 @@ private:
 
   void send_snap_protect();
   void handle_snap_protect(int r);
+
+  void send_set_head();
+  void handle_set_head(int r);
 
   bool handle_cancellation();
 
