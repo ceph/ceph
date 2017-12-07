@@ -40,7 +40,7 @@ journal.
 
 The API call looks like::
 
-    ceph-volume prepare --filestore --data volume_group/lv_name --journal journal
+    ceph-volume lvm prepare --filestore --data volume_group/lv_name --journal journal
 
 There is flexibility to use a raw device or partition as well for ``--data``
 that will be converted to a logical volume. This is not ideal in all situations
@@ -58,12 +58,12 @@ device name (or path).
 
 When using a partition, this is how it would look for ``/dev/sdc1``::
 
-    ceph-volume prepare --filestore --data volume_group/lv_name --journal /dev/sdc1
+    ceph-volume lvm prepare --filestore --data volume_group/lv_name --journal /dev/sdc1
 
 For a logical volume, just like for ``--data``, a volume group and logical
 volume name are required::
 
-    ceph-volume prepare --filestore --data volume_group/lv_name --journal volume_group/journal_lv
+    ceph-volume lvm prepare --filestore --data volume_group/lv_name --journal volume_group/journal_lv
 
 A generated uuid is used to ask the cluster for a new OSD. These two pieces are
 crucial for identifying an OSD and will later be used throughout the
