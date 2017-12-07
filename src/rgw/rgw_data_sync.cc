@@ -1373,8 +1373,9 @@ public:
         yield call(new RGWReadRemoteDataLogShardInfoCR(sync_env, shard_id, &shard_info));
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to fetch remote data log info: ret=" << retcode));
-          stop_spawned_services();
-          drain_all();
+          lease_cr->go_down();
+          drain_all_but(1);
+          stop_error_repo();
           return set_cr_error(retcode);
         }
         datalog_marker = shard_info.marker;
@@ -1388,8 +1389,9 @@ public:
           yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, &sync_marker.marker, &log_entries, &truncated));
           if (retcode < 0) {
             tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
-            stop_spawned_services();
-            drain_all();
+            lease_cr->go_down();
+            drain_all_but(1);
+            stop_error_repo();
             return set_cr_error(retcode);
           }
 
@@ -1419,8 +1421,9 @@ public:
                 spawned_keys.insert(log_iter->entry.key);
                 spawn(new RGWDataSyncSingleEntryCR(sync_env, log_iter->entry.key, log_iter->log_id, marker_tracker, error_repo, false, tn), false);
                 if (retcode < 0) {
-                  stop_spawned_services();
-                  drain_all();
+                  lease_cr->go_down();
+                  drain_all_but(1);
+                  stop_error_repo();
                   return set_cr_error(retcode);
                 }
               }
@@ -1449,8 +1452,7 @@ public:
     }
     return 0;
   }
-  void stop_spawned_services() {
-    lease_cr->go_down();
+  void stop_error_repo() {
     if (error_repo) {
       error_repo->finish();
       error_repo->put();
