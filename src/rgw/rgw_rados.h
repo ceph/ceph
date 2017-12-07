@@ -2285,7 +2285,7 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
-  RGWSyncTraceManager *sync_tracer;
+  RGWSyncTraceManager *sync_tracer = nullptr;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;

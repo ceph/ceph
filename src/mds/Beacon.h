@@ -87,7 +87,7 @@ private:
   mds_rank_t standby_for_rank;
   std::string standby_for_name;
   fs_cluster_id_t standby_for_fscid;
-  bool standby_replay;
+  bool standby_replay = false;
   MDSMap::DaemonState want_state;
 
   // Internal beacon state
