@@ -2643,9 +2643,6 @@ void PG::_update_calc_stats()
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
-    dout(20) << __func__ << " calc" << (!is_clean() ? " not-clean" : "")
-	     << (is_undersized() ? " undersized" : "")
-	     << (is_remapped() ? " remapped" : "") << dendl;
     dout(20) << __func__ << " actingset " << actingset << " upset "
              << upset << " actingbackfill " << actingbackfill << dendl;
     dout(20) << __func__ << " acting " << acting << " up " << up << dendl;
