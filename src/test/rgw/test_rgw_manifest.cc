@@ -82,7 +82,7 @@ public:
 
   void append(uint64_t ofs, const OldObjManifestPart& part) {
     objs[ofs] = part;
-    obj_size = max(obj_size, ofs + part.size);
+    obj_size = ceph::max(obj_size, ofs + part.size);
   }
 
   void encode(bufferlist& bl) const {
