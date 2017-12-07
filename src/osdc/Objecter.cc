@@ -1021,14 +1021,16 @@ bool Objecter::ms_dispatch(Message *m)
   return false;
 }
 
-void Objecter::_scan_requests(OSDSession *s,
-			      bool force_resend,
-			      bool cluster_full,
-			      map<int64_t, bool> *pool_full_map,
-			      map<ceph_tid_t, Op*>& need_resend,
-			      list<LingerOp*>& need_resend_linger,
-			      map<ceph_tid_t, CommandOp*>& need_resend_command,
-			      shunique_lock& sul)
+void Objecter::_scan_requests(
+  OSDSession *s,
+  bool skipped_map,
+  bool cluster_full,
+  map<int64_t, bool> *pool_full_map,
+  map<ceph_tid_t, Op*>& need_resend,
+  list<LingerOp*>& need_resend_linger,
+  map<ceph_tid_t, CommandOp*>& need_resend_command,
+  shunique_lock& sul,
+  const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
 {
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
@@ -1052,7 +1054,7 @@ void Objecter::_scan_requests(OSDSession *s,
 	(*pool_full_map)[op->target.base_oloc.pool];
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1077,6 +1079,10 @@ void Objecter::_scan_requests(OSDSession *s,
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
+    _prune_snapc(osdmap->get_new_removed_snaps(), op);
+    if (skipped_map) {
+      _prune_snapc(*gap_removed_snaps, op);
+    }
     bool force_resend_writes = cluster_full;
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
@@ -1085,7 +1091,7 @@ void Objecter::_scan_requests(OSDSession *s,
 			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !(force_resend_writes && op->respects_full()))
+      if (!skipped_map && !(force_resend_writes && op->respects_full()))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1115,7 +1121,7 @@ void Objecter::_scan_requests(OSDSession *s,
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       // resend if skipped map; otherwise do nothing.
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1230,15 +1236,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	update_pool_full_map(pool_full_map);
 
 	// check all outstanding requests on every epoch
+	for (auto& i : need_resend) {
+	  _prune_snapc(osdmap->get_new_removed_snaps(), i.second);
+	  if (skipped_map) {
+	    _prune_snapc(m->gap_removed_snaps, i.second);
+	  }
+	}
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
-		       need_resend_linger, need_resend_command, sul);
+		       need_resend_linger, need_resend_command, sul,
+		       &m->gap_removed_snaps);
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, skipped_map, cluster_full,
 			 &pool_full_map, need_resend,
-			 need_resend_linger, need_resend_command, sul);
+			 need_resend_linger, need_resend_command, sul,
+			 &m->gap_removed_snaps);
 	  ++p;
 	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
@@ -1258,7 +1272,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != osd_sessions.end(); ++p) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, false, false, NULL, need_resend,
-			 need_resend_linger, need_resend_command, sul);
+			 need_resend_linger, need_resend_command, sul,
+			 nullptr);
 	}
 	ldout(cct, 3) << "handle_osd_map decoding full epoch "
 		      << m->get_last() << dendl;
@@ -1266,7 +1281,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	_scan_requests(homeless_session, false, false, NULL,
 		       need_resend, need_resend_linger,
-		       need_resend_command, sul);
+		       need_resend_command, sul, nullptr);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting"
 		      << dendl;
@@ -2756,6 +2771,34 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   if (!p)
     return -ENOENT;
   return p->raw_hash_to_pg(p->hash_key(key, ns));
+}
+
+void Objecter::_prune_snapc(
+  const mempool::osdmap::map<int64_t,
+  OSDMap::snap_interval_set_t>& new_removed_snaps,
+  Op *op)
+{
+  bool match = false;
+  auto i = new_removed_snaps.find(op->target.base_pgid.pool());
+  if (i != new_removed_snaps.end()) {
+    for (auto s : op->snapc.snaps) {
+      if (i->second.contains(s)) {
+	match = true;
+	break;
+      }
+    }
+    if (match) {
+      vector<snapid_t> new_snaps;
+      for (auto s : op->snapc.snaps) {
+	if (!i->second.contains(s)) {
+	  new_snaps.push_back(s);
+	}
+      }
+      op->snapc.snaps.swap(new_snaps);
+      ldout(cct,10) << __func__ << " op " << op->tid << " snapc " << op->snapc
+		    << " (was " << new_snaps << ")" << dendl;
+    }
+  }
 }
 
 int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)

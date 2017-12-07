@@ -50,9 +50,9 @@ void SnapServer::reset_state()
 	    // needing removal, skip.
 	    continue;
 	  }
-	  if (!pi->removed_snaps.empty() &&
-	      pi->removed_snaps.range_end() > first_free)
-	    first_free = pi->removed_snaps.range_end();
+	  if (pi->snap_seq > first_free) {
+	    first_free = pi->snap_seq;
+	  }
 	}
       });
     if (first_free > last_snap)

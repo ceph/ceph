@@ -27,7 +27,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 2;
+  uint8_t v = 3;
   if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
     v = 1;
   }
@@ -57,12 +57,15 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(pg_sum_delta, bl, features);
   ::encode(stamp_delta, bl);
   ::encode(avail_space_by_rule, bl);
+  if (struct_v >= 3) {
+    ::encode(purged_snaps, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_pg_unknown, p);
@@ -87,6 +90,9 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(pg_sum_delta, p);
   ::decode(stamp_delta, p);
   ::decode(avail_space_by_rule, p);
+  if (struct_v >= 3) {
+    ::decode(purged_snaps, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -136,6 +142,21 @@ void PGMapDigest::dump(Formatter *f) const
     f->dump_unsigned("num_primary_pg", p.second.primary);
     f->dump_unsigned("num_acting_pg", p.second.acting);
     f->dump_unsigned("num_up_pg", p.second.up);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("purged_snaps");
+  for (auto& j : purged_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", j.first);
+    f->open_object_section("purged_snaps");
+    for (auto i = j.second.begin(); i != j.second.end(); ++i) {
+      f->open_object_section("interval");
+      f->dump_stream("start") << i.get_start();
+      f->dump_stream("length") << i.get_len();
+      f->close_section();
+    }
+    f->close_section();
     f->close_section();
   }
   f->close_section();
@@ -1266,6 +1287,28 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   }
 }
 
+void PGMap::calc_purged_snaps()
+{
+  purged_snaps.clear();
+  set<int64_t> unknown;
+  for (auto& i : pg_stat) {
+    if (i.second.state == 0) {
+      unknown.insert(i.first.pool());
+      purged_snaps.erase(i.first.pool());
+      continue;
+    } else if (unknown.count(i.first.pool())) {
+      continue;
+    }
+    auto j = purged_snaps.find(i.first.pool());
+    if (j == purged_snaps.end()) {
+      // base case
+      purged_snaps[i.first.pool()] = i.second.purged_snaps;
+    } else {
+      j->second.intersection_of(i.second.purged_snaps);
+    }
+  }
+}
+
 void PGMap::stat_osd_add(int osd, const osd_stat_t &s)
 {
   num_osd++;
@@ -1285,9 +1328,10 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
 }
 
 void PGMap::encode_digest(const OSDMap& osdmap,
-			  bufferlist& bl, uint64_t features) const
+			  bufferlist& bl, uint64_t features)
 {
   get_rules_avail(osdmap, &avail_space_by_rule);
+  calc_purged_snaps();
   PGMapDigest::encode(bl, features);
 }
 
