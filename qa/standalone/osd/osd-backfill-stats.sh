@@ -385,11 +385,11 @@ function TEST_backfill_sizeup4_allout() {
 }
 
 
-# [1,0] ->  [3]/[1,0]
+# [1,2,0] ->  [3]/[1,2]
 # misplaced 1000 -> 500
-# state ends at active+clean+remapped [0,1]/[2,1,0]
+# state ends at active+clean+remapped [3]/[3,1]
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                       STATE_STAMP                VERSION REPORTED UP  UP_PRIMARY ACTING ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         500                  0        0       1000       0     0 100      100 active+remapped+backfilling 2017-11-28 19:13:56.092439  21'500   31:790 [3]          3  [1,0]              1        0'0 2017-11-28 19:13:28.698661             0'0 2017-11-28 19:13:28.698661
+# 1.0         500                  0        0       1000       0     0 100      100 active+remapped+backfilling 2017-11-28 19:13:56.092439  21'500   31:790 [3]          3  [1,2]              1        0'0 2017-11-28 19:13:28.698661             0'0 2017-11-28 19:13:28.698661
 function TEST_backfill_remapped() {
     local dir=$1
 
