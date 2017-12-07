@@ -2737,7 +2737,7 @@ void PG::_update_calc_stats()
 	if (!acting_source_objects.empty()) {
 	  auto extra_copy = acting_source_objects.begin();
 	  extra_missing = std::get<0>(*extra_copy);
-          acting_source_objects.erase(*extra_copy);
+          acting_source_objects.erase(extra_copy);
 	}
       } else {	// Erasure coded
 	// Use corresponding shard
@@ -2765,8 +2765,9 @@ void PG::_update_calc_stats()
     // If there are still acting that haven't been accounted for
     // then they are misplaced
     for (const auto& a : acting_source_objects) {
-      dout(20) << __func__ << " extra acting misplaced " << std::get<0>(a) << dendl;
-      misplaced += std::max((int64_t)0, num_objects - std::get<0>(a));
+      int64_t extra_misplaced = std::max((int64_t)0, num_objects - std::get<0>(a));
+      dout(20) << __func__ << " extra acting misplaced " << extra_misplaced << dendl;
+      misplaced += extra_misplaced;
     }
     dout(20) << __func__ << " degraded " << degraded << dendl;
     dout(20) << __func__ << " misplaced " << misplaced << dendl;
