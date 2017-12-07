@@ -405,6 +405,10 @@ std::vector<Option> get_global_options() {
     .set_default("12201")
     .set_description(""),
 
+    Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Send cluster log messages to stderr (prefixed by channel)"),
+
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")
     .set_description(""),
