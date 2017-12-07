@@ -564,6 +564,32 @@ static int do_map(int argc, const char *argv[])
     goto close_ret;
   }
 
+  r = rados.init_with_context(g_ceph_context);
+  if (r < 0)
+    goto close_fd;
+
+  r = rados.connect();
+  if (r < 0)
+    goto close_fd;
+
+  r = rados.ioctx_create(poolname.c_str(), io_ctx);
+  if (r < 0)
+    goto close_fd;
+
+  r = rbd.open(io_ctx, image, imgname.c_str());
+  if (r < 0)
+    goto close_fd;
+
+  if (!snapname.empty()) {
+    r = image.snap_set(snapname.c_str());
+    if (r < 0)
+      goto close_fd;
+  }
+
+  r = image.stat(info, sizeof(info));
+  if (r < 0)
+    goto close_fd;
+
   if (devpath.empty()) {
     char dev[64];
     bool try_load_module = true;
@@ -629,32 +655,6 @@ static int do_map(int argc, const char *argv[])
   flags = NBD_FLAG_SEND_FLUSH | NBD_FLAG_SEND_TRIM | NBD_FLAG_HAS_FLAGS;
   if (!snapname.empty() || readonly)
     flags |= NBD_FLAG_READ_ONLY;
-
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0)
-    goto close_nbd;
-
-  r = rados.connect();
-  if (r < 0)
-    goto close_nbd;
-
-  r = rados.ioctx_create(poolname.c_str(), io_ctx);
-  if (r < 0)
-    goto close_nbd;
-
-  r = rbd.open(io_ctx, image, imgname.c_str());
-  if (r < 0)
-    goto close_nbd;
-
-  if (!snapname.empty()) {
-    r = image.snap_set(snapname.c_str());
-    if (r < 0)
-      goto close_nbd;
-  }
-
-  r = image.stat(info, sizeof(info));
-  if (r < 0)
-    goto close_nbd;
 
   r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
   if (r < 0) {
