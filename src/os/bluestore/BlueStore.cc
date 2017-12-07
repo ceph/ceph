@@ -7360,7 +7360,7 @@ int BlueStore::omap_get(
       } else {
 	string user_key;
 	decode_omap_key(it->key(), &user_key);
-	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
 	(*out)[user_key] = it->value();
       }
@@ -7470,7 +7470,7 @@ int BlueStore::omap_get_keys(
       }
       string user_key;
       decode_omap_key(it->key(), &user_key);
-      dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+      dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
       keys->insert(user_key);
       it->next();
@@ -10930,7 +10930,7 @@ void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
   txc->t->rm_range_keys(omap_prefix, prefix, tail);
-  dout(30) << __func__ << "remove range start: "
+  dout(20) << __func__ << "remove range start: "
            << pretty_binary_string(prefix) << " end: "
            << pretty_binary_string(tail) << dendl;
 }
@@ -10984,7 +10984,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     ::decode(value, p);
     final_key.resize(9); // keep prefix
     final_key += key;
-    dout(30) << __func__ << "  " << pretty_binary_string(final_key)
+    dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
     txc->t->set(prefix, final_key, value);
   }
@@ -11044,7 +11044,7 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
       ::decode(key, p);
       final_key.resize(9); // keep prefix
       final_key += key;
-      dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
+      dout(20) << __func__ << "  rm " << pretty_binary_string(final_key)
 	       << " <- " << key << dendl;
       txc->t->rmkey(prefix, final_key);
     }
@@ -11075,7 +11075,7 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
     get_omap_key(o->onode.nid, first, &key_first);
     get_omap_key(o->onode.nid, last, &key_last);
     txc->t->rm_range_keys(prefix, key_first, key_last);
-    dout(30) << __func__ << "remove range start: "
+    dout(20) << __func__ << "remove range start: "
              << pretty_binary_string(key_first) << " end: "
              << pretty_binary_string(key_last) << dendl;
   }
