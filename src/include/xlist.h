@@ -18,6 +18,7 @@
 #include "include/assert.h"
 #include <iterator>
 #include <cstdlib>
+#include <ostream>
 
 template<typename T>
 class xlist {
