@@ -114,6 +114,7 @@ public:
 
   static SnapshotCopyRequest* create(librbd::MockTestImageCtx *src_image_ctx,
                                      librbd::MockTestImageCtx *dst_image_ctx,
+                                     librados::snap_t snap_id_end,
                                      ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                      Context *on_finish) {
     assert(s_instance != nullptr);

@@ -41,19 +41,24 @@ using librbd::util::unique_lock_name;
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
                                             I *dst_image_ctx,
+                                            librados::snap_t snap_id_end,
                                             ContextWQ *work_queue,
                                             SnapSeqs *snap_seqs,
                                             Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_work_queue(work_queue),
-    m_snap_seqs_result(snap_seqs), m_snap_seqs(*snap_seqs),
-    m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
+    m_dst_image_ctx(dst_image_ctx), m_snap_id_end(snap_id_end),
+    m_work_queue(work_queue), m_snap_seqs_result(snap_seqs),
+    m_snap_seqs(*snap_seqs), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("SnapshotCopyRequest::m_lock", this)) {
   // snap ids ordered from oldest to newest
   m_src_snap_ids.insert(src_image_ctx->snaps.begin(),
                         src_image_ctx->snaps.end());
   m_dst_snap_ids.insert(dst_image_ctx->snaps.begin(),
                         dst_image_ctx->snaps.end());
+  if (m_snap_id_end != CEPH_NOSNAP) {
+    m_src_snap_ids.erase(m_src_snap_ids.upper_bound(m_snap_id_end),
+                         m_src_snap_ids.end());
+  }
 }
 
 template <typename I>

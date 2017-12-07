@@ -91,7 +91,8 @@ void DeepCopyRequest<I>::send_copy_snapshots() {
   Context *ctx = create_context_callback<
     DeepCopyRequest<I>, &DeepCopyRequest<I>::handle_copy_snapshots>(this);
   m_snapshot_copy_request = SnapshotCopyRequest<I>::create(
-    m_src_image_ctx, m_dst_image_ctx, m_work_queue, m_snap_seqs, ctx);
+    m_src_image_ctx, m_dst_image_ctx, m_snap_id_end, m_work_queue, m_snap_seqs,
+    ctx);
   m_snapshot_copy_request->get();
   m_lock.Unlock();
 
