@@ -218,7 +218,7 @@ void RGWFormatter_Plain::write_data(const char *fmt, ...)
 done:
 #define LARGE_ENOUGH_BUF 4096
   if (!buf) {
-    max_len = max(LARGE_ENOUGH_BUF, size);
+    max_len = ceph::max(LARGE_ENOUGH_BUF, size);
     buf = (char *)malloc(max_len);
     if (!buf) {
       cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;
