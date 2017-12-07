@@ -9851,7 +9851,7 @@ void PrimaryLogPG::cancel_flush(FlushOpRef fop, bool requeue)
       p.second = 0;
     } 
   }
-  if (fop->blocking) {
+  if (fop->blocking && fop->obc->is_blocked()) {
     fop->obc->stop_block();
     kick_object_context_blocked(fop->obc);
   }
