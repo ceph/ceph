@@ -327,6 +327,9 @@ std::vector<Option> get_global_options() {
     .set_daemon_default(true)
     .set_description("send critical error log lines to stderr"),
 
+    Option("log_stderr_prefix", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("String to prefix log messages with when sent to stderr"),
+
     Option("log_to_syslog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
     .set_description("send log lines to syslog facility"),
