@@ -1907,10 +1907,6 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("osd_map_max_advance", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(40)
-    .set_description(""),
-
     Option("osd_map_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(50)
     .set_description(""),
@@ -1922,6 +1918,11 @@ std::vector<Option> get_global_options() {
     Option("osd_map_share_max_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(40)
     .set_description(""),
+
+    Option("osd_pg_epoch_max_lag_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2.0)
+    .set_description("Max multiple of the map cache that PGs can lag before we throttle map injest")
+    .add_see_also("osd_map_cache_size"),
 
     Option("osd_inject_bad_map_crc_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
@@ -1937,14 +1938,6 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_markdown_count", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
-
-    Option("osd_peering_wq_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(2)
-    .set_description(""),
-
-    Option("osd_peering_wq_batch_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(20)
     .set_description(""),
 
     Option("osd_op_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -2296,6 +2289,66 @@ std::vector<Option> get_global_options() {
     Option("osd_op_queue_mclock_scrub_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.001)
     .set_description("mclock weight of limit requests")
+    .set_long_description("mclock weight of limit requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_op_queue_mclock_client_op_res")
+    .add_see_also("osd_op_queue_mclock_client_op_wgt")
+    .add_see_also("osd_op_queue_mclock_client_op_lim")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
+    .add_see_also("osd_op_queue_mclock_snap_res")
+    .add_see_also("osd_op_queue_mclock_snap_wgt")
+    .add_see_also("osd_op_queue_mclock_snap_lim")
+    .add_see_also("osd_op_queue_mclock_recov_res")
+    .add_see_also("osd_op_queue_mclock_recov_wgt")
+    .add_see_also("osd_op_queue_mclock_recov_lim")
+    .add_see_also("osd_op_queue_mclock_scrub_res")
+    .add_see_also("osd_op_queue_mclock_scrub_wgt"),
+
+    Option("osd_op_queue_mclock_peering_event_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock reservation of peering events")
+    .set_long_description("mclock reservation of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the reservation")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_op_queue_mclock_client_op_res")
+    .add_see_also("osd_op_queue_mclock_client_op_wgt")
+    .add_see_also("osd_op_queue_mclock_client_op_lim")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
+    .add_see_also("osd_op_queue_mclock_snap_res")
+    .add_see_also("osd_op_queue_mclock_snap_wgt")
+    .add_see_also("osd_op_queue_mclock_snap_lim")
+    .add_see_also("osd_op_queue_mclock_recov_res")
+    .add_see_also("osd_op_queue_mclock_recov_wgt")
+    .add_see_also("osd_op_queue_mclock_recov_lim")
+    .add_see_also("osd_op_queue_mclock_scrub_wgt")
+    .add_see_also("osd_op_queue_mclock_scrub_lim"),
+
+    Option("osd_op_queue_mclock_peering_event_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.0)
+    .set_description("mclock weight of peering events")
+    .set_long_description("mclock weight of scrub requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the weight")
+    .add_see_also("osd_op_queue")
+    .add_see_also("osd_op_queue_mclock_client_op_res")
+    .add_see_also("osd_op_queue_mclock_client_op_wgt")
+    .add_see_also("osd_op_queue_mclock_client_op_lim")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_res")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_wgt")
+    .add_see_also("osd_op_queue_mclock_osd_rep_op_lim")
+    .add_see_also("osd_op_queue_mclock_snap_res")
+    .add_see_also("osd_op_queue_mclock_snap_wgt")
+    .add_see_also("osd_op_queue_mclock_snap_lim")
+    .add_see_also("osd_op_queue_mclock_recov_res")
+    .add_see_also("osd_op_queue_mclock_recov_wgt")
+    .add_see_also("osd_op_queue_mclock_recov_lim")
+    .add_see_also("osd_op_queue_mclock_scrub_res")
+    .add_see_also("osd_op_queue_mclock_scrub_lim"),
+
+    Option("osd_op_queue_mclock_peering_event_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.001)
+    .set_description("mclock weight of limit peering events")
     .set_long_description("mclock weight of limit requests when osd_op_queue is either 'mclock_opclass' or 'mclock_client'; higher values increase the limit")
     .add_see_also("osd_op_queue")
     .add_see_also("osd_op_queue_mclock_client_op_res")
@@ -3010,6 +3063,10 @@ std::vector<Option> get_global_options() {
 
     Option("osd_recovery_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_description(""),
+
+    Option("osd_peering_op_priority", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(255)
     .set_description(""),
 
     Option("osd_snap_trim_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)

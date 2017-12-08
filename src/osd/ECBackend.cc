@@ -1434,10 +1434,6 @@ void ECBackend::clear_recovery_state()
   recovery_ops.clear();
 }
 
-void ECBackend::on_flushed()
-{
-}
-
 void ECBackend::dump_recovery_info(Formatter *f) const
 {
   f->open_array_section("recovery_ops");

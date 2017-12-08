@@ -363,7 +363,6 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  ThreadPool::BatchWorkQueue<PG> &peering_wq;
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
@@ -384,6 +383,7 @@ public:
 private:
   // -- map epoch lower bound --
   Mutex pg_epoch_lock;
+  Cond pg_cond;
   multiset<epoch_t> pg_epochs;
   map<spg_t,epoch_t> pg_epoch;
 
@@ -394,11 +394,19 @@ public:
     assert(t == pg_epoch.end());
     pg_epoch[pgid] = epoch;
     pg_epochs.insert(epoch);
+    if (*pg_epochs.begin() == epoch) {
+      // we are the (new?) blocking epoch
+      pg_cond.Signal();
+    }
   }
   void pg_update_epoch(spg_t pgid, epoch_t epoch) {
     Mutex::Locker l(pg_epoch_lock);
     map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
     assert(t != pg_epoch.end());
+    if (*pg_epochs.begin() == t->second) {
+      // we were on the blocking epoch
+      pg_cond.Signal();
+    }
     pg_epochs.erase(pg_epochs.find(t->second));
     t->second = epoch;
     pg_epochs.insert(epoch);
@@ -407,6 +415,10 @@ public:
     Mutex::Locker l(pg_epoch_lock);
     map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
     if (t != pg_epoch.end()) {
+      if (*pg_epochs.begin() == t->second) {
+	// we were on the blocking epoch
+	pg_cond.Signal();
+      }
       pg_epochs.erase(pg_epochs.find(t->second));
       pg_epoch.erase(t);
     }
@@ -417,6 +429,14 @@ public:
       return 0;
     else
       return *pg_epochs.begin();
+  }
+
+  void wait_min_pg_epoch(epoch_t e) {
+    Mutex::Locker l(pg_epoch_lock);
+    while (!pg_epochs.empty() &&
+	   *pg_epochs.begin() < e) {
+      pg_cond.Wait(pg_epoch_lock);
+    }
   }
 
 private:
@@ -849,8 +869,6 @@ public:
 
   void send_pg_created(pg_t pgid);
 
-  void queue_for_peering(PG *pg);
-
   Mutex snap_sleep_lock;
   SafeTimer snap_sleep_timer;
 
@@ -939,6 +957,12 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
+  /// newest map fully consumed by handle_osd_map (i.e., written to disk)
+  epoch_t map_cache_pinned_epoch = 0;
+
+  /// true if pg consumption affected our unpinning
+  std::atomic<bool> map_cache_pinned_low = {false};
+
   OSDMapRef try_get_map(epoch_t e);
   OSDMapRef get_map(epoch_t e) {
     OSDMapRef ret(try_get_map(e));
@@ -972,6 +996,7 @@ public:
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
 
   void clear_map_bl_cache_pins(epoch_t e);
+  void check_map_bl_cache_pins();
 
   void need_heartbeat_peer_update();
 
@@ -1278,6 +1303,9 @@ private:
   class C_Tick;
   class C_Tick_WithoutOSDLock;
 
+  // -- config settings --
+  float m_osd_pg_epoch_max_lag_factor;
+
   // -- superblock --
   OSDSuperblock superblock;
 
@@ -1343,7 +1371,6 @@ public:
 
 private:
 
-  ThreadPool peering_tp;
   ShardedThreadPool osd_op_tp;
   ThreadPool disk_tp;
   ThreadPool command_tp;
@@ -1592,6 +1619,7 @@ private:
    * and already requeued the items.
    */
   friend class PGOpItem;
+  friend class PGPeeringItem;
   friend class PGRecovery;
 
   class ShardedOpWQ
@@ -1798,62 +1826,16 @@ private:
     PGRef pg, OpRequestRef op,
     ThreadPool::TPHandle &handle);
 
-  // -- peering queue --
-  struct PeeringWQ : public ThreadPool::BatchWorkQueue<PG> {
-    list<PG*> peering_queue;
-    OSD *osd;
-    set<PG*> in_use;
-    PeeringWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::BatchWorkQueue<PG>(
-	"OSD::PeeringWQ", ti, si, tp), osd(o) {}
-
-    void _dequeue(PG *pg) override {
-      for (list<PG*>::iterator i = peering_queue.begin();
-	   i != peering_queue.end();
-	   ) {
-	if (*i == pg) {
-	  peering_queue.erase(i++);
-	  pg->put("PeeringWQ");
-	} else {
-	  ++i;
-	}
-      }
-    }
-    bool _enqueue(PG *pg) override {
-      pg->get("PeeringWQ");
-      peering_queue.push_back(pg);
-      return true;
-    }
-    bool _empty() override {
-      return peering_queue.empty();
-    }
-    void _dequeue(list<PG*> *out) override;
-    void _process(
-      const list<PG *> &pgs,
-      ThreadPool::TPHandle &handle) override {
-      assert(!pgs.empty());
-      osd->process_peering_events(pgs, handle);
-      for (list<PG *>::const_iterator i = pgs.begin();
-	   i != pgs.end();
-	   ++i) {
-	(*i)->put("PeeringWQ");
-      }
-    }
-    void _process_finish(const list<PG *> &pgs) override {
-      for (list<PG*>::const_iterator i = pgs.begin();
-	   i != pgs.end();
-	   ++i) {
-	in_use.erase(*i);
-      }
-    }
-    void _clear() override {
-      assert(peering_queue.empty());
-    }
-  } peering_wq;
-
-  void process_peering_events(
-    const list<PG*> &pg,
-    ThreadPool::TPHandle &handle);
+  void enqueue_peering_evt(
+    PG *pg,
+    PGPeeringEventRef ref);
+  void enqueue_peering_evt_front(
+    PG *pg,
+    PGPeeringEventRef ref);
+  void dequeue_peering_evt(
+    PG *pg,
+    PGPeeringEventRef ref,
+    ThreadPool::TPHandle& handle);
 
   friend class PG;
   friend class PrimaryLogPG;
@@ -1885,12 +1867,11 @@ private:
   void note_up_osd(int osd);
   friend class C_OnMapCommit;
 
-  bool advance_pg(
+  void advance_pg(
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
     PG::RecoveryCtx *rctx,
-    set<PGRef> *split_pgs
-  );
+    set<PGRef> *split_pgs);
   void consume_map();
   void activate_map();
 
@@ -1927,7 +1908,7 @@ protected:
   std::set<create_from_osd_t> pending_creates_from_osd;
   unsigned pending_creates_from_mon = 0;
 
-  map<spg_t, list<PG::CephPeeringEvtRef> > peering_wait_for_split;
+  map<spg_t, list<PGPeeringEventRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
   PGPool _get_pool(int id, OSDMapRef createmap);
@@ -1977,7 +1958,7 @@ protected:
     const pg_history_t& orig_history,
     const PastIntervals& pi,
     epoch_t epoch,
-    PG::CephPeeringEvtRef evt);
+    PGPeeringEventRef evt);
   bool maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create);
   void resume_creating_pg();
 
