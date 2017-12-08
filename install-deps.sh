@@ -26,11 +26,11 @@ function munge_ceph_spec_in {
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
 }
 
-function ensure_decent_gcc {
+function ensure_decent_gcc_on_deb {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
-    old=$(gcc -dumpversion)
-    new=$1
+    local old=$(gcc -dumpversion)
+    local new=$1
     if dpkg --compare-versions $old ge 5.1; then
 	return
     fi
@@ -48,6 +48,38 @@ function ensure_decent_gcc {
     # cmake uses the latter by default
     $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+}
+
+function version_lt {
+    test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=5.1
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	case $- in
+	    *i*)
+		# interactive shell
+		cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-7 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-7
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	    ;;
+	    *)
+		# non-interactive shell
+		source /opt/rh/devtoolset-$dts_ver/enable
+		;;
+	esac
+    fi
 }
 
 if [ x`uname`x = xFreeBSDx ]; then
@@ -111,7 +143,7 @@ else
                 $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
                 $SUDO apt-get update
                 $SUDO apt-get install -y gcc-7
-                ensure_decent_gcc 7
+                ensure_decent_gcc_on_deb 7
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -169,12 +201,17 @@ else
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
-			    $SUDO yum install centos-release-scl;;
+			    $SUDO yum install centos-release-scl
+			    dts_ver=7
+			    ;;
 			aarch64)
-			    $SUDO yum install centos-release-scl-rh;;
+			    $SUDO yum install centos-release-scl-rh
+			    dts_ver=6
+			    ;;
 		    esac
                 elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
+                    dts_ver=7
                 elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
@@ -182,6 +219,9 @@ else
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+	if [ -n dts_ver ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse|suse|sles)
