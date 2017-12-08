@@ -122,7 +122,12 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
+%ifarch x86_64
 BuildRequires:	devtoolset-7-gcc-c++
+%endif
+%ifarch aarch64
+BuildRequires:	devtoolset-6-gcc-c++
+%endif
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -789,7 +794,12 @@ python-rbd, python-rgw or python-cephfs instead.
 %build
 
 %if 0%{?rhel} == 7
+%ifarch x86_64
 . /opt/rh/devtoolset-7/enable
+%endif
+%ifarch aarch64
+. /opt/rh/devtoolset-6/enable
+%endif
 %endif
 
 %if 0%{with cephfs_java}
