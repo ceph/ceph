@@ -69,10 +69,10 @@ void ImageMap<I>::queue_update_map(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  std::string instance_id = m_policy->lookup(global_image_id);
-  assert(instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  Policy::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
 
-  m_updates.emplace_back(global_image_id, instance_id);
+  m_updates.emplace_back(global_image_id, info.instance_id, info.mapped_time);
 }
 
 template<typename I>
@@ -89,10 +89,10 @@ void ImageMap<I>::queue_acquire_image(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  std::string instance_id = m_policy->lookup(global_image_id);
-  assert(instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  Policy::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
 
-  m_acquire_updates.emplace_back(global_image_id, instance_id);
+  m_acquire_updates.emplace_back(global_image_id, info.instance_id);
 }
 
 template <typename I>
@@ -101,10 +101,10 @@ void ImageMap<I>::queue_release_image(const std::string &global_image_id) {
 
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
-  std::string instance_id = m_policy->lookup(global_image_id);
-  assert(instance_id != Policy::UNMAPPED_INSTANCE_ID);
+  Policy::LookupInfo info = m_policy->lookup(global_image_id);
+  assert(info.instance_id != Policy::UNMAPPED_INSTANCE_ID);
 
-  m_release_updates.emplace_back(global_image_id, instance_id);
+  m_release_updates.emplace_back(global_image_id, info.instance_id);
 }
 
 template <typename I>
@@ -171,8 +171,8 @@ void ImageMap<I>::update_image_mapping() {
   // prepare update map
   std::map<std::string, cls::rbd::MirrorImageMap> update_mapping;
   for (auto const &update : updates) {
-    update_mapping.emplace(update.global_image_id,
-                           cls::rbd::MirrorImageMap(update.instance_id, bl));
+    update_mapping.emplace(
+      update.global_image_id, cls::rbd::MirrorImageMap(update.instance_id, update.mapped_time, bl));
   }
 
   start_async_op();
@@ -404,9 +404,9 @@ void ImageMap<I>::update_images_removed(const std::string &peer_uuid,
       schedule_remove_action(global_image_id);
     }
 
-    std::string instance_id = m_policy->lookup(global_image_id);
-    if (instance_id != Policy::UNMAPPED_INSTANCE_ID) {
-      to_remove.emplace_back(global_image_id, instance_id);
+    Policy::LookupInfo info = m_policy->lookup(global_image_id);
+    if (info.instance_id != Policy::UNMAPPED_INSTANCE_ID) {
+      to_remove.emplace_back(global_image_id, info.instance_id);
     }
   }
 
