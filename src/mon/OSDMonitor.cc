@@ -16,10 +16,13 @@
  *
  */
 
-#include <algorithm>
-#include <boost/algorithm/string.hpp>
+#include <regex>
 #include <locale>
 #include <sstream>
+#include <algorithm>
+
+#include <boost/algorithm/string.hpp>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "mon/OSDMonitor.h"
 #include "mon/Monitor.h"
@@ -91,6 +94,108 @@ const uint32_t MAX_POOL_APPLICATION_KEYS = 64;
 const uint32_t MAX_POOL_APPLICATION_LENGTH = 128;
 
 } // anonymous namespace
+
+// Helpers for parsing commands:
+namespace { 
+
+inline std::string make_ws_trimmed(const std::string& input)
+{
+ return input.substr(
+			input.find_first_not_of(" \t\n\r"),
+			input.find_last_not_of(" \t\n\r"));
+}
+
+// A shame we don't have std::string_view, but this should not be /too/ high-overhead:
+inline bool cmd_match(const string cmd_string, const string cmd_prefix, bool matching_fn(const string))
+try
+{
+ if(std::string::npos == cmd_string.find(cmd_prefix))
+  return false;
+ 
+ return matching_fn(make_ws_trimmed(
+                     cmd_string.substr(cmd_prefix.size(), cmd_string.size())));
+}
+catch(std::out_of_range&)
+{
+ return false;
+}
+
+inline bool cmd_match(const string cmd_string, const string cmd_prefix, const string match_str)
+try
+{
+ if(std::string::npos == cmd_string.find(cmd_prefix))
+  return false;
+ 
+ return match_str == make_ws_trimmed(
+                      cmd_string.substr(cmd_prefix.size(), cmd_string.size()));
+}
+catch(std::out_of_range&)
+{
+ return false;
+}
+
+// Matches the tail of a command, starting after cmd_prefix:
+inline bool cmd_match_any(const string, const string)
+{
+ return false;
+}
+
+template <typename MatchT, typename ...MatchTS>
+inline bool cmd_match_any(const string cmd_string, const string cmd_prefix, MatchT match_with, MatchTS ...match_ts)
+{
+ return cmd_match(cmd_string, cmd_prefix, match_with) || cmd_match_any(cmd_string, cmd_prefix, match_ts...);
+}
+
+// Note that ValueT is not defined in terms of value_type:
+template <typename ValueT>
+inline bool equal_to_any_in(const ValueT v, const std::vector<std::string>&& xs)
+{
+ using namespace std;
+
+ return any_of(begin(xs), end(xs),
+               [&v](const ValueT cand) { return v == cand; });
+}
+
+template <typename ValueT>
+inline bool ends_with_any_in(const ValueT v, const std::vector<std::string>&& xs)
+{
+ using namespace std;
+
+ return any_of(begin(xs), end(xs), [&v](const ValueT cand) { 
+               return boost::algorithm::ends_with(v, cand); 
+        });
+}
+
+bool match_cmd_delete_remove(const std::string cmd)
+{
+ return equal_to_any_in(cmd, { "rm", "remove", "del", "delete" });
+}
+
+constexpr auto cmd_delete_remove_strings { "(rm|remove|del|delete)" };
+
+// Pretty half-baked, but should make life easier in several situations:
+// Helps handle the form "osd del-foo":
+auto match_remove_cmd_in(const string prefix, const string alternatives)
+{
+ // Synthesize a regular expression such as:
+ // osd\s+(rm|remove|del|delete)+\-(noup|nodown|noin|noout)($|(\s+.*))
+ string regex_pattern =   prefix + R"(\s+)"
+                        + cmd_delete_remove_strings + '+'
+                        + R"(\-)"
+                        + '(' + alternatives + ')'
+                        + R"(($|(\s+.*)))"
+                        ;
+
+ return regex { regex_pattern };
+}
+
+bool matches_cmd_delete_remove(const std::string input, const std::string prefix, const std::string alternatives)
+{                   
+ return regex_match(input,
+                    match_remove_cmd_in(prefix, "noup|nodown|noin|noout"));
+}
+
+} // anonymous namespace 
 
 void LastEpochClean::Lec::report(ps_t ps, epoch_t last_epoch_clean)
 {
@@ -6519,7 +6624,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     p.application_metadata[app][key] = value;
     ss << "set application '" << app << "' key '" << key << "' to '"
        << value << "' on pool '" << pool_name << "'";
-  } else if (boost::algorithm::ends_with(prefix, "rm")) {
+  } else if (ends_with_any_in(prefix, { "rm", "remove", "del", "delete" })) {
     if (!app_exists) {
       ss << "application '" << app << "' is not enabled on pool '" << pool_name
          << "'";
@@ -7753,12 +7858,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     goto update;
 
-  } else if (prefix == "osd crush weight-set rm" ||
-	     prefix == "osd crush weight-set rm-compat") {
+  } else if (cmd_match_any(prefix, "osd crush weight-set", &match_cmd_delete_remove, "rm-compat")) {
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     int64_t pool;
-    if (prefix == "osd crush weight-set rm") {
+    if (cmd_match(prefix, "osd crush weight-set", &match_cmd_delete_remove)) { // eg. not "rm-compat"
       string poolname;
       cmd_getval(cct, cmdmap, "pool", poolname);
       pool = osdmap.lookup_pg_pool_name(poolname.c_str());
@@ -8099,9 +8203,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, ss.str(),
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd crush rm" ||
-	     prefix == "osd crush remove" ||
-	     prefix == "osd crush unlink") {
+  } else if (cmd_match(prefix, "osd crush", "rm|remove|del|delete|unlink")) {
     do {
       // osd crush rm <id> [ancestor]
       CrushWrapper newcrush;
@@ -8407,7 +8509,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd erasure-code-profile rm") {
+  } else if (cmd_match_any(prefix, "osd erasure-code-profile", &match_cmd_delete_remove)) {
     string name;
     cmd_getval(cct, cmdmap, "name", name);
 
@@ -8563,7 +8665,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                                       get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd crush rule rm") {
+  } else if (cmd_match_any(prefix, "osd crush rule", &match_cmd_delete_remove)) {
     string name;
     cmd_getval(cct, cmdmap, "name", name);
 
@@ -8973,7 +9075,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd down" ||
 	     prefix == "osd out" ||
 	     prefix == "osd in" ||
-	     prefix == "osd rm") {
+         cmd_match_any(prefix, "osd", &match_cmd_delete_remove)) {
 
     bool any = false;
     bool stop = false;
@@ -9063,7 +9165,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	    ss << "marked in osd." << osd << ". ";
 	    any = true;
 	  }
-        } else if (prefix == "osd rm") {
+        } else if (cmd_match_any(prefix, "osd", &match_cmd_delete_remove)) {
           err = prepare_command_osd_remove(osd);
 
           if (err == -EBUSY) {
@@ -9222,10 +9324,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                                  get_last_committed() + 1));
       return true;
     }
-  } else if (prefix == "osd rm-noup" ||
-             prefix == "osd rm-nodown" ||
-             prefix == "osd rm-noin" ||
-             prefix == "osd rm-noout") {
+  } else if (matches_cmd_delete_remove(prefix, "osd", "noup|nodown|noin|noout")) {
 
     enum {
       OP_NOUP,
@@ -10095,7 +10194,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
-      } else if (blacklistop == "rm") {
+      } else if (match_cmd_delete_remove(blacklistop)) {
 	if (osdmap.is_blacklisted(addr) ||
 	    pending_inc.new_blacklist.count(addr)) {
 	  if (osdmap.is_blacklisted(addr))
@@ -10349,8 +10448,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 					      get_last_committed() + 1));
     return true;
 
-  } else if (prefix == "osd pool delete" ||
-             prefix == "osd pool rm") {
+  } else if (cmd_match_any(prefix, "osd pool", &match_cmd_delete_remove)) { 
     // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
     string poolstr, poolstr2, sure;
     cmd_getval(cct, cmdmap, "pool", poolstr);
@@ -10501,8 +10599,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd tier remove" ||
-             prefix == "osd tier rm") {
+  } else if (cmd_match_any(prefix, "osd tier", &match_cmd_delete_remove)) {
     string poolstr;
     cmd_getval(cct, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -10618,8 +10715,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd tier remove-overlay" ||
-             prefix == "osd tier rm-overlay") {
+  } else if (cmd_match_any(prefix, "osd tier", 
+                           "remove-overlay", "rm-overlay", 
+                           "delete-overlay", "del-overlay")) {
     string poolstr;
     cmd_getval(cct, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
@@ -10950,7 +11048,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool application enable" ||
              prefix == "osd pool application disable" ||
              prefix == "osd pool application set" ||
-             prefix == "osd pool application rm") {
+             cmd_match_any(prefix, "osd pool application", &match_cmd_delete_remove)) {
     err = prepare_command_pool_application(prefix, cmdmap, ss);
     if (err == -EAGAIN)
       goto wait;

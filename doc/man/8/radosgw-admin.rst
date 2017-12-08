@@ -134,8 +134,8 @@ which are as follows:
 :command:`objects expire`
   Run expired objects cleanup.
 
-:command:`period delete`
-  Delete a period.
+:command:`period rm`
+  Remove a period.
 
 :command:`period get`
   Get the period info.
@@ -182,8 +182,8 @@ which are as follows:
 :command:`realm create`
   Create a new realm.
 
-:command:`realm delete`
-  Delete a realm.
+:command:`realm rm`
+  Remove a realm.
 
 :command:`realm get`
   Show the realm info.
@@ -218,8 +218,8 @@ which are as follows:
 :command:`zonegroup default`
   Set the default zone group.
 
-:command:`zonegroup delete`
-  Delete a zone group info.
+:command:`zonegroup rm`
+  Remove a zone group info.
 
 :command:`zonegroup get`
   Show the zone group info.
@@ -257,8 +257,8 @@ which are as follows:
 :command:`zone create`
   Create a new zone.
 
-:command:`zone delete`
-  Delete a zone.
+:command:`zone rm`
+  Remove a zone.
 
 :command:`zone get`
   Show zone cluster params.
@@ -406,8 +406,8 @@ which are as follows:
 :command:`replicalog update`
   Update replica metadata log entry.
 
-:command:`replicalog delete`
-  Delete replica metadata log entry.
+:command:`replicalog rm`
+  Remove replica metadata log entry.
 
 :command:`orphans find`
   Init and run search for leaked rados objects
@@ -421,8 +421,8 @@ which are as follows:
 :command:`role create`
   create a new AWS role for use with STS.
 
-:command:`role delete`
-  Delete a role.
+:command:`role rm`
+  Remove a role.
 
 :command:`role get`
   Get a role.
@@ -442,8 +442,8 @@ which are as follows:
 :command:`role-policy get`
   Get the specified inline policy document embedded with the given role.
 
-:command:`role-policy delete`
-  Delete the policy attached to a role
+:command:`role-policy rm`
+  Remove the policy attached to a role
 
 :command:`reshard add`
   Schedule a resharding of a bucket
