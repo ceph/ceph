@@ -1555,6 +1555,7 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
   OSDMapRef l = map_cache.add(e, o, &existed);
   if (existed) {
     delete o;
+    o = nullptr;
   }
   return l;
 }
@@ -1835,6 +1836,7 @@ umount_store:
   store->umount();
 free_store:
   delete store;
+  store = nullptr;
   return ret;
 }
 
@@ -3458,7 +3460,7 @@ int OSD::shutdown()
 
   store->umount();
   delete store;
-  store = 0;
+  store = nullptr;
   dout(10) << "Store synced" << dendl;
 
   monc->shutdown();
@@ -8364,15 +8366,21 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     do_infos(*ctx.info_map, curmap);
   }
   delete ctx.notify_list;
+  ctx.notify_list = nullptr;
   delete ctx.query_map;
+  ctx.query_map = nullptr;
   delete ctx.info_map;
+  ctx.info_map = nullptr;
   if ((ctx.on_applied->empty() &&
        ctx.on_safe->empty() &&
        ctx.transaction->empty() &&
        ctx.created_pgs.empty()) || !pg) {
     delete ctx.transaction;
+    ctx.transaction = nullptr;
     delete ctx.on_applied;
+    ctx.on_applied = nullptr;
     delete ctx.on_safe;
+    ctx.on_safe = nullptr;
     assert(ctx.created_pgs.empty());
   } else {
     if (!ctx.created_pgs.empty()) {
@@ -8383,6 +8391,7 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
       std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
       handle);
     delete (ctx.transaction);
+    ctx.transaction = nullptr;
     assert(tr == 0);
   }
 }
