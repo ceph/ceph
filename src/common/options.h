@@ -39,17 +39,19 @@ struct Option {
    * Advanced: for users, configures some internal behaviour
    * Development: not for users.  May be dangerous, may not be documented.
    */
-  enum level_t {
-    LEVEL_BASIC,
-    LEVEL_ADVANCED,
-    LEVEL_DEV,
+  enum struct Level {
+    BASIC,
+    ADVANCED,
+    DEV,
   };
 
-  const char *level_to_str(level_t l) const {
+  typedef Level level_t;
+
+  const char* level_to_str(level_t l) const {
     switch(l) {
-      case LEVEL_BASIC: return "basic";
-      case LEVEL_ADVANCED: return "advanced";
-      case LEVEL_DEV: return "developer";
+      case Level::BASIC: return "basic";
+      case Level::ADVANCED: return "advanced";
+      case Level::DEV: return "developer";
       default: return "unknown";
     }
   }
