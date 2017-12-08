@@ -8539,8 +8539,13 @@ void BlueStore::_kv_sync_thread()
 	} else if (deferred_aggressive) {
 	  force_flush = true;
 	}
-      } else
-	force_flush = true;
+      } else {
+      	if (aios || !deferred_done.empty()) {
+	  force_flush = true;
+      	} else {
+	  dout(20) << __func__ << " skipping flush (no aios, no deferred_done)" << dendl;
+      	}
+      }
 
       if (force_flush) {
 	dout(20) << __func__ << " num_aios=" << aios
