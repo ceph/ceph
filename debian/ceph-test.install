@@ -1,8 +1,5 @@
 usr/bin/ceph-client-debug
 usr/bin/ceph-coverage
-usr/bin/ceph-kvstore-tool
-usr/bin/ceph-monstore-tool
-usr/bin/ceph-osdomap-tool
 usr/bin/ceph_bench_log
 usr/bin/ceph_erasure_code
 usr/bin/ceph_erasure_code_benchmark

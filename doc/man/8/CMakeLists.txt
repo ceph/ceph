@@ -3,6 +3,7 @@ set(client_srcs
   ceph-conf.rst
   ceph.rst
   ceph-authtool.rst
+  ceph-kvstore-tool.rst
   rados.rst
   ceph-post-file.rst
   ceph-dencoder.rst)

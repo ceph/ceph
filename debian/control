@@ -103,10 +103,10 @@ Recommends: btrfs-tools,
             ntp | time-daemon,
 Replaces: ceph (<< 10),
           ceph-common (<< 0.78-500),
-          ceph-test (<< 0.94-1322),
+          ceph-test (<< 12.2.2-14),
           python-ceph (<< 0.92-1223),
 Breaks: ceph (<< 10),
-        ceph-test (<< 0.94-1322),
+        ceph-test (<< 12.2.2-14),
         python-ceph (<< 0.92-1223),
 Description: common ceph daemon libraries and management tools
  Ceph is a massively scalable, open-source, distributed
@@ -204,8 +204,8 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Recommends: ceph-common,
-Replaces: ceph (<< 10),
-Breaks: ceph (<< 10),
+Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: monitor server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -237,8 +237,8 @@ Depends: ceph-base (= ${binary:Version}),
          ${python:Depends},
          ${shlibs:Depends},
 Recommends: ceph-common (= ${binary:Version}),
-Replaces: ceph (<< 10),
-Breaks: ceph (<< 10),
+Replaces: ceph (<< 10), ceph-test (<< 12.2.2-14)
+Breaks: ceph (<< 10), ceph-test (<< 12.2.2-14)
 Description: OSD server for the ceph storage system
  Ceph is a massively scalable, open-source, distributed
  storage system that runs on commodity hardware and delivers object,
@@ -712,6 +712,8 @@ Depends: ceph-common,
          xmlstarlet,
          ${misc:Depends},
          ${shlibs:Depends},
+Replaces: ceph-base (<< 11)
+Breaks: ceph-base (<< 1)
 Description: Ceph test and benchmarking tools
  This package contains tools for testing and benchmarking Ceph.
 
