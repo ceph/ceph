@@ -851,6 +851,10 @@ protected:
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
 	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
+          for (auto& op : p.second) {
+            op->mark_delayed("waiting for scrub");
+          }
+
 	  waiting_for_scrub.splice(
 	    waiting_for_scrub.begin(),
 	    p.second,
