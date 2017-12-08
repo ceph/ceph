@@ -792,8 +792,9 @@ def upgrade(ctx, config):
         (var, val) = branch.items()[0]
         ceph_branch = '--{var}={val}'.format(var=var, val=val)
     else:
-        # default to master
-        ceph_branch = '--dev=master'
+        # default to wip-branch under test
+        dev_branch = ctx.config['branch']
+        ceph_branch = '--dev={branch}'.format(branch=dev_branch)
     # get the node used for initial deployment which is mon.a
     mon_a = mapped_role.get('mon.a')
     (ceph_admin,) = ctx.cluster.only(mon_a).remotes.iterkeys()
