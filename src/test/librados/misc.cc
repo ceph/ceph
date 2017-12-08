@@ -19,7 +19,7 @@
 #include <map>
 #include <sstream>
 #include <string>
-#include <boost/regex.hpp>
+#include <regex>
 
 using namespace librados;
 using std::map;
@@ -1249,7 +1249,7 @@ TEST_F(LibRadosMisc, Applications) {
   string result(buf);
   rados_buffer_free(buf);
   rados_buffer_free(st);
-  if (!boost::regex_search(result, boost::regex("require_osd_release [l-z]"))) {
+  if (!std::regex_search(result, std::regex("require_osd_release [l-z]"))) {
     std::cout << "SKIPPING";
     return;
   }
@@ -1318,8 +1318,8 @@ TEST_F(LibRadosMiscPP, Applications) {
 				   inbl, &outbl, &outs));
   ASSERT_LT(0u, outbl.length());
   ASSERT_LE(0u, outs.length());
-  if (!boost::regex_search(outbl.to_str(),
-                           boost::regex("require_osd_release [l-z]"))) {
+  if (!std::regex_search(outbl.to_str(),
+			 std::regex("require_osd_release [l-z]"))) {
     std::cout << "SKIPPING";
     return;
   }
