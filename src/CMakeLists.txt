@@ -627,7 +627,6 @@ set(ceph_common_deps
   json_spirit erasure_code ${LIB_RESOLV}
   Boost::thread
   Boost::system
-  Boost::regex
   Boost::random
   Boost::program_options
   Boost::date_time
