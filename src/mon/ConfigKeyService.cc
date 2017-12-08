@@ -23,6 +23,7 @@
 #include "common/errno.h"
 #include "include/stringify.h"
 
+#include "include/assert.h" // re-clobber assert()
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, this)

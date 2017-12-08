@@ -1,6 +1,11 @@
 13.0.1
 ------
 
+* *RGW, MON*:
+    Commands variously marked as "del", "delete", "remove" etc. should now all be
+    normalized as "rm". Commands already supporting alternatives to "rm" remain
+    backward-compatible.
+
 * *CephFS*:
 
   * Several "ceph mds" commands have been obsoleted and replaced
