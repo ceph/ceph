@@ -52,6 +52,11 @@ class ArgumentFormat(ArgumentError):
     """
     pass
 
+class ArgumentMissing(ArgumentError):
+    """
+    Argument value missing in a command
+    """
+    pass
 
 class ArgumentValid(ArgumentError):
     """
@@ -944,8 +949,8 @@ def validate(args, signature, flags=0, partial=False):
                         return d
                     # special-case the "0 expected 1" case
                     if desc.numseen == 0 and desc.n == 1:
-                        raise ArgumentNumber(
-                            'missing required parameter {0}'.format(desc)
+                        raise ArgumentMissing(
+                            'missing required parameter'
                         )
                     raise ArgumentNumber(
                         'saw {0} of {1}, expected {2}'.
@@ -1050,6 +1055,18 @@ def validate_command(sigdict, args, verbose=False):
                     valid_dict = validate(args, sig, flags=cmd.get('flags', 0))
                     found = cmd
                     break
+                except ArgumentMissing as e:
+                    print("Invalid command:", e, file=sys.stderr)
+                    bestcmds = bestcmds[:10]
+                    if len(bestcmds) == 1:
+                        print('Syntax:', file=sys.stderr)
+                    else:
+                        print('{0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
+
+                    for cmdsig in bestcmds:
+                        for (cmdtag, cmd) in cmdsig.items():
+                            print(concise_sig(cmd['sig']), ': ', cmd['help'], file=sys.stderr)
+                    return {}
                 except ArgumentPrefix:
                     # ignore prefix mismatches; we just haven't found
                     # the right command yet
