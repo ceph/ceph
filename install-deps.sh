@@ -178,6 +178,7 @@ else
                 elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
+                $SUDO yum install -y CUnit-devel # dpdk deps
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
