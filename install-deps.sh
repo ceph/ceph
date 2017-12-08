@@ -62,6 +62,38 @@ EOF
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
 }
 
+function version_lt {
+    test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=5.1
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	case $- in
+	    *i*)
+		# interactive shell
+		cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-7 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-7
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	    ;;
+	    *)
+		# non-interactive shell
+		source /opt/rh/devtoolset-$dts_ver/enable
+		;;
+	esac
+    fi
+}
+
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
@@ -179,12 +211,17 @@ else
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
-			    $SUDO yum install centos-release-scl;;
+			    $SUDO yum install centos-release-scl
+			    dts_ver=7
+			    ;;
 			aarch64)
-			    $SUDO yum install centos-release-scl-rh;;
+			    $SUDO yum install centos-release-scl-rh
+			    dts_ver=6
+			    ;;
 		    esac
                 elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
+                    dts_ver=7
                 elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
@@ -193,6 +230,9 @@ else
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+	if [ -n dts_ver ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse*|suse|sles)
