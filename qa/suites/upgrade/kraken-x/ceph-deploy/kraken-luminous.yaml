@@ -42,8 +42,6 @@ tasks:
       stable: kraken
     skip-mgr: True
 - ceph-deploy.upgrade:
-    branch:
-      dev: luminous
     setup-mgr-node: True
     check-for-healthy: True
     roles:
