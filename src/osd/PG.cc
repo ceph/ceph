@@ -90,7 +90,7 @@ static ostream& _prefix(std::ostream *_dout, T *t)
   return *_dout << t->gen_prefix();
 }
 
-MEMPOOL_DEFINE_OBJECT_FACTORY(PG::CephPeeringEvt, pg_peering_evt, osd);
+MEMPOOL_DEFINE_OBJECT_FACTORY(PGPeeringEvent, pg_peering_evt, osd);
 
 void PGStateHistory::enter(PG* pg, const utime_t entime, const char* state)
 {
@@ -1953,9 +1953,10 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     dout(10) << "_activate_committed " << epoch
 	     << ", that was an old interval" << dendl;
   } else if (is_primary()) {
+    assert(!peer_activated.count(pg_whoami));
     peer_activated.insert(pg_whoami);
     dout(10) << "_activate_committed " << epoch
-	     << " peer_activated now " << peer_activated 
+	     << " peer_activated now " << peer_activated
 	     << " last_interval_started " << info.history.last_interval_started
 	     << " last_epoch_started " << info.history.last_epoch_started
 	     << " same_interval_since " << info.history.same_interval_since << dendl;
@@ -2013,8 +2014,8 @@ void PG::all_activated_and_committed()
   assert(blocked_by.empty());
 
   queue_peering_event(
-    CephPeeringEvtRef(
-      std::make_shared<CephPeeringEvt>(
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
         get_osdmap()->get_epoch(),
         get_osdmap()->get_epoch(),
         AllReplicasActivated())));
@@ -5051,8 +5052,8 @@ void PG::scrub_finish()
 
   if (has_error) {
     queue_peering_event(
-      CephPeeringEvtRef(
-	std::make_shared<CephPeeringEvt>(
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
 	  get_osdmap()->get_epoch(),
 	  get_osdmap()->get_epoch(),
 	  DoRecovery())));
@@ -5835,19 +5836,15 @@ void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
   requeue_map_waiters();
-  for (list<CephPeeringEvtRef>::iterator i = peering_waiters.begin();
-       i != peering_waiters.end();
-       ++i) osd->queue_for_peering(this);
-  peering_queue.splice(peering_queue.begin(), peering_waiters,
-		       peering_waiters.begin(), peering_waiters.end());
+  for (auto i = peering_waiters.rbegin();
+       i != peering_waiters.rend();
+       ++i) {
+    osd->osd->enqueue_peering_evt_front(this, *i);
+  }
 }
 
-void PG::process_peering_event(RecoveryCtx *rctx)
+void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
 {
-  assert(!peering_queue.empty());
-  CephPeeringEvtRef evt = peering_queue.front();
-  peering_queue.pop_front();
-
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
@@ -5860,12 +5857,11 @@ void PG::process_peering_event(RecoveryCtx *rctx)
   write_if_dirty(*rctx->transaction);
 }
 
-void PG::queue_peering_event(CephPeeringEvtRef evt)
+void PG::queue_peering_event(PGPeeringEventRef evt)
 {
   if (old_peering_evt(evt))
     return;
-  peering_queue.push_back(evt);
-  osd->queue_for_peering(this);
+  osd->osd->enqueue_peering_evt(this, evt);
 }
 
 void PG::queue_null(epoch_t msg_epoch,
@@ -5873,7 +5869,7 @@ void PG::queue_null(epoch_t msg_epoch,
 {
   dout(10) << "null" << dendl;
   queue_peering_event(
-    CephPeeringEvtRef(std::make_shared<CephPeeringEvt>(msg_epoch, query_epoch,
+    PGPeeringEventRef(std::make_shared<PGPeeringEvent>(msg_epoch, query_epoch,
 					 NullEvt())));
 }
 
@@ -5881,7 +5877,7 @@ void PG::queue_flushed(epoch_t e)
 {
   dout(10) << "flushed" << dendl;
   queue_peering_event(
-    CephPeeringEvtRef(std::make_shared<CephPeeringEvt>(e, e,
+    PGPeeringEventRef(std::make_shared<PGPeeringEvent>(e, e,
 					 FlushedEvt())));
 }
 
@@ -5891,7 +5887,7 @@ void PG::queue_query(epoch_t msg_epoch,
 {
   dout(10) << "handle_query " << q << " from replica " << from << dendl;
   queue_peering_event(
-    CephPeeringEvtRef(std::make_shared<CephPeeringEvt>(msg_epoch, query_epoch,
+    PGPeeringEventRef(std::make_shared<PGPeeringEvent>(msg_epoch, query_epoch,
 					 MQuery(from, q, query_epoch))));
 }
 
@@ -5907,16 +5903,16 @@ void PG::find_unfound(epoch_t queued, RecoveryCtx *rctx)
   if (rctx->query_map->empty()) {
     string action;
     if (state_test(PG_STATE_BACKFILLING)) {
-      auto evt = PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
+      auto evt = PGPeeringEventRef(
+	new PGPeeringEvent(
 	  queued,
 	  queued,
 	  PG::UnfoundBackfill()));
       queue_peering_event(evt);
       action = "in backfill";
     } else if (state_test(PG_STATE_RECOVERING)) {
-      auto evt = PG::CephPeeringEvtRef(
-	new PG::CephPeeringEvt(
+      auto evt = PGPeeringEventRef(
+	new PGPeeringEvent(
 	  queued,
 	  queued,
 	  PG::UnfoundRecovery()));
@@ -7511,7 +7507,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoe
   // don't update history (yet) if we are active and primary; the replica
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
-  if (pg->is_actingbackfill(infoevt.from)) {
+  if (pg->is_actingbackfill(infoevt.from) &&
+      pg->peer_activated.count(infoevt.from) == 0) {
     ldout(pg->cct, 10) << " peer osd." << infoevt.from
 		       << " activated and committed" << dendl;
     pg->peer_activated.insert(infoevt.from);

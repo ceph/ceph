@@ -252,10 +252,6 @@ void ReplicatedBackend::on_change()
   clear_recovery_state();
 }
 
-void ReplicatedBackend::on_flushed()
-{
-}
-
 int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
