@@ -14,7 +14,6 @@
 #include "common/backport14.h"
 #include "common/sstring.hh"
 #include "rgw_op.h"
-#include "rgw_rest.h"
 #include "rgw_http_errors.h"
 #include "rgw_acl_s3.h"
 #include "rgw_policy_s3.h"
