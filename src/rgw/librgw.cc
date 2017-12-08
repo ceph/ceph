@@ -50,10 +50,8 @@
 #include "rgw_lib_frontend.h"
 
 #include <errno.h>
-#include <chrono>
 #include <thread>
 #include <string>
-#include <string.h>
 #include <mutex>
 
 
