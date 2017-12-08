@@ -1545,17 +1545,8 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
-  RGWBucket bucket;
-  int ret;
-
+  int ret = 0;
   string bucket_name = op_state.get_bucket_name();
-
-  if (!bucket_name.empty()) {
-    ret = bucket.init(store, op_state);
-    if (ret < 0)
-      return ret;
-  }
-
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
@@ -1583,7 +1574,11 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
       map<string, RGWBucketEnt>::iterator iter;
 
       for (iter = m.begin(); iter != m.end(); ++iter) {
-        std::string  obj_name = iter->first;
+        std::string obj_name = iter->first;
+        if (!bucket_name.empty() && bucket_name != obj_name) {
+          continue;
+        }
+
         if (show_stats)
           bucket_stats(store, user_id.tenant, obj_name, formatter);
         else
@@ -1597,7 +1592,10 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
     formatter->close_section();
   } else if (!bucket_name.empty()) {
-    bucket_stats(store, user_id.tenant, bucket_name, formatter);
+    ret = bucket_stats(store, user_id.tenant, bucket_name, formatter);
+    if (ret < 0) {
+      return ret;
+    }
   } else {
     RGWAccessHandle handle;
 
