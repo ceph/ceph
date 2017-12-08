@@ -6,7 +6,6 @@
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
-#include "common/Throttle.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
