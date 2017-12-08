@@ -2756,10 +2756,10 @@ struct C_ProxyChunkRead : public Context {
   PrimaryLogPG::ProxyReadOpRef prdop;
   utime_t start;
   ObjectOperation *obj_op;
-  int op_index;
-  uint64_t req_offset;
+  int op_index = 0;
+  uint64_t req_offset = 0;
   ObjectContextRef obc;
-  uint64_t req_total_len;
+  uint64_t req_total_len = 0;
   C_ProxyChunkRead(PrimaryLogPG *p, hobject_t o, epoch_t lpr,
 		   const PrimaryLogPG::ProxyReadOpRef& prd)
     : pg(p), oid(o), last_peering_reset(lpr),
