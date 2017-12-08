@@ -5005,6 +5005,13 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT_BUCKET_STATS) {
     bucket_op.set_fetch_stats(true);
 
+    if (!user_id.empty()) {
+      bucket_op.set_user_id(user_id);
+    }
+    if (!bucket_name.empty()) {
+      bucket_op.set_bucket_name(bucket_name);
+    }
+
     int r = RGWBucketAdminOp::info(store, bucket_op, f);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
