@@ -180,6 +180,12 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
+	if [ $(lsb_release -si) = CentOS -a $(uname -m) = aarch64 ]; then
+	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
+	    $SUDO yum-config-manager --disable centos-sclo-rh || true
+	    $SUDO yum remove centos-release-scl || true
+	fi
+
         $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
@@ -201,11 +207,13 @@ else
                     $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
-			    $SUDO yum install centos-release-scl
+			    $SUDO yum -y install centos-release-scl
 			    dts_ver=7
 			    ;;
 			aarch64)
-			    $SUDO yum install centos-release-scl-rh
+			    $SUDO yum -y install centos-release-scl-rh
+			    $SUDO yum-config-manager --disable centos-sclo-rh
+			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
 			    dts_ver=6
 			    ;;
 		    esac
