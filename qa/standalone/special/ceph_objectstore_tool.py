@@ -1749,6 +1749,13 @@ def main(argv):
             PGS = [f for f in os.listdir(dir) if os.path.isfile(os.path.join(dir, f))]
             for pg in PGS:
                 file = os.path.join(dir, pg)
+                # Make sure this doesn't crash
+                cmd = (CFSD_PREFIX + "--op dump-import --file {file}").format(osd=osd, file=file)
+                logging.debug(cmd)
+                ret = call(cmd, shell=True, stdout=nullfd)
+                if ret != 0:
+                    logging.error("Dump-import failed from {file} with {ret}".format(file=file, ret=ret))
+                    IMP_ERRORS += 1
                 # This should do nothing
                 cmd = (CFSD_PREFIX + "--op import --file {file} --dry-run").format(osd=osd, file=file)
                 logging.debug(cmd)
