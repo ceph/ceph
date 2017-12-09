@@ -17,10 +17,9 @@
 
 #include <mutex>
 #include <random>
+#include <type_traits>
 
 #include "boost/optional.hpp"
-
-#include "common/backport14.h"
 
 // Basic random number facility, adapted from N3551:
 namespace ceph {
@@ -145,7 +144,7 @@ IntegerT generate_random_number()
 
 template <typename IntegerT>
 IntegerT generate_random_number(const IntegerT min, const IntegerT max,
-                                ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+                                std::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
 {
   return detail::generate_random_number<IntegerT,
                                         std::uniform_int_distribution<IntegerT>,
@@ -158,7 +157,7 @@ namespace detail {
 template <typename IntegerT, typename MutexT, typename EngineT>
 int generate_random_number(const IntegerT min, const IntegerT max,
                            MutexT& m, EngineT& e,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+                           std::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
 {
   return detail::generate_random_number<IntegerT, MutexT,
                                         std::uniform_int_distribution<IntegerT>,
@@ -169,7 +168,7 @@ int generate_random_number(const IntegerT min, const IntegerT max,
 template <typename IntegerT, typename MutexT, typename EngineT>
 int generate_random_number(const IntegerT max,
                            MutexT& m, EngineT& e,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+                           std::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
 {
   constexpr IntegerT zero = 0;
   return generate_random_number(zero, max, m, e);
@@ -179,7 +178,7 @@ int generate_random_number(const IntegerT max,
 
 template <typename IntegerT>
 int generate_random_number(const IntegerT max,
-                           ceph::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
+                           std::enable_if_t<std::is_integral<IntegerT>::value>* = nullptr)
 {
   constexpr IntegerT zero = 0;   
   return generate_random_number(zero, max);
@@ -187,7 +186,7 @@ int generate_random_number(const IntegerT max,
 
 template <typename RealT>
 RealT generate_random_number(const RealT min, const RealT max, 
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
+                             std::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
 {
   return detail::generate_random_number<RealT,
                                         std::uniform_real_distribution<RealT>, 
@@ -199,7 +198,7 @@ namespace detail {
 
 template <typename RealT, typename MutexT>
 RealT generate_random_number(const RealT max, MutexT& m,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
+                             std::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
 {
   constexpr RealT zero = 0.0;
   return generate_random_number(zero, max, m);
@@ -207,7 +206,7 @@ RealT generate_random_number(const RealT max, MutexT& m,
 
 template <typename RealT, typename MutexT, typename EngineT>
 RealT generate_random_number(const RealT min, const RealT max, MutexT& m, EngineT& e,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
+                             std::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
 {
   return detail::generate_random_number<RealT, MutexT, 
                                         std::uniform_real_distribution<RealT>,
@@ -218,7 +217,7 @@ RealT generate_random_number(const RealT min, const RealT max, MutexT& m, Engine
 
 template <typename RealT, typename MutexT, typename EngineT>
 RealT generate_random_number(const RealT max, MutexT& m, EngineT& e,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
+                             std::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
 {
   constexpr RealT zero = 0.0;
   return generate_random_number(zero, max, m, e);
@@ -228,7 +227,7 @@ RealT generate_random_number(const RealT max, MutexT& m, EngineT& e,
 
 template <typename RealT>
 RealT generate_random_number(const RealT max,
-                             ceph::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
+                             std::enable_if_t<std::is_floating_point<RealT>::value>* = nullptr)
 {
   constexpr RealT zero = 0.0;
   return generate_random_number(zero, max);
