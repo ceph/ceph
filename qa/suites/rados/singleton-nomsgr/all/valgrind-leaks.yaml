@@ -1,6 +1,11 @@
 # see http://tracker.ceph.com/issues/20360 and http://tracker.ceph.com/issues/18126
 os_type: centos
 
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+
 overrides:
   install:
     ceph:
