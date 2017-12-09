@@ -653,6 +653,9 @@ OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_pg_delete_res, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_pg_delete_wgt, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_pg_delete_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
@@ -869,6 +872,9 @@ OPTION(osd_scrub_cost, OPT_U32)
 // set requested scrub priority higher than scrub priority to make the
 // requested scrubs jump the queue of scheduled scrubs
 OPTION(osd_requested_scrub_priority, OPT_U32)
+
+OPTION(osd_pg_delete_priority, OPT_U32)
+OPTION(osd_pg_delete_cost, OPT_U32) // set default cost equal to 1MB io
 
 OPTION(osd_recovery_priority, OPT_U32)
 // set default cost equal to 20MB io
