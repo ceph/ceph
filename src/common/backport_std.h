@@ -18,7 +18,8 @@
 #ifndef CEPH_COMMON_BACKPORT14_H
 #define CEPH_COMMON_BACKPORT14_H
 
-// Library code from C++14 that can be implemented in C++11.
+// Library code from later C++ standards and technical specifications
+// backported to C++14.
 
 namespace ceph {
 // Template variable aliases from C++17 <type_traits>
