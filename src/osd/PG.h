@@ -259,7 +259,7 @@ public:
 
   ObjectStore::CollectionHandle ch;
 
-  class RecoveryCtx;
+  struct RecoveryCtx;
 
   // -- methods --
   std::string gen_prefix() const override;
