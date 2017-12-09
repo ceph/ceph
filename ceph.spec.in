@@ -407,10 +407,11 @@ Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	mailcap
 %endif
 %description radosgw
-RADOS is a distributed object store used by the Ceph distributed
-storage system.  This package provides a REST gateway to the
-object store that aims to implement a superset of Amazon's S3
-service as well as the OpenStack Object Storage ("Swift") API.
+RADOS gateway is a distributed object store used by the Ceph
+distributed storage system.  This package provides a REST
+gateway to the object store that aims to implement a superset
+of Amazon's S3 service as well as the OpenStack Object Storage
+("Swift") API.
 
 %if %{with ocf}
 %package resource-agents
