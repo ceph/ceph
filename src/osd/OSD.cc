@@ -9520,7 +9520,7 @@ void OSD::check_config()
   // some sanity checks
   if (cct->_conf->osd_map_cache_size <= (int)cct->_conf->osd_pg_epoch_persisted_max_stale + 2) {
     clog->warn() << "osd_map_cache_size (" << cct->_conf->osd_map_cache_size << ")"
-		 << " is not > osd_pg_epoch_persisted_max_stale ("
+		 << " is not > osd_pg_epoch_persisted_max_stale + 2 ("
 		 << cct->_conf->osd_pg_epoch_persisted_max_stale << ")";
   }
 }
