@@ -36,12 +36,12 @@ function ensure_decent_gcc_on_deb {
     fi
 
     $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-\${new} 20 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-\${new}
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
 
     $SUDO update-alternatives \
-	 --install /usr/bin/gcc gcc /usr/bin/gcc-\${old} 10 \
-	 --slave   /usr/bin/g++ g++ /usr/bin/g++-\${old}
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
 
     $SUDO update-alternatives --auto gcc
 
@@ -140,9 +140,10 @@ else
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*)
+                $SUDO apt-get install -y software-properties-common
                 $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
                 $SUDO apt-get update
-                $SUDO apt-get install -y gcc-7
+                $SUDO apt-get install -y g++-7
                 ensure_decent_gcc_on_deb 7
                 ;;
             *)
