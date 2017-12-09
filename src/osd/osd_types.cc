@@ -3337,8 +3337,17 @@ bool PastIntervals::is_new_interval(
   const vector<int> &new_up,
   OSDMapRef osdmap,
   OSDMapRef lastmap,
-  pg_t pgid) {
-  return !(lastmap->get_pools().count(pgid.pool())) ||
+  pg_t pgid)
+{
+  const pg_pool_t *plast = lastmap->get_pg_pool(pgid.pool());
+  if (!plast) {
+    return false; // after pool is deleted there are no more interval changes
+  }
+  const pg_pool_t *pi = osdmap->get_pg_pool(pgid.pool());
+  if (!pi) {
+    return true;  // pool was deleted this epoch -> (final!) interval change
+  }
+  return
     is_new_interval(old_acting_primary,
 		    new_acting_primary,
 		    old_acting,
@@ -3347,12 +3356,12 @@ bool PastIntervals::is_new_interval(
 		    new_up_primary,
 		    old_up,
 		    new_up,
-		    lastmap->get_pools().find(pgid.pool())->second.size,
-		    osdmap->get_pools().find(pgid.pool())->second.size,
-		    lastmap->get_pools().find(pgid.pool())->second.min_size,
-		    osdmap->get_pools().find(pgid.pool())->second.min_size,
-		    lastmap->get_pg_num(pgid.pool()),
-		    osdmap->get_pg_num(pgid.pool()),
+		    plast->size,
+		    pi->size,
+		    plast->min_size,
+		    pi->min_size,
+		    plast->get_pg_num(),
+		    pi->get_pg_num(),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
