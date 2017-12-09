@@ -1174,6 +1174,8 @@ public:
   ~OSDService();
 };
 
+void cls_initialize(ClassHandler *ch);
+
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/

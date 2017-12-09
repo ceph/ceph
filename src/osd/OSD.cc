@@ -2078,8 +2078,6 @@ OSD::~OSD()
   delete store;
 }
 
-void cls_initialize(ClassHandler *ch);
-
 void OSD::handle_signal(int signum)
 {
   assert(signum == SIGINT || signum == SIGTERM);
