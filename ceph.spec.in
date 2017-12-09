@@ -126,7 +126,11 @@ BuildRequires:	fuse-devel
 BuildRequires:	devtoolset-7-gcc-c++
 %endif
 %ifarch aarch64
+%if 0%{?centos}
 BuildRequires:	devtoolset-6-gcc-c++
+%else
+BuildRequires:	devtoolset-7-gcc-c++
+%endif
 %endif
 %else
 BuildRequires:	gcc-c++
@@ -798,7 +802,11 @@ python-rbd, python-rgw or python-cephfs instead.
 . /opt/rh/devtoolset-7/enable
 %endif
 %ifarch aarch64
+%if 0%{?centos}
 . /opt/rh/devtoolset-6/enable
+%else
+. /opt/rh/devtoolset-7/enable
+%endif
 %endif
 %endif
 
