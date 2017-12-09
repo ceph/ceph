@@ -7900,7 +7900,8 @@ void OSD::advance_pg(
     // Check for split!
     set<spg_t> children;
     spg_t parent(pg->pg_id);
-    if (parent.is_split(
+    if (nextmap->have_pg_pool(pg->pg_id.pool()) &&
+	parent.is_split(
 	  lastmap->get_pg_num(pg->pg_id.pool()),
 	  nextmap->get_pg_num(pg->pg_id.pool()),
 	  &children)) {

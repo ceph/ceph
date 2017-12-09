@@ -227,7 +227,9 @@ void PG::dump_live_ids()
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
-  assert(pi);
+  if (!pi) {
+    return; // pool has been deleted
+  }
   info = *pi;
   auid = pi->auid;
   name = map->get_pool_name(id);
@@ -5253,7 +5255,9 @@ void PG::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
     changed = true;
   }
   const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
-  assert(pi);
+  if (!pi) {
+    return; // pool deleted
+  }
   if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
     const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
     if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
@@ -5455,7 +5459,8 @@ void PG::start_peering_interval(
       dirty_info = true;
       dirty_big_info = true;
       info.history.same_interval_since = osdmap->get_epoch();
-      if (info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
+      if (osdmap->have_pg_pool(info.pgid.pgid.pool()) &&
+	  info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
 				  osdmap->get_pg_num(info.pgid.pgid.pool()),
 				  nullptr)) {
 	info.history.last_epoch_split = osdmap->get_epoch();
