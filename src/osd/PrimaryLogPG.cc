@@ -11503,15 +11503,13 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
   pg_log.reset_backfill();
   dirty_info = true;
 
-
   // clear log
   PGLogEntryHandler rollbacker{this, t};
   pg_log.roll_forward(&rollbacker);
 
-  write_if_dirty(*t);
-
-  if (!deleting)
+  if (!deleting) {
     on_shutdown();
+  }
 }
 
 void PrimaryLogPG::clear_async_reads()

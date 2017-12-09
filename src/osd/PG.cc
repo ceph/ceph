@@ -5608,6 +5608,9 @@ ostream& operator<<(ostream& out, const PG& pg)
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
+  if (pg.deleting)
+    out << " DELETING";
+
   if (!pg.past_intervals.empty()) {
     out << " pi=[" << pg.past_intervals.get_bounds()
 	<< ")/" << pg.past_intervals.size();
@@ -6033,6 +6036,87 @@ void PG::update_store_on_load()
     }
   }
 }
+
+
+void PG::_delete_some()
+{
+  dout(10) << __func__ << dendl;
+
+  // this ensures we get a valid result.  it *also* serves to throttle
+  // us a bit (on filestore) because we won't delete more until the
+  // previous deletions are applied.
+  osr->flush();
+
+  vector<ghobject_t> olist;
+  ObjectStore::Transaction t;
+  int max = std::min(osd->store->get_ideal_list_max(),
+		     (int)cct->_conf->osd_target_transaction_size);
+  ghobject_t next;
+  osd->store->collection_list(
+    coll,
+    next,
+    ghobject_t::get_max(),
+    max,
+    &olist,
+    &next);
+  dout(20) << __func__ << " " << olist << dendl;
+
+  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  int64_t num = 0;
+  for (auto& oid : olist) {
+    if (oid.is_pgmeta()) {
+      continue;
+    }
+    int r = snap_mapper.remove_oid(oid.hobj, &_t);
+    if (r != 0 && r != -ENOENT) {
+      ceph_abort();
+    }
+    t.remove(coll, oid);
+    ++num;
+  }
+  epoch_t e = get_osdmap()->get_epoch();
+  if (num) {
+    dout(20) << __func__ << " deleting " << num << " objects" << dendl;
+    struct C_DeleteMore : public Context {
+      PGRef pg;
+      epoch_t epoch;
+      C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
+      void finish(int r) {
+	if (r >= 0) {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch)) {
+	    pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
+	  }
+	  pg->unlock();
+	}
+      }
+    };
+    osd->store->queue_transaction(
+      osr.get(),
+      std::move(t),
+      new C_DeleteMore(this, e));
+  } else {
+    dout(20) << __func__ << " finished" << dendl;
+    if (cct->_conf->osd_inject_failure_on_pg_removal) {
+      _exit(1);
+    }
+
+    ObjectStore::Transaction t;
+    PGLog::clear_info_log(info.pgid, &t);
+    t.remove_collection(coll);
+    int r = osd->store->queue_transaction(
+      osd->meta_osr.get(), std::move(t),
+      // keep pg ref around until txn completes to avoid any issues
+      // with Sequencer lifecycle (seen w/ filestore).
+      new ContainerContext<PGRef>(this));
+    assert(r == 0);
+
+    osd->finish_pg_delete(this);
+    deleted = true;
+  }
+}
+
+
 
 /*------------ Recovery State Machine----------------*/
 #undef dout_prefix
@@ -7760,10 +7844,16 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_peered());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+
+  if (!pg->get_osdmap()->have_pg_pool(pg->get_pgid().pool())) {
+    ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
+    post_event(DeleteStart());
+  } else {
+    pg->start_flush(
+      context< RecoveryMachine >().get_cur_transaction(),
+      context< RecoveryMachine >().get_on_applied_context_list(),
+      context< RecoveryMachine >().get_on_safe_context_list());
+  }
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
@@ -7859,6 +7949,36 @@ void PG::RecoveryState::Stray::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_stray_latency, dur);
+}
+
+
+/*--------Deleting----------*/
+PG::RecoveryState::Deleting::Deleting(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg, "Started/Deleting")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->deleting = true;
+  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+  pg->on_removal(t);
+  pg->osd->logger->inc(l_osd_pg_removing);
+  pg->osd->queue_for_pg_delete(pg->get_pgid(), pg->get_osdmap()->get_epoch());
+}
+
+boost::statechart::result PG::RecoveryState::Deleting::react(const DeleteSome& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->_delete_some();
+  return discard_event();
+}
+
+void PG::RecoveryState::Deleting::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->deleting = false;
+  pg->osd->logger->dec(l_osd_pg_removing);
 }
 
 /*--------GetInfo---------*/
