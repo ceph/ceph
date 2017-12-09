@@ -878,7 +878,7 @@ bool ParseState::obj_start() {
   if (w->objectable && !objecting) {
     objecting = true;
     if (w->id == TokenID::Statement) {
-      pp->policy.statements.push_back({});
+      pp->policy.statements.emplace_back();
     }
 
     return true;
