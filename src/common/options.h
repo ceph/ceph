@@ -227,6 +227,12 @@ struct Option {
   }
 
   template<typename T>
+  Option& set_max(const T& ma) {
+    set_value(max, ma);
+    return *this;
+  }
+
+  template<typename T>
   Option& set_min_max(const T& mi, const T& ma) {
     set_value(min, mi);
     set_value(max, ma);
