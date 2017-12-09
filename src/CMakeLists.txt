@@ -690,6 +690,10 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
   INSTALL_RPATH "")
+if(WITH_STATIC_LIBSTDCXX)
+  set_target_properties(ceph-common PROPERTIES
+    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+endif()
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)

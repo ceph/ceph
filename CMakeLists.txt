@@ -169,6 +169,13 @@ else(ENABLE_SHARED)
 endif(ENABLE_SHARED)
 set(CMAKE_POSITION_INDEPENDENT_CODE ${ENABLE_SHARED})
 
+option(WITH_STATIC_LIBSTDCXX "Link against libstdc++ statically" OFF)
+if(WITH_STATIC_LIBSTDCXX)
+  if(NOT CMAKE_COMPILER_IS_GNUCXX)
+    message(FATAL_ERROR "Please use GCC to enable WITH_STATIC_LIBSTDCXX")
+  endif()
+endif()
+
 option(WITH_RDMA "Enable RDMA in async messenger" ON)
 if(WITH_RDMA)
   find_package(rdma REQUIRED)
