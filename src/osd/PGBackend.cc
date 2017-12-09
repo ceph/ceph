@@ -902,6 +902,18 @@ out:
   return auth;
 }
 
+static unsigned int return_rand(ostream &errorstream){
+  signed int seed;
+  FILE* urandom = fopen("/dev/urandom", "r");
+  size_t result = fread(&seed, sizeof(int), 1, urandom);
+  if (result == unsigned(feof(urandom))) {
+    errorstream << "Reading error /dev/urandom";
+  }
+  fclose(urandom);
+  srand(seed);
+  return seed;
+}
+
 void PGBackend::be_compare_scrubmaps(
   const map<pg_shard_t,ScrubMap*> &maps,
   const set<hobject_t> &master_set,
@@ -1041,7 +1053,7 @@ void PGBackend::be_compare_scrubmaps(
       }
       if (auth_object.digest_present && auth_object.omap_digest_present &&
 	  cct->_conf->osd_debug_scrub_chance_rewrite_digest &&
-	  (((unsigned)rand() % 100) >
+	  ((return_rand(errorstream) % 100) >
 	   cct->_conf->osd_debug_scrub_chance_rewrite_digest)) {
 	dout(20) << __func__ << " randomly updating digest on " << *k << dendl;
 	update = MAYBE;
