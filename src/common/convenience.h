@@ -46,38 +46,38 @@ namespace ceph {
 // are some lock factories.
 template<typename Mutex, typename ...Args>
 inline auto uniquely_lock(Mutex&& m, Args&& ...args)
-  -> std::unique_lock<remove_reference_t<Mutex> > {
-  return std::unique_lock<remove_reference_t<Mutex> >(
+  -> std::unique_lock<std::remove_reference_t<Mutex> > {
+  return std::unique_lock<std::remove_reference_t<Mutex> >(
     std::forward<Mutex>(m), std::forward<Args>(args)... );
 }
 
 template<typename Mutex, typename ...Args>
 inline auto sharingly_lock(Mutex&& m, Args&& ...args)
-  -> boost::shared_lock<remove_reference_t<Mutex> > {
+  -> boost::shared_lock<std::remove_reference_t<Mutex> > {
   return
-    boost::shared_lock<remove_reference_t<Mutex> >(
+    boost::shared_lock<std::remove_reference_t<Mutex> >(
       std::forward<Mutex>(m), std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
 inline auto shuniquely_lock(std::unique_lock<Mutex>&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
     std::forward<std::unique_lock<Mutex> >(m), std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
 inline auto shuniquely_lock(boost::shared_lock<Mutex>&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
     std::forward<boost::shared_lock<Mutex> >(m),
     std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
 inline auto shuniquely_lock(Mutex&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
     std::forward<Mutex>(m), std::forward<Args>(args)...);
 }
 
@@ -104,7 +104,7 @@ inline auto shuniquely_lock(Mutex&& m, Args&& ...args)
 
 template<typename Mutex>
 inline auto guardedly_lock(Mutex&& m)
-  -> std::lock_guard<remove_reference_t<Mutex> > {
+  -> std::lock_guard<std::remove_reference_t<Mutex> > {
   m.lock();
   // So the way this works is that Copy List Initialization creates
   // one and only one Temporary. There is no implicit copy that is
@@ -126,7 +126,7 @@ inline auto guardedly_lock(Mutex&& m)
 
 template<typename Mutex>
 inline auto guardedly_lock(Mutex&& m, std::adopt_lock_t)
-  -> std::lock_guard<remove_reference_t<Mutex> > {
+  -> std::lock_guard<std::remove_reference_t<Mutex> > {
   return { std::forward<Mutex>(m), std::adopt_lock };
 }
 
@@ -156,11 +156,11 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
 // returns a lock class.
 //
 #define UNIQUE_LOCK_T(m) \
-  ::std::unique_lock<ceph::remove_reference_t<decltype(m)>>
+  ::std::unique_lock<std::remove_reference_t<decltype(m)>>
 #define SHARED_LOCK_T(m) \
-  ::std::shared_lock<ceph::remove_reference_t<decltype(m)>>
+  ::std::shared_lock<std::remove_reference_t<decltype(m)>>
 #define SHUNIQUE_LOCK_T(m) \
-  ::ceph::shunique_lock<ceph::remove_reference_t<decltype(m)>>
+  ::ceph::shunique_lock<std::remove_reference_t<decltype(m)>>
 
 // boost::optional is wonderful! Unfortunately it lacks a function for
 // the thing you would most obviously want to do with it: apply a
@@ -176,7 +176,7 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
 //
 template<typename T, typename F>
 auto maybe_do(const boost::optional<T>& t, F&& f) ->
-  boost::optional<ceph::result_of_t<F(const ceph::decay_t<T>)>>
+  boost::optional<std::result_of_t<F(const std::decay_t<T>)>>
 {
   if (t)
     return { std::forward<F>(f)(*t) };
@@ -190,9 +190,9 @@ auto maybe_do(const boost::optional<T>& t, F&& f) ->
 //
 template<typename T, typename F, typename U>
 auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
-  ceph::result_of_t<F(const ceph::decay_t<T>)>
+  std::result_of_t<F(const std::decay_t<T>)>
 {
-  static_assert(std::is_convertible<U, ceph::result_of_t<F(T)>>::value,
+  static_assert(ceph::is_convertible_v<U, std::result_of_t<F(T)>>,
 		"Alternate value must be convertible to function return type.");
   if (t)
     return std::forward<F>(f)(*t);
