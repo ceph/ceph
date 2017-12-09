@@ -1747,6 +1747,26 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
       epoch));
 }
 
+void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
+{
+  dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;
+  enqueue_back(
+    OpQueueItem(
+      unique_ptr<OpQueueItem::OpQueueable>(
+	new PGDelete(pgid, e)),
+      cct->_conf->osd_pg_delete_cost,
+      cct->_conf->osd_pg_delete_priority,
+      ceph_clock_now(),
+      0,
+      e));
+}
+
+void OSDService::finish_pg_delete(PG *pg)
+{
+  osd->op_shardedwq.clear_pg_pointer(pg);
+  pg_remove_epoch(pg->get_pgid());
+}
+
 void OSDService::_queue_for_recovery(
   std::pair<epoch_t, PGRef> p,
   uint64_t reserved_pushes)
@@ -2218,7 +2238,9 @@ will start to track new ops received afterwards.";
       for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
           it != pg_map.end();
           ++it) {
-
+	if (it->second->is_deleted()) {
+	  continue;
+	}
         list<obj_watch_item_t> pg_watchers;
         PG *pg = it->second;
         pg->get_watchers(&pg_watchers);
@@ -3441,6 +3463,9 @@ int OSD::shutdown()
     for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
         p != pg_map.end();
         ++p) {
+      if (p->second->is_deleted()) {
+	continue;
+      }
       dout(20) << " kicking pg " << p->first << dendl;
       p->second->lock();
       if (p->second->get_num_ref() != 1) {
@@ -3809,8 +3834,6 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
     }
     peering_wait_for_split.erase(to_wake);
   }
-  if (!service.get_osdmap()->have_pg_pool(pg->pg_id.pool()))
-    _remove_pg(pg);
 }
 
 OSD::res_result OSD::_try_resurrect_pg(
@@ -3907,14 +3930,38 @@ PG *OSD::_create_lock_pg(
 
 PG *OSD::_lookup_lock_pg(spg_t pgid)
 {
-  RWLock::RLocker l(pg_map_lock);
-
-  auto pg_map_entry = pg_map.find(pgid);
-  if (pg_map_entry == pg_map.end())
+  while (true) {
+    {
+      RWLock::RLocker l(pg_map_lock);
+      auto p = pg_map.find(pgid);
+      if (p == pg_map.end()) {
+	return nullptr;
+      }
+      PG *pg = p->second;
+      pg->lock();
+      if (!pg->is_deleted()) {
+	return pg;
+      }
+      pg->unlock();
+    }
+    // try again, this time with a write lock
+    {
+      RWLock::WLocker l(pg_map_lock);
+      auto p = pg_map.find(pgid);
+      if (p == pg_map.end()) {
+	return nullptr;
+      }
+      PG *pg = p->second;
+      pg->lock();
+      if (!pg->is_deleted()) {
+	return pg;
+      }
+      pg_map.erase(p);
+      pg->put("PGMap");
+      pg->unlock();
+    }
     return nullptr;
-  PG *pg = pg_map_entry->second;
-  pg->lock();
-  return pg;
+  }
 }
 
 PG *OSD::lookup_lock_pg(spg_t pgid)
@@ -4584,6 +4631,9 @@ void OSD::maybe_update_heartbeat_peers()
     for (ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.begin();
 	 i != pg_map.end();
 	 ++i) {
+      if (i->second->is_deleted()) {
+	continue;
+      }
       PG *pg = i->second;
       pg->with_heartbeat_peers([&](int peer) {
 	  if (osdmap->is_up(peer)) {
@@ -6381,6 +6431,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     RWLock::RLocker l(pg_map_lock);
     for (ceph::unordered_map<spg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
 	 pg_map_e != pg_map.end(); ++pg_map_e) {
+      if (pg_map_e->second->is_deleted()) {
+	continue;
+      }
       PG *pg = pg_map_e->second;
       string s = stringify(pg->pg_id);
       f->open_array_section(s.c_str());
@@ -6908,8 +6961,12 @@ void OSD::handle_scrub(MOSDScrub *m)
   if (m->scrub_pgs.empty()) {
     for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
 	 p != pg_map.end();
-	 ++p)
+	 ++p) {
+      if (p->second->is_deleted()) {
+	continue;
+      }
       handle_pg_scrub(m, p->second);
+    }
   } else {
     for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
 	 p != m->scrub_pgs.end();
@@ -7873,12 +7930,10 @@ void OSD::advance_pg(
   set<PGRef> *new_pgs)
 {
   assert(pg->is_locked());
-  epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
   OSDMapRef lastmap = pg->get_osdmap();
-
   assert(lastmap->get_epoch() < osd_epoch);
 
-  for (;
+  for (epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
        next_epoch <= osd_epoch;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
@@ -7933,7 +7988,6 @@ void OSD::consume_map()
   }
 
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-  list<PGRef> to_remove;
 
   // scan pg's
   {
@@ -7942,6 +7996,9 @@ void OSD::consume_map()
         it != pg_map.end();
         ++it) {
       PG *pg = it->second;
+      if (pg->is_deleted()) {
+	continue;
+      }
       pg->lock();
       if (pg->is_primary())
         num_pg_primary++;
@@ -7950,12 +8007,7 @@ void OSD::consume_map()
       else
         num_pg_stray++;
 
-      if (!osdmap->have_pg_pool(pg->pg_id.pool())) {
-        //pool is deleted!
-        to_remove.push_back(PGRef(pg));
-      } else {
-        service.init_splits_between(it->first, service.get_osdmap(), osdmap);
-      }
+      service.init_splits_between(it->first, service.get_osdmap(), osdmap);
 
       pg->unlock();
     }
@@ -7969,15 +8021,6 @@ void OSD::consume_map()
 	++pg;
       }
     }
-  }
-
-  for (list<PGRef>::iterator i = to_remove.begin();
-       i != to_remove.end();
-       to_remove.erase(i++)) {
-    RWLock::WLocker locker(pg_map_lock);
-    (*i)->lock();
-    _remove_pg(&**i);
-    (*i)->unlock();
   }
 
   service.expand_pg_num(service.get_osdmap(), osdmap);
@@ -8005,6 +8048,9 @@ void OSD::consume_map()
         it != pg_map.end();
         ++it) {
       PG *pg = it->second;
+      if (pg->is_deleted()) {
+	continue;
+      }
       pg->lock();
       pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
       pg->unlock();
@@ -8936,32 +8982,16 @@ void OSD::handle_pg_remove(OpRequestRef op)
       continue;
     }
 
-    RWLock::WLocker l(pg_map_lock);
-    if (pg_map.count(pgid) == 0) {
-      dout(10) << " don't have pg " << pgid << dendl;
-      continue;
-    }
-    dout(5) << "queue_pg_for_deletion: " << pgid << dendl;
-    PG *pg = _lookup_lock_pg_with_map_lock_held(pgid);
-    pg_history_t history = pg->get_history();
-    int up_primary, acting_primary;
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(
-      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-    bool valid_history = project_pg_history(
-      pg->pg_id, history, pg->get_osdmap()->get_epoch(),
-      up, up_primary, acting, acting_primary);
-    if (valid_history &&
-        history.same_interval_since <= m->get_epoch()) {
-      assert(pg->get_primary().osd == m->get_source().num());
-      PGRef _pg(pg);
-      _remove_pg(pg);
+    PG *pg = _lookup_lock_pg(pgid);
+    if (pg) {
+      pg->queue_peering_event(
+	PGPeeringEventRef(
+	  new PGPeeringEvent(
+	    m->get_epoch(), m->get_epoch(),
+	    PG::DeleteStart())));
       pg->unlock();
     } else {
-      dout(10) << *pg << " ignoring remove request, pg changed in epoch "
-	       << history.same_interval_since
-	       << " > " << m->get_epoch() << dendl;
-      pg->unlock();
+      dout(10) << " don't have pg " << pgid << dendl;
     }
   }
 }
@@ -8994,7 +9024,7 @@ void OSD::_remove_pg(PG *pg)
   service.pg_remove_epoch(pg->pg_id);
 
   // dereference from op_wq
-  op_shardedwq.clear_pg_pointer(pg->pg_id);
+  //op_shardedwq.clear_pg_pointer(pg->pg_id);
 
   // remove from map
   pg_map.erase(pg->pg_id);
@@ -9335,10 +9365,6 @@ void OSD::dequeue_peering_evt(
   PGPeeringEventRef evt,
   ThreadPool::TPHandle& handle)
 {
-  if (pg->is_deleting()) {
-    pg->unlock();
-    return;
-  }
   auto curmap = service.get_osdmap();
   PG::RecoveryCtx rctx = create_context();
   set<PGRef> split_pgs;
@@ -9351,9 +9377,23 @@ void OSD::dequeue_peering_evt(
   if (!split_pgs.empty()) {
     rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
     split_pgs.clear();
- }
+  }
   dispatch_context_transaction(rctx, pg, &handle);
+  bool deleted = pg->is_deleted();
   pg->unlock();
+
+  if (deleted) {
+    RWLock::WLocker l(pg_map_lock);
+    auto p = pg_map.find(pg->get_pgid());
+    if (p != pg_map.end() &&
+	p->second == pg) {
+      dout(20) << __func__ << " removed pg " << pg << " from pg_map" << dendl;
+      pg_map.erase(p);
+      pg->put("PGMap");
+    } else {
+      dout(20) << __func__ << " failed to remove pg " << pg << " from pg_map" << dendl;
+    }
+  }
 
   if (need_up_thru) {
     queue_want_up_thru(same_interval_since);
@@ -9362,6 +9402,22 @@ void OSD::dequeue_peering_evt(
 
   service.send_pg_temp();
 }
+
+void OSD::dequeue_delete(
+  PG *pg,
+  epoch_t e,
+  ThreadPool::TPHandle& handle)
+{
+  dequeue_peering_evt(
+    pg,
+    PGPeeringEventRef(
+      new PGPeeringEvent(
+	e, e,
+	PG::DeleteSome())),
+    handle);
+}
+
+
 
 // --------------------------------
 
@@ -9833,16 +9889,17 @@ void OSD::ShardedOpWQ::prune_pg_waiters(OSDMapRef osdmap, int whoami)
   }
 }
 
-void OSD::ShardedOpWQ::clear_pg_pointer(spg_t pgid)
+void OSD::ShardedOpWQ::clear_pg_pointer(PG *pg)
 {
+  spg_t pgid = pg->get_pgid();
   uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
   auto sdata = shard_list[shard_index];
   Mutex::Locker l(sdata->sdata_op_ordering_lock);
   auto p = sdata->pg_slots.find(pgid);
   if (p != sdata->pg_slots.end()) {
     auto& slot = p->second;
-    dout(20) << __func__ << " " << pgid << " pg " << slot.pg << dendl;
-    assert(!slot.pg || slot.pg->is_deleting());
+    assert(!slot.pg || slot.pg == pg);
+    dout(20) << __func__ << " " << pgid << " pg " << pg << " cleared" << dendl;
     slot.pg = nullptr;
   }
 }
@@ -9922,10 +9979,19 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   osd->service.maybe_inject_dispatch_delay();
 
   // [lookup +] lock pg (if we have it)
-  if (!pg) {
-    pg = osd->_lookup_lock_pg(token);
-  } else {
-    pg->lock();
+  while (true) {
+    if (!pg) {
+      pg = osd->_lookup_lock_pg(token);
+    } else {
+      pg->lock();
+      if (pg->is_deleted()) {
+	dout(20) << __func__ << " got deleted pg " << pg << ", retrying" << dendl;
+	pg->unlock();
+	pg = nullptr;
+	continue;
+      }
+    }
+    break;
   }
 
   osd->service.maybe_inject_dispatch_delay();
@@ -9960,7 +10026,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
-  if (pg && !slot.pg && !pg->is_deleting()) {
+  if (pg && !slot.pg) {
     dout(20) << __func__ << " " << token << " set pg to " << pg << dendl;
     slot.pg = pg;
   }
