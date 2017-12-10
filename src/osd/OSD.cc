@@ -9054,28 +9054,21 @@ void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
     return;
   }
   set<spg_t> did;
-  if (newflags & OFR_BACKFILL) {
+  bool is_force;
+  if (newflags)
     for (auto& pg : pgs) {
-      if (pg->set_force_backfill(!(newflags & OFR_CANCEL))) {
-	did.insert(pg->pg_id);
-      }
+      if (OFR_BACKFILL)
+        is_force = pg->set_force_backfill(!(newflags & OFR_CANCEL));
+      else if (OFR_RECOVERY)
+        is_force = pg->set_force_recovery(!(newflags & OFR_CANCEL));
+      if (is_force)
+        did.insert(pg->pg_id);
     }
-  } else if (newflags & OFR_RECOVERY) {
-    for (auto& pg : pgs) {
-      if (pg->set_force_recovery(!(newflags & OFR_CANCEL))) {
-	did.insert(pg->pg_id);
-      }
-    }
-  }
-  if (did.empty()) {
-    dout(10) << __func__ << " " << ((newflags & OFR_CANCEL) ? "cleared" : "set")
-	     << " force_" << ((newflags & OFR_BACKFILL) ? "backfill" : "recovery")
-	     << " on no pgs" << dendl;
-  } else {
-    dout(10) << __func__ << " " << ((newflags & OFR_CANCEL) ? "cleared" : "set")
-	     << " force_" << ((newflags & OFR_BACKFILL) ? "backfill" : "recovery")
-	     << " on " << did << dendl;
-  }
+
+  dout(10) << __func__ << " "
+    << ((newflags & OFR_CANCEL) ? "cleared" : "set") << " "
+    << "force_" << ((newflags & OFR_BACKFILL) ? "backfill" : "recovery")
+    << (did.empty() ? " on no pgs" : " on ") << did << dendl;
 }
 
 void OSD::do_recovery(
