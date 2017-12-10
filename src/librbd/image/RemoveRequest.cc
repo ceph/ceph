@@ -56,9 +56,19 @@ RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, const std::string &image_name,
     m_prog_ctx(prog_ctx), m_op_work_queue(op_work_queue),
     m_on_finish(on_finish) {
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
+}
 
-  m_image_ctx = I::create((m_image_id.empty() ? m_image_name : std::string()),
-                          m_image_id, nullptr, m_ioctx, false);
+template<typename I>
+RemoveRequest<I>::RemoveRequest(IoCtx &ioctx, I *image_ctx, bool force,
+                                bool from_trash_remove,
+                                ProgressContext &prog_ctx,
+                                ContextWQ *op_work_queue, Context *on_finish)
+  : m_ioctx(ioctx), m_image_name(image_ctx->name), m_image_id(image_ctx->id),
+    m_image_ctx(image_ctx), m_force(force),
+    m_from_trash_remove(from_trash_remove), m_prog_ctx(prog_ctx),
+    m_op_work_queue(op_work_queue), m_on_finish(on_finish),
+    m_cct(image_ctx->cct), m_header_oid(image_ctx->header_oid),
+    m_old_format(image_ctx->old_format), m_unknown_format(false) {
 }
 
 template<typename I>
@@ -70,6 +80,14 @@ void RemoveRequest<I>::send() {
 
 template<typename I>
 void RemoveRequest<I>::open_image() {
+  if (m_image_ctx != nullptr) {
+    check_exclusive_lock();
+    return;
+  }
+
+  m_image_ctx = I::create(m_image_id.empty() ? m_image_name : "", m_image_id,
+                          nullptr, m_ioctx, false);
+
   ldout(m_cct, 20) << dendl;
 
   using klass = RemoveRequest<I>;
