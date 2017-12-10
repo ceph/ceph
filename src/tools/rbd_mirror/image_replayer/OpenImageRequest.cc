@@ -43,7 +43,7 @@ void OpenImageRequest<I>::send_open_image() {
   Context *ctx = create_context_callback<
     OpenImageRequest<I>, &OpenImageRequest<I>::handle_open_image>(
       this);
-  (*m_image_ctx)->state->open(false, ctx);
+  (*m_image_ctx)->state->open(0, ctx);
 }
 
 template <typename I>

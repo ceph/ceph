@@ -238,7 +238,7 @@ void CloneRequest<I>::send_open() {
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_open>(this);
 
-  m_imctx->state->open(true, ctx);
+  m_imctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template <typename I>

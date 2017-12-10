@@ -234,8 +234,7 @@ ImageState<I>::ImageState(I *image_ctx)
   : m_image_ctx(image_ctx), m_state(STATE_UNINITIALIZED),
     m_lock(util::unique_lock_name("librbd::ImageState::m_lock", this)),
     m_last_refresh(0), m_refresh_seq(0),
-    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)),
-    m_skip_open_parent_image(false) {
+    m_update_watchers(new ImageUpdateWatchers(image_ctx->cct)) {
 }
 
 template <typename I>
@@ -245,9 +244,9 @@ ImageState<I>::~ImageState() {
 }
 
 template <typename I>
-int ImageState<I>::open(bool skip_open_parent) {
+int ImageState<I>::open(uint64_t flags) {
   C_SaferCond ctx;
-  open(skip_open_parent, &ctx);
+  open(flags, &ctx);
 
   int r = ctx.wait();
   if (r < 0) {
@@ -257,13 +256,13 @@ int ImageState<I>::open(bool skip_open_parent) {
 }
 
 template <typename I>
-void ImageState<I>::open(bool skip_open_parent, Context *on_finish) {
+void ImageState<I>::open(uint64_t flags, Context *on_finish) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
   m_lock.Lock();
   assert(m_state == STATE_UNINITIALIZED);
-  m_skip_open_parent_image = skip_open_parent;
+  m_open_flags = flags;
 
   Action action(ACTION_TYPE_OPEN);
   action.refresh_seq = m_refresh_seq;
@@ -583,7 +582,7 @@ void ImageState<I>::send_open_unlock() {
     *m_image_ctx, create_context_callback<
       ImageState<I>, &ImageState<I>::handle_open>(this));
   image::OpenRequest<I> *req = image::OpenRequest<I>::create(
-    m_image_ctx, m_skip_open_parent_image, ctx);
+    m_image_ctx, m_open_flags, ctx);
 
   m_lock.Unlock();
   req->send();

@@ -25,9 +25,10 @@ using util::create_context_callback;
 using util::create_rados_callback;
 
 template <typename I>
-OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
+OpenRequest<I>::OpenRequest(I *image_ctx, uint64_t flags,
                             Context *on_finish)
-  : m_image_ctx(image_ctx), m_skip_open_parent_image(skip_open_parent),
+  : m_image_ctx(image_ctx),
+    m_skip_open_parent_image(flags & OPEN_FLAG_SKIP_OPEN_PARENT),
     m_on_finish(on_finish), m_error_result(0) {
 }
 

@@ -114,6 +114,10 @@ struct SnapInfo {
   }
 };
 
+enum {
+  OPEN_FLAG_SKIP_OPEN_PARENT = 1 << 0,
+};
+
 } // namespace librbd
 
 #endif // LIBRBD_TYPES_H

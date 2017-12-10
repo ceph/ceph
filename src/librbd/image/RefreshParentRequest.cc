@@ -125,7 +125,7 @@ void RefreshParentRequest<I>::send_open_parent() {
   Context *ctx = create_async_context_callback(
     m_child_image_ctx, create_context_callback<
       klass, &klass::handle_open_parent, false>(this));
-  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, false, ctx);
+  OpenRequest<I> *req = OpenRequest<I>::create(m_parent_image_ctx, 0, ctx);
   req->send();
 }
 
