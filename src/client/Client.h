@@ -761,7 +761,6 @@ private:
   void _put_fh(Fh *fh);
 
   int _do_remount(void);
-  friend class C_Client_Remount;
 
   struct C_Readahead : public Context {
     Client *client;
