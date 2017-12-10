@@ -7148,10 +7148,8 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
 {
   vector<OSDHealthMetric> metrics;
   {
-    utime_t oldest_secs;
-    const utime_t now = ceph_clock_now();
-    auto too_old = now;
-    too_old -= cct->_conf->get_val<double>("osd_op_complaint_time");
+    auto too_old =
+      ceph_clock_now() - cct->_conf->get_val<double>("osd_op_complaint_time");
     int slow = 0;
     auto count_slow_ops = [&](TrackedOp& op) {
       if (op.get_initiated() < too_old) {
@@ -7161,7 +7159,10 @@ vector<OSDHealthMetric> OSD::get_health_metrics()
 	return false;
       }
     };
-    if (op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops)) {
+    utime_t oldest_secs;
+    if (slow != 0) {
+      utime_t oldest_secs;
+      op_tracker.visit_ops_in_flight(&oldest_secs, count_slow_ops);
       metrics.emplace_back(osd_metric::SLOW_OPS, slow, oldest_secs);
     } else {
       // no news is not good news.
