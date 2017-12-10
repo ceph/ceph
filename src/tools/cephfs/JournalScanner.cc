@@ -286,6 +286,7 @@ int JournalScanner::scan_events()
           gap = true;
           gap_start = read_offset;
           read_offset += consumed;
+          break;
         }
       }
     }
