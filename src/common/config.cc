@@ -22,7 +22,9 @@
 #include "common/hostname.h"
 
 #include <boost/type_traits.hpp>
-
+#include <boost/asio/ip/address_v4.hpp>
+#include <boost/asio/ip/address_v6.hpp>
+#include <boost/regex.hpp>
 /* Don't use standard Ceph logging in this file.
  * We can't use logging until it's initialized, and a lot of the necessary
  * initialization happens here.
@@ -480,6 +482,19 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       set_val_or_die("mon_host", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--bind", (char*)NULL)) {
+      boost::system::error_code ec;
+      static const boost::regex e("\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+      if (!boost::regex_match(val.c_str(), e)) {
+        boost::asio::ip::address_v6 v6 =
+          boost::asio::ip::address_v6::from_string(val.c_str(), ec);
+      } else {
+        boost::asio::ip::address_v4 v4 =
+          boost::asio::ip::address_v4::from_string(val.c_str(), ec);
+      }
+      if (ec) {
+        std::cerr << "error: invalid ip address " << val.c_str() << std::endl;
+        _exit(1); 
+      }
       set_val_or_die("public_addr", val.c_str());
     }
     else if (ceph_argparse_witharg(args, i, &val, "--keyfile", "-K", (char*)NULL)) {
