@@ -607,7 +607,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
     e.emplace("aws:SecureTransport", "true");
   }
 
-  i = m.find("HTTP_HOST");
+  i = m.find("REMOTE_ADDR");
   if (i != m.end()) {
     e.emplace("aws:SourceIp", i->second);
   }
