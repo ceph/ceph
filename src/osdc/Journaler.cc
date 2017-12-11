@@ -153,7 +153,7 @@ public:
 void Journaler::recover(Context *onread) 
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onread->complete(-EAGAIN);
     return;
   }
@@ -213,7 +213,7 @@ void Journaler::_reread_head(Context *onfinish)
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     finish->complete(-EAGAIN);
     return;
   }
@@ -245,7 +245,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 void Journaler::_finish_read_head(int r, bufferlist& bl)
 {
   lock_guard l(lock);
-  if (stopping)
+  if (is_stopping())
     return;
 
   assert(state == STATE_READHEAD);
@@ -337,7 +337,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
 				C_OnFinisher *onfinish)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onfinish->complete(-EAGAIN);
     return;
   }
@@ -354,7 +354,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
 void Journaler::_finish_probe_end(int r, uint64_t end)
 {
   lock_guard l(lock);
-  if (stopping)
+  if (is_stopping())
     return;
 
   assert(state == STATE_PROBING);
@@ -408,7 +408,7 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
 {
   // Expect to be called back from finish_reread_head, which already takes lock
   // lock is locked
-  if (stopping) {
+  if (is_stopping()) {
     onfinish->complete(-EAGAIN);
     return;
   }
@@ -603,7 +603,7 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
 void Journaler::_do_flush(unsigned amount)
 {
-  if (stopping)
+  if (is_stopping())
     return;
   if (write_pos == flush_pos)
     return;
@@ -694,7 +694,7 @@ void Journaler::_do_flush(unsigned amount)
 void Journaler::wait_for_flush(Context *onsafe)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onsafe->complete(-EAGAIN);
     return;
   }
@@ -727,7 +727,7 @@ void Journaler::_wait_for_flush(Context *onsafe)
 void Journaler::flush(Context *onsafe)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onsafe->complete(-EAGAIN);
     return;
   }
@@ -1035,7 +1035,7 @@ void Journaler::_issue_read(uint64_t len)
 
 void Journaler::_prefetch()
 {
-  if (stopping)
+  if (is_stopping())
     return;
 
   ldout(cct, 10) << "_prefetch" << dendl;
@@ -1183,7 +1183,7 @@ void Journaler::erase(Context *completion)
 void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     completion->complete(-EAGAIN);
     return;
   }
@@ -1249,7 +1249,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 void Journaler::wait_for_readable(Context *onreadable)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     finisher->queue(onreadable, -EAGAIN);
     return;
   }
@@ -1294,7 +1294,7 @@ void Journaler::trim()
 
 void Journaler::_trim()
 {
-  if (stopping)
+  if (is_stopping())
     return;
 
   assert(!readonly);
@@ -1547,8 +1547,8 @@ void Journaler::shutdown()
 
   ldout(cct, 1) << __func__ << dendl;
 
+  state = STATE_STOPPING;
   readable = false;
-  stopping = true;
 
   // Kick out anyone reading from journal
   error = -EAGAIN;
