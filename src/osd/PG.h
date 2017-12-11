@@ -480,7 +480,6 @@ public:
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
   void _delete_some();
-  void pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t);
 
   // reference counting
 #ifdef PG_DEBUG_REFS
