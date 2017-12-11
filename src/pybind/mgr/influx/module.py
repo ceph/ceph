@@ -2,6 +2,7 @@ from datetime import datetime
 from threading import Event
 import json
 import errno
+import time
 
 from mgr_module import MgrModule
 
@@ -163,6 +164,8 @@ class Module(MgrModule):
 
         # If influx server has authentication turned off then
         # missing username/password is valid.
+        self.log.debug("Sending data to Influx host: %s",
+                       self.config['hostname'])
         client = InfluxDBClient(self.config['hostname'], self.config['port'],
                                 self.config['username'],
                                 self.config['password'],
@@ -232,7 +235,10 @@ class Module(MgrModule):
         self.run = True
 
         while self.run:
+            start = time.time()
             self.send_to_influx()
-            self.log.debug("Running interval loop")
-            self.log.debug("sleeping for %d seconds", self.config['interval'])
+            runtime = time.time() - start
+            self.log.debug('Finished sending data in Influx in %.3f seconds',
+                           runtime)
+            self.log.debug("Sleeping for %d seconds", self.config['interval'])
             self.event.wait(self.config['interval'])
