@@ -543,6 +543,10 @@ COMMAND("osd crush set-device-class " \
 	"set the <class> of the osd(s) <id> [<id>...]," \
         "or use <all|any|*> to set all.", \
 	"osd", "rw", "cli,rest")
+COMMAND("osd crush unset-device-class " \
+        "name=class,type=CephString,goodchars=[A-Za-z0-9-_] ", \
+        "remove class of all osds belonging to the specific <class>", \
+        "osd", "rw", "cli,rest")
 COMMAND("osd crush rm-device-class " \
         "name=ids,type=CephString,n=N", \
         "remove class of the osd(s) <id> [<id>...]," \

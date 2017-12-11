@@ -7228,6 +7228,44 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
       return true;
     }
+  } else if (prefix == "osd crush unset-device-class") {
+    string device_class;
+    if (!cmd_getval(cct, cmdmap, "class", device_class)) {
+      err = -EINVAL;
+      goto reply;
+    }
+
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    if (!newcrush.class_exists(device_class)) {
+      ss << "class '" << device_class << "' " << "does not exist";
+      err = 0;
+      goto reply;
+    }
+
+    set<int> osds;
+    set<int> updated;
+    osdmap.crush->get_devices_by_class(device_class, &osds);
+
+    for (auto &osd : osds) {
+      err = newcrush.remove_device_class(cct, osd, &ss);
+      if (err < 0) {
+        goto reply;
+      }
+      updated.insert(osd);
+    }
+
+    if (!updated.empty()) {
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+      ss << "done removing class of osd(s): " << updated;
+      getline(ss, rs);
+      wait_for_finished_proposal(op,
+        new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
+      return true;
+    } else {
+      ss << "no osd belongs to class '" << device_class << "'";
+    }
   } else if (prefix == "osd crush class rename") {
     string srcname, dstname;
     if (!cmd_getval(cct, cmdmap, "srcname", srcname)) {
