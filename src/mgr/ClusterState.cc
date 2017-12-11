@@ -69,7 +69,6 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
   std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
-
   pending_inc.update_stat(from, std::move(stats->osd_stat));
 
   for (auto p : stats->pg_stat) {
@@ -110,6 +109,9 @@ void ClusterState::ingest_pgstats(MPGStats *stats)
 
     pending_inc.pg_stat_updates[pgid] = pg_stats;
   }
+  for (auto p : stats->pool_stat) {
+    pending_inc.pool_statfs_updates[std::make_pair(p.first, from)] = p.second;
+  }
 }
 
 void ClusterState::update_delta_stats()
@@ -128,7 +130,6 @@ void ClusterState::update_delta_stats()
   jf.dump_object("pending_inc", pending_inc);
   jf.flush(*_dout);
   *_dout << dendl;
-
   pg_map.apply_incremental(g_ceph_context, pending_inc);
   pending_inc = PGMap::Incremental();
 }
