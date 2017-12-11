@@ -1148,6 +1148,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
                      [--read-only] [--exclusive] [--device <device>] 
                      [--nbds_max <nbds_max>] [--max_part <max_part>] 
+                     [--timeout <timeout>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -1165,6 +1166,7 @@ Skip test on FreeBSD as it generates different output there.
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part
+    --timeout arg         set nbd request timeout (seconds)
   
   rbd help nbd unmap
   usage: rbd nbd unmap 
