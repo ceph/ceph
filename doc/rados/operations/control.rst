@@ -249,7 +249,7 @@ Valid fields are:
 	* ``size``: Sets the number of copies of data in the pool.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_ruleset``: rule number for mapping placement.
+	* ``crush_rule``: rule number for mapping placement.
 
 Get the value of a pool setting. ::
 

@@ -440,7 +440,7 @@ The Ceph storage system supports the notion of 'Pools', which are logical
 partitions for storing objects.
 
 Ceph Clients retrieve a `Cluster Map`_ from a Ceph Monitor, and write objects to
-pools. The pool's ``size`` or number of replicas, the CRUSH ruleset and the
+pools. The pool's ``size`` or number of replicas, the CRUSH rule and the
 number of placement groups determine how Ceph will place the data.
 
 .. ditaa:: 
@@ -455,7 +455,7 @@ number of placement groups determine how Ceph will place the data.
                  |      To
                  v
             +--------+           +---------------+
-            |  Pool  |---------->| CRUSH Ruleset |
+            |  Pool  |---------->|  CRUSH Rule   |
             +--------+  Selects  +---------------+
                  
 
@@ -463,7 +463,7 @@ Pools set at least the following parameters:
 
 - Ownership/Access to Objects
 - The Number of Placement Groups, and 
-- The CRUSH Ruleset to Use.
+- The CRUSH Rule to Use.
 
 See `Set Pool Values`_ for details.
 

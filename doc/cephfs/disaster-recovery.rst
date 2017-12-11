@@ -245,7 +245,7 @@ it with empty file system data structures:
 ::
 
     ceph fs flag set enable_multiple true --yes-i-really-mean-it
-    ceph osd pool create recovery <pg-num> replicated <crush-ruleset-name>
+    ceph osd pool create recovery <pg-num> replicated <crush-rule-name>
     ceph fs new recovery-fs recovery <data pool> --allow-dangerous-metadata-overlay
     cephfs-data-scan init --force-init --filesystem recovery-fs --alternate-pool recovery
     ceph fs reset recovery-fs --yes-i-really-mean-it
