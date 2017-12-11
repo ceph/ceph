@@ -21,7 +21,6 @@
 #include "common/Clock.h"
 #include "common/HeartbeatMap.h"
 #include "common/Timer.h"
-#include "common/backport14.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/entity_name.h"
@@ -732,7 +731,7 @@ int MDSDaemon::_handle_command(
 
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    std::unique_ptr<JSONFormatter> f(ceph::make_unique<JSONFormatter>());
+    std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
     for (MDSCommand *cp = mds_commands;
 	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {

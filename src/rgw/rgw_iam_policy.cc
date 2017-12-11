@@ -7,11 +7,12 @@
 #include <stack>
 #include <utility>
 
+#include <experimental/iterator>
+
 #include <boost/regex.hpp>
 #include <iostream>
 #include "rapidjson/reader.h"
 
-#include "common/backport14.h"
 #include "rgw_auth.h"
 #include <arpa/inet.h>
 #include "rgw_iam_policy.h"
@@ -34,8 +35,6 @@ using std::uint64_t;
 using std::unordered_map;
 
 using boost::container::flat_set;
-using boost::none;
-using boost::optional;
 using boost::regex;
 using boost::regex_constants::ECMAScript;
 using boost::regex_constants::optimize;
@@ -63,8 +62,8 @@ struct actpair {
 };
 
 namespace {
-optional<Partition> to_partition(const smatch::value_type& p,
-				 bool wildcards) {
+boost::optional<Partition> to_partition(const smatch::value_type& p,
+					bool wildcards) {
   if (p == "aws") {
     return Partition::aws;
   } else if (p == "aws-cn") {
@@ -73,15 +72,13 @@ optional<Partition> to_partition(const smatch::value_type& p,
     return Partition::aws_us_gov;
   } else if (p == "*" && wildcards) {
     return Partition::wildcard;
-  } else {
-    return none;
   }
 
-  ceph_abort();
+  return boost::none;
 }
 
-optional<Service> to_service(const smatch::value_type& s,
-			     bool wildcards) {
+boost::optional<Service> to_service(const smatch::value_type& s,
+				    bool wildcards) {
   static const unordered_map<string, Service> services = {
     { "acm", Service::acm },
     { "apigateway", Service::apigateway },
@@ -170,7 +167,7 @@ optional<Service> to_service(const smatch::value_type& s,
 
   auto i = services.find(s);
   if (i == services.end()) {
-    return none;
+    return boost::none;
   } else {
     return i->second;
   }
@@ -205,7 +202,7 @@ ARN::ARN(const rgw_bucket& b, const string& o)
   resource.append(o);
 }
 
-optional<ARN> ARN::parse(const string& s, bool wildcards) {
+boost::optional<ARN> ARN::parse(const string& s, bool wildcards) {
   static const char str_wild[] = "arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)";
   static const regex rx_wild(str_wild,
 				    sizeof(str_wild) - 1,
@@ -228,7 +225,7 @@ optional<ARN> ARN::parse(const string& s, bool wildcards) {
       }
     }
   }
-  return none;
+  return boost::none;
 }
 
 string ARN::to_string() const {
@@ -721,8 +718,8 @@ bool ParseState::key(const char* s, size_t l) {
 
 // I should just rewrite a few helper functions to use iterators,
 // which will make all of this ever so much nicer.
-static optional<Principal> parse_principal(CephContext* cct, TokenID t,
-					   string&& s) {
+static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
+						  string&& s) {
   // Wildcard!
   if ((t == TokenID::AWS) && (s == "*")) {
     return Principal::wildcard();
@@ -878,7 +875,7 @@ bool ParseState::obj_start() {
   if (w->objectable && !objecting) {
     objecting = true;
     if (w->id == TokenID::Statement) {
-      pp->policy.statements.push_back({});
+      pp->policy.statements.emplace_back();
     }
 
     return true;
@@ -945,27 +942,27 @@ bool Condition::eval(const Environment& env) const {
     return orrible(std::equal_to<std::string>(), s, vals);
 
   case TokenID::StringNotEquals:
-    return orrible(ceph::not_fn(std::equal_to<std::string>()),
+    return orrible(std::not_fn(std::equal_to<std::string>()),
 		   s, vals);
 
   case TokenID::StringEqualsIgnoreCase:
     return orrible(ci_equal_to(), s, vals);
 
   case TokenID::StringNotEqualsIgnoreCase:
-    return orrible(ceph::not_fn(ci_equal_to()), s, vals);
+    return orrible(std::not_fn(ci_equal_to()), s, vals);
 
   case TokenID::StringLike:
     return orrible(string_like(), s, vals);
 
   case TokenID::StringNotLike:
-    return orrible(ceph::not_fn(string_like()), s, vals);
+    return orrible(std::not_fn(string_like()), s, vals);
 
     // Numeric
   case TokenID::NumericEquals:
     return shortible(std::equal_to<double>(), as_number, s, vals);
 
   case TokenID::NumericNotEquals:
-    return shortible(ceph::not_fn(std::equal_to<double>()),
+    return shortible(std::not_fn(std::equal_to<double>()),
 		     as_number, s, vals);
 
 
@@ -987,7 +984,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<ceph::real_time>(), as_date, s, vals);
 
   case TokenID::DateNotEquals:
-    return shortible(ceph::not_fn(std::equal_to<ceph::real_time>()),
+    return shortible(std::not_fn(std::equal_to<ceph::real_time>()),
 		     as_date, s, vals);
 
   case TokenID::DateLessThan:
@@ -1018,7 +1015,7 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    return shortible(ceph::not_fn(std::equal_to<MaskedIP>()), as_network, s,
+    return shortible(std::not_fn(std::equal_to<MaskedIP>()), as_network, s,
 		     vals);
 
 #if 0
@@ -1032,10 +1029,10 @@ bool Condition::eval(const Environment& env) const {
   }
 }
 
-optional<MaskedIP> Condition::as_network(const string& s) {
+boost::optional<MaskedIP> Condition::as_network(const string& s) {
   MaskedIP m;
   if (s.empty()) {
-    return none;
+    return boost::none;
   }
 
   m.v6 = s.find(':');
@@ -1047,7 +1044,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     m.prefix = strtoul(s.data() + slash + 1, &end, 10);
     if (*end != 0 || (m.v6 && m.prefix > 128) ||
 	(!m.v6 && m.prefix > 32)) {
-      return none;
+      return boost::none;
     }
   }
 
@@ -1062,7 +1059,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   if (m.v6) {
     struct sockaddr_in6 a;
     if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a)) != 1) {
-      return none;
+      return boost::none;
     }
 
     m.addr |= Address(a.sin6_addr.s6_addr[0]) << 0;
@@ -1084,12 +1081,12 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   } else {
     struct sockaddr_in a;
     if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
-      return none;
+      return boost::none;
     }
     m.addr = ntohl(a.sin_addr.s_addr);
   }
 
-  return none;
+  return boost::none;
 }
 
 namespace {
@@ -1188,7 +1185,7 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
     m << "[]";
   } else {
     m << "[ ";
-    std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+    std::copy(begin, end, std::experimental::make_ostream_joiner(m, ", "));
     m << " ]";
   }
   return m;
@@ -1197,7 +1194,7 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
 template<typename Iterator>
 ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
   m << "{ ";
-  std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+  std::copy(begin, end, std::experimental::make_ostream_joiner(m, ", "));
   m << " }";
   return m;
 }
@@ -1215,7 +1212,7 @@ ostream& operator <<(ostream& m, const Condition& c) {
 }
 
 Effect Statement::eval(const Environment& e,
-		       optional<const rgw::auth::Identity&> ida,
+		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
   if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
     return Effect::Pass;
@@ -1520,7 +1517,7 @@ Policy::Policy(CephContext* cct, const string& tenant,
 }
 
 Effect Policy::eval(const Environment& e,
-		    optional<const rgw::auth::Identity&> ida,
+		    boost::optional<const rgw::auth::Identity&> ida,
 		    std::uint64_t action, const ARN& resource) const {
   auto allowed = false;
   for (auto& s : statements) {

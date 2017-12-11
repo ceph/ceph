@@ -36,9 +36,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-using boost::none;
-using boost::optional;
-
 using rgw::IAM::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::op_to_perm;
@@ -1087,11 +1084,11 @@ bool verify_requester_payer_permission(struct req_state *s)
 }
 
 namespace {
-Effect eval_or_pass(const optional<Policy>& policy,
-			   const rgw::IAM::Environment& env,
-			   const rgw::auth::Identity& id,
-			   const uint64_t op,
-			   const ARN& arn) {
+Effect eval_or_pass(const boost::optional<Policy>& policy,
+		    const rgw::IAM::Environment& env,
+		    const rgw::auth::Identity& id,
+		    const uint64_t op,
+		    const ARN& arn) {
   if (!policy)
     return Effect::Pass;
   else
@@ -1103,7 +1100,7 @@ bool verify_bucket_permission(struct req_state * const s,
 			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
-			      const optional<Policy>& bucket_policy,
+			      const boost::optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))
@@ -1188,7 +1185,7 @@ static inline bool check_deferred_bucket_perms(struct req_state * const s,
 					       const rgw_bucket& bucket,
 					       RGWAccessControlPolicy * const user_acl,
 					       RGWAccessControlPolicy * const bucket_acl,
-					       const optional<Policy>& bucket_policy,
+					       const boost::optional<Policy>& bucket_policy,
 					       const uint8_t deferred_check,
 					       const uint64_t op)
 {
@@ -1211,7 +1208,7 @@ bool verify_object_permission(struct req_state * const s,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
                               RGWAccessControlPolicy * const object_acl,
-                              const optional<Policy>& bucket_policy,
+                              const boost::optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))

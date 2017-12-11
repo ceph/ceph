@@ -16,7 +16,6 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
-#include "common/backport14.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -248,10 +247,10 @@ static int get_bucket_policy_from_attr(CephContext *cct,
 					      policy, instance_obj);
 }
 
-static optional<Policy> get_iam_policy_from_attr(CephContext* cct,
-						 RGWRados* store,
-						 map<string, bufferlist>& attrs,
-						 const string& tenant) {
+static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
+							RGWRados* store,
+							map<string, bufferlist>& attrs,
+							const string& tenant) {
   auto i = attrs.find(RGW_ATTR_IAM_POLICY);
   if (i != attrs.end()) {
     return Policy(cct, tenant, i->second);
@@ -329,7 +328,7 @@ static int read_obj_policy(RGWRados *store,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
-			   optional<Policy>& policy,
+			   boost::optional<Policy>& policy,
                            rgw_bucket& bucket,
                            rgw_obj_key& object)
 {
@@ -401,17 +400,17 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_S3>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->user_id.empty()) {
-      s->user_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
+      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
     }
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
   } else {
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
   }
 
   /* check if copy source is within the current domain */
@@ -567,8 +566,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
-    s->object_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
-
+    s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
     rgw_obj obj(s->bucket, s->object);
       
     store->set_atomic(s->obj_ctx, obj);
@@ -1040,7 +1038,7 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
 int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy * const bucket_acl,
-                                       const optional<Policy>& bucket_policy,
+                                       const boost::optional<Policy>& bucket_policy,
                                        const off_t start_ofs,
                                        const off_t end_ofs)
 {
@@ -1139,14 +1137,14 @@ static int iterate_user_manifest_parts(CephContext * const cct,
                                        RGWBucketInfo *pbucket_info,
                                        const string& obj_prefix,
                                        RGWAccessControlPolicy * const bucket_acl,
-                                       const optional<Policy>& bucket_policy,
+                                       const boost::optional<Policy>& bucket_policy,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
                                        string * const pobj_sum,
                                        int (*cb)(rgw_bucket& bucket,
                                                  const rgw_bucket_dir_entry& ent,
                                                  RGWAccessControlPolicy * const bucket_acl,
-                                                 const optional<Policy>& bucket_policy,
+                                                 const boost::optional<Policy>& bucket_policy,
                                                  off_t start_ofs,
                                                  off_t end_ofs,
                                                  void *param),
@@ -1187,7 +1185,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 
       obj_ofs += obj_size;
       if (pobj_sum) {
-        etag_sum.Update((const byte *)ent.meta.etag.c_str(),
+        etag_sum.Update((const ::byte *)ent.meta.etag.c_str(),
                         ent.meta.etag.length());
       }
 
@@ -1245,7 +1243,7 @@ static int iterate_slo_parts(CephContext *cct,
                              int (*cb)(rgw_bucket& bucket,
                                        const rgw_bucket_dir_entry& ent,
                                        RGWAccessControlPolicy *bucket_acl,
-                                       const optional<Policy>& bucket_policy,
+                                       const boost::optional<Policy>& bucket_policy,
                                        off_t start_ofs,
                                        off_t end_ofs,
                                        void *param),
@@ -1297,7 +1295,7 @@ static int iterate_slo_parts(CephContext *cct,
 	// SLO is a Swift thing, and Swift has no knowledge of S3 Policies.
         int r = cb(part.bucket, ent, part.bucket_acl,
 		   (part.bucket_policy ?
-		    optional<Policy>(*part.bucket_policy) : none),
+		    boost::optional<Policy>(*part.bucket_policy) : boost::none),
 		   start_ofs, end_ofs, cb_param);
 	if (r < 0)
           return r;
@@ -1313,7 +1311,7 @@ static int iterate_slo_parts(CephContext *cct,
 static int get_obj_user_manifest_iterate_cb(rgw_bucket& bucket,
                                             const rgw_bucket_dir_entry& ent,
                                             RGWAccessControlPolicy * const bucket_acl,
-                                            const optional<Policy>& bucket_policy,
+                                            const boost::optional<Policy>& bucket_policy,
                                             const off_t start_ofs,
                                             const off_t end_ofs,
                                             void * const param)
@@ -1340,8 +1338,8 @@ int RGWGetObj::handle_user_manifest(const char *prefix)
 
   RGWAccessControlPolicy _bucket_acl(s->cct);
   RGWAccessControlPolicy *bucket_acl;
-  optional<Policy> _bucket_policy;
-  optional<Policy>* bucket_policy;
+  boost::optional<Policy> _bucket_policy;
+  boost::optional<Policy>* bucket_policy;
   RGWBucketInfo bucket_info;
   RGWBucketInfo *pbucket_info;
 
@@ -1434,7 +1432,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   ldout(s->cct, 2) << "RGWGetObj::handle_slo_manifest()" << dendl;
 
   vector<RGWAccessControlPolicy> allocated_acls;
-  map<string, pair<RGWAccessControlPolicy *, optional<Policy>>> policies;
+  map<string, pair<RGWAccessControlPolicy *, boost::optional<Policy>>> policies;
   map<string, rgw_bucket> buckets;
 
   map<uint64_t, rgw_slo_part> slo_parts;
@@ -1525,7 +1523,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
-    etag_sum.Update((const byte *)entry.etag.c_str(),
+    etag_sum.Update((const ::byte *)entry.etag.c_str(),
                     entry.etag.length());
 
     slo_parts[total_len] = part;
@@ -2953,7 +2951,7 @@ int RGWPutObj::verify_permission()
   if (copy_source) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
-    optional<Policy> policy;
+    boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
     rgw_bucket cs_bucket(copy_source_bucket_info.bucket);
     rgw_obj_key cs_object(copy_source_object_name, copy_source_version_id);
@@ -3443,7 +3441,7 @@ void RGWPutObj::execute()
     }
 
     if (need_calc_md5) {
-      hash.Update((const byte *)data.c_str(), data.length());
+      hash.Update((const ::byte *)data.c_str(), data.length());
     }
 
     /* update torrrent */
@@ -3589,7 +3587,7 @@ void RGWPutObj::execute()
     ::encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
-    hash.Update((byte *)slo_info->raw_data, slo_info->raw_data_len);
+    hash.Update((::byte *)slo_info->raw_data, slo_info->raw_data_len);
     complete_etag(hash, &etag);
     ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
@@ -3795,7 +3793,7 @@ void RGWPostObj::execute()
         break;
       }
 
-      hash.Update((const byte *)data.c_str(), data.length());
+      hash.Update((const ::byte *)data.c_str(), data.length());
       op_ret = put_data_and_throttle(filter, data, ofs, false);
 
       ofs += len;
@@ -4362,7 +4360,7 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
 int RGWCopyObj::verify_permission()
 {
   RGWAccessControlPolicy src_acl(s->cct);
-  optional<Policy> src_policy;
+  boost::optional<Policy> src_policy;
   op_ret = get_params();
   if (op_ret < 0)
     return op_ret;
@@ -4716,7 +4714,7 @@ void RGWPutACLs::execute()
       op_ret = -ERR_MALFORMED_XML;
       s->err.message = "The XML you provided was larger than the maximum " +
                        std::to_string(s->cct->_conf->rgw_max_put_param_size) +
-                       " bytes allowed.";
+                       " ::bytes allowed.";
     }
     return;
   }
@@ -4870,7 +4868,7 @@ void RGWPutLC::execute()
 
   MD5 data_hash;
   unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  data_hash.Update(reinterpret_cast<const byte*>(data), len);
+  data_hash.Update(reinterpret_cast<const ::byte*>(data), len);
   data_hash.Final(data_hash_res);
 
   if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
@@ -5469,7 +5467,7 @@ void RGWCompleteMultipart::execute()
 
       hex_to_buf(obj_iter->second.etag.c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
-      hash.Update((const byte *)petag, sizeof(petag));
+      hash.Update((const ::byte *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
 
@@ -5522,7 +5520,7 @@ void RGWCompleteMultipart::execute()
       accounted_size += obj_part.accounted_size;
     }
   } while (truncated);
-  hash.Final((byte *)final_etag);
+  hash.Final((::byte *)final_etag);
 
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
@@ -6448,7 +6446,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       op_ret = len;
       return op_ret;
     } else if (len > 0) {
-      hash.Update((const byte *)data.c_str(), data.length());
+      hash.Update((const ::byte *)data.c_str(), data.length());
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="

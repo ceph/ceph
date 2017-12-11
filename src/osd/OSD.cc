@@ -4211,7 +4211,7 @@ bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
   if (pg_map.size() < max_pgs_per_osd) {
     return false;
   }
-  [[gnu::unused]] auto&& pending_creates_locker = guardedly_lock(pending_creates_lock);
+  auto pending_creates_locker = guardedly_lock(pending_creates_lock);
   if (is_mon_create) {
     pending_creates_from_mon++;
   } else {
@@ -4251,7 +4251,7 @@ void OSD::resume_creating_pg()
       return;
     }
     unsigned spare_pgs = max_pgs_per_osd - pg_map.size();
-    [[gnu::unused]] auto&& locker = guardedly_lock(pending_creates_lock);
+    auto locker = guardedly_lock(pending_creates_lock);
     if (pending_creates_from_mon > 0) {
       do_sub_pg_creates = true;
       if (pending_creates_from_mon >= spare_pgs) {
@@ -7960,7 +7960,7 @@ void OSD::consume_map()
       pg->unlock();
     }
 
-    [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
+    auto pending_create_locker = guardedly_lock(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.cbegin();
 	 pg != pending_creates_from_osd.cend();) {
       if (osdmap->get_pg_acting_rank(pg->first, whoami) < 0) {

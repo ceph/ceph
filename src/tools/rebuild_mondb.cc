@@ -241,7 +241,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
   unsigned nadded = 0;
 
   OSDMap osdmap;
-  for (auto e = ceph::max(last_committed+1, sb.oldest_map);
+  for (auto e = std::max(last_committed+1, sb.oldest_map);
        e <= sb.newest_map; e++) {
     bool have_crc = false;
     uint32_t crc = -1;
