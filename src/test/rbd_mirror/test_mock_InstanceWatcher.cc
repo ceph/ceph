@@ -692,13 +692,13 @@ public:
     EXPECT_CALL(mock_image_sync_throttler, start_op(sync_id, _))
         .WillOnce(Invoke([on_call, on_start_ctx] (const std::string &,
                                                   Context *ctx) {
-                           if (on_call != nullptr) {
-                             on_call->complete(0);
-                           }
                            if (on_start_ctx != nullptr) {
                              *on_start_ctx = ctx;
                            } else {
                              ctx->complete(0);
+                           }
+                           if (on_call != nullptr) {
+                             on_call->complete(0);
                            }
                          }));
   }
