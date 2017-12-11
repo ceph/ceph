@@ -193,8 +193,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
         rgw::auth::add_sysreq(cct, store, s,
           rgw::auth::RemoteApplier(cct, store, std::move(extra_acl_strategy), info,
                                    cct->_conf->rgw_keystone_implicit_tenants)));
-    /* TODO(rzarzynski): replace with static_ptr. */
-    return aplptr_t(new decltype(apl)(std::move(apl)));
+    return ceph::make_static<decltype(apl)>(std::move(apl));
   }
 
   aplptr_t create_apl_local(CephContext* const cct,
@@ -205,8 +204,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
       rgw::auth::add_3rdparty(store, s->account_name,
         rgw::auth::add_sysreq(cct, store, s,
           rgw::auth::LocalApplier(cct, user_info, subuser)));
-    /* TODO(rzarzynski): replace with static_ptr. */
-    return aplptr_t(new decltype(apl)(std::move(apl)));
+    return ceph::make_static<decltype(apl)>(std::move(apl));
   }
 
   aplptr_t create_apl_turl(CephContext* const cct,
@@ -215,7 +213,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
     /* TempURL doesn't need any user account override. It's a Swift-specific
      * mechanism that requires  account name internally, so there is no
      * business with delegating the responsibility outside. */
-    return aplptr_t(new rgw::auth::swift::TempURLApplier(cct, user_info));
+    return ceph::make_static<TempURLApplier>(cct, user_info);
   }
 
 public:
