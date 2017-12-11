@@ -734,20 +734,20 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
            << ceph_mds_state_name(state) << dendl;
       return true;
     } else {
-      // Made it through special cases and validations, record the
-      // daemon's reported state to the FSMap.
-      pending_fsmap.modify_daemon(gid, [state, seq](MDSMap::mds_info_t *info) {
-        info->state = state;
-        info->state_seq = seq;
-      });
-
-      if (state == MDSMap::STATE_ACTIVE) {
+      if (info.state != MDSMap::STATE_ACTIVE && state == MDSMap::STATE_ACTIVE) {
         auto fscid = pending_fsmap.mds_roles.at(gid);
         auto fs = pending_fsmap.get_filesystem(fscid);
         mon->clog->info() << info.human_name() << " is now active in "
                           << "filesystem " << fs->mds_map.fs_name << " as rank "
                           << info.rank;
       }
+
+      // Made it through special cases and validations, record the
+      // daemon's reported state to the FSMap.
+      pending_fsmap.modify_daemon(gid, [state, seq](MDSMap::mds_info_t *info) {
+        info->state = state;
+        info->state_seq = seq;
+      });
     }
   }
 
@@ -1816,11 +1816,11 @@ void MDSMonitor::maybe_replace_gid(mds_gid_t gid, const MDSMap::mds_info_t& info
   // getting beacons through recently.
   utime_t latest_beacon;
   for (const auto & i : last_beacon) {
-    latest_beacon = MAX(i.second.stamp, latest_beacon);
+    latest_beacon = std::max(i.second.stamp, latest_beacon);
   }
   const bool may_replace = latest_beacon >
     (ceph_clock_now() -
-     MAX(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
+     std::max(g_conf->mds_beacon_interval, g_conf->mds_beacon_grace * 0.5));
 
   // are we in?
   // and is there a non-laggy standby that can take over for us?

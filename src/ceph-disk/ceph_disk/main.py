@@ -42,11 +42,22 @@ import pwd
 import grp
 import textwrap
 import glob
+import warnings
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
 KEY_MANAGEMENT_MODE_V1 = 'ceph-mon v1'
+
+DEPRECATION_WARNING = """
+*******************************************************************************
+This tool is now deprecated in favor of ceph-volume.
+It is recommended to use ceph-volume for OSD deployments. For details see:
+
+    http://docs.ceph.com/docs/master/ceph-volume/#migrating
+
+*******************************************************************************
+"""
 
 PTYPE = {
     'regular': {
@@ -150,6 +161,13 @@ PTYPE = {
         },
     },
 }
+
+try:
+    # see https://bugs.python.org/issue23098
+    os.major(0x80002b00)
+except OverflowError:
+    os.major = lambda devid: ((devid >> 8) & 0xfff) | ((devid >> 32) & ~0xfff)
+    os.minor = lambda devid: (devid & 0xff) | ((devid >> 12) & ~0xff)
 
 
 class Ptype(object):
@@ -1017,8 +1035,8 @@ def write_one_line(parent, name, text):
     with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
-    path_set_context(tmp)
     os.rename(tmp, path)
+    path_set_context(path)
 
 
 def init_get():
@@ -1247,7 +1265,8 @@ def get_fsid(cluster):
     :return: The fsid or raises Error.
     """
     fsid = get_conf_with_default(cluster=cluster, variable='fsid')
-    if fsid is None:
+    # uuids from boost always default to 'the empty uuid'
+    if fsid == '00000000-0000-0000-0000-000000000000':
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
 
@@ -1281,6 +1300,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
@@ -2722,8 +2743,8 @@ class Lockbox(object):
             ptype = self.partition.get_ptype()
             ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
-                LOG.warning('incorrect partition UUID: %s, expected %s'
-                            % (ptype, str(ready)))
+                LOG.warning('incorrect partition UUID: %s, expected %s',
+                            ptype, str(ready))
         else:
             LOG.debug('Creating osd partition on %s',
                       self.args.lockbox)
@@ -2767,12 +2788,12 @@ class Lockbox(object):
     def populate(self):
         maybe_mkdir(os.path.join(STATEDIR, 'osd-lockbox'))
         args = ['mkfs', '-t', 'ext4', self.partition.get_dev()]
-        LOG.debug('Creating lockbox fs on %s: ' + str(" ".join(args)))
+        LOG.debug('Creating lockbox fs: %s', " ".join(args))
         command_check_call(args)
         path = self.get_mount_point()
         maybe_mkdir(path)
         args = ['mount', '-t', 'ext4', self.partition.get_dev(), path]
-        LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+        LOG.debug('Mounting lockbox: %s', " ".join(args))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
         if self.args.cluster_uuid is None:
@@ -5639,6 +5660,8 @@ def make_zap_parser(subparsers):
 
 
 def main(argv):
+    # Deprecate from the very beginning
+    warnings.warn(DEPRECATION_WARNING)
     args = parse_args(argv)
 
     setup_logging(args.verbose, args.log_stdout)
@@ -5658,9 +5681,19 @@ def main(argv):
     CEPH_PREF_GROUP = args.setgroup
 
     if args.verbose:
-        args.func(args)
+        try:
+            args.func(args)
+        except Exception:
+            # warn on any exception when running with verbosity
+            warnings.warn(DEPRECATION_WARNING)
+            # but still raise the original issue
+            raise
+
     else:
         main_catch(args.func, args)
+
+    # if there aren't any errors, still log again at the very bottom
+    warnings.warn(DEPRECATION_WARNING)
 
 
 def setup_logging(verbose, log_stdout):
@@ -5688,6 +5721,8 @@ def main_catch(func, args):
         func(args)
 
     except Error as e:
+        # warn on generic 'error' exceptions
+        warnings.warn(DEPRECATION_WARNING)
         raise SystemExit(
             '{prog}: {msg}'.format(
                 prog=args.prog,
@@ -5696,6 +5731,8 @@ def main_catch(func, args):
         )
 
     except CephDiskException as error:
+        # warn on ceph-disk exceptions
+        warnings.warn(DEPRECATION_WARNING)
         exc_name = error.__class__.__name__
         raise SystemExit(
             '{prog} {exc_name}: {msg}'.format(

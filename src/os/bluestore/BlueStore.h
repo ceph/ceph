@@ -443,7 +443,7 @@ public:
       sb->coll = coll;
     }
 
-    bool remove(SharedBlob *sb) {
+    bool try_remove(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
       if (sb->nref == 0) {
 	assert(sb->get_parent() == this);
@@ -451,6 +451,12 @@ public:
 	return true;
       }
       return false;
+    }
+
+    void remove(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      assert(sb->get_parent() == this);
+      sb_map.erase(sb->get_sbid());
     }
 
     bool empty() {
@@ -1722,10 +1728,8 @@ public:
     }
 
     bool _is_all_kv_submitted() {
-      // caller must hold qlock
-      if (q.empty()) {
-	return true;
-      }
+      // caller must hold qlock & q.empty() must not empty
+      assert(!q.empty());
       TransContext *txc = &q.back();
       if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
@@ -1740,7 +1744,8 @@ public:
 	// may become true outside qlock, and we need to make
 	// sure those threads see waiters and signal qcond.
 	++kv_submitted_waiters;
-	if (_is_all_kv_submitted()) {
+	if (q.empty() || _is_all_kv_submitted()) {
+	  --kv_submitted_waiters;
 	  return;
 	}
 	qcond.wait(l);
@@ -1878,7 +1883,6 @@ private:
 
   PerfCounters *logger = nullptr;
 
-  std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
   RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};

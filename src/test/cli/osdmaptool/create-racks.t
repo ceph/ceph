@@ -16,7 +16,6 @@
   tunable allowed_bucket_algs 54
   
   # devices
-  device 0 device0
   device 1 osd.1
   device 2 osd.2
   device 3 osd.3

@@ -271,3 +271,12 @@ add_ceph_unittest(unittest_backport14)
 add_executable(unittest_convenience test_convenience.cc)
 target_link_libraries(unittest_convenience ceph-common)
 add_ceph_unittest(unittest_convenience)
+
+add_executable(unittest_bounded_key_counter
+  test_bounded_key_counter.cc
+  $<TARGET_OBJECTS:unit-main>)
+target_link_libraries(unittest_bounded_key_counter global)
+add_ceph_unittest(unittest_bounded_key_counter)
+
+add_executable(unittest_static_ptr test_static_ptr.cc)
+add_ceph_unittest(unittest_static_ptr)

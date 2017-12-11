@@ -639,8 +639,15 @@ void AsyncConnection::process()
       case STATE_OPEN_MESSAGE_READ_FOOTER_AND_DISPATCH:
         {
           ceph_msg_footer footer;
+          ceph_msg_footer_old old_footer;
+          unsigned len;
+          // footer
+          if (has_feature(CEPH_FEATURE_MSG_AUTH))
+            len = sizeof(footer);
+          else
+            len = sizeof(old_footer);
 
-          r = read_until(sizeof(footer), state_buffer);
+          r = read_until(len, state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read footer data error " << dendl;
             goto fail;
@@ -648,7 +655,16 @@ void AsyncConnection::process()
             break;
           }
 
-          footer = *((ceph_msg_footer*)state_buffer);
+          if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+            footer = *((ceph_msg_footer*)state_buffer);
+          } else {
+            old_footer = *((ceph_msg_footer_old*)state_buffer);
+            footer.front_crc = old_footer.front_crc;
+            footer.middle_crc = old_footer.middle_crc;
+            footer.data_crc = old_footer.data_crc;
+            footer.sig = 0;
+            footer.flags = old_footer.flags;
+          }
           int aborted = (footer.flags & CEPH_MSG_FOOTER_COMPLETE) == 0;
           ldout(async_msgr->cct, 10) << __func__ << " aborted = " << aborted << dendl;
           if (aborted) {
@@ -1862,7 +1878,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddr() << " --> "
 		      << get_peer_addr() << " -- "
@@ -2154,7 +2170,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   assert(center->in_thread());
   m->set_seq(++out_seq);
 
@@ -2199,7 +2215,22 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     outcoming_bl.claim_append(bl);  
   }
 
-  outcoming_bl.append((char*)&footer, sizeof(footer));
+  // send footer; if receiver doesn't support signatures, use the old footer format
+  ceph_msg_footer_old old_footer;
+  if (has_feature(CEPH_FEATURE_MSG_AUTH)) {
+    outcoming_bl.append((char*)&footer, sizeof(footer));
+  } else {
+    if (msgr->crcflags & MSG_CRC_HEADER) {
+      old_footer.front_crc = footer.front_crc;
+      old_footer.middle_crc = footer.middle_crc;
+      old_footer.data_crc = footer.data_crc;
+    } else {
+       old_footer.front_crc = old_footer.middle_crc = 0;
+    }
+    old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
+    old_footer.flags = footer.flags;
+    outcoming_bl.append((char*)&old_footer, sizeof(old_footer));
+  }
 
   m->trace.event("async writing message");
   ldout(async_msgr->cct, 20) << __func__ << " sending " << m->get_seq()

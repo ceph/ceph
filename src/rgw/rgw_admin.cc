@@ -38,13 +38,13 @@
 #include "rgw_replica_log.h"
 #include "rgw_orphan.h"
 #include "rgw_sync.h"
+#include "rgw_sync_log_trim.h"
 #include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
 #include "rgw_reshard.h"
 
-using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -82,6 +82,7 @@ void usage()
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
   cout << "  bucket reshard             reshard bucket\n";
+  cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
   cout << "  bucket sync enable         enable bucket sync\n";
   cout << "  bi get                     retrieve bucket index object entries\n";
@@ -91,6 +92,7 @@ void usage()
   cout << "  object rm                  remove object\n";
   cout << "  object stat                stat an object for its metadata\n";
   cout << "  object unlink              unlink object from bucket index\n";
+  cout << "  object rewrite             rewrite the specified object\n";
   cout << "  objects expire             run expired objects cleanup\n";
   cout << "  period delete              delete a period\n";
   cout << "  period get                 get period info\n";
@@ -143,6 +145,12 @@ void usage()
   cout << "  zone placement add         add a zone placement target\n";
   cout << "  zone placement modify      modify a zone placement target\n";
   cout << "  zone placement rm          remove a zone placement target\n";
+  cout << "  metadata sync status       get metadata sync status\n";
+  cout << "  metadata sync init         init metadata sync\n";
+  cout << "  metadata sync run          run metadata sync\n";
+  cout << "  data sync status           get data sync status of the specified source zone\n";
+  cout << "  data sync init             init data sync for the specified source zone\n";
+  cout << "  data sync run              run data sync for the specified source zone\n";
   cout << "  pool add                   add an existing pool for data placement\n";
   cout << "  pool rm                    remove an existing pool from data placement set\n";
   cout << "  pools list                 list placement active set\n";
@@ -203,7 +211,7 @@ void usage()
   cout << "   --uid=<id>                user id\n";
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
-  cout << "   --email=<email>\n";
+  cout << "   --email=<email>           user's email address\n";
   cout << "   --secret/--secret-key=<key>\n";
   cout << "                             specify secret key\n";
   cout << "   --gen-access-key          generate random access key (for S3)\n";
@@ -212,17 +220,17 @@ void usage()
   cout << "   --temp-url-key[-2]=<key>  temp url key\n";
   cout << "   --access=<access>         Set access permissions for sub-user, should be one\n";
   cout << "                             of read, write, readwrite, full\n";
-  cout << "   --display-name=<name>\n";
+  cout << "   --display-name=<name>     user's display name\n";
   cout << "   --max-buckets             max number of buckets for a user\n";
   cout << "   --admin                   set the admin flag on the user\n";
   cout << "   --system                  set the system flag on the user\n";
-  cout << "   --bucket=<bucket>\n";
-  cout << "   --pool=<pool>\n";
-  cout << "   --object=<object>\n";
-  cout << "   --date=<date>\n";
-  cout << "   --start-date=<date>\n";
-  cout << "   --end-date=<date>\n";
-  cout << "   --bucket-id=<bucket-id>\n";
+  cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
+  cout << "   --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.\n";
+  cout << "   --object=<object>         object name\n";
+  cout << "   --date=<date>             date in the format yyyy-mm-dd\n";
+  cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
+  cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
+  cout << "   --bucket-id=<bucket-id>   bucket id\n";
   cout << "   --shard-id=<shard-id>     optional for mdlog list\n";
   cout << "                             required for: \n";
   cout << "                               mdlog trim\n";
@@ -235,8 +243,6 @@ void usage()
   cout << "   --commit                  commit the period during 'period update'\n";
   cout << "   --staging                 get staging period info\n";
   cout << "   --master                  set as master\n";
-  cout << "   --master-url              master url\n";
-  cout << "   --master-zonegroup=<id>   master zonegroup id\n";
   cout << "   --master-zone=<id>        master zone id\n";
   cout << "   --rgw-realm=<name>        realm name\n";
   cout << "   --realm-id=<id>           realm id\n";
@@ -251,6 +257,7 @@ void usage()
   cout << "   --source-zone             specify the source zone (for data sync)\n";
   cout << "   --default                 set entity (realm, zonegroup, zone) as default\n";
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
+  cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
@@ -290,8 +297,9 @@ void usage()
   cout << "   --skip-zero-entries       log show only dumps entries that don't have zero value\n";
   cout << "                             in one of the numeric field\n";
   cout << "   --infile=<file>           specify a file to read in when setting data\n";
-  cout << "   --state=<state string>    specify a state for the opstate set command\n";
-  cout << "   --replica-log-type        replica log type (metadata, data, bucket), required for\n";
+  cout << "   --state=<state>           specify a state for the opstate set command\n";
+  cout << "   --replica-log-type=<logtypestr>\n";
+  cout << "                             replica log type (metadata, data, bucket), required for\n";
   cout << "                             replica log operations\n";
   cout << "   --categories=<list>       comma separated list of categories, used in usage show\n";
   cout << "   --caps=<caps>             list of caps (e.g., \"usage=read, write; user=read\")\n";
@@ -303,15 +311,16 @@ void usage()
   cout << "                             object deletions by not involving GC\n";
   cout << "   --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,\n";
   cout << "                             ignores bucket index consistency\n";
+  cout << "   --min-rewrite-size        min object size for bucket rewrite (default 4M)\n";
+  cout << "   --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)\n";
+  cout << "   --min-rewrite-stripe-size min stripe size for object rewrite (default 0)\n";
   cout << "\n";
   cout << "<date> := \"YYYY-MM-DD[ hh:mm:ss]\"\n";
   cout << "\nQuota options:\n";
-  cout << "   --bucket                  specified bucket for quota command\n";
   cout << "   --max-objects             specify max objects (negative value to disable)\n";
   cout << "   --max-size                specify max size (in B/K/M/G/T, negative value to disable)\n";
   cout << "   --quota-scope             scope of quota (bucket, user)\n";
   cout << "\nOrphans search options:\n";
-  cout << "   --pool                    data pool to scan for leaked rados objects in\n";
   cout << "   --num-shards              num of shards to use for keeping the temporary scan info\n";
   cout << "   --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)\n";
   cout << "   --job-id                  set the job id (for orphans find)\n";
@@ -434,6 +443,7 @@ enum {
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_BILOG_STATUS,
+  OPT_BILOG_AUTOTRIM,
   OPT_DATA_SYNC_STATUS,
   OPT_DATA_SYNC_INIT,
   OPT_DATA_SYNC_RUN,
@@ -858,6 +868,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BILOG_TRIM;
     if (strcmp(cmd, "status") == 0)
       return OPT_BILOG_STATUS;
+    if (strcmp(cmd, "autotrim") == 0)
+      return OPT_BILOG_AUTOTRIM;
   } else if (strcmp(prev_cmd, "data") == 0) {
     if (strcmp(cmd, "sync") == 0) {
       *need_more = true;
@@ -2238,6 +2250,24 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
+static int check_pool_support_omap(rgw_pool pool) 
+{
+  librados::IoCtx io_ctx;
+  int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
+  if (ret < 0) {
+     // the pool may not exist at this moment, we have no way to check if it supports omap.
+     return 0;
+  }
+
+  ret = io_ctx.omap_clear("__omap_test_not_exist_oid__");
+  if (ret == -EOPNOTSUPP) {
+    io_ctx.close();
+    return ret;
+  }
+  io_ctx.close();
+  return 0;
+}
+
 int check_reshard_bucket_params(RGWRados *store,
 				const string& bucket_name,
 				const string& tenant,
@@ -2338,19 +2368,20 @@ int main(int argc, const char **argv)
   std::string start_date, end_date;
   std::string key_type_str;
   std::string period_id, period_epoch, remote, url;
-  std::string master_zonegroup, master_zone;
+  std::string master_zone;
   std::string realm_name, realm_id, realm_new_name;
   std::string zone_name, zone_id, zone_new_name;
   std::string zonegroup_name, zonegroup_id, zonegroup_new_name;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
+  std::string redirect_zone;
+  bool redirect_zone_set = false;
   list<string> endpoints;
   int tmp_int;
   int sync_from_all_specified = false;
   bool sync_from_all = false;
   list<string> sync_from;
   list<string> sync_from_rm;
-  std::string master_url;
   int is_master_int;
   int set_default = 0;
   bool is_master = false;
@@ -2524,11 +2555,11 @@ int main(int argc, const char **argv)
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show_log_entries", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show-log-entries", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show_log_sum", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show-log-sum", (char*)NULL)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip_zero_entries", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip-zero-entries", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &admin, NULL, "--admin", (char*)NULL)) {
       admin_specified = true;
@@ -2706,13 +2737,12 @@ int main(int argc, const char **argv)
       is_master_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &set_default, NULL, "--default", (char*)NULL)) {
       /* do nothing */
+    } else if (ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*)NULL)) {
+      redirect_zone = val;
+      redirect_zone_set = true;
     } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master-url", (char*)NULL)) {
-      master_url = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master-zonegroup", (char*)NULL)) {
-      master_zonegroup = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*)NULL)) {
       master_zone = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*)NULL)) {
@@ -2857,7 +2887,10 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_PUT
                           && opt_cmd != OPT_ROLE_POLICY_LIST
                           && opt_cmd != OPT_ROLE_POLICY_GET
-                          && opt_cmd != OPT_ROLE_POLICY_DELETE) {
+                          && opt_cmd != OPT_ROLE_POLICY_DELETE
+                          && opt_cmd != OPT_RESHARD_ADD
+                          && opt_cmd != OPT_RESHARD_CANCEL
+                          && opt_cmd != OPT_RESHARD_STATUS) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -3473,12 +3506,14 @@ int main(int argc, const char **argv)
         zone.tier_config = tier_config_add;
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
 	       << cpp_strerror(-ret) << std::endl;
@@ -3893,13 +3928,15 @@ int main(int argc, const char **argv)
 	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
           string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+          string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 	  ret = zonegroup.add_zone(zone,
                                    (is_master_set ? &is_master : NULL),
                                    (is_read_only_set ? &read_only : NULL),
                                    endpoints,
                                    ptier_type,
                                    psync_from_all,
-                                   sync_from, sync_from_rm);
+                                   sync_from, sync_from_rm,
+                                   predirect_zone);
 	  if (ret < 0) {
 	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
 		 << ": " << cpp_strerror(-ret) << std::endl;
@@ -4139,13 +4176,17 @@ int main(int argc, const char **argv)
           need_zone_update = true;
         }
 
-        for (auto add : tier_config_add) {
-          zone.tier_config[add.first] = add.second;
+        if (tier_config_add.size() > 0) {
+          for (auto add : tier_config_add) {
+            zone.tier_config[add.first] = add.second;
+          }
           need_zone_update = true;
         }
 
-        for (auto rm : tier_config_rm) {
-          zone.tier_config.erase(rm.first);
+        if (tier_config_rm.size() > 0) {
+          for (auto rm : tier_config_rm) {
+            zone.tier_config.erase(rm.first);
+          }
           need_zone_update = true;
         }
 
@@ -4166,12 +4207,14 @@ int main(int argc, const char **argv)
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
+        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
                                  (is_master_set ? &is_master : NULL),
                                  (is_read_only_set ? &read_only : NULL),
                                  endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm);
+                                 psync_from_all, sync_from, sync_from_rm,
+                                 predirect_zone);
 	if (ret < 0) {
 	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4272,6 +4315,13 @@ int main(int argc, const char **argv)
           if (compression_type) {
             info.compression_type = *compression_type;
           }
+
+          ret = check_pool_support_omap(info.get_data_extra_pool());
+          if (ret < 0) {
+             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+                 << "' does not support omap" << std::endl;
+             return ret;
+          }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
           auto p = zone.placement_pools.find(placement_id);
           if (p == zone.placement_pools.end()) {
@@ -4294,6 +4344,13 @@ int main(int argc, const char **argv)
           }
           if (compression_type) {
             info.compression_type = *compression_type;
+          }
+          
+          ret = check_pool_support_omap(info.get_data_extra_pool());
+          if (ret < 0) {
+             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+                 << "' does not support omap" << std::endl;
+             return ret;
           }
         } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
           zone.placement_pools.erase(placement_id);
@@ -6722,6 +6779,31 @@ next:
     encode_json("markers", markers, formatter);
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_BILOG_AUTOTRIM) {
+    RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+    RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+    int ret = http.set_threaded();
+    if (ret < 0) {
+      cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+
+    rgw::BucketTrimConfig config;
+    configure_bucket_trim(store->ctx(), config);
+
+    rgw::BucketTrimManager trim(store, config);
+    ret = trim.init();
+    if (ret < 0) {
+      cerr << "trim manager init failed with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
+    ret = crs.run(trim.create_admin_bucket_trim_cr(&http));
+    if (ret < 0) {
+      cerr << "automated bilog trim failed with " << cpp_strerror(ret) << std::endl;
+      return -ret;
+    }
   }
 
   if (opt_cmd == OPT_DATALOG_LIST) {

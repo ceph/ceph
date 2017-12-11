@@ -119,7 +119,7 @@ public:
       external_engines(cct, store, &ver_abstractor),
       local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
-    /* The anynoymous auth. */
+    /* The anonymous auth. */
     if (AllowAnonAccessT) {
       add_engine(Control::SUFFICIENT, anonymous_engine);
     }

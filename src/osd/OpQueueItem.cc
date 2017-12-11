@@ -20,6 +20,15 @@ void PGOpItem::run(OSD *osd,
                    ThreadPool::TPHandle &handle)
 {
   osd->dequeue_op(pg, op, handle);
+  pg->unlock();
+}
+
+void PGPeeringItem::run(
+  OSD *osd,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  osd->dequeue_peering_evt(pg.get(), evt, handle);
 }
 
 void PGSnapTrim::run(OSD *osd,
@@ -27,6 +36,7 @@ void PGSnapTrim::run(OSD *osd,
                    ThreadPool::TPHandle &handle)
 {
   pg->snap_trimmer(epoch_queued);
+  pg->unlock();
 }
 
 void PGScrub::run(OSD *osd,
@@ -34,6 +44,7 @@ void PGScrub::run(OSD *osd,
                    ThreadPool::TPHandle &handle)
 {
   pg->scrub(epoch_queued, handle);
+  pg->unlock();
 }
 
 void PGRecovery::run(OSD *osd,
@@ -41,6 +52,7 @@ void PGRecovery::run(OSD *osd,
                    ThreadPool::TPHandle &handle)
 {
   osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, handle);
+  pg->unlock();
 }
 
 

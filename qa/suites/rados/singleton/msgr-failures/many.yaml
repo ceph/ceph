@@ -3,6 +3,7 @@ overrides:
     conf:
       global:
         ms inject socket failures: 500
+        mon mgr beacon grace: 90
       mgr:
         debug monc: 10
         mon client hunt interval max multiple: 2

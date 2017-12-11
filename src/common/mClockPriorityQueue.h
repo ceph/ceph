@@ -39,6 +39,7 @@ namespace ceph {
 
     using priority_t = unsigned;
     using cost_t = unsigned;
+    using Retn = std::pair<T, dmc::PhaseType>;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
@@ -309,6 +310,12 @@ namespace ceph {
       queue.add_request(std::move(item), cl, cost);
     }
 
+    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
+			     const dmc::ReqParams& req_params) {
+      // priority is ignored
+      queue.add_request(std::move(item), cl, req_params, cost);
+    }
+
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
@@ -323,7 +330,7 @@ namespace ceph {
     T dequeue() override final {
       assert(!empty());
 
-      if (!(high_queue.empty())) {
+      if (!high_queue.empty()) {
 	T ret = std::move(high_queue.rbegin()->second.front().second);
 	high_queue.rbegin()->second.pop_front();
 	if (high_queue.rbegin()->second.empty()) {
@@ -342,6 +349,32 @@ namespace ceph {
       assert(pr.is_retn());
       auto& retn = pr.get_retn();
       return std::move(*(retn.request));
+    }
+
+    Retn dequeue_distributed() {
+      assert(!empty());
+      dmc::PhaseType resp_params = dmc::PhaseType();
+
+      if (!high_queue.empty()) {
+	T ret = std::move(high_queue.rbegin()->second.front().second);
+	high_queue.rbegin()->second.pop_front();
+	if (high_queue.rbegin()->second.empty()) {
+	  high_queue.erase(high_queue.rbegin()->first);
+	}
+	return std::make_pair(std::move(ret), resp_params);
+      }
+
+      if (!queue_front.empty()) {
+	T ret = std::move(queue_front.front().second);
+	queue_front.pop_front();
+	return std::make_pair(std::move(ret), resp_params);
+      }
+
+      auto pr = queue.pull_request();
+      assert(pr.is_retn());
+      auto& retn = pr.get_retn();
+      resp_params = retn.phase;
+      return std::make_pair(std::move(*(retn.request)), resp_params);
     }
 
     void dump(ceph::Formatter *f) const override final {

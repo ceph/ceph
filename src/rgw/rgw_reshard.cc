@@ -18,7 +18,6 @@ const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
 
-using namespace std;
 
 #define RESHARD_SHARD_WINDOW 64
 #define RESHARD_MAX_AIO 128
@@ -619,6 +618,7 @@ int RGWReshard::update(const RGWBucketInfo& bucket_info, const RGWBucketInfo& ne
   cls_rgw_reshard_entry entry;
   entry.bucket_name = bucket_info.bucket.name;
   entry.bucket_id = bucket_info.bucket.bucket_id;
+  entry.tenant = bucket_info.owner.tenant;
 
   int ret = get(entry);
   if (ret < 0) {

@@ -749,7 +749,7 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
   uint64_t bytes_remaining = length;
   uint64_t event_offset = 0;
   do {
-    uint64_t event_length = MIN(bytes_remaining, max_write_data_size);
+    uint64_t event_length = std::min(bytes_remaining, max_write_data_size);
 
     bufferlist event_bl;
     event_bl.substr_of(bl, event_offset, event_length);
@@ -1496,7 +1496,7 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
        it != aio_object_requests.end(); ++it) {
     if (r < 0) {
       // don't send aio requests if the journal fails -- bubble error up
-      (*it)->complete(r);
+      (*it)->fail(r);
     } else {
       // send any waiting aio requests now that journal entry is safe
       (*it)->send();

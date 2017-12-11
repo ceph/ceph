@@ -109,8 +109,7 @@ public:
   }
 
   bool complete_object_copy(MockObjectCopyRequest &mock_object_copy_request,
-                               uint64_t object_num, int r,
-                               std::function<void()> fn = []() {}) {
+                            uint64_t object_num, Context **object_ctx, int r) {
     Mutex::Locker locker(mock_object_copy_request.lock);
     while (mock_object_copy_request.object_contexts.count(object_num) == 0) {
       if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
@@ -119,12 +118,12 @@ public:
       }
     }
 
-    FunctionContext *wrapper_ctx = new FunctionContext(
-      [&mock_object_copy_request, object_num, fn] (int r) {
-        fn();
-        mock_object_copy_request.object_contexts[object_num]->complete(r);
-      });
-    m_work_queue->queue(wrapper_ctx, r);
+    if (object_ctx != nullptr) {
+      *object_ctx = mock_object_copy_request.object_contexts[object_num];
+    } else {
+      m_work_queue->queue(mock_object_copy_request.object_contexts[object_num],
+                          r);
+    }
     return true;
   }
 
@@ -217,11 +216,11 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SimpleImage) {
   request->send();
 
   ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockDeepCopyImageCopyRequest, Throttled) {
+TEST_F(TestMockDeepCopyImageCopyRequest, OutOfOrder) {
   librados::snap_t snap_id_end;
   ASSERT_EQ(0, create_snap("copy", &snap_id_end));
 
@@ -267,18 +266,22 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Throttled) {
                                           m_snap_seqs, &prog_ctx, &ctx);
   request->send();
 
-  std::function<void()> sleep_fn = [request]() {
-    sleep(1);
-  };
-
+  std::map<uint64_t, Context*> copy_contexts;
   ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
   for (uint64_t i = 0; i < object_count; ++i) {
     if (i % 10 == 0) {
-      ASSERT_TRUE(complete_object_copy(mock_object_copy_request, i, 0, sleep_fn));
+      ASSERT_TRUE(complete_object_copy(mock_object_copy_request, i,
+                  &copy_contexts[i], 0));
     } else {
-      ASSERT_TRUE(complete_object_copy(mock_object_copy_request, i, 0));
+      ASSERT_TRUE(complete_object_copy(mock_object_copy_request, i, nullptr,
+                                       0));
     }
   }
+
+  for (auto& pair : copy_contexts) {
+    pair.second->complete(0);
+  }
+
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -313,7 +316,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, SnapshotSubset) {
   snap_map.erase(snap_map.begin());
   ASSERT_EQ(snap_map, wait_for_snap_map(mock_object_copy_request));
 
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -339,7 +342,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, RestartPartialSync) {
                                           m_snap_seqs, &no_op, &ctx);
   request->send();
 
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 1, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 1, nullptr, 0));
   ASSERT_EQ(0, ctx.wait());
 }
 
@@ -375,7 +378,7 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel) {
   ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
   request->cancel();
 
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
   ASSERT_EQ(-ECANCELED, ctx.wait());
 }
 
@@ -419,17 +422,17 @@ TEST_F(TestMockDeepCopyImageCopyRequest, Cancel_Inflight_Sync) {
 
   ASSERT_EQ(m_snap_map, wait_for_snap_map(mock_object_copy_request));
 
-  std::function<void()> cancel_fn = [request]() {
-    sleep(2);
-    request->cancel();
-  };
+  Context *cancel_ctx = nullptr;
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 1, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 2, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 3, &cancel_ctx,
+                                   0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 4, nullptr, 0));
+  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 5, nullptr, 0));
 
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 0, 0));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 1, 0));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 2, 0));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 3, 0, cancel_fn));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 4, 0));
-  ASSERT_TRUE(complete_object_copy(mock_object_copy_request, 5, 0));
+  request->cancel();
+  cancel_ctx->complete(0);
 
   ASSERT_EQ(-ECANCELED, ctx.wait());
   ASSERT_EQ(5u, prog_ctx.object_number.get());

@@ -320,8 +320,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
   int r = _allocate(
     log_file->fnode.prefer_bdev,
     cct->_conf->bluefs_max_log_runway,
-    &log_file->fnode.extents);
-  log_file->fnode.recalc_allocated();
+    &log_file->fnode);
   assert(r == 0);
   log_writer = _create_writer(log_file);
 
@@ -842,6 +841,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  bluefs_fnode_t fnode;
 	  ::decode(fnode, p);
+	  fnode.recalc_allocated();
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_update " << " " << fnode << dendl;
           if (unlikely(to_stdout)) {
@@ -968,7 +968,7 @@ void BlueFS::_drop_link(FileRef file)
     }
     file_map.erase(file->fnode.ino);
     file->deleted = true;
-    file->fnode.recalc_allocated();
+
     if (file->dirty_seq) {
       assert(file->dirty_seq > log_seq_stable);
       assert(dirty_files.count(file->dirty_seq));
@@ -1226,13 +1226,12 @@ void BlueFS::_compact_log_sync()
   dout(20) << __func__ << " need " << need << dendl;
 
   mempool::bluefs::vector<bluefs_extent_t> old_extents;
-  old_extents.swap(log_file->fnode.extents);
-  log_file->fnode.recalc_allocated();
+  uint64_t old_allocated = 0;
+  log_file->fnode.swap_extents(old_extents, old_allocated);
   while (log_file->fnode.get_allocated() < need) {
     int r = _allocate(log_file->fnode.prefer_bdev,
 		      need - log_file->fnode.get_allocated(),
-		      &log_file->fnode.extents);
-    log_file->fnode.recalc_allocated();
+		      &log_file->fnode);
     assert(r == 0);
   }
 
@@ -1243,12 +1242,14 @@ void BlueFS::_compact_log_sync()
   log_writer->append(bl);
   int r = _flush(log_writer, true);
   assert(r == 0);
+#ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(log_writer, &completed_ios);
     wait_for_aio(log_writer);
     completed_ios.clear();
   }
+#endif
   flush_bdev();
 
   dout(10) << __func__ << " writing super" << dendl;
@@ -1315,9 +1316,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   while (log_file->fnode.get_allocated() < need) {
     int r = _allocate(log_file->fnode.prefer_bdev,
 		      cct->_conf->bluefs_max_log_runway,
-		      &log_file->fnode.extents);
+		      &log_file->fnode);
     assert(r == 0);
-    log_file->fnode.recalc_allocated();
   }
   dout(10) << __func__ << " log extents " << log_file->fnode.extents << dendl;
 
@@ -1350,9 +1350,8 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
 
   // allocate
   int r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
-                    &new_log->fnode.extents);
+                    &new_log->fnode);
   assert(r == 0);
-  new_log->fnode.recalc_allocated();
   new_log_writer = _create_writer(new_log);
   new_log_writer->append(bl);
 
@@ -1376,7 +1375,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
     if (discarded + e.length <= old_log_jump_to) {
       dout(10) << __func__ << " remove old log extent " << e << dendl;
       discarded += e.length;
-      log_file->fnode.extents.erase(log_file->fnode.extents.begin());
+      log_file->fnode.pop_front_extent();
     } else {
       dout(10) << __func__ << " remove front of old log extent " << e << dendl;
       uint64_t drop = old_log_jump_to - discarded;
@@ -1388,17 +1387,18 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
     }
     old_extents.push_back(temp);
   }
-  new_log->fnode.extents.insert(new_log->fnode.extents.end(),
-				log_file->fnode.extents.begin(),
-				log_file->fnode.extents.end());
+  auto from = log_file->fnode.extents.begin();
+  auto to = log_file->fnode.extents.end();
+  while (from != to) {
+    new_log->fnode.append_extent(*from);
+    ++from;
+  }
 
   // clear the extents from old log file, they are added to new log
-  log_file->fnode.extents.clear();
-
+  log_file->fnode.clear_extents();
   // swap the log files. New log file is the log file now.
-  log_file->fnode.extents.swap(new_log->fnode.extents);
-  log_file->fnode.recalc_allocated();
-  new_log->fnode.recalc_allocated();
+  new_log->fnode.swap_extents(log_file->fnode);
+
   log_writer->pos = log_writer->file->fnode.size =
     log_writer->pos - old_log_jump_to + new_log_jump_to;
 
@@ -1505,9 +1505,8 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
     }
     int r = _allocate(log_writer->file->fnode.prefer_bdev,
 		      cct->_conf->bluefs_max_log_runway,
-		      &log_writer->file->fnode.extents);
+		      &log_writer->file->fnode);
     assert(r == 0);
-    log_writer->file->fnode.recalc_allocated();
     log_t.op_file_update(log_writer->file->fnode);
   }
 
@@ -1620,7 +1619,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     assert(h->file->fnode.ino != 1);
     int r = _allocate(h->file->fnode.prefer_bdev,
 		      offset + length - allocated,
-		      &h->file->fnode.extents);
+		      &h->file->fnode);
     if (r < 0) {
       derr << __func__ << " allocated: 0x" << std::hex << allocated
            << " offset: 0x" << offset << " length: 0x" << length << std::dec
@@ -1628,7 +1627,6 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       assert(0 == "bluefs enospc");
       return r;
     }
-    h->file->fnode.recalc_allocated();
     if (cct->_conf->bluefs_preextend_wal_files &&
 	h->writer_type == WRITER_WAL) {
       // NOTE: this *requires* that rocksdb also has log recycling
@@ -1782,6 +1780,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
   return 0;
 }
 
+#ifdef HAVE_LIBAIO
 // we need to retire old completed aios so they don't stick around in
 // memory indefinitely (along with their bufferlist refs).
 void BlueFS::_claim_completed_aios(FileWriter *h, list<aio_t> *ls)
@@ -1807,6 +1806,7 @@ void BlueFS::wait_for_aio(FileWriter *h)
   }
   dout(10) << __func__ << " " << h << " done in " << (ceph_clock_now() - start) << dendl;
 }
+#endif
 
 int BlueFS::_flush(FileWriter *h, bool force)
 {
@@ -1896,6 +1896,7 @@ int BlueFS::_fsync(FileWriter *h, std::unique_lock<std::mutex>& l)
 
 void BlueFS::_flush_bdev_safely(FileWriter *h)
 {
+#ifdef HAVE_LIBAIO
   if (!cct->_conf->bluefs_sync_write) {
     list<aio_t> completed_ios;
     _claim_completed_aios(h, &completed_ios);
@@ -1904,7 +1905,9 @@ void BlueFS::_flush_bdev_safely(FileWriter *h)
     completed_ios.clear();
     flush_bdev();
     lock.lock();
-  } else {
+  } else
+#endif
+  {
     lock.unlock();
     flush_bdev();
     lock.lock();
@@ -1922,7 +1925,7 @@ void BlueFS::flush_bdev()
 }
 
 int BlueFS::_allocate(uint8_t id, uint64_t len,
-		      mempool::bluefs::vector<bluefs_extent_t> *ev)
+		      bluefs_fnode_t* node)
 {
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
@@ -1931,10 +1934,30 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 
   uint64_t left = ROUND_UP_TO(len, min_alloc_size);
   int r = -ENOSPC;
+  int64_t alloc_len = 0;
+  AllocExtentVector extents;
+  
   if (alloc[id]) {
     r = alloc[id]->reserve(left);
   }
-  if (r < 0) {
+  
+  if (r == 0) {
+    uint64_t hint = 0;
+    if (!node->extents.empty() && node->extents.back().bdev == id) {
+      hint = node->extents.back().end();
+    }   
+    extents.reserve(4);  // 4 should be (more than) enough for most allocations
+    alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
+  }
+  if (r < 0 || (alloc_len < (int64_t)left)) {
+    if (r == 0) {
+      interval_set<uint64_t> to_release;
+      alloc[id]->unreserve(left - alloc_len);
+      for (auto& p : extents) {
+        to_release.insert(p.offset, p.length);
+      }
+      alloc[id]->release(to_release);
+    }
     if (id != BDEV_SLOW) {
       if (bdev[id]) {
 	dout(1) << __func__ << " failed to allocate 0x" << std::hex << left
@@ -1943,7 +1966,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
 		<< "; fallback to bdev " << (int)id + 1
 		<< std::dec << dendl;
       }
-      return _allocate(id + 1, len, ev);
+      return _allocate(id + 1, len, node);
     }
     if (bdev[id])
       derr << __func__ << " failed to allocate 0x" << std::hex << left
@@ -1952,29 +1975,13 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     else
       derr << __func__ << " failed to allocate 0x" << std::hex << left
 	   << " on bdev " << (int)id << ", dne" << std::dec << dendl;
-    return r;
-  }
-
-  uint64_t hint = 0;
-  if (!ev->empty() && ev->back().bdev == id) {
-    hint = ev->back().end();
-  }
-
-  AllocExtentVector extents;
-  extents.reserve(4);  // 4 should be (more than) enough for most allocations
-  int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, hint,
-                          &extents);
-  if (alloc_len < (int64_t)left) {
-    derr << __func__ << " allocate failed on 0x" << std::hex << left
-	 << " min_alloc_size 0x" << min_alloc_size 
-         << " hint 0x" <<  hint << std::dec << dendl;
-    alloc[id]->dump();
-    assert(0 == "allocate failed... wtf");
+    if (alloc[id]) 
+      alloc[id]->dump();    
     return -ENOSPC;
   }
 
   for (auto& p : extents) {
-    ev->push_back(bluefs_extent_t(id, p.offset, p.length));
+    node->append_extent(bluefs_extent_t(id, p.offset, p.length));
   }
    
   return 0;
@@ -1992,10 +1999,9 @@ int BlueFS::_preallocate(FileRef f, uint64_t off, uint64_t len)
   uint64_t allocated = f->fnode.get_allocated();
   if (off + len > allocated) {
     uint64_t want = off + len - allocated;
-    int r = _allocate(f->fnode.prefer_bdev, want, &f->fnode.extents);
+    int r = _allocate(f->fnode.prefer_bdev, want, &f->fnode);
     if (r < 0)
       return r;
-    f->fnode.recalc_allocated();
     log_t.op_file_update(f->fnode);
   }
   return 0;
@@ -2073,8 +2079,8 @@ int BlueFS::open_for_write(
       for (auto& p : file->fnode.extents) {
 	pending_release[p.bdev].insert(p.offset, p.length);
       }
-      file->fnode.extents.clear();
-      file->fnode.recalc_allocated();
+
+      file->fnode.clear_extents();
     }
   }
   assert(file->fnode.ino > 1);

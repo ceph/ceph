@@ -17,9 +17,9 @@ void RGWEnv::init(CephContext *cct)
   conf.init(cct);
 }
 
-void RGWEnv::set(const boost::string_ref& name, const boost::string_ref& val)
+void RGWEnv::set(std::string name, std::string val)
 {
-  env_map[name.to_string()] = val.to_string();
+  env_map[std::move(name)] = std::move(val);
 }
 
 void RGWEnv::init(CephContext *cct, char **envp)

@@ -101,6 +101,19 @@ namespace librbd {
     time_t deferment_end_time;
   } trash_image_info_t;
 
+  typedef struct {
+    std::string pool_name;
+    std::string image_name;
+    std::string image_id;
+    bool trash;
+  } child_info_t;
+
+  typedef struct {
+    std::string addr;
+    int64_t id;
+    uint64_t cookie;
+  } image_watcher_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -311,6 +324,11 @@ public:
    * of this image at the currently set snapshot.
    */
   int list_children(std::set<std::pair<std::string, std::string> > *children);
+  /**
+  * Returns a structure of poolname, imagename, imageid and trash flag
+  * for each clone of this image at the currently set snapshot.
+  */
+  int list_children2(std::vector<librbd::child_info_t> *children);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,
@@ -463,6 +481,8 @@ public:
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
+
+  int list_watchers(std::list<image_watcher_t> &watchers);
 
 private:
   friend class RBD;

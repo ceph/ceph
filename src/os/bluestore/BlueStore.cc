@@ -1670,7 +1670,7 @@ void BlueStore::SharedBlob::put()
 			     << " removing self from set " << get_parent()
 			     << dendl;
     if (get_parent()) {
-      if (get_parent()->remove(this)) {
+      if (get_parent()->try_remove(this)) {
 	delete this;
       } else {
 	ldout(coll->store->cct, 20)
@@ -3323,13 +3323,13 @@ void BlueStore::Collection::split_cache(
 	  continue;
 	}
 	ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
-	sb->coll = dest;
 	if (sb->get_sbid()) {
 	  ldout(store->cct, 20) << __func__
 				<< "   moving registration " << *sb << dendl;
 	  shared_blob_set.remove(sb);
 	  dest->shared_blob_set.add(dest, sb);
 	}
+	sb->coll = dest;
 	if (dest->cache != cache) {
 	  for (auto& i : sb->bc.buffer_map) {
 	    if (!i.second->is_writing()) {
@@ -5522,7 +5522,6 @@ int BlueStore::umount()
     mempool_thread.shutdown();
     dout(20) << __func__ << " stopping kv thread" << dendl;
     _kv_stop();
-    _reap_collections();
     _flush_cache();
     dout(20) << __func__ << " closing" << dendl;
 
@@ -6295,23 +6294,26 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-  std::lock_guard<std::mutex> l(reap_lock);
+  // _reap_collections and this in the same thread,
+  // so no need a lock.
   removed_collections.push_back(c);
 }
 
 void BlueStore::_reap_collections()
 {
+
   list<CollectionRef> removed_colls;
   {
-    std::lock_guard<std::mutex> l(reap_lock);
-    removed_colls.swap(removed_collections);
+    // _queue_reap_collection and this in the same thread.
+    // So no need a lock.
+    if (!removed_collections.empty())
+      removed_colls.swap(removed_collections);
+    else
+      return;
   }
 
-  bool all_reaped = true;
-
-  for (list<CollectionRef>::iterator p = removed_colls.begin();
-       p != removed_colls.end();
-       ++p) {
+  list<CollectionRef>::iterator p = removed_colls.begin();
+  while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
@@ -6319,19 +6321,21 @@ void BlueStore::_reap_collections()
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
 		     << " flush_txns " << o->flushing_count << dendl;
-	    return false;
+	    return true;
 	  }
-	  return true;
+	  return false;
 	})) {
-      all_reaped = false;
+      ++p;
       continue;
     }
     c->onode_map.clear();
+    p = removed_colls.erase(p);
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
-
-  if (all_reaped) {
+  if (removed_colls.empty()) {
     dout(10) << __func__ << " all reaped" << dendl;
+  } else {
+    removed_collections.splice(removed_collections.begin(), removed_colls);
   }
 }
 
@@ -6551,7 +6555,7 @@ int BlueStore::_do_read(
   bufferlist& bl,
   uint32_t op_flags)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   int r = 0;
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -7213,8 +7217,7 @@ int BlueStore::_collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max() ||
-    start.hobj.is_max()) {
+  if (start.is_max() || start.hobj.is_max()) {
     goto out;
   }
   get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
@@ -7877,20 +7880,8 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 
 void BlueStore::_txc_calc_cost(TransContext *txc)
 {
-  // this is about the simplest model for transaction cost you can
-  // imagine.  there is some fixed overhead cost by saying there is a
-  // minimum of one "io".  and then we have some cost per "io" that is
-  // a configurable (with different hdd and ssd defaults), and add
-  // that to the bytes value.
-  int ios = 1;  // one "io" for the kv commit
-  for (auto& p : txc->ioc.pending_aios) {
-    ios += p.iov.size();
-  }
-
-#ifdef HAVE_SPDK
-  ios += txc->ioc.total_nseg;
-#endif
-
+  // one "io" for the kv commit
+  auto ios = 1 + txc->ioc.get_num_ios();
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
@@ -8037,10 +8028,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   OpSequencer *osr = txc->osr.get();
   std::lock_guard<std::mutex> l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
-
-  // release aio contexts (including pinned buffers).
-  txc->ioc.running_aios.clear();
-
+  txc->ioc.release_running_aios();
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;
@@ -8327,17 +8315,11 @@ void BlueStore::_txc_finish(TransContext *txc)
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
-  interval_set<uint64_t> bulk_release_extents;
   // it's expected we're called with lazy_release_lock already taken!
-  if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
+  if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
     dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
-    // interval_set seems to be too costly for inserting things in
-    // bstore_kv_final. We could serialize in simpler format and perform
-    // the merge separately, maybe even in a dedicated thread.
-    bulk_release_extents.insert(txc->released);
+    alloc->release(txc->released);
   }
-
-  alloc->release(bulk_release_extents);
   txc->allocated.clear();
   txc->released.clear();
 }
@@ -8481,6 +8463,7 @@ void BlueStore::_kv_stop()
   }
   kv_sync_thread.join();
   kv_finalize_thread.join();
+  assert(removed_collections.empty());
   {
     std::lock_guard<std::mutex> l(kv_lock);
     kv_stop = false;
@@ -8556,8 +8539,13 @@ void BlueStore::_kv_sync_thread()
 	} else if (deferred_aggressive) {
 	  force_flush = true;
 	}
-      } else
-	force_flush = true;
+      } else {
+      	if (aios || !deferred_done.empty()) {
+	  force_flush = true;
+      	} else {
+	  dout(20) << __func__ << " skipping flush (no aios, no deferred_done)" << dendl;
+      	}
+      }
 
       if (force_flush) {
 	dout(20) << __func__ << " num_aios=" << aios
@@ -9017,7 +9005,7 @@ int BlueStore::queue_transactions(
     TrackedOpRef op,
     ThreadPool::TPHandle *handle)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   Context *onreadable;
   Context *ondisk;
   Context *onreadable_sync;
@@ -11496,11 +11484,13 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     ghobject_t next;
     // Enumerate onodes in db, up to nonexistent_count + 1
     // then check if all of them are marked as non-existent.
-    // Bypass the check if returned number is greater than nonexistent_count
+    // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
                          nonexistent_count + 1, &ls, &next);
     if (r >= 0) {
-      bool exists = false; //ls.size() > nonexistent_count;
+      // If true mean collecton has more objects than nonexistent_count,
+      // so bypass check.
+      bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
         dout(10) << __func__ << " oid " << *it << dendl;
         auto onode = (*c)->onode_map.lookup(*it);

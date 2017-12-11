@@ -8,7 +8,6 @@
 #include "rgw_common.h"
 #include "rgw_es_query.h"
 
-using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

@@ -244,19 +244,12 @@ void ReplicatedBackend::clear_recovery_state()
 void ReplicatedBackend::on_change()
 {
   dout(10) << __func__ << dendl;
-  for (map<ceph_tid_t, InProgressOp>::iterator i = in_progress_ops.begin();
-       i != in_progress_ops.end();
-       in_progress_ops.erase(i++)) {
-    if (i->second.on_commit)
-      delete i->second.on_commit;
-    if (i->second.on_applied)
-      delete i->second.on_applied;
+  for (auto& op : in_progress_ops) {
+    delete op.second.on_commit;
+    delete op.second.on_applied;
   }
+  in_progress_ops.clear();
   clear_recovery_state();
-}
-
-void ReplicatedBackend::on_flushed()
-{
 }
 
 int ReplicatedBackend::objects_read_sync(
@@ -269,18 +262,6 @@ int ReplicatedBackend::objects_read_sync(
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
-struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
-  int r;
-  Context *c;
-  AsyncReadCallback(int r, Context *c) : r(r), c(c) {}
-  void finish(ThreadPool::TPHandle&) override {
-    c->complete(r);
-    c = NULL;
-  }
-  ~AsyncReadCallback() override {
-    delete c;
-  }
-};
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
   const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -288,29 +269,7 @@ void ReplicatedBackend::objects_read_async(
   Context *on_complete,
   bool fast_read)
 {
-  // There is no fast read implementation for replication backend yet
-  assert(!fast_read);
-
-  int r = 0;
-  for (list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-		 pair<bufferlist*, Context*> > >::const_iterator i =
-	   to_read.begin();
-       i != to_read.end() && r >= 0;
-       ++i) {
-    int _r = store->read(ch, ghobject_t(hoid), i->first.get<0>(),
-			 i->first.get<1>(), *(i->second.first),
-			 i->first.get<2>());
-    if (i->second.second) {
-      get_parent()->schedule_recovery_work(
-	get_parent()->bless_gencontext(
-	  new AsyncReadCallback(_r, i->second.second)));
-    }
-    if (_r < 0)
-      r = _r;
-  }
-  get_parent()->schedule_recovery_work(
-    get_parent()->bless_gencontext(
-      new AsyncReadCallback(r, on_complete)));
+  assert(0 == "async read is not used by replica pool");
 }
 
 class C_OSD_OnOpCommit : public Context {
@@ -514,15 +473,16 @@ void ReplicatedBackend::submit_transaction(
   assert(added.size() <= 1);
   assert(removed.size() <= 1);
 
-  assert(!in_progress_ops.count(tid));
-  InProgressOp &op = in_progress_ops.insert(
+  auto insert_res = in_progress_ops.insert(
     make_pair(
       tid,
       InProgressOp(
 	tid, on_all_commit, on_all_acked,
 	orig_op, at_version)
       )
-    ).first->second;
+    );
+  assert(insert_res.second);
+  InProgressOp &op = insert_res.first->second;
 
   op.waiting_for_applied.insert(
     parent->get_actingbackfill_shards().begin(),
@@ -573,7 +533,7 @@ void ReplicatedBackend::submit_transaction(
 void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
@@ -597,7 +557,7 @@ void ReplicatedBackend::op_applied(
 void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
@@ -629,9 +589,8 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   ceph_tid_t rep_tid = r->get_tid();
   pg_shard_t from = r->from;
 
-  if (in_progress_ops.count(rep_tid)) {
-    map<ceph_tid_t, InProgressOp>::iterator iter =
-      in_progress_ops.find(rep_tid);
+  auto iter = in_progress_ops.find(rep_tid);
+  if (iter != in_progress_ops.end()) {
     InProgressOp &ip_op = iter->second;
     const MOSDOp *m = NULL;
     if (ip_op.op)
@@ -1079,7 +1038,7 @@ void ReplicatedBackend::issue_op(
       op_t,
       peer,
       pinfo);
-    if (op->op)
+    if (op->op && op->op->pg_trace)
       wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
     get_parent()->send_message_osd_cluster(
       peer.osd, wr, get_osdmap()->get_epoch());

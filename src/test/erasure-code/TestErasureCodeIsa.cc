@@ -73,9 +73,9 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
   {
     int want_to_decode[] = {0, 1};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 2),
-                            encoded,
-                            &decoded));
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 2),
+			     encoded,
+			     &decoded));
     EXPECT_EQ(2u, decoded.size());
     EXPECT_EQ(chunk_size, decoded[0].length());
     compare_chunks(in, decoded);
@@ -91,9 +91,9 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
     EXPECT_EQ(3u, degraded.size());
     int want_to_decode[] = {1};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 1),
-                            degraded,
-                            &decoded));
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 1),
+			     degraded,
+			     &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(4u, decoded.size());
     EXPECT_EQ(chunk_size, decoded[1].length());
@@ -110,7 +110,7 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
     EXPECT_EQ(3u, degraded.size());
     int want_to_decode[] = {3};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 1),
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 1),
                             degraded,
                             &decoded));
     // always decode all, regardless of want_to_decode
@@ -129,9 +129,9 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
     EXPECT_EQ(3u, degraded.size());
     int want_to_decode[] = {2};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 1),
-                            degraded,
-                            &decoded));
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 1),
+			     degraded,
+			     &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(4u, decoded.size());
     EXPECT_EQ(chunk_size, decoded[2].length());
@@ -149,9 +149,9 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
     EXPECT_EQ(2u, degraded.size());
     int want_to_decode[] = {1, 3};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 2),
-                            degraded,
-                            &decoded));
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 2),
+			     degraded,
+			     &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(4u, decoded.size());
     EXPECT_EQ(chunk_size, decoded[1].length());
@@ -166,9 +166,9 @@ void IsaErasureCodeTest::encode_decode(unsigned object_size)
     EXPECT_EQ(2u, degraded.size());
     int want_to_decode[] = {0, 1};
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, Isa.decode(set<int>(want_to_decode, want_to_decode + 2),
-                            degraded,
-                            &decoded));
+    EXPECT_EQ(0, Isa._decode(set<int>(want_to_decode, want_to_decode + 2),
+			     degraded,
+			     &decoded));
     // always decode all, regardless of want_to_decode
     EXPECT_EQ(4u, decoded.size());
     EXPECT_EQ(chunk_size, decoded[0].length());
@@ -203,9 +203,9 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
     set<int> available_chunks;
     set<int> minimum;
 
-    EXPECT_EQ(0, Isa.minimum_to_decode(want_to_read,
-                                       available_chunks,
-                                       &minimum));
+    EXPECT_EQ(0, Isa._minimum_to_decode(want_to_read,
+					available_chunks,
+					&minimum));
     EXPECT_TRUE(minimum.empty());
   }
   //
@@ -218,9 +218,9 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
 
     want_to_read.insert(0);
 
-    EXPECT_EQ(-EIO, Isa.minimum_to_decode(want_to_read,
-                                          available_chunks,
-                                          &minimum));
+    EXPECT_EQ(-EIO, Isa._minimum_to_decode(want_to_read,
+					   available_chunks,
+					   &minimum));
   }
   //
   // Reading a subset of the available chunks is always possible.
@@ -233,9 +233,9 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
     want_to_read.insert(0);
     available_chunks.insert(0);
 
-    EXPECT_EQ(0, Isa.minimum_to_decode(want_to_read,
-                                       available_chunks,
-                                       &minimum));
+    EXPECT_EQ(0, Isa._minimum_to_decode(want_to_read,
+					available_chunks,
+					&minimum));
     EXPECT_EQ(want_to_read, minimum);
   }
   //
@@ -251,9 +251,9 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
     want_to_read.insert(1);
     available_chunks.insert(0);
 
-    EXPECT_EQ(-EIO, Isa.minimum_to_decode(want_to_read,
-                                          available_chunks,
-                                          &minimum));
+    EXPECT_EQ(-EIO, Isa._minimum_to_decode(want_to_read,
+					   available_chunks,
+					   &minimum));
   }
   //
   // When chunks are not available, the minimum can be made of any
@@ -275,9 +275,9 @@ TEST_F(IsaErasureCodeTest, minimum_to_decode)
     available_chunks.insert(2);
     available_chunks.insert(3);
 
-    EXPECT_EQ(0, Isa.minimum_to_decode(want_to_read,
-                                       available_chunks,
-                                       &minimum));
+    EXPECT_EQ(0, Isa._minimum_to_decode(want_to_read,
+					available_chunks,
+					&minimum));
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(0u, minimum.count(3));
   }
@@ -384,9 +384,9 @@ DecodeAndVerify(ErasureCodeIsaDefault& Isa, map<int, bufferlist> &degraded, set<
   bool ok;
 
   // decode as requested
-  ok = Isa.decode(want_to_decode,
-                  degraded,
-                  &decoded);
+  ok = Isa._decode(want_to_decode,
+		   degraded,
+		   &decoded);
 
   for (int i = 0; i < (int) decoded.size(); i++) {
     // compare all the buffers with their original

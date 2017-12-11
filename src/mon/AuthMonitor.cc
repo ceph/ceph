@@ -1300,19 +1300,19 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       }
     }
 
-    auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
-    if (!fs) {
-      ss << "filesystem " << filesystem << " does not exist.";
-      err = -EINVAL;
-      goto done;
+    if (filesystem != "*" && filesystem != "all") {
+      auto fs = mon->mdsmon()->get_fsmap().get_filesystem(filesystem);
+      if (!fs) {
+	ss << "filesystem " << filesystem << " does not exist.";
+	err = -EINVAL;
+	goto done;
+      }
     }
 
-    auto data_pools = fs->mds_map.get_data_pools();
-    for (auto p : data_pools) {
-      const string &pool_name = mon->osdmon()->osdmap.get_pool_name(p);
-      osd_cap_string += osd_cap_string.empty() ? "" : ", ";
-      osd_cap_string += "allow " + osd_cap_wanted + " pool=" + pool_name;
-    }
+    osd_cap_string += osd_cap_string.empty()? "" : ", ";
+    osd_cap_string += "allow " + osd_cap_wanted
+      + " tag " + pg_pool_t::APPLICATION_NAME_CEPHFS
+      + " data=" + filesystem;
 
     std::map<string, bufferlist> wanted_caps = {
       { "mon", _encode_cap("allow r") },
@@ -1325,8 +1325,8 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       for (const auto &sys_cap : wanted_caps) {
 	if (entity_auth.caps.count(sys_cap.first) == 0 ||
 	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
-	  ss << "key for " << entity << " exists but cap " << sys_cap.first
-	     << " does not match";
+	  ss << entity << " already has fs capabilities that differ from those supplied. To generate a new auth key for "
+	     << entity << ", first remove " << entity << " from configuration files, execute 'ceph auth rm " << entity << "', then execute this command again.";
 	  err = -EINVAL;
 	  goto done;
 	}

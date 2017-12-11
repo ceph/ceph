@@ -429,23 +429,24 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     };
 
     auto rp = summary.tail.rbegin();
-    while (num > 0 && rp != summary.tail.rend()) {
+    for (; num > 0 && rp != summary.tail.rend(); ++rp) {
       if (match(*rp)) {
         num--;
       }
-      ++rp;
+    }
+    if (rp == summary.tail.rend()) {
+      --rp;
     }
     ostringstream ss;
-    auto p = summary.tail.begin();
-    for ( ; p != summary.tail.end(); ++p) {
-      if (!match(*p)) {
+    for (; rp != summary.tail.rbegin(); --rp) {
+      if (!match(*rp)) {
         continue;
       }
 
       if (f) {
-	f->dump_object("entry", *p);
+	f->dump_object("entry", *rp);
       } else {
-	ss << *p << "\n";
+	ss << *rp << "\n";
       }
     }
     if (f) {

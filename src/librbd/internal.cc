@@ -109,6 +109,15 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
   return 0;
 }
 
+bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
+{
+  if (c1.pool_name != c2.pool_name)
+    return c1.pool_name < c2.pool_name;
+  else if (c1.image_name != c2.image_name)
+    return c1.image_name < c2.image_name;
+  else
+    return false;
+}
 
 } // anonymous namespace
 
@@ -620,7 +629,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     return 0;
   }
 
-  int list_children(ImageCtx *ictx, set<pair<string, string> >& names)
+  int list_children(ImageCtx *ictx,
+                    vector<child_info_t> *names)
   {
     CephContext *cct = ictx->cct;
     ldout(cct, 20) << "children list " << ictx->name << dendl;
@@ -640,7 +650,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     Rados rados(ictx->md_ctx);
-    for ( auto &info : image_info){
+    for (auto &info : image_info) {
       IoCtx ioctx;
       r = rados.ioctx_create2(info.first.first, ioctx);
       if (r < 0) {
@@ -650,17 +660,38 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       }
 
       for (auto &id_it : info.second) {
-	string name;
-	r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
-	if (r < 0) {
-	  lderr(cct) << "Error looking up name for image id " << id_it
-		     << " in pool " << info.first.second << dendl;
-	  return r;
-	}
-	names.insert(make_pair(info.first.second, name));
+        string name;
+        bool trash = false;
+        r = cls_client::dir_get_name(&ioctx, RBD_DIRECTORY, id_it, &name);
+        if (r == -ENOENT) {
+          cls::rbd::TrashImageSpec trash_spec;
+          r = cls_client::trash_get(&ioctx, id_it, &trash_spec);
+          if (r < 0) {
+            if (r != -EOPNOTSUPP && r != -ENOENT) {
+              lderr(cct) << "Error looking up name for image id " << id_it
+                         << " in rbd trash" << dendl;
+              return r;
+            }
+            return -ENOENT;
+          }
+          name = trash_spec.name;
+          trash = true;
+        } else if (r < 0 && r != -ENOENT) {
+          lderr(cct) << "Error looking up name for image id " << id_it
+                     << " in pool " << info.first.second << dendl;
+          return r;
+        }
+        names->push_back(
+        child_info_t {
+          info.first.second,
+          name,
+          id_it,
+          trash
+        });
       }
     }
-    
+    std::sort(names->begin(), names->end(), compare_by_name);
+
     return 0;
   }
 
@@ -1349,9 +1380,8 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       image_id = ictx->id;
       ictx->owner_lock.get_read();
       if (ictx->exclusive_lock != nullptr) {
-        r = ictx->operations->prepare_image_update();
-        if (r < 0 || (ictx->exclusive_lock != nullptr &&
-                      !ictx->exclusive_lock->is_lock_owner())) {
+        r = ictx->operations->prepare_image_update(false);
+        if (r < 0) {
 	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
 	  ictx->owner_lock.put_read();
 	  ictx->state->close();
@@ -1909,10 +1939,30 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 			     LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+    uint64_t object_id = 0;
     for (uint64_t offset = 0; offset < src_size; offset += period) {
       if (throttle.pending_error()) {
         return throttle.wait_for_ret();
       }
+      
+      {
+        RWLock::RLocker snap_locker(src->snap_lock);
+        if (src->object_map != nullptr) {
+          bool skip = true;
+          // each period is related to src->stripe_count objects, check them all
+          for (uint64_t i=0; i < src->stripe_count; i++) {
+            if (object_id < src->object_map->size() &&
+                src->object_map->object_may_exist(object_id)) {
+              skip = false;
+            }
+            ++object_id;
+          }
+
+          if (skip) continue;
+        } else {
+          object_id += src->stripe_count;
+        }
+      }      
 
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
@@ -2217,7 +2267,6 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker md_locker(ictx->md_lock);
     r = ictx->invalidate_cache(false);
     ictx->perfcounter->inc(l_librbd_invalidate_cache);
     return r;
@@ -2327,7 +2376,35 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
     }
   }
 
+  int list_watchers(ImageCtx *ictx,
+		    std::list<librbd::image_watcher_t> &watchers)
+  {
+    int r;
+    std::string header_oid;
+    std::list<obj_watch_t> obj_watchers;
 
+    if (ictx->old_format) {
+      header_oid = util::old_header_name(ictx->name);
+    } else {
+      header_oid = util::header_name(ictx->id);
+    }
+
+    r = ictx->md_ctx.list_watchers(header_oid, &obj_watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    for (auto i = obj_watchers.begin(); i != obj_watchers.end(); ++i) {
+      librbd::image_watcher_t watcher;
+      watcher.addr = i->addr;
+      watcher.id = i->watcher_id;
+      watcher.cookie = i->cookie;
+
+      watchers.push_back(watcher);
+    }
+
+    return 0;
+  }
 
 }
 

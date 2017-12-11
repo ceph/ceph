@@ -62,7 +62,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     size_t offset = 0;
     int idx = 0;
     for (; offset < length && idx < vector.iov_count; idx++) {
-      size_t len = MIN(vector.iov[idx].iov_len, length - offset);
+      size_t len = std::min(vector.iov[idx].iov_len, length - offset);
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }
@@ -113,27 +113,29 @@ void ReadResult::C_SparseReadRequestBase::finish(ExtentMap &extent_map,
                                                  const Extents &buffer_extents,
                                                  uint64_t offset, size_t length,
                                                  bufferlist &bl, int r) {
-  aio_completion->lock.Lock();
   CephContext *cct = aio_completion->ictx->cct;
   ldout(cct, 10) << "C_SparseReadRequestBase: r = " << r
                  << dendl;
 
-  if (r >= 0 || r == -ENOENT) { // this was a sparse_read operation
+  if (ignore_enoent && r == -ENOENT) {
+    r = 0;
+  }
+  if (r >= 0) {
     ldout(cct, 10) << " got " << extent_map
                    << " for " << buffer_extents
                    << " bl " << bl.length() << dendl;
-    // reads from the parent don't populate the m_ext_map and the overlap
-    // may not be the full buffer.  compensate here by filling in m_ext_map
-    // with the read extent when it is empty.
+    // handle the case where a sparse-read wasn't issued
     if (extent_map.empty()) {
       extent_map[offset] = bl.length();
     }
 
+    aio_completion->lock.Lock();
     aio_completion->read_result.m_destriper.add_partial_sparse_result(
       cct, bl, extent_map, offset, buffer_extents);
+    aio_completion->lock.Unlock();
+
     r = length;
   }
-  aio_completion->lock.Unlock();
 
   C_ReadRequest::finish(r);
 }

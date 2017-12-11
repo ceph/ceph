@@ -331,7 +331,7 @@ struct MDRequestImpl : public MutationImpl {
   const filepath& get_filepath2();
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
-  bool is_replay() const;
+  bool is_queued_for_replay() const;
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;

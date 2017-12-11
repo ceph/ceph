@@ -300,9 +300,11 @@ void MDBalancer::send_heartbeat()
     return;
   }
 
-  mds_load.clear();
-  if (mds->get_nodeid() == 0)
+  if (mds->get_nodeid() == 0) {
     beat_epoch++;
+   
+    mds_load.clear();
+  }
 
   // my load
   mds_load_t load = get_load(now);
@@ -367,8 +369,19 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     goto out;
   }
 
+  if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
+    dout(10) << "receive next epoch " << m->get_beat() << " from mds." << who << " before mds0" << dendl;
+
+    beat_epoch = m->get_beat();
+    // clear the mds load info whose epoch is less than beat_epoch 
+    mds_load.clear();
+  }
+
   if (who == 0) {
-    dout(20) << " from mds0, new epoch" << dendl;
+    dout(20) << " from mds0, new epoch " << m->get_beat() << dendl;
+    if (beat_epoch != m->get_beat()) {
+      mds_load.clear();
+    }
     beat_epoch = m->get_beat();
     send_heartbeat();
 
@@ -1098,7 +1111,7 @@ void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amount)
 {
   // hit me
-  double v = dir->pop_me.get(type).hit(now, amount);
+  double v = dir->pop_me.get(type).hit(now, mds->mdcache->decayrate, amount);
 
   const bool hot = (v > g_conf->mds_bal_split_rd && type == META_POP_IRD) ||
                    (v > g_conf->mds_bal_split_wr && type == META_POP_IWR);
@@ -1166,12 +1179,12 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
   bool hit_subtree_nested = dir->is_auth();  // all nested auth subtrees
 
   while (true) {
-    dir->pop_nested.get(type).hit(now, amount);
+    dir->pop_nested.get(type).hit(now, mds->mdcache->decayrate, amount);
     if (rd_adj != 0.0)
       dir->pop_nested.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
 
     if (hit_subtree) {
-      dir->pop_auth_subtree.get(type).hit(now, amount);
+      dir->pop_auth_subtree.get(type).hit(now, mds->mdcache->decayrate, amount);
       if (rd_adj != 0.0)
 	dir->pop_auth_subtree.get(META_POP_IRD).adjust(now, mds->mdcache->decayrate, rd_adj);
     }

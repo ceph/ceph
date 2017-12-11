@@ -166,6 +166,18 @@ else()
   set(C_STANDARD_REQUIRED ON)
 endif()
 
+
+if(CMAKE_COMPILER_IS_GNUCXX AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
+  # this is not always correct, as one can use clang with libstdc++ or
+  # use old gcc with new libstdc++, but it covers the most cases.
+  #
+  # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
+  message(SEND_ERROR "performance regression is expected due to an O(n) "
+    "implementation of 'std::list::size()' in libstdc++ older than 5.1.0, "
+    "Please use GCC 5.1 and up.")
+endif()
+
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
   COMPILER_SUPPORTS_DIAGNOSTICS_COLOR)
@@ -282,15 +294,6 @@ if(HAVE_RDMA)
   list(APPEND EXTRALIBS ${RDMA_LIBRARIES} pthread)
 endif(HAVE_RDMA)
 
-if(HAVE_DPDK)
-  set(CMAKE_CXX_FLAGS "-march=native ${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${DPDK_LIBRARY})
-  if(NOT USE_CRYPTOPP)
-    message(FATAL_ERROR "CRYPTOPP must be supported when enable DPDK.")
-  endif(NOT USE_CRYPTOPP)
-  list(APPEND EXTRALIBS ${DPDK_LIBRARIES})
-endif(HAVE_DPDK)
-
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
   set(ALLOC_LIBS ${GPERFTOOLS_TCMALLOC_LIBRARY})
@@ -396,24 +399,6 @@ if(HAVE_RDMA)
     msg/async/rdma/RDMAStack.cc)
 endif(HAVE_RDMA)
 
-set(dpdk_common_srcs)
-if(HAVE_DPDK)
-  list(APPEND dpdk_common_srcs
-    msg/async/dpdk/ARP.cc
-    msg/async/dpdk/DPDK.cc
-    msg/async/dpdk/dpdk_rte.cc
-    msg/async/dpdk/DPDKStack.cc
-    msg/async/dpdk/EventDPDK.cc
-    msg/async/dpdk/IP.cc
-    msg/async/dpdk/net.cc
-    msg/async/dpdk/IPChecksum.cc
-    msg/async/dpdk/Packet.cc
-    msg/async/dpdk/TCP.cc
-    msg/async/dpdk/UserspaceEvent.cc
-    msg/async/dpdk/ethernet.cc)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${DPDK_INCLUDE_DIR}")
-endif(HAVE_DPDK)
-
 add_library(common_buffer_obj OBJECT
   common/buffer.cc)
 
@@ -428,6 +413,7 @@ set(libcommon_files
   common/LogClient.cc
   common/LogEntry.cc
   common/PrebufferedStreambuf.cc
+  common/CachedPrebufferedStreambuf.cc
   common/BackTrace.cc
   common/perf_counters.cc
   common/perf_histogram.cc
@@ -494,7 +480,6 @@ set(libcommon_files
   msg/QueueStrategy.cc
   ${xio_common_srcs}
   ${async_rdma_common_srcs}
-  ${dpdk_common_srcs}
   msg/msg_types.cc
   common/reverse.c
   common/hobject.cc
@@ -541,6 +526,8 @@ set(libcommon_files
   common/Cycles.cc
   common/scrub_types.cc
   common/bit_str.cc
+  dmclock/src/dmclock_util.cc
+  dmclock/support/src/run_every.cc
   osdc/Striper.cc
   osdc/Objecter.cc
   common/Graylog.cc
@@ -653,9 +640,6 @@ set(ceph_common_deps
 if(HAVE_RDMA)
   list(APPEND ceph_common_deps ${RDMA_LIBRARY})
 endif()
-if(HAVE_DPDK)
-  list(APPEND ceph_common_deps ${DPDK_LIBRARIES})
-endif()
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
@@ -670,6 +654,32 @@ if(HAVE_ARMV8_CRC)
   set_target_properties(common_crc_aarch64 PROPERTIES COMPILE_FLAGS "${CMAKE_C_FLAGS} ${ARMV8_CRC_COMPILE_FLAGS}")
   list(APPEND ceph_common_deps common_crc_aarch64)
 endif(HAVE_ARMV8_CRC)
+
+if(WITH_DPDK)
+  list(APPEND common_async_dpdk_files
+    msg/async/dpdk/ARP.cc
+    msg/async/dpdk/DPDK.cc
+    msg/async/dpdk/dpdk_rte.cc
+    msg/async/dpdk/DPDKStack.cc
+    msg/async/dpdk/EventDPDK.cc
+    msg/async/dpdk/IP.cc
+    msg/async/dpdk/net.cc
+    msg/async/dpdk/IPChecksum.cc
+    msg/async/dpdk/Packet.cc
+    msg/async/dpdk/TCP.cc
+    msg/async/dpdk/UserspaceEvent.cc
+    msg/async/dpdk/ethernet.cc)
+  add_library(common_async_dpdk STATIC
+    ${common_async_dpdk_files})
+  # to ready the dpdk header files
+  add_dependencies(common_async_dpdk
+    ${DPDK_LIBRARIES})
+  list(APPEND ceph_common_deps common_async_dpdk)
+  target_link_libraries(common_async_dpdk
+    ${DPDK_LIBRARIES})
+  set_target_properties(common_async_dpdk PROPERTIES
+    COMPILE_FLAGS "-march=native -I${DPDK_INCLUDE_DIR}")
+endif(WITH_DPDK)
 
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
@@ -713,6 +723,7 @@ if (WITH_MGR)
       mgr/DaemonServer.cc
       mgr/ClusterState.cc
       mgr/ActivePyModules.cc
+      mgr/OSDHealthMetricCollector.cc
       mgr/StandbyPyModules.cc
       mgr/PyModuleRegistry.cc
       mgr/PyModuleRunner.cc

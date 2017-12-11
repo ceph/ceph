@@ -828,6 +828,7 @@ class TestImage(object):
     def test_metadata(self):
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
+        assert_raises(KeyError, self.image.metadata_get, "key1")
         self.image.metadata_set("key1", "value1")
         self.image.metadata_set("key2", "value2")
         value = self.image.metadata_get("key1")
@@ -841,6 +842,7 @@ class TestImage(object):
         eq(len(metadata), 1)
         eq(metadata[0], ("key2", "value2"))
         self.image.metadata_remove("key2")
+        assert_raises(KeyError, self.image.metadata_remove, "key2")
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
 
@@ -853,6 +855,12 @@ class TestImage(object):
             self.image.metadata_remove("key" + str(i))
             metadata = list(self.image.metadata_list())
             eq(len(metadata), N - i - 1)
+
+    def test_watchers_list(self):
+        watchers = list(self.image.watchers_list())
+        # The image is open (in r/w mode) from setup, so expect there to be one
+        # watcher.
+        eq(len(watchers), 1)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
@@ -1043,32 +1051,74 @@ class TestClone(object):
         deduped = set([(pool_name, image[1]) for image in actual])
         eq(deduped, set(expected))
 
+    def check_children2(self, expected):
+        actual = list(self.image.list_children2())
+        eq(actual, expected)
+
+    def get_image_id(self, ioctx, name):
+        with Image(ioctx, name) as image:
+            return image.id()
+
     def test_list_children(self):
         global ioctx
         global features
         self.image.set_snap('snap1')
         self.check_children([(pool_name, self.clone_name)])
+        self.check_children2(
+            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+              'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone.close()
         self.rbd.remove(ioctx, self.clone_name)
         eq(self.image.list_children(), [])
+        eq(list(self.image.list_children2()), [])
 
         clone_name = get_temp_image_name() + '_'
         expected_children = []
+        expected_children2 = []
         for i in range(10):
             self.rbd.clone(ioctx, image_name, 'snap1', ioctx,
                            clone_name + str(i), features)
             expected_children.append((pool_name, clone_name + str(i)))
+            expected_children2.append(
+                {'pool': pool_name, 'image': clone_name + str(i), 'trash': False,
+                 'id': self.get_image_id(ioctx, clone_name + str(i))})
             self.check_children(expected_children)
+            self.check_children2(expected_children2)
+
+        image6_id = self.get_image_id(ioctx, clone_name + str(5))
+        RBD().trash_move(ioctx, clone_name + str(5), 0)
+        expected_children.remove((pool_name, clone_name + str(5)))
+        for item in expected_children2:
+          for k, v in item.items():
+            if v == image6_id:
+              item["trash"] = True
+        self.check_children(expected_children)
+        self.check_children2(expected_children2)
+
+        RBD().trash_restore(ioctx, image6_id, clone_name + str(5))
+        expected_children.append((pool_name, clone_name + str(5)))
+        for item in expected_children2:
+          for k, v in item.items():
+            if v == image6_id:
+              item["trash"] = False
+        self.check_children(expected_children)
+        self.check_children2(expected_children2)
 
         for i in range(10):
             self.rbd.remove(ioctx, clone_name + str(i))
-            expected_children.pop(0)
+            expected_children.remove((pool_name, clone_name + str(i)))
+            expected_children2.pop(0)
             self.check_children(expected_children)
+            self.check_children2(expected_children2)
 
         eq(self.image.list_children(), [])
+        eq(list(self.image.list_children2()), [])
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, self.clone_name,
                        features)
         self.check_children([(pool_name, self.clone_name)])
+        self.check_children2(
+            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+              'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone = Image(ioctx, self.clone_name)
 
     def test_flatten_errors(self):

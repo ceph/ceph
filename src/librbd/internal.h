@@ -64,7 +64,7 @@ namespace librbd {
 
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
-		    std::set<std::pair<std::string, std::string> > & names);
+                    std::vector<child_info_t> *names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -170,6 +170,7 @@ namespace librbd {
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 
+  int list_watchers(ImageCtx *ictx, std::list<librbd::image_watcher_t> &watchers);
 }
 
 std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts);

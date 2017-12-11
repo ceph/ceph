@@ -558,6 +558,12 @@ start_mon() {
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		   --cap mon 'allow r' \
+			--cap osd 'allow rw tag cephfs data=*' \
+			--cap mds 'allow rwp' \
+			"$keyring_fn"
+
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
 		    --cap mon 'allow rw' \
 		    --cap osd 'allow rwx' \
@@ -705,7 +711,7 @@ EOF
 EOF
 	        fi
 	        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
-	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
+	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow rw tag cephfs *=*' mds 'allow' mgr 'allow profile mds'
 	        if [ "$standby" -eq 1 ]; then
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
@@ -736,6 +742,7 @@ EOF
                 ceph_adm osd pool create "cephfs_data_${name}" 8
                 ceph_adm osd pool create "cephfs_metadata_${name}" 8
                 ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done

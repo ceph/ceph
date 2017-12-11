@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include "include/uuid.h"
+#include "blkdev.h"
+
 
 #ifdef __linux__
 #include <linux/fs.h>
@@ -334,7 +336,7 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
   return -EOPNOTSUPP;
 }
 
-void get_dm_parents(const string& dev, set<string> *ls)
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
@@ -374,7 +376,7 @@ int get_device_by_fd(int fd, char *partition, char *device, size_t max)
   return -EOPNOTSUPP;
 }
 
-void get_dm_parents(const string& dev, set<string> *ls)
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
@@ -409,7 +411,7 @@ int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }
-void get_dm_parents(const string& dev, set<string> *ls)
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 #endif

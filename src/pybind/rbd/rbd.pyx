@@ -96,6 +96,12 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t size
         char *name
 
+    ctypedef struct rbd_child_info_t:
+        char *pool_name
+        char *image_name
+        char *image_id
+        bint trash
+
     ctypedef enum rbd_mirror_mode_t:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
@@ -147,6 +153,11 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_trash_image_source_t source
         time_t deletion_time
         time_t deferment_end_time
+
+    ctypedef struct rbd_image_watcher_t:
+        char *addr
+        int64_t id
+        uint64_t cookie
 
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
@@ -269,6 +280,10 @@ cdef extern from "rbd/librbd.h" nogil:
                                void *cbdata)
     ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
                               char *images, size_t *images_len)
+    int rbd_list_children2(rbd_image_t image, rbd_child_info_t *children,
+                           int *max_children)
+    void rbd_list_children_cleanup(rbd_child_info_t *children,
+                                   size_t num_children)
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
                              char *tag, size_t *tag_len,
                              char *clients, size_t *clients_len,
@@ -338,6 +353,11 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
                           char *keys, size_t *key_len, char *values,
                           size_t *vals_len)
+
+    int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
+                          size_t *max_watchers)
+    void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
+                                   size_t num_watchers)
 
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
@@ -970,7 +990,7 @@ class RBD(object):
         with nogil:
             ret = rbd_trash_get(_ioctx, _image_id, &c_info)
         if ret != 0:
-            raise make_ex(ret, 'error restoring image from trash')
+            raise make_ex(ret, 'error retrieving image from trash')
 
         __source_string = ['USER', 'MIRRORING']
         info = {
@@ -2232,6 +2252,14 @@ written." % (self.name, ret, length))
             free(c_pools)
             free(c_images)
 
+    def list_children2(self):
+        """
+        Iterate over the children of a snapshot.
+
+        :returns: :class:`ChildIterator`
+        """
+        return ChildIterator(self)
+
     def list_lockers(self):
         """
         List clients that have locked the image and information
@@ -2683,9 +2711,11 @@ written." % (self.name, ret, length))
                     ret = rbd_metadata_get(self.image, _key, value, &size)
                 if ret != -errno.ERANGE:
                     break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for image %s' % (key, self.name))
             if ret != 0:
                 raise make_ex(ret, 'error getting metadata %s for image %s' %
-                              (self.key, self.name,))
+                              (key, self.name,))
             return decode_cstr(value)
         finally:
             free(value)
@@ -2709,7 +2739,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error setting metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
 
     def metadata_remove(self, key):
@@ -2725,9 +2755,11 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_metadata_remove(self.image, _key)
 
+        if ret == -errno.ENOENT:
+            raise KeyError('no metadata %s for image %s' % (key, self.name))
         if ret != 0:
             raise make_ex(ret, 'error removing metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name,))
 
     def metadata_list(self):
         """
@@ -2736,6 +2768,16 @@ written." % (self.name, ret, length))
         :returns: :class:`MetadataIterator`
         """
         return MetadataIterator(self)
+
+
+    def watchers_list(self):
+        """
+        List image watchers.
+
+        :returns: :class:`WatcherIterator`
+        """
+        return WatcherIterator(self)
+
 
 cdef class LockOwnerIterator(object):
     """
@@ -2958,3 +3000,100 @@ cdef class TrashIterator(object):
         if self.entries:
             free(self.entries)
 
+cdef class ChildIterator(object):
+    """
+    Iterator over child info for a snapshot.
+
+    Yields a dictionary containing information about a child.
+
+    Keys are:
+
+    * ``pool`` (str) - name of the pool
+
+    * ``image`` (str) - name of the child
+
+    * ``id`` (str) - id of the child
+
+    * ``trash`` (bool) - True if child is in trash bin
+    """
+
+    cdef rbd_child_info_t *children
+    cdef int num_children
+    cdef object image
+
+    def __init__(self, Image image):
+        self.image = image
+        self.children = NULL
+        self.num_children = 10
+        while True:
+            self.children = <rbd_child_info_t*>realloc_chk(self.children,
+                                                           self.num_children *
+                                                           sizeof(rbd_child_info_t))
+            with nogil:
+                ret = rbd_list_children2(image.image, self.children, &self.num_children)
+            if ret >= 0:
+                self.num_children = ret
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing children.')
+
+    def __iter__(self):
+        for i in range(self.num_children):
+            yield {
+                'pool'  : decode_cstr(self.children[i].pool_name),
+                'image' : decode_cstr(self.children[i].image_name),
+                'id'    : decode_cstr(self.children[i].image_id),
+                'trash' : self.children[i].trash
+                }
+
+    def __dealloc__(self):
+        if self.children:
+            rbd_list_children_cleanup(self.children, self.num_children)
+            free(self.children)
+
+cdef class WatcherIterator(object):
+    """
+    Iterator over watchers of an image.
+
+    Yields a dictionary containing information about a watcher.
+
+    Keys are:
+
+    * ``addr`` (str) - address of the watcher
+
+    * ``id`` (int) - id of the watcher
+
+    * ``cookie`` (int) - the watcher's cookie
+    """
+
+    cdef rbd_image_watcher_t *watchers
+    cdef size_t num_watchers
+    cdef object image
+
+    def __init__(self, Image image):
+        self.image = image
+        self.watchers = NULL
+        self.num_watchers = 10
+        while True:
+            self.watchers = <rbd_image_watcher_t*>realloc_chk(self.watchers,
+                                                              self.num_watchers *
+                                                              sizeof(rbd_image_watcher_t))
+            with nogil:
+                ret = rbd_watchers_list(image.image, self.watchers, &self.num_watchers)
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing watchers.')
+
+    def __iter__(self):
+        for i in range(self.num_watchers):
+            yield {
+                'addr'   : decode_cstr(self.watchers[i].addr),
+                'id'     : self.watchers[i].id,
+                'cookie' : self.watchers[i].cookie
+                }
+
+    def __dealloc__(self):
+        if self.watchers:
+            rbd_watchers_list_cleanup(self.watchers, self.num_watchers)
+            free(self.watchers)

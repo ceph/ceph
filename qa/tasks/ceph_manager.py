@@ -111,7 +111,7 @@ class Thrasher:
         self.stopping = False
         self.logger = logger
         self.config = config
-        self.revive_timeout = self.config.get("revive_timeout", 150)
+        self.revive_timeout = self.config.get("revive_timeout", 360)
         self.pools_to_fix_pgp_num = set()
         if self.config.get('powercycle'):
             self.revive_timeout += 120
@@ -153,7 +153,7 @@ class Thrasher:
                                            first_mon[1],
                                            opt)
             self.saved_options.append((service, opt, old_value))
-            self._set_config(service, '*', opt, new_value)
+            manager.inject_args(service, '*', opt, new_value)
         # initialize ceph_objectstore_tool property - must be done before
         # do_thrash is spawned - http://tracker.ceph.com/issues/18799
         if (self.config.get('powercycle') or
@@ -179,13 +179,6 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
-
-    def _set_config(self, service_type, service_id, name, value):
-        opt_arg = '--{name} {value}'.format(name=name, value=value)
-        whom = '.'.join([service_type, service_id])
-        self.ceph_manager.raw_cluster_cmd('--', 'tell', whom,
-                                          'injectargs', opt_arg)
-
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
@@ -392,10 +385,12 @@ class Thrasher:
         self.dead_osds.remove(osd)
         self.live_osds.append(osd)
         if self.random_eio > 0 and osd is self.rerrosd:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err='+str(self.random_eio))
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err='+str(self.random_eio))
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'filestore_debug_random_read_err',
+                                          self.random_eio)
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'bluestore_debug_random_read_err',
+                                          self.random_eio)
 
 
     def out_osd(self, osd=None):
@@ -893,8 +888,9 @@ class Thrasher:
                 osd_state = "false"
             else:
                 osd_state = "true"
-            self.ceph_manager.raw_cluster_cmd_result('tell', 'osd.*',
-                             'injectargs', '--osd_enable_op_tracker=%s' % osd_state)
+            self.ceph_manager.inject_args('osd', '*',
+                                          'osd_enable_op_tracker',
+                                          osd_state)
             gevent.sleep(delay)
 
     @log_exc
@@ -952,10 +948,12 @@ class Thrasher:
         delay = self.config.get("op_delay", 5)
         self.rerrosd = self.live_osds[0]
         if self.random_eio > 0:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err='+str(self.random_eio))
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err='+str(self.random_eio))
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'filestore_debug_random_read_err',
+                                          self.random_eio)
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'bluestore_debug_random_read_err',
+                                          self.random_eio)
         self.log("starting do_thrash")
         while not self.stopping:
             to_log = [str(x) for x in ["in_osds: ", self.in_osds,
@@ -985,16 +983,16 @@ class Thrasher:
             time.sleep(delay)
         self.all_up()
         if self.random_eio > 0:
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--filestore_debug_random_read_err=0.0')
-            self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
-                          'injectargs', '--', '--bluestore_debug_random_read_err=0.0')
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'filestore_debug_random_read_err', '0.0')
+            self.ceph_manager.inject_args('osd', self.rerrosd,
+                                          'bluestore_debug_random_read_err', '0.0')
         for pool in list(self.pools_to_fix_pgp_num):
             if self.ceph_manager.get_pool_pg_num(pool) > 0:
                 self.fix_pgp_num(pool)
         self.pools_to_fix_pgp_num.clear()
         for service, opt, saved_value in self.saved_options:
-            self._set_config(service, '*', opt, saved_value)
+            self.ceph_manager.inject_args(service, '*', opt, saved_value)
         self.saved_options = []
         self.all_up_in()
 
@@ -1480,6 +1478,13 @@ class CephManager:
                                           ['config', 'show'])
         j = json.loads(proc.stdout.getvalue())
         return j[name]
+
+    def inject_args(self, service_type, service_id, name, value):
+        whom = '{0}.{1}'.format(service_type, service_id)
+        if isinstance(value, bool):
+            value = 'true' if value else 'false'
+        opt_arg = '--{name}={value}'.format(name=name, value=value)
+        self.raw_cluster_cmd('--', 'tell', whom, 'injectargs', opt_arg)
 
     def set_config(self, osdnum, **argdict):
         """
@@ -2274,6 +2279,8 @@ class CephManager:
     def wait_till_pg_convergence(self, timeout=None):
         start = time.time()
         old_stats = None
+        active_osds = [osd['osd'] for osd in self.get_osd_dump()
+                       if osd['in'] and osd['up']]
         while True:
             # strictly speaking, no need to wait for mon. but due to the
             # "ms inject socket failures" setting, the osdmap could be delayed,
@@ -2281,7 +2288,7 @@ class CephManager:
             # newly created pools which is not yet known by mgr. so, to make sure
             # the mgr is updated with the latest pg-stats, waiting for mon/mgr is
             # necessary.
-            self.flush_all_pg_stats()
+            self.flush_pg_stats(active_osds)
             new_stats = dict((stat['pgid'], stat['state'])
                              for stat in self.get_pg_stats())
             if old_stats == new_stats:
@@ -2312,11 +2319,9 @@ class CephManager:
             remote.console.power_off()
         elif self.config.get('bdev_inject_crash') and self.config.get('bdev_inject_crash_probability'):
             if random.uniform(0, 1) < self.config.get('bdev_inject_crash_probability', .5):
-                self.raw_cluster_cmd(
-                    '--', 'tell', 'osd.%d' % osd,
-                    'injectargs',
-                    '--bdev-inject-crash %d' % self.config.get('bdev_inject_crash'),
-                )
+                self.inject_args(
+                    'osd', osd,
+                    'bdev-inject-crash', self.config.get('bdev_inject_crash'))
                 try:
                     self.ctx.daemons.get_daemon('osd', osd, self.cluster).wait()
                 except:
@@ -2338,9 +2343,8 @@ class CephManager:
         """
         Stop osd if nothing else works.
         """
-        self.raw_cluster_cmd('--', 'tell', 'osd.%d' % osd,
-                             'injectargs',
-                             '--objectstore-blackhole')
+        self.inject_args('osd', osd,
+                         'objectstore-blackhole', True)
         time.sleep(2)
         self.ctx.daemons.get_daemon('osd', osd, self.cluster).stop()
 

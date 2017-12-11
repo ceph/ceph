@@ -97,18 +97,18 @@ struct DirStat {
 
 struct InodeStat {
   vinodeno_t vino;
-  uint32_t rdev;
-  version_t version;
-  version_t xattr_version;
+  uint32_t rdev = 0;
+  version_t version = 0;
+  version_t xattr_version = 0;
   ceph_mds_reply_cap cap;
   file_layout_t layout;
   utime_t ctime, btime, mtime, atime;
-  uint32_t time_warp_seq;
-  uint64_t size, max_size;
-  uint64_t change_attr;
-  uint64_t truncate_size;
-  uint32_t truncate_seq;
-  uint32_t mode, uid, gid, nlink;
+  uint32_t time_warp_seq = 0;
+  uint64_t size = 0, max_size = 0;
+  uint64_t change_attr = 0;
+  uint64_t truncate_size = 0;
+  uint32_t truncate_seq = 0;
+  uint32_t mode = 0, uid = 0, gid = 0, nlink = 0;
   frag_info_t dirstat;
   nest_info_t rstat;
 
@@ -202,7 +202,7 @@ struct InodeStat {
 class MClientReply : public Message {
   // reply data
 public:
-  struct ceph_mds_reply_head head;
+  struct ceph_mds_reply_head head {};
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;

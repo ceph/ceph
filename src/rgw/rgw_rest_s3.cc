@@ -245,10 +245,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
-  
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
@@ -1384,10 +1381,12 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
+      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       end_header(s, this, "application/xml");
       dump_start(s);
       struct tm tmp;
@@ -2042,9 +2041,7 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   if (delete_marker) {
     dump_header(s, "x-amz-delete-marker", "true");
   }
@@ -2539,6 +2536,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   end_header(s, this, "application/xml");
   if (op_ret == 0) { 
     dump_start(s);
@@ -3826,6 +3824,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
         case RGW_OP_PUT_ACLS:
         case RGW_OP_PUT_CORS:
+        case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
         case RGW_OP_DELETE_MULTI_OBJ:

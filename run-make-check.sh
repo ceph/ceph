@@ -60,7 +60,7 @@ function run() {
     fi
 
     if test -f ./install-deps.sh ; then
-	$DRY_RUN ./install-deps.sh || return 1
+	$DRY_RUN source ./install-deps.sh || return 1
     fi
 
     # Init defaults after deps are installed. get_processors() depends on coreutils nproc.

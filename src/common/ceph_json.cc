@@ -5,7 +5,6 @@
 #include <fstream>
 #include <include/types.h>
 
-using namespace std;
 using namespace json_spirit;
 
 #define dout_subsys ceph_subsys_rgw

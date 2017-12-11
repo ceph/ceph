@@ -22,7 +22,6 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
-#include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -403,7 +402,7 @@ class RGWEnv {
 public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const boost::string_ref& name, const boost::string_ref& val);
+  void set(std::string name, std::string val);
   const char *get(const char *name, const char *def_val = nullptr) const;
   int get_int(const char *name, int def_val = 0) const;
   bool get_bool(const char *name, bool def_val = 0);
@@ -1537,6 +1536,10 @@ struct rgw_obj_key {
     instance = i;
   }
 
+  const string& get_instance() const {
+    return instance;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1728,6 +1731,7 @@ struct rgw_obj_key {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
@@ -1799,6 +1803,7 @@ struct req_state {
   string zonegroup_endpoint;
   string bucket_instance_id;
   int bucket_instance_shard_id;
+  string redirect_zone_endpoint;
 
   string redirect;
 

@@ -9,4 +9,5 @@ tasks:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
     daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2]
+    mon-health-to-clog: false
 - print: "**** done ceph.restart 1st half"

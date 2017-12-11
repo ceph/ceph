@@ -45,7 +45,6 @@
 #include "include/util.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
@@ -2133,12 +2132,15 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   if (!dry_run) {
     attr.clear();
     oi.size = setsize;
-    ::encode(oi, attr, -1);  /* fixme: using full features */
     ObjectStore::Transaction t;
-    t.setattr(coll, ghobj, OI_ATTR, attr);
     // Only modify object info if we want to corrupt it
-    if (!corrupt)
+    if (!corrupt && (uint64_t)st.st_size != setsize) {
       t.truncate(coll, ghobj, setsize);
+      // Changing objectstore size will invalidate data_digest, so clear it.
+      oi.clear_data_digest();
+    }
+    ::encode(oi, attr, -1);  /* fixme: using full features */
+    t.setattr(coll, ghobj, OI_ATTR, attr);
     if (is_snap) {
       bufferlist snapattr;
       snapattr.clear();

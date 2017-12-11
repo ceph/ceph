@@ -332,7 +332,6 @@ Mirantis <contact@mirantis.com> Alexey Sheplyakov <asheplyakov@mirantis.com>
 Mirantis <contact@mirantis.com> Andrew Woodward <awoodward@mirantis.com>
 Mirantis <contact@mirantis.com> Dmitry Yatsushkevich <dyatsushkevich@mirantis.com>
 Mirantis <contact@mirantis.com> Dmytro Iurchenko <diurchenko@mirantis.com>
-Mirantis <contact@mirantis.com> Igor Fedotov <ifedotov@mirantis.com>
 Mirantis <contact@mirantis.com> Kiseleva Alyona <akiselyova@mirantis.com>
 Mirantis <contact@mirantis.com> Mykola Golub <mgolub@mirantis.com>
 Mirantis <contact@mirantis.com> Proskurin Kirill <kproskurin@mirantis.com>
@@ -498,6 +497,7 @@ SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
 SUSE <contact@suse.com> Dirk Mueller <dmueller@suse.com>
 SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
+SUSE <contact@sise.com> Igor Fedotov <ifedotov@suse.com>
 SUSE <contact@suse.com> Jan Fajerski <jfajerski@suse.com>
 SUSE <contact@suse.com> Jesse Williamson <jesse.williamson@suse.com>
 SUSE <contact@suse.com> João Eduardo Luís <joao@suse.de>
@@ -526,6 +526,10 @@ Telecom Bretagne <contact@telecom-bretagne.eu> Thomas Cantin <thomas.cantin@tele
 Tencent <contact@tencent.com> Wei Luo <weilluo@tencent.com>
 Tencent <contact@tencent.com> Wenjun Huang <wenjunhuang@tencent.com>
 Tencent <contact@tencent.com> Zhi Zhang <willzzhang@tencent.com>
+Tencent Cloud <contact@cloud.tencent.com> Chang Liu <liuchang0812@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Jing Chen <jeegnchen@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Shanchun Lv <lvshanchun@gmail.com>
+Tencent Cloud <contact@cloud.tencent.com> Zongyou Yao <yaozongyou@vip.qq.com>
 Teradata <contact@teradata.com> Nitin A Kamble <Nitin.Kamble@Teradata.com>
 The Linux Box <contact@linuxbox.com> Adam C. Emerson <aemerson@linuxbox.com>
 The Linux Box <contact@linuxbox.com> Ali Maredia <ali@linuxbox.com>
@@ -562,7 +566,6 @@ Unaffiliated <no@organization.net> Bosse Klykken <larkly@gmail.com>
 Unaffiliated <no@organization.net> Brian Felton <bjfelton@gmail.com>
 Unaffiliated <no@organization.net> Burkhard Linke <Burkhard.Linke@computational.bio.uni-giessen.de>
 Unaffiliated <no@organization.net> craigchi <craig10624@gmail.com>
-Unaffiliated <no@organization.net> Chang Liu <liuchang0812@gmail.com>
 Unaffiliated <no@organization.net> Charles Alva <charlesalva@gmail.com>
 Unaffiliated <no@organization.net> Chanyoung Park <park910113@gmail.com>
 Unaffiliated <no@organization.net> Cheng Cheng <ccheng.leo@gmail.com>

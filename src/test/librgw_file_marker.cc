@@ -83,6 +83,7 @@ namespace {
     friend ostream& operator<<(ostream& os, const obj_rec& rec);
   };
 
+  /* Unused
   ostream& operator<<(ostream& os, const obj_rec& rec)
   {
     RGWFileHandle* rgw_fh = rec.rgw_fh;
@@ -94,7 +95,8 @@ namespace {
     }
     return os;
   }
-  
+  */
+
   std::stack<obj_rec> obj_stack;
   std::deque<obj_rec> cleanup_queue;
 
@@ -113,6 +115,7 @@ namespace {
       : obj(_obj), st(_st) {}
   };
 
+  /* Unused
   ostream& operator<<(ostream& os, const obj_rec_st& rec)
   {
     RGWFileHandle* rgw_fh = rec.obj.rgw_fh;
@@ -137,6 +140,7 @@ namespace {
     }
     return os;
   }
+  */
 
   bool do_marker1 = false;
   bool do_marker2 = true;

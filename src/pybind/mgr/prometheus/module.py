@@ -42,7 +42,7 @@ def health_status_to_number(status):
     elif status == 'HEALTH_ERR':
         return 2
 
-PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'degraded',
+PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'deep', 'degraded',
         'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
         'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
         'incomplete', 'stale', 'remapped', 'undersized', 'peered']
@@ -263,12 +263,18 @@ class Module(MgrModule):
                          key.split('+')]
         for state, value in reported_pg_s:
             path = 'pg_{}'.format(state)
-            self.metrics[path].set(value)
+            try:
+                self.metrics[path].set(value)
+            except KeyError:
+                self.log.warn("skipping pg in unknown state {}".format(state))
         reported_states = [s[0] for s in reported_pg_s]
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             if state not in reported_states:
-                self.metrics[path].set(0)
+                try:
+                    self.metrics[path].set(0)
+                except KeyError:
+                    self.log.warn("skipping pg in unknown state {}".format(state))
 
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')

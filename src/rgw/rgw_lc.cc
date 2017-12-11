@@ -24,7 +24,6 @@ const char* LC_STATUS[] = {
       "COMPLETE"
 };
 
-using namespace std;
 using namespace librados;
 
 bool LCRule::valid()
@@ -146,12 +145,12 @@ void *RGWLC::LCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
-      dout(5) << "life cycle: start" << dendl;
+      dout(2) << "life cycle: start" << dendl;
       int r = lc->process();
       if (r < 0) {
         dout(0) << "ERROR: do life cycle process() returned error r=" << r << dendl;
       }
-      dout(5) << "life cycle: stop" << dendl;
+      dout(2) << "life cycle: stop" << dendl;
     }
     if (lc->going_down())
       break;
@@ -318,6 +317,8 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
             ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret <<dendl;
             return ret;
           }
+          if (going_down())
+            return 0;
         }
       }
     } while(is_truncated);
@@ -455,8 +456,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << key << dendl;
+              ldout(cct, 2) << "DELETED:" << bucket_name << ":" << key << dendl;
             }
+
+            if (going_down())
+              return 0;
           }
         }
       } while (is_truncated);
@@ -557,8 +561,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
             if (ret < 0) {
               ldout(cct, 0) << "ERROR: remove_expired_obj " << dendl;
             } else {
-              ldout(cct, 10) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
+              ldout(cct, 2) << "DELETED:" << bucket_name << ":" << obj_iter->key << dendl;
             }
+
+            if (going_down())
+              return 0;
           }
         }
       } while (is_truncated);
@@ -799,5 +806,10 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   nt = mktime(&bdt);
 
   return (nt+24*60*60 - tt);
+}
+
+void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
+{
+  o.push_back(new RGWLifecycleConfiguration);
 }
 

@@ -25,6 +25,8 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
+#include "dmclock/src/dmclock_client.h"
+
 #include "include/assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -40,7 +42,6 @@
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
 
 class Context;
 class Messenger;
@@ -1148,6 +1149,16 @@ struct ObjectOperation {
     ::encode(tgt_oloc, osd_op.indata);
   }
 
+  void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
+		 object_t tgt_oid, uint64_t tgt_offset) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
+    ::encode(src_offset, osd_op.indata);
+    ::encode(src_length, osd_op.indata);
+    ::encode(tgt_oloc, osd_op.indata);
+    ::encode(tgt_oid, osd_op.indata);
+    ::encode(tgt_offset, osd_op.indata);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1200,6 +1211,8 @@ public:
   MonClient *monc;
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
+  std::unique_ptr<dmc::ServiceTracker<int>> qos_trk;
+  std::atomic<bool> mclock_service_tracker;
 private:
   OSDMap    *osdmap;
 public:
@@ -1249,6 +1262,7 @@ private:
   void start_tick();
   void tick();
   void update_crush_location();
+  void update_mclock_service_tracker();
 
   class RequestStateHook;
 
@@ -1912,6 +1926,9 @@ public:
   };
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
+  void _prune_snapc(
+    const mempool::osdmap::map<int64_t, OSDMap::snap_interval_set_t>& new_removed_snaps,
+    Op *op);
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, Connection *con,
@@ -2012,6 +2029,7 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
+    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
@@ -2026,7 +2044,11 @@ private:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+  {
+    if (cct->_conf->objecter_mclock_service_tracker) {
+      qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
+    }
+  }
   ~Objecter() override;
 
   void init();
@@ -2069,14 +2091,16 @@ private:
   void set_osdmap_full_try() { osdmap_full_try = true; }
   void unset_osdmap_full_try() { osdmap_full_try = false; }
 
-  void _scan_requests(OSDSession *s,
-		      bool force_resend,
-		      bool cluster_full,
-		      map<int64_t, bool> *pool_full_map,
-		      map<ceph_tid_t, Op*>& need_resend,
-		      list<LingerOp*>& need_resend_linger,
-		      map<ceph_tid_t, CommandOp*>& need_resend_command,
-		      shunique_lock& sul);
+  void _scan_requests(
+    OSDSession *s,
+    bool skipped_map,
+    bool cluster_full,
+    map<int64_t, bool> *pool_full_map,
+    map<ceph_tid_t, Op*>& need_resend,
+    list<LingerOp*>& need_resend_linger,
+    map<ceph_tid_t, CommandOp*>& need_resend_command,
+    shunique_lock& sul,
+    const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
 
   int64_t get_object_hash_position(int64_t pool, const string& key,
 				   const string& ns);
