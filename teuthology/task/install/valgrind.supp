@@ -373,6 +373,13 @@
 	...
 }
 {
+	rocksdb BGThreadWrapper
+	Memcheck:Leak
+	...
+	fun:*BGThreadWrapper*
+	...
+}
+{
 	libstdc++ leak on xenial
 	Memcheck:Leak
 	fun:malloc
