@@ -165,7 +165,7 @@ public:
 				    Formatter *f, bool verbose) const;
   void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
   static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    const object_stat_sum_t &sum,
+			    const pool_stat_t &pool_stat,
 			    uint64_t avail,
 			    float raw_used_rate,
 			    bool verbose, const pg_pool_t *pool);
@@ -230,6 +230,13 @@ public:
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
   mempool::pgmap::unordered_map<pg_t,pg_stat_t> pg_stat;
 
+  typedef mempool::pgmap::map<
+    std::pair<int64_t, int>,  // <pool, osd>
+    store_statfs_t>
+      per_osd_pool_statfs_t;
+
+  per_osd_pool_statfs_t pool_statfs;
+
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -239,6 +246,7 @@ public:
     epoch_t pg_scan;  // osdmap epoch
     mempool::pgmap::set<pg_t> pg_remove;
     utime_t stamp;
+    per_osd_pool_statfs_t pool_statfs_updates;
 
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
@@ -293,11 +301,20 @@ public:
   void update_pool_deltas(
     CephContext *cct,
     const utime_t ts,
-    const mempool::pgmap::unordered_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
+    const mempool::pgmap::unordered_map<int32_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
   void deleted_pool(int64_t pool) {
+    for (auto i = pool_statfs.begin();  i != pool_statfs.end();) {
+      if (i->first.first == pool) {
+	i = pool_statfs.erase(i);
+      } else {
+        ++i;
+      }
+    }
+
     pg_pool_sum.erase(pool);
+    num_pg_by_pool_state.erase(pool);
     num_pg_by_pool.erase(pool);
     per_pool_sum_deltas.erase(pool);
     per_pool_sum_deltas_stamps.erase(pool);
@@ -386,7 +403,7 @@ public:
   void calc_stats();
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
+  bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void calc_purged_snaps();
   void stat_osd_add(int osd, const osd_stat_t &s);

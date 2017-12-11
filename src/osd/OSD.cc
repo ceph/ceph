@@ -7299,9 +7299,13 @@ MPGStats* OSD::collect_pg_stats()
   std::lock_guard lec{min_last_epoch_clean_lock};
   min_last_epoch_clean = osdmap->get_epoch();
   min_last_epoch_clean_pgs.clear();
+
+  std::set<int64_t> pool_set;
   vector<PGRef> pgs;
   _get_pgs(&pgs);
   for (auto& pg : pgs) {
+    auto pool = pg->pg_id.pgid.pool();
+    pool_set.emplace((int64_t)pool);
     if (!pg->is_primary()) {
       continue;
     }
@@ -7310,6 +7314,16 @@ MPGStats* OSD::collect_pg_stats()
 	min_last_epoch_clean = min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
+  }
+  store_statfs_t st;
+  for (auto p : pool_set) {
+    int r = store->pool_statfs(p, &st);
+    if (r == -ENOTSUP) {
+      break;
+    } else {
+      assert(r >= 0);
+      m->pool_stat[p] = st;
+    }
   }
 
   return m;

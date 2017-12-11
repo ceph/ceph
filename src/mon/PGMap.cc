@@ -775,7 +775,9 @@ void PGMapDigest::dump_pool_stats_full(
       tbl.define_column("DIRTY", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("READ", TextTable::LEFT, TextTable::RIGHT);
       tbl.define_column("WRITE", TextTable::LEFT, TextTable::RIGHT);
-      tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("USED COMPR", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("UNDER COMPR", TextTable::LEFT, TextTable::RIGHT);
     }
   }
 
@@ -785,6 +787,7 @@ void PGMapDigest::dump_pool_stats_full(
     int64_t pool_id = p->first;
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
+
     const string& pool_name = osd_map.get_pool_name(pool_id);
     const pool_stat_t &stat = pg_pool_sum.at(pool_id);
 
@@ -793,7 +796,6 @@ void PGMapDigest::dump_pool_stats_full(
                                          pool->get_type(),
                                          pool->get_size());
     int64_t avail;
-    float raw_used_rate;
     if (avail_by_rule.count(ruleno) == 0) {
       // FIXME: we don't guarantee avail_space_by_rule is up-to-date before this function is invoked
       avail = get_rule_avail(ruleno);
@@ -803,8 +805,6 @@ void PGMapDigest::dump_pool_stats_full(
     } else {
       avail = avail_by_rule[ruleno];
     }
-
-    raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
 
     if (f) {
       f->open_object_section("pool");
@@ -827,7 +827,8 @@ void PGMapDigest::dump_pool_stats_full(
       }
 
     }
-    dump_object_stat_sum(tbl, f, stat.stats.sum, avail, raw_used_rate, verbose, pool);
+    float raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
+    dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, pool);
     if (f)
       f->close_section();  // stats
     else
@@ -890,28 +891,34 @@ void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) co
 
 void PGMapDigest::dump_object_stat_sum(
   TextTable &tbl, Formatter *f,
-  const object_stat_sum_t &sum, uint64_t avail,
+  const pool_stat_t &pool_stat, uint64_t avail,
   float raw_used_rate, bool verbose,
   const pg_pool_t *pool)
 {
-  float curr_object_copies_rate = 0.0;
-  if (sum.num_object_copies > 0)
-    curr_object_copies_rate = (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
+  const object_stat_sum_t &sum = pool_stat.stats.sum;
+  const store_statfs_t statfs = pool_stat.store_stats;
 
+  if (sum.num_object_copies > 0) {
+    raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
+  }
+    
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
   if (avail) {
-    used = sum.num_bytes * raw_used_rate * curr_object_copies_rate;
+    used = statfs.allocated;
     used /= used + avail;
-  } else if (sum.num_bytes) {
+  } else if (statfs.allocated) {
     used = 1.0;
   }
-
+  auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
+  // an approximation for actually stored user data
+  auto stored_normalized =
+    raw_used_rate ? statfs.stored / raw_used_rate : 0;
   if (f) {
-    f->dump_int("kb_used", shift_round_up(sum.num_bytes, 10));
-    f->dump_int("bytes_used", sum.num_bytes);
+    f->dump_int("kb_used", shift_round_up(statfs.allocated, 10));
+    f->dump_int("bytes_used", statfs.allocated);
     f->dump_float("percent_used", used);
-    f->dump_unsigned("max_avail", avail / raw_used_rate);
+    f->dump_unsigned("max_avail", avail_res);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
       f->dump_int("quota_objects", pool->quota_max_objects);
@@ -921,18 +928,25 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("rd_bytes", sum.num_rd_kb * 1024ull);
       f->dump_int("wr", sum.num_wr);
       f->dump_int("wr_bytes", sum.num_wr_kb * 1024ull);
-      f->dump_int("raw_bytes_used", sum.num_bytes * raw_used_rate * curr_object_copies_rate);
+      f->dump_int("stored", stored_normalized);
+      f->dump_int("compress_bytes_used", statfs.compressed_allocated);
+      f->dump_int("compress_under_bytes", statfs.compressed_original);
+      // Stored by user amplified by replication
+      f->dump_int("stored_raw", statfs.stored);
     }
   } else {
-    tbl << stringify(byte_u_t(sum.num_bytes));
+    tbl << stringify(byte_u_t(statfs.allocated));
     tbl << percentify(used*100);
-    tbl << byte_u_t(avail / raw_used_rate);
+    tbl << byte_u_t(avail_res);
     tbl << sum.num_objects;
     if (verbose) {
       tbl << stringify(si_u_t(sum.num_objects_dirty))
           << stringify(byte_u_t(sum.num_rd))
           << stringify(byte_u_t(sum.num_wr))
-          << stringify(byte_u_t(sum.num_bytes * raw_used_rate * curr_object_copies_rate));
+	  << stringify(byte_u_t(stored_normalized))
+	  << stringify(byte_u_t(statfs.compressed_allocated))
+	  << stringify(byte_u_t(statfs.compressed_original))
+	  ;
     }
   }
 }
@@ -1040,6 +1054,14 @@ void PGMap::Incremental::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("pool_statfs_updates");
+  for (auto p = pool_statfs_updates.begin(); p != pool_statfs_updates.end(); ++p) {
+    f->open_object_section("pool_statfs");
+    f->dump_stream("poolid/osd") << p->first;
+    p->second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
 
   f->open_array_section("osd_stat_removals");
   for (auto p = osd_stat_rm.begin(); p != osd_stat_rm.end(); ++p)
@@ -1070,8 +1092,8 @@ void PGMap::Incremental::generate_test_instances(list<PGMap::Incremental*>& o)
   o.back()->osd_stat_updates[6] = osd_stat_t();
   o.back()->pg_remove.insert(pg_t(1,2));
   o.back()->osd_stat_rm.insert(5);
+  o.back()->pool_statfs_updates[std::make_pair(1234,4)] = store_statfs_t();
 }
-
 
 // --
 
@@ -1080,27 +1102,48 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   ceph_assert(inc.version == version+1);
   version++;
 
-  pool_stat_t pg_sum_old = pg_sum;
-  mempool::pgmap::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
+  mempool::pgmap::unordered_map<int32_t, pool_stat_t> pg_pool_sum_old;
+  pg_pool_sum_old = pg_pool_sum;
 
   for (auto p = inc.pg_stat_updates.begin();
        p != inc.pg_stat_updates.end();
        ++p) {
     const pg_t &update_pg(p->first);
+    auto update_pool = update_pg.pool();
     const pg_stat_t &update_stat(p->second);
 
-    if (pg_pool_sum_old.count(update_pg.pool()) == 0)
-      pg_pool_sum_old[update_pg.pool()] = pg_pool_sum[update_pg.pool()];
-
-    auto t = pg_stat.find(update_pg);
-    if (t == pg_stat.end()) {
+    auto pg_stat_iter = pg_stat.find(update_pg);
+    pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
+    if (pg_stat_iter == pg_stat.end()) {
       pg_stat.insert(make_pair(update_pg, update_stat));
     } else {
-      stat_pg_sub(update_pg, t->second);
-      t->second = update_stat;
+      stat_pg_sub(update_pg, pg_stat_iter->second);
+      pool_sum_ref.sub(pg_stat_iter->second);
+      pg_stat_iter->second = update_stat;
     }
     stat_pg_add(update_pg, update_stat);
+    pool_sum_ref.add(update_stat);
   }
+
+  for (auto p = inc.pool_statfs_updates.begin();
+       p != inc.pool_statfs_updates.end();
+       ++p) {
+    auto update_pool = p->first.first;
+    auto update_osd =  p->first.second;
+    auto& statfs_inc = p->second;
+
+    auto pool_statfs_iter =
+      pool_statfs.find(std::make_pair(update_pool, update_osd));
+    pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
+    if (pool_statfs_iter == pool_statfs.end()) {
+      pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);
+    } else {
+      pool_sum_ref.sub(pool_statfs_iter->second);
+      pool_statfs_iter->second = statfs_inc;
+    }
+    pool_sum_ref.add(statfs_inc);
+  }
+
   for (auto p = inc.get_osd_stat_updates().begin();
        p != inc.get_osd_stat_updates().end();
        ++p) {
@@ -1122,12 +1165,13 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
        ++p) {
     const pg_t &removed_pg(*p);
     auto s = pg_stat.find(removed_pg);
+    bool pool_erased = false;
     if (s != pg_stat.end()) {
-      stat_pg_sub(removed_pg, s->second);
+      pool_erased = stat_pg_sub(removed_pg, s->second);
       pg_stat.erase(s);
-    }
-    if (removed_pg.ps() == 0) {
-      deleted_pools.insert(removed_pg.pool());
+      if (pool_erased) {
+        deleted_pools.insert(removed_pg.pool());
+      }
     }
   }
 
@@ -1139,8 +1183,15 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
       stat_osd_sub(t->first, t->second);
       osd_stat.erase(t);
     }
+    for (auto i = pool_statfs.begin();  i != pool_statfs.end(); ++i) {
+      if (i->first.second == *p) {
+	pg_pool_sum[i->first.first].sub(i->second);
+	pool_statfs.erase(i);
+      }
+    }
   }
 
+  pool_stat_t pg_sum_old = pg_sum;
   // skip calculating delta while sum was not synchronized
   if (!stamp.is_zero() && !pg_sum_old.stats.sum.is_zero()) {
     utime_t delta_t;
@@ -1194,7 +1245,15 @@ void PGMap::calc_stats()
   for (auto p = pg_stat.begin();
        p != pg_stat.end();
        ++p) {
-    stat_pg_add(p->first, p->second);
+    auto pg = p->first;
+    stat_pg_add(pg, p->second);
+    pg_pool_sum[pg.pool()].add(p->second);
+  }
+  for (auto p = pool_statfs.begin();
+       p != pool_statfs.end();
+       ++p) {
+    auto pool = p->first.first;
+    pg_pool_sum[pool].add(p->second);
   }
   for (auto p = osd_stat.begin();
        p != osd_stat.end();
@@ -1205,13 +1264,13 @@ void PGMap::calc_stats()
 void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
-  pg_pool_sum[pgid.pool()].add(s);
+  auto pool = pgid.pool();
   pg_sum.add(s);
 
   num_pg++;
   num_pg_by_state[s.state]++;
   num_pg_by_pool_state[pgid.pool()][s.state]++;
-  num_pg_by_pool[pgid.pool()]++;
+  num_pg_by_pool[pool]++;
 
   if ((s.state & PG_STATE_CREATING) &&
       s.parent_split_bits == 0) {
@@ -1251,11 +1310,10 @@ void PGMap::stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
   }
 }
 
-void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
+bool PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
                         bool sameosds)
 {
-  pool_stat_t& ps = pg_pool_sum[pgid.pool()];
-  ps.sub(s);
+  bool pool_erased = false;
   pg_sum.sub(s);
 
   num_pg--;
@@ -1268,9 +1326,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   }
   end = --num_pg_by_pool[pgid.pool()];
   if (end == 0) {
-    num_pg_by_pool_state.erase(pgid.pool());
-    num_pg_by_pool.erase(pgid.pool());
-    pg_pool_sum.erase(pgid.pool());
+    pool_erased = true;
   }
 
   if ((s.state & PG_STATE_CREATING) &&
@@ -1294,7 +1350,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   }
 
   if (sameosds)
-    return;
+    return pool_erased;
 
   for (auto p = s.blocked_by.begin();
        p != s.blocked_by.end();
@@ -1330,6 +1386,7 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
     if (it != num_pg_by_osd.end() && it->second.primary > 0)
       it->second.primary--;
   }
+  return pool_erased;
 }
 
 void PGMap::calc_purged_snaps()
@@ -1382,25 +1439,27 @@ void PGMap::encode_digest(const OSDMap& osdmap,
 
 void PGMap::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(7, 7, bl);
+  ENCODE_START(8, 8, bl);
   encode(version, bl);
   encode(pg_stat, bl);
   encode(osd_stat, bl, features);
   encode(last_osdmap_epoch, bl);
   encode(last_pg_scan, bl);
   encode(stamp, bl);
+  encode(pool_statfs, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START(7, bl);
+  DECODE_START(8, bl);
   decode(version, bl);
   decode(pg_stat, bl);
   decode(osd_stat, bl);
   decode(last_osdmap_epoch, bl);
   decode(last_pg_scan, bl);
   decode(stamp, bl);
+  decode(pool_statfs, bl);
   DECODE_FINISH(bl);
 
   calc_stats();
@@ -2044,11 +2103,11 @@ void PGMap::update_one_pool_delta(
  */
 void PGMap::update_pool_deltas(
   CephContext *cct, const utime_t ts,
-  const mempool::pgmap::unordered_map<uint64_t,pool_stat_t>& pg_pool_sum_old)
+  const mempool::pgmap::unordered_map<int32_t,pool_stat_t>& pg_pool_sum_old)
 {
   for (auto it = pg_pool_sum_old.begin();
        it != pg_pool_sum_old.end(); ++it) {
-    update_one_pool_delta(cct, ts, it->first, it->second);
+    update_one_pool_delta(cct, ts, (uint64_t)it->first, it->second); //FIXME: make pool type consistent!!!
   }
 }
 
