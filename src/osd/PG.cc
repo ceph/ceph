@@ -8752,13 +8752,3 @@ void PG::with_heartbeat_peers(std::function<void(int)> f)
   }
   heartbeat_peer_lock.Unlock();
 }
-
-void PG::pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t)
-{
-  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
-  int r = snap_mapper.remove_oid(oid.hobj, &_t);
-  if (r != 0 && r != -ENOENT) {
-    ceph_abort();
-  }
-  t->remove(coll, oid);
-}

@@ -239,108 +239,6 @@ class CephContext;
 typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class MOSDOp;
 
-class DeletingState {
-  Mutex lock;
-  Cond cond;
-  enum {
-    QUEUED,
-    CLEARING_DIR,
-    CLEARING_WAITING,
-    DELETING_DIR,
-    DELETED_DIR,
-    CANCELED,
-  } status;
-  bool stop_deleting;
-public:
-  const spg_t pgid;
-  const PGRef old_pg_state;
-  explicit DeletingState(const pair<spg_t, PGRef> &in) :
-    lock("DeletingState::lock"), status(QUEUED), stop_deleting(false),
-    pgid(in.first), old_pg_state(in.second) {
-    }
-
-  /// transition status to CLEARING_WAITING
-  bool pause_clearing() {
-    Mutex::Locker l(lock);
-    assert(status == CLEARING_DIR);
-    if (stop_deleting) {
-      status = CANCELED;
-      cond.Signal();
-      return false;
-    }
-    status = CLEARING_WAITING;
-    return true;
-  } ///< @return false if we should cancel deletion
-
-  /// start or resume the clearing - transition the status to CLEARING_DIR
-  bool start_or_resume_clearing() {
-    Mutex::Locker l(lock);
-    assert(
-      status == QUEUED ||
-      status == DELETED_DIR ||
-      status == CLEARING_WAITING);
-    if (stop_deleting) {
-      status = CANCELED;
-      cond.Signal();
-      return false;
-    }
-    status = CLEARING_DIR;
-    return true;
-  } ///< @return false if we should cancel the deletion
-
-  /// transition status to CLEARING_DIR
-  bool resume_clearing() {
-    Mutex::Locker l(lock);
-    assert(status == CLEARING_WAITING);
-    if (stop_deleting) {
-      status = CANCELED;
-      cond.Signal();
-      return false;
-    }
-    status = CLEARING_DIR;
-    return true;
-  } ///< @return false if we should cancel deletion
-
-  /// transition status to deleting
-  bool start_deleting() {
-    Mutex::Locker l(lock);
-    assert(status == CLEARING_DIR);
-    if (stop_deleting) {
-      status = CANCELED;
-      cond.Signal();
-      return false;
-    }
-    status = DELETING_DIR;
-    return true;
-  } ///< @return false if we should cancel deletion
-
-  /// signal collection removal queued
-  void finish_deleting() {
-    Mutex::Locker l(lock);
-    assert(status == DELETING_DIR);
-    status = DELETED_DIR;
-    cond.Signal();
-  }
-
-  /// try to halt the deletion
-  bool try_stop_deletion() {
-    Mutex::Locker l(lock);
-    stop_deleting = true;
-    /**
-     * If we are in DELETING_DIR or CLEARING_DIR, there are in progress
-     * operations we have to wait for before continuing on.  States
-     * CLEARING_WAITING and QUEUED indicate that the remover will check
-     * stop_deleting before queueing any further operations.  CANCELED
-     * indicates that the remover has already halted.  DELETED_DIR
-     * indicates that the deletion has been fully queued.
-     */
-    while (status == DELETING_DIR || status == CLEARING_DIR)
-      cond.Wait(lock);
-    return status != DELETED_DIR;
-  } ///< @return true if we don't need to recreate the collection
-};
-typedef ceph::shared_ptr<DeletingState> DeletingStateRef;
-
 class OSD;
 
 class OSDService {
@@ -349,7 +247,6 @@ public:
   CephContext *cct;
   SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
   ceph::shared_ptr<ObjectStore::Sequencer> meta_osr;
-  SharedPtrRegistry<spg_t, DeletingState> deleting_pgs;
   const int whoami;
   ObjectStore *&store;
   LogClient &log_client;
@@ -1942,13 +1839,6 @@ public:
 protected:
   PG   *_open_lock_pg(OSDMapRef createmap,
 		      spg_t pg, bool no_lockdep_check=false);
-  enum res_result {
-    RES_PARENT,    // resurrected a parent
-    RES_SELF,      // resurrected self
-    RES_NONE       // nothing relevant deleting
-  };
-  res_result _try_resurrect_pg(
-    OSDMapRef curmap, spg_t pgid, spg_t *resurrected, PGRef *old_pg_state);
 
   PG   *_create_lock_pg(
     OSDMapRef createmap,
@@ -2113,7 +2003,6 @@ protected:
   void handle_force_recovery(Message *m);
 
   void handle_pg_remove(OpRequestRef op);
-  void _remove_pg(PG *pg);
 
   // -- commands --
   struct Command {
@@ -2182,48 +2071,6 @@ protected:
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
-
-  // -- removing --
-  struct RemoveWQ :
-    public ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> > {
-    CephContext* cct;
-    ObjectStore *&store;
-    list<pair<PGRef, DeletingStateRef> > remove_queue;
-    RemoveWQ(CephContext* cct, ObjectStore *&o, time_t ti, time_t si,
-	     ThreadPool *tp)
-      : ThreadPool::WorkQueueVal<pair<PGRef, DeletingStateRef> >(
-	"OSD::RemoveWQ", ti, si, tp), cct(cct), store(o) {}
-
-    bool _empty() override {
-      return remove_queue.empty();
-    }
-    void _enqueue(pair<PGRef, DeletingStateRef> item) override {
-      remove_queue.push_back(item);
-    }
-    void _enqueue_front(pair<PGRef, DeletingStateRef> item) override {
-      remove_queue.push_front(item);
-    }
-    bool _dequeue(pair<PGRef, DeletingStateRef> item) {
-      ceph_abort();
-    }
-    pair<PGRef, DeletingStateRef> _dequeue() override {
-      assert(!remove_queue.empty());
-      pair<PGRef, DeletingStateRef> item = remove_queue.front();
-      remove_queue.pop_front();
-      return item;
-    }
-    void _process(pair<PGRef, DeletingStateRef>,
-		  ThreadPool::TPHandle &) override;
-    void _clear() override {
-      remove_queue.clear();
-    }
-    int get_remove_queue_len() {
-      lock();
-      int r = remove_queue.size();
-      unlock();
-      return r;
-    }
-  } remove_wq;
 
   // -- status reporting --
   MPGStats *collect_pg_stats();
