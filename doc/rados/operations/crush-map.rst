@@ -218,6 +218,10 @@ The device class for one or more OSDs can be explicitly set with::
 
   ceph osd crush set-device-class <class> <osd-name> [...]
 
+All OSDs belonging to the specific device class can be explicitly unset with::
+
+  ceph osd crush unset-device-class <class>
+
 Once a device class is set, it cannot be changed to another class
 until the old class is unset with::
 

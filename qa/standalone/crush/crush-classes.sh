@@ -214,6 +214,22 @@ function TEST_mon_classes() {
     ceph osd crush tree --show-shadow | grep 'class_1' && return 1
     ceph osd crush class ls | grep 'class_2' || return 1
     ceph osd crush tree --show-shadow | grep 'class_2' || return 1
+
+    # test class unset-device-class
+    ceph osd crush set-device-class aaa osd.0 || return 1
+    ceph osd tree | grep -q 'aaa' || return 1
+    ceph osd crush dump | grep -q '~aaa' || return 1
+    ceph osd crush tree --show-shadow | grep -q '~aaa' || return 1
+    ceph osd crush unset-device-class aaa || return 1
+    ceph osd tree | grep -q 'aaa' && return 1
+    ceph osd crush class ls | grep -q 'aaa' && return 1
+    ceph osd crush set-device-class abc all || return 1
+    ceph osd tree | grep -q 'abc' || return 1
+    ceph osd crush dump | grep -q '~abc' || return 1
+    ceph osd crush tree --show-shadow | grep -q '~abc' || return 1
+    ceph osd crush unset-device-class abc || return 1
+    ceph osd tree | grep -q 'abc' && return 1
+    ceph osd crush class ls | grep -q 'abc' && return 1
 }
 
 main crush-classes "$@"
