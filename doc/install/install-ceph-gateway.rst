@@ -284,7 +284,7 @@ Once you have updated your region, update the region map. For example::
 Where ``client.rgw.ceph-client`` is the name of the gateway user.
 
 .. note:: Mapping the index pool (for each zone, if applicable) to a CRUSH
-          ruleset of SSD-based OSDs may also help with bucket index performance.
+          rule of SSD-based OSDs may also help with bucket index performance.
 
 Add Wildcard to DNS
 -------------------

@@ -167,8 +167,8 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		Controlled Replication Under Scalable Hashing. It is the algorithm
 		Ceph uses to compute object storage locations.
 
-	ruleset
-		A set of CRUSH data placement rules that applies to a particular pool(s).
+	CRUSH rule
+		The CRUSH data placement rule that applies to a particular pool(s).
 
 	Pool
 	Pools
