@@ -4617,28 +4617,6 @@ int mirror_image_map_remove(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
- * Initialize the header with basic metadata.
- * Everything is stored as key/value pairs as omaps in the header object.
- *
- * Input:
- * none
- *
- * Output:
- * @return 0 on success, negative error code on failure
- */
-int group_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  bufferlist snap_seqbl;
-  uint64_t snap_seq = 0;
-  ::encode(snap_seq, snap_seqbl);
-  int r = cls_cxx_map_set_val(hctx, GROUP_SNAP_SEQ, &snap_seqbl);
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
-/**
  * List consistency groups from the directory.
  *
  * Input:
@@ -5674,7 +5652,6 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_image_map_list;
   cls_method_handle_t h_mirror_image_map_update;
   cls_method_handle_t h_mirror_image_map_remove;
-  cls_method_handle_t h_group_create;
   cls_method_handle_t h_group_dir_list;
   cls_method_handle_t h_group_dir_add;
   cls_method_handle_t h_group_dir_remove;
