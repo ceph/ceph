@@ -5819,9 +5819,9 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
       string key = i->substr(0, equal);
       equal++;
       const string value = i->substr(equal);
-      if (key.find("ruleset-") == 0) {
-	if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
-	    g_conf->get_val<bool>("mon_fixup_legacy_erasure_code_profiles")) {
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+	  key.find("ruleset-") == 0) {
+	if (g_conf->get_val<bool>("mon_fixup_legacy_erasure_code_profiles")) {
 	  mon->clog->warn() << "erasure code profile property '" << key
 			    << "' is no longer supported; try "
 			    << "'crush-" << key.substr(8) << "' instead";
