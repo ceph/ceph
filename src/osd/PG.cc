@@ -7386,6 +7386,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     return forward_event();
   }
   ldout(pg->cct, 10) << "Active advmap" << dendl;
+  bool need_publish = false;
 
   if (advmap.osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
     const auto& new_removed_snaps = advmap.osdmap->get_new_removed_snaps();
@@ -7464,7 +7465,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       // share updated purged_snaps to mgr/mon so that we (a) stop reporting
       // purged snaps and (b) perhaps share more snaps that we have purged
       // but didn't fit in pg_stat_t.
-      pg->publish_stats_to_osd();
+      need_publish = true;
       pg->share_pg_info();
     }
   } else if (!pg->pool.newly_removed_snaps.empty()) {
@@ -7482,7 +7483,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     }
   }
 
-  bool need_publish = false;
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
