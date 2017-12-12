@@ -1456,6 +1456,8 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     req->get_connection()->send_message(reply);
   }
 
+  assert (reply);
+
   if (req->is_queued_for_replay() &&
       (mdr->has_completed || reply->get_result() < 0)) {
     if (reply->get_result() < 0) {
@@ -2317,7 +2319,8 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 
   // ack!
   MMDSSlaveRequest *reply = new MMDSSlaveRequest(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
-  
+
+  assert (auth_pin_freeze);
   // return list of my auth_pins (if any)
   for (set<MDSCacheObject*>::iterator p = mdr->auth_pins.begin();
        p != mdr->auth_pins.end();
@@ -8322,6 +8325,8 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
     if (root)
       mdcache->try_trim_non_auth_subtree(root);
   }
+
+  assert (srcdn);
 
   if (mdr) {
     list<MDSInternalContextBase*> finished;
