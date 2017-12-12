@@ -2183,6 +2183,7 @@ namespace librbd {
 
       return 0;
     }
+
     int trash_list(librados::IoCtx *ioctx,
                    const std::string &start, uint64_t max_return,
                    map<string, cls::rbd::TrashImageSpec> *entries)
@@ -2195,6 +2196,7 @@ namespace librbd {
       if (r < 0) {
 	return r;
       }
+
       bufferlist::iterator iter = out_bl.begin();
       return trash_list_finish(&iter, entries);
     }
@@ -2218,6 +2220,7 @@ namespace librbd {
 
       return 0;
     }
+
 
     int trash_get(librados::IoCtx *ioctx, const std::string &id,
                   cls::rbd::TrashImageSpec *trash_spec)
