@@ -17,7 +17,6 @@
 #include "rgw_common.h"
 #include "rgw_keystone.h"
 #include "rgw_auth_keystone.h"
-#include "rgw_keystone.h"
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
 

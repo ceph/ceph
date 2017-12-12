@@ -28,7 +28,6 @@
 #include "common/mime.h"
 #include "common/utf8.h"
 #include "common/ceph_json.h"
-#include "common/utf8.h"
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
