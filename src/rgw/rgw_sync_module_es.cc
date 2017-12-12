@@ -609,7 +609,7 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
 }
 
 int RGWElasticSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
-  string endpoint = config["endpoint"];
+  string endpoint = config["endpoint"]("");
   instance->reset(new RGWElasticSyncModuleInstance(cct, config));
   return 0;
 }
