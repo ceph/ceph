@@ -6104,11 +6104,13 @@ void PG::_delete_some()
     ObjectStore::Transaction t;
     PGLog::clear_info_log(info.pgid, &t);
     t.remove_collection(coll);
+    PGRef pgref(this);
     int r = osd->store->queue_transaction(
       osd->meta_osr.get(), std::move(t),
       // keep pg ref around until txn completes to avoid any issues
       // with Sequencer lifecycle (seen w/ filestore).
-      new ContainerContext<PGRef>(this));
+      new ContainerContext<PGRef>(pgref),
+      new ContainerContext<PGRef>(pgref));
     assert(r == 0);
 
     osd->finish_pg_delete(this);
