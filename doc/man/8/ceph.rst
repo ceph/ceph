@@ -922,7 +922,7 @@ Subcommand ``create`` creates pool.
 Usage::
 
 	ceph osd pool create <poolname> <int[0-]> {<int[0-]>} {replicated|erasure}
-	{<erasure_code_profile>} {<ruleset>} {<int>}
+	{<erasure_code_profile>} {<rule>} {<int>}
 
 Subcommand ``delete`` deletes pool.
 
@@ -935,7 +935,7 @@ Subcommand ``get`` gets pool parameter <var>.
 Usage::
 
 	ceph osd pool get <poolname> size|min_size|pg_num|
-	pgp_num|crush_ruleset|auid|write_fadvise_dontneed
+	pgp_num|crush_rule|auid|write_fadvise_dontneed
 
 Only for tiered pools::
 
@@ -987,7 +987,7 @@ Subcommand ``set`` sets pool parameter <var> to <val>.
 Usage::
 
 	ceph osd pool set <poolname> size|min_size|pg_num|
-	pgp_num|crush_ruleset|hashpspool|nodelete|nopgchange|nosizechange|
+	pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|
 	hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|debug_fake_ec_pool|
 	target_max_bytes|target_max_objects|cache_target_dirty_ratio|
 	cache_target_dirty_high_ratio|
