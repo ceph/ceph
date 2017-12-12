@@ -5591,6 +5591,8 @@ ostream& operator<<(ostream& out, const PG& pg)
       << " " << pg.up;
   if (pg.acting != pg.up)
     out << "/" << pg.acting;
+  if (pg.is_ec_pg())
+    out << "p" << pg.get_primary();
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
 
