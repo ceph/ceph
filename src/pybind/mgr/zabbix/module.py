@@ -88,6 +88,8 @@ class Module(MgrModule):
 
     def init_module_config(self):
         self.fsid = self.get('mon_map')['fsid']
+        self.log.debug('Found Ceph fsid %s', self.fsid)
+
         for key, default in self.config_keys.items():
             self.set_config_option(key, self.get_config(key, default))
 
@@ -106,6 +108,8 @@ class Module(MgrModule):
         if option == 'interval' and value < 10:
             raise RuntimeError('interval should be set to at least 10 seconds')
 
+        self.log.debug('Setting in-memory config option %s to: %s', option,
+                       value)
         self.config[option] = value
         return True
 
@@ -217,7 +221,7 @@ class Module(MgrModule):
             return
 
         try:
-            self.log.debug(
+            self.log.info(
                 'Sending data to Zabbix server %s as host/identifier %s',
                 self.config['zabbix_host'], identifier)
             self.log.debug(data)
@@ -268,13 +272,10 @@ class Module(MgrModule):
         self.event.set()
 
     def serve(self):
-        self.log.debug('Zabbix module starting up')
+        self.log.info('Zabbix module starting up')
         self.run = True
 
         self.init_module_config()
-
-        for key, value in self.config.items():
-            self.log.debug('%s: %s', key, value)
 
         while self.run:
             self.log.debug('Waking up for new iteration')
