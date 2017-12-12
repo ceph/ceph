@@ -10,7 +10,7 @@ def get_partuuid(device):
     device
     """
     out, err, rc = process.call(
-        ['sudo', 'blkid', '-s', 'PARTUUID', '-o', 'value', device]
+        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
 
@@ -21,7 +21,7 @@ def get_device_from_partuuid(partuuid):
     device is
     """
     out, err, rc = process.call(
-        ['sudo', 'blkid', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
+        ['blkid', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
     )
     return ' '.join(out).strip()
 
@@ -90,7 +90,7 @@ def lsblk(device, columns=None):
 
     Normal CLI output, as filtered by the flags in this function will look like ::
 
-        $ sudo lsblk --nodeps -P -o NAME,KNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
+        $ lsblk --nodeps -P -o NAME,KNAME,MAJ:MIN,FSTYPE,MOUNTPOINT
         NAME="sda1" KNAME="sda1" MAJ:MIN="8:1" FSTYPE="ext4" MOUNTPOINT="/"
 
     :param columns: A list of columns to report as keys in its original form.
@@ -107,7 +107,7 @@ def lsblk(device, columns=None):
     #             on the actual device we are querying for
     # -P       -> Produce pairs of COLUMN="value"
     # -o       -> Use the columns specified or default ones provided by this function
-    command = ['sudo', 'lsblk', '--nodeps', '-P', '-o']
+    command = ['lsblk', '--nodeps', '-P', '-o']
     command.append(','.join(columns))
     command.append(device)
     out, err, rc = process.call(command)
@@ -134,7 +134,7 @@ def _lsblk_type(device):
     It does not process the output to return a boolean, but it does process it to return the
     """
     out, err, rc = process.call(
-        ['sudo', 'blkid', '-s', 'PARTUUID', '-o', 'value', device]
+        ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
 

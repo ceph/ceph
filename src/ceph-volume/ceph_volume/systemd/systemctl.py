@@ -5,23 +5,23 @@ from ceph_volume import process
 
 
 def start(unit):
-    process.run(['sudo', 'systemctl', 'start', unit])
+    process.run(['systemctl', 'start', unit])
 
 
 def stop(unit):
-    process.run(['sudo', 'systemctl', 'stop', unit])
+    process.run(['systemctl', 'stop', unit])
 
 
 def enable(unit):
-    process.run(['sudo', 'systemctl', 'enable', unit])
+    process.run(['systemctl', 'enable', unit])
 
 
 def disable(unit):
-    process.run(['sudo', 'systemctl', 'disable', unit])
+    process.run(['systemctl', 'disable', unit])
 
 
 def mask(unit):
-    process.run(['sudo', 'systemctl', 'mask', unit])
+    process.run(['systemctl', 'mask', unit])
 
 
 def start_osd(id_):
@@ -50,7 +50,7 @@ def mask_ceph_disk():
     # masking ceph-disk@* will not work, so we must link the service directly.
     # /etc/systemd takes precendence regardless of the location of the unit
     process.run(
-        ['sudo', 'ln', '-sf', '/dev/null',  '/etc/systemd/system/ceph-disk@.service']
+        ['ln', '-sf', '/dev/null', '/etc/systemd/system/ceph-disk@.service']
     )
 
 
