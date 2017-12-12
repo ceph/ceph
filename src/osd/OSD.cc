@@ -7656,16 +7656,47 @@ void OSD::check_osdmap_features()
   }
 }
 
+struct C_CompleteSplits : public Context {
+  OSD *osd;
+  set<PGRef> pgs;
+  C_CompleteSplits(OSD *osd, const set<PGRef> &in)
+    : osd(osd), pgs(in) {}
+  void finish(int r) override {
+    Mutex::Locker l(osd->osd_lock);
+    if (osd->is_stopping())
+      return;
+    PG::RecoveryCtx rctx = osd->create_context();
+    for (set<PGRef>::iterator i = pgs.begin();
+	 i != pgs.end();
+	 ++i) {
+      osd->pg_map_lock.get_write();
+      (*i)->lock();
+      PG *pg = i->get();
+      osd->add_newly_split_pg(pg, &rctx);
+      if (!((*i)->is_deleting())) {
+        set<spg_t> to_complete;
+        to_complete.insert((*i)->get_pgid());
+        osd->service.complete_split(to_complete);
+      }
+      osd->pg_map_lock.put_write();
+      osd->dispatch_context_transaction(rctx, pg);
+      osd->wake_pg_waiters(*i);
+      (*i)->unlock();
+    }
+
+    osd->dispatch_context(rctx, 0, osd->service.get_osdmap());
+  }
+};
+
 void OSD::advance_pg(
   epoch_t osd_epoch, PG *pg,
   ThreadPool::TPHandle &handle,
-  PG::RecoveryCtx *rctx,
-  set<PGRef> *new_pgs)
+  PG::RecoveryCtx *rctx)
 {
   assert(pg->is_locked());
   OSDMapRef lastmap = pg->get_osdmap();
   assert(lastmap->get_epoch() < osd_epoch);
-
+  set<PGRef> new_pgs;  // any split children
   for (epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
        next_epoch <= osd_epoch;
        ++next_epoch) {
@@ -7695,7 +7726,7 @@ void OSD::advance_pg(
 	  &children)) {
       service.mark_split_in_progress(pg->pg_id, children);
       split_pgs(
-	pg, children, new_pgs, lastmap, nextmap,
+	pg, children, &new_pgs, lastmap, nextmap,
 	rctx);
     }
 
@@ -7704,6 +7735,10 @@ void OSD::advance_pg(
   }
   pg->handle_activate_map(rctx);
   service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
+
+  if (!new_pgs.empty()) {
+    rctx->on_applied->add(new C_CompleteSplits(this, new_pgs));
+  }
 }
 
 void OSD::consume_map()
@@ -8991,38 +9026,6 @@ void OSD::dequeue_op(
 }
 
 
-struct C_CompleteSplits : public Context {
-  OSD *osd;
-  set<PGRef> pgs;
-  C_CompleteSplits(OSD *osd, const set<PGRef> &in)
-    : osd(osd), pgs(in) {}
-  void finish(int r) override {
-    Mutex::Locker l(osd->osd_lock);
-    if (osd->is_stopping())
-      return;
-    PG::RecoveryCtx rctx = osd->create_context();
-    for (set<PGRef>::iterator i = pgs.begin();
-	 i != pgs.end();
-	 ++i) {
-      osd->pg_map_lock.get_write();
-      (*i)->lock();
-      PG *pg = i->get();
-      osd->add_newly_split_pg(pg, &rctx);
-      if (!((*i)->is_deleting())) {
-        set<spg_t> to_complete;
-        to_complete.insert((*i)->get_pgid());
-        osd->service.complete_split(to_complete);
-      }
-      osd->pg_map_lock.put_write();
-      osd->dispatch_context_transaction(rctx, pg);
-      osd->wake_pg_waiters(*i);
-      (*i)->unlock();
-    }
-
-    osd->dispatch_context(rctx, 0, osd->service.get_osdmap());
-  }
-};
-
 void OSD::dequeue_peering_evt(
   PG *pg,
   PGPeeringEventRef evt,
@@ -9030,17 +9033,12 @@ void OSD::dequeue_peering_evt(
 {
   auto curmap = service.get_osdmap();
   PG::RecoveryCtx rctx = create_context();
-  set<PGRef> split_pgs;
   if (curmap->get_epoch() > pg->get_osdmap()->get_epoch()) {
-    advance_pg(curmap->get_epoch(), pg, handle, &rctx, &split_pgs);
+    advance_pg(curmap->get_epoch(), pg, handle, &rctx);
   }
   pg->do_peering_event(evt, &rctx);
   auto need_up_thru = pg->get_need_up_thru();
   auto same_interval_since = pg->get_same_interval_since();
-  if (!split_pgs.empty()) {
-    rctx.on_applied->add(new C_CompleteSplits(this, split_pgs));
-    split_pgs.clear();
-  }
   dispatch_context_transaction(rctx, pg, &handle);
   bool deleted = pg->is_deleted();
   pg->unlock();

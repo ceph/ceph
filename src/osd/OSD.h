@@ -1780,8 +1780,7 @@ private:
   void advance_pg(
     epoch_t advance_to, PG *pg,
     ThreadPool::TPHandle &handle,
-    PG::RecoveryCtx *rctx,
-    set<PGRef> *split_pgs);
+    PG::RecoveryCtx *rctx);
   void consume_map();
   void activate_map();
 
