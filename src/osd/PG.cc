@@ -8152,7 +8152,6 @@ void PG::RecoveryState::GetInfo::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------GetLog------------*/
@@ -8287,7 +8286,6 @@ void PG::RecoveryState::GetLog::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------WaitActingChange--------*/
@@ -8380,7 +8378,6 @@ void PG::RecoveryState::Down::exit()
   pg->osd->recoverystate_perf->tinc(rs_down_latency, dur);
 
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
@@ -8458,7 +8455,6 @@ void PG::RecoveryState::Incomplete::exit()
   pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
 
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------GetMissing--------*/
@@ -8603,7 +8599,6 @@ void PG::RecoveryState::GetMissing::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------WaitUpThru--------*/
