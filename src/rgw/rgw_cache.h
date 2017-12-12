@@ -149,6 +149,7 @@ class ObjectCache {
 
   void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
+  void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
 public:
