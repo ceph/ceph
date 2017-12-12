@@ -377,7 +377,7 @@ namespace rgw {
   } /* RGWLibFS::unlink */
 
   int RGWLibFS::rename(RGWFileHandle* src_fh, RGWFileHandle* dst_fh,
-		       const char *_src_name, const char *_dst_name)
+		       const char *_src_name, const char *_dst_name, const char* acl="")
 
   {
     /* XXX initial implementation: try-copy, and delete if copy
@@ -429,7 +429,7 @@ namespace rgw {
       case 0:
       {
 	RGWCopyObjRequest req(cct, get_user(), src_fh, dst_fh, src_name,
-			      dst_name);
+			      dst_name, acl);
 	int rc = rgwlib.get_fe()->execute_req(&req);
 	if ((rc != 0) ||
 	    ((rc = req.get_ret()) != 0)) {
@@ -496,7 +496,7 @@ namespace rgw {
   } /* RGWLibFS::rename */
 
   MkObjResult RGWLibFS::mkdir(RGWFileHandle* parent, const char *name,
-			      struct stat *st, uint32_t mask, uint32_t flags)
+			      struct stat *st, uint32_t mask, uint32_t flags, const char* acl="")
   {
     int rc, rc2;
     rgw_file_handle *lfh;
@@ -548,7 +548,7 @@ namespace rgw {
 	return mkr;
       }
 
-      RGWCreateBucketRequest req(get_context(), get_user(), bname);
+      RGWCreateBucketRequest req(get_context(), get_user(), bname, acl);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -575,7 +575,7 @@ namespace rgw {
       }
 
       RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
-			  dir_name, bl);
+			  dir_name, bl, acl);
 
       /* save attrs */
       req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
@@ -608,7 +608,7 @@ namespace rgw {
   } /* RGWLibFS::mkdir */
 
   MkObjResult RGWLibFS::create(RGWFileHandle* parent, const char *name,
-			      struct stat *st, uint32_t mask, uint32_t flags)
+			      struct stat *st, uint32_t mask, uint32_t flags, const char* acl="")
   {
     int rc, rc2;
 
@@ -632,7 +632,7 @@ namespace rgw {
 
     /* create it */
     buffer::list bl;
-    RGWPutObjRequest req(cct, get_user(), parent->bucket_name(), obj_name, bl);
+    RGWPutObjRequest req(cct, get_user(), parent->bucket_name(), obj_name, bl, acl);
     MkObjResult mkr{nullptr, -EINVAL};
 
     rc = rgwlib.get_fe()->execute_req(&req);
@@ -1105,7 +1105,7 @@ namespace rgw {
   } /* RGWFileHandle::readdir */
 
   int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
-			   void *buffer)
+			   void *buffer, const char* acl="")
   {
     using std::get;
     using WriteCompletion = RGWLibFS::WriteCompletion;
@@ -1148,7 +1148,7 @@ namespace rgw {
       std::string object_name = relative_object_name();
       f->write_req =
 	new RGWWriteRequest(fs->get_context(), fs->get_user(), this,
-			    bucket_name(), object_name);
+			    bucket_name(), object_name, acl);
       rc = rgwlib.get_fe()->start_req(f->write_req);
       if (rc < 0) {
 	lsubdout(fs->get_context(), rgw, 5)
@@ -1668,6 +1668,32 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
   return get<1>(fhr);
 } /* rgw_create */
 
+int rgw_create_with_acl(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+               const char *name, struct stat *st, uint32_t mask,
+               struct rgw_file_handle **fh, uint32_t posix_flags,
+               uint32_t flags, const char *acl)
+{
+  using std::get;
+
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+
+  if ((! parent) ||
+      (parent->is_root()) ||
+      (parent->is_file())) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  MkObjResult fhr = fs->create(parent, name, st, mask, flags, acl);
+  RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
+
+  if (nfh)
+    *fh = nfh->get_fh();
+
+  return get<1>(fhr);
+}
+
 /*
   create a new directory
 */
@@ -1695,6 +1721,30 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
   return get<1>(fhr);
 } /* rgw_mkdir */
 
+int rgw_mkdir_with_acl(struct rgw_fs *rgw_fs,
+              struct rgw_file_handle *parent_fh,
+              const char *name, struct stat *st, uint32_t mask,
+              struct rgw_file_handle **fh, uint32_t flags, const char* acl)
+{
+  using std::get;
+
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+
+  if (! parent) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  MkObjResult fhr = fs->mkdir(parent, name, st, mask, flags, acl);
+  RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
+
+  if (nfh)
+    *fh = nfh->get_fh();
+
+  return get<1>(fhr);
+}
+
 /*
   rename object
 */
@@ -1709,6 +1759,19 @@ int rgw_rename(struct rgw_fs *rgw_fs,
   RGWFileHandle* dst_fh = get_rgwfh(dst);
 
   return fs->rename(src_fh, dst_fh, src_name, dst_name);
+}
+
+int rgw_rename_with_acl(struct rgw_fs *rgw_fs,
+               struct rgw_file_handle *src, const char* src_name,
+               struct rgw_file_handle *dst, const char* dst_name,
+               uint32_t flags, const char* acl)
+{
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+
+  RGWFileHandle* src_fh = get_rgwfh(src);
+  RGWFileHandle* dst_fh = get_rgwfh(dst);
+
+  return fs->rename(src_fh, dst_fh, src_name, dst_name, acl);
 }
 
 /*
@@ -2008,6 +2071,30 @@ int rgw_write(struct rgw_fs *rgw_fs,
   }
 
   rc = rgw_fh->write(offset, length, bytes_written, buffer);
+
+  return rc;
+}
+
+/*
+   write data to file
+*/
+int rgw_write_with_acl(struct rgw_fs *rgw_fs,
+              struct rgw_file_handle *fh, uint64_t offset,
+              size_t length, size_t *bytes_written, void *buffer,
+              uint32_t flags, const char* acl)
+{
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+  int rc;
+
+  *bytes_written = 0;
+
+  if (! rgw_fh->is_file())
+    return -EISDIR;
+
+  if (! rgw_fh->is_open())
+    return -EPERM;
+  
+  rc = rgw_fh->write(offset, length, bytes_written, buffer, acl);
 
   return rc;
 }

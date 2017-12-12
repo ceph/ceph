@@ -562,7 +562,7 @@ namespace rgw {
     int readdir(rgw_readdir_cb rcb, void *cb_arg, readdir_offset offset,
 		bool *eof, uint32_t flags);
 
-    int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
+    int write(uint64_t off, size_t len, size_t *nbytes, void *buffer, const char* acl);
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
       /* NFS3 and NFSv4 COMMIT implementation
@@ -1125,13 +1125,13 @@ namespace rgw {
 	     size_t* bytes_read, void* buffer, uint32_t flags);
 
     int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
-	       const char *old_name, const char *new_name);
+	       const char *old_name, const char *new_name, const char* acl);
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
+		      uint32_t mask, uint32_t flags, const char* acl);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
+		      uint32_t mask, uint32_t flags, const char* acl);
 
     int unlink(RGWFileHandle* rgw_fh, const char *name,
 	       uint32_t flags = FLAG_NONE);
@@ -1616,10 +1616,11 @@ class RGWCreateBucketRequest : public RGWLibRequest,
 {
 public:
   const std::string& bucket_name;
+  std::string acl;
 
   RGWCreateBucketRequest(CephContext* _cct, RGWUserInfo *_user,
-			std::string& _bname)
-    : RGWLibRequest(_cct, _user), bucket_name(_bname) {
+			std::string& _bname, const char* _acl="")
+    : RGWLibRequest(_cct, _user), bucket_name(_bname), acl(_acl) {
     op = this;
   }
 
@@ -1646,6 +1647,7 @@ public:
     struct req_state* s = get_state();
     s->info.method = "PUT";
     s->op = OP_PUT;
+    s->canned_acl = acl;
 
     string uri = "/" + bucket_name;
     /* XXX derp derp derp */
@@ -1739,12 +1741,13 @@ public:
   const std::string& obj_name;
   buffer::list& bl; /* XXX */
   size_t bytes_written;
+  std::string acl;
 
   RGWPutObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		  const std::string& _bname, const std::string& _oname,
-		  buffer::list& _bl)
+		  buffer::list& _bl, const char* _acl = "")
     : RGWLibRequest(_cct, _user), bucket_name(_bname), obj_name(_oname),
-      bl(_bl), bytes_written(0) {
+      bl(_bl), bytes_written(0), acl(_acl) {
     op = this;
   }
 
@@ -1785,7 +1788,7 @@ public:
 
     // woo
     s->user = user;
-
+    s->canned_acl = acl;
     return 0;
   }
 
@@ -2265,12 +2268,13 @@ public:
   size_t bytes_written;
   bool multipart;
   bool eio;
+  std::string acl;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
-		  const std::string& _bname, const std::string& _oname)
+		  const std::string& _bname, const std::string& _oname, const char* _acl="")
     : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), processor(nullptr), filter(nullptr), real_ofs(0),
-      bytes_written(0), multipart(false), eio(false) {
+      bytes_written(0), multipart(false), eio(false), acl(_acl) {
 
     int ret = header_init();
     if (ret == 0) {
@@ -2297,7 +2301,7 @@ public:
     struct req_state* s = get_state();
     s->info.method = "PUT";
     s->op = OP_PUT;
-
+    s->canned_acl = acl;
     /* XXX derp derp derp */
     std::string uri = make_uri(bucket_name, obj_name);
     s->relative_uri = uri;
@@ -2329,6 +2333,7 @@ public:
     struct req_state* s = get_state();
     RGWAccessControlPolicy_S3 s3policy(s->cct);
     /* we don't have (any) headers, so just create canned ACLs */
+    s->canned_acl = acl;
     int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
     policy = s3policy;
     return ret;
@@ -2373,12 +2378,12 @@ public:
   RGWFileHandle* dst_parent;
   const std::string& src_name;
   const std::string& dst_name;
-
+  std::string acl;
   RGWCopyObjRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _src_parent, RGWFileHandle* _dst_parent,
-		    const std::string& _src_name, const std::string& _dst_name)
+		    const std::string& _src_name, const std::string& _dst_name, const char* _acl = "")
     : RGWLibRequest(_cct, _user), src_parent(_src_parent),
-      dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name) {
+      dst_parent(_dst_parent), src_name(_src_name), dst_name(_dst_name), acl(_acl) {
     /* all requests have this */
     op = this;
 
@@ -2405,7 +2410,7 @@ public:
     struct req_state* s = get_state();
     s->info.method = "PUT"; // XXX check
     s->op = OP_PUT;
-
+    s->canned_acl = acl;
     src_bucket_name = src_parent->bucket_name();
     // need s->src_bucket_name?
     src_object.name = src_parent->format_child_name(src_name, false);

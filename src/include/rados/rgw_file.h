@@ -177,6 +177,10 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 	       const char *name, struct stat *st, uint32_t mask,
 	       struct rgw_file_handle **fh, uint32_t posix_flags,
 	       uint32_t flags);
+int rgw_create_with_acl(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+               const char *name, struct stat *st, uint32_t mask,
+               struct rgw_file_handle **fh, uint32_t posix_flags,
+               uint32_t flags, const char* acl);
 
 /*
   create a new directory
@@ -187,6 +191,10 @@ int rgw_mkdir(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *parent_fh,
 	      const char *name, struct stat *st, uint32_t mask,
 	      struct rgw_file_handle **fh, uint32_t flags);
+int rgw_mkdir_with_acl(struct rgw_fs *rgw_fs,
+              struct rgw_file_handle *parent_fh,
+              const char *name, struct stat *st, uint32_t mask,
+              struct rgw_file_handle **fh, uint32_t flags, const char* acl);
 
 /*
   rename object
@@ -197,7 +205,10 @@ int rgw_rename(struct rgw_fs *rgw_fs,
 	       struct rgw_file_handle *olddir, const char* old_name,
 	       struct rgw_file_handle *newdir, const char* new_name,
 	       uint32_t flags);
-
+int rgw_rename_with_acl(struct rgw_fs *rgw_fs,
+               struct rgw_file_handle *olddir, const char* old_name,
+               struct rgw_file_handle *newdir, const char* new_name,
+               uint32_t flags, const char* acl);
 /*
   remove file or directory
 */
@@ -302,6 +313,10 @@ int rgw_write(struct rgw_fs *rgw_fs,
 	      struct rgw_file_handle *fh, uint64_t offset,
 	      size_t length, size_t *bytes_written, void *buffer,
 	      uint32_t flags);
+int rgw_write_with_acl(struct rgw_fs *rgw_fs,
+              struct rgw_file_handle *fh, uint64_t offset,
+              size_t length, size_t *bytes_written, void *buffer,
+              uint32_t flags, const char* acl);
 
 #define RGW_UIO_NONE    0x0000
 #define RGW_UIO_GIFT    0x0001
