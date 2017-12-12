@@ -2186,7 +2186,8 @@ static inline int rgw_str_to_bool(const char *s, int def_val)
   if (!s)
     return def_val;
 
-  return (strcasecmp(s, "on") == 0 ||
+  return (strcasecmp(s, "true") == 0 ||
+          strcasecmp(s, "on") == 0 ||
           strcasecmp(s, "yes") == 0 ||
           strcasecmp(s, "1") == 0);
 }
