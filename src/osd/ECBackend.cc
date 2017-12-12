@@ -759,6 +759,7 @@ bool ECBackend::_handle_message(
     // not conflict with ECSubWrite's operator<<.
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
       _op->get_nonconst_req());
+    _op->mark_started();
     handle_sub_write(op->op.from, _op, op->op, _op->pg_trace);
     return true;
   }
@@ -925,8 +926,6 @@ void ECBackend::handle_sub_write(
   const ZTracer::Trace &trace,
   Context *on_local_applied_sync)
 {
-  if (msg)
-    msg->mark_started();
   trace.event("handle_sub_write");
   assert(!get_parent()->get_log().get_missing().is_missing(op.soid));
   if (!get_parent()->pgb_is_primary())
@@ -1816,6 +1815,8 @@ bool ECBackend::try_state_to_reads()
 	     << " because it requires an rmw and the cache is invalid "
 	     << pipeline_state
 	     << dendl;
+    if (op->client_op)
+      op->client_op->mark_delayed("waiting_state");
     return false;
   }
 
@@ -1874,6 +1875,8 @@ bool ECBackend::try_state_to_reads()
 	}
 	check_ops();
       });
+    if (op->client_op)
+      op->client_op->mark_delayed("waiting_reads");
   }
 
   return true;
@@ -1964,6 +1967,8 @@ bool ECBackend::try_reads_to_commit()
   }
   op->remote_read.clear();
   op->remote_read_result.clear();
+  if (op->client_op)
+    op->client_op->mark_event("start_ec_write");
 
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
