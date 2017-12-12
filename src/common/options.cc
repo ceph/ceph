@@ -6056,10 +6056,6 @@ std::vector<Option> get_mds_options() {
     .set_default("/var/lib/ceph/mds/$cluster-$id")
     .set_description(""),
 
-    Option("mds_max_file_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1ULL << 40)
-    .set_description(""),
-
     Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64 << 10)
     .set_description(""),
@@ -6114,10 +6110,6 @@ std::vector<Option> get_mds_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("mds_session_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
-    .set_description(""),
-
     Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -6136,10 +6128,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
-
-    Option("mds_session_autoclose", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(300)
     .set_description(""),
 
     Option("mds_health_summarize_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -6212,10 +6200,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_bal_unreplicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
-
-    Option("mds_bal_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
     .set_description(""),
 
     Option("mds_bal_split_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)

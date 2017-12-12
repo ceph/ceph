@@ -444,10 +444,10 @@ class Filesystem(MDSCluster):
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
 
     def set_max_mds(self, max_mds):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+        self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_dirfrags(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
