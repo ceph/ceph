@@ -2432,7 +2432,7 @@ void ECBackend::be_deep_scrub(
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
   uint64_t pos = 0;
   bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
+    g_conf->osd_skip_data_digest;
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
