@@ -5857,7 +5857,7 @@ void PG::take_waiters()
   for (auto i = peering_waiters.rbegin();
        i != peering_waiters.rend();
        ++i) {
-    osd->osd->enqueue_peering_evt_front(this, *i);
+    osd->osd->enqueue_peering_evt_front(info.pgid, *i);
   }
 }
 
@@ -5879,7 +5879,7 @@ void PG::queue_peering_event(PGPeeringEventRef evt)
 {
   if (old_peering_evt(evt))
     return;
-  osd->osd->enqueue_peering_evt(this, evt);
+  osd->osd->enqueue_peering_evt(info.pgid, evt);
 }
 
 void PG::queue_null(epoch_t msg_epoch,

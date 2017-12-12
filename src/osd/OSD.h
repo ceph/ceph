@@ -1732,10 +1732,10 @@ private:
     ThreadPool::TPHandle &handle);
 
   void enqueue_peering_evt(
-    PG *pg,
+    spg_t pgid,
     PGPeeringEventRef ref);
   void enqueue_peering_evt_front(
-    PG *pg,
+    spg_t pgid,
     PGPeeringEventRef ref);
   void dequeue_peering_evt(
     PG *pg,

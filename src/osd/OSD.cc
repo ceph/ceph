@@ -8959,12 +8959,12 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef& op, epoch_t epoch)
       epoch));
 }
 
-void OSD::enqueue_peering_evt(PG *pg, PGPeeringEventRef evt)
+void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 {
-  dout(15) << __func__ << " " << pg->get_pgid() << " " << evt->get_desc() << dendl;
+  dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
   op_shardedwq.queue(
     OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pg->get_pgid(), evt)),
+      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
       10,
       cct->_conf->osd_peering_op_priority,
       utime_t(),
@@ -8972,12 +8972,12 @@ void OSD::enqueue_peering_evt(PG *pg, PGPeeringEventRef evt)
       evt->get_epoch_sent()));
 }
 
-void OSD::enqueue_peering_evt_front(PG *pg, PGPeeringEventRef evt)
+void OSD::enqueue_peering_evt_front(spg_t pgid, PGPeeringEventRef evt)
 {
-  dout(15) << __func__ << " " << pg->get_pgid() << " " << evt->get_desc() << dendl;
+  dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
   op_shardedwq.queue_front(
     OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pg->get_pgid(), evt)),
+      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
       10,
       cct->_conf->osd_peering_op_priority,
       utime_t(),
