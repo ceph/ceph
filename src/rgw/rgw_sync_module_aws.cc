@@ -969,10 +969,10 @@ static int conf_to_uint64(CephContext *cct, const JSONFormattable& config, const
 int RGWAWSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config,  RGWSyncModuleInstanceRef *instance){
   AWSSyncConfig conf;
 
-  conf.s3_endpoint = config["s3_endpoint"];
+  conf.s3_endpoint = config["s3_endpoint"]("");
 
-  string access_key = config["access_key"];
-  string secret = config["secret"];
+  string access_key = config["access_key"]("");
+  string secret = config["secret"]("");
 
   conf.key = RGWAccessKey(access_key, secret);
 

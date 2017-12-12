@@ -474,9 +474,9 @@ struct JSONFormattable {
     FMT_ARRAY,
     FMT_OBJ,
   } type{FMT_NONE};
-  string str;
+  std::string str;
   vector<JSONFormattable> arr;
-  map<string, JSONFormattable> obj;
+  map<std::string, JSONFormattable> obj;
 
   void decode_json(JSONObj *jo) {
     if (jo->is_array()) {
@@ -514,25 +514,47 @@ struct JSONFormattable {
     decode(obj, bl);
     DECODE_FINISH(bl);
   }
-  const string& val() const {
+  const std::string& val() const {
     return str;
   }
+
+  int val_int() const;
+  bool val_bool() const;
 
   const vector<JSONFormattable>& array() const {
     return arr;
   }
 
-  const JSONFormattable& operator[](const string& name) const;
-
-  operator string() const {
-    return val();
+  const JSONFormattable& operator[](const std::string& name) const;
+  const JSONFormattable& operator[](const char * name) const {
+    return this->operator[](std::string(name));
   }
 
-  bool find(const string& name, string *val) const;
+  string operator ()(const char *def_val) const {
+    return def(string(def_val));
+  }
 
-  string get(const string& name, const string& def_val) const;
-  int get_int(const string& name, int def_val) const;
-  bool get_bool(const string& name, bool def_val) const;
+  string operator ()(const string& def_val) const {
+    return def(def_val);
+  }
+
+  int operator()(int def_val) const {
+    return def(def_val);
+  }
+
+  bool operator()(bool def_val) const {
+    return def(def_val);
+  }
+
+  std::string def(const std::string& def_val) const;
+  int def(int def_val) const;
+  bool def(bool def_val) const;
+
+  bool find(const std::string& name, std::string *val) const;
+
+  std::string get(const std::string& name, const std::string& def_val) const;
+  int get_int(const std::string& name, int def_val) const;
+  bool get_bool(const std::string& name, bool def_val) const;
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 

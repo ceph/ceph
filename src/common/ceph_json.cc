@@ -540,41 +540,55 @@ bool JSONFormattable::find(const string& name, string *val) const
   if (i == obj.end()) {
     return false;
   }
-  *val = i->second;
+  *val = i->second.val();
   return true;
+}
+
+int JSONFormattable::val_int() const {
+  return atoi(str.c_str());
+}
+
+bool JSONFormattable::val_bool() const {
+  return (boost::iequals(str, "true") ||
+          boost::iequals(str, "on") ||
+          boost::iequals(str, "yes") ||
+          boost::iequals(str, "1"));
+}
+
+string JSONFormattable::def(const string& def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val();
+}
+
+int JSONFormattable::def(int def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val_int();
+}
+
+bool JSONFormattable::def(bool def_val) const {
+  if (type == FMT_NONE) {
+    return def_val;
+  }
+  return val_bool();
 }
 
 string JSONFormattable::get(const string& name, const string& def_val) const
 {
-  string s;
-  if (find(name, &s)) {
-    return s;
-  }
-
-  return def_val;
+  return (*this)[name].def(def_val);
 }
 
 int JSONFormattable::get_int(const string& name, int def_val) const
 {
-  string s;
-  if (find(name, &s)) {
-    return atoi(s.c_str());
-  }
-
-  return def_val;
+  return (*this)[name].def(def_val);
 }
 
 bool JSONFormattable::get_bool(const string& name, bool def_val) const
 {
-  string s;
-  if (find(name, &s)) {
-    return (boost::iequals(s, "true") ||
-            boost::iequals(s, "on") ||
-            boost::iequals(s, "yes") ||
-            boost::iequals(s, "1"));
-  }
-
-  return def_val;
+  return (*this)[name].def(def_val);
 }
 
 void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
