@@ -3724,8 +3724,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
 
 AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
-                                       /* FIXME: const. */
-                                       bool using_qs) const
+                                       const bool using_qs) const
 {
   boost::string_view access_key_id;
   boost::string_view signed_hdrs;
