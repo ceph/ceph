@@ -3824,7 +3824,7 @@ void OSD::add_newly_split_pg(PG *pg, PG::RecoveryCtx *rctx)
 	   to_wake->second.begin();
 	 i != to_wake->second.end();
 	 ++i) {
-      pg->queue_peering_event(*i);
+      enqueue_peering_evt(pg->get_pgid(), *i);
     }
     peering_wait_for_split.erase(to_wake);
   }
@@ -4077,20 +4077,13 @@ int OSD::handle_pg_peering_evt(
     dispatch_context(rctx, pg, osdmap);
 
     dout(10) << *pg << " is new" << dendl;
-
-    pg->queue_peering_event(evt);
+    enqueue_peering_evt(pg->get_pgid(), evt);
     wake_pg_waiters(pg);
     pg->unlock();
     return 0;
   } else {
-    // already had it.  did the mapping change?
-    if (epoch < pg->get_same_interval_since()) {
-      dout(10) << *pg << __func__ << " acting changed in "
-	       << pg->get_same_interval_since()
-	       << " (msg from " << epoch << ")" << dendl;
-    } else {
-      pg->queue_peering_event(evt);
-    }
+    // already had it
+    enqueue_peering_evt(pg->get_pgid(), evt);
     pg->unlock();
     return -EEXIST;
   }
@@ -8485,19 +8478,7 @@ void OSD::handle_pg_backfill_reserve(OpRequestRef op)
     ceph_abort();
   }
 
-  if (service.splitting(m->pgid)) {
-    peering_wait_for_split[m->pgid].push_back(evt);
-    return;
-  }
-
-  PG *pg = _lookup_lock_pg(m->pgid);
-  if (!pg) {
-    dout(10) << " don't have pg " << m->pgid << dendl;
-    return;
-  }
-
-  pg->queue_peering_event(evt);
-  pg->unlock();
+  enqueue_peering_evt(m->pgid, evt);
 }
 
 void OSD::handle_pg_recovery_reserve(OpRequestRef op)
@@ -8539,19 +8520,7 @@ void OSD::handle_pg_recovery_reserve(OpRequestRef op)
     ceph_abort();
   }
 
-  if (service.splitting(m->pgid)) {
-    peering_wait_for_split[m->pgid].push_back(evt);
-    return;
-  }
-
-  PG *pg = _lookup_lock_pg(m->pgid);
-  if (!pg) {
-    dout(10) << " don't have pg " << m->pgid << dendl;
-    return;
-  }
-
-  pg->queue_peering_event(evt);
-  pg->unlock();
+  enqueue_peering_evt(m->pgid, evt);
 }
 
 void OSD::handle_force_recovery(Message *m)
@@ -8716,17 +8685,12 @@ void OSD::handle_pg_remove(OpRequestRef op)
       continue;
     }
 
-    PG *pg = _lookup_lock_pg(pgid);
-    if (pg) {
-      pg->queue_peering_event(
-	PGPeeringEventRef(
-	  new PGPeeringEvent(
-	    m->get_epoch(), m->get_epoch(),
-	    PG::DeleteStart())));
-      pg->unlock();
-    } else {
-      dout(10) << " don't have pg " << pgid << dendl;
-    }
+    enqueue_peering_evt(
+      pgid,
+      PGPeeringEventRef(
+	new PGPeeringEvent(
+	  m->get_epoch(), m->get_epoch(),
+	  PG::DeleteStart())));
   }
 }
 
