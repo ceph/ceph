@@ -6079,9 +6079,15 @@ void PG::_delete_some()
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     struct C_DeleteMore : public Context {
       PGRef pg;
+      int count = 2;
       epoch_t epoch;
       C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
-      void finish(int r) {
+      void complete(int r) {
+	// complete will be called exactly count times; only the last time will actualy
+	// complete.
+	if (--count) {
+	  return;
+	}
 	if (r >= 0) {
 	  pg->lock();
 	  if (!pg->pg_has_reset_since(epoch)) {
@@ -6089,12 +6095,15 @@ void PG::_delete_some()
 	  }
 	  pg->unlock();
 	}
+	delete this;
       }
     };
+    Context *fin = new C_DeleteMore(this, e);
     osd->store->queue_transaction(
       osr.get(),
       std::move(t),
-      new C_DeleteMore(this, e));
+      fin,
+      fin);
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
