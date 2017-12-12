@@ -1080,7 +1080,8 @@ struct rgw_bucket {
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
   std::string get_key(char tenant_delim = '/',
-                      char id_delim = ':') const;
+                      char id_delim = ':',
+                      size_t reserve = 0) const;
 
   const rgw_pool& get_data_extra_pool() const {
     return explicit_placement.get_data_extra_pool();
