@@ -10139,7 +10139,7 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
   else
     len = end - ofs + 1;
 
-  if (astate->has_manifest && astate->manifest.has_tail()) {
+  if (astate && astate->has_manifest && astate->manifest.has_tail()) {
     /* now get the relevant object part */
     RGWObjManifest::obj_iterator iter = astate->manifest.obj_find(ofs);
 
