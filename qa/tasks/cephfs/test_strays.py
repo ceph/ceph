@@ -962,7 +962,7 @@ class TestStrays(CephFSTestCase):
 
         max_purge_files = 2
 
-        self.set_conf('mds', 'mds_bal_frag', 'false')
+        self.fs.set_allow_dirfrags(True)
         self.set_conf('mds', 'mds_max_purge_files', "%d" % max_purge_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()

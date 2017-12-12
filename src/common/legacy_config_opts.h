@@ -398,7 +398,6 @@ OPTION(filer_max_purge_ops, OPT_U32)
 OPTION(filer_max_truncate_ops, OPT_U32)
 
 OPTION(mds_data, OPT_STR)
-OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph fs set <fs_name> max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
 OPTION(mds_max_file_recover, OPT_U32)
@@ -409,17 +408,15 @@ OPTION(mds_beacon_interval, OPT_FLOAT)
 OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
 
-OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout
 OPTION(mds_session_blacklist_on_evict, OPT_BOOL)  // whether to blacklist clients whose sessions are dropped via admin commands
 
 OPTION(mds_sessionmap_keys_per_op, OPT_U32)    // how many sessions should I try to load/store in a single OMAP operation?
 OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
-OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT) // collapse N-client health metrics to a single 'many'
 OPTION(mds_reconnect_timeout, OPT_FLOAT)  // seconds to wait for clients during mds restart
-	      //  make it (mds_session_timeout - mds_beacon_grace)
+	      //  make it (mdsmap.session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT)
 OPTION(mds_dirstat_min_interval, OPT_FLOAT)    // try to avoid propagating more often than this
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT)  // how quickly dirstat changes propagate up the hierarchy
@@ -436,7 +433,6 @@ OPTION(mds_bal_export_pin, OPT_BOOL)  // allow clients to pin directory trees to
 OPTION(mds_bal_sample_interval, OPT_DOUBLE)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT)
-OPTION(mds_bal_frag, OPT_BOOL)
 OPTION(mds_bal_split_size, OPT_INT)
 OPTION(mds_bal_split_rd, OPT_FLOAT)
 OPTION(mds_bal_split_wr, OPT_FLOAT)
