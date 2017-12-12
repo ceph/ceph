@@ -913,8 +913,13 @@ public:
 private:
   // split
   Mutex in_progress_split_lock;
+  // splits are "pending" after OSD has consumed the map indicating the PG should
+  // split but the PG has not yet processed the map.
   map<spg_t, spg_t> pending_splits; // child -> parent
   map<spg_t, set<spg_t> > rev_pending_splits; // parent -> [children]
+
+  // splits are "in progress" after the PG has gotten the map, and we hold the
+  // parent lock, but the children have not yet been created.
   set<spg_t> in_progress_splits;       // child
 
 public:
