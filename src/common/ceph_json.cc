@@ -5,9 +5,15 @@
 #include <fstream>
 #include <include/types.h>
 
+#include <boost/algorithm/string.hpp>
+
 using namespace json_spirit;
 
 #define dout_subsys ceph_subsys_rgw
+
+
+static JSONFormattable default_formattable;
+
 
 JSONObjIter::JSONObjIter()
 {
@@ -513,5 +519,82 @@ void encode_json(const char *name, const bufferlist& bl, Formatter *f)
   string s(b64.c_str(), b64.length());
 
   encode_json(name, s, f);
+}
+
+
+
+/* JSONFormattable */
+
+const JSONFormattable& JSONFormattable::operator[](const string& name) const
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return default_formattable;
+  }
+  return i->second;
+}
+
+bool JSONFormattable::find(const string& name, string *val) const
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return false;
+  }
+  *val = i->second;
+  return true;
+}
+
+string JSONFormattable::get(const string& name, const string& def_val) const
+{
+  string s;
+  if (find(name, &s)) {
+    return s;
+  }
+
+  return def_val;
+}
+
+int JSONFormattable::get_int(const string& name, int def_val) const
+{
+  string s;
+  if (find(name, &s)) {
+    return atoi(s.c_str());
+  }
+
+  return def_val;
+}
+
+bool JSONFormattable::get_bool(const string& name, bool def_val) const
+{
+  string s;
+  if (find(name, &s)) {
+    return (boost::iequals(s, "true") ||
+            boost::iequals(s, "on") ||
+            boost::iequals(s, "yes") ||
+            boost::iequals(s, "1"));
+  }
+
+  return def_val;
+}
+
+void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
+{
+  switch (v.type) {
+    case JSONFormattable::FMT_STRING:
+      encode_json(name, v.str, f);
+      break;
+    case JSONFormattable::FMT_ARRAY:
+      encode_json(name, v.arr, f);
+      break;
+    case JSONFormattable::FMT_OBJ:
+      f->open_object_section(name);
+      for (auto iter : v.obj) {
+        encode_json(iter.first.c_str(), iter.second, f);
+      }
+      f->close_section();
+      break;
+    case JSONFormattable::FMT_NONE:
+      break;
+  }
 }
 

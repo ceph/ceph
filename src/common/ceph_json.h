@@ -467,4 +467,75 @@ void encode_json_map(const char *name, const char *index_name, const char *value
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
 
+struct JSONFormattable {
+  enum Type {
+    FMT_NONE,
+    FMT_STRING,
+    FMT_ARRAY,
+    FMT_OBJ,
+  } type{FMT_NONE};
+  string str;
+  vector<JSONFormattable> arr;
+  map<string, JSONFormattable> obj;
+
+  void decode_json(JSONObj *jo) {
+    if (jo->is_array()) {
+      type = JSONFormattable::FMT_ARRAY;
+      decode_json_obj(arr, jo);
+    } else if (jo->is_object()) {
+      type = JSONFormattable::FMT_OBJ;
+      auto iter = jo->find_first();
+      while (!iter.end()) {
+        JSONObj *field = *iter;
+        decode_json_obj(obj[field->get_name()], field);
+      }
+    } else {
+      type = JSONFormattable::FMT_STRING;
+      decode_json_obj(str, jo);
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode((uint8_t)type, bl);
+    encode(str, bl);
+    encode(arr, bl);
+    encode(obj, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint8_t t;
+    decode(t, bl);
+    type = (Type)t;
+    decode(str, bl);
+    decode(arr, bl);
+    decode(obj, bl);
+    DECODE_FINISH(bl);
+  }
+  const string& val() const {
+    return str;
+  }
+
+  const vector<JSONFormattable>& array() const {
+    return arr;
+  }
+
+  const JSONFormattable& operator[](const string& name) const;
+
+  operator string() const {
+    return val();
+  }
+
+  bool find(const string& name, string *val) const;
+
+  string get(const string& name, const string& def_val) const;
+  int get_int(const string& name, int def_val) const;
+  bool get_bool(const string& name, bool def_val) const;
+};
+WRITE_CLASS_ENCODER(JSONFormattable)
+
+void encode_json(const char *name, const JSONFormattable& v, Formatter *f);
+
 #endif

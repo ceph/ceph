@@ -951,14 +951,14 @@ public:
   }
 };
 
-static int conf_to_uint64(CephContext *cct, const map<string, string, ltstr_nocase>& config, const string& key, uint64_t *pval)
+static int conf_to_uint64(CephContext *cct, const JSONFormattable& config, const string& key, uint64_t *pval)
 {
-  auto i = config.find(key);
-  if (i != config.end()) {
+  string sval;
+  if (config.find(key, &sval)) {
     string err;
-    uint64_t val = strict_strtoll(i->second.c_str(), 10, &err);
+    uint64_t val = strict_strtoll(sval.c_str(), 10, &err);
     if (!err.empty()) {
-      ldout(cct, 0) << "ERROR: could not parse configurable value for cloud sync module: " << i->first << ": " << i->second << dendl;
+      ldout(cct, 0) << "ERROR: could not parse configurable value for cloud sync module: " << key << ": " << sval << dendl;
       return -EINVAL;
     }
     *pval = val;
@@ -966,22 +966,13 @@ static int conf_to_uint64(CephContext *cct, const map<string, string, ltstr_noca
   return 0;
 }
 
-int RGWAWSSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config,  RGWSyncModuleInstanceRef *instance){
+int RGWAWSSyncModule::create_instance(CephContext *cct, const JSONFormattable& config,  RGWSyncModuleInstanceRef *instance){
   AWSSyncConfig conf;
-  auto i = config.find("s3_endpoint");
-  if (i != config.end())
-    conf.s3_endpoint = i->second;
 
-  string access_key;
-  string secret;
+  conf.s3_endpoint = config["s3_endpoint"];
 
-  i = config.find("access_key");
-  if (i != config.end())
-    access_key = i->second;
-
-  i = config.find("secret");
-  if (i != config.end())
-    secret = i->second;
+  string access_key = config["access_key"];
+  string secret = config["secret"];
 
   conf.key = RGWAccessKey(access_key, secret);
 
