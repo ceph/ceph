@@ -664,11 +664,13 @@ void MDBalancer::prep_rebalance(int beat)
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
-      } else if ((it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) && 
-        (it->second == whoami || !mds_last_epoch_under_info[it->second] || beat_epoch - mds_last_epoch_under_info[it->second] >= 2)){
-	dout(15) << "   mds." << it->second << " is exporter" << dendl;
-	exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
-	exporter_set.insert(it->second);
+      } else if (it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
+        int mds_last_epoch_under = (it->second == whoami) ? 0 : mds_last_epoch_under_info[it->second];
+        if (!mds_last_epoch_under || beat_epoch - mds_last_epoch_under >= 2) {
+	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
+	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
+	  exporter_set.insert(it->second);
+        }
       }
     }
 
