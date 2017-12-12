@@ -692,7 +692,7 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
-  cutoff -= g_conf->mds_session_timeout;  
+  cutoff -= mds->mdsmap->get_session_timeout();
   while (1) {
     Session *session = mds->sessionmap.get_oldest_session(Session::STATE_OPEN);
     if (!session) break;
@@ -713,7 +713,7 @@ void Server::find_idle_sessions()
 
   // autoclose
   cutoff = now;
-  cutoff -= g_conf->mds_session_autoclose;
+  cutoff -= mds->mdsmap->get_session_autoclose();
 
   // don't kick clients if we've been laggy
   if (mds->get_laggy_until() > cutoff) {
