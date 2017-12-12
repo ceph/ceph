@@ -149,15 +149,15 @@ Setting up a backing storage pool typically involves one of two scenarios:
 - **Erasure Coding:** In this scenario, the pool uses erasure coding to 
   store data much more efficiently with a small performance tradeoff.
 
-In the standard storage scenario, you can setup a CRUSH ruleset to establish 
+In the standard storage scenario, you can setup a CRUSH rule to establish 
 the failure domain (e.g., osd, host, chassis, rack, row, etc.). Ceph OSD 
-Daemons perform optimally when all storage drives in the ruleset are of the 
+Daemons perform optimally when all storage drives in the rule are of the 
 same size, speed (both RPMs and throughput) and type. See `CRUSH Maps`_ 
-for details on creating a ruleset. Once you have created a ruleset, create 
+for details on creating a rule. Once you have created a rule, create 
 a backing storage pool. 
 
 In the erasure coding scenario, the pool creation arguments will generate the
-appropriate ruleset automatically. See `Create a Pool`_ for details.
+appropriate rule automatically. See `Create a Pool`_ for details.
 
 In subsequent examples, we will refer to the backing storage pool 
 as ``cold-storage``.
@@ -169,8 +169,8 @@ Setting Up a Cache Pool
 Setting up a cache pool follows the same procedure as the standard storage
 scenario, but with this difference: the drives for the cache tier are typically
 high performance drives that reside in their own servers and have their own
-ruleset.  When setting up a ruleset, it should take account of the hosts that
-have the high performance drives while omitting the hosts that don't. See
+CRUSH rule.  When setting up such a rule, it should take account of the hosts
+that have the high performance drives while omitting the hosts that don't. See
 `Placing Different Pools on Different OSDs`_ for details.
 
 
