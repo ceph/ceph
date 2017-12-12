@@ -2290,6 +2290,7 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     dump_errno(s);
 
     end_header(s, this, "application/xml");
+    dump_start(s);
     if (op_ret == 0) {
       s->formatter->open_object_section_in_ns("CopyObjectResult", XMLNS_AWS_S3);
     }
