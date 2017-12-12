@@ -4920,8 +4920,8 @@ int group_image_list(cls_method_context_t hctx,
   bool more;
   do {
     int r = cls_cxx_map_get_vals(hctx, last_read,
-				     cls::rbd::RBD_GROUP_IMAGE_KEY_PREFIX,
-				     max_read, &vals, &more);
+				 cls::rbd::RBD_GROUP_IMAGE_KEY_PREFIX,
+				 max_read, &vals, &more);
     if (r < 0)
       return r;
 
@@ -5114,8 +5114,8 @@ static int group_snap_list(cls_method_context_t hctx,
   bool more;
   do {
     int r = cls_cxx_map_get_vals(hctx, last_read,
-				     RBD_GROUP_SNAP_KEY_PREFIX,
-				     max_read, &vals, &more);
+				 RBD_GROUP_SNAP_KEY_PREFIX,
+				 max_read, &vals, &more);
     if (r < 0)
       return r;
 
@@ -5154,7 +5154,7 @@ static int check_duplicate_snap_name(cls_method_context_t hctx,
     if (r < 0) {
       return r;
     }
-    for (auto snap: page) {
+    for (auto& snap: page) {
       if (snap.name == snap_name && snap.id != snap_id) {
 	return -EEXIST;
       }
@@ -5177,9 +5177,10 @@ static int check_duplicate_snap_id(cls_method_context_t hctx,
   int r = cls_cxx_map_get_val(hctx, snap_key, &bl);
   if (r == -ENOENT) {
     return 0;
-  } else {
-    return -EEXIST;
+  } else if (r < 0) {
+    return r;
   }
+  return -EEXIST;
 }
 
 }
@@ -5296,9 +5297,7 @@ int group_snap_remove(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls::rbd::GroupSnapshot group_snap;
-  group_snap.id = snap_id;
-  std::string snap_key = group::snap_key(group_snap.id);
+  std::string snap_key = group::snap_key(snap_id);
 
   CLS_LOG(20, "removing snapshot with key %s", snap_key.c_str());
   int r = cls_cxx_map_remove_key(hctx, snap_key);
@@ -5328,16 +5327,14 @@ int group_snap_get_by_id(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls::rbd::GroupSnapshot group_snap;
-  group_snap.id = snap_id;
-
   bufferlist snapbl;
 
-  int r = cls_cxx_map_get_val(hctx, group::snap_key(group_snap.id), &snapbl);
+  int r = cls_cxx_map_get_val(hctx, group::snap_key(snap_id), &snapbl);
   if (r < 0) {
     return r;
   }
 
+  cls::rbd::GroupSnapshot group_snap;
   bufferlist::iterator iter = snapbl.begin();
   try {
     ::decode(group_snap, iter);
@@ -5579,6 +5576,7 @@ int trash_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
+
   CLS_LOG(20, "trash_get_image id=%s", id.c_str());
 
 
