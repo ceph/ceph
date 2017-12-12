@@ -103,6 +103,7 @@ public:
 #define ES_NUM_SHARDS_DEFAULT 16
 #define ES_NUM_REPLICAS_DEFAULT 1
 
+
 struct ElasticConfig {
   uint64_t sync_instance{0};
   string id;
@@ -115,19 +116,19 @@ struct ElasticConfig {
   uint32_t num_shards{0};
   uint32_t num_replicas{0};
 
-  void init(CephContext *cct, const map<string, string, ltstr_nocase>& config) {
-    string elastic_endpoint = rgw_conf_get(config, "endpoint", "");
+  void init(CephContext *cct, const JSONFormattable& config) {
+    string elastic_endpoint = config.get("endpoint", "");
     id = string("elastic:") + elastic_endpoint;
     conn.reset(new RGWRESTConn(cct, nullptr, id, { elastic_endpoint }));
-    explicit_custom_meta = rgw_conf_get_bool(config, "explicit_custom_meta", true);
-    index_buckets.init(rgw_conf_get(config, "index_buckets_list", ""), true); /* approve all buckets by default */
-    allow_owners.init(rgw_conf_get(config, "approved_owners_list", ""), true); /* approve all bucket owners by default */
-    override_index_path = rgw_conf_get(config, "override_index_path", "");
-    num_shards = rgw_conf_get_int(config, "num_shards", ES_NUM_SHARDS_DEFAULT);
+    explicit_custom_meta = config.get_bool("explicit_custom_meta", true);
+    index_buckets.init(config.get("index_buckets_list", ""), true); /* approve all buckets by default */
+    allow_owners.init(config.get("approved_owners_list", ""), true); /* approve all bucket owners by default */
+    override_index_path = config.get("override_index_path", "");
+    num_shards = config.get_int("num_shards", ES_NUM_SHARDS_DEFAULT);
     if (num_shards < ES_NUM_SHARDS_MIN) {
       num_shards = ES_NUM_SHARDS_MIN;
     }
-    num_replicas = rgw_conf_get_int(config, "num_replicas", ES_NUM_REPLICAS_DEFAULT);
+    num_replicas = config.get_int("num_replicas", ES_NUM_REPLICAS_DEFAULT);
   }
 
   void init_instance(RGWRealm& realm, uint64_t instance_id) {
@@ -534,7 +535,7 @@ public:
 class RGWElasticDataSyncModule : public RGWDataSyncModule {
   ElasticConfigRef conf;
 public:
-  RGWElasticDataSyncModule(CephContext *cct, const map<string, string, ltstr_nocase>& config) : conf(std::make_shared<ElasticConfig>()) {
+  RGWElasticDataSyncModule(CephContext *cct, const JSONFormattable& config) : conf(std::make_shared<ElasticConfig>()) {
     conf->init(cct, config);
   }
   ~RGWElasticDataSyncModule() override {}
@@ -580,7 +581,7 @@ public:
   }
 };
 
-RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const map<string, string, ltstr_nocase>& config)
+RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(cct, config));
 }
@@ -607,12 +608,8 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   return new RGWRESTMgr_MDSearch_S3();
 }
 
-int RGWElasticSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
-  string endpoint;
-  auto i = config.find("endpoint");
-  if (i != config.end()) {
-    endpoint = i->second;
-  }
+int RGWElasticSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(cct, config));
   return 0;
 }
