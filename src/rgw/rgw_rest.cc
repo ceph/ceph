@@ -1118,9 +1118,6 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
     return -ERR_TOO_LARGE;
   }
 
-  if (!ofs)
-    supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
-
   return len;
 }
 
