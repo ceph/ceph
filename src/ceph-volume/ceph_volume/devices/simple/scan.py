@@ -129,6 +129,7 @@ class Scan(object):
         else:
             with open(json_path, 'w') as fp:
                 json.dump(osd_metadata, fp, indent=4, sort_keys=True, ensure_ascii=False)
+                fp.write(os.linesep)
             terminal.success(
                 'OSD %s got scanned and metadata persisted to file: %s' % (
                     osd_id,
