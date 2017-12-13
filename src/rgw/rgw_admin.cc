@@ -3645,7 +3645,9 @@ int main(int argc, const char **argv)
         }
 
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-        zone.tier_config = tier_config_add;
+        for (auto a : tier_config_add) {
+          zone.tier_config.set(a.first, a.second);
+        }
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
         string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
