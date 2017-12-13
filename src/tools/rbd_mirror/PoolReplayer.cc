@@ -215,12 +215,10 @@ private:
 
 PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
                            ServiceDaemon<librbd::ImageCtx>* service_daemon,
-			   ImageDeleter<>* image_deleter,
 			   int64_t local_pool_id, const peer_t &peer,
 			   const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
-  m_image_deleter(image_deleter),
   m_local_pool_id(local_pool_id),
   m_peer(peer),
   m_args(args),
@@ -313,8 +311,15 @@ void PoolReplayer::init()
 
   dout(20) << "connected to " << m_peer << dendl;
 
+  // TODO
+  C_SaferCond image_deleter_ctx;
+  m_image_deleter.reset(new ImageDeleter<>(m_local_io_ctx, m_threads,
+                                           m_service_daemon));
+  m_image_deleter->init(&image_deleter_ctx);
+  image_deleter_ctx.wait();
+
   m_instance_replayer.reset(InstanceReplayer<>::create(
-    m_threads, m_service_daemon, m_image_deleter, m_local_rados,
+    m_threads, m_service_daemon, m_image_deleter.get(), m_local_rados,
     local_mirror_uuid, m_local_pool_id));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
@@ -369,6 +374,13 @@ void PoolReplayer::shut_down() {
   if (m_instance_replayer) {
     m_instance_replayer->shut_down();
     m_instance_replayer.reset();
+  }
+
+  // TODO
+  if (m_image_deleter) {
+    C_SaferCond image_deleter_ctx;
+    m_image_deleter->shut_down(&image_deleter_ctx);
+    image_deleter_ctx.wait();
   }
 
   assert(!m_local_pool_watcher);
@@ -553,6 +565,10 @@ void PoolReplayer::print_status(Formatter *f, stringstream *ss)
   f->close_section();
 
   m_instance_replayer->print_status(f, ss);
+
+  f->open_object_section("image_deleter");
+  m_image_deleter->print_status(f, ss);
+  f->close_section();
 
   f->close_section();
   f->flush(*ss);

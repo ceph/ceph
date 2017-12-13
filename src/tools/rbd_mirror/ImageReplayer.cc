@@ -401,7 +401,7 @@ void ImageReplayer<I>::wait_for_deletion() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_wait_for_deletion>(this);
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_pool_id, m_global_image_id, ctx, false);
+    m_global_image_id, ctx, false);
 }
 
 template <typename I>
@@ -744,7 +744,7 @@ void ImageReplayer<I>::stop(Context *on_finish, bool manual, int r,
   dout(20) << "on_finish=" << on_finish << ", manual=" << manual
 	   << ", desc=" << desc << dendl;
 
-  m_image_deleter->cancel_waiter(m_local_pool_id, m_global_image_id);
+  m_image_deleter->cancel_waiter(m_global_image_id);
 
   image_replayer::BootstrapRequest<I> *bootstrap_request = nullptr;
   bool shut_down_replay = false;
@@ -1657,7 +1657,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
       delete_requested = true;
     }
     if (delete_requested || m_resync_requested) {
-      m_image_deleter->schedule_image_delete(m_local_ioctx, m_global_image_id,
+      m_image_deleter->schedule_image_delete(m_global_image_id,
                                              m_resync_requested, nullptr);
 
       m_local_image_id = "";

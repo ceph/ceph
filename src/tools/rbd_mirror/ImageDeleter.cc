@@ -30,6 +30,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
 #include "ImageDeleter.h"
+#include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 #include <map>
 #include <sstream>
@@ -79,13 +80,14 @@ private:
 template <typename I>
 class ImageDeleterAdminSocketHook : public AdminSocketHook {
 public:
-  ImageDeleterAdminSocketHook(CephContext *cct, ImageDeleter<I> *image_del) :
+  ImageDeleterAdminSocketHook(CephContext *cct, const std::string& pool_name,
+                              ImageDeleter<I> *image_del) :
     admin_socket(cct->get_admin_socket()) {
 
     std::string command;
     int r;
 
-    command = "rbd mirror deletion status";
+    command = "rbd mirror deletion status " + pool_name;
     r = admin_socket->register_command(command, command, this,
 				       "get status for image deleter");
     if (r == 0) {
@@ -121,19 +123,32 @@ private:
 };
 
 template <typename I>
-ImageDeleter<I>::ImageDeleter(ContextWQ *work_queue, SafeTimer *timer,
-                              Mutex *timer_lock,
+ImageDeleter<I>::ImageDeleter(librados::IoCtx& local_io_ctx,
+                              Threads<librbd::ImageCtx>* threads,
                               ServiceDaemon<librbd::ImageCtx>* service_daemon)
-  : m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
+  : m_local_io_ctx(local_io_ctx), m_work_queue(threads->work_queue),
+    m_timer(threads->timer), m_timer_lock(&threads->timer_lock),
     m_service_daemon(service_daemon),
-    m_lock("rbd::mirror::ImageDeleter::m_lock"),
-    m_asok_hook(new ImageDeleterAdminSocketHook<I>(g_ceph_context, this))
-{
+    m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageDeleter::m_lock",
+                                          this)) {
 }
 
 template <typename I>
-ImageDeleter<I>::~ImageDeleter() {
-  dout(20) << dendl;
+void ImageDeleter<I>::init(Context* on_finish) {
+  dout(10) << dendl;
+
+  m_asok_hook = new ImageDeleterAdminSocketHook<I>(
+    g_ceph_context, m_local_io_ctx.get_pool_name(), this);
+
+  on_finish->complete(0);
+}
+
+template <typename I>
+void ImageDeleter<I>::shut_down(Context* on_finish) {
+  dout(10) << dendl;
+
+  delete m_asok_hook;
+  m_asok_hook = nullptr;
 
   {
     Mutex::Locker timer_locker(*m_timer_lock);
@@ -142,34 +157,40 @@ ImageDeleter<I>::~ImageDeleter() {
     cancel_retry_timer();
   }
 
-  C_SaferCond ctx;
-  m_async_op_tracker.wait_for_ops(&ctx);
-  ctx.wait();
-
-  // wake up any external state machines waiting on deletions
-  assert(m_in_flight_delete_queue.empty());
-  for (auto& info : m_delete_queue) {
-    if (info->on_delete != nullptr) {
-      info->on_delete->complete(-ECANCELED);
-    }
-  }
-  for (auto& info : m_retry_delete_queue) {
-    if (info->on_delete != nullptr) {
-      info->on_delete->complete(-ECANCELED);
-    }
-  }
-
-  delete m_asok_hook;
+  wait_for_ops(on_finish);
 }
 
 template <typename I>
-void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
-                                            const std::string& global_image_id,
+void ImageDeleter<I>::wait_for_ops(Context* on_finish) {
+  auto ctx = new FunctionContext([this, on_finish](int) {
+      cancel_all_deletions(on_finish);
+    });
+  m_async_op_tracker.wait_for_ops(ctx);
+}
+
+template <typename I>
+void ImageDeleter<I>::cancel_all_deletions(Context* on_finish) {
+  {
+    Mutex::Locker locker(m_lock);
+    // wake up any external state machines waiting on deletions
+    assert(m_in_flight_delete_queue.empty());
+    for (auto& queue : {&m_delete_queue, &m_retry_delete_queue}) {
+      for (auto& info : *queue) {
+        if (info->on_delete != nullptr) {
+          info->on_delete->complete(-ECANCELED);
+        }
+      }
+      queue->clear();
+    }
+  }
+  on_finish->complete(0);
+}
+
+template <typename I>
+void ImageDeleter<I>::schedule_image_delete(const std::string& global_image_id,
                                             bool ignore_orphaned,
                                             Context *on_delete) {
-  int64_t local_pool_id = local_io_ctx->get_id();
-  dout(5) << "local_pool_id=" << local_pool_id << ", "
-          << "global_image_id=" << global_image_id << dendl;
+  dout(5) << "global_image_id=" << global_image_id << dendl;
 
   if (on_delete != nullptr) {
     on_delete = new FunctionContext([this, on_delete](int r) {
@@ -179,7 +200,7 @@ void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
 
   {
     Mutex::Locker locker(m_lock);
-    auto del_info = find_delete_info(local_pool_id, global_image_id);
+    auto del_info = find_delete_info(global_image_id);
     if (del_info != nullptr) {
       dout(20) << "image " << global_image_id << " "
                << "was already scheduled for deletion" << dendl;
@@ -194,27 +215,24 @@ void ImageDeleter<I>::schedule_image_delete(IoCtxRef local_io_ctx,
       return;
     }
 
-    m_delete_queue.emplace_back(new DeleteInfo(local_pool_id, global_image_id,
-                                               local_io_ctx, ignore_orphaned,
+    m_delete_queue.emplace_back(new DeleteInfo(global_image_id, ignore_orphaned,
                                                on_delete));
   }
   remove_images();
 }
 
 template <typename I>
-void ImageDeleter<I>::wait_for_scheduled_deletion(int64_t local_pool_id,
-                                                  const std::string &global_image_id,
+void ImageDeleter<I>::wait_for_scheduled_deletion(const std::string &global_image_id,
                                                   Context *ctx,
                                                   bool notify_on_failed_retry) {
-  dout(5) << "local_pool_id=" << local_pool_id << ", "
-          << "global_image_id=" << global_image_id << dendl;
+  dout(5) << "global_image_id=" << global_image_id << dendl;
 
   ctx = new FunctionContext([this, ctx](int r) {
       m_work_queue->queue(ctx, r);
     });
 
   Mutex::Locker locker(m_lock);
-  auto del_info = find_delete_info(local_pool_id, global_image_id);
+  auto del_info = find_delete_info(global_image_id);
   if (!del_info) {
     // image not scheduled for deletion
     ctx->complete(0);
@@ -229,13 +247,11 @@ void ImageDeleter<I>::wait_for_scheduled_deletion(int64_t local_pool_id,
 }
 
 template <typename I>
-void ImageDeleter<I>::cancel_waiter(int64_t local_pool_id,
-                                    const std::string &global_image_id) {
-  dout(5) << "local_pool_id=" << local_pool_id << ", "
-          << "global_image_id=" << global_image_id << dendl;
+void ImageDeleter<I>::cancel_waiter(const std::string &global_image_id) {
+  dout(5) << "global_image_id=" << global_image_id << dendl;
 
   Mutex::Locker locker(m_lock);
-  auto del_info = find_delete_info(local_pool_id, global_image_id);
+  auto del_info = find_delete_info(global_image_id);
   if (!del_info) {
     return;
   }
@@ -283,14 +299,13 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
 
 template <typename I>
 typename ImageDeleter<I>::DeleteInfoRef
-ImageDeleter<I>::find_delete_info(int64_t local_pool_id,
-                                  const std::string &global_image_id) {
+ImageDeleter<I>::find_delete_info(const std::string &global_image_id) {
   assert(m_lock.is_locked());
   DeleteQueue delete_queues[] = {m_in_flight_delete_queue,
                                  m_retry_delete_queue,
                                  m_delete_queue};
 
-  DeleteInfo delete_info{local_pool_id, global_image_id};
+  DeleteInfo delete_info{global_image_id};
   for (auto& queue : delete_queues) {
     auto it = std::find_if(queue.begin(), queue.end(),
                            [&delete_info](const DeleteInfoRef& ref) {
@@ -394,7 +409,7 @@ void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
     });
 
   auto req = image_deleter::RemoveRequest<I>::create(
-    *delete_info->local_io_ctx, delete_info->global_image_id,
+    m_local_io_ctx, delete_info->global_image_id,
     delete_info->ignore_orphaned, &delete_info->error_result, m_work_queue,
     ctx);
   req->send();
@@ -512,7 +527,6 @@ void ImageDeleter<I>::DeleteInfo::print_status(Formatter *f, stringstream *ss,
                                                bool print_failure_info) {
   if (f) {
     f->open_object_section("delete_info");
-    f->dump_int("local_pool_id", local_pool_id);
     f->dump_string("global_image_id", global_image_id);
     if (print_failure_info) {
       f->dump_string("error_code", cpp_strerror(error_code));

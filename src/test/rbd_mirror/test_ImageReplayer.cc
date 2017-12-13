@@ -124,8 +124,7 @@ public:
                                                             m_local_cluster,
                                                             m_threads.get()));
     m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
-      m_threads->work_queue, m_threads->timer, &m_threads->timer_lock,
-      m_service_daemon.get()));
+      m_local_ioctx, m_threads.get(), m_service_daemon.get()));
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr);
     m_instance_watcher->handle_acquire_leader();
@@ -139,6 +138,10 @@ public:
 
     delete m_replayer;
     delete m_instance_watcher;
+
+    C_SaferCond ctx;
+    m_image_deleter->shut_down(&ctx);
+    ctx.wait();
 
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
@@ -662,7 +665,7 @@ TEST_F(TestImageReplayer, Resync)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
+    m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond;
@@ -724,7 +727,7 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
+    m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond3;
@@ -762,7 +765,7 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
 
   C_SaferCond delete_ctx;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_ctx);
+    m_replayer->get_global_image_id(), &delete_ctx);
   EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond2;
@@ -949,7 +952,7 @@ TEST_F(TestImageReplayer, Disconnect)
   ASSERT_EQ(0, cond2.wait());
   C_SaferCond delete_cond;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond);
+    m_replayer->get_global_image_id(), &delete_cond);
   EXPECT_EQ(0, delete_cond.wait());
 
   start();
@@ -990,7 +993,7 @@ TEST_F(TestImageReplayer, Disconnect)
   ASSERT_EQ(-ENOTCONN, cond5.wait());
   C_SaferCond delete_cond1;
   m_image_deleter->wait_for_scheduled_deletion(
-    m_local_ioctx.get_id(), m_replayer->get_global_image_id(), &delete_cond1);
+    m_replayer->get_global_image_id(), &delete_cond1);
   EXPECT_EQ(0, delete_cond1.wait());
 
   C_SaferCond cond6;

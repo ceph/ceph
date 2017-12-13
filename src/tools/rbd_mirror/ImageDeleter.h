@@ -36,6 +36,7 @@ namespace rbd {
 namespace mirror {
 
 template <typename> class ServiceDaemon;
+template <typename> class Threads;
 
 /**
  * Manage deletion of non-primary images.
@@ -43,22 +44,23 @@ template <typename> class ServiceDaemon;
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
-  ImageDeleter(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  ImageDeleter(librados::IoCtx& local_io_ctx,
+               Threads<librbd::ImageCtx>* threads,
                ServiceDaemon<librbd::ImageCtx>* service_daemon);
-  ~ImageDeleter();
+
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
-  void schedule_image_delete(IoCtxRef local_io_ctx,
-                             const std::string& global_image_id,
+  void init(Context* on_finish);
+  void shut_down(Context* on_finish);
+
+  void schedule_image_delete(const std::string& global_image_id,
                              bool ignore_orphaned,
                              Context *on_finish);
-  void wait_for_scheduled_deletion(int64_t local_pool_id,
-                                   const std::string &global_image_id,
+  void wait_for_scheduled_deletion(const std::string &global_image_id,
                                    Context *ctx,
                                    bool notify_on_failed_retry=true);
-  void cancel_waiter(int64_t local_pool_id,
-                     const std::string &global_image_id);
+  void cancel_waiter(const std::string &global_image_id);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
@@ -73,9 +75,7 @@ public:
 private:
 
   struct DeleteInfo {
-    int64_t local_pool_id;
     std::string global_image_id;
-    IoCtxRef local_io_ctx;
     bool ignore_orphaned = false;
     Context *on_delete = nullptr;
 
@@ -85,26 +85,22 @@ private:
     int retries = 0;
     bool notify_on_failed_retry = true;
 
-    DeleteInfo(int64_t local_pool_id, const std::string& global_image_id)
-      : local_pool_id(local_pool_id), global_image_id(global_image_id) {
+    DeleteInfo(const std::string& global_image_id)
+      : global_image_id(global_image_id) {
     }
 
-    DeleteInfo(int64_t local_pool_id, const std::string& global_image_id,
-               IoCtxRef local_io_ctx, bool ignore_orphaned,
-               Context *on_delete)
-      : local_pool_id(local_pool_id), global_image_id(global_image_id),
-        local_io_ctx(local_io_ctx), ignore_orphaned(ignore_orphaned),
+    DeleteInfo(const std::string& global_image_id,
+               bool ignore_orphaned, Context *on_delete)
+      : global_image_id(global_image_id), ignore_orphaned(ignore_orphaned),
         on_delete(on_delete) {
     }
 
     inline bool operator==(const DeleteInfo& delete_info) const {
-      return (local_pool_id == delete_info.local_pool_id &&
-              global_image_id == delete_info.global_image_id);
+      return (global_image_id == delete_info.global_image_id);
     }
 
     friend std::ostream& operator<<(std::ostream& os, DeleteInfo& delete_info) {
-      os << "[" << "local_pool_id=" << delete_info.local_pool_id << ", "
-         << "global_image_id=" << delete_info.global_image_id << "]";
+      os << "[global_image_id=" << delete_info.global_image_id << "]";
     return os;
     }
 
@@ -115,6 +111,7 @@ private:
   typedef std::shared_ptr<DeleteInfo> DeleteInfoRef;
   typedef std::deque<DeleteInfoRef> DeleteQueue;
 
+  librados::IoCtx& m_local_io_ctx;
   ContextWQ *m_work_queue;
   SafeTimer *m_timer;
   Mutex *m_timer_lock;
@@ -131,7 +128,7 @@ private:
   DeleteQueue m_retry_delete_queue;
   DeleteQueue m_in_flight_delete_queue;
 
-  AdminSocketHook *m_asok_hook;
+  AdminSocketHook *m_asok_hook = nullptr;
 
   Context *m_timer_ctx = nullptr;
 
@@ -141,8 +138,7 @@ private:
   void enqueue_failed_delete(DeleteInfoRef* delete_info, int error_code,
                              double retry_delay);
 
-  DeleteInfoRef find_delete_info(int64_t local_pool_id,
-                                 const std::string &global_image_id);
+  DeleteInfoRef find_delete_info(const std::string &global_image_id);
 
   void remove_images();
   void remove_image(DeleteInfoRef delete_info);
@@ -151,6 +147,9 @@ private:
   void schedule_retry_timer();
   void cancel_retry_timer();
   void handle_retry_timer();
+
+  void wait_for_ops(Context* on_finish);
+  void cancel_all_deletions(Context* on_finish);
 
 };
 
