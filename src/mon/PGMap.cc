@@ -2666,7 +2666,9 @@ void PGMap::get_health_checks(
 
   // REQUEST_SLOW
   // REQUEST_STUCK
-  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+  // SLOW_OPS unifies them in mimic.
+  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC &&
+      cct->_conf->mon_osd_warn_op_age > 0 &&
       !osd_sum.op_queue_age_hist.h.empty() &&
       osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
       cct->_conf->mon_osd_warn_op_age) {
