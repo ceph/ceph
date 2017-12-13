@@ -467,17 +467,13 @@ bool OSDService::splitting(spg_t pgid)
     pending_splits.count(pgid);
 }
 
-void OSDService::complete_split(const set<spg_t> &pgs)
+void OSDService::complete_split(spg_t pgid)
 {
   Mutex::Locker l(in_progress_split_lock);
-  for (set<spg_t>::const_iterator i = pgs.begin();
-       i != pgs.end();
-       ++i) {
-    dout(10) << __func__ << ": Completing split on pg " << *i << dendl;
-    assert(!pending_splits.count(*i));
-    assert(in_progress_splits.count(*i));
-    in_progress_splits.erase(*i);
-  }
+  dout(10) << __func__ << ": Completing split on pg " << pgid << dendl;
+  assert(!pending_splits.count(pgid));
+  assert(in_progress_splits.count(pgid));
+  in_progress_splits.erase(pgid);
 }
 
 void OSDService::need_heartbeat_peer_update()
@@ -7658,11 +7654,7 @@ struct C_CompleteSplits : public Context {
       (*i)->lock();
       PG *pg = i->get();
       osd->add_newly_split_pg(pg, &rctx);
-      if (!((*i)->is_deleting())) {
-        set<spg_t> to_complete;
-        to_complete.insert((*i)->get_pgid());
-        osd->service.complete_split(to_complete);
-      }
+      osd->service.complete_split((*i)->get_pgid());
       osd->pg_map_lock.put_write();
       osd->dispatch_context_transaction(rctx, pg);
       osd->wake_pg_waiters(*i);
