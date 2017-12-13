@@ -26,7 +26,6 @@ tasks:
     - objects unfound and apparently lost
     - overall HEALTH_
     - \(OSDMAP_FLAGS\)
-    - \(REQUEST_SLOW\)
     - \(SLOW_OPS\)
     - \(PG_
     - \(OBJECT_MISPLACED\)

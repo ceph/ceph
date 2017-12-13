@@ -6,7 +6,6 @@ overrides:
       - \(CACHE_POOL_NO_HIT_SET\)
       - \(CACHE_POOL_NEAR_FULL\)
       - \(POOL_FULL\)
-      - \(REQUEST_SLOW\)
       - \(SLOW_OPS\)
       - \(MON_DOWN\)
       - \(PG_
