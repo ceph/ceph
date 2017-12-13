@@ -19,6 +19,7 @@
 
 #include "include/types.h"
 #include "rgw_bucket.h"
+#include "rgw_lc.h"
 #include "rgw_user.h"
 #include "rgw_string.h"
 #include "rgw_multi.h"
@@ -1378,14 +1379,44 @@ int RGWBucketAdminOp::remove_object(RGWRados *store, RGWBucketAdminOpState& op_s
   return bucket.remove_object(op_state);
 }
 
+template <class T>
+static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  T t;
+
+  bufferlist::iterator iter = bl.begin();
+
+  try {
+    ::decode(t, iter);
+  } catch (buffer::error& err) {
+    return false;
+  }
+
+  encode_json(field_name, t, f);
+
+  return true;
+}
+
+static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  string val;
+  if (bl.length() > 0) {
+    val.assign(bl.c_str());
+  }
+  f->dump_string(field_name, val);
+
+  return true;
+}
+
 static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
   map<RGWObjCategory, RGWStorageStats> stats;
+  map<string, bufferlist> attrs;
 
   real_time mtime;
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, &mtime, &attrs);
   if (r < 0)
     return r;
 
@@ -1416,6 +1447,30 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
+
+  map<string, bufferlist> other_attrs;
+  for (auto& attr : attrs) {
+    bufferlist& bl = attr.second;
+    bool handled = false;
+    if (attr.first == RGW_ATTR_ACL) {
+      handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter);
+    } else if (attr.first == RGW_ATTR_ID_TAG) {
+      handled = dump_string("tag", bl, formatter);
+    } else if (attr.first == RGW_ATTR_LC) {
+      handled = decode_dump<RGWLifecycleConfiguration>("lifecycle", bl, formatter);
+    } else if (attr.first == RGW_ATTR_CORS) {
+      handled = decode_dump<RGWCORSConfiguration>("cors", bl, formatter);
+    }
+
+    if (!handled)
+      other_attrs[attr.first] = bl;
+  }
+
+  formatter->open_object_section("attrs");
+  for (auto& other_attr : other_attrs) {
+    dump_string(other_attr.first.c_str(), other_attr.second, formatter);
+  }
+  formatter->close_section();
   formatter->close_section();
 
   return 0;
