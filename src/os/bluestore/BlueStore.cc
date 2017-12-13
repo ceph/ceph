@@ -3513,6 +3513,7 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
   _init_logger();
   cct->_conf->add_observer(this);
   set_cache_shards(1);
+  _check_kvbackend();
 }
 
 BlueStore::BlueStore(CephContext *cct,
@@ -3534,6 +3535,7 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf->add_observer(this);
   set_cache_shards(1);
+  _check_kvbackend();
 }
 
 BlueStore::~BlueStore()
@@ -4513,6 +4515,17 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
+void BlueStore::_check_kvbackend() {
+
+  auto kv_backend = cct->_conf->get_val<std::string>("bluestore_kvbackend");
+
+  if (kv_backend != bluestore_kvbackend) {
+    derr << "backend must be rocksdb to use bluefs. "
+       << kv_backend << " will be changed to rocksdb for bluefs."
+       << dendl;
+  }
+}
+
 int BlueStore::_open_db(bool create, bool to_repair_db)
 {
   int r;
@@ -4522,12 +4535,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   stringstream err;
   ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
-  string kv_backend;
+  string kv_backend = bluestore_kvbackend;
   std::vector<KeyValueDB::ColumnFamily> cfs;
 
-  if (create) {
-    kv_backend = cct->_conf->bluestore_kvbackend;
-  } else {
+  if (!create) {
     r = read_meta("kv_backend", &kv_backend);
     if (r < 0) {
       derr << __func__ << " unable to read 'kv_backend' meta" << dendl;
@@ -4561,10 +4572,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
-    if (kv_backend != "rocksdb") {
-      derr << " backend must be rocksdb to use bluefs" << dendl;
-      return -EINVAL;
-    }
+ 
     bluefs = new BlueFS(cct);
 
     string bfn;
@@ -5332,7 +5340,7 @@ int BlueStore::mkfs()
   }
 
 
-  r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
+  r = write_meta("kv_backend", bluestore_kvbackend);
   if (r < 0)
     goto out_close_fm;
 

@@ -122,6 +122,9 @@ enum {
 
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
+private:
+  void _check_kvbackend();
+  std::string bluestore_kvbackend = "rocksdb";
   // -----------------------------------------------------
   // types
 public:
@@ -129,7 +132,6 @@ public:
   const char** get_tracked_conf_keys() const override;
   void handle_conf_change(const struct md_config_t *conf,
                                   const std::set<std::string> &changed) override;
-
   void _set_csum();
   void _set_compression();
   void _set_throttle_params();
