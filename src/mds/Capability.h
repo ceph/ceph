@@ -127,9 +127,9 @@ public:
     mseq(0),
     suppress(0), state(0) {
   }
-  Capability(const Capability& other);  // no copying
+  Capability(const Capability& other) = delete;
 
-  const Capability& operator=(const Capability& other);  // no copying
+  const Capability& operator=(const Capability& other) = delete;
 
   int pending() { return _pending; }
   int issued() { return _issued; }
