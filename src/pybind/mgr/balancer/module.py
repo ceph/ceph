@@ -877,13 +877,13 @@ class Module(MgrModule):
         for osd, weight in plan.compat_ws.iteritems():
             self.log.info('ceph osd crush weight-set reweight-compat osd.%d %f',
                           osd, weight)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd crush weight-set reweight-compat',
                 'format': 'json',
                 'item': 'osd.%d' % osd,
                 'weight': [weight],
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # new_weight
@@ -892,12 +892,12 @@ class Module(MgrModule):
             reweightn[str(osd)] = str(int(weight * float(0x10000)))
         if len(reweightn):
             self.log.info('ceph osd reweightn %s', reweightn)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd reweightn',
                 'format': 'json',
                 'weights': json.dumps(reweightn),
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # upmap
