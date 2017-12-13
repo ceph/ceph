@@ -19,12 +19,52 @@ if test $(id -u) != 0 ; then
 fi
 export LC_ALL=C # the following is vulnerable to i18n
 
+function ensure_decent_gcc_on_deb {
+    # point gcc to the one offered by distro if the used one is different
+    local old=$(readlink -e /usr/bin/x86_64-linux-gnu-gcc | cut -d'-' -f2)
+    local new=$1
+    if dpkg --compare-versions $old eq $new; then
+	    return
+    fi
+
+    case $- in
+    *i*)
+        # interactive shell
+        cat <<EOF
+/usr/bin/x86_64-linux-gnu-gcc now points to gcc-$old, which is not the version
+shipped with the distro: gcc-$new. Reverting...
+EOF
+    esac
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+
+    $SUDO update-alternatives --auto gcc
+
+    # cmake uses the latter by default
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+}
+
 source /etc/os-release
 case $ID in
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
+        case "$VERSION" in
+            *Trusty*)
+                ensure_decent_gcc_on_deb 4.8
+                ;;
+            *Xenial*)
+                ensure_decent_gcc_on_deb 5
+                ;;
+        esac
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
