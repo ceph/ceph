@@ -1421,6 +1421,7 @@ protected:
   virtual void _split_into(pg_t child_pgid, PG *child, unsigned split_bits) = 0;
 
   friend class C_OSD_RepModify_Commit;
+  friend class C_DeleteMore;
 
   // -- backoff --
   Mutex backoff_lock;  // orders inside Backoff::lock
