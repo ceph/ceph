@@ -301,7 +301,7 @@ class DPDKQueuePair {
       // devices have a 15.5K limitation on a maximum single fragment
       // size.
       //
-      phys_addr_t pa = rte_malloc_virt2phy(va);
+      rte_iova_t pa = rte_malloc_virt2iova(va);
       if (!pa)
         return copy_one_data_buf(qp, m, va, buf_len);
 
@@ -626,7 +626,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_malloc_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
+    m->buf_physaddr  = rte_malloc_virt2iova(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 
