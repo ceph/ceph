@@ -1243,13 +1243,12 @@ void PG::calc_replicated_acting(
   pg_shard_t auth_log_shard_id = auth_log_shard->first;
   
   // select primary
-  map<pg_shard_t,pg_info_t>::const_iterator primary;
+  map<pg_shard_t,pg_info_t>::const_iterator primary = all_info.find(up_primary);
   if (up.size() &&
-      !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
+      !primary->second.is_incomplete() &&
+      primary->second.last_update >=
         auth_log_shard->second.log_tail) {
     ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
-    primary = all_info.find(up_primary); // prefer up[0], all thing being equal
   } else {
     assert(!auth_log_shard->second.is_incomplete());
     ss << "up[0] needs backfill, osd." << auth_log_shard_id
