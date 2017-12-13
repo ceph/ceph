@@ -64,7 +64,7 @@ public:
 };
 
 int RGWLogSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
-  string prefix = config["prefix"]("");
+  string prefix = config["prefix"];
   instance->reset(new RGWLogSyncModuleInstance(prefix));
   return 0;
 }
