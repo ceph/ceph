@@ -172,14 +172,14 @@ int MemStore::_load()
 
 void MemStore::set_fsid(uuid_d u)
 {
-  int r = write_meta("fs_fsid", stringify(u));
+  int r = write_meta("fsid", stringify(u));
   assert(r >= 0);
 }
 
 uuid_d MemStore::get_fsid()
 {
   string fsid_str;
-  int r = read_meta("fs_fsid", &fsid_str);
+  int r = read_meta("fsid", &fsid_str);
   assert(r >= 0);
   uuid_d uuid;
   bool b = uuid.parse(fsid_str.c_str());
@@ -190,12 +190,12 @@ uuid_d MemStore::get_fsid()
 int MemStore::mkfs()
 {
   string fsid_str;
-  int r = read_meta("fs_fsid", &fsid_str);
+  int r = read_meta("fsid", &fsid_str);
   if (r == -ENOENT) {
     uuid_d fsid;
     fsid.generate_random();
     fsid_str = stringify(fsid);
-    r = write_meta("fs_fsid", fsid_str);
+    r = write_meta("fsid", fsid_str);
     if (r < 0)
       return r;
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
