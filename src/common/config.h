@@ -15,6 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
+#include "common/backport14.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -165,6 +166,13 @@ public:
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
   template<typename T> const T get_val(const std::string &key) const;
+  template<typename T, typename Callback, typename...Args>
+  auto with_val(const string& key, Callback&& cb, Args&&... args) const ->
+    ceph::result_of_t<Callback(const T&, Args...)> {
+    return std::forward<Callback>(cb)(
+      boost::get<T>(this->get_val_generic(key)),
+      std::forward<Args>(args)...);
+  }
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
