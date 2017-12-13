@@ -593,6 +593,7 @@ RocksDBStore::~RocksDBStore()
 {
   close();
   delete logger;
+  logger = nullptr;
 
   // Ensure db is destroyed before dependent db_cache and filterpolicy
   for (auto& p : cf_handles) {
