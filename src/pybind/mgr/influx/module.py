@@ -44,7 +44,9 @@ class Module(MgrModule):
         'database': 'ceph',
         'username': None,
         'password': None,
-        'interval': 5
+        'interval': 5,
+        'ssl': 'false',
+        'verify_ssl': 'true'
     }
 
     def __init__(self, *args, **kwargs):
@@ -139,6 +141,9 @@ class Module(MgrModule):
         if option == 'interval' and value < 5:
             raise RuntimeError('interval should be set to at least 5 seconds')
 
+        if option in ['ssl', 'verify_ssl']:
+            value = value.lower() == 'true'
+
         self.config[option] = value
 
     def init_module_config(self):
@@ -155,6 +160,11 @@ class Module(MgrModule):
         self.config['interval'] = \
             int(self.get_config("interval",
                                 default=self.config_keys['interval']))
+        ssl = self.get_config("ssl", default=self.config_keys['ssl'])
+        self.config['ssl'] = ssl.lower() == 'true'
+        verify_ssl = \
+            self.get_config("verify_ssl", default=self.config_keys['verify_ssl'])
+        self.config['verify_ssl'] = verify_ssl.lower() == 'true'
 
     def send_to_influx(self):
         if not self.config['hostname']:
@@ -169,7 +179,9 @@ class Module(MgrModule):
         client = InfluxDBClient(self.config['hostname'], self.config['port'],
                                 self.config['username'],
                                 self.config['password'],
-                                self.config['database'])
+                                self.config['database'],
+                                self.config['ssl'],
+                                self.config['verify_ssl'])
 
         # using influx client get_list_database requires admin privs,
         # instead we'll catch the not found exception and inform the user if
