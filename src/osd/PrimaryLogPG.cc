@@ -3214,6 +3214,9 @@ bool PrimaryLogPG::can_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc)
 	/* requested chunks exist in chunk_map ? */
 	for (auto &p : obc->obs.oi.manifest.chunk_map) {
 	  if (p.first <= cursor && p.first + p.second.length > cursor) {
+	    if (p.second.flags != chunk_info_t::FLAG_MISSING) {
+	      return false;
+	    }
 	    if (p.second.length >= remain) {
 	      remain = 0;
 	      break; 
