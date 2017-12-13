@@ -663,9 +663,6 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
-  void revise_have(hobject_t oid, eversion_t have) {
-    missing.revise_have(oid, have);
-  }
 
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
     missing.add(oid, need, have, false);
