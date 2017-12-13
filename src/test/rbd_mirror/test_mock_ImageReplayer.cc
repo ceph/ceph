@@ -85,11 +85,11 @@ struct Threads<librbd::MockTestImageCtx> {
 
 template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD4(schedule_image_delete, void(IoCtxRef, const std::string&, bool,
+  MOCK_METHOD3(schedule_image_delete, void(const std::string&, bool,
                                            Context*));
-  MOCK_METHOD4(wait_for_scheduled_deletion,
-               void(int64_t, const std::string&, Context*, bool));
-  MOCK_METHOD2(cancel_waiter, void(int64_t, const std::string&));
+  MOCK_METHOD3(wait_for_scheduled_deletion,
+               void(const std::string&, Context*, bool));
+  MOCK_METHOD1(cancel_waiter, void(const std::string&));
 };
 
 template<>
@@ -385,22 +385,21 @@ public:
                                           const std::string& global_image_id,
                                           int r) {
     EXPECT_CALL(mock_image_deleter,
-                wait_for_scheduled_deletion(_, global_image_id, _, false))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *ctx) {
+                wait_for_scheduled_deletion(global_image_id, _, false))
+      .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
                              m_threads->work_queue->queue(ctx, r);
                            })));
   }
 
   void expect_cancel_waiter(MockImageDeleter& mock_image_deleter) {
-    EXPECT_CALL(mock_image_deleter, cancel_waiter(m_local_io_ctx.get_id(),
-                                                  "global image id"));
+    EXPECT_CALL(mock_image_deleter, cancel_waiter("global image id"));
   }
 
   void expect_schedule_image_delete(MockImageDeleter& mock_image_deleter,
                                     const std::string& global_image_id,
                                     bool ignore_orphan) {
     EXPECT_CALL(mock_image_deleter,
-                schedule_image_delete(_, global_image_id, ignore_orphan, nullptr));
+                schedule_image_delete(global_image_id, ignore_orphan, nullptr));
   }
 
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
