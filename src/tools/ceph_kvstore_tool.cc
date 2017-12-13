@@ -182,7 +182,7 @@ class StoreTool
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->set(prefix, key, val);
-    int ret = db->submit_transaction_sync(tx);
+    int ret = db->submit_transaction(tx, true);
 
     return (ret == 0);
   }
@@ -193,7 +193,7 @@ class StoreTool
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkey(prefix, key);
-    int ret = db->submit_transaction_sync(tx);
+    int ret = db->submit_transaction(tx, true);
 
     return (ret == 0);
   }
@@ -203,7 +203,7 @@ class StoreTool
 
     KeyValueDB::Transaction tx = db->get_transaction();
     tx->rmkeys_by_prefix(prefix);
-    int ret = db->submit_transaction_sync(tx);
+    int ret = db->submit_transaction(tx, true);
 
     return (ret == 0);
   }
@@ -253,7 +253,7 @@ class StoreTool
       total_keys += num_keys;
 
       if (num_keys > 0)
-        other->submit_transaction_sync(tx);
+        other->submit_transaction(tx, true);
 
       auto cur_duration = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
       std::cout << "ts = " << cur_duration.count() << "s, copied " << total_keys

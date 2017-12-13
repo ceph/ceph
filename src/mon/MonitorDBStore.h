@@ -296,7 +296,7 @@ class MonitorDBStore
 	break;
       }
     }
-    int r = db->submit_transaction_sync(dbt);
+    int r = db->submit_transaction(dbt, true);
     if (r >= 0) {
       while (!compact.empty()) {
 	if (compact.front().second.first == string() &&
@@ -577,7 +577,7 @@ class MonitorDBStore
     for (iter = prefixes.begin(); iter != prefixes.end(); ++iter) {
       dbt->rmkeys_by_prefix((*iter));
     }
-    int r = db->submit_transaction_sync(dbt);
+    int r = db->submit_transaction(dbt, true);
     assert(r >= 0);
   }
 

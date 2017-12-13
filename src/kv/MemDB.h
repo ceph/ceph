@@ -129,8 +129,7 @@ public:
     return std::shared_ptr<MDBTransactionImpl>(new MDBTransactionImpl(this));
   }
 
-  int submit_transaction(Transaction) override;
-  int submit_transaction_sync(Transaction) override;
+  int submit_transaction(Transaction, bool) override;
 
   int get(const std::string &prefix, const std::set<std::string> &key,
     std::map<std::string, bufferlist> *out) override;

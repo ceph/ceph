@@ -323,8 +323,7 @@ public:
     return std::make_shared<RocksDBTransactionImpl>(this);
   }
 
-  int submit_transaction(KeyValueDB::Transaction t) override;
-  int submit_transaction_sync(KeyValueDB::Transaction t) override;
+  int submit_transaction(KeyValueDB::Transaction t, bool is_sync) override;
   int get(
     const string &prefix,
     const std::set<string> &key,

@@ -206,7 +206,7 @@ public:
       t->rmkey(k.first, k.second);
       it->next();
     }
-    store->submit_transaction_sync(t);
+    store->submit_transaction(t, true);
   }
 
   string _bl_to_str(bufferlist val) {
@@ -271,7 +271,7 @@ public:
     tx->set(prefix3, "32", _gen_val("32"));
     tx->set(prefix3, "33", _gen_val("33"));
 
-    db->submit_transaction_sync(tx);
+    db->submit_transaction(tx, true);
   }
 
   void SetUp() override {
@@ -307,7 +307,7 @@ public:
     KeyValueDB::Transaction tx = store->get_transaction();
     // remove the prefix in the middle of the key space
     tx->rmkeys_by_prefix(prefix2);
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     deque<string> key_deque;
     KeyValueDB::WholeSpaceIterator iter = store->get_wholespace_iterator();
@@ -339,7 +339,7 @@ public:
     tx = store->get_transaction();
     // remove the prefix at the beginning of the key space
     tx->rmkeys_by_prefix(prefix1);
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter = store->get_wholespace_iterator();
     iter->seek_to_first();
@@ -371,7 +371,7 @@ public:
     tx = store->get_transaction();
     // remove the prefix at the end of the key space
     tx->rmkeys_by_prefix(prefix3);
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter = store->get_wholespace_iterator();
     iter->seek_to_first();
@@ -413,7 +413,7 @@ public:
     t->rmkey(prefix1, "12");
     t->rmkey(prefix2, "23");
     t->rmkey(prefix3, "33");
-    store->submit_transaction_sync(t);
+    store->submit_transaction(t, true);
 
     deque<string> key_deque;
 
@@ -540,7 +540,7 @@ public:
     tx->set(prefix2, "xxx", _gen_val("xxx"));
     tx->set(prefix2, "zzz", _gen_val("zzz"));
 
-    db->submit_transaction_sync(tx);
+    db->submit_transaction(tx, true);
   }
 
   void SetUp() override {
@@ -590,7 +590,7 @@ public:
     // insert new key 'ddd' after 'ccc' and before 'eee'
     KeyValueDB::Transaction tx = store->get_transaction();
     tx->set(prefix1, "ddd", _gen_val("ddd"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter->next();
     ASSERT_TRUE(iter->valid());
@@ -601,7 +601,7 @@ public:
     ASSERT_TRUE(iter->valid());
     tx = store->get_transaction();
     tx->set(prefix2, "yyy", _gen_val("yyy"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter->prev();
     ASSERT_TRUE(iter->valid());
@@ -633,7 +633,7 @@ public:
     // insert new key 'ddd' after 'ccc' and before 'eee'
     KeyValueDB::Transaction tx = store->get_transaction();
     tx->set(prefix1, "ddd", _gen_val("ddd"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter->next();
     ASSERT_TRUE(iter->valid());
@@ -644,7 +644,7 @@ public:
     ASSERT_TRUE(iter->valid());
     tx = store->get_transaction();
     tx->set(prefix2, "yyy", _gen_val("yyy"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     iter->prev();
     ASSERT_TRUE(iter->valid());
@@ -668,7 +668,7 @@ public:
 
     KeyValueDB::Transaction tx = store->get_transaction();
     tx->set(prefix1, "aaa", _gen_val("aaa_1"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     ASSERT_TRUE(validate_iterator(iter, prefix1,
 				  "aaa", _gen_val_str("aaa_1")));
@@ -680,7 +680,7 @@ public:
 
     tx = store->get_transaction();
     tx->set(prefix2, "zzz", _gen_val("zzz_1"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     ASSERT_TRUE(validate_iterator(iter, prefix2,
 				  "zzz", _gen_val_str("zzz_1")));
@@ -703,7 +703,7 @@ public:
 
     KeyValueDB::Transaction tx = store->get_transaction();
     tx->set(prefix1, "aaa", _gen_val("aaa_1"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     ASSERT_TRUE(validate_iterator(iter, prefix1,
 				  "aaa", _gen_val_str("aaa")));
@@ -715,7 +715,7 @@ public:
 
     tx = store->get_transaction();
     tx->set(prefix2, "zzz", _gen_val("zzz_1"));
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
 
     ASSERT_TRUE(validate_iterator(iter, prefix2,
 				  "zzz", _gen_val_str("zzz")));
@@ -783,7 +783,7 @@ public:
     tx->set(prefix3, "mmm", _gen_val("mmm"));
     tx->set(prefix3, "yyy", _gen_val("yyy"));
 
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
   }
 
   void SetUp() override {
@@ -1254,7 +1254,7 @@ public:
     tx->set(prefix4, "mmm", _gen_val("mmm"));
     tx->set(prefix4, "yyy", _gen_val("yyy"));
 
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
   }
 
   void SetUp() override {
@@ -1516,7 +1516,7 @@ public:
     tx->set(prefix1, "vvv", _gen_val("vvv"));
     tx->set(prefix1, "zzz", _gen_val("zzz"));
 
-    store->submit_transaction_sync(tx);
+    store->submit_transaction(tx, true);
   }
 
   void SetUp() override {

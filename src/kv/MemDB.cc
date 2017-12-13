@@ -195,7 +195,7 @@ void MemDB::close()
   _save();
 }
 
-int MemDB::submit_transaction(KeyValueDB::Transaction t)
+int MemDB::submit_transaction(KeyValueDB::Transaction t, bool is_sync)
 {
   MDBTransactionImpl* mt =  static_cast<MDBTransactionImpl*>(t.get());
 
@@ -214,13 +214,6 @@ int MemDB::submit_transaction(KeyValueDB::Transaction t)
     }
   }
 
-  return 0;
-}
-
-int MemDB::submit_transaction_sync(KeyValueDB::Transaction tsync)
-{
-  dtrace << __func__ << " " << dendl;
-  submit_transaction(tsync);
   return 0;
 }
 

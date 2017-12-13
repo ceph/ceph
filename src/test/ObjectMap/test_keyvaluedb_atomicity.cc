@@ -74,7 +74,7 @@ void *write(void *_db) {
     for (int j = 0; j < NUM_COPIES; ++j) {
       t->set(prefix_gen(j), to_set);
     }
-    assert(!db->submit_transaction(t));
+    assert(!db->submit_transaction(t, false));
   }
   return 0;
 }

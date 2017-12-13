@@ -104,7 +104,7 @@ TEST_P(KVTest, OpenWriteRead) {
     value.clear();
     value.append("value3");
     t->set("prefix", "key3", value);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
 
     bufferlist v1, v2;
     ASSERT_EQ(0, db->get("prefix", "key", &v1));
@@ -128,7 +128,7 @@ TEST_P(KVTest, PutReopen) {
     t->set("prefix", "key", value);
     t->set("prefix", "key2", value);
     t->set("prefix", "key3", value);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   fini();
 
@@ -145,7 +145,7 @@ TEST_P(KVTest, PutReopen) {
     KeyValueDB::Transaction t = db->get_transaction();
     t->rmkey("prefix", "key");
     t->rmkey("prefix", "key3");
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   fini();
 
@@ -175,7 +175,7 @@ TEST_P(KVTest, BenchCommit) {
     for (int i=0; i<30; ++i) {
       KeyValueDB::Transaction t = db->get_transaction();
       t->set("prefix", "big" + stringify(i), big);
-      db->submit_transaction_sync(t);
+      db->submit_transaction(t, true);
     }
   }
   cout << "now doing small writes" << std::endl;
@@ -186,7 +186,7 @@ TEST_P(KVTest, BenchCommit) {
   for (int i=0; i<n; ++i) {
     KeyValueDB::Transaction t = db->get_transaction();
     t->set("prefix", "key" + stringify(i), data);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   utime_t end = ceph_clock_now();
   utime_t dur = end - start;
@@ -233,7 +233,7 @@ TEST_P(KVTest, Merge) {
     t->set("A", "A1", v2);
     t->rmkey("A", "A2");
     t->merge("A", "A2", v3);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   {
     bufferlist v1, v2, v3;
@@ -249,7 +249,7 @@ TEST_P(KVTest, Merge) {
     bufferlist v1;
     v1.append(string("1"));
     t->merge("A", "A2", v1);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   {
     bufferlist v;
@@ -272,7 +272,7 @@ TEST_P(KVTest, RMRange) {
     t->set("prefix", "key45", value);
     t->set("prefix", "key5", value);
     t->set("prefix", "key6", value);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
 
   {
@@ -280,7 +280,7 @@ TEST_P(KVTest, RMRange) {
     t->set("prefix", "key7", value);
     t->set("prefix", "key8", value);
     t->rm_range_keys("prefix", "key2", "key7");
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
     bufferlist v1, v2;
     ASSERT_EQ(0, db->get("prefix", "key1", &v1));
     v1.clear();
@@ -294,7 +294,7 @@ TEST_P(KVTest, RMRange) {
   {
     KeyValueDB::Transaction t = db->get_transaction();
     t->rm_range_keys("prefix", "key", "key");
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
     bufferlist v1, v2;
     ASSERT_EQ(0, db->get("prefix", "key1", &v1));
     ASSERT_EQ(0, db->get("prefix", "key8", &v2));
@@ -303,7 +303,7 @@ TEST_P(KVTest, RMRange) {
   {
     KeyValueDB::Transaction t = db->get_transaction();
     t->rm_range_keys("prefix", "key-", "key~");
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
     bufferlist v1, v2;
     ASSERT_EQ(-ENOENT, db->get("prefix", "key1", &v1));
     ASSERT_EQ(-ENOENT, db->get("prefix", "key8", &v2));
@@ -330,7 +330,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
     t->set("prefix", "key", value);
     t->set("cf1", "key", value);
     t->set("cf2", "key2", value);
-    ASSERT_EQ(0, db->submit_transaction_sync(t));
+    ASSERT_EQ(0, db->submit_transaction(t, true));
   }
   fini();
 
@@ -351,7 +351,7 @@ TEST_P(KVTest, RocksDBColumnFamilyTest) {
     KeyValueDB::Transaction t = db->get_transaction();
     t->rmkey("prefix", "key");
     t->rmkey("cf2", "key2");
-    ASSERT_EQ(0, db->submit_transaction_sync(t));
+    ASSERT_EQ(0, db->submit_transaction(t, true));
   }
   fini();
 
@@ -388,7 +388,7 @@ TEST_P(KVTest, RocksDBIteratorTest) {
     t->set("prefix", "key2", bl2);
     t->set("cf1", "key1", bl1);
     t->set("cf1", "key2", bl2);
-    ASSERT_EQ(0, db->submit_transaction_sync(t));
+    ASSERT_EQ(0, db->submit_transaction(t, true));
   }
   {
     cout << "iterating the default CF" << std::endl;
@@ -441,7 +441,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
     t->set("cf1", "A1", v2);
     t->rmkey("cf1", "A2");
     t->merge("cf1", "A2", v3);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   {
     bufferlist v1, v2, v3;
@@ -457,7 +457,7 @@ TEST_P(KVTest, RocksDBCFMerge) {
     bufferlist v1;
     v1.append(string("1"));
     t->merge("cf1", "A2", v1);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
   {
     bufferlist v;

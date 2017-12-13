@@ -1933,7 +1933,7 @@ void KStore::_txc_state_proc(TransContext *txc)
       if (!cct->_conf->kstore_sync_transaction) {
 	std::lock_guard<std::mutex> l(kv_lock);
 	if (cct->_conf->kstore_sync_submit_transaction) {
-          int r = db->submit_transaction(txc->t);
+          int r = db->submit_transaction(txc->t, false);
 	  assert(r == 0);
 	}
 	kv_queue.push_back(txc);
@@ -1941,7 +1941,7 @@ void KStore::_txc_state_proc(TransContext *txc)
 	return;
       }
       {
-	int r = db->submit_transaction_sync(txc->t);
+	int r = db->submit_transaction(txc->t, true);
 	assert(r == 0);
       }
       break;
@@ -2103,11 +2103,11 @@ void KStore::_kv_sync_thread()
 	for (std::deque<TransContext *>::iterator it = kv_committing.begin();
 	     it != kv_committing.end();
 	     ++it) {
-	  int r = db->submit_transaction((*it)->t);
+	  int r = db->submit_transaction((*it)->t, false);
 	  assert(r == 0);
 	}
       }
-      int r = db->submit_transaction_sync(t);
+      int r = db->submit_transaction(t, true);
       assert(r == 0);
       utime_t finish = ceph_clock_now();
       utime_t dur = finish - start;

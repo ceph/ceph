@@ -98,8 +98,7 @@ public:
     return std::make_shared<KineticTransactionImpl>(this);
   }
 
-  int submit_transaction(KeyValueDB::Transaction t);
-  int submit_transaction_sync(KeyValueDB::Transaction t);
+  int submit_transaction(KeyValueDB::Transaction t, bool is_sync);
   int get(
     const string &prefix,
     const std::set<string> &key,

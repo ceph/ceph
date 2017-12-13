@@ -155,7 +155,7 @@ public:
     return Transaction(new TransactionImpl_(this));
   }
 
-  int submit_transaction(Transaction trans) override {
+  int submit_transaction(Transaction trans, bool) override {
     return static_cast<TransactionImpl_*>(trans.get())->complete();
   }
 

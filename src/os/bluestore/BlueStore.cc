@@ -4298,7 +4298,7 @@ int BlueStore::_open_fm(bool create)
 	start += l + u;
       }
     }
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
 
   int r = fm->init();
@@ -5328,7 +5328,7 @@ int BlueStore::mkfs()
 
     ondisk_format = latest_ondisk_format;
     _prepare_ondisk_format_super(t);
-    db->submit_transaction_sync(t);
+    db->submit_transaction(t, true);
   }
 
 
@@ -7833,7 +7833,7 @@ int BlueStore::_upgrade_super()
     }
     ondisk_format = 2;
     _prepare_ondisk_format_super(t);
-    int r = db->submit_transaction_sync(t);
+    int r = db->submit_transaction(t, true);
     assert(r == 0);
   }
 
@@ -7963,7 +7963,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 		   << dendl;
 	} else {
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t, false);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
 	}
@@ -8591,7 +8591,7 @@ void BlueStore::_kv_sync_thread()
       for (auto txc : kv_committing) {
 	if (txc->state == TransContext::STATE_KV_QUEUED) {
 	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t, false);
 	  assert(r == 0);
 	  _txc_applied_kv(txc);
 	  --txc->osr->kv_committing_serially;
@@ -8651,7 +8651,7 @@ void BlueStore::_kv_sync_thread()
       }
 
       // submit synct synchronously (block and wait for it to commit)
-      int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
+      int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(synct, true);
       assert(r == 0);
 
       {

@@ -95,7 +95,7 @@ int DBObjectMap::check(std::ostream &out, bool repair, bool force)
 	    repaired = true;
 	    KeyValueDB::Transaction t = db->get_transaction();
 	    t->rmkeys_by_prefix(USER_PREFIX + header_key(header.seq) + COMPLETE_PREFIX);
-	    db->submit_transaction(t);
+	    db->submit_transaction(t, false);
 	    out << "Cleared complete mapping to repair" << std::endl;
 	  } else {
 	    errors++;  // Only count when not repaired
@@ -529,7 +529,7 @@ int DBObjectMap::set_keys(const ghobject_t &oid,
 
   t->set(user_prefix(header), set);
 
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::set_header(const ghobject_t &oid,
@@ -544,7 +544,7 @@ int DBObjectMap::set_header(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
   _set_header(header, bl, t);
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 void DBObjectMap::_set_header(Header header, const bufferlist &bl,
@@ -606,7 +606,7 @@ int DBObjectMap::clear(const ghobject_t &oid,
   int r = _clear(header, t);
   if (r < 0)
     return r;
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::_clear(Header header,
@@ -656,7 +656,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
     return 0;
   t->rmkeys(user_prefix(header), to_clear);
   if (!header->parent) {
-    return db->submit_transaction(t);
+    return db->submit_transaction(t, false);
   }
 
   assert(state.legacy);
@@ -686,7 +686,7 @@ int DBObjectMap::rm_keys(const ghobject_t &oid,
   header->parent = 0;
   set_map_header(hl, oid, *header, t);
   t->rmkeys_by_prefix(complete_prefix(header));
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::clear_keys_header(const ghobject_t &oid,
@@ -723,7 +723,7 @@ int DBObjectMap::clear_keys_header(const ghobject_t &oid,
   set_map_header(hl, oid, *newheader, t);
   if (!attrs.empty())
     t->set(xattr_prefix(newheader), attrs);
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::get(const ghobject_t &oid,
@@ -842,7 +842,7 @@ int DBObjectMap::set_xattrs(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
   t->set(xattr_prefix(header), to_set);
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::remove_xattrs(const ghobject_t &oid,
@@ -857,7 +857,7 @@ int DBObjectMap::remove_xattrs(const ghobject_t &oid,
   if (check_spos(oid, header, spos))
     return 0;
   t->rmkeys(xattr_prefix(header), to_remove);
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 // ONLY USED FOR TESTING
@@ -896,7 +896,7 @@ int DBObjectMap::legacy_clone(const ghobject_t &oid,
 
   Header parent = lookup_map_header(*lsource, oid);
   if (!parent)
-    return db->submit_transaction(t);
+    return db->submit_transaction(t, false);
 
   Header source = generate_new_header(oid, parent);
   Header destination = generate_new_header(target, parent);
@@ -917,7 +917,7 @@ int DBObjectMap::legacy_clone(const ghobject_t &oid,
   t->set(xattr_prefix(source), to_set);
   t->set(xattr_prefix(destination), to_set);
   t->rmkeys_by_prefix(xattr_prefix(parent));
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::clone(const ghobject_t &oid,
@@ -952,7 +952,7 @@ int DBObjectMap::clone(const ghobject_t &oid,
 
   Header source = lookup_map_header(*lsource, oid);
   if (!source)
-    return db->submit_transaction(t);
+    return db->submit_transaction(t, false);
 
   Header destination = generate_new_header(target, Header());
   if (spos)
@@ -983,7 +983,7 @@ int DBObjectMap::clone(const ghobject_t &oid,
   }
   t->set(user_prefix(destination), to_write);
 
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }
 
 int DBObjectMap::upgrade_to_v2()
@@ -1027,7 +1027,7 @@ int DBObjectMap::upgrade_to_v2()
       dout(20) << __func__ << " updating " << remove.size() << " keys" << dendl;
       t->rmkeys(HOBJECT_TO_SEQ, remove);
       t->set(HOBJECT_TO_SEQ, add);
-      int r = db->submit_transaction(t);
+      int r = db->submit_transaction(t, false);
       if (r < 0)
 	return r;
     }
@@ -1044,7 +1044,7 @@ void DBObjectMap::set_state()
   Mutex::Locker l(header_lock);
   KeyValueDB::Transaction t = db->get_transaction();
   write_state(t);
-  int ret = db->submit_transaction_sync(t);
+  int ret = db->submit_transaction(t, true);
   assert(ret == 0);
   dout(1) << __func__ << " done" << dendl;
   return;
@@ -1125,11 +1125,11 @@ int DBObjectMap::sync(const ghobject_t *oid,
      */
     Mutex::Locker l(header_lock);
     write_state(t);
-    return db->submit_transaction_sync(t);
+    return db->submit_transaction(t, true);
   } else {
     Mutex::Locker l(header_lock);
     write_state(t);
-    return db->submit_transaction_sync(t);
+    return db->submit_transaction(t, true);
   }
 }
 
@@ -1142,7 +1142,7 @@ int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
   map<string, bufferlist> to_write;
   to_write[GLOBAL_STATE_KEY] = bl;
   t->set(SYS_PREFIX, to_write);
-  return _t ? 0 : db->submit_transaction(t);
+  return _t ? 0 : db->submit_transaction(t, false);
 }
 
 
@@ -1407,11 +1407,11 @@ int DBObjectMap::rename(const ghobject_t &from,
 
   Header hdr = lookup_map_header(*lsource, from);
   if (!hdr)
-    return db->submit_transaction(t);
+    return db->submit_transaction(t, false);
 
   remove_map_header(*lsource, from, hdr, t);
   hdr->oid = to;
   set_map_header(*ltarget, to, *hdr, t);
 
-  return db->submit_transaction(t);
+  return db->submit_transaction(t, false);
 }

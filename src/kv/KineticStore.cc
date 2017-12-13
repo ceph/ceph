@@ -110,7 +110,7 @@ void KineticStore::close()
     cct->get_perfcounters_collection()->remove(logger);
 }
 
-int KineticStore::submit_transaction(KeyValueDB::Transaction t)
+int KineticStore::submit_transaction(KeyValueDB::Transaction t, bool is_sync)
 {
   KineticTransactionImpl * _t =
     static_cast<KineticTransactionImpl *>(t.get());
@@ -144,11 +144,6 @@ int KineticStore::submit_transaction(KeyValueDB::Transaction t)
 
   logger->inc(l_kinetic_txns);
   return 0;
-}
-
-int KineticStore::submit_transaction_sync(KeyValueDB::Transaction t)
-{
-  return submit_transaction(t);
 }
 
 void KineticStore::KineticTransactionImpl::set(

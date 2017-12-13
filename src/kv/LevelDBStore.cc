@@ -214,29 +214,21 @@ int LevelDBStore::repair(std::ostream &out)
   }
 }
 
-int LevelDBStore::submit_transaction(KeyValueDB::Transaction t)
-{
-  utime_t start = ceph_clock_now();
-  LevelDBTransactionImpl * _t =
-    static_cast<LevelDBTransactionImpl *>(t.get());
-  leveldb::Status s = db->Write(leveldb::WriteOptions(), &(_t->bat));
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_leveldb_txns);
-  logger->tinc(l_leveldb_submit_latency, lat);
-  return s.ok() ? 0 : -1;
-}
-
-int LevelDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
+int LevelDBStore::submit_transaction(KeyValueDB::Transaction t, bool is_sync)
 {
   utime_t start = ceph_clock_now();
   LevelDBTransactionImpl * _t =
     static_cast<LevelDBTransactionImpl *>(t.get());
   leveldb::WriteOptions options;
-  options.sync = true;
+  options.sync = is_sync;
+
   leveldb::Status s = db->Write(options, &(_t->bat));
+
   utime_t lat = ceph_clock_now() - start;
   logger->inc(l_leveldb_txns);
-  logger->tinc(l_leveldb_submit_sync_latency, lat);
+  is_sync ? logger->tinc(l_leveldb_submit_sync_latency, lat) :
+    logger->tinc(l_leveldb_submit_latency, lat);
+
   return s.ok() ? 0 : -1;
 }
 

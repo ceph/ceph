@@ -58,7 +58,7 @@ int FileStoreTracker::init()
   got.clear();
   ::encode(restart_seq, got["STATUS"]);
   t->set("STATUS", got);
-  db->submit_transaction(t);
+  db->submit_transaction(t, false);
   return 0;
 }
 
@@ -266,7 +266,7 @@ void _clean_forward(const pair<coll_t, string> &obj,
     to_remove.insert(i->key());
   }
   t->rmkeys(obj_to_prefix(obj), to_remove);
-  db->submit_transaction(t);
+  db->submit_transaction(t, true);
 }
 
 
@@ -408,7 +408,7 @@ void FileStoreTracker::committed(const pair<coll_t, string> &obj,
   KeyValueDB::Transaction t = db->get_transaction();
   clear_obsolete(obj, status, db, t);
   set_obj_status(obj, status, t);
-  db->submit_transaction(t);
+  db->submit_transaction(t, false);
 }
 
 void FileStoreTracker::applied(const pair<coll_t, string> &obj,
@@ -421,7 +421,7 @@ void FileStoreTracker::applied(const pair<coll_t, string> &obj,
   KeyValueDB::Transaction t = db->get_transaction();
   clear_obsolete(obj, status, db, t);
   set_obj_status(obj, status, t);
-  db->submit_transaction(t);
+  db->submit_transaction(t, false);
 }
 
 
@@ -445,6 +445,6 @@ uint64_t FileStoreTracker::set_content(const pair<coll_t, string> &obj,
   ::encode(make_pair(most_recent + 1, buf_content),
 	   to_set[seq_to_key(most_recent + 1)]);
   t->set(obj_to_prefix(obj), to_set);
-  db->submit_transaction(t);
+  db->submit_transaction(t, false);
   return most_recent + 1;
 }

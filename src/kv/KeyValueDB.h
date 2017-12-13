@@ -166,10 +166,7 @@ public:
   virtual int repair(std::ostream &out) { return 0; }
 
   virtual Transaction get_transaction() = 0;
-  virtual int submit_transaction(Transaction) = 0;
-  virtual int submit_transaction_sync(Transaction t) {
-    return submit_transaction(t);
-  }
+  virtual int submit_transaction(Transaction, bool) = 0;
 
   /// Retrieve Keys
   virtual int get(

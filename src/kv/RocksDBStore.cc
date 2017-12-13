@@ -756,32 +756,17 @@ int RocksDBStore::submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Tra
   return s.ok() ? 0 : -1;
 }
 
-int RocksDBStore::submit_transaction(KeyValueDB::Transaction t) 
+int RocksDBStore::submit_transaction(KeyValueDB::Transaction t, bool is_sync) 
 {
   utime_t start = ceph_clock_now();
   rocksdb::WriteOptions woptions;
-  woptions.sync = false;
+  woptions.sync = is_sync;
 
   int result = submit_common(woptions, t);
 
   utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns);
-  logger->tinc(l_rocksdb_submit_latency, lat);
-  
-  return result;
-}
-
-int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
-{
-  utime_t start = ceph_clock_now();
-  rocksdb::WriteOptions woptions;
-  woptions.sync = true;
-  
-  int result = submit_common(woptions, t);
-  
-  utime_t lat = ceph_clock_now() - start;
-  logger->inc(l_rocksdb_txns_sync);
-  logger->tinc(l_rocksdb_submit_sync_latency, lat);
+  is_sync ? logger->inc(l_rocksdb_txns) : logger->inc(l_rocksdb_txns_sync);
+  is_sync ? logger->tinc(l_rocksdb_submit_latency, lat) : logger->tinc(l_rocksdb_submit_sync_latency, lat);
 
   return result;
 }
