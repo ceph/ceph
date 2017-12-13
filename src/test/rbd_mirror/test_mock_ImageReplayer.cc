@@ -87,8 +87,8 @@ template <>
 struct ImageDeleter<librbd::MockTestImageCtx> {
   MOCK_METHOD3(schedule_image_delete, void(const std::string&, bool,
                                            Context*));
-  MOCK_METHOD3(wait_for_scheduled_deletion,
-               void(const std::string&, Context*, bool));
+  MOCK_METHOD2(wait_for_scheduled_deletion,
+               void(const std::string&, Context*));
   MOCK_METHOD1(cancel_waiter, void(const std::string&));
 };
 
@@ -385,7 +385,7 @@ public:
                                           const std::string& global_image_id,
                                           int r) {
     EXPECT_CALL(mock_image_deleter,
-                wait_for_scheduled_deletion(global_image_id, _, false))
+                wait_for_scheduled_deletion(global_image_id, _))
       .WillOnce(WithArg<1>(Invoke([this, r](Context *ctx) {
                              m_threads->work_queue->queue(ctx, r);
                            })));

@@ -23,6 +23,7 @@
 #include <atomic>
 #include <deque>
 #include <iosfwd>
+#include <map>
 #include <memory>
 #include <vector>
 
@@ -38,6 +39,8 @@ namespace mirror {
 template <typename> class ServiceDaemon;
 template <typename> class Threads;
 
+namespace image_deleter { template <typename> struct TrashWatcher; }
+
 /**
  * Manage deletion of non-primary images.
  */
@@ -51,20 +54,29 @@ public:
   ImageDeleter(const ImageDeleter&) = delete;
   ImageDeleter& operator=(const ImageDeleter&) = delete;
 
+  static void trash_move(librados::IoCtx& local_io_ctx,
+                         const std::string& global_image_id, bool resync,
+                         ContextWQ* work_queue, Context* on_finish);
+
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
 
   void schedule_image_delete(const std::string& global_image_id,
                              bool ignore_orphaned,
                              Context *on_finish);
+  void wait_for_deletion(const std::string &global_image_id,
+                         bool scheduled_only, Context* on_finish);
   void wait_for_scheduled_deletion(const std::string &global_image_id,
-                                   Context *ctx,
-                                   bool notify_on_failed_retry=true);
+                                   Context* on_finish) {
+    wait_for_deletion(global_image_id, true, on_finish);
+  }
+
   void cancel_waiter(const std::string &global_image_id);
 
   void print_status(Formatter *f, std::stringstream *ss);
 
   // for testing purposes
+
   std::vector<std::string> get_delete_queue_items();
   std::vector<std::pair<std::string, int> > get_failed_queue_items();
 
@@ -73,26 +85,33 @@ public:
   }
 
 private:
+  struct TrashListener : public image_deleter::TrashListener {
+    ImageDeleter *image_deleter;
+
+    TrashListener(ImageDeleter *image_deleter) : image_deleter(image_deleter) {
+    }
+
+    void handle_trash_image(const std::string& image_id,
+                            const utime_t& deferment_end_time) override {
+      image_deleter->handle_trash_image(image_id, deferment_end_time);
+    }
+  };
 
   struct DeleteInfo {
     std::string global_image_id;
     bool ignore_orphaned = false;
-    Context *on_delete = nullptr;
 
     image_deleter::ErrorResult error_result = {};
     int error_code = 0;
     utime_t retry_time = {};
     int retries = 0;
-    bool notify_on_failed_retry = true;
 
     DeleteInfo(const std::string& global_image_id)
       : global_image_id(global_image_id) {
     }
 
-    DeleteInfo(const std::string& global_image_id,
-               bool ignore_orphaned, Context *on_delete)
-      : global_image_id(global_image_id), ignore_orphaned(ignore_orphaned),
-        on_delete(on_delete) {
+    DeleteInfo(const std::string& global_image_id, bool ignore_orphaned)
+      : global_image_id(global_image_id), ignore_orphaned(ignore_orphaned) {
     }
 
     inline bool operator==(const DeleteInfo& delete_info) const {
@@ -104,18 +123,19 @@ private:
     return os;
     }
 
-    void notify(int r);
     void print_status(Formatter *f, std::stringstream *ss,
                       bool print_failure_info=false);
   };
   typedef std::shared_ptr<DeleteInfo> DeleteInfoRef;
   typedef std::deque<DeleteInfoRef> DeleteQueue;
+  typedef std::map<std::string, Context*> OnDeleteContexts;
 
   librados::IoCtx& m_local_io_ctx;
-  ContextWQ *m_work_queue;
-  SafeTimer *m_timer;
-  Mutex *m_timer_lock;
+  Threads<librbd::ImageCtx>* m_threads;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
+
+  image_deleter::TrashWatcher<ImageCtxT>* m_trash_watcher = nullptr;
+  TrashListener m_trash_listener;
 
   std::atomic<unsigned> m_running { 1 };
 
@@ -127,6 +147,8 @@ private:
   DeleteQueue m_delete_queue;
   DeleteQueue m_retry_delete_queue;
   DeleteQueue m_in_flight_delete_queue;
+
+  OnDeleteContexts m_on_delete_contexts;
 
   AdminSocketHook *m_asok_hook = nullptr;
 
@@ -148,8 +170,14 @@ private:
   void cancel_retry_timer();
   void handle_retry_timer();
 
+  void handle_trash_image(const std::string& image_id,
+                          const utime_t& deferment_end_time);
+
+  void shut_down_trash_watcher(Context* on_finish);
   void wait_for_ops(Context* on_finish);
   void cancel_all_deletions(Context* on_finish);
+
+  void notify_on_delete(const std::string& global_image_id, int r);
 
 };
 
