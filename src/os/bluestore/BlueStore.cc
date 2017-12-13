@@ -4727,8 +4727,11 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       env->CreateDir(fn);
       if (cct->_conf->rocksdb_separate_wal_dir)
 	env->CreateDir(fn + ".wal");
-      if (cct->_conf->get_val<std::string>("rocksdb_db_paths").length())
-	env->CreateDir(fn + ".slow");
+
+      if (cct->_conf->with_val<std::string>(
+            "rocksdb_db_paths", [](const std::string& s) {
+              return s.length(); }))
+        env->CreateDir(fn + ".slow");
     }
   } else if (create) {
     int r = ::mkdir(fn.c_str(), 0755);
@@ -4782,8 +4785,10 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     options = cct->_conf->bluestore_rocksdb_options;
 
     map<string,string> cf_map;
-    get_str_map(cct->_conf->get_val<string>("bluestore_rocksdb_cfs"), &cf_map,
-		" \t");
+    cct->_conf->with_val<string>("bluestore_rocksdb_cfs",
+                                 get_str_map,
+                                 &cf_map,
+                                 " \t");
     for (auto& i : cf_map) {
       dout(10) << "column family " << i.first << ": " << i.second << dendl;
       cfs.push_back(KeyValueDB::ColumnFamily(i.first, i.second));

@@ -5457,9 +5457,11 @@ int OSDMonitor::parse_erasure_code_profile(const vector<string> &erasure_code_pr
 					   map<string,string> *erasure_code_profile_map,
 					   ostream *ss)
 {
-  int r = get_json_str_map(g_conf->get_val<string>("osd_pool_default_erasure_code_profile"),
-		           *ss,
-		           erasure_code_profile_map);
+  int r = g_conf->with_val<string>("osd_pool_default_erasure_code_profile",
+				   get_json_str_map,
+				   *ss,
+				   erasure_code_profile_map,
+				   true);
   if (r)
     return r;
   assert((*erasure_code_profile_map).count("plugin"));
