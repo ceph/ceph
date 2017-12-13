@@ -4125,6 +4125,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << " oid " << hoid << " snaps missing in mapper"
 			    << ", should be: "
 			    << obj_snaps
+			     << " was " << cur_snaps << " r " << r
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, obj_snaps, &_t);
