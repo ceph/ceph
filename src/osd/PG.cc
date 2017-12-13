@@ -6037,15 +6037,37 @@ void PG::update_store_on_load()
   }
 }
 
+struct C_DeleteMore : public Context {
+  PGRef pg;
+  epoch_t epoch;
+  int count = 2;
+  C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
+  void finish(int r) override {
+    ceph_abort();
+  }
+  void complete(int r) override {
+    assert(r == 0);
+    // complete will be called exactly count times; only the last time will actualy
+    // complete.
+    if (--count) {
+      return;
+    }
+    pg->lock();
+    if (!pg->pg_has_reset_since(epoch)) {
+      pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
+    }
+    pg->unlock();
+    delete this;
+  }
+};
 
 void PG::_delete_some()
 {
   dout(10) << __func__ << dendl;
 
-  // this ensures we get a valid result.  it *also* serves to throttle
-  // us a bit (on filestore) because we won't delete more until the
-  // previous deletions are applied.
-  osr->flush();
+  // we do not need to flush here because (1) we only start deleting after
+  // the initial metadata changes are applied and committed, and (2) we do not
+  // process the next chunk until we have applied and committed our work.
 
   vector<ghobject_t> olist;
   ObjectStore::Transaction t;
@@ -6077,27 +6099,6 @@ void PG::_delete_some()
   epoch_t e = get_osdmap()->get_epoch();
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
-    struct C_DeleteMore : public Context {
-      PGRef pg;
-      int count = 2;
-      epoch_t epoch;
-      C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
-      void complete(int r) {
-	// complete will be called exactly count times; only the last time will actualy
-	// complete.
-	if (--count) {
-	  return;
-	}
-	if (r >= 0) {
-	  pg->lock();
-	  if (!pg->pg_has_reset_since(epoch)) {
-	    pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
-	  }
-	  pg->unlock();
-	}
-	delete this;
-      }
-    };
     Context *fin = new C_DeleteMore(this, e);
     osd->store->queue_transaction(
       osr.get(),
@@ -7974,7 +7975,10 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   pg->on_removal(t);
   pg->osd->logger->inc(l_osd_pg_removing);
-  pg->osd->queue_for_pg_delete(pg->get_pgid(), pg->get_osdmap()->get_epoch());
+  RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
+  Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
+  rctx->on_applied->contexts.push_back(fin);
+  rctx->on_safe->contexts.push_back(fin);
 }
 
 boost::statechart::result PG::RecoveryState::Deleting::react(const DeleteSome& evt)
