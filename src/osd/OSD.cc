@@ -452,26 +452,11 @@ void OSDService::expand_pg_num(OSDMapRef old_map,
 			       OSDMapRef new_map)
 {
   Mutex::Locker l(in_progress_split_lock);
-  for (set<spg_t>::iterator i = in_progress_splits.begin();
-       i != in_progress_splits.end();
-    ) {
-    if (!new_map->have_pg_pool(i->pool())) {
-      in_progress_splits.erase(i++);
-    } else {
-      _maybe_split_pgid(old_map, new_map, *i);
-      ++i;
-    }
+  for (auto pgid : in_progress_splits) {
+    _maybe_split_pgid(old_map, new_map, pgid);
   }
-  for (map<spg_t, spg_t>::iterator i = pending_splits.begin();
-       i != pending_splits.end();
-    ) {
-    if (!new_map->have_pg_pool(i->first.pool())) {
-      rev_pending_splits.erase(i->second);
-      pending_splits.erase(i++);
-    } else {
-      _maybe_split_pgid(old_map, new_map, i->first);
-      ++i;
-    }
+  for (auto i : pending_splits) {
+    _maybe_split_pgid(old_map, new_map, i.first);
   }
 }
 
