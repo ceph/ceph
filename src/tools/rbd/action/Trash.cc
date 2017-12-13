@@ -143,7 +143,7 @@ int execute_remove(const po::variables_map &vm) {
 }
 
 std::string delete_status(time_t deferment_end_time) {
-  time_t now = ceph_clock_gettime();
+  time_t now = time(nullptr);
 
   std::string time_str = ctime(&deferment_end_time);
   time_str = time_str.substr(0, time_str.length() - 1);
