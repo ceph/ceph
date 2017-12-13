@@ -125,6 +125,11 @@ public:
                                                             m_threads.get()));
     m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
       m_local_ioctx, m_threads.get(), m_service_daemon.get()));
+
+    C_SaferCond ctx;
+    m_image_deleter->init(&ctx);
+    EXPECT_EQ(0, ctx.wait());
+
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr);
     m_instance_watcher->handle_acquire_leader();

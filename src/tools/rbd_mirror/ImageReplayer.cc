@@ -400,8 +400,7 @@ void ImageReplayer<I>::wait_for_deletion() {
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_wait_for_deletion>(this);
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_global_image_id, ctx, false);
+  m_image_deleter->wait_for_scheduled_deletion(m_global_image_id, ctx);
 }
 
 template <typename I>

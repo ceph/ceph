@@ -78,10 +78,21 @@ public:
 
   void TearDown() override {
     remove_image();
+
+    C_SaferCond ctx;
+    m_deleter->shut_down(&ctx);
+    ctx.wait();
+
     delete m_deleter;
     m_service_daemon.reset();
 
     TestFixture::TearDown();
+  }
+
+  void init_image_deleter() {
+    C_SaferCond ctx;
+    m_deleter->init(&ctx);
+    ASSERT_EQ(0, ctx.wait());
   }
 
   void remove_image(bool force=false) {
@@ -203,7 +214,6 @@ public:
                                                     &mirror_image));
   }
 
-
   librbd::RBD rbd;
   std::string m_local_image_id;
   std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
@@ -211,6 +221,7 @@ public:
 };
 
 TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
+  init_image_deleter();
   m_deleter->schedule_image_delete(GLOBAL_IMAGE_ID, false, nullptr);
 
   C_SaferCond ctx;
@@ -224,6 +235,7 @@ TEST_F(TestImageDeleter, Delete_NonPrimary_Image) {
 }
 
 TEST_F(TestImageDeleter, Delete_Split_Brain_Image) {
+  init_image_deleter();
   promote_image();
   demote_image();
 
@@ -240,6 +252,7 @@ TEST_F(TestImageDeleter, Delete_Split_Brain_Image) {
 }
 
 TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
+  init_image_deleter();
   promote_image();
 
   C_SaferCond ctx;
@@ -251,6 +264,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Primary_Image) {
 }
 
 TEST_F(TestImageDeleter, Fail_Delete_Orphan_Image) {
+  init_image_deleter();
   promote_image();
   demote_image();
 
@@ -263,6 +277,7 @@ TEST_F(TestImageDeleter, Fail_Delete_Orphan_Image) {
 }
 
 TEST_F(TestImageDeleter, Delete_Image_With_Child) {
+  init_image_deleter();
   create_snapshot();
 
   m_deleter->schedule_image_delete(GLOBAL_IMAGE_ID, false, nullptr);
@@ -276,6 +291,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Child) {
 }
 
 TEST_F(TestImageDeleter, Delete_Image_With_Children) {
+  init_image_deleter();
   create_snapshot("snap1");
   create_snapshot("snap2");
 
@@ -290,6 +306,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Children) {
 }
 
 TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChild) {
+  init_image_deleter();
   create_snapshot("snap1", true);
 
   m_deleter->schedule_image_delete(GLOBAL_IMAGE_ID, false, nullptr);
@@ -303,6 +320,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChild) {
 }
 
 TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
+  init_image_deleter();
   create_snapshot("snap1", true);
   create_snapshot("snap2", true);
 
@@ -317,6 +335,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_ProtectedChildren) {
 }
 
 TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
+  init_image_deleter();
   std::string clone_id = create_clone();
 
   C_SaferCond ctx;
@@ -337,6 +356,7 @@ TEST_F(TestImageDeleter, Delete_Image_With_Clone) {
 }
 
 TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
+  init_image_deleter();
   remove_image();
 
   cls::rbd::MirrorImage mirror_image(GLOBAL_IMAGE_ID,
@@ -357,6 +377,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image) {
 }
 
 TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
+  init_image_deleter();
   remove_image(true);
 
   cls::rbd::MirrorImage mirror_image(GLOBAL_IMAGE_ID,
@@ -380,6 +401,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_With_MirroringState) {
 }
 
 TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
+  init_image_deleter();
   remove_image();
 
   C_SaferCond ctx;
@@ -393,6 +415,7 @@ TEST_F(TestImageDeleter, Delete_NonExistent_Image_Without_MirroringState) {
 }
 
 TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
+  init_image_deleter();
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
   EXPECT_EQ(0, ictx->state->open(false));
@@ -405,6 +428,7 @@ TEST_F(TestImageDeleter, Fail_Delete_NonPrimary_Image) {
 }
 
 TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
+  init_image_deleter();
   EXPECT_EQ(0, g_ceph_context->_conf->set_val("rbd_mirror_delete_retry_interval", "0.1"));
   ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                 false);
@@ -425,4 +449,3 @@ TEST_F(TestImageDeleter, Retry_Failed_Deletes) {
 
   check_image_deleted();
 }
-

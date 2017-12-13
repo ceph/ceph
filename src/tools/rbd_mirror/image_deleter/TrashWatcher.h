@@ -26,6 +26,12 @@ struct TrashListener;
 template <typename ImageCtxT = librbd::ImageCtx>
 class TrashWatcher : public librbd::TrashWatcher<ImageCtxT> {
 public:
+  static TrashWatcher* create(librados::IoCtx &io_ctx,
+                              Threads<ImageCtxT> *threads,
+                              TrashListener& trash_listener) {
+    return new TrashWatcher(io_ctx, threads, trash_listener);
+  }
+
   TrashWatcher(librados::IoCtx &io_ctx, Threads<ImageCtxT> *threads,
                TrashListener& trash_listener);
   TrashWatcher(const TrashWatcher&) = delete;
