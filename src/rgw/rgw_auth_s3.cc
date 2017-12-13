@@ -391,6 +391,16 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   }
   date = d;
 
+  auto req_tp = ceph::coarse_real_clock::from_time_t(internal_timegm(&t));
+  auto cur_tp = ceph::coarse_real_clock::now();
+  constexpr auto grace = std::chrono::minutes{RGW_AUTH_GRACE_MINS};
+  if (std::chrono::abs(cur_tp - req_tp) > grace) {
+    dout(10) << "NOTICE: request time skew too big." << dendl;
+    using ceph::operator<<;
+    dout(10) << "req_tp=" << req_tp << ", cur_tp=" << cur_tp << dendl;
+    return -ERR_REQUEST_TIME_SKEWED;
+  }
+
   return 0;
 }
 
