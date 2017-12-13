@@ -474,10 +474,10 @@ struct JSONFormattable {
     FMT_ARRAY,
     FMT_OBJ,
   } type{FMT_NONE};
-  std::string str;
+
+  string str;
   vector<JSONFormattable> arr;
   map<std::string, JSONFormattable> obj;
-
   void decode_json(JSONObj *jo) {
     if (jo->is_array()) {
       type = JSONFormattable::FMT_ARRAY;
@@ -485,7 +485,7 @@ struct JSONFormattable {
     } else if (jo->is_object()) {
       type = JSONFormattable::FMT_OBJ;
       auto iter = jo->find_first();
-      while (!iter.end()) {
+      for (;!iter.end(); ++iter) {
         JSONObj *field = *iter;
         decode_json_obj(obj[field->get_name()], field);
       }
@@ -514,6 +514,7 @@ struct JSONFormattable {
     decode(obj, bl);
     DECODE_FINISH(bl);
   }
+
   const std::string& val() const {
     return str;
   }
@@ -528,6 +529,23 @@ struct JSONFormattable {
   const JSONFormattable& operator[](const std::string& name) const;
   const JSONFormattable& operator[](const char * name) const {
     return this->operator[](std::string(name));
+  }
+
+  operator std::string() const {
+    return str;
+  }
+
+  explicit operator int() const {
+    return val_int();
+  }
+
+  explicit operator bool() const {
+    return val_bool();
+  }
+
+  template<class T>
+  T operator[](const std::string& name) const {
+    return this->operator[](name)(T());
   }
 
   string operator ()(const char *def_val) const {
