@@ -2875,6 +2875,50 @@ void PGMap::get_health_checks(
       d.detail.swap(detail);
     }
   }
+
+  // PG_SLOW_SNAP_TRIMMING
+  if (!pg_stat.empty() && cct->_conf->mon_osd_snap_trim_queue_warn_on > 0) {
+    uint32_t snapthreshold = cct->_conf->mon_osd_snap_trim_queue_warn_on;
+    uint64_t snaptrimq_exceeded = 0;
+    uint32_t longest_queue = 0;
+    const pg_t* longest_q_pg = nullptr;
+    list<string> detail;
+
+    for (auto& i: pg_stat) {
+      uint32_t current_len = i.second.snaptrimq_len;
+      if (current_len >= snapthreshold) {
+        snaptrimq_exceeded++;
+        if (longest_queue <= current_len) {
+          longest_q_pg = &i.first;
+          longest_queue = current_len;
+        }
+        if (detail.size() < max - 1) {
+          stringstream ss;
+          ss << "snap trim queue for pg " << i.first << " at " << current_len;
+          detail.push_back(ss.str());
+          continue;
+        }
+        if (detail.size() < max) {
+          detail.push_back("...more pgs affected");
+          continue;
+        }
+      }
+    }
+
+    if (snaptrimq_exceeded) {
+      {
+         ostringstream ss;
+         ss << "longest queue on pg " << *longest_q_pg << " at " << longest_queue;
+         detail.push_back(ss.str());
+      }
+
+      stringstream ss;
+      ss << "snap trim queue for " << snaptrimq_exceeded << " pg(s) >= " << snapthreshold << " (mon_osd_snap_trim_queue_warn_on)";
+      auto& d = checks->add("PG_SLOW_SNAP_TRIMMING", HEALTH_WARN, ss.str());
+      detail.push_back("try decreasing \"osd snap trim sleep\" and/or increasing \"osd pg max concurrent snap trims\".");
+      d.detail.swap(detail);
+    }
+  }
 }
 
 int process_pg_map_command(
