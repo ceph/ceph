@@ -929,7 +929,7 @@ public:
     return _start_split(parent, children);
   }
   void mark_split_in_progress(spg_t parent, const set<spg_t> &pgs);
-  void complete_split(const set<spg_t> &pgs);
+  void complete_split(spg_t pgid);
   void cancel_pending_splits_for_parent(spg_t parent);
   void _cancel_pending_splits_for_parent(spg_t parent);
   bool splitting(spg_t pgid);
