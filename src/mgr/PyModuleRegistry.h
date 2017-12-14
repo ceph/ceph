@@ -54,17 +54,27 @@ private:
   // before ClusterState exists.
   MgrMap mgr_map;
 
+  /**
+   * Discover python modules from local disk
+   */
+  std::set<std::string> probe_modules() const;
+
 public:
   static std::string config_prefix;
 
-  void list_modules(std::set<std::string> *modules);
-
-  void get_modules(std::list<PyModuleRef> *modules_out)
+  /**
+   * Get references to all modules (whether they have loaded and/or
+   * errored) or not.
+   */
+  std::list<PyModuleRef> get_modules() const
   {
     Mutex::Locker l(lock);
+    std::list<PyModuleRef> modules_out;
     for (const auto &i : modules) {
-      modules_out->push_back(i.second);
+      modules_out.push_back(i.second);
     }
+
+    return modules_out;
   }
 
   PyModuleRegistry(LogChannelRef clog_)
