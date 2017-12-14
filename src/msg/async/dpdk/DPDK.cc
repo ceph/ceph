@@ -845,7 +845,7 @@ void DPDKQueuePair::process_packets(
 
     // Set stipped VLAN value if available
     if ((_dev->_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) &&
-        (m->ol_flags & PKT_RX_VLAN_PKT)) {
+        (m->ol_flags & PKT_RX_VLAN_STRIPPED)) {
       oi.vlan_tci = m->vlan_tci;
     }
 
