@@ -253,9 +253,10 @@ template <typename I>
 void TrashMoveRequest<I>::trash_move() {
   dout(10) << dendl;
 
-  // TODO support configurable "deletion delay"
   utime_t delete_time{ceph_clock_now()};
   utime_t deferment_end_time{delete_time};
+  deferment_end_time += m_image_ctx->mirroring_delete_delay;
+
   m_trash_image_spec = {
     cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING, m_image_ctx->name, delete_time,
     deferment_end_time};

@@ -106,6 +106,7 @@ struct MockImageCtx {
           image_ctx.journal_max_concurrent_object_sets),
       mirroring_resync_after_disconnect(
           image_ctx.mirroring_resync_after_disconnect),
+      mirroring_delete_delay(image_ctx.mirroring_delete_delay),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
@@ -314,6 +315,7 @@ struct MockImageCtx {
   uint32_t journal_max_payload_bytes;
   int journal_max_concurrent_object_sets;
   bool mirroring_resync_after_disconnect;
+  uint64_t mirroring_delete_delay;
   int mirroring_replay_delay;
   bool non_blocking_aio;
   bool blkin_trace_all;
