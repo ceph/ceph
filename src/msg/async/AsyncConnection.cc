@@ -159,11 +159,16 @@ AsyncConnection::~AsyncConnection()
 void AsyncConnection::maybe_start_delay_thread()
 {
   if (!delay_state) {
-    auto pos = async_msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(peer_type));
-    if (pos != string::npos) {
-      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
-      delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
-    }
+    async_msgr->cct->_conf->with_val<std::string>(
+      "ms_inject_delay_type",
+      [this](const string& s) {
+	if (s.find(ceph_entity_type_name(peer_type)) != string::npos) {
+	  ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
+			      << dendl;
+	  delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
+					    conn_id);
+	}
+      });
   }
 }
 
@@ -1878,7 +1883,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddr() << " --> "
 		      << get_peer_addr() << " -- "
@@ -2170,7 +2175,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   assert(center->in_thread());
   m->set_seq(++out_seq);
 

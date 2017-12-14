@@ -235,7 +235,7 @@ void usage(ostream& out)
 
 unsigned default_op_size = 1 << 22;
 
-static void usage_exit()
+[[noreturn]] static void usage_exit()
 {
   usage(cerr);
   exit(1);

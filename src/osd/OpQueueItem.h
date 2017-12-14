@@ -23,7 +23,7 @@
 #include "osd/PG.h"
 #include "common/mClockCommon.h"
 #include "messages/MOSDOp.h"
-
+#include "PGPeeringEvent.h"
 
 class OSD;
 
@@ -41,6 +41,7 @@ public:
   public:
     enum class op_type_t {
       client_op,
+      peering_event,
       bg_snaptrim,
       bg_recovery,
       bg_scrub
@@ -194,6 +195,19 @@ public:
   }
   boost::optional<OpRequestRef> maybe_get_op() const override final {
     return op;
+  }
+  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGPeeringItem : public PGOpQueueable {
+  PGPeeringEventRef evt;
+public:
+  PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::peering_event;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };

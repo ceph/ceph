@@ -78,7 +78,7 @@ def get_api_vgs():
 
     Command and sample delimeted output, should look like::
 
-        $ sudo vgs --noheadings --separator=';' \
+        $ vgs --noheadings --separator=';' \
           -o vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free
           ubuntubox-vg;1;2;0;wz--n-;299.52g;12.00m
           osd_vg;3;1;0;wz--n-;29.21g;9.21g
@@ -86,7 +86,7 @@ def get_api_vgs():
     """
     fields = 'vg_name,pv_count,lv_count,snap_count,vg_attr,vg_size,vg_free'
     stdout, stderr, returncode = process.call(
-        ['sudo', 'vgs', '--noheadings', '--separator=";"', '-o', fields]
+        ['vgs', '--noheadings', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -98,14 +98,14 @@ def get_api_lvs():
 
     Command and delimeted output, should look like::
 
-        $ sudo lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
+        $ lvs --noheadings --separator=';' -o lv_tags,lv_path,lv_name,vg_name
           ;/dev/ubuntubox-vg/root;root;ubuntubox-vg
           ;/dev/ubuntubox-vg/swap_1;swap_1;ubuntubox-vg
 
     """
     fields = 'lv_tags,lv_path,lv_name,vg_name,lv_uuid'
     stdout, stderr, returncode = process.call(
-        ['sudo', 'lvs', '--noheadings', '--separator=";"', '-o', fields]
+        ['lvs', '--noheadings', '--separator=";"', '-o', fields]
     )
     return _output_parser(stdout, fields)
 
@@ -117,7 +117,7 @@ def get_api_pvs():
 
     Command and delimeted output, should look like::
 
-        $ sudo pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
+        $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
           /dev/sda1;;
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
@@ -127,7 +127,7 @@ def get_api_pvs():
     # note the use of `pvs -a` which will return every physical volume including
     # ones that have not been initialized as "pv" by LVM
     stdout, stderr, returncode = process.call(
-        ['sudo', 'pvs', '-a', '--no-heading', '--separator=";"', '-o', fields]
+        ['pvs', '-a', '--no-heading', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
@@ -186,7 +186,6 @@ def create_pv(device):
     to journals.
     """
     process.run([
-        'sudo',
         'pvcreate',
         '-v',  # verbose
         '-f',  # force it
@@ -204,7 +203,6 @@ def create_vg(name, *devices):
     Once created the volume group is returned as a ``VolumeGroup`` object
     """
     process.run([
-        'sudo',
         'vgcreate',
         '--force',
         '--yes',
@@ -224,7 +222,6 @@ def remove_lv(path):
     """
     stdout, stderr, returncode = process.call(
         [
-            'sudo',
             'lvremove',
             '-v',  # verbose
             '-f',  # force it
@@ -261,7 +258,6 @@ def create_lv(name, group, size=None, tags=None):
     }
     if size:
         process.run([
-            'sudo',
             'lvcreate',
             '--yes',
             '-L',
@@ -272,7 +268,6 @@ def create_lv(name, group, size=None, tags=None):
     # system call is different for LVM
     else:
         process.run([
-            'sudo',
             'lvcreate',
             '--yes',
             '-l',
@@ -660,7 +655,7 @@ class Volume(object):
         """
         for k, v in self.tags.items():
             tag = "%s=%s" % (k, v)
-            process.run(['sudo', 'lvchange', '--deltag', tag, self.lv_path])
+            process.run(['lvchange', '--deltag', tag, self.lv_path])
 
     def set_tags(self, tags):
         """
@@ -691,11 +686,11 @@ class Volume(object):
         if self.tags.get(key):
             current_value = self.tags[key]
             tag = "%s=%s" % (key, current_value)
-            process.call(['sudo', 'lvchange', '--deltag', tag, self.lv_api['lv_path']])
+            process.call(['lvchange', '--deltag', tag, self.lv_api['lv_path']])
 
         process.call(
             [
-                'sudo', 'lvchange',
+                'lvchange',
                 '--addtag', '%s=%s' % (key, value), self.lv_path
             ]
         )
@@ -754,11 +749,11 @@ class PVolume(object):
         if self.tags.get(key):
             current_value = self.tags[key]
             tag = "%s=%s" % (key, current_value)
-            process.call(['sudo', 'pvchange', '--deltag', tag, self.pv_name])
+            process.call(['pvchange', '--deltag', tag, self.pv_name])
 
         process.call(
             [
-                'sudo', 'pvchange',
+                'pvchange',
                 '--addtag', '%s=%s' % (key, value), self.pv_name
             ]
         )

@@ -97,8 +97,6 @@ public:
   void on_change() override;
   void clear_recovery_state() override;
 
-  void on_flushed() override;
-
   void dump_recovery_info(Formatter *f) const override;
 
   void call_write_ordered(std::function<void(void)> &&cb) override;

@@ -9,7 +9,6 @@
 #include <signal.h>
 #include <sys/wait.h>
 #include <sys/types.h>
-#include <common/errno.h>
 #include <ostream>
 #include "common/errno.h"
 

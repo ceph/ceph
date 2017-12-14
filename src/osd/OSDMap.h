@@ -343,6 +343,10 @@ class OSDMap {
 public:
   MEMPOOL_CLASS_HELPERS();
 
+  typedef interval_set<
+    snapid_t,
+    mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -389,6 +393,8 @@ public:
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<pair<int32_t,int32_t>>> new_pg_upmap_items;
     mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items;
+    mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
+    mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
     string cluster_snapshot;
 
@@ -522,6 +528,15 @@ private:
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
+
+  /// queue of snaps to remove
+  mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
+
+  /// removed_snaps additions this epoch
+  mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
+
+  /// removed_snaps removals this epoch
+  mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
   epoch_t cluster_snapshot_epoch;
   string cluster_snapshot;
@@ -666,6 +681,8 @@ public:
   bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
+
+  void get_flag_set(set<string> *flagset) const;
 
   static void calc_state_set(int state, set<string>& st);
 
@@ -1136,6 +1153,19 @@ public:
       }
     }
     return false;
+  }
+
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_removed_snaps_queue() const {
+    return removed_snaps_queue;
+  }
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_new_removed_snaps() const {
+    return new_removed_snaps;
+  }
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_new_purged_snaps() const {
+    return new_purged_snaps;
   }
 
   int64_t lookup_pg_pool_name(const string& name) const {

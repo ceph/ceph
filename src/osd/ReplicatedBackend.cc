@@ -252,10 +252,6 @@ void ReplicatedBackend::on_change()
   clear_recovery_state();
 }
 
-void ReplicatedBackend::on_flushed()
-{
-}
-
 int ReplicatedBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
@@ -537,7 +533,7 @@ void ReplicatedBackend::submit_transaction(
 void ReplicatedBackend::op_applied(
   InProgressOp *op)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_APPLIED_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {
@@ -561,7 +557,7 @@ void ReplicatedBackend::op_applied(
 void ReplicatedBackend::op_commit(
   InProgressOp *op)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   OID_EVENT_TRACE_WITH_MSG((op && op->op) ? op->op->get_req() : NULL, "OP_COMMIT_BEGIN", true);
   dout(10) << __func__ << ": " << op->tid << dendl;
   if (op->op) {

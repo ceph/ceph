@@ -415,7 +415,8 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
 
 void SnapRealm::adjust_parent()
 {
-  SnapRealm *newparent = inode->get_parent_dn()->get_dir()->get_inode()->find_snaprealm();
+  CDentry *pdn = inode->get_parent_dn();
+  SnapRealm *newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
   if (newparent != parent) {
     dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
     if (parent)
@@ -455,7 +456,7 @@ void SnapRealm::split_at(SnapRealm *child)
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
     if (realm != child &&
-	child->inode->is_projected_ancestor_of(realm->inode)) {
+	child->inode->is_ancestor_of(realm->inode)) {
       dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
       realm->parent = child;
       child->open_children.insert(realm);
@@ -467,29 +468,12 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
-  elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
-  while (!p.end()) {
+  for (elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
+       !p.end(); ) {
     CInode *in = *p;
     ++p;
-
     // does inode fall within the child realm?
-    bool under_child = false;
-
-    if (in == child->inode) {
-      under_child = true;
-    } else {
-      CInode *t = in;
-      while (t->get_parent_dn()) {
-	t = t->get_parent_dn()->get_dir()->get_inode();
-	if (t == child->inode) {
-	  under_child = true;
-	  break;
-	}
-	if (t == in)
-	  break;
-      }
-    }
-    if (under_child) {
+    if (child->inode->is_ancestor_of(in)) {
       dout(20) << " child gets " << *in << dendl;
       in->move_to_realm(child);
     } else {

@@ -22,14 +22,14 @@
 #include "os/ObjectStore.h"
 #include <list>
 
-#define PGLOG_INDEXED_OBJECTS          (1 << 0)
-#define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
-#define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
-#define PGLOG_INDEXED_DUPS             (1 << 3)
-#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | \
-					PGLOG_INDEXED_CALLER_OPS | \
-					PGLOG_INDEXED_EXTRA_CALLER_OPS | \
-					PGLOG_INDEXED_DUPS)
+constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
+constexpr auto PGLOG_INDEXED_CALLER_OPS       = 1 << 1;
+constexpr auto PGLOG_INDEXED_EXTRA_CALLER_OPS = 1 << 2;
+constexpr auto PGLOG_INDEXED_DUPS             = 1 << 3;
+constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS 
+                                              | PGLOG_INDEXED_CALLER_OPS 
+                                              | PGLOG_INDEXED_EXTRA_CALLER_OPS 
+                                              | PGLOG_INDEXED_DUPS;
 
 class CephContext;
 
@@ -663,9 +663,6 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
-  void revise_have(hobject_t oid, eversion_t have) {
-    missing.revise_have(oid, have);
-  }
 
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
     missing.add(oid, need, have, false);

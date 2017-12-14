@@ -86,7 +86,7 @@ the ``allow_dirfrags`` flag on the filesystem:
 
 ::
 
-    ceph fs set <filesystem name> allow_dirfrags
+    ceph fs set <filesystem name> allow_dirfrags 1
 
 Multiple active metadata servers
 --------------------------------
@@ -101,7 +101,7 @@ enabling multiple active metadata servers as follows:
 
 ::
 
-    ceph fs set <filesystem name> allow_multimds
+    ceph fs set <filesystem name> allow_multimds 1
 
 Note that the default size of the active mds cluster (``max_mds``) is
 still set to 1 initially.

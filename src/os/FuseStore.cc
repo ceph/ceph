@@ -1103,7 +1103,10 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_bsize = 4096;   // LIES!
   stbuf->f_blocks = s.total / 4096;
   stbuf->f_bavail = s.available / 4096;
+  stbuf->f_bfree = stbuf->f_bavail;
 
+  ldout(fs->store->cct, 10) << __func__ << " " << path << ": " 
+    << stbuf->f_bavail << "/" << stbuf->f_blocks << dendl;
   return 0;
 }
 

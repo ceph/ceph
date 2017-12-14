@@ -119,7 +119,22 @@ BuildRequires:	gperf
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
+%if 0%{?rhel} == 7
+# devtoolset offers newer make and valgrind-devel, but the old ones are good
+# enough.
+%ifarch x86_64
+BuildRequires:	devtoolset-7-gcc-c++
+%endif
+%ifarch aarch64
+%if 0%{?centos}
+BuildRequires:	devtoolset-6-gcc-c++
+%else
+BuildRequires:	devtoolset-7-gcc-c++
+%endif
+%endif
+%else
 BuildRequires:	gcc-c++
+%endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel >= 2.4
@@ -781,6 +796,20 @@ python-rbd, python-rgw or python-cephfs instead.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
+
+%if 0%{?rhel} == 7
+%ifarch x86_64
+. /opt/rh/devtoolset-7/enable
+%endif
+%ifarch aarch64
+%if 0%{?centos}
+. /opt/rh/devtoolset-6/enable
+%else
+. /opt/rh/devtoolset-7/enable
+%endif
+%endif
+%endif
+
 %if 0%{with cephfs_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
@@ -1482,7 +1511,7 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%{_prefix}/lib/ocf/resource.d/ceph/rbd
+%attr(0755,-,-) %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
 

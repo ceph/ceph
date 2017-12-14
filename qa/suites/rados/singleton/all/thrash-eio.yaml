@@ -26,11 +26,12 @@ tasks:
     - objects unfound and apparently lost
     - overall HEALTH_
     - \(OSDMAP_FLAGS\)
-    - \(REQUEST_SLOW\)
     - \(SLOW_OPS\)
     - \(PG_
     - \(OBJECT_MISPLACED\)
     - \(OSD_
+    - \(OBJECT_
+    - \(TOO_FEW_PGS\)
 - thrashosds:
     op_delay: 30
     clean_interval: 120

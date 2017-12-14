@@ -828,6 +828,7 @@ class TestImage(object):
     def test_metadata(self):
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
+        assert_raises(KeyError, self.image.metadata_get, "key1")
         self.image.metadata_set("key1", "value1")
         self.image.metadata_set("key2", "value2")
         value = self.image.metadata_get("key1")
@@ -841,6 +842,7 @@ class TestImage(object):
         eq(len(metadata), 1)
         eq(metadata[0], ("key2", "value2"))
         self.image.metadata_remove("key2")
+        assert_raises(KeyError, self.image.metadata_remove, "key2")
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
 
@@ -853,6 +855,12 @@ class TestImage(object):
             self.image.metadata_remove("key" + str(i))
             metadata = list(self.image.metadata_list())
             eq(len(metadata), N - i - 1)
+
+    def test_watchers_list(self):
+        watchers = list(self.image.watchers_list())
+        # The image is open (in r/w mode) from setup, so expect there to be one
+        # watcher.
+        eq(len(watchers), 1)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []

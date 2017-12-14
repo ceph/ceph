@@ -22,7 +22,6 @@
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
-#include "rgw_rest.h"
 
 #include "rgw_token.h"
 #include "include/assert.h"
@@ -776,7 +775,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
                            const bool using_qs) const;
 
   auth_data_t get_auth_data_v2(const req_state* s) const;
-  auth_data_t get_auth_data_v4(const req_state* s, bool using_qs) const;
+  auth_data_t get_auth_data_v4(const req_state* s, const bool using_qs) const;
 
 public:
   AWSGeneralAbstractor(CephContext* const cct)

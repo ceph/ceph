@@ -1939,10 +1939,30 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     uint64_t period = src->get_stripe_period();
     unsigned fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL |
 			     LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
+    uint64_t object_id = 0;
     for (uint64_t offset = 0; offset < src_size; offset += period) {
       if (throttle.pending_error()) {
         return throttle.wait_for_ret();
       }
+      
+      {
+        RWLock::RLocker snap_locker(src->snap_lock);
+        if (src->object_map != nullptr) {
+          bool skip = true;
+          // each period is related to src->stripe_count objects, check them all
+          for (uint64_t i=0; i < src->stripe_count; i++) {
+            if (object_id < src->object_map->size() &&
+                src->object_map->object_may_exist(object_id)) {
+              skip = false;
+            }
+            ++object_id;
+          }
+
+          if (skip) continue;
+        } else {
+          object_id += src->stripe_count;
+        }
+      }      
 
       uint64_t len = min(period, src_size - offset);
       bufferlist *bl = new bufferlist();
@@ -2356,7 +2376,35 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
   }
 
+  int list_watchers(ImageCtx *ictx,
+		    std::list<librbd::image_watcher_t> &watchers)
+  {
+    int r;
+    std::string header_oid;
+    std::list<obj_watch_t> obj_watchers;
 
+    if (ictx->old_format) {
+      header_oid = util::old_header_name(ictx->name);
+    } else {
+      header_oid = util::header_name(ictx->id);
+    }
+
+    r = ictx->md_ctx.list_watchers(header_oid, &obj_watchers);
+    if (r < 0) {
+      return r;
+    }
+
+    for (auto i = obj_watchers.begin(); i != obj_watchers.end(); ++i) {
+      librbd::image_watcher_t watcher;
+      watcher.addr = i->addr;
+      watcher.id = i->watcher_id;
+      watcher.cookie = i->cookie;
+
+      watchers.push_back(watcher);
+    }
+
+    return 0;
+  }
 
 }
 

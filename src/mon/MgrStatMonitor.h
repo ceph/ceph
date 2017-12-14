@@ -73,6 +73,10 @@ public:
     return nullptr;
   }
 
+  const PGMapDigest& get_digest() {
+    return digest;
+  }
+
   ceph_statfs get_statfs(OSDMap& osdmap,
 			 boost::optional<int64_t> data_pool) const {
     return digest.get_statfs(osdmap, data_pool);

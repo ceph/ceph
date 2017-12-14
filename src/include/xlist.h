@@ -18,6 +18,7 @@
 #include "include/assert.h"
 #include <iterator>
 #include <cstdlib>
+#include <ostream>
 
 template<typename T>
 class xlist {
@@ -192,10 +193,28 @@ public:
       return *this;
     }
     bool end() const { return cur == 0; }
+    bool operator==(const_iterator& rhs) const {
+      return cur == rhs.cur;
+    }
+    bool operator!=(const_iterator& rhs) const {
+      return cur != rhs.cur;
+    }
   };
 
   const_iterator begin() const { return const_iterator(_front); }
   const_iterator end() const { return const_iterator(NULL); }
+
+  friend std::ostream &operator<<(std::ostream &oss, const xlist<T> &list) {
+    bool first = true;
+    for (const auto &item : list) {
+      if (!first) {
+        oss << ", ";
+      }
+      oss << *item; /* item should be a pointer */
+      first = false;
+    }
+    return oss;
+  }
 };
 
 

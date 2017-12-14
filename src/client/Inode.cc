@@ -69,8 +69,8 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.is_file())
     out << " " << in.oset;
 
-  if (!in.dn_set.empty())
-    out << " parents=" << in.dn_set;
+  if (!in.dentries.empty())
+    out << " parents=" << in.dentries;
 
   if (in.is_dir() && in.has_dir_layout())
     out << " has_dir_layout";
@@ -85,10 +85,11 @@ ostream& operator<<(ostream &out, const Inode &in)
 
 void Inode::make_long_path(filepath& p)
 {
-  if (!dn_set.empty()) {
-    assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-    (*dn_set.begin())->dir->parent_inode->make_long_path(p);
-    p.push_dentry((*dn_set.begin())->name);
+  if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    assert(dn->dir && dn->dir->parent_inode);
+    dn->dir->parent_inode->make_long_path(p);
+    p.push_dentry(dn->name);
   } else if (snapdir_parent) {
     snapdir_parent->make_nosnap_relative_path(p);
     string empty;
@@ -110,10 +111,11 @@ void Inode::make_nosnap_relative_path(filepath& p)
     snapdir_parent->make_nosnap_relative_path(p);
     string empty;
     p.push_dentry(empty);
-  } else if (!dn_set.empty()) {
-    assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-    (*dn_set.begin())->dir->parent_inode->make_nosnap_relative_path(p);
-    p.push_dentry((*dn_set.begin())->name);
+  } else if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    assert(dn->dir && dn->dir->parent_inode);
+    dn->dir->parent_inode->make_nosnap_relative_path(p);
+    p.push_dentry(dn->name);
   } else {
     p = filepath(ino);
   }
@@ -322,9 +324,9 @@ Dir *Inode::open_dir()
   if (!dir) {
     dir = new Dir(this);
     lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
-    assert(dn_set.size() < 2); // dirs can't be hard-linked
-    if (!dn_set.empty())
-      (*dn_set.begin())->get();      // pin dentry
+    assert(dentries.size() < 2); // dirs can't be hard-linked
+    if (!dentries.empty())
+      get_first_parent()->get();      // pin dentry
     get();                  // pin inode
   }
   return dir;
@@ -495,12 +497,12 @@ void Inode::dump(Formatter *f) const
   f->dump_int("ref", _ref);
   f->dump_int("ll_ref", ll_ref);
 
-  if (!dn_set.empty()) {
+  if (!dentries.empty()) {
     f->open_array_section("parents");
-    for (set<Dentry*>::const_iterator p = dn_set.begin(); p != dn_set.end(); ++p) {
+    for (const auto &dn : dentries) {
       f->open_object_section("dentry");
-      f->dump_stream("dir_ino") << (*p)->dir->parent_inode->ino;
-      f->dump_string("name", (*p)->name);
+      f->dump_stream("dir_ino") << dn->dir->parent_inode->ino;
+      f->dump_string("name", dn->name);
       f->close_section();
     }
     f->close_section();

@@ -1992,11 +1992,11 @@ public:
 
   vector<bufferlist> checksums;
   vector<int> checksum_retvals;
-  uint32_t offset;
-  uint32_t length;
+  uint32_t offset = 0;
+  uint32_t length = 0;
   string tgt_oid;
   string tgt_pool_name;
-  uint32_t tgt_offset;
+  uint32_t tgt_offset = 0;
 
   ChunkReadOp(int n,
 	 RadosTestContext *context,

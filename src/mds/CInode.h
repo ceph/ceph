@@ -527,11 +527,12 @@ private:
 public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
-    if (dirfrags.count(fg)) {
+    auto pi = dirfrags.find(fg);
+    if (pi != dirfrags.end()) {
       //assert(g_conf->debug_mds < 2 || dirfragtree.is_leaf(fg)); // performance hack FIXME
-      return dirfrags[fg];
-    } else
-      return NULL;
+      return pi->second;
+    } 
+    return NULL;
   }
   bool get_dirfrags_under(frag_t fg, std::list<CDir*>& ls);
   CDir* get_approx_dirfrag(frag_t fg);
@@ -728,8 +729,13 @@ public:
   inode_t& get_inode() { return inode; }
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
-  const CDentry* get_projected_parent_dn() const { return !projected_parent.empty() ? projected_parent.back() : parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
+  const CDentry* get_projected_parent_dn() const { return !projected_parent.empty() ? projected_parent.back() : parent; }
+  const CDentry* get_oldest_parent_dn() const {
+    if (parent)
+      return parent;
+    return !projected_parent.empty() ? projected_parent.front(): NULL;
+  }
   CDir *get_parent_dir();
   const CDir *get_projected_parent_dir() const;
   CDir *get_projected_parent_dir();
@@ -742,7 +748,8 @@ public:
   }
 
   // -- misc -- 
-  bool is_projected_ancestor_of(CInode *other);
+  bool is_ancestor_of(const CInode *other) const;
+  bool is_projected_ancestor_of(const CInode *other) const;
 
   void make_path_string(std::string& s, bool projected=false, const CDentry *use_parent=NULL) const;
   void make_path(filepath& s, bool projected=false) const;

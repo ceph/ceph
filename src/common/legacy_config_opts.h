@@ -374,7 +374,6 @@ OPTION(client_permissions, OPT_BOOL)
 OPTION(client_dirsize_rbytes, OPT_BOOL)
 
 OPTION(client_try_dentry_invalidate, OPT_BOOL) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
-OPTION(client_die_on_failed_remount, OPT_BOOL)
 OPTION(client_check_pool_perm, OPT_BOOL)
 OPTION(client_use_faked_inos, OPT_BOOL)
 OPTION(client_mds_namespace, OPT_STR)
@@ -608,7 +607,6 @@ OPTION(osd_tier_promote_max_bytes_sec, OPT_U64)
 OPTION(osd_objecter_finishers, OPT_INT)
 
 OPTION(osd_map_dedup, OPT_BOOL)
-OPTION(osd_map_max_advance, OPT_INT) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT)
 OPTION(osd_map_message_max, OPT_INT)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT)  // cap on # of inc maps we send to peers, clients
@@ -618,8 +616,6 @@ OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL)
 OPTION(osd_max_markdown_period , OPT_INT)
 OPTION(osd_max_markdown_count, OPT_INT)
 
-OPTION(osd_peering_wq_threads, OPT_INT)
-OPTION(osd_peering_wq_batch_size, OPT_U64)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
 OPTION(osd_disk_threads, OPT_INT)
@@ -660,6 +656,9 @@ OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
@@ -861,6 +860,7 @@ OPTION(mon_rocksdb_options, OPT_STR)
  */
 OPTION(osd_client_op_priority, OPT_U32)
 OPTION(osd_recovery_op_priority, OPT_U32)
+OPTION(osd_peering_op_priority, OPT_U32)
 
 OPTION(osd_snap_trim_priority, OPT_U32)
 OPTION(osd_snap_trim_cost, OPT_U32) // set default cost equal to 1MB io

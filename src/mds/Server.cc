@@ -116,62 +116,62 @@ void Server::create_logger()
       "Client session messages", "hcs", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request", "Client requests dispatched");
   plb.add_u64_counter(l_mdss_dispatch_slave_request, "dispatch_server_request", "Server requests dispatched");
-  plb.add_u64_counter(l_mdss_req_lookuphash, "req_lookuphash",
-      "Request type lookup hash of inode");
-  plb.add_u64_counter(l_mdss_req_lookupino, "req_lookupino",
-      "Request type lookup inode");
-  plb.add_u64_counter(l_mdss_req_lookupparent, "req_lookupparent",
-      "Request type lookup parent");
-  plb.add_u64_counter(l_mdss_req_lookupname, "req_lookupname",
-      "Request type lookup name");
-  plb.add_u64_counter(l_mdss_req_lookup, "req_lookup",
-      "Request type lookup");
-  plb.add_u64_counter(l_mdss_req_lookupsnap, "req_lookupsnap",
-      "Request type lookup snapshot");
-  plb.add_u64_counter(l_mdss_req_getattr, "req_getattr",
-      "Request type get attribute");
-  plb.add_u64_counter(l_mdss_req_setattr, "req_setattr",
-      "Request type set attribute");
-  plb.add_u64_counter(l_mdss_req_setlayout, "req_setlayout",
-      "Request type set file layout");
-  plb.add_u64_counter(l_mdss_req_setdirlayout, "req_setdirlayout",
-      "Request type set directory layout");
-  plb.add_u64_counter(l_mdss_req_setxattr, "req_setxattr",
-      "Request type set extended attribute");
-  plb.add_u64_counter(l_mdss_req_rmxattr, "req_rmxattr",
-      "Request type remove extended attribute");
-  plb.add_u64_counter(l_mdss_req_readdir, "req_readdir",
-      "Request type read directory");
-  plb.add_u64_counter(l_mdss_req_setfilelock, "req_setfilelock",
-      "Request type set file lock");
-  plb.add_u64_counter(l_mdss_req_getfilelock, "req_getfilelock",
-      "Request type get file lock");
-  plb.add_u64_counter(l_mdss_req_create, "req_create",
-      "Request type create");
-  plb.add_u64_counter(l_mdss_req_open, "req_open",
-      "Request type open");
-  plb.add_u64_counter(l_mdss_req_mknod, "req_mknod",
-      "Request type make node");
-  plb.add_u64_counter(l_mdss_req_link, "req_link",
-      "Request type link");
-  plb.add_u64_counter(l_mdss_req_unlink, "req_unlink",
-      "Request type unlink");
-  plb.add_u64_counter(l_mdss_req_rmdir, "req_rmdir",
-      "Request type remove directory");
-  plb.add_u64_counter(l_mdss_req_rename, "req_rename",
-      "Request type rename");
-  plb.add_u64_counter(l_mdss_req_mkdir, "req_mkdir",
-      "Request type make directory");
-  plb.add_u64_counter(l_mdss_req_symlink, "req_symlink",
-      "Request type symbolic link");
-  plb.add_u64_counter(l_mdss_req_lssnap, "req_lssnap",
-      "Request type list snapshot");
-  plb.add_u64_counter(l_mdss_req_mksnap, "req_mksnap",
-      "Request type make snapshot");
-  plb.add_u64_counter(l_mdss_req_rmsnap, "req_rmsnap",
-      "Request type remove snapshot");
-  plb.add_u64_counter(l_mdss_req_renamesnap, "req_renamesnap",
-      "Request type rename snapshot");
+  plb.add_time_avg(l_mdss_req_lookuphash_latency, "req_lookuphash_latency",
+      "Request type lookup hash of inode latency");
+  plb.add_time_avg(l_mdss_req_lookupino_latency, "req_lookupino_latency",
+      "Request type lookup inode latency");
+  plb.add_time_avg(l_mdss_req_lookupparent_latency, "req_lookupparent_latency",
+      "Request type lookup parent latency");
+  plb.add_time_avg(l_mdss_req_lookupname_latency, "req_lookupname_latency",
+      "Request type lookup name latency");
+  plb.add_time_avg(l_mdss_req_lookup_latency, "req_lookup_latency",
+      "Request type lookup latency");
+  plb.add_time_avg(l_mdss_req_lookupsnap_latency, "req_lookupsnap_latency",
+      "Request type lookup snapshot latency");
+  plb.add_time_avg(l_mdss_req_getattr_latency, "req_getattr_latency",
+      "Request type get attribute latency");
+  plb.add_time_avg(l_mdss_req_setattr_latency, "req_setattr_latency",
+      "Request type set attribute latency");
+  plb.add_time_avg(l_mdss_req_setlayout_latency, "req_setlayout_latency",
+      "Request type set file layout latency");
+  plb.add_time_avg(l_mdss_req_setdirlayout_latency, "req_setdirlayout_latency",
+      "Request type set directory layout latency");
+  plb.add_time_avg(l_mdss_req_setxattr_latency, "req_setxattr_latency",
+      "Request type set extended attribute latency");
+  plb.add_time_avg(l_mdss_req_rmxattr_latency, "req_rmxattr_latency",
+      "Request type remove extended attribute latency");
+  plb.add_time_avg(l_mdss_req_readdir_latency, "req_readdir_latency",
+      "Request type read directory latency");
+  plb.add_time_avg(l_mdss_req_setfilelock_latency, "req_setfilelock_latency",
+      "Request type set file lock latency");
+  plb.add_time_avg(l_mdss_req_getfilelock_latency, "req_getfilelock_latency",
+      "Request type get file lock latency");
+  plb.add_time_avg(l_mdss_req_create_latency, "req_create_latency",
+      "Request type create latency");
+  plb.add_time_avg(l_mdss_req_open_latency, "req_open_latency",
+      "Request type open latency");
+  plb.add_time_avg(l_mdss_req_mknod_latency, "req_mknod_latency",
+      "Request type make node latency");
+  plb.add_time_avg(l_mdss_req_link_latency, "req_link_latency",
+      "Request type link latency");
+  plb.add_time_avg(l_mdss_req_unlink_latency, "req_unlink_latency",
+      "Request type unlink latency");
+  plb.add_time_avg(l_mdss_req_rmdir_latency, "req_rmdir_latency",
+      "Request type remove directory latency");
+  plb.add_time_avg(l_mdss_req_rename_latency, "req_rename_latency",
+      "Request type rename latency");
+  plb.add_time_avg(l_mdss_req_mkdir_latency, "req_mkdir_latency",
+      "Request type make directory latency");
+  plb.add_time_avg(l_mdss_req_symlink_latency, "req_symlink_latency",
+      "Request type symbolic link latency");
+  plb.add_time_avg(l_mdss_req_lssnap_latency, "req_lssnap_latency",
+      "Request type list snapshot latency");
+  plb.add_time_avg(l_mdss_req_mksnap_latency, "req_mksnap_latency",
+      "Request type make snapshot latency");
+  plb.add_time_avg(l_mdss_req_rmsnap_latency, "req_rmsnap_latency",
+      "Request type remove snapshot latency");
+  plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
+      "Request type rename snapshot latency");
   logger = plb.create_perf_counters();
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
@@ -1194,93 +1194,6 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
 {
   if (mdr->client_request) {
     reply_client_request(mdr, new MClientReply(mdr->client_request, r));
-
-    // add here to avoid counting ops multiple times (e.g., locks, loading)
-    switch(mdr->client_request->get_op()) {
-    case CEPH_MDS_OP_LOOKUPHASH:
-      logger->inc(l_mdss_req_lookuphash);
-      break;
-    case CEPH_MDS_OP_LOOKUPINO:
-      logger->inc(l_mdss_req_lookupino);
-      break;
-    case CEPH_MDS_OP_LOOKUPPARENT:
-      logger->inc(l_mdss_req_lookupparent);
-      break;
-    case CEPH_MDS_OP_LOOKUPNAME:
-      logger->inc(l_mdss_req_lookupname);
-      break;
-    case CEPH_MDS_OP_LOOKUP:
-      logger->inc(l_mdss_req_lookup);
-      break;
-    case CEPH_MDS_OP_LOOKUPSNAP:
-      logger->inc(l_mdss_req_lookupsnap);
-      break;
-    case CEPH_MDS_OP_GETATTR:
-      logger->inc(l_mdss_req_getattr);
-      break;
-    case CEPH_MDS_OP_SETATTR:
-      logger->inc(l_mdss_req_setattr);
-      break;
-    case CEPH_MDS_OP_SETLAYOUT:
-      logger->inc(l_mdss_req_setlayout);
-      break;
-    case CEPH_MDS_OP_SETDIRLAYOUT:
-      logger->inc(l_mdss_req_setdirlayout);
-      break;
-    case CEPH_MDS_OP_SETXATTR:
-      logger->inc(l_mdss_req_setxattr);
-      break;
-    case CEPH_MDS_OP_RMXATTR:
-      logger->inc(l_mdss_req_rmxattr);
-      break;
-    case CEPH_MDS_OP_READDIR:
-      logger->inc(l_mdss_req_readdir);
-      break;
-    case CEPH_MDS_OP_SETFILELOCK:
-      logger->inc(l_mdss_req_setfilelock);
-      break;
-    case CEPH_MDS_OP_GETFILELOCK:
-      logger->inc(l_mdss_req_getfilelock);
-      break;
-    case CEPH_MDS_OP_CREATE:
-      logger->inc(l_mdss_req_create);
-    case CEPH_MDS_OP_OPEN:
-      logger->inc(l_mdss_req_open);
-      break;
-    case CEPH_MDS_OP_MKNOD:
-      logger->inc(l_mdss_req_mknod);
-      break;
-    case CEPH_MDS_OP_LINK:
-      logger->inc(l_mdss_req_link);
-      break;
-    case CEPH_MDS_OP_UNLINK:
-      logger->inc(l_mdss_req_unlink);
-      break;
-    case CEPH_MDS_OP_RMDIR:
-      logger->inc(l_mdss_req_rmdir);
-      break;
-    case CEPH_MDS_OP_RENAME:
-      logger->inc(l_mdss_req_rename);
-      break;
-    case CEPH_MDS_OP_MKDIR:
-      logger->inc(l_mdss_req_mkdir);
-      break;
-    case CEPH_MDS_OP_SYMLINK:
-      logger->inc(l_mdss_req_symlink);
-      break;
-    case CEPH_MDS_OP_LSSNAP:
-      logger->inc(l_mdss_req_lssnap);
-      break;
-    case CEPH_MDS_OP_MKSNAP:
-      logger->inc(l_mdss_req_mksnap);
-      break;
-    case CEPH_MDS_OP_RMSNAP:
-      logger->inc(l_mdss_req_rmsnap);
-      break;
-    case CEPH_MDS_OP_RENAMESNAP:
-      logger->inc(l_mdss_req_renamesnap);
-      break;
-    }
   } else if (mdr->internal_op > -1) {
     dout(10) << "respond_to_request on internal request " << mdr << dendl;
     if (!mdr->internal_op_finish)
@@ -1288,6 +1201,100 @@ void Server::respond_to_request(MDRequestRef& mdr, int r)
     mdr->internal_op_finish->complete(r);
     mdcache->request_finish(mdr);
   }
+}
+
+// statistics mds req op number and latency 
+void Server::perf_gather_op_latency(const MClientRequest* req, utime_t lat)
+{
+  int code = l_mdss_first;
+  switch(req->get_op()) {
+  case CEPH_MDS_OP_LOOKUPHASH:
+    code = l_mdss_req_lookuphash_latency;
+    break;
+  case CEPH_MDS_OP_LOOKUPINO:
+    code = l_mdss_req_lookupino_latency;
+    break;
+  case CEPH_MDS_OP_LOOKUPPARENT:
+    code = l_mdss_req_lookupparent_latency;
+    break;
+  case CEPH_MDS_OP_LOOKUPNAME:
+    code = l_mdss_req_lookupname_latency;
+    break;
+  case CEPH_MDS_OP_LOOKUP:
+    code = l_mdss_req_lookup_latency;
+    break;
+  case CEPH_MDS_OP_LOOKUPSNAP:
+    code = l_mdss_req_lookupsnap_latency;
+    break;
+  case CEPH_MDS_OP_GETATTR:
+    code = l_mdss_req_getattr_latency;
+    break;
+  case CEPH_MDS_OP_SETATTR:
+    code = l_mdss_req_setattr_latency;
+    break;
+  case CEPH_MDS_OP_SETLAYOUT:
+    code = l_mdss_req_setlayout_latency;
+    break;
+  case CEPH_MDS_OP_SETDIRLAYOUT:
+    code = l_mdss_req_setdirlayout_latency;
+    break;
+  case CEPH_MDS_OP_SETXATTR:
+    code = l_mdss_req_setxattr_latency;
+    break;
+  case CEPH_MDS_OP_RMXATTR:
+    code = l_mdss_req_rmxattr_latency;
+    break;
+  case CEPH_MDS_OP_READDIR:
+    code = l_mdss_req_readdir_latency;
+    break;
+  case CEPH_MDS_OP_SETFILELOCK:
+    code = l_mdss_req_setfilelock_latency;
+    break;
+  case CEPH_MDS_OP_GETFILELOCK:
+    code = l_mdss_req_getfilelock_latency;
+    break;
+  case CEPH_MDS_OP_CREATE:
+    code = l_mdss_req_create_latency;
+    break;
+  case CEPH_MDS_OP_OPEN:
+    code = l_mdss_req_open_latency;
+    break;
+  case CEPH_MDS_OP_MKNOD:
+    code = l_mdss_req_mknod_latency;
+    break;
+  case CEPH_MDS_OP_LINK:
+    code = l_mdss_req_link_latency;
+    break;
+  case CEPH_MDS_OP_UNLINK:
+    code = l_mdss_req_unlink_latency;
+    break;
+  case CEPH_MDS_OP_RMDIR:
+    code = l_mdss_req_rmdir_latency;
+    break;
+  case CEPH_MDS_OP_RENAME:
+    code = l_mdss_req_rename_latency;
+    break;
+  case CEPH_MDS_OP_MKDIR:
+    code = l_mdss_req_mkdir_latency;
+    break;
+  case CEPH_MDS_OP_SYMLINK:
+    code = l_mdss_req_symlink_latency;
+    break;
+  case CEPH_MDS_OP_LSSNAP:
+    code = l_mdss_req_lssnap_latency;
+    break;
+  case CEPH_MDS_OP_MKSNAP:
+    code = l_mdss_req_mksnap_latency;
+    break;
+  case CEPH_MDS_OP_RMSNAP:
+    code = l_mdss_req_rmsnap_latency;
+    break;
+  case CEPH_MDS_OP_RENAMESNAP:
+    code = l_mdss_req_renamesnap_latency;
+    break;
+  default: ceph_abort();
+  }
+  logger->tinc(code, lat);   
 }
 
 void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
@@ -1353,6 +1360,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
   mds->logger->inc(l_mds_reply);
   utime_t lat = ceph_clock_now() - req->get_recv_stamp();
   mds->logger->tinc(l_mds_reply_latency, lat);
+  perf_gather_op_latency(req, lat);
   dout(20) << "lat " << lat << dendl;
 
   mdr->mark_event("early_replied");
@@ -1409,6 +1417,7 @@ void Server::reply_client_request(MDRequestRef& mdr, MClientReply *reply)
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
+    perf_gather_op_latency(req, lat);
     dout(20) << "lat " << lat << dendl;
     
     if (tracei)
@@ -2504,7 +2513,7 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, const string&
         respond_to_request(mdr, -EEXIST);
         return 0;
       }
-    } else {
+    } else if (!dir->inode->is_stray()) {
       dn->first = dir->inode->find_snaprealm()->get_newest_seq() + 1;
     }
 
@@ -4242,7 +4251,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   if (cmode & CEPH_FILE_MODE_WR) {
     pi->client_ranges[client].range.first = 0;
     pi->client_ranges[client].range.last = pi->get_layout_size_increment();
-    pi->client_ranges[client].follows = in->find_snaprealm()->get_newest_seq();
+    pi->client_ranges[client].follows = realm->get_newest_seq();
     changed_ranges = true;
   }
   
@@ -5954,6 +5963,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       return;
   }
 
+  SnapRealm *realm = in->find_snaprealm();
+  snapid_t follows = realm->get_newest_seq();
+  if (straydn)
+    straydn->first = MAX((uint64_t)in->first, follows + 1);
+
   // yay!
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
     // subtree root auths need to be witnesses
@@ -5981,7 +5995,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (dnl->is_remote() && !dnl->get_inode()->is_auth()) 
     _link_remote(mdr, false, dn, dnl->get_inode());
   else
-    _unlink_local(mdr, dn, straydn);
+    _unlink_local(mdr, dn, straydn, follows);
 }
 
 class C_MDS_unlink_local_finish : public ServerLogContext {
@@ -5998,15 +6012,13 @@ public:
   }
 };
 
-void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
+void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, snapid_t follows)
 {
   dout(10) << "_unlink_local " << *dn << dendl;
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   CInode *in = dnl->get_inode();
 
-  SnapRealm *realm = in->find_snaprealm();
-  snapid_t follows = realm->get_newest_seq();
 
   // ok, let's do it.
   mdr->ls = mdlog->get_current_segment();
@@ -6025,7 +6037,6 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   if (straydn) {
     assert(dnl->is_primary());
     straydn->push_projected_linkage(in);
-    straydn->first = follows + 1;
   }
 
   // the unlinked dentry
@@ -6070,9 +6081,16 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
 
   dn->push_projected_linkage();
 
+  if (straydn) {
+    assert(in->first <= straydn->first);
+    in->first = straydn->first;
+  }
+
   if (in->is_dir()) {
     assert(straydn);
     mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
+
+    in->maybe_export_pin(true);
   }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(this, mdr, dn, straydn));
@@ -7268,7 +7286,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-  snapid_t next_dest_snap = dest_realm->get_newest_seq() + 1;
+  snapid_t next_dest_snap = MAX(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
 
   // add it all to the metablob
   // target inode
@@ -7279,7 +7297,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
-	straydn->first = MAX(oldin->first, next_dest_snap);
+	straydn->first = MAX((uint64_t)oldin->first, dest_realm->get_newest_seq() + 1);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
@@ -7303,7 +7321,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
-	destdn->first = MAX(destdn->first, next_dest_snap);
+	destdn->first = next_dest_snap;
 
       if (destdn->is_auth())
         metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
@@ -7316,6 +7334,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       if (destdn->is_auth() && !destdnl->is_null())
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
+	// FIXME: stray reintegration, do we need to update destdn->first?
 	destdn->first = MAX(destdn->first, next_dest_snap);
 
       if (destdn->is_auth())
@@ -7329,8 +7348,8 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
-    else
-      destdn->first = MAX(destdn->first, next_dest_snap);
+
+    destdn->first = MAX(srci->first, next_dest_snap);
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);
@@ -7365,8 +7384,15 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     dout(10) << " NOT journaling srcdn " << *srcdn << dendl;
 
   // make renamed inode first track the dn
-  if (srcdnl->is_primary() && destdn->is_auth())
-    srci->first = destdn->first;  
+  if (srcdnl->is_primary() && destdn->is_auth()) {
+    assert(srci->first <= destdn->first);
+    srci->first = destdn->first;
+  }
+  // make stray inode first track the straydn
+  if (straydn && straydn->is_auth()) {
+    assert(oldin->first <= straydn->first);
+    oldin->first = straydn->first;
+  }
 
   if (oldin && oldin->is_dir()) {
     assert(straydn);
@@ -8860,16 +8886,13 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
     // prepare
   if (!mdr->more()->stid) {
     mds->snapclient->prepare_update(diri->ino(), snapid, dstname, utime_t(),
-				    &mdr->more()->stid, &mdr->more()->snapidbl,
+				    &mdr->more()->stid,
 				    new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
   version_t stid = mdr->more()->stid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  snapid_t seq;
-  ::decode(seq, p);
-  dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
+  dout(10) << " stid is " << stid << dendl;
 
   // journal
   inode_t *pi = diri->project_inode();

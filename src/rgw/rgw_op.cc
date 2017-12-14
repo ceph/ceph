@@ -50,8 +50,6 @@
 
 #include "compressor/Compressor.h"
 
-#include "rgw_acl_swift.h"
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -607,7 +605,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
     e.emplace("aws:SecureTransport", "true");
   }
 
-  i = m.find("HTTP_HOST");
+  i = m.find("REMOTE_ADDR");
   if (i != m.end()) {
     e.emplace("aws:SourceIp", i->second);
   }
@@ -2128,7 +2126,7 @@ void RGWGetBucketWebsite::pre_exec()
 void RGWGetBucketWebsite::execute()
 {
   if (!s->bucket_info.has_website) {
-    op_ret = -ENOENT;
+    op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
 }
 
