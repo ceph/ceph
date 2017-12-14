@@ -5639,22 +5639,13 @@ void RGWAbortMultipart::execute()
 {
   op_ret = -EINVAL;
   string upload_id;
-  string meta_oid;
   upload_id = s->info.args.get("uploadId");
-  map<string, bufferlist> attrs;
-  rgw_obj meta_obj;
   RGWMPObj mp;
 
   if (upload_id.empty() || s->object.empty())
     return;
 
   mp.init(s->object.name, upload_id);
-  meta_oid = mp.get_meta();
-
-  op_ret = get_multipart_info(store, s, meta_oid, NULL, attrs);
-  if (op_ret < 0)
-    return;
-
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   op_ret = abort_multipart_upload(store, s->cct, obj_ctx, s->bucket_info, mp);
 }
