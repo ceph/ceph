@@ -98,6 +98,12 @@ private:
   void handle_init_local_pool_watcher(int r, Context *on_finish);
 
   void init_remote_pool_watcher(Context *on_finish);
+  void handle_init_remote_pool_watcher(int r, Context *on_finish);
+
+  void init_image_deleter(Context* on_finish);
+
+  void shut_down_image_deleter(Context* on_finish);
+  void handle_shut_down_image_deleter(int r, Context* on_finish);
 
   void shut_down_pool_watchers(Context *on_finish);
   void handle_shut_down_pool_watchers(int r, Context *on_finish);
