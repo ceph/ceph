@@ -330,6 +330,9 @@ INSTANTIATE_TEST_CASE_P(
 #endif
     "zlib/noisal",
     "snappy",
+#ifdef HAVE_BROTLI
+    "brotli",
+#endif
     "zstd"));
 
 #ifdef __x86_64__
