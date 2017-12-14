@@ -37,6 +37,9 @@ public:
 #ifdef HAVE_LZ4
     COMP_ALG_LZ4 = 4,
 #endif
+#ifdef HAVE_BROTLI
+    COMP_ALG_BROTLI = 5,
+#endif
     COMP_ALG_LAST	//the last value for range checks
   };
   // compression options
