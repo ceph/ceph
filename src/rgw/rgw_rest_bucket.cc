@@ -239,12 +239,41 @@ void RGWOp_Set_Bucket_Quota::execute()
     http_ret = -EINVAL;
     return;
   }
+
+  bool use_http_params;
+
+  if (s->content_length > 0) {
+    use_http_params = false;
+  } else {
+    const char *encoding = s->info.env->get("HTTP_TRANSFER_ENCODING");
+    use_http_params = (!encoding || strcmp(encoding, "chunked") != 0);
+  }
   RGWQuotaInfo quota;
-  bool empty;
-  http_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
-  if (http_ret < 0) {
-    ldout(store->ctx(), 20) << "failed to retrieve input" << dendl;
-    return;
+  if (!use_http_params) {
+    bool empty;
+    http_ret = rgw_rest_get_json_input(store->ctx(), s, quota, QUOTA_INPUT_MAX_LEN, &empty);
+    if (http_ret < 0) {
+      if (!empty)
+        return;
+      /* was probably chunked input, but no content provided, configure via http params */
+      use_http_params = true;
+    }
+  }
+  if (use_http_params) {
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    RGWObjectCtx obj_ctx(store);
+    http_ret = store->get_bucket_info(obj_ctx, uid.tenant, bucket, bucket_info, NULL, &attrs);
+    if (http_ret < 0) {
+      return;
+    }
+    RGWQuotaInfo *old_quota = &bucket_info.quota;
+    int64_t old_max_size_kb = rgw_rounded_kb(old_quota->max_size);
+    int64_t max_size_kb;
+    RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
+    RESTArgs::get_int64(s, "max-size-kb", old_max_size_kb, &max_size_kb);
+    quota.max_size = max_size_kb * 1024;
+    RESTArgs::get_bool(s, "enabled", old_quota->enabled, &quota.enabled);
   }
 
   RGWBucketAdminOpState op_state;
