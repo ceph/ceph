@@ -2970,6 +2970,15 @@ static int usage_iterate_range(cls_method_context_t hctx, uint64_t start, uint64
     if (ret < 0)
       return ret;
 
+    /* filter the user entry, if by_user is false. */
+    if (!by_user) {
+      string u = (e.payer.empty() ? e.owner.to_str() : e.payer.to_str());
+      u.append("_");
+      if (key.compare(0, u.size(), u) == 0) {
+        continue;
+      }
+    }
+
     if (e.epoch < start)
       continue;
 
