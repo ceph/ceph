@@ -61,21 +61,11 @@ public:
   void init(Context* on_finish);
   void shut_down(Context* on_finish);
 
-  void schedule_image_delete(const std::string& global_image_id,
-                             bool ignore_orphaned,
-                             Context *on_finish);
-  void wait_for_deletion(const std::string &global_image_id,
-                         bool scheduled_only, Context* on_finish);
-  void wait_for_scheduled_deletion(const std::string &global_image_id,
-                                   Context* on_finish) {
-    wait_for_deletion(global_image_id, true, on_finish);
-  }
-
-  void cancel_waiter(const std::string &global_image_id);
-
   void print_status(Formatter *f, std::stringstream *ss);
 
   // for testing purposes
+  void wait_for_deletion(const std::string &image_id,
+                         bool scheduled_only, Context* on_finish);
 
   std::vector<std::string> get_delete_queue_items();
   std::vector<std::pair<std::string, int> > get_failed_queue_items();
@@ -98,28 +88,23 @@ private:
   };
 
   struct DeleteInfo {
-    std::string global_image_id;
-    bool ignore_orphaned = false;
+    std::string image_id;
 
     image_deleter::ErrorResult error_result = {};
     int error_code = 0;
     utime_t retry_time = {};
     int retries = 0;
 
-    DeleteInfo(const std::string& global_image_id)
-      : global_image_id(global_image_id) {
-    }
-
-    DeleteInfo(const std::string& global_image_id, bool ignore_orphaned)
-      : global_image_id(global_image_id), ignore_orphaned(ignore_orphaned) {
+    DeleteInfo(const std::string& image_id)
+      : image_id(image_id) {
     }
 
     inline bool operator==(const DeleteInfo& delete_info) const {
-      return (global_image_id == delete_info.global_image_id);
+      return (image_id == delete_info.image_id);
     }
 
     friend std::ostream& operator<<(std::ostream& os, DeleteInfo& delete_info) {
-      os << "[global_image_id=" << delete_info.global_image_id << "]";
+      os << "[image_id=" << delete_info.image_id << "]";
     return os;
     }
 
@@ -160,7 +145,7 @@ private:
   void enqueue_failed_delete(DeleteInfoRef* delete_info, int error_code,
                              double retry_delay);
 
-  DeleteInfoRef find_delete_info(const std::string &global_image_id);
+  DeleteInfoRef find_delete_info(const std::string &image_id);
 
   void remove_images();
   void remove_image(DeleteInfoRef delete_info);
@@ -177,7 +162,7 @@ private:
   void wait_for_ops(Context* on_finish);
   void cancel_all_deletions(Context* on_finish);
 
-  void notify_on_delete(const std::string& global_image_id, int r);
+  void notify_on_delete(const std::string& image_id, int r);
 
 };
 
