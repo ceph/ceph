@@ -473,7 +473,7 @@ class LocalFuseMount(FuseMount):
 
         prefix = [os.path.join(BIN_PREFIX, "ceph-fuse")]
         if os.getuid() != 0:
-            prefix += ["--client-die-on-failed-remount=false"]
+            prefix += ["--client_die_on_failed_dentry_invalidate=false"]
 
         if mount_path is not None:
             prefix += ["--client_mountpoint={0}".format(mount_path)]
