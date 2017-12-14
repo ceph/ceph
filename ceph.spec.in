@@ -1511,7 +1511,7 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%{_prefix}/lib/ocf/resource.d/ceph/rbd
+%attr(0755,-,-) %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
 
