@@ -2288,7 +2288,7 @@ void PGMap::get_health_checks(
 
         if (pg_info.state & PG_STATE_INCOMPLETE) {
           const pg_pool_t *pi = osdmap.get_pg_pool(pg_id.pool());
-          if (pi && pi->min_size > 1) {
+          if (pi && pi->min_size > 2 && pi->type == pg_pool_t::TYPE_ERASURE) {
             ss << " (reducing pool "
                << osdmap.get_pool_name(pg_id.pool())
                << " min_size from " << (int)pi->min_size
