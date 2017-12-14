@@ -766,8 +766,7 @@ public:
 class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   CephContext* const cct;
 
-  bool is_time_skew_ok(const utime_t& header_time,
-                       const bool qsr) const;
+  bool is_time_skew_ok(const utime_t& header_time) const;
 
   virtual boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
