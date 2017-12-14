@@ -940,6 +940,14 @@ int PrimaryLogPG::do_command(
         f->dump_stream("shard") << *p;
       f->close_section();
     }
+    if (!async_recovery_targets.empty()) {
+      f->open_array_section("async_recovery_targets");
+      for (set<pg_shard_t>::iterator p = async_recovery_targets.begin();
+	   p != async_recovery_targets.end();
+	   ++p)
+        f->dump_stream("shard") << *p;
+      f->close_section();
+    }
     if (!acting_recovery_backfill.empty()) {
       f->open_array_section("acting_recovery_backfill");
       for (set<pg_shard_t>::iterator p = acting_recovery_backfill.begin();
