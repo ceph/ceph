@@ -20,6 +20,7 @@
 #include "librbd/journal/DemoteRequest.h"
 #include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/RemoveRequest.h"
+#include "librbd/journal/ResetRequest.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/PromoteRequest.h"
 
@@ -405,54 +406,17 @@ int Journal<I>::reset(librados::IoCtx &io_ctx, const std::string &image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 5) << __func__ << ": image=" << image_id << dendl;
 
-  Journaler journaler(io_ctx, image_id, IMAGE_CLIENT_ID, {});
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
   C_SaferCond cond;
-  journaler.init(&cond);
-  BOOST_SCOPE_EXIT_ALL(&journaler) {
-    journaler.shut_down();
-  };
+  auto req = journal::ResetRequest<I>::create(io_ctx, image_id, IMAGE_CLIENT_ID,
+                                              Journal<>::LOCAL_MIRROR_UUID,
+                                              op_work_queue, &cond);
+  req->send();
 
-  int r = cond.wait();
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to initialize journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  uint8_t order, splay_width;
-  int64_t pool_id;
-  journaler.get_metadata(&order, &splay_width, &pool_id);
-
-  std::string pool_name;
-  if (pool_id != -1) {
-    librados::Rados rados(io_ctx);
-    r = rados.pool_reverse_lookup(pool_id, &pool_name);
-    if (r < 0) {
-      lderr(cct) << __func__ << ": "
-                 << "failed to lookup data pool: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-  }
-
-  C_SaferCond ctx1;
-  journaler.remove(true, &ctx1);
-  r = ctx1.wait();
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to reset journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  r = create(io_ctx, image_id, order, splay_width, pool_name);
-  if (r < 0) {
-    lderr(cct) << __func__ << ": "
-               << "failed to create journal: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  return 0;
+  return cond.wait();
 }
 
 template <typename I>

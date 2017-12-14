@@ -51,6 +51,7 @@ set(unittest_librbd_srcs
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  journal/test_mock_ResetRequest.cc
   managed_lock/test_mock_AcquireRequest.cc
   managed_lock/test_mock_BreakRequest.cc
   managed_lock/test_mock_GetLockerRequest.cc
