@@ -1438,8 +1438,6 @@ public:
   void record_write_error(OpRequestRef op, const hobject_t &soid,
 			  MOSDOpReply *orig_reply, int r);
   void do_pg_op(OpRequestRef op);
-  void do_sub_op(OpRequestRef op);
-  void do_sub_op_reply(OpRequestRef op);
   void do_scan(
     OpRequestRef op,
     ThreadPool::TPHandle &handle);
