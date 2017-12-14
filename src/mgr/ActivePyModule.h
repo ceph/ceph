@@ -52,6 +52,11 @@ public:
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
 
+  PyObject *dispatch_remote(
+      const std::string &method,
+      PyObject *args,
+      PyObject *kwargs);
+
   int handle_command(
     const cmdmap_t &cmdmap,
     std::stringstream *ds,

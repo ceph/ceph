@@ -108,6 +108,12 @@ public:
                   const std::string &notify_id);
   void notify_all(const LogEntry &log_entry);
 
+  PyObject *dispatch_remote(
+      const std::string &other_module,
+      const std::string &method,
+      PyObject *args,
+      PyObject *kwargs);
+
   int init();
   void shutdown();
 

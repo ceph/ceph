@@ -60,6 +60,11 @@ class Module(MgrModule):
                 "desc": "Peek at a configuration value (localized variant)",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test remote",
+                "desc": "Test inter-module calls",
+                "perm": "r"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -93,6 +98,9 @@ class Module(MgrModule):
             return 0, str(self.get_config(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
             return 0, str(self.get_localized_config(command['key'])), ''
+        elif command['prefix'] == 'mgr self-test remote':
+            self.remote("influx", "handle_command", {"prefix": "influx self-test"})
+            return 0, '', 'Successfully called'
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

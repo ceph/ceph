@@ -100,6 +100,41 @@ void ActivePyModule::notify_clog(const LogEntry &log_entry)
   }
 }
 
+PyObject *ActivePyModule::dispatch_remote(
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs)
+{
+
+  // Check that args are pickleable
+  // TODO
+
+  // ... then don't *actually* pickle them because we're in
+  // a local CPython process and happen to know that the subinterpreter
+  // implementation shares a GIL, allocator, deallocator and GC state, so
+  // it's actually fine to just pass the objects between subinterpreters.
+  // But in future this might involve pickling to support a CSP-aware future
+  // Python interpreter a la PEP554
+
+
+  // Fire the receiving method
+  auto boundMethod = PyObject_GetAttrString(pClassInstance, method.c_str());
+  if (boundMethod == nullptr) {
+    // TODO: give them an exception about missing method
+    return nullptr;
+  }
+
+  auto remoteResult = PyObject_Call(boundMethod,
+      args, kwargs);
+  Py_DECREF(boundMethod);
+
+  // As with the inputs, validate that the outputs are pickleable but
+  // don't actually serialize them.
+  // TODO
+
+  return remoteResult;
+}
+
 
 
 int ActivePyModule::handle_command(
