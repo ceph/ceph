@@ -726,7 +726,7 @@ bool DaemonServer::handle_command(MCommand *m)
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied' does your client key have mgr caps? "
+      ss << "access denied: does your client key have mgr caps? "
             "See http://docs.ceph.com/docs/master/mgr/administrator/"
             "#client-authentication";
       cmdctx->reply(-EACCES, ss);
