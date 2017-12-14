@@ -181,7 +181,7 @@ class Module(MgrModule):
         # so that we can stably use the same tag names that
         # the Prometheus node_exporter does
         metrics['disk_occupation'] = Metric(
-            'undef',
+            'untyped',
             'disk_occupation',
             'Associate Ceph daemon with disk used',
             DISK_OCCUPATION
