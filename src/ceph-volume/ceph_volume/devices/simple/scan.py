@@ -74,7 +74,11 @@ class Scan(object):
             if system.is_binary(file_path):
                 continue
             if os.path.isfile(file_path):
-                osd_metadata[_file] = self.get_contents(file_path)
+                content = self.get_contents(file_path)
+                try:
+                    osd_metadata[_file] = int(content)
+                except ValueError:
+                    osd_metadata[_file] = content
 
         device = path_mounts.get(path)
         # it is possible to have more than one device, pick the first one, and
