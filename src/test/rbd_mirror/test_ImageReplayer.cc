@@ -35,7 +35,6 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/types.h"
-#include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
@@ -123,12 +122,6 @@ public:
     m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
                                                             m_local_cluster,
                                                             m_threads.get()));
-    m_image_deleter.reset(new rbd::mirror::ImageDeleter<>(
-      m_local_ioctx, m_threads.get(), m_service_daemon.get()));
-
-    C_SaferCond ctx;
-    m_image_deleter->init(&ctx);
-    EXPECT_EQ(0, ctx.wait());
 
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr);
@@ -144,10 +137,6 @@ public:
     delete m_replayer;
     delete m_instance_watcher;
 
-    C_SaferCond ctx;
-    m_image_deleter->shut_down(&ctx);
-    ctx.wait();
-
     EXPECT_EQ(0, m_remote_cluster.pool_delete(m_remote_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->pool_delete(m_local_pool_name.c_str()));
   }
@@ -155,7 +144,7 @@ public:
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(
-        m_threads.get(), m_image_deleter.get(), m_instance_watcher,
+        m_threads.get(), m_instance_watcher,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
     m_replayer->add_peer("peer uuid", m_remote_ioctx);
@@ -391,7 +380,6 @@ public:
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<rbd::mirror::Threads<>> m_threads;
   std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
-  std::unique_ptr<rbd::mirror::ImageDeleter<>> m_image_deleter;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   std::string m_local_mirror_uuid = "local mirror uuid";
@@ -668,17 +656,13 @@ TEST_F(TestImageReplayer, Resync)
   m_replayer->resync_image(&ctx);
   ASSERT_EQ(0, ctx.wait());
 
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
+  wait_for_stopped();
 
   C_SaferCond cond;
   m_replayer->start(&cond);
   ASSERT_EQ(0, cond.wait());
 
   ASSERT_TRUE(m_replayer->is_replaying());
-
   wait_for_replay_complete();
 
   open_local_image(&ictx);
@@ -730,11 +714,6 @@ TEST_F(TestImageReplayer, Resync_While_Stop)
 
   ASSERT_TRUE(m_replayer->is_stopped());
 
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
-
   C_SaferCond cond3;
   m_replayer->start(&cond3);
   ASSERT_EQ(0, cond3.wait());
@@ -767,11 +746,6 @@ TEST_F(TestImageReplayer, Resync_StartInterrupted)
   ASSERT_EQ(0, cond.wait());
 
   ASSERT_TRUE(m_replayer->is_stopped());
-
-  C_SaferCond delete_ctx;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_global_image_id(), &delete_ctx);
-  EXPECT_EQ(0, delete_ctx.wait());
 
   C_SaferCond cond2;
   m_replayer->start(&cond2);
@@ -955,10 +929,6 @@ TEST_F(TestImageReplayer, Disconnect)
   C_SaferCond cond2;
   m_replayer->start(&cond2);
   ASSERT_EQ(0, cond2.wait());
-  C_SaferCond delete_cond;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_global_image_id(), &delete_cond);
-  EXPECT_EQ(0, delete_cond.wait());
 
   start();
   wait_for_replay_complete();
@@ -996,10 +966,6 @@ TEST_F(TestImageReplayer, Disconnect)
   C_SaferCond cond5;
   m_replayer->start(&cond5);
   ASSERT_EQ(-ENOTCONN, cond5.wait());
-  C_SaferCond delete_cond1;
-  m_image_deleter->wait_for_scheduled_deletion(
-    m_replayer->get_global_image_id(), &delete_cond1);
-  EXPECT_EQ(0, delete_cond1.wait());
 
   C_SaferCond cond6;
   m_replayer->start(&cond6);

@@ -319,8 +319,8 @@ void PoolReplayer::init()
   image_deleter_ctx.wait();
 
   m_instance_replayer.reset(InstanceReplayer<>::create(
-    m_threads, m_service_daemon, m_image_deleter.get(), m_local_rados,
-    local_mirror_uuid, m_local_pool_id));
+    m_threads, m_service_daemon, m_local_rados, local_mirror_uuid,
+    m_local_pool_id));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
 
