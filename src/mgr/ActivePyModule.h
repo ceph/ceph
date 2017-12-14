@@ -52,11 +52,20 @@ public:
   void notify(const std::string &notify_type, const std::string &notify_id);
   void notify_clog(const LogEntry &le);
 
+  bool method_exists(const std::string &method) const;
+
+  PyObject *dispatch_remote(
+      const std::string &method,
+      PyObject *args,
+      PyObject *kwargs,
+      std::string *err);
+
   int handle_command(
     const cmdmap_t &cmdmap,
     const bufferlist &inbuf,
     std::stringstream *ds,
     std::stringstream *ss);
+
 
   void set_health_checks(health_check_map_t&& c) {
     health_checks = std::move(c);

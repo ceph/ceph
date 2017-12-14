@@ -459,6 +459,19 @@ bool ActivePyModules::get_store(const std::string &module_name,
   }
 }
 
+PyObject *ActivePyModules::dispatch_remote(
+    const std::string &other_module,
+    const std::string &method,
+    PyObject *args,
+    PyObject *kwargs,
+    std::string *err)
+{
+  auto mod_iter = modules.find(other_module);
+  assert(mod_iter != modules.end());
+
+  return mod_iter->second->dispatch_remote(method, args, kwargs, err);
+}
+
 bool ActivePyModules::get_config(const std::string &module_name,
     const std::string &key, std::string *val) const
 {
@@ -834,4 +847,5 @@ void ActivePyModules::set_uri(const std::string& module_name,
 
   modules[module_name]->set_uri(uri);
 }
+
 
