@@ -1898,20 +1898,19 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // object name too long?
-  if (m->get_oid().name.size() > cct->_conf->osd_max_object_name_len) {
-    dout(4) << "do_op name is longer than "
-	    << cct->_conf->osd_max_object_name_len
-	    << " bytes" << dendl;
+  auto osd_max_object_name_len =
+    cct->_conf->get_val<uint64_t>("osd_max_object_name_len");
+  bool is_long_name = m->get_oid().name.size() > osd_max_object_name_len;
+  if (m->get_oid().name.size() > osd_max_object_name_len ||
+      m->get_hobj().get_key().size() > osd_max_object_name_len) {
+
+    dout(4) << "do_op " << (is_long_name ? "name" : "locator") << " "
+            << "is longer than " << osd_max_object_name_len << " bytes" <<dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
+
     return;
   }
-  if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
-    dout(4) << "do_op locator is longer than "
-	    << cct->_conf->osd_max_object_name_len
-	    << " bytes" << dendl;
-    osd->reply_op_error(op, -ENAMETOOLONG);
-    return;
-  }
+
   if (m->get_hobj().nspace.size() > cct->_conf->osd_max_object_namespace_len) {
     dout(4) << "do_op namespace is longer than "
 	    << cct->_conf->osd_max_object_namespace_len
