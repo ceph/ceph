@@ -38,7 +38,7 @@ function ensure_decent_gcc_on_deb {
     local dist=$(lsb_release --short --codename)
 
     if [ ! -f /usr/bin/g++-${new} ]; then
-	$SUDO cat > /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
 deb http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
 deb http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
