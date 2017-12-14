@@ -1746,6 +1746,7 @@ void OSDService::finish_pg_delete(PG *pg)
 {
   osd->op_shardedwq.clear_pg_pointer(pg);
   pg_remove_epoch(pg->get_pgid());
+  cancel_pending_splits_for_parent(pg->get_pgid());
 }
 
 void OSDService::_queue_for_recovery(
