@@ -3923,16 +3923,18 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     qsr = true;
 
     boost::string_view expires = s->info.args.get("Expires");
-    if (! expires.empty()) {
-      /* It looks we have the guarantee that expires is a null-terminated,
-       * and thus string_view::data() can be safely used. */
-      const time_t exp = atoll(expires.data());
-      time_t now;
-      time(&now);
+    if (expires.empty()) {
+      throw -EPERM;
+    }
 
-      if (now >= exp) {
-        throw -EPERM;
-      }
+    /* It looks we have the guarantee that expires is a null-terminated,
+     * and thus string_view::data() can be safely used. */
+    const time_t exp = atoll(expires.data());
+    time_t now;
+    time(&now);
+
+    if (now >= exp) {
+      throw -EPERM;
     }
   } else {
     /* The "Authorization" HTTP header is being used. */
