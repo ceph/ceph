@@ -211,7 +211,7 @@ void ImageDeleter<I>::cancel_all_deletions(Context* on_finish) {
     assert(m_in_flight_delete_queue.empty());
     for (auto& queue : {&m_delete_queue, &m_retry_delete_queue}) {
       for (auto& info : *queue) {
-        notify_on_delete(info->global_image_id, -ECANCELED);
+        notify_on_delete(info->image_id, -ECANCELED);
       }
       queue->clear();
     }
@@ -220,68 +220,25 @@ void ImageDeleter<I>::cancel_all_deletions(Context* on_finish) {
 }
 
 template <typename I>
-void ImageDeleter<I>::schedule_image_delete(const std::string& global_image_id,
-                                            bool ignore_orphaned,
-                                            Context *on_delete) {
-  dout(5) << "global_image_id=" << global_image_id << dendl;
-
-  if (on_delete != nullptr) {
-    on_delete = new FunctionContext([this, on_delete](int r) {
-        m_threads->work_queue->queue(on_delete, r);
-      });
-  }
-
-  {
-    Mutex::Locker locker(m_lock);
-    notify_on_delete(global_image_id, -ESTALE);
-    if (on_delete != nullptr) {
-      m_on_delete_contexts[global_image_id] = on_delete;
-    }
-
-    auto del_info = find_delete_info(global_image_id);
-    if (del_info != nullptr) {
-      dout(20) << "image " << global_image_id << " "
-               << "was already scheduled for deletion" << dendl;
-      if (ignore_orphaned) {
-        del_info->ignore_orphaned = true;
-      }
-      return;
-    }
-
-    m_delete_queue.emplace_back(new DeleteInfo(global_image_id,
-                                               ignore_orphaned));
-  }
-  remove_images();
-}
-
-template <typename I>
-void ImageDeleter<I>::wait_for_deletion(const std::string& global_image_id,
+void ImageDeleter<I>::wait_for_deletion(const std::string& image_id,
                                         bool scheduled_only,
                                         Context* on_finish) {
-  dout(5) << "global_image_id=" << global_image_id << dendl;
+  dout(5) << "image_id=" << image_id << dendl;
 
   on_finish = new FunctionContext([this, on_finish](int r) {
       m_threads->work_queue->queue(on_finish, r);
     });
 
   Mutex::Locker locker(m_lock);
-  auto del_info = find_delete_info(global_image_id);
+  auto del_info = find_delete_info(image_id);
   if (!del_info && scheduled_only) {
     // image not scheduled for deletion
     on_finish->complete(0);
     return;
   }
 
-  notify_on_delete(global_image_id, -ESTALE);
-  m_on_delete_contexts[global_image_id] = on_finish;
-}
-
-template <typename I>
-void ImageDeleter<I>::cancel_waiter(const std::string &global_image_id) {
-  dout(5) << "global_image_id=" << global_image_id << dendl;
-
-  Mutex::Locker locker(m_lock);
-  notify_on_delete(global_image_id, -ECANCELED);
+  notify_on_delete(image_id, -ESTALE);
+  m_on_delete_contexts[image_id] = on_finish;
 }
 
 template <typename I>
@@ -289,7 +246,7 @@ void ImageDeleter<I>::complete_active_delete(DeleteInfoRef* delete_info,
                                              int r) {
   dout(20) << "info=" << *delete_info << ", r=" << r << dendl;
   Mutex::Locker locker(m_lock);
-  notify_on_delete((*delete_info)->global_image_id, r);
+  notify_on_delete((*delete_info)->image_id, r);
   delete_info->reset();
 }
 
@@ -308,7 +265,7 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
   Mutex::Locker timer_locker(m_threads->timer_lock);
   Mutex::Locker locker(m_lock);
   auto& delete_info_ref = *delete_info;
-  notify_on_delete(delete_info_ref->global_image_id, error_code);
+  notify_on_delete(delete_info_ref->image_id, error_code);
   delete_info_ref->error_code = error_code;
   ++delete_info_ref->retries;
   delete_info_ref->retry_time = ceph_clock_now();
@@ -320,13 +277,13 @@ void ImageDeleter<I>::enqueue_failed_delete(DeleteInfoRef* delete_info,
 
 template <typename I>
 typename ImageDeleter<I>::DeleteInfoRef
-ImageDeleter<I>::find_delete_info(const std::string &global_image_id) {
+ImageDeleter<I>::find_delete_info(const std::string &image_id) {
   assert(m_lock.is_locked());
   DeleteQueue delete_queues[] = {m_in_flight_delete_queue,
                                  m_retry_delete_queue,
                                  m_delete_queue};
 
-  DeleteInfo delete_info{global_image_id};
+  DeleteInfo delete_info{image_id};
   for (auto& queue : delete_queues) {
     auto it = std::find_if(queue.begin(), queue.end(),
                            [&delete_info](const DeleteInfoRef& ref) {
@@ -375,7 +332,7 @@ vector<string> ImageDeleter<I>::get_delete_queue_items() {
 
   Mutex::Locker l(m_lock);
   for (const auto& del_info : m_delete_queue) {
-    items.push_back(del_info->global_image_id);
+    items.push_back(del_info->image_id);
   }
 
   return items;
@@ -387,7 +344,7 @@ vector<pair<string, int> > ImageDeleter<I>::get_failed_queue_items() {
 
   Mutex::Locker l(m_lock);
   for (const auto& del_info : m_retry_delete_queue) {
-    items.push_back(make_pair(del_info->global_image_id,
+    items.push_back(make_pair(del_info->image_id,
                               del_info->error_code));
   }
 
@@ -430,9 +387,8 @@ void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
     });
 
   auto req = image_deleter::RemoveRequest<I>::create(
-    m_local_io_ctx, delete_info->global_image_id,
-    delete_info->ignore_orphaned, &delete_info->error_result, m_threads->work_queue,
-    ctx);
+    m_local_io_ctx, delete_info->image_id, &delete_info->error_result,
+    m_threads->work_queue, ctx);
   req->send();
 }
 
@@ -538,7 +494,6 @@ void ImageDeleter<I>::handle_trash_image(const std::string& image_id,
   Mutex::Locker timer_locker(m_threads->timer_lock);
   Mutex::Locker locker(m_lock);
 
-  // TODO
   auto del_info = find_delete_info(image_id);
   if (del_info != nullptr) {
     dout(20) << "image " << image_id << " "
@@ -549,7 +504,7 @@ void ImageDeleter<I>::handle_trash_image(const std::string& image_id,
   dout(10) << "image_id=" << image_id << ", "
            << "deferment_end_time=" << deferment_end_time << dendl;
 
-  del_info.reset(new DeleteInfo(image_id, false));
+  del_info.reset(new DeleteInfo(image_id));
   del_info->retry_time = deferment_end_time;
   m_retry_delete_queue.push_back(del_info);
 
@@ -557,10 +512,10 @@ void ImageDeleter<I>::handle_trash_image(const std::string& image_id,
 }
 
 template <typename I>
-void ImageDeleter<I>::notify_on_delete(const std::string& global_image_id,
+void ImageDeleter<I>::notify_on_delete(const std::string& image_id,
                                        int r) {
-  dout(10) << "global_image_id=" << global_image_id << ", r=" << r << dendl;
-  auto it = m_on_delete_contexts.find(global_image_id);
+  dout(10) << "image_id=" << image_id << ", r=" << r << dendl;
+  auto it = m_on_delete_contexts.find(image_id);
   if (it == m_on_delete_contexts.end()) {
     return;
   }
@@ -574,7 +529,7 @@ void ImageDeleter<I>::DeleteInfo::print_status(Formatter *f, stringstream *ss,
                                                bool print_failure_info) {
   if (f) {
     f->open_object_section("delete_info");
-    f->dump_string("global_image_id", global_image_id);
+    f->dump_string("image_id", image_id);
     if (print_failure_info) {
       f->dump_string("error_code", cpp_strerror(error_code));
       f->dump_int("retries", retries);
