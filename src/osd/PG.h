@@ -1167,7 +1167,7 @@ protected:
   bool backfill_reserved;
   bool backfill_reserving;
 
-  set<pg_shard_t> backfill_targets;
+  set<pg_shard_t> backfill_targets,  async_recovery_targets;
 
   bool is_backfill_targets(pg_shard_t osd) {
     return backfill_targets.count(osd);
