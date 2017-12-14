@@ -174,6 +174,7 @@ public:
   void set_placement_rule(const string& rule) {
     placement_rule = rule;
   }
+  void dump(Formatter *f) const;
 };
 
 struct compression_block {
@@ -789,6 +790,7 @@ public:
     void update_location();
 
     friend class RGWObjManifest;
+    void dump(Formatter *f) const;
   };
 
   const obj_iterator& obj_begin();
