@@ -674,6 +674,7 @@ class LocalFilesystem(Filesystem, LocalMDSCluster):
 
         self.id = None
         self.name = None
+        self.ec_profile = None
         self.metadata_pool_name = None
         self.metadata_overlay = False
         self.data_pool_name = None
