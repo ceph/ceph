@@ -416,11 +416,14 @@ void OSDService::init_splits_between(spg_t pgid,
 				     OSDMapRef tomap)
 {
   // First, check whether we can avoid this potentially expensive check
-  if (tomap->have_pg_pool(pgid.pool()) &&
-      pgid.is_split(
-	frommap->get_pg_num(pgid.pool()),
-	tomap->get_pg_num(pgid.pool()),
-	NULL)) {
+  if (frommap->have_pg_pool(pgid.pool()) &&
+      (!tomap->have_pg_pool(pgid.pool()) ||  // pool is deleted, must check for splits
+       pgid.is_split(
+	 frommap->get_pg_num(pgid.pool()),
+	 tomap->get_pg_num(pgid.pool()),
+	 NULL))) {
+    dout(20) << __func__ << " " << pgid << " from " << frommap->get_epoch() << " -> "
+	     << tomap->get_epoch() << " enumerating split children" << dendl;
     // Ok, a split happened, so we need to walk the osdmaps
     set<spg_t> new_pgs; // pgs to scan on each map
     new_pgs.insert(pgid);
@@ -429,8 +432,15 @@ void OSDService::init_splits_between(spg_t pgid,
 	 e <= tomap->get_epoch();
 	 ++e) {
       OSDMapRef nextmap(try_get_map(e));
-      if (!nextmap)
+      if (!nextmap) {
+	dout(10) << __func__ << " " << pgid << " missing map " << e << dendl;
 	continue;
+      }
+      if (!nextmap->have_pg_pool(pgid.pool())) {
+	dout(20) << __func__ << " " << pgid << " pool deleted in " << nextmap->get_epoch()
+		 << dendl;
+	break;
+      }
       set<spg_t> even_newer_pgs; // pgs added in this loop
       for (set<spg_t>::iterator i = new_pgs.begin(); i != new_pgs.end(); ++i) {
 	set<spg_t> split_pgs;
@@ -444,7 +454,8 @@ void OSDService::init_splits_between(spg_t pgid,
       new_pgs.insert(even_newer_pgs.begin(), even_newer_pgs.end());
       curmap = nextmap;
     }
-    assert(curmap == tomap); // we must have had both frommap and tomap
+    dout(20) << __func__ << " " << pgid << " from " << frommap->get_epoch() << " -> "
+	     << tomap->get_epoch() << " children " << new_pgs << dendl;
   }
 }
 
