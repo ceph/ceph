@@ -152,8 +152,7 @@ void MgrStandby::send_beacon()
   assert(lock.is_locked_by_me());
   dout(1) << state_str() << dendl;
 
-  std::list<PyModuleRef> modules;
-  py_module_registry.get_modules(&modules);
+  std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
   // Construct a list of the info about each loaded module
   // which we will transmit to the monitor.

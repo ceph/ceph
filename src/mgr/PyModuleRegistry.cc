@@ -69,8 +69,7 @@ int PyModuleRegistry::init(const MgrMap &map)
 
   std::list<std::string> failed_modules;
 
-  std::set<std::string> module_names;
-  list_modules(&module_names);
+  std::set<std::string> module_names = probe_modules();
   // Load python code
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
@@ -221,14 +220,16 @@ void PyModuleRegistry::shutdown()
   Py_Finalize();
 }
 
-static void _list_modules(
-  const std::string path,
-  std::set<std::string> *modules)
+std::set<std::string> PyModuleRegistry::probe_modules() const
 {
+  std::string path = g_conf->get_val<std::string>("mgr_module_path");
+
   DIR *dir = opendir(path.c_str());
   if (!dir) {
-    return;
+    return {};
   }
+
+  std::set<std::string> modules_out;
   struct dirent *entry = NULL;
   while ((entry = readdir(dir)) != NULL) {
     string n(entry->d_name);
@@ -239,17 +240,13 @@ static void _list_modules(
       string initfn = fn + "/module.py";
       r = ::stat(initfn.c_str(), &st);
       if (r == 0) {
-	modules->insert(n);
+	modules_out.insert(n);
       }
     }
   }
   closedir(dir);
-}
 
-void PyModuleRegistry::list_modules(std::set<std::string> *modules)
-{
-  g_conf->with_val<std::string>("mgr_module_path",
-				&_list_modules, modules);
+  return modules_out;
 }
 
 int PyModuleRegistry::handle_command(
