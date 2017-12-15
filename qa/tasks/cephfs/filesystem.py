@@ -437,14 +437,18 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot deactivate rank 0")
         self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
 
+    def set_var(self, var, *args):
+        a = map(str, args)
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
+
     def set_max_mds(self, max_mds):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+        self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_dirfrags(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
 
     def set_allow_new_snaps(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
@@ -558,6 +562,9 @@ class Filesystem(MDSCluster):
 
     def get_mds_map(self):
         return self.status().get_fsmap(self.id)['mdsmap']
+
+    def get_var(self, var):
+        return self.status().get_fsmap(self.id)['mdsmap'][var]
 
     def add_data_pool(self, name):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())

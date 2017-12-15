@@ -23,9 +23,9 @@ Automatic client eviction
 
 There are two situations in which a client may be evicted automatically:
 
-On an active MDS daemon, if a client has not communicated with the MDS for
-over ``mds_session_autoclose`` seconds (300 seconds by default), then it
-will be evicted automatically.
+On an active MDS daemon, if a client has not communicated with the MDS for over
+``session_autoclose`` (a file system variable) seconds (300 seconds by
+default), then it will be evicted automatically.
 
 During MDS startup (including on failover), the MDS passes through a
 state called ``reconnect``.  During this state, it waits for all the
