@@ -606,8 +606,8 @@ class Module(MgrModule):
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_config('upmap_max_iterations', 10)
-        max_deviation = self.get_config('upmap_max_deviation', .01)
+        max_iterations = int(self.get_config('upmap_max_iterations', 10))
+        max_deviation = float(self.get_config('upmap_max_deviation', .01))
 
         ms = plan.initial
         pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
@@ -632,10 +632,10 @@ class Module(MgrModule):
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
-        max_iterations = self.get_config('crush_compat_max_iterations', 25)
+        max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
         if max_iterations < 1:
             return False
-        step = self.get_config('crush_compat_step', .5)
+        step = float(self.get_config('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
             return False
         max_misplaced = float(self.get_config('max_misplaced',
