@@ -6610,7 +6610,7 @@ void OSD::ms_fast_dispatch(Message *m)
   if (m->trace)
     op->osd_trace.init("osd op", &trace_endpoint, &m->trace);
 
-  // note sender epoch, min req'd epoch
+  // note sender epoch, min req's epoch
   op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_map_epoch();
   op->min_epoch = static_cast<MOSDFastDispatchOp*>(m)->get_min_epoch();
   assert(op->min_epoch <= op->sent_epoch); // sanity check!
