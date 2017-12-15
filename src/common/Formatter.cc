@@ -52,7 +52,7 @@ Formatter::Formatter() { }
 
 Formatter::~Formatter() { }
 
-Formatter *Formatter::create(const std::string &type,
+Formatter *Formatter::create(const std::string& type,
 			     const std::string& default_type,
 			     const std::string& fallback)
 {
