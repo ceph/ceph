@@ -192,7 +192,8 @@ TEST(md_config_t, set_val)
 
 TEST(Option, validation)
 {
-  Option opt_int("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
+  typedef Option::Level Level;
+  Option opt_int("foo", Option::TYPE_INT, Level::BASIC);
   opt_int.set_min_max(5, 10);
 
   std::string msg;
@@ -200,13 +201,13 @@ TEST(Option, validation)
   EXPECT_EQ(-EINVAL, opt_int.validate(Option::value_t(int64_t(11)), &msg));
   EXPECT_EQ(0, opt_int.validate(Option::value_t(int64_t(7)), &msg));
 
-  Option opt_enum("foo", Option::TYPE_STR, Option::LEVEL_BASIC);
+  Option opt_enum("foo", Option::TYPE_STR, Level::BASIC);
   opt_enum.set_enum_allowed({"red", "blue"});
   EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("red")), &msg));
   EXPECT_EQ(0, opt_enum.validate(Option::value_t(std::string("blue")), &msg));
   EXPECT_EQ(-EINVAL, opt_enum.validate(Option::value_t(std::string("green")), &msg));
 
-  Option opt_validator("foo", Option::TYPE_INT, Option::LEVEL_BASIC);
+  Option opt_validator("foo", Option::TYPE_INT, Level::BASIC);
   opt_validator.set_validator([](std::string *value, std::string *error_message){
       if (*value == std::string("one")) {
         *value = "1";
