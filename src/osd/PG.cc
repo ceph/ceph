@@ -1237,10 +1237,11 @@ void PG::calc_replicated_acting(
   set<pg_shard_t> *acting_backfill,
   ostream &ss)
 {
-  ss << "calc_acting newest update on osd." << auth_log_shard->first
+  pg_shard_t auth_log_shard_id = auth_log_shard->first;
+
+  ss << __func__ << " newest update on osd." << auth_log_shard_id
      << " with " << auth_log_shard->second
      << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
-  pg_shard_t auth_log_shard_id = auth_log_shard->first;
   
   // select primary
   map<pg_shard_t,pg_info_t>::const_iterator primary;
@@ -1257,7 +1258,7 @@ void PG::calc_replicated_acting(
     primary = auth_log_shard;
   }
 
-  ss << "calc_acting primary is osd." << primary->first
+  ss << __func__ << " primary is osd." << primary->first
      << " with " << primary->second << std::endl;
   want->push_back(primary->first.osd);
   acting_backfill->insert(primary->first);
