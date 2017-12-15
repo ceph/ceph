@@ -75,19 +75,19 @@ public:
    * keep track of last deltas for each pool, calculated using
    * @p pg_pool_sum as baseline.
    */
-  mempool::pgmap::unordered_map<uint64_t, mempool::pgmap::list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t, mempool::pgmap::list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
   /**
    * keep track of per-pool timestamp deltas, according to last update on
    * each pool.
    */
-  mempool::pgmap::unordered_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  mempool::pgmap::unordered_map<int64_t, utime_t> per_pool_sum_deltas_stamps;
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
    * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
-  mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+  mempool::pgmap::unordered_map<int64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
 
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
@@ -334,7 +334,7 @@ public:
 
   void update_one_pool_delta(CephContext *cct,
                              const utime_t ts,
-                             const uint64_t pool,
+                             const int64_t pool,
                              const pool_stat_t& old_pool_sum);
 
  public:
