@@ -230,12 +230,12 @@ public:
       flags(CEPH_MDSMAP_DEFAULTS), last_failure(0),
       last_failure_osd_epoch(0),
       tableserver(0), root(0),
-      session_timeout(0),
-      session_autoclose(0),
-      max_file_size(0),
+      session_timeout(60),
+      session_autoclose(300),
+      max_file_size(1ULL<<40), /* 1TB */
       cas_pool(-1),
       metadata_pool(-1),
-      max_mds(0),
+      max_mds(1),
       standby_count_wanted(-1),
       ever_allowed_features(0),
       explicitly_allowed_features(0),
@@ -249,9 +249,15 @@ public:
   utime_t get_session_timeout() const {
     return utime_t(session_timeout,0);
   }
+  void set_session_timeout(uint32_t t) {
+    session_timeout = t;
+  }
 
   utime_t get_session_autoclose() const {
     return utime_t(session_autoclose, 0);
+  }
+  void set_session_autoclose(uint32_t t) {
+    session_autoclose = t;
   }
 
   uint64_t get_max_filesize() const { return max_file_size; }
