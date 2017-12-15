@@ -3041,7 +3041,7 @@ static int usage_log_trim_cb(cls_method_context_t hctx, const string& key, rgw_u
   string key_by_time;
   string key_by_user;
 
-  string o = entry.owner.to_str();
+  string o = (entry.payer.empty() ? entry.owner.to_str() : entry.payer.to_str());
   usage_record_name_by_time(entry.epoch, o, entry.bucket, key_by_time);
   usage_record_name_by_user(o, entry.epoch, entry.bucket, key_by_user);
 
