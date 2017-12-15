@@ -355,6 +355,7 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
     pr->oncommit->complete(0);
     prl.unlock();
     delete pr;
+    pr = nullptr;
     return;
   }
 
@@ -453,6 +454,7 @@ void Filer::_do_truncate_range(TruncRange *tr, int fin)
     tr->oncommit->complete(0);
     trl.unlock();
     delete tr;
+    tr = nullptr;
     return;
   }
 
