@@ -234,12 +234,14 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     std::string time_str = ctime(&entry.deletion_time);
     time_str = time_str.substr(0, time_str.length() - 1);
 
+    bool has_parent = false;
     std::string pool, image, snap, parent;
     r = im.parent_info(&pool, &image, &snap);
-    if (r < 0 && r != -ENOENT)
+    if (r == -ENOENT) {
+      r = 0;
+    } else if (r < 0) {
       return r;
-    bool has_parent = false;
-    if (r != -ENOENT) {
+    } else {
       parent = pool + "/" + image + "@" + snap;
       has_parent = true;
     }
