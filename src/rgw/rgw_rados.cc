@@ -10890,29 +10890,28 @@ int RGWRados::_get_bucket_info(RGWObjectCtx& obj_ctx,
                                map<string, bufferlist> *pattrs,
                                boost::optional<obj_version> refresh_version)
 {
-  bucket_info_entry e;
   string bucket_entry;
   rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
 
 
-  if (binfo_cache->find(bucket_entry, &e)) {
+  if (auto e = binfo_cache->find(bucket_entry)) {
     if (refresh_version &&
-        e.info.objv_tracker.read_version.compare(&(*refresh_version))) {
+        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
       lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
                  << "a failure that should be debugged. I am a nice machine, "
                  << "so I will try to recover." << dendl;
       binfo_cache->invalidate(bucket_entry);
+    } else {
+      info = e->info;
+      if (pattrs)
+	*pattrs = e->attrs;
+      if (pmtime)
+	*pmtime = e->mtime;
+      return 0;
     }
-    info = e.info;
-    if (pattrs)
-      *pattrs = e.attrs;
-    if (pmtime)
-      *pmtime = e.mtime;
-    return 0;
   }
 
-  bufferlist bl;
-
+  bucket_info_entry e;
   RGWBucketEntryPoint entry_point;
   real_time ep_mtime;
   RGWObjVersionTracker ot;
