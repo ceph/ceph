@@ -263,16 +263,16 @@ int rgw_get_user_info_from_index(RGWRados * const store,
                                  RGWObjVersionTracker * const objv_tracker,
                                  real_time * const pmtime)
 {
-  user_info_entry e;
-  if (uinfo_cache.find(key, &e)) {
-    info = e.info;
+  if (auto e = uinfo_cache.find(key)) {
+    info = e->info;
     if (objv_tracker)
-      *objv_tracker = e.objv_tracker;
+      *objv_tracker = e->objv_tracker;
     if (pmtime)
-      *pmtime = e.mtime;
+      *pmtime = e->mtime;
     return 0;
   }
 
+  user_info_entry e;
   bufferlist bl;
   RGWUID uid;
   RGWObjectCtx obj_ctx(store);

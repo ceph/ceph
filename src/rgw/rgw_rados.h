@@ -3736,7 +3736,7 @@ class RGWChainedCacheImpl : public RGWChainedCache {
   ceph::timespan expiry;
   RWLock lock;
 
-  map<string, std::pair<T, ceph::coarse_mono_time>> entries;
+  std::unordered_map<std::string, std::pair<T, ceph::coarse_mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
@@ -3747,19 +3747,18 @@ public:
 				    "rgw_bucket_info_cache_expiry_interval"));
   }
 
-  bool find(const string& key, T *entry) {
+  boost::optional<T> find(const string& key) {
     RWLock::RLocker rl(lock);
     auto iter = entries.find(key);
     if (iter == entries.end()) {
-      return false;
+      return boost::none;
     }
     if (expiry.count() &&
 	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
-      return false;
+      return boost::none;
     }
 
-    *entry = iter->second.first;
-    return true;
+    return iter->second.first;
   }
 
   bool put(RGWRados *store, const string& key, T *entry, list<rgw_cache_entry_info *>& cache_info_entries) {
