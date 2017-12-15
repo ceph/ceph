@@ -587,7 +587,6 @@ private:
     memset(&fsid, 0, sizeof(fsid));
   }
 
-  // no copying
 private:
   OSDMap(const OSDMap& other) = default;
   OSDMap& operator=(const OSDMap& other) = default;
