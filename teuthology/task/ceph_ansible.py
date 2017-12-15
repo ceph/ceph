@@ -40,6 +40,10 @@ class CephAnsible(Task):
         * Set ``monitor_interface`` for each host if ``monitor_interface`` is
           unset
         * Set ``public_network`` for each host if ``public_network`` is unset
+
+    The machine that ceph-ansible runs on can be specified using the
+    installer.0 role.  If installer.0 is not used, the first mon will be the
+    machine on which ceph-ansible runs.
     """.format(git_base=teuth_config.ceph_git_base_url)
 
     groups_to_roles = dict(
@@ -112,10 +116,15 @@ class CephAnsible(Task):
             '-i', 'inven.yml', 'site.yml'
         ]
         log.debug("Running %s", args)
-        # use the first mon node as installer node
-        (ceph_installer,) = self.ctx.cluster.only(
-            misc.get_first_mon(self.ctx,
-                               self.config)).remotes.iterkeys()
+        # If there is an installer.0 node, use that for the installer.
+        # Otherwise, use the first mon node as installer node.
+        ansible_loc = self.ctx.cluster.only('installer.0')
+        if ansible_loc.remotes:
+            (ceph_installer,) = ansible_loc.remotes.iterkeys()
+        else:
+            (ceph_installer,) = self.ctx.cluster.only(
+                misc.get_first_mon(self.ctx,
+                                   self.config)).remotes.iterkeys()
         self.ceph_installer = ceph_installer
         self.args = args
         if self.config.get('rhbuild'):
