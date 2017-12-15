@@ -1970,6 +1970,13 @@ bool MDSRankDispatcher::handle_asok_command(
         f->reset();
       }
     }
+  } else if (command == "dump loads") {
+    Mutex::Locker l(mds_lock);
+    int r = balancer->dump_loads(f);
+    if (r != 0) {
+      ss << "Failed to dump loads: " << cpp_strerror(r);
+      f->reset();
+    }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);
     mdcache->force_readonly();
