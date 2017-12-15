@@ -912,7 +912,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       f.reset(Formatter::create("json-pretty"));
 
     string who;
-    bool all = !cmd_getval(g_ceph_context, cmdmap, "who", who);
+    bool all = !cmd_getval(g_ceph_context, cmdmap, "role", who);
     dout(1) << "all = " << all << dendl;
     if (all) {
       r = 0;
@@ -1290,7 +1290,7 @@ int MDSMonitor::filesystem_command(
   op->mark_mdsmon_event(__func__);
   int r = 0;
   string whostr;
-  cmd_getval(g_ceph_context, cmdmap, "who", whostr);
+  cmd_getval(g_ceph_context, cmdmap, "role", whostr);
 
   if (prefix == "mds deactivate") {
     mds_role_t role;
@@ -1350,7 +1350,7 @@ int MDSMonitor::filesystem_command(
     }
   } else if (prefix == "mds fail") {
     string who;
-    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(g_ceph_context, cmdmap, "role_or_gid", who);
 
     MDSMap::mds_info_t failed_info;
     r = fail_mds(ss, who, &failed_info);
@@ -1396,7 +1396,7 @@ int MDSMonitor::filesystem_command(
     }
     
     std::string role_str;
-    cmd_getval(g_ceph_context, cmdmap, "who", role_str);
+    cmd_getval(g_ceph_context, cmdmap, "role", role_str);
     mds_role_t role;
     int r = parse_role(role_str, &role, ss);
     if (r < 0) {
@@ -1447,7 +1447,7 @@ int MDSMonitor::filesystem_command(
     r = 0;
   } else if (prefix == "mds repaired") {
     std::string role_str;
-    cmd_getval(g_ceph_context, cmdmap, "rank", role_str);
+    cmd_getval(g_ceph_context, cmdmap, "role", role_str);
     mds_role_t role;
     r = parse_role(role_str, &role, ss);
     if (r < 0) {
