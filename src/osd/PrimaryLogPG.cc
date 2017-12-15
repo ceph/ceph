@@ -1589,6 +1589,12 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
     pgbackend->get_is_readable_predicate(),
     pgbackend->get_is_recoverable_predicate());
   snap_trimmer_machine.initiate();
+  init_config();
+}
+
+void PrimaryLogPG::init_config() {
+  osd_max_object_name_len_ =
+    cct->_conf->get_val<uint64_t>("osd_max_object_name_len");
 }
 
 void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& oloc, object_locator_t& src_oloc)
@@ -1898,16 +1904,16 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   // object name too long?
-  if (m->get_oid().name.size() > cct->_conf->osd_max_object_name_len) {
+  if (m->get_oid().name.size() > osd_max_object_name_len_) {
     dout(4) << "do_op name is longer than "
-	    << cct->_conf->osd_max_object_name_len
+	    << osd_max_object_name_len_
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
-  if (m->get_hobj().get_key().size() > cct->_conf->osd_max_object_name_len) {
+  if (m->get_hobj().get_key().size() > osd_max_object_name_len_) {
     dout(4) << "do_op locator is longer than "
-	    << cct->_conf->osd_max_object_name_len
+	    << osd_max_object_name_len_
 	    << " bytes" << dendl;
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;

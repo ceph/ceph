@@ -24,6 +24,8 @@
 #include "common/config_obs.h"
 #include "common/options.h"
 
+#include <type_traits>
+
 #define OSD_REP_PRIMARY 0
 #define OSD_REP_SPLAY   1
 #define OSD_REP_CHAIN   2
@@ -173,6 +175,9 @@ public:
       boost::get<T>(this->get_val_generic(key)),
       std::forward<Args>(args)...);
   }
+  template <typename T,
+    typename std::enable_if<std::is_same<T, uint64_t>::value>::type* = nullptr>
+  const T get_val_(const std::string& key) const;
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
