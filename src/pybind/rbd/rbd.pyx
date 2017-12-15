@@ -227,8 +227,12 @@ cdef extern from "rbd/librbd.h" nogil:
 
     int rbd_open(rados_ioctx_t io, const char *name,
                  rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id(rados_ioctx_t io, const char *image_id,
+                       rbd_image_t *image, const char *snap_name)
     int rbd_open_read_only(rados_ioctx_t io, const char *name,
                            rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
+                                 rbd_image_t *image, const char *snap_name)
     int rbd_close(rbd_image_t image)
     int rbd_resize(rbd_image_t image, uint64_t size)
     int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
@@ -1372,9 +1376,12 @@ cdef class Image(object):
     cdef object ioctx
     cdef rados_ioctx_t _ioctx
 
-    def __init__(self, ioctx, name, snapshot=None, read_only=False):
+    def __init__(self, ioctx, name=None, snapshot=None,
+                 read_only=False, image_id=None):
         """
         Open the image at the given snapshot.
+        Specify either name or id, otherwise :class:`InvalidArgument` is raised.
+
         If a snapshot is specified, the image will be read-only, unless
         :func:`Image.set_snap` is called later.
 
@@ -1394,25 +1401,42 @@ cdef class Image(object):
         :type snaphshot: str
         :param read_only: whether to open the image in read-only mode
         :type read_only: bool
+        :param image_id: the id of the image
+        :type image_id: str
         """
-        name = cstr(name, 'name')
+        name = cstr(name, 'name', opt=True)
+        image_id = cstr(image_id, 'image_id', opt=True)
         snapshot = cstr(snapshot, 'snapshot', opt=True)
         self.closed = True
-        self.name = name
+        if name is not None and image_id is not None:
+            raise InvalidArgument("only need to specify image name or image id")
+        elif name is None and image_id is None:
+            raise InvalidArgument("image name or image id was not specified")
+        elif name is not None:
+            self.name = name
+        else:
+            self.name = image_id
         # Keep around a reference to the ioctx, so it won't get deleted
         self.ioctx = ioctx
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
-            char *_name = name
+            char *_name = opt_str(name)
+            char *_image_id = opt_str(image_id)
             char *_snapshot = opt_str(snapshot)
         if read_only:
             with nogil:
-                ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id_read_only(_ioctx, _image_id, &self.image, _snapshot)
         else:
             with nogil:
-                ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id(_ioctx, _image_id, &self.image, _snapshot)
         if ret != 0:
-            raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
+            raise make_ex(ret, 'error opening image %s at snapshot %s' % (self.name, snapshot))
         self.closed = False
 
     def __enter__(self):
