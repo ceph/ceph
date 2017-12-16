@@ -731,7 +731,7 @@ int64_t BlueStore::GarbageCollector::estimate(
 
       // update gc_start_offset/gc_end_offset if needed
       gc_start_offset = min(gc_start_offset, (uint64_t)it->e.blob_start());
-      gc_end_offset = ceph::max(gc_end_offset, (uint64_t)it->e.blob_end());
+      gc_end_offset = std::max(gc_end_offset, (uint64_t)it->e.blob_end());
 
       auto o = it->e.logical_offset;
       auto l = it->e.length;

@@ -10,6 +10,7 @@
 #include <set>
 #include <ostream>
 #include <string>
+#include <shared_mutex>
 #include <boost/circular_buffer.hpp>
 
 #define SSTR(o) ({      \
@@ -99,7 +100,7 @@ public:
 class RGWSyncTraceManager : public AdminSocketHook {
   friend class RGWSyncTraceNode;
 
-  mutable boost::shared_mutex lock;
+  mutable std::shared_timed_mutex lock;
   using shunique_lock = ceph::shunique_lock<decltype(lock)>;
 
   CephContext *cct;

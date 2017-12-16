@@ -620,7 +620,7 @@ bool PurgeQueue::drain(
     max_purge_ops = 0xffff;
   }
 
-  drain_initial = ceph::max(bytes_remaining, drain_initial);
+  drain_initial = std::max(bytes_remaining, drain_initial);
 
   *progress = drain_initial - bytes_remaining;
   *progress_total = drain_initial;
