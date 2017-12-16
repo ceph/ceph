@@ -91,6 +91,19 @@ struct MQuery : boost::statechart::event< MQuery > {
   }
 };
 
+struct MTrim : boost::statechart::event<MTrim> {
+  epoch_t epoch;
+  int from;
+  shard_id_t shard;
+  eversion_t trim_to;
+  MTrim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to)
+    : epoch(epoch), from(from), shard(shard), trim_to(trim_to) {}
+  void print(std::ostream *out) const {
+    *out << "MTrim epoch " << epoch << " from " << from << " shard " << shard
+	 << " trim_to " << trim_to;
+  }
+};
+
 struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
   unsigned priority;
   explicit RequestBackfillPrio(unsigned prio) :

@@ -3571,31 +3571,6 @@ void PG::trim_log()
   }
 }
 
-void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to)
-{
-  if (epoch < info.history.same_interval_since) {
-    dout(10) << " got old trim to " << trim_to << ", ignoring" << dendl;
-    return;
-  }
-
-  if (is_primary()) {
-    // peer is informing us of their last_complete_ondisk
-    dout(10) << " replica osd." << from << " lcod " << trim_to << dendl;
-    peer_last_complete_ondisk[pg_shard_t(from, shard)] = trim_to;
-
-    // trim log when the pg is recovered
-    calc_min_last_complete_ondisk();
-  } else {
-    // primary is instructing us to trim
-    ObjectStore::Transaction t;
-    pg_log.trim(trim_to, info);
-    dirty_info = true;
-    write_if_dirty(t);
-    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
-    assert(tr == 0);
-  }
-}
-
 void PG::add_log_entry(const pg_log_entry_t& e, bool applied)
 {
   // raise last_complete only if we were previously up to date
@@ -8063,6 +8038,20 @@ boost::statechart::result PG::RecoveryState::Active::react(const MNotifyRec& not
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Active::react(const MTrim& trim)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  assert(pg->is_primary());
+
+  // peer is informing us of their last_complete_ondisk
+  ldout(pg->cct,10) << " replica osd." << trim.from << " lcod " << trim.trim_to << dendl;
+  pg->peer_last_complete_ondisk[pg_shard_t(trim.from, trim.shard)] = trim.trim_to;
+
+  // trim log when the pg is recovered
+  pg->calc_min_last_complete_ondisk();
+  return discard_event();
+}
+
 boost::statechart::result PG::RecoveryState::Active::react(const MInfoRec& infoevt)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -8269,6 +8258,15 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MLogRec&
   pg->merge_log(*t, logevt.msg->info, logevt.msg->log, logevt.from);
   assert(pg->pg_log.get_head() == pg->info.last_update);
 
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::ReplicaActive::react(const MTrim& trim)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  // primary is instructing us to trim
+  pg->pg_log.trim(trim.trim_to, pg->info);
+  pg->dirty_info = true;
   return discard_event();
 }
 
