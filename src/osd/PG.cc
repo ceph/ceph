@@ -6052,6 +6052,13 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 }
 
+boost::statechart::result PG::RecoveryState::Initial::react(const Initialize& l)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->update_store_with_options();
+  return transit< Reset >();
+}
+
 boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
 {
   PG *pg = context< RecoveryMachine >().pg;
