@@ -422,8 +422,6 @@ public:
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
-  void handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t trim_to);
-
   /**
    * @param ops_begun returns how many recovery ops the function started
    * @returns true if any useful work was accomplished; false otherwise
@@ -2164,6 +2162,7 @@ protected:
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MNotifyRec >,
 	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< MTrim >,
 	boost::statechart::custom_reaction< Backfilled >,
 	boost::statechart::custom_reaction< AllReplicasActivated >,
 	boost::statechart::custom_reaction< DeferRecovery >,
@@ -2180,6 +2179,7 @@ protected:
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MNotifyRec& notevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const MTrim& trimevt);
       boost::statechart::result react(const Backfilled&) {
 	return discard_event();
       }
@@ -2318,6 +2318,7 @@ protected:
 	boost::statechart::custom_reaction< MQuery >,
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< MLogRec >,
+	boost::statechart::custom_reaction< MTrim >,
 	boost::statechart::custom_reaction< Activate >,
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
@@ -2330,6 +2331,7 @@ protected:
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
       boost::statechart::result react(const MLogRec& logevt);
+      boost::statechart::result react(const MTrim& trimevt);
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
       boost::statechart::result react(const Activate&);
