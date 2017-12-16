@@ -26,7 +26,6 @@
 #include "global/signal_handler.h"
 #include "include/compat.h"
 #include "include/str_list.h"
-#include "common/admin_socket.h"
 
 #include <pwd.h>
 #include <grp.h>
