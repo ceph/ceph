@@ -6,4 +6,3 @@ tasks:
     set_chunk: true
     op_weights:
       chunk_read: 100
-      write: 30
