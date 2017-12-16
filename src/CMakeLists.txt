@@ -688,6 +688,12 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
   INSTALL_RPATH "")
+if(WITH_STATIC_LIBSTDCXX)
+  set_target_properties(ceph-common PROPERTIES
+    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+  set_target_properties(common PROPERTIES
+    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+endif()
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
@@ -824,7 +830,7 @@ set(ceph_mon_srcs
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
-target_link_libraries(ceph-mon mon common os global-static common
+target_link_libraries(ceph-mon mon os global-static common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)
