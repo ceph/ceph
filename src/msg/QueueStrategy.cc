@@ -15,7 +15,7 @@
 #include "QueueStrategy.h"
 #define dout_subsys ceph_subsys_ms
 #include "common/debug.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 
 QueueStrategy::QueueStrategy(int _n_threads)
   : lock("QueueStrategy::lock"),
@@ -107,7 +107,7 @@ void QueueStrategy::start()
   for (int ix = 0; ix < n_threads; ++ix) {
     string thread_name = "ms_xio_qs_";
     thread_name.append(std::to_string(ix));
-    auto thrd = ceph::make_unique<QSThread>(this);
+    auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());
     threads.emplace_back(std::move(thrd));
   }

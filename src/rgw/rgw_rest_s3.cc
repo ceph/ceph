@@ -10,7 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
@@ -1327,7 +1327,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
   if (tag_str){
-    obj_tags = ceph::make_unique<RGWObjTags>();
+    obj_tags = std::make_unique<RGWObjTags>();
     ret = obj_tags->set_from_string(tag_str);
     if (ret < 0){
       ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
