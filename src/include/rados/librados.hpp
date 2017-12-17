@@ -458,8 +458,6 @@ namespace librados
 
     /**
      * Pin/unpin an object in cache tier
-     *
-     * @returns 0 on success, negative error code on failure
      */
     void cache_pin();
     void cache_unpin();
@@ -1222,15 +1220,6 @@ namespace librados
 
     // assert version for next sync operations
     void set_assert_version(uint64_t ver);
-
-    /**
-     * Pin/unpin an object in cache tier
-     *
-     * @param o the name of the object
-     * @returns 0 on success, negative error code on failure
-     */
-    int cache_pin(const std::string& o);
-    int cache_unpin(const std::string& o);
 
     std::string get_pool_name() const;
 
