@@ -1075,8 +1075,6 @@ def main():
 
         if ret < 0:
             ret = -ret
-            errstr = errno.errorcode.get(ret, 'Unknown')
-            print(u'Error {0}: {1}'.format(errstr, outs), file=sys.stderr)
             if len(targets) > 1:
                 final_ret = ret
             else:
