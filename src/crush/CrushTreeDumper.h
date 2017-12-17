@@ -167,6 +167,14 @@ namespace CrushTreeDumper {
 
     bool is_touched(int id) const { return touched.count(id) > 0; }
 
+    void set_root(const string& bucket) {
+      roots.clear();
+      if (crush->name_exists(bucket)) {
+	int i = crush->get_item_id(bucket);
+	roots.insert(i);
+      }
+    }
+
   protected:
     virtual void dump_item(const Item &qi, F *f) = 0;
 
