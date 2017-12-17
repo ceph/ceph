@@ -212,10 +212,8 @@ public:
   int group_image_list(IoCtx& io_ctx, const char *group_name,
 		       std::vector<group_image_status_t> *images);
 
-private:
-  /* We don't allow assignment or copying */
-  RBD(const RBD& rhs);
-  const RBD& operator=(const RBD& rhs);
+  RBD(const RBD& rhs) = delete;
+  const RBD& operator=(const RBD& rhs) = delete;
 };
 
 class CEPH_RBD_API ImageOptions {
@@ -484,12 +482,11 @@ public:
 
   int list_watchers(std::list<image_watcher_t> &watchers);
 
+  Image(const Image& rhs) = delete;
+  const Image& operator=(const Image& rhs) = delete;
+
 private:
   friend class RBD;
-
-  Image(const Image& rhs);
-  const Image& operator=(const Image& rhs);
-
   image_ctx_t ctx;
 };
 
