@@ -172,8 +172,7 @@ static int get_bucket_instance_policy_from_attr(CephContext *cct,
 						RGWRados *store,
 						RGWBucketInfo& bucket_info,
 						map<string, bufferlist>& bucket_attrs,
-						RGWAccessControlPolicy *policy,
-						rgw_raw_obj& obj)
+						RGWAccessControlPolicy *policy)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -240,10 +239,7 @@ static int get_bucket_policy_from_attr(CephContext *cct,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy)
 {
-  rgw_raw_obj instance_obj;
-  store->get_bucket_instance_obj(bucket_info.bucket, instance_obj);
-  return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs,
-					      policy, instance_obj);
+  return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs, policy);
 }
 
 static optional<Policy> get_iam_policy_from_attr(CephContext* cct,
