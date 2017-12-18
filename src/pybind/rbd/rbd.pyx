@@ -177,7 +177,7 @@ cdef extern from "rbd/librbd.h" nogil:
         rbd_group_image_state_t state
 
     ctypedef enum rbd_group_snap_state_t:
-        _GROUP_SNAP_STATE_PENDING "GROUP_SNAP_STATE_PENDING"
+        _GROUP_SNAP_STATE_INCOMPLETE "GROUP_SNAP_STATE_INCOMPLETE"
         _GROUP_SNAP_STATE_COMPLETE "GROUP_SNAP_STATE_COMPLETE"
 
     ctypedef struct rbd_group_snap_spec_t:
