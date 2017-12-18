@@ -379,7 +379,7 @@ WRITE_CLASS_ENCODER(ImageSnapshotSpec);
 struct GroupSnapshot {
   std::string id;
   std::string name;
-  GroupSnapshotState state;
+  GroupSnapshotState state = GROUP_SNAPSHOT_STATE_INCOMPLETE;
 
   GroupSnapshot() {}
   GroupSnapshot(std::string _id,
