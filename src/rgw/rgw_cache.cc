@@ -16,7 +16,7 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
     return -ENOENT;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  auto iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
     if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
@@ -190,7 +190,7 @@ void ObjectCache::remove(string& name)
     return;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  auto iter = cache_map.find(name);
   if (iter == cache_map.end())
     return;
 

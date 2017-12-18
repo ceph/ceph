@@ -7,6 +7,7 @@
 #include "rgw_rados.h"
 #include <string>
 #include <map>
+#include <unordered_map>
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/assert.h"
@@ -135,7 +136,7 @@ struct ObjectCacheEntry {
 };
 
 class ObjectCache {
-  std::map<string, ObjectCacheEntry> cache_map;
+  std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::deque<string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
