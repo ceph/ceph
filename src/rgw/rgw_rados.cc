@@ -11983,13 +11983,8 @@ int RGWRados::_get_bucket_info(RGWObjectCtx& obj_ctx,
   if (pattrs)
     *pattrs = e.attrs;
 
-  list<rgw_cache_entry_info *> cache_info_entries;
-  cache_info_entries.push_back(&entry_cache_info);
-  cache_info_entries.push_back(&cache_info);
-
-
   /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache->put(this, bucket_entry, &e, cache_info_entries)) {
+  if (!binfo_cache->put(this, bucket_entry, &e, {&entry_cache_info, &cache_info})) {
     ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
