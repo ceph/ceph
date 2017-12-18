@@ -3796,6 +3796,112 @@ void ObjectModDesc::decode(bufferlist::iterator &_bl)
   DECODE_FINISH(_bl);
 }
 
+void ObjectCleanRegions::trim()
+{
+  while (clean_offsets.num_intervals() > max_num_intervals) {
+    typename interval_set<uint64_t>::iterator shortest_interval = clean_offsets.begin();
+    if (shortest_interval == clean_offsets.end())
+      break;
+    for (typename interval_set<uint64_t>::iterator it = clean_offsets.begin();
+         it != clean_offsets.end();
+         ++it) {
+      if (it.get_len() < shortest_interval.get_len())
+        shortest_interval = it;
+    }
+    clean_offsets.erase(shortest_interval);
+  }
+}
+
+void ObjectCleanRegions::merge(const ObjectCleanRegions &other)
+{
+  clean_offsets.intersection_of(other.clean_offsets);
+  clean_omap = clean_omap && other.clean_omap;
+  trim();
+}
+
+void ObjectCleanRegions::mark_data_region_dirty(uint64_t offset, uint64_t len)
+{
+  interval_set<uint64_t> clean_region;
+  clean_region.insert(0, (uint64_t)-1);
+  clean_region.erase(offset, len);
+  clean_offsets.intersection_of(clean_region);
+  trim();
+}
+
+void ObjectCleanRegions::mark_omap_dirty()
+{
+  clean_omap = false;
+}
+
+void ObjectCleanRegions::mark_object_new()
+{
+  new_object = true;
+}
+
+void ObjectCleanRegions::mark_fully_dirty()
+{
+  mark_data_region_dirty(0, (uint64_t)-1);
+  mark_omap_dirty();
+  mark_object_new();
+}
+
+interval_set<uint64_t> ObjectCleanRegions::get_dirty_regions() const
+{
+   interval_set<uint64_t> dirty_region;
+   dirty_region.insert(0, (uint64_t)-1);
+   dirty_region.subtract(clean_offsets);
+   return dirty_region;
+}
+
+bool ObjectCleanRegions::omap_is_dirty() const
+{
+  return !clean_omap;
+}
+
+bool ObjectCleanRegions::object_is_exist() const
+{
+  return !new_object;
+}
+
+void ObjectCleanRegions::encode(bufferlist &bl) const
+{
+  ::encode(clean_offsets, bl);
+  ::encode(clean_omap, bl);
+  ::encode(new_object, bl);
+}
+
+void ObjectCleanRegions::decode(bufferlist::iterator &bl)
+{
+  ::decode(clean_offsets, bl);
+  ::decode(clean_omap, bl);
+  ::decode(new_object, bl);
+}
+
+void ObjectCleanRegions::dump(Formatter *f) const
+{
+  f->open_object_section("object_clean_regions");
+  f->dump_stream("clean_offsets") << clean_offsets;
+  f->dump_bool("clean_omap", clean_omap);
+  f->dump_bool("object_new", new_object);
+  f->close_section();
+}
+
+void ObjectCleanRegions::generate_test_instances(list<ObjectCleanRegions*>& o)
+{
+  o.push_back(new ObjectCleanRegions());
+  o.push_back(new ObjectCleanRegions());
+  o.back()->mark_data_region_dirty(4096, 40960);
+  o.back()->mark_omap_dirty();
+  o.back()->mark_object_new();
+}
+
+ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
+{
+  return out << "clean_offsets: " << ocr.clean_offsets
+             << ", clean_omap: " << ocr.clean_omap
+             << ", object_new: " << ocr.new_object;
+}
+
 // -- pg_log_entry_t --
 
 string pg_log_entry_t::get_key_name() const
@@ -3826,7 +3932,7 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(11, 4, bl);
+  ENCODE_START(12, 4, bl);
   ::encode(op, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
@@ -3853,12 +3959,13 @@ void pg_log_entry_t::encode(bufferlist &bl) const
   ::encode(extra_reqids, bl);
   if (op == ERROR)
     ::encode(return_code, bl);
+  ::encode(clean_regions, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
   ::decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -3912,6 +4019,10 @@ void pg_log_entry_t::decode(bufferlist::iterator &bl)
     ::decode(extra_reqids, bl);
   if (struct_v >= 11 && op == ERROR)
     ::decode(return_code, bl);
+  if (struct_v >= 12)
+    ::decode(clean_regions, bl);
+  else
+    clean_regions.mark_fully_dirty();
   DECODE_FINISH(bl);
 }
 
@@ -3951,6 +4062,11 @@ void pg_log_entry_t::dump(Formatter *f) const
   {
     f->open_object_section("mod_desc");
     mod_desc.dump(f);
+    f->close_section();
+  }
+  {
+    f->open_object_section("clean_reginos");
+    clean_regions.dump(f);
     f->close_section();
   }
 }
@@ -4242,6 +4358,7 @@ ostream& operator<<(ostream& out, const pg_missing_item& i)
   if (i.have != eversion_t())
     out << "(" << i.have << ")";
   out << " flags = " << i.flag_str();
+  out << " clean_regions " << i.clean_regions;
   return out;
 }
 
@@ -5293,7 +5410,7 @@ void ObjectRecoveryProgress::dump(Formatter *f) const
 
 void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(2, 1, bl);
+  ENCODE_START(3, 1, bl);
   ::encode(soid, bl);
   ::encode(version, bl);
   ::encode(size, bl);
@@ -5301,13 +5418,14 @@ void ObjectRecoveryInfo::encode(bufferlist &bl, uint64_t features) const
   ::encode(ss, bl);
   ::encode(copy_subset, bl);
   ::encode(clone_subset, bl);
+  ::encode(object_exist, bl);
   ENCODE_FINISH(bl);
 }
 
 void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
 				int64_t pool)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   ::decode(soid, bl);
   ::decode(version, bl);
   ::decode(size, bl);
@@ -5315,6 +5433,8 @@ void ObjectRecoveryInfo::decode(bufferlist::iterator &bl,
   ::decode(ss, bl);
   ::decode(copy_subset, bl);
   ::decode(clone_subset, bl);
+  if (struct_v > 2)
+    ::decode(object_exist, bl);
   DECODE_FINISH(bl);
 
   if (struct_v < 2) {
@@ -5340,6 +5460,7 @@ void ObjectRecoveryInfo::generate_test_instances(
   o.back()->soid = hobject_t(sobject_t("key", CEPH_NOSNAP));
   o.back()->version = eversion_t(0,0);
   o.back()->size = 100;
+  o.back()->object_exist = false;
 }
 
 
@@ -5360,6 +5481,7 @@ void ObjectRecoveryInfo::dump(Formatter *f) const
   }
   f->dump_stream("copy_subset") << copy_subset;
   f->dump_stream("clone_subset") << clone_subset;
+  f->dump_stream("object_exist") << object_exist;
 }
 
 ostream& operator<<(ostream& out, const ObjectRecoveryInfo &inf)
@@ -5375,6 +5497,7 @@ ostream &ObjectRecoveryInfo::print(ostream &out) const
 	     << ", copy_subset: " << copy_subset
 	     << ", clone_subset: " << clone_subset
 	     << ", snapset: " << ss
+	     << ", object_exist: " << object_exist
 	     << ")";
 }
 

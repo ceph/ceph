@@ -79,7 +79,7 @@ public:
     ::encode(epoch, payload);
     ::encode(info, payload);
     ::encode(log, payload);
-    ::encode(missing, payload);
+    ::encode(missing, payload, features);
     ::encode(query_epoch, payload);
     ::encode(past_intervals, payload);
     ::encode(to, payload);
