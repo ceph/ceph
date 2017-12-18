@@ -1659,6 +1659,9 @@ private:
     /// wake any pg waiters after a PG is created/instantiated
     void wake_pg_waiters(spg_t pgid);
 
+    void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot,
+		       unsigned *pushes_to_free);
+
     /// prune ops (and possibly pg_slots) for pgs that shouldn't be here
     void prune_pg_waiters(OSDMapRef osdmap, int whoami);
 
