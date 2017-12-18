@@ -332,8 +332,7 @@ void MDBalancer::send_heartbeat()
   mds->logger->set(l_mds_load_cent, 100 * load.mds_load());
   mds->logger->set(l_mds_dispatch_queue_len, load.queue_len);
 
-  map<mds_rank_t, mds_load_t>::value_type val(mds->get_nodeid(), load);
-  mds_load.insert(val);
+  mds_load[mds->get_nodeid()] = load;
 
   // import_map -- how much do i import from whom
   map<mds_rank_t, float> import_map;
@@ -374,8 +373,6 @@ void MDBalancer::send_heartbeat()
 /* This function DOES put the passed message before returning */
 void MDBalancer::handle_heartbeat(MHeartbeat *m)
 {
-  typedef map<mds_rank_t, mds_load_t> mds_load_map_t;
-
   mds_rank_t who = mds_rank_t(m->get_source().num());
   dout(25) << "=== got heartbeat " << m->get_beat() << " from " << m->get_source().num() << " " << m->get_load() << dendl;
 
@@ -418,15 +415,8 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     }
   }
 
-  {
-    // set mds_load[who]
-    mds_load_map_t::value_type val(who, m->get_load());
-    pair < mds_load_map_t::iterator, bool > rval (mds_load.insert(val));
-    if (!rval.second) {
-      rval.first->second = val.second;
-    }
-  }
-  mds_import_map[ who ] = m->get_import_map();
+  mds_load[who] = m->get_load();
+  mds_import_map[who] = m->get_import_map();
   mds_last_epoch_under_info[who] = m->get_last_epoch_under();
 
   {
@@ -631,9 +621,7 @@ void MDBalancer::prep_rebalance(int beat)
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
-      map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
-      std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
-      mds_load_t &load(r.first->second);
+      mds_load_t& load = mds_load.at(i);
 
       double l = load.mds_load() * load_fac;
       mds_meta_load[i] = l;
@@ -780,12 +768,8 @@ int MDBalancer::mantle_prep_rebalance()
 
   /* fill in the metrics for each mds by grabbing load struct */
   vector < map<string, double> > metrics (cluster_size);
-  for (mds_rank_t i=mds_rank_t(0);
-       i < mds_rank_t(cluster_size);
-       i++) {
-    map<mds_rank_t, mds_load_t>::value_type val(i, mds_load_t(ceph_clock_now()));
-    std::pair < map<mds_rank_t, mds_load_t>::iterator, bool > r(mds_load.insert(val));
-    mds_load_t &load(r.first->second);
+  for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
+    mds_load_t& load = mds_load.at(i);
 
     metrics[i] = {{"auth.meta_load", load.auth.meta_load()},
                   {"all.meta_load", load.all.meta_load()},
