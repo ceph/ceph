@@ -539,6 +539,10 @@ CEPH_RBD_API int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, str
 
 CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 
+CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
+					     uint64_t snap_id,
+					     rbd_snap_namespace_type_t *namespace_type);
+
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
 
 CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
