@@ -3745,7 +3745,7 @@ public:
   void init(RGWRados *store) {
     store->register_chained_cache(this);
     expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
-				    "rgw_bucket_info_cache_expiry_interval"));
+				    "rgw_cache_expiry_interval"));
   }
 
   boost::optional<T> find(const string& key) {
