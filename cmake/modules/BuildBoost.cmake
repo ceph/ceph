@@ -79,14 +79,14 @@ function(do_build_boost version)
     message(STATUS "boost already in src")
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.63)
+  elseif(version VERSION_GREATER 1.66)
     message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
   else()
     message(STATUS "boost will be downloaded...")
     # NOTE: If you change this version number make sure the package is available
     # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.63.0)
-    set(boost_md5 1c837ecd990bb022d07e7aab32b09847)
+    set(boost_version 1.66.0)
+    set(boost_md5 b2dfbd6c717be4a7bb2d88018eaccf75)
     string(REPLACE "." "_" boost_version_underscore ${boost_version} )
     set(boost_url 
       https://dl.bintray.com/boostorg/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
