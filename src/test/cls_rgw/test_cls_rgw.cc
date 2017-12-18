@@ -693,6 +693,47 @@ TEST(cls_rgw, gc_defer)
   ASSERT_EQ(0, destroy_one_pool_pp(gc_pool_name, rados));
 }
 
+TEST(cls_rgw, usage_basic)
+{
+  string oid="usage.1";
+  string user="user1";
+  uint64_t start_epoch{0}, end_epoch{(uint64_t) -1};
+  constexpr auto total_usage_entries = 512;
+  uint64_t max_entries = 2000;
+
+  rgw_usage_log_info info;
+
+  for (int i=0; i < total_usage_entries; i++){
+    auto bucket = str_int("bucket", i);
+    string p; // we are not testing bucket payer here
+    info.entries.emplace_back(rgw_usage_log_entry(user, p, bucket));
+  }
+  ObjectWriteOperation op;
+  cls_rgw_usage_log_add(op, info);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+
+  string read_iter;
+  map <rgw_user_bucket, rgw_usage_log_entry> usage, usage2;
+  bool truncated;
+
+
+  int ret = cls_rgw_usage_log_read(ioctx, oid, user, start_epoch, end_epoch,
+				   max_entries, read_iter, usage, &truncated);
+  // read the entries, and see that we have all the added entries
+  ASSERT_EQ(0, ret);
+  ASSERT_FALSE(truncated);
+  ASSERT_EQ(total_usage_entries, usage.size());
+
+  // delete and read to assert that we've deleted all the values
+  ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, user, start_epoch, end_epoch));
+
+
+  ret = cls_rgw_usage_log_read(ioctx, oid, user, start_epoch, end_epoch,
+			       max_entries, read_iter, usage2, &truncated);
+  ASSERT_EQ(0, ret);
+  ASSERT_EQ(0, usage2.size());
+
+}
 
 /* must be last test! */
 
