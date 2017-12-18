@@ -1281,16 +1281,15 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       CDentry *dn = dir->lookup_exact_snap(p->dn, p->dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(p->dn, p->dnfirst, p->dnlast);
-	dn->set_version(p->dnv);
-	if (p->is_dirty()) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay added (full) " << *dn << dendl;
       } else {
-	dn->set_version(p->dnv);
-	if (p->is_dirty()) dn->_mark_dirty(logseg);
 	dout(10) << "EMetaBlob.replay for [" << p->dnfirst << "," << p->dnlast << "] had " << *dn << dendl;
 	dn->first = p->dnfirst;
 	assert(dn->last == p->dnlast);
       }
+      dn->set_version(p->dnv);
+      if (p->is_dirty()) dn->_mark_dirty(logseg);
+     
       if (lump.is_importing())
 	dn->state_set(CDentry::STATE_AUTH);
 
