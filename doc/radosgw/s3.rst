@@ -74,6 +74,8 @@ The following table describes the support status for current Amazon S3 functiona
 +---------------------------------+-----------------+----------------------------------------+
 | **Object Tagging**              | Supported       | Not supported in bucket policy/LC rules|
 +---------------------------------+-----------------+----------------------------------------+
+| **Storage Class**               | Not Supported   | Use **Bucket Location** as alternative |
++--------------------------------------------------------------------------------------------+
 
 
 Unsupported Header Fields
