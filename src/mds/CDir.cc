@@ -183,7 +183,9 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   cache(mdcache), inode(in), frag(fg),
   first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  projected_version(0),  item_dirty(this), item_new(this),
+  projected_version(0),
+  dirty_dentries(member_offset(CDentry, item_dir_dirty)),
+  item_dirty(this), item_new(this),
   num_head_items(0), num_head_null(0),
   num_snap_items(0), num_snap_null(0),
   num_dirty(0), committing_version(0), committed_version(0),
@@ -863,8 +865,10 @@ void CDir::steal_dentry(CDentry *dn)
     dn->dir->adjust_nested_auth_pins(-ap, -dap, NULL);
   }
 
-  if (dn->is_dirty()) 
+  if (dn->is_dirty()) {
+    dirty_dentries.push_back(&dn->item_dir_dirty);
     num_dirty++;
+  }
 
   dn->dir = this;
 }
@@ -2121,11 +2125,7 @@ void CDir::_omap_commit(int op_prio)
     stale_items.clear();
   }
 
-  for (map_t::iterator p = items.begin();
-      p != items.end(); ) {
-    CDentry *dn = p->second;
-    ++p;
-
+  auto write_one = [&](CDentry *dn) {
     string key;
     dn->key().encode(key);
 
@@ -2134,12 +2134,8 @@ void CDir::_omap_commit(int op_prio)
       dout(10) << " rm " << key << dendl;
       write_size += key.length();
       to_remove.insert(key);
-      continue;
+      return;
     }
-
-    if (!dn->is_dirty() &&
-	(!dn->state_test(CDentry::STATE_FRAGMENTING) || dn->get_linkage()->is_null()))
-      continue;  // skip clean dentries
 
     if (dn->get_linkage()->is_null()) {
       dout(10) << " rm " << dn->name << " " << *dn << dendl;
@@ -2173,6 +2169,22 @@ void CDir::_omap_commit(int op_prio)
       write_size = 0;
       to_set.clear();
       to_remove.clear();
+    }
+  };
+
+  if (state_test(CDir::STATE_FRAGMENTING)) {
+    for (auto p = items.begin(); p != items.end(); ) {
+      CDentry *dn = p->second;
+      ++p;
+      if (!dn->is_dirty() && dn->get_linkage()->is_null())
+	continue;
+      write_one(dn);
+    }
+  } else {
+    for (auto p = dirty_dentries.begin(); !p.end(); ) {
+      CDentry *dn = *p;
+      ++p;
+      write_one(dn);
     }
   }
 
@@ -2342,10 +2354,9 @@ void CDir::_committed(int r, version_t v)
     mark_clean();
 
   // dentries clean?
-  for (map_t::iterator it = items.begin();
-       it != items.end(); ) {
-    CDentry *dn = it->second;
-    ++it;
+  for (auto p = dirty_dentries.begin(); !p.end(); ) {
+    CDentry *dn = *p;
+    ++p;
     
     // inode?
     if (dn->linkage.is_primary()) {
@@ -2366,19 +2377,18 @@ void CDir::_committed(int r, version_t v)
 
     // dentry
     if (committed_version >= dn->get_version()) {
-      if (dn->is_dirty()) {
-	dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
-	dn->mark_clean();
+      dout(15) << " dir " << committed_version << " >= dn " << dn->get_version() << " now clean " << *dn << dendl;
+      dn->mark_clean();
 
-	// drop clean null stray dentries immediately
-	if (stray && 
-	    dn->get_num_ref() == 0 &&
-	    !dn->is_projected() &&
-	    dn->get_linkage()->is_null())
-	  remove_dentry(dn);
-      } 
+      // drop clean null stray dentries immediately
+      if (stray &&
+	  dn->get_num_ref() == 0 &&
+	  !dn->is_projected() &&
+	  dn->get_linkage()->is_null())
+	remove_dentry(dn);
     } else {
       dout(15) << " dir " << committed_version << " < dn " << dn->get_version() << " still dirty " << *dn << dendl;
+      assert(dn->is_dirty());
     }
   }
 
