@@ -3294,7 +3294,8 @@ public:
                              rgw_cache_entry_info *cache_info);
 
   virtual void register_chained_cache(RGWChainedCache *cache) {}
-  virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
+  virtual bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+				 RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(RGWObjectCtx& ctx,
                   const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -3784,7 +3785,8 @@ public:
     return iter->second.first;
   }
 
-  bool put(RGWRados *store, const string& key, T *entry, list<rgw_cache_entry_info *>& cache_info_entries) {
+  bool put(RGWRados *store, const string& key, T *entry,
+	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
     Entry chain_entry(this, key, entry);
 
     /* we need the store cache to call us under its lock to maintain lock ordering */

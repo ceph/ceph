@@ -294,10 +294,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
     return -EIO;
   }
 
-  list<rgw_cache_entry_info *> cache_info_entries;
-  cache_info_entries.push_back(&cache_info);
-
-  uinfo_cache.put(store, key, &e, cache_info_entries);
+  uinfo_cache.put(store, key, &e, { &cache_info });
 
   info = e.info;
   if (objv_tracker)
