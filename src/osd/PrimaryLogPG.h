@@ -527,7 +527,7 @@ public:
     bool ignore_cache;    ///< true if IGNORE_CACHE flag is set
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
-
+    ObjectCleanRegions clean_regions;
     // side effects
     list<pair<watch_info_t,bool> > watch_connects; ///< new watch + will_ping flag
     list<watch_disconnect_t> watch_disconnects; ///< old watch + send_discon

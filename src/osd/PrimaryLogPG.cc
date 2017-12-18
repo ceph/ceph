@@ -6198,6 +6198,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	      trim.insert(op.extent.truncate_size,
 	        oi.size - op.extent.truncate_size);
 	      ctx->modified_ranges.union_of(trim);
+	      ctx->clean_regions.mark_data_region_dirty(op.extent.truncate_size, oi.size - op.extent.truncate_size);
 	    }
 	    if (op.extent.truncate_size != oi.size) {
               truncate_update_size_and_usage(ctx->delta_stats,
@@ -6244,7 +6245,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         }
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
-
+	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
+	dout(10) << "clean_regions modified" << ctx->clean_regions << dendl;
       }
       break;
       
@@ -6280,6 +6282,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
+	ctx->clean_regions.mark_data_region_dirty(0, op.extent.length);
       }
       break;
 
@@ -6314,6 +6317,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  interval_set<uint64_t> ch;
 	  ch.insert(op.extent.offset, op.extent.length);
 	  ctx->modified_ranges.union_of(ch);
+	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
 	  ctx->delta_stats.num_wr++;
 	  oi.clear_data_digest();
 	} else {
@@ -6392,6 +6396,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  interval_set<uint64_t> trim;
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
 	  ctx->modified_ranges.union_of(trim);
+	  ctx->clean_regions.mark_data_region_dirty(op.extent.offset, oi.size - op.extent.offset);
 	}
 	if (op.extent.offset != oi.size) {
           truncate_update_size_and_usage(ctx->delta_stats,
@@ -7093,6 +7098,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	t->omap_setkeys(soid, to_set_bl);
+	ctx->clean_regions.mark_omap_dirty();
 	ctx->delta_stats.num_wr++;
         ctx->delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
       }
@@ -7130,6 +7136,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	if (oi.is_omap()) {
 	  t->omap_clear(soid);
+	  ctx->clean_regions.mark_omap_dirty();
 	  ctx->delta_stats.num_wr++;
 	  obs.oi.clear_omap_digest();
 	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
@@ -7161,6 +7168,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	tracepoint(osd, do_osd_op_pre_omaprmkeys, soid.oid.name.c_str(), soid.snap.val);
 	t->omap_rmkeys(soid, to_rm_bl);
+	ctx->clean_regions.mark_omap_dirty();
 	ctx->delta_stats.num_wr++;
       }
       obs.oi.clear_omap_digest();
@@ -7365,6 +7373,8 @@ inline int PrimaryLogPG::_delete_oid(
     interval_set<uint64_t> ch;
     ch.insert(0, oi.size);
     ctx->modified_ranges.union_of(ch);
+    ctx->clean_regions.mark_data_region_dirty(0, oi.size);
+    ctx->clean_regions.mark_omap_dirty();
   }
 
   ctx->delta_stats.num_wr++;
@@ -7537,6 +7547,15 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       maybe_create_new_object(ctx, true);
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
+      
+      if (obs.oi.has_extents()) {
+        ctx->delta_stats.num_bytes -= obs.oi.extents.size();
+        obs.oi.extents.clear();
+      } else {
+        ctx->delta_stats.num_bytes -= obs.oi.size;
+      }
+      ctx->clean_regions.mark_data_region_dirty(0, rollback_to->obs.oi.size);
+      ctx->clean_regions.mark_omap_dirty();
       obs.oi.size = rollback_to->obs.oi.size;
       if (rollback_to->obs.oi.is_data_digest())
 	obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
@@ -8033,6 +8052,9 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type)
 				    ctx->obs->oi.version,
 				    ctx->user_at_version, ctx->reqid,
 				    ctx->mtime, 0));
+  ctx->log.back().clean_regions = ctx->clean_regions;
+  dout(20) << __func__ << " object " << soid <<  " marks clean_regions " << ctx->log.back().clean_regions << dendl;
+
   if (soid.snap < CEPH_NOSNAP) {
     switch (log_op_type) {
     case pg_log_entry_t::MODIFY:
@@ -9027,6 +9049,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   ctx->modified_ranges.union_of(ch);
 
   if (cb->get_data_size() != obs.oi.size) {
+    ctx->clean_regions.mark_data_region_dirty(0, MAX(obs.oi.size, cb->get_data_size()));
     ctx->delta_stats.num_bytes -= obs.oi.size;
     obs.oi.size = cb->get_data_size();
     ctx->delta_stats.num_bytes += obs.oi.size;
@@ -9189,11 +9212,13 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     tctx->new_obs.oi.user_version = results->user_version;
     if (results->is_data_digest()) {
       tctx->new_obs.oi.set_data_digest(results->data_digest);
+      tctx->clean_regions.mark_data_region_dirty(0, results->object_size);
     } else {
       tctx->new_obs.oi.clear_data_digest();
     }
     if (results->is_omap_digest()) {
       tctx->new_obs.oi.set_omap_digest(results->omap_digest);
+      tctx->clean_regions.mark_omap_dirty();
     } else {
       tctx->new_obs.oi.clear_omap_digest();
     }
