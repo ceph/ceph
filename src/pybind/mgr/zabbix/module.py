@@ -86,14 +86,23 @@ class Module(MgrModule):
         self.event = Event()
 
     def init_module_config(self):
+        firste = None
         for key, default in self.config_keys.items():
-            value = self.get_localized_config(key, default)
-            if value is None:
-                raise RuntimeError('Configuration key {0} not set; "ceph '
+            try:
+                value = self.get_localized_config(key, default)
+                if value is not None:
+                    self.set_config_option(key, value)
+                if value is None:
+                    raise RuntimeError('Configuration key {0} not set; "ceph '
                                    'config-key set mgr/zabbix/{0} '
                                    '<value>"'.format(key))
+            except Exception as e:
+                if firste is None:
+                   firste = e
+                continue
 
-            self.set_config_option(key, value)
+        if firste is not None:
+           raise firste
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
