@@ -451,7 +451,7 @@ int execute_group_snap_list(const po::variables_map &vm) {
     std::string snap_name = i.name;
     int state = i.state;
     std::string state_string;
-    if (GROUP_SNAP_STATE_PENDING == state) {
+    if (GROUP_SNAP_STATE_INCOMPLETE == state) {
       state_string = "pending";
     } else {
       state_string = "ok";
