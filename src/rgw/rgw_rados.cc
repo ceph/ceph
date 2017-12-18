@@ -394,6 +394,13 @@ int RGWZoneGroup::add_zone(const RGWZoneParams& zone_params, bool *is_master, bo
   }
   if (ptier_type) {
     zone.tier_type = *ptier_type;
+    if (!store->get_sync_modules_manager()->get_module(*ptier_type, nullptr)) {
+      ldout(cct, 0) << "ERROR: could not found sync module: " << *ptier_type 
+                    << ",  valid sync modules: " 
+                    << store->get_sync_modules_manager()->get_registered_module_names()
+                    << dendl;
+      return -ENOENT;
+    }
   }
 
   if (psync_from_all) {
@@ -4396,6 +4403,12 @@ int RGWRados::init_complete()
     ret = sync_modules_manager->create_instance(cct, zone_public_config.tier_type, zone_params.tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        lderr(cct) << "ERROR: " << zone_public_config.tier_type 
+                   << " sync module does not exist. valid sync modules: " 
+                   << sync_modules_manager->get_registered_module_names()
+                   << dendl;
+      }
       return ret;
     }
   }
