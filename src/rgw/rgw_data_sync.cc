@@ -1042,7 +1042,7 @@ public:
         if (retcode < 0) {
           tn->log(0, SSTR("ERROR: failed to log sync failure: retcode=" << retcode));
         }
-        if (error_repo && !error_repo->append(raw_key)) {
+        if (!error_repo || !error_repo->append(raw_key)) {
           tn->log(0, SSTR("ERROR: failed to log sync failure in error repo: retcode=" << retcode));
         }
       } else if (error_repo && remove_from_repo) {
