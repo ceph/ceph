@@ -985,10 +985,13 @@ public:
       }
 
       if (sync_status < 0) {
-        yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", raw_key,
-                                                        -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
-        if (retcode < 0) {
-          ldout(sync_env->store->ctx(), 0) << "ERROR: failed to log sync failure: retcode=" << retcode << dendl;
+        // write actual sync failures for 'radosgw-admin sync error list'
+        if (sync_status != -EBUSY && sync_status != -EAGAIN) {
+          yield call(sync_env->error_logger->log_error_cr(sync_env->conn->get_remote_id(), "data", raw_key,
+                                                          -sync_status, string("failed to sync bucket instance: ") + cpp_strerror(-sync_status)));
+          if (retcode < 0) {
+            ldout(sync_env->store->ctx(), 0) << "ERROR: failed to log sync failure: retcode=" << retcode << dendl;
+          }
         }
         if (error_repo && !error_repo->append(raw_key)) {
           ldout(sync_env->store->ctx(), 0) << "ERROR: failed to log sync failure in error repo: retcode=" << retcode << dendl;
