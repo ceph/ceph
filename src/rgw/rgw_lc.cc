@@ -237,7 +237,7 @@ int RGWLC::bucket_lc_prepare(int index)
       pair<string, int > entry(iter->first, lc_uninitial);
       ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
-        dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry " << obj_names[index] << dendl;
+        dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry on " << obj_names[index] << dendl;
         break;
       }
       marker = iter->first;
@@ -588,7 +588,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
-      dout(0) << "RGWLC::bucket_lc_post() failed to acquire lock on, sleep 5, try again" << obj_names[index] << dendl;
+      dout(0) << "RGWLC::bucket_lc_post() failed to acquire lock on " << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
@@ -609,7 +609,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
 
     ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
-      dout(0) << "RGWLC::process() failed to set entry " << obj_names[index] << dendl;
+      dout(0) << "RGWLC::process() failed to set entry on " << obj_names[index] << dendl;
     }
 clean:
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
@@ -672,7 +672,7 @@ int RGWLC::process(int index, int max_lock_secs)
 
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
-      dout(0) << "RGWLC::process() failed to acquire lock on, sleep 5, try again" << obj_names[index] << dendl;
+      dout(0) << "RGWLC::process() failed to acquire lock on " << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
