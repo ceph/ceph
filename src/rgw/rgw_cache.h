@@ -126,29 +126,30 @@ WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 
 struct ObjectCacheEntry {
   ObjectCacheInfo info;
-  std::list<string>::iterator lru_iter;
+  std::deque<string>::iterator lru_iter;
   uint64_t lru_promotion_ts;
   uint64_t gen;
-  std::list<pair<RGWChainedCache *, string> > chained_entries;
+  std::vector<pair<RGWChainedCache *, string> > chained_entries;
 
   ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
 };
 
 class ObjectCache {
   std::map<string, ObjectCacheEntry> cache_map;
-  std::list<string> lru;
+  std::deque<string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
   RWLock lock;
   CephContext *cct;
 
-  list<RGWChainedCache *> chained_cache;
+  vector<RGWChainedCache *> chained_cache;
 
   bool enabled;
 
-  void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
-  void remove_lru(string& name, std::list<string>::iterator& lru_iter);
+  void touch_lru(string& name, ObjectCacheEntry& entry,
+		 std::deque<string>::iterator& lru_iter);
+  void remove_lru(string& name, std::deque<string>::iterator& lru_iter);
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
@@ -161,7 +162,8 @@ public:
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
   }
-  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry);
+  bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+			 RGWChainedCache::Entry *chained_entry);
 
   void set_enabled(bool status);
 
@@ -246,7 +248,7 @@ public:
 
   int delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker) override;
 
-  bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) override {
+  bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries, RGWChainedCache::Entry *chained_entry) override {
     return cache.chain_cache_entry(cache_info_entries, chained_entry);
   }
 };
