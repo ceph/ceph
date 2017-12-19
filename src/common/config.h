@@ -24,17 +24,7 @@
 #include "common/config_obs.h"
 #include "common/options.h"
 
-#define OSD_REP_PRIMARY 0
-#define OSD_REP_SPLAY   1
-#define OSD_REP_CHAIN   2
-
 class CephContext;
-
-extern const char *CEPH_CONF_FILE_DEFAULT;
-
-#define LOG_TO_STDERR_NONE 0
-#define LOG_TO_STDERR_SOME 1
-#define LOG_TO_STDERR_ALL 2
 
 /** This class represents the current Ceph configuration.
  *
