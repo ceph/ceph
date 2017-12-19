@@ -4046,7 +4046,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_string("poolname", osdmap.pool_name[p->first]);
 	  f->close_section();
 	} else {
-	  ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	  ds << p->first << ' ' << osdmap.pool_name[p->first];
+	  if (next(p) != osdmap.pools.end()) {
+	    ds << '\n';
+	  }
 	}
       }
     }
