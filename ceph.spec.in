@@ -340,11 +340,13 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python-cherrypy
+Requires:       python-jinja2
 Requires:       python-werkzeug
 Requires:       pyOpenSSL
 %endif
 %if 0%{?suse_version}
 Requires: 	python-CherryPy
+Requires:       python-Jinja2
 Requires:       python-Werkzeug
 Requires:       python-pyOpenSSL
 Recommends:     python-influxdb
