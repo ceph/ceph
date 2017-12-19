@@ -3826,9 +3826,11 @@ void RGWPutCORS::execute()
     store->set_atomic(s->obj_ctx, obj);
     op_ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl);
   } else {
-    map<string, bufferlist> attrs = s->bucket_attrs;
-    attrs[RGW_ATTR_CORS] = cors_bl;
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_CORS] = cors_bl;
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    });
   }
 }
 
@@ -3842,51 +3844,54 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
-  op_ret = read_bucket_cors();
-  if (op_ret < 0)
-    return;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      op_ret = read_bucket_cors();
+      if (op_ret < 0)
+	return op_ret;
 
-  bufferlist bl;
-  rgw_obj obj;
-  if (!cors_exist) {
-    dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    op_ret = -ENOENT;
-    return;
-  }
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_atomic(s->obj_ctx, obj);
-  map<string, bufferlist> orig_attrs, attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
+      bufferlist bl;
+      rgw_obj obj;
+      if (!cors_exist) {
+	dout(2) << "No CORS configuration set yet for this bucket" << dendl;
+	op_ret = -ENOENT;
+	return op_ret;
+      }
+      store->get_bucket_instance_obj(s->bucket, obj);
+      store->set_atomic(s->obj_ctx, obj);
+      map<string, bufferlist> orig_attrs, attrs, rmattrs;
+      map<string, bufferlist>::iterator iter;
 
-  bool is_object_op = (!s->object.empty());
+      bool is_object_op = (!s->object.empty());
 
+      if (is_object_op) {
+	/* check if obj exists, read orig attrs */
+	op_ret = get_obj_attrs(store, s, obj, orig_attrs);
+	if (op_ret < 0)
+	  return op_ret;
+      } else {
+	op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+	if (op_ret < 0)
+	  return op_ret;
+      }
 
-  if (is_object_op) {
-    /* check if obj exists, read orig attrs */
-    op_ret = get_obj_attrs(store, s, obj, orig_attrs);
-    if (op_ret < 0)
-      return;
-  } else {
-    op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
-    if (op_ret < 0)
-      return;
-  }
+      /* only remove meta attrs */
+      for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+	const string& name = iter->first;
+	dout(10) << "DeleteCORS : attr: " << name << dendl;
+	if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
+	  rmattrs[name] = iter->second;
+	} else if (attrs.find(name) == attrs.end()) {
+	  attrs[name] = iter->second;
+	}
+      }
+      if (is_object_op) {
+	op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
+      } else {
+	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      }
 
-  /* only remove meta attrs */
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    dout(10) << "DeleteCORS : attr: " << name << dendl;
-    if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
-      rmattrs[name] = iter->second;
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-  if (is_object_op) {
-    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
-  } else {
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
-  }
+      return op_ret;
+    });
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
