@@ -347,7 +347,9 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
                     std::vector<std::string> *status)
 {
   status->clear();
-  boost::optional<size_t> num_shards;
+  // The initialisation below is required to silence a false positive
+  // -Wmaybe-uninitialized warning
+  boost::optional<size_t> num_shards = boost::make_optional(false, 0UL);
   for (auto peer = first; peer != last; ++peer) {
     const size_t peer_shards = peer->size();
     if (!num_shards) {
@@ -417,6 +419,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   std::string bucket_instance;
   const std::string& zone_id; //< my zone id
   RGWBucketInfo bucket_info; //< bucket instance info to locate bucket indices
+  int child_ret = 0;
 
   using StatusShards = std::vector<rgw_bucket_shard_sync_info>;
   std::vector<StatusShards> peer_status; //< sync status for each peer
@@ -467,7 +470,6 @@ int BucketTrimInstanceCR::operate()
     }
     // wait for a response from each peer. all must respond to attempt trim
     while (num_spawned()) {
-      int child_ret;
       yield wait_for_child();
       collect(&child_ret, nullptr);
       if (child_ret < 0) {
