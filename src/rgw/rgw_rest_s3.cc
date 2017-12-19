@@ -3660,16 +3660,15 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
-                                           const bool qsr) const
+bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time) const
 {
   /* Check for time skew first. */
   const time_t req_sec = header_time.sec();
   time_t now;
   time(&now);
 
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
     ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
                    << "; now - RGW_AUTH_GRACE_MINS="
                    << now - RGW_AUTH_GRACE_MINS * 60
@@ -3682,9 +3681,9 @@ bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
                    << " req_time=" << header_time
                    << dendl;
     return false;
-  } else {
-    return true;
   }
+
+  return true;
 }
 
 
@@ -3956,7 +3955,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   ldout(cct, 10) << "string_to_sign:\n"
                  << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
-  if (! is_time_skew_ok(header_time, qsr)) {
+  if (!qsr && !is_time_skew_ok(header_time)) {
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
