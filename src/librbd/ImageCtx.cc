@@ -470,17 +470,8 @@ struct C_InvalidateCache : public Context {
 			       string in_snap_name) const
   {
     assert(snap_lock.is_locked());
-    auto it = snap_ids.find({in_snap_namespace, in_snap_name});
-    if (it != snap_ids.end())
-      return it->second;
-    return CEPH_NOSNAP;
-  }
-
-  snap_t ImageCtx::get_snap_id_from_namespace(cls::rbd::SnapshotNamespace in_snap_namespace) const
-  {
-    assert(snap_lock.is_locked());
     map<pair<cls::rbd::SnapshotNamespace, std::string>, snap_t>::const_iterator it =
-      snap_ids.lower_bound({in_snap_namespace, ""});
+      snap_ids.lower_bound({in_snap_namespace, in_snap_name});
     if (it != snap_ids.end()) {
       return it->second;
     }
