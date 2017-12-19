@@ -1231,6 +1231,8 @@ protected:
   unsigned get_recovery_priority();
   /// get backfill reservation priority
   unsigned get_backfill_priority();
+  /// get priority for pg deletion
+  unsigned get_delete_priority();
 
   void mark_clean();  ///< mark an active pg clean
 
@@ -1870,6 +1872,8 @@ protected:
 
   TrivialEvent(DeleteStart)
   TrivialEvent(DeleteSome)
+  TrivialEvent(DeleteReserved)
+  TrivialEvent(DeleteInterrupted)
 
   /* Encapsulates PG recovery process */
   class RecoveryState {
@@ -1981,7 +1985,9 @@ protected:
     //       RepWaitBackfillReserved
     //       RepWaitRecoveryReserved
     //     Stray
-    //     Deleting
+    //     ToDelete
+    //       WaitDeleteReserved
+    //       Deleting
     // Crashed
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
@@ -2280,7 +2286,7 @@ protected:
       void exit();
     };
 
-    struct Deleting;
+    struct ToDelete;
     struct RepNotRecovering;
     struct ReplicaActive : boost::statechart::state< ReplicaActive, Started, RepNotRecovering >, NamedState {
       explicit ReplicaActive(my_context ctx);
@@ -2299,7 +2305,7 @@ protected:
 	boost::statechart::custom_reaction< UnfoundBackfill >,
 	boost::statechart::custom_reaction< RemoteBackfillPreempted >,
 	boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
-	boost::statechart::transition<DeleteStart, Deleting>
+	boost::statechart::transition<DeleteStart, ToDelete>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -2461,7 +2467,7 @@ protected:
 	boost::statechart::custom_reaction< MInfoRec >,
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< RecoveryDone >,
-	boost::statechart::transition<DeleteStart, Deleting>
+	boost::statechart::transition<DeleteStart, ToDelete>
 	> reactions;
       boost::statechart::result react(const MQuery& query);
       boost::statechart::result react(const MLogRec& logevt);
@@ -2472,15 +2478,39 @@ protected:
       }
     };
 
-    struct Deleting : boost::statechart::state<Deleting, Started>, NamedState {
+    struct WaitDeleteReserved;
+    struct ToDelete : boost::statechart::state<ToDelete, Started, WaitDeleteReserved>, NamedState {
+      unsigned priority = 0;
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
 	boost::statechart::custom_reaction< DeleteSome >
 	> reactions;
-      explicit Deleting(my_context ctx);
-      boost::statechart::result react(const ActMap &evt) {
+      explicit ToDelete(my_context ctx);
+      boost::statechart::result react(const ActMap &evt);
+      boost::statechart::result react(const DeleteSome &evt) {
+	// happens if we drop out of Deleting due to reprioritization etc.
 	return discard_event();
       }
+      void exit();
+    };
+
+    struct Deleting;
+    struct WaitDeleteReserved : boost::statechart::state<WaitDeleteReserved,
+							 ToDelete>, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::transition<DeleteReserved, Deleting>
+	> reactions;
+      explicit WaitDeleteReserved(my_context ctx);
+      void exit();
+    };
+
+    struct Deleting : boost::statechart::state<Deleting,
+					       ToDelete>, NamedState {
+      typedef boost::mpl::list <
+	boost::statechart::custom_reaction< DeleteSome >,
+	boost::statechart::transition<DeleteInterrupted, WaitDeleteReserved>
+	> reactions;
+      explicit Deleting(my_context ctx);
       boost::statechart::result react(const DeleteSome &evt);
       void exit();
     };
