@@ -143,7 +143,6 @@ add_library(rgw_a STATIC ${rgw_a_srcs})
 add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC
-  "../Beast/include"
   ${FCGI_INCLUDE_DIR}
   "../rapidjson/include"
   )
