@@ -454,7 +454,7 @@ void ImageReplayer<I>::handle_prepare_remote_image(int r) {
     dout(20) << "remote image does not exist" << dendl;
 
     // TODO need to support multiple remote images
-    if (!m_local_image_id.empty() &&
+    if (m_remote_image.image_id.empty() && !m_local_image_id.empty() &&
         m_local_image_tag_owner == m_remote_image.mirror_uuid) {
       // local image exists and is non-primary and linked to the missing
       // remote image
