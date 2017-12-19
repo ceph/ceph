@@ -3150,7 +3150,7 @@ class RGWChainedCacheImpl : public RGWChainedCache {
   ceph::timespan expiry;
   RWLock lock;
 
-  map<string, std::pair<T, ceph::coarse_mono_time>> entries;
+  map<string, std::pair<T, ceph::mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
@@ -3167,7 +3167,7 @@ public:
       return false;
     }
     if (expiry.count() &&
-	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
+	(ceph::mono_clock::now() - iter->second.second) > expiry) {
       return false;
     }
 
@@ -3187,7 +3187,7 @@ public:
     RWLock::WLocker wl(lock);
     entries[key].first = *entry;
     if (expiry.count() > 0) {
-      entries[key].second = ceph::coarse_mono_clock::now();
+      entries[key].second = ceph::mono_clock::now();
     }
   }
 
