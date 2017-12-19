@@ -54,3 +54,8 @@ int RGWObjTags::set_from_string(const string& input){
   }
   return ret;
 }
+
+void RGWObjTags::generate_test_instances(list<RGWObjTags*>& o)
+{
+  o.push_back(new RGWObjTags);
+}

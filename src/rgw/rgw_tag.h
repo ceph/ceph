@@ -37,6 +37,7 @@ class RGWObjTags
   void clear() { tag_map.clear(); }
   bool empty() const noexcept { return tag_map.empty(); }
   const tag_map_t& get_tags() const {return tag_map;}
+  static void generate_test_instances(list<RGWObjTags*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjTags)
 

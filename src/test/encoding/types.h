@@ -312,6 +312,9 @@ TYPE(RGWCacheNotifyInfo)
 #include "rgw/rgw_lc.h"
 TYPE(RGWLifecycleConfiguration)
 
+#include "rgw/rgw_gc.h"
+TYPE(RGWObjTags)
+
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
 TYPE(rgw_bucket_dir_entry_meta)
