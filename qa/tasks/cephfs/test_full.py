@@ -387,12 +387,12 @@ class TestQuotaFull(FullnessTestCase):
                                             "max_bytes", "{0}".format(self.pool_capacity))
 
     def is_full(self):
-        return self.fs.is_pool_full(self.fs.get_data_pool_name())
+        return self.fs.is_full()
 
 
 class TestClusterFull(FullnessTestCase):
     """
-    Test cluster-wide fullness, which indicates that an OSD has become too full
+    Test data pool fullness, which indicates that an OSD has become too full
     """
     pool_capacity = None
     REQUIRE_MEMSTORE = True
