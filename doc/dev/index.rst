@@ -145,7 +145,7 @@ time using `Internet Relay Chat`_.
 
 .. _`Internet Relay Chat`: http://www.irchelp.org/
 
-See https://ceph.com/irc/ for how to set up your IRC
+See ``https://ceph.com/irc/`` for how to set up your IRC
 client and a list of channels.
 
 Submitting patches
@@ -708,19 +708,24 @@ chapters examine the `make check`_ and integration tests in detail.
 Testing - make check
 ====================
 
-After compiling Ceph, the `make check`_ command can be used to run the
-code through a battery of tests covering various aspects of Ceph. For
-inclusion in `make check`_, a test must:
+After compiling Ceph, the code can be run through a battery of tests covering
+various aspects of Ceph. For historical reasons, this battery of tests is often
+referred to as `make check`_ even though the actual command used to run the
+tests is now ``ctest``. For inclusion in this battery of tests, a test must:
 
 * bind ports that do not conflict with other tests
 * not require root access
 * not require more than one machine to run
 * complete within a few minutes
 
-While it is possible to run `make check`_ directly, it can be tricky to
-correctly set up your environment. Fortunately, a script is provided to
-make it easier run `make check`_ on your code. It can be run from the
-top-level directory of the Ceph source tree by doing::
+For simplicity, we will refer to this class of tests as "make check tests" or
+"unit tests", to distinguish them from the more complex "integration tests"
+that are run via the `teuthology framework`_.
+
+While it is possible to run ``ctest`` directly, it can be tricky to correctly
+set up your environment. Fortunately, a script is provided to make it easier
+run the unit tests on your code. It can be run from the top-level directory of
+the Ceph source tree by doing::
 
     $ ./run-make-check.sh
 
@@ -729,10 +734,32 @@ command to complete successfully on x86_64 (other architectures may have
 different constraints). Depending on your hardware, it can take from 20
 minutes to three hours to complete, but it's worth the wait.
 
+How unit tests are declared
+---------------------------
+
+Unit tests are declared in the ``CMakeLists.txt`` files (multiple files under
+``./src``) using the ``add_ceph_test`` or ``add_ceph_unittest`` CMake functions,
+which are themselves defined in ``./cmake/modules/AddCephTest.cmake``. Some
+unit tests are scripts, while others are binaries that are compiled during the
+build process.  The ``add_ceph_test`` function is used to declare unit test
+scripts, while ``add_ceph_unittest`` is used for unit test binaries.
+
+Unit testing of CLI tools
+-------------------------
+
+Some of the CLI tools are tested using special files ending with the extension
+``.t`` and stored under ``./src/test/cli``. These tests are run using a tool
+called `cram`_ via a shell script ``./src/test/run-cli-tests``.  `cram`_ tests
+that are not suitable for `make check`_ may also be run by teuthology using
+the `cram task`_.
+
+.. _`cram`: https://bitheap.org/cram/
+.. _`cram task`: https://github.com/ceph/ceph/blob/master/qa/tasks/cram.py
+
 Caveats
 -------
 
-1. Unlike the various Ceph daemons and ``ceph-fuse``, the `make check`_ tests
+1. Unlike the various Ceph daemons and ``ceph-fuse``, the unit tests
    are linked against the default memory allocator (glibc) unless explicitly
    linked against something else. This enables tools like valgrind to be used
    in the tests.
