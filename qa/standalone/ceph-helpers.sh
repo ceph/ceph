@@ -576,6 +576,7 @@ function run_osd() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
@@ -595,6 +596,7 @@ function run_osd_bluestore() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
@@ -714,6 +716,7 @@ function activate_osd() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
