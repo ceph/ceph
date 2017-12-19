@@ -1524,6 +1524,8 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o
   ldout(cache->cct, 30) << __func__ << " " << oid << " " << o << dendl;
   onode_map[oid] = o;
   cache->_add_onode(o, 1);
+  lgeneric_subdout(cache->cct,cachetrace,10) << "CACHE bluestore_onode add "
+					     << oid << dendl;
   return o;
 }
 
@@ -1560,6 +1562,8 @@ void BlueStore::OnodeSpace::clear()
   std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 10) << __func__ << dendl;
   for (auto &p : onode_map) {
+    lgeneric_subdout(cache->cct,cachetrace,10) << "CACHE bluestore_onode rm "
+					       << p.first << dendl;
     cache->_rm_onode(p.second);
   }
   onode_map.clear();
@@ -1593,6 +1597,11 @@ void BlueStore::OnodeSpace::rename(
     onode_map.erase(pn);
   }
   OnodeRef o = po->second;
+
+  lgeneric_subdout(cache->cct,cachetrace,10) << "CACHE bluestore_onode rm "
+					     << old_oid << dendl;
+  lgeneric_subdout(cache->cct,cachetrace,10) << "CACHE bluestore_onode add "
+					     << new_oid << dendl;
 
   // install a non-existent onode at old location
   oldo.reset(new Onode(o->c, old_oid, o->key));
@@ -3226,8 +3235,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   }
 
   OnodeRef o = onode_map.lookup(oid);
-  if (o)
+  if (o) {
+    lgeneric_subdout(store->cct,cachetrace,10) << "CACHE bluestore_onode "
+					       << "get_hit " << oid << dendl;
     return o;
+  }
 
   mempool::bluestore_cache_other::string key;
   get_object_key(store->cct, oid, &key);
@@ -3242,8 +3254,11 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (v.length() == 0) {
     assert(r == -ENOENT);
     if (!store->cct->_conf->bluestore_debug_misc &&
-	!create)
+	!create) {
+      lgeneric_subdout(store->cct,cachetrace,10) << "CACHE bluestore_onode "
+						 << "get_dne " << oid << dendl;
       return OnodeRef();
+    }
 
     // new object, new onode
     on = new Onode(this, oid, key);
@@ -3269,6 +3284,8 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
       on->extent_map.init_shards(false, false);
     }
   }
+  lgeneric_subdout(store->cct,cachetrace,10) << "CACHE bluestore_onode get_miss "
+					     << oid << dendl;
   o.reset(on);
   return onode_map.add(oid, o);
 }
