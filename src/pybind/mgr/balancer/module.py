@@ -303,7 +303,7 @@ class Module(MgrModule):
             self.optimize(plan)
             return (0, '', '')
         elif command['prefix'] == 'balancer rm':
-            self.plan_rm(command['name'])
+            self.plan_rm(command['plan'])
             return (0, '', '')
         elif command['prefix'] == 'balancer reset':
             self.plans = {}
