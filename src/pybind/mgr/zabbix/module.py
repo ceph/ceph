@@ -72,7 +72,7 @@ class Module(MgrModule):
         },
         {
             "cmd": "zabbix send",
-            "desc": "Force sending data to Zabbux",
+            "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
         {
