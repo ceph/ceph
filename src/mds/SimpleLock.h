@@ -167,7 +167,7 @@ protected:
   __s16 state;
 
 private:
-  __s16 num_rdlock;
+  __s32 num_rdlock;
   __s32 num_client_lease;
 
   struct unstable_bits_t {
