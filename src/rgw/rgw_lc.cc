@@ -679,7 +679,6 @@ int RGWLC::process(int index, int max_lock_secs)
     if (ret < 0)
       return 0;
 
-    string marker;
     cls_rgw_lc_obj_head head;
     ret = cls_rgw_lc_get_head(store->lc_pool_ctx, obj_names[index], head);
     if (ret < 0) {
