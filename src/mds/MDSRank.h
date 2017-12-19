@@ -136,6 +136,8 @@ class MDSRank {
     // a separate lock here in future potentially.
     Mutex &mds_lock;
 
+    class CephContext *cct;
+
     bool is_daemon_stopping() const;
 
     // Reference to global cluster log client, just to avoid initialising
