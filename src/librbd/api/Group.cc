@@ -258,7 +258,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 
     std::string snap_name;
     ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->get_snap_id_from_namespace(ne);
+    snap_t snap_id = ictx->get_snap_id(ne, "");
     r = ictx->get_snap_name(snap_id, &snap_name);
     ictx->snap_lock.put_read();
     if (r >= 0) {
@@ -853,7 +853,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     } else {
       ImageCtx *ictx = ictxs[i];
       ictx->snap_lock.get_read();
-      snap_t snap_id = ictx->get_snap_id_from_namespace(ne);
+      snap_t snap_id = ictx->get_snap_id(ne, "");
       ictx->snap_lock.put_read();
       if (snap_id == CEPH_NOSNAP) {
 	ldout(cct, 20) <<
@@ -892,7 +892,7 @@ remove_image_snaps:
     on_finishes[i] = new C_SaferCond;
     std::string snap_name;
     ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->get_snap_id_from_namespace(ne);
+    snap_t snap_id = ictx->get_snap_id(ne, "");
     r = ictx->get_snap_name(snap_id, &snap_name);
     ictx->snap_lock.put_read();
     if (r >= 0) {
