@@ -5040,7 +5040,6 @@ void RGWDeleteCORS::execute()
   if (op_ret < 0)
     return;
 
-  bufferlist bl;
   rgw_raw_obj obj;
   if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
