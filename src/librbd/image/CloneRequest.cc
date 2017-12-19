@@ -7,7 +7,6 @@
 #include "common/errno.h"
 #include "include/assert.h"
 #include "librbd/ImageState.h"
-#include "librbd/Journal.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
@@ -120,36 +119,6 @@ void CloneRequest<I>::send_validate_parent() {
   if (!snap_protected) {
     lderr(m_cct) << "parent snapshot must be protected" << dendl;
     return complete(-EINVAL);
-  }
-
-  if ((m_p_features & RBD_FEATURE_JOURNALING) != 0) {
-    m_force_non_primary = !m_non_primary_global_image_id.empty();
-    using klass = CloneRequest<I>;
-    Context *ctx = create_context_callback<
-	klass, &klass::handle_validate_parent>(this);
-
-    Journal<I>::is_tag_owner(m_p_imctx, &m_is_primary, ctx);
-    return;
-  }
-
-  send_validate_child();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_validate_parent(int r) {
-  ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-	       << dendl;
-    return complete(r);
-  }
-
-  if ((m_p_features & RBD_FEATURE_JOURNALING) != 0) {
-    if (!m_is_primary && !m_force_non_primary) {
-      lderr(m_cct) << "parent is non-primary mirrored image" << dendl;
-      return complete(-EINVAL);
-    }
   }
 
   send_validate_child();
@@ -464,7 +433,8 @@ void CloneRequest<I>::send_enable_mirror() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   using klass = CloneRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_enable_mirror>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_enable_mirror>(this);
 
   mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
     m_imctx->md_ctx, m_id, m_non_primary_global_image_id,
