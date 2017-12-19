@@ -4916,17 +4916,17 @@ void RGWPutLC::execute()
   do {
     op_ret = l.lock_exclusive(ctx, oid);
     if (op_ret == -EBUSY) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on " << oid << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on " << oid << ", ret=" << op_ret << dendl;
       break;
     }
     op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << op_ret << dendl;     
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry on " << oid << ", ret=" << op_ret << dendl;     
     }
     break;
   }while(1);
@@ -4966,17 +4966,17 @@ void RGWDeleteLC::execute()
   do {
     op_ret = l.lock_exclusive(ctx, oid);
     if (op_ret == -EBUSY) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on " << oid << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on " << oid << ", ret=" << op_ret << dendl;
       break;
     }
     op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to set entry " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to rm entry on " << oid << ", ret=" << op_ret << dendl;
     }
     break;
   }while(1);
