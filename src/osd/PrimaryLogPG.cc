@@ -1194,7 +1194,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
-	while (1) {
+	while (true) {
 	  const hobject_t &mcand =
 	    missing_iter == pg_log.get_missing().get_items().end() ?
 	    _max :
@@ -1233,22 +1233,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    break;
 	  }
 
-	  if (candidate.snap != CEPH_NOSNAP)
-	    continue;
-
-	  // skip internal namespace
-	  if (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace)
-	    continue;
-
-	  if (missing_loc.is_deleted(candidate))
-	    continue;
-
-	  // skip wrong namespace
-	  if (m->get_hobj().nspace != librados::all_nspaces &&
-               candidate.get_namespace() != m->get_hobj().nspace)
-	    continue;
-
-	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	  if (candidate.snap != CEPH_NOSNAP /* skip internal namespace */ ||
+            (candidate.get_namespace() == cct->_conf->osd_hit_set_namespace) ||
+            missing_loc.is_deleted(candidate) ||
+            // skip wrong namespace
+            (m->get_hobj().nspace != librados::all_nspaces &&
+              candidate.get_namespace() != m->get_hobj().nspace) ||
+            (filter && !pgls_filter(filter, candidate, filter_out)))
 	    continue;
 
           dout(20) << "pgnls item 0x" << std::hex
@@ -1335,13 +1326,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	hobject_t next;
 	hobject_t current = response.handle;
 	osr->flush();
-	int r = pgbackend->objects_list_partial(
-	  current,
-	  list_size,
-	  list_size,
-	  &sentries,
-	  &next);
-	if (r != 0) {
+	if (pgbackend->objects_list_partial(
+          current, list_size, list_size, &sentries, &next) != 0) {
 	  result = -EINVAL;
 	  break;
 	}
@@ -1352,7 +1338,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  pg_log.get_missing().get_items().lower_bound(current);
 	vector<hobject_t>::iterator ls_iter = sentries.begin();
 	hobject_t _max = hobject_t::get_max();
-	while (1) {
+	while (true) {
 	  const hobject_t &mcand =
 	    missing_iter == pg_log.get_missing().get_items().end() ?
 	    _max :
@@ -1388,17 +1374,11 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	    break;
 	  }
 
-	  if (candidate.snap != CEPH_NOSNAP)
-	    continue;
-
-	  // skip wrong namespace
-	  if (candidate.get_namespace() != m->get_hobj().nspace)
-	    continue;
-
-	  if (missing_loc.is_deleted(candidate))
-	    continue;
-
-	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	  if ((candidate.snap != CEPH_NOSNAP) ||
+            // skip wrong namespace
+            (candidate.get_namespace() != m->get_hobj().nspace) ||
+            (missing_loc.is_deleted(candidate)) ||
+            (filter && !pgls_filter(filter, candidate, filter_out)))
 	    continue;
 
 	  response.entries.push_back(make_pair(candidate.oid,
@@ -1668,10 +1648,8 @@ void PrimaryLogPG::do_request(
 	is_down() ||
 	is_incomplete() ||
 	(!is_active() && is_peered());
-      if (g_conf->osd_backoff_on_peering && !backoff) {
-	if (is_peering()) {
-	  backoff = true;
-	}
+      if ((g_conf->osd_backoff_on_peering && !backoff) && is_peering()) {
+        backoff = true;
       }
       if (backoff) {
 	add_pg_backoff(session);
@@ -1691,8 +1669,7 @@ void PrimaryLogPG::do_request(
   if (!is_peered()) {
     // Delay unless PGBackend says it's ok
     if (pgbackend->can_handle_while_inactive(op)) {
-      bool handled = pgbackend->handle_message(op);
-      assert(handled);
+      assert(pgbackend->handle_message(op));
       return;
     } else {
       waiting_for_peered.push_back(op);
@@ -1865,8 +1842,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   }
 
   if (op->rmw_flags == 0) {
-    int r = osd->osd->init_op_flags(op);
-    if (r) {
+    if (int r = osd->osd->init_op_flags(op)) {
       osd->reply_op_error(op, r);
       return;
     }
@@ -1964,10 +1940,10 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 	     << dendl;
     return;
   }
-  int64_t poolid = get_pgid().pool();
+
   if (op->may_write()) {
 
-    const pg_pool_t *pi = get_osdmap()->get_pg_pool(poolid);
+    const pg_pool_t *pi = get_osdmap()->get_pg_pool(get_pgid().pool());
     if (!pi) {
       return;
     }
@@ -2068,9 +2044,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     eversion_t version;
     version_t user_version;
     int return_code = 0;
-    bool got = check_in_progress_op(
-      m->get_reqid(), &version, &user_version, &return_code);
-    if (got) {
+    if (check_in_progress_op(
+      m->get_reqid(), &version, &user_version, &return_code)) {
       dout(3) << __func__ << " dup " << m->get_reqid()
 	      << " version " << version << dendl;
       if (already_complete(version)) {
@@ -2167,8 +2142,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     if (obc.get()) {
       if (obc->obs.oi.soid != hobject_t() && hit_set->contains(obc->obs.oi.soid))
 	in_hit_set = true;
-    } else {
-      if (missing_oid != hobject_t() && hit_set->contains(missing_oid))
+    } else if (missing_oid != hobject_t() && hit_set->contains(missing_oid)) {
         in_hit_set = true;
     }
     if (!op->hitset_inserted) {
@@ -2181,17 +2155,12 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     }
   }
 
-  if (agent_state) {
-    if (agent_choose_mode(false, op))
+  if (agent_state && agent_choose_mode(false, op))
       return;
-  }
 
-  if (obc.get() && obc->obs.exists && obc->obs.oi.has_manifest()) {
-    if (maybe_handle_manifest(op,
-			       write_ordered,
-			       obc))
+  if (obc.get() && obc->obs.exists && obc->obs.oi.has_manifest() && 
+    maybe_handle_manifest(op, write_ordered, obc))
     return;
-  }
 
   if (maybe_handle_cache(op,
 			 write_ordered,
@@ -12470,20 +12439,17 @@ uint64_t PrimaryLogPG::recover_backfill(
 	BackfillInterval& pbi = peer_backfill_info[bt];
         // Find all check peers that have the wrong version
 	if (check == backfill_info.begin && check == pbi.begin) {
-	  if (pbi.objects.begin()->second != obj_v) {
-	    need_ver_targs.push_back(bt);
-	  } else {
+	  (pbi.objects.begin()->second != obj_v) ?
+	    need_ver_targs.push_back(bt) :
 	    keep_ver_targs.push_back(bt);
-	  }
         } else {
 	  pg_info_t& pinfo = peer_info[bt];
 
           // Only include peers that we've caught up to their backfill line
 	  // otherwise, they only appear to be missing this object
 	  // because their pbi.begin > backfill_info.begin.
-          if (backfill_info.begin > pinfo.last_backfill)
-	    missing_targs.push_back(bt);
-	  else
+          (backfill_info.begin > pinfo.last_backfill) ?
+	    missing_targs.push_back(bt) :
 	    skip_targs.push_back(bt);
 	}
       }
@@ -12793,8 +12759,8 @@ void PrimaryLogPG::scan_range(
 
   vector<hobject_t> ls;
   ls.reserve(max);
-  int r = pgbackend->objects_list_partial(bi->begin, min, max, &ls, &bi->end);
-  assert(r >= 0);
+  assert(pgbackend->objects_list_partial(
+    bi->begin, min, max, &ls, &bi->end) >= 0);
   dout(10) << " got " << ls.size() << " items, next " << bi->end << dendl;
   dout(20) << ls << dendl;
 
@@ -12852,11 +12818,8 @@ void PrimaryLogPG::check_local()
       dout(10) << " checking " << p->soid
 	       << " at " << p->version << dendl;
       struct stat st;
-      int r = osd->store->stat(
-	ch,
-	ghobject_t(p->soid, ghobject_t::NO_GEN, pg_whoami.shard),
-	&st);
-      if (r != -ENOENT) {
+      if (osd->store->stat(ch, ghobject_t(
+        p->soid, ghobject_t::NO_GEN, pg_whoami.shard), &st) != -ENOENT) {
 	derr << __func__ << " " << p->soid << " exists, but should have been "
 	     << "deleted" << dendl;
 	assert(0 == "erroneously present object");
@@ -12946,9 +12909,8 @@ void PrimaryLogPG::hit_set_remove_all()
     hobject_t aoid = get_hit_set_archive_object(p->begin, p->end, p->using_gmt);
 
     // Once we hit a degraded object just skip
-    if (is_degraded_or_backfilling_object(aoid))
-      return;
-    if (scrubber.write_blocked_by_scrub(aoid))
+    if (is_degraded_or_backfilling_object(aoid) ||
+      scrubber.write_blocked_by_scrub(aoid))
       return;
   }
 
@@ -12963,8 +12925,7 @@ void PrimaryLogPG::hit_set_remove_all()
     OpContextUPtr ctx = simple_opc_create(obc);
     ctx->at_version = get_next_version();
     ctx->updated_hset_history = info.hit_set;
-    utime_t now = ceph_clock_now();
-    ctx->mtime = now;
+    ctx->mtime = ceph_clock_now();
     hit_set_trim(ctx, 0);
     simple_opc_submit(std::move(ctx));
   }
@@ -13313,9 +13274,8 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   // listing we get back is imprecise.
   vector<hobject_t> ls;
   hobject_t next;
-  int r = pgbackend->objects_list_partial(agent_state->position, ls_min, ls_max,
-					  &ls, &next);
-  assert(r >= 0);
+  assert(pgbackend->objects_list_partial(
+    agent_state->position, ls_min, ls_max, &ls, &next) >= 0);
   dout(20) << __func__ << " got " << ls.size() << " objects" << dendl;
   int started = 0;
   for (vector<hobject_t>::iterator p = ls.begin();
@@ -13408,18 +13368,13 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   if (agent_state->position < agent_state->start &&
       next >= agent_state->start) {
     dout(20) << __func__ << " wrap around " << agent_state->start << dendl;
-    if (total_started == 0)
-      need_delay = true;
-    else
-      total_started = 0;
+    total_started == 0 ? need_delay = true : total_started = 0;
     agent_state->start = next;
   }
   agent_state->started = total_started;
 
   // See if we are starting from beginning
-  if (next.is_max())
-    agent_state->position = hobject_t();
-  else
+  next.is_max() ? agent_state->position = hobject_t() :
     agent_state->position = next;
 
   // Discard old in memory HitSets
@@ -13498,11 +13453,10 @@ bool PrimaryLogPG::agent_maybe_flush(ObjectContextRef& obc)
 
   utime_t now = ceph_clock_now();
   utime_t ob_local_mtime;
-  if (obc->obs.oi.local_mtime != utime_t()) {
-    ob_local_mtime = obc->obs.oi.local_mtime;
-  } else {
+  obc->obs.oi.local_mtime != utime_t() ?
+    ob_local_mtime = obc->obs.oi.local_mtime :
     ob_local_mtime = obc->obs.oi.mtime;
-  }
+
   bool evict_mode_full =
     (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL);
   if (!evict_mode_full &&
@@ -13567,8 +13521,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   }
 
   if (soid.snap == CEPH_NOSNAP) {
-    int result = _verify_no_head_clones(soid, obc->ssc->snapset);
-    if (result < 0) {
+    if (_verify_no_head_clones(soid, obc->ssc->snapset) < 0) {
       dout(20) << __func__ << " skip (clones) " << obc->obs.oi << dendl;
       return false;
     }
@@ -13578,11 +13531,9 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     // is this object old than cache_min_evict_age?
     utime_t now = ceph_clock_now();
     utime_t ob_local_mtime;
-    if (obc->obs.oi.local_mtime != utime_t()) {
-      ob_local_mtime = obc->obs.oi.local_mtime;
-    } else {
+    obc->obs.oi.local_mtime != utime_t() ?
+      ob_local_mtime = obc->obs.oi.local_mtime :
       ob_local_mtime = obc->obs.oi.mtime;
-    }
     if (ob_local_mtime + utime_t(pool.info.cache_min_evict_age, 0) > now) {
       dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
@@ -13716,9 +13667,8 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     unflushable += info.stats.stats.sum.num_objects_omap;
 
   uint64_t num_user_objects = info.stats.stats.sum.num_objects;
-  if (num_user_objects > unflushable)
-    num_user_objects -= unflushable;
-  else
+  num_user_objects > unflushable ?
+    num_user_objects -= unflushable :
     num_user_objects = 0;
 
   uint64_t num_user_bytes = info.stats.stats.sum.num_bytes;
@@ -13730,9 +13680,8 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   // also reduce the num_dirty by num_objects_omap
   int64_t num_dirty = info.stats.stats.sum.num_objects_dirty;
   if (!base_pool->supports_omap()) {
-    if (num_dirty > info.stats.stats.sum.num_objects_omap)
-      num_dirty -= info.stats.stats.sum.num_objects_omap;
-    else
+    num_dirty > info.stats.stats.sum.num_objects_omap ?
+      num_dirty -= info.stats.stats.sum.num_objects_omap :
       num_dirty = 0;
   }
 
@@ -13802,9 +13751,8 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   // evict mode
   uint64_t evict_target = pool.info.cache_target_full_ratio_micro;
   uint64_t evict_slop = (float)evict_target * cct->_conf->osd_agent_slop;
-  if (restart || agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE)
-    evict_target += evict_slop;
-  else
+  restart || agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE ?
+    evict_target += evict_slop :
     evict_target -= MIN(evict_target, evict_slop);
 
   if (full_micro > 1000000) {
@@ -14223,13 +14171,9 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     }
     if (!expected) {
       // If we couldn't read the head's snapset, just ignore clones
-      if (head && !snapset) {
-	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			  << " clone ignored due to missing snapset";
-      } else {
-	osd->clog->error() << mode << " " << info.pgid << " " << soid
-			   << " is an unexpected clone";
-      }
+      osd->clog->error() << mode << " " << info.pgid << " " << soid
+        << ((head && !snapset) ? " clone ignored due to missing snapset" :
+          " is an unexpected clone");
       ++scrubber.shallow_errors;
       soid_error.set_headless();
       scrubber.store->add_snap_error(pool.id, soid_error);
@@ -14393,16 +14337,12 @@ void PrimaryLogPG::scrub_snapshot_metadata(
     OpContextUPtr ctx = simple_opc_create(obc);
     ctx->at_version = get_next_version();
     ctx->mtime = utime_t();      // do not update mtime
-    if (p->second.first) {
-      ctx->new_obs.oi.set_data_digest(*p->second.first);
-    } else {
+    p->second.first ? ctx->new_obs.oi.set_data_digest(*p->second.first) :
       ctx->new_obs.oi.clear_data_digest();
-    }
-    if (p->second.second) {
-      ctx->new_obs.oi.set_omap_digest(*p->second.second);
-    } else {
+
+    p->second.second ? ctx->new_obs.oi.set_omap_digest(*p->second.second) :
       ctx->new_obs.oi.clear_omap_digest();
-    }
+
     finish_ctx(ctx.get(), pg_log_entry_t::MODIFY);
 
     ctx->register_on_success(
