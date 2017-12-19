@@ -11,14 +11,51 @@
  * Foundation.  See file COPYING.
  *
  */
-
 #ifndef CEPH_CLOCK_H
 #define CEPH_CLOCK_H
-
 #include "include/utime.h"
-
 #include <time.h>
 
-utime_t ceph_clock_now();
+struct ceph_clock {
+public:
+  ceph_clock() : start_(now_()) {}
 
+  utime_t now() {
+    return now_();
+  }
+
+  void reset() {
+    reset_();
+  }
+
+  utime_t elapsed() {
+    return elapsed_();
+  }
+
+private:
+  utime_t now_() {
+#if defined(CLOCK_REALTIME)
+    struct timespec tp;
+    clock_gettime(CLOCK_REALTIME, &tp);
+    utime_t n(tp);
+#else
+    struct timeval tv;
+    gettimeofday(&tv, nullptr);
+    utime_t n(&tv);
+#endif
+    return n;
+  } 
+
+  void reset_() {
+    start_ = now_();
+  }
+
+  utime_t elapsed_() {
+    return now_() - start_;
+  }
+
+  utime_t start_;
+};
+
+utime_t ceph_clock_now();
 #endif
