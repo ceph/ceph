@@ -8948,10 +8948,10 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 	      p.second->dest_obj_fadvise_flags);
       dout(20) << __func__ << " offset: " << p.second->cursor.data_offset 
 	      << " length: " << sub_chunk.outdata.length() << dendl;
-      sub_chunk.outdata.clear();
       write_update_size_and_usage(ctx->delta_stats, obs.oi, ctx->modified_ranges,
 				  p.second->cursor.data_offset, sub_chunk.outdata.length());
       obs.oi.manifest.chunk_map[p.second->cursor.data_offset].flags = 0; // clean
+      sub_chunk.outdata.clear();
     }
     obs.oi.clear_data_digest();
     ctx->at_version = get_next_version(); 
