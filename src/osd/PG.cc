@@ -2211,6 +2211,19 @@ unsigned PG::get_backfill_priority()
   return static_cast<unsigned>(ret);
 }
 
+unsigned PG::get_delete_priority()
+{
+  auto state = get_osdmap()->get_state(osd->whoami);
+  if (state & (CEPH_OSD_NEARFULL |
+	       CEPH_OSD_FULL)) {
+    return OSD_DELETE_PRIORITY_FULL;
+  } else if (state & CEPH_OSD_BACKFILLFULL) {
+    return OSD_DELETE_PRIORITY_FULLISH;
+  } else {
+    return OSD_DELETE_PRIORITY_NORMAL;
+  }
+}
+
 void PG::finish_recovery(list<Context*>& tfin)
 {
   dout(10) << "finish_recovery" << dendl;
@@ -6125,6 +6138,10 @@ void PG::_delete_some()
 
     osd->finish_pg_delete(this);
     deleted = true;
+
+    // cancel reserver here, since the PG is about to get deleted and the
+    // exit() methods don't run when that happens.
+    osd->local_reserver.cancel_reservation(info.pgid);
   }
 }
 
@@ -7964,24 +7981,80 @@ void PG::RecoveryState::Stray::exit()
 }
 
 
-/*--------Deleting----------*/
+/*--------ToDelete----------*/
+PG::RecoveryState::ToDelete::ToDelete(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->logger->inc(l_osd_pg_removing);
+}
+
+void PG::RecoveryState::ToDelete::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->logger->dec(l_osd_pg_removing);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+}
+
+/*----WaitDeleteReserved----*/
+PG::RecoveryState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg,
+	       "Started/ToDelete/WaitDeleteReseved")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  context<ToDelete>().priority = pg->get_delete_priority();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->osd->local_reserver.request_reservation(
+    pg->info.pgid,
+    new QueuePeeringEvt<DeleteReserved>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeleteReserved()),
+    context<ToDelete>().priority,
+    new QueuePeeringEvt<DeleteInterrupted>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeleteInterrupted()));
+}
+
+boost::statechart::result PG::RecoveryState::ToDelete::react(
+  const ActMap& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->get_delete_priority() != priority) {
+    ldout(pg->cct,10) << __func__ << " delete priority changed, resetting"
+		      << dendl;
+    return transit<ToDelete>();
+  }
+  return discard_event();
+}
+
+void PG::RecoveryState::WaitDeleteReserved::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*----Deleting-----*/
 PG::RecoveryState::Deleting::Deleting(my_context ctx)
   : my_base(ctx),
-    NamedState(context< RecoveryMachine >().pg, "Started/Deleting")
+    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete/Deleting")
 {
   context< RecoveryMachine >().log_enter(state_name);
   PG *pg = context< RecoveryMachine >().pg;
   pg->deleting = true;
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   pg->on_removal(t);
-  pg->osd->logger->inc(l_osd_pg_removing);
   RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
   Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
   rctx->on_applied->contexts.push_back(fin);
   rctx->on_safe->contexts.push_back(fin);
 }
 
-boost::statechart::result PG::RecoveryState::Deleting::react(const DeleteSome& evt)
+boost::statechart::result PG::RecoveryState::Deleting::react(
+  const DeleteSome& evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->_delete_some();
@@ -7993,7 +8066,7 @@ void PG::RecoveryState::Deleting::exit()
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
   pg->deleting = false;
-  pg->osd->logger->dec(l_osd_pg_removing);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 }
 
 /*--------GetInfo---------*/

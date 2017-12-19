@@ -87,6 +87,15 @@
 /// max recovery priority for MBackfillReserve, only when forced manually
 #define OSD_RECOVERY_PRIORITY_FORCED 255
 
+/// priority for pg deletion when osd is not fullish
+#define OSD_DELETE_PRIORITY_NORMAL 179
+
+/// priority for pg deletion when osd is approaching full
+#define OSD_DELETE_PRIORITY_FULLISH 219
+
+/// priority when more full
+#define OSD_DELETE_PRIORITY_FULL 255
+
 
 typedef hobject_t collection_list_handle_t;
 
