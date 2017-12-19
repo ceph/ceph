@@ -1552,9 +1552,6 @@ public:
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    Context *oncommit = nullptr;         ///< signal on commit
-    Context *onreadable = nullptr;       ///< signal on readable
-    Context *onreadable_sync = nullptr;  ///< signal on readable
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
@@ -1599,9 +1596,9 @@ public:
       // onode itself isn't written, though
       modified_objects.insert(o);
     }
-    void removed(OnodeRef& o) {
+    void note_removed_object(OnodeRef& o) {
       onodes.erase(o);
-      modified_objects.erase(o);
+      modified_objects.insert(o);
     }
 
     void aio_finish(BlueStore *store) override {
@@ -1663,6 +1660,8 @@ public:
 
     Sequencer *parent;
     BlueStore *store;
+
+    size_t shard;
 
     uint64_t last_seq = 0;
 

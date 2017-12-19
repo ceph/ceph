@@ -93,6 +93,10 @@ struct PrimaryLogPG::C_OSD_OnApplied : Context {
     epoch_t epoch,
     eversion_t v)
     : pg(pg), epoch(epoch), v(v) {}
+  bool sync_finish(int r) override {
+    pg->op_applied(v);
+    return true;
+  }
   void finish(int) override {
     pg->lock();
     if (!pg->pg_has_reset_since(epoch))
@@ -141,6 +145,11 @@ public:
       c.release()->complete(t);
     pg->unlock();
   }
+  bool sync_finish(T t) {
+    // we assume here all blessed/wrapped Contexts can complete synchronously.
+    c.release()->complete(t);
+    return true;
+  }
 };
 
 GenContext<ThreadPool::TPHandle&> *PrimaryLogPG::bless_gencontext(
@@ -163,6 +172,11 @@ public:
     else
       c.release()->complete(r);
     pg->unlock();
+  }
+  bool sync_finish(int r) {
+    // we assume here all blessed/wrapped Contexts can complete synchronously.
+    c.release()->complete(r);
+    return true;
   }
 };
 
@@ -216,8 +230,14 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
   public:
   C_OSD_AppliedRecoveredObject(PrimaryLogPG *p, ObjectContextRef o) :
     pg(p), obc(o) {}
-  void finish(int r) override {
+  bool sync_finish(int r) override {
     pg->_applied_recovered_object(obc);
+    return true;
+  }
+  void finish(int r) override {
+    pg->lock();
+    pg->_applied_recovered_object(obc);
+    pg->unlock();
   }
 };
 
@@ -240,8 +260,14 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
   public:
   explicit C_OSD_AppliedRecoveredObjectReplica(PrimaryLogPG *p) :
     pg(p) {}
-  void finish(int r) override {
+  bool sync_finish(int r) override {
     pg->_applied_recovered_object_replica();
+    return true;
+  }
+  void finish(int r) override {
+    pg->lock();
+    pg->_applied_recovered_object_replica();
+    pg->unlock();
   }
 };
 
@@ -10031,67 +10057,40 @@ void PrimaryLogPG::submit_log_entries(
 	    peer.osd, m, get_osdmap()->get_epoch());
 	}
       }
-      if (get_osdmap()->require_osd_release >= CEPH_RELEASE_JEWEL) {
-	ceph_tid_t rep_tid = repop->rep_tid;
-	waiting_on.insert(pg_whoami);
-	log_entry_update_waiting_on.insert(
-	  make_pair(
-	    rep_tid,
-	    LogUpdateCtx{std::move(repop), std::move(waiting_on)}
-	    ));
-	struct OnComplete : public Context {
-	  PrimaryLogPGRef pg;
-	  ceph_tid_t rep_tid;
-	  epoch_t epoch;
-	  OnComplete(
-	    PrimaryLogPGRef pg,
-	    ceph_tid_t rep_tid,
-	    epoch_t epoch)
-	    : pg(pg), rep_tid(rep_tid), epoch(epoch) {}
-	  void finish(int) override {
-	    pg->lock();
-	    if (!pg->pg_has_reset_since(epoch)) {
-	      auto it = pg->log_entry_update_waiting_on.find(rep_tid);
-	      assert(it != pg->log_entry_update_waiting_on.end());
-	      auto it2 = it->second.waiting_on.find(pg->pg_whoami);
-	      assert(it2 != it->second.waiting_on.end());
-	      it->second.waiting_on.erase(it2);
-	      if (it->second.waiting_on.empty()) {
-		pg->repop_all_committed(it->second.repop.get());
-		pg->log_entry_update_waiting_on.erase(it);
-	      }
+      ceph_tid_t rep_tid = repop->rep_tid;
+      waiting_on.insert(pg_whoami);
+      log_entry_update_waiting_on.insert(
+	make_pair(
+	  rep_tid,
+	  LogUpdateCtx{std::move(repop), std::move(waiting_on)}
+	  ));
+      struct OnComplete : public Context {
+	PrimaryLogPGRef pg;
+	ceph_tid_t rep_tid;
+	epoch_t epoch;
+	OnComplete(
+	  PrimaryLogPGRef pg,
+	  ceph_tid_t rep_tid,
+	  epoch_t epoch)
+	  : pg(pg), rep_tid(rep_tid), epoch(epoch) {}
+	void finish(int) override {
+	  pg->lock();
+	  if (!pg->pg_has_reset_since(epoch)) {
+	    auto it = pg->log_entry_update_waiting_on.find(rep_tid);
+	    assert(it != pg->log_entry_update_waiting_on.end());
+	    auto it2 = it->second.waiting_on.find(pg->pg_whoami);
+	    assert(it2 != it->second.waiting_on.end());
+	    it->second.waiting_on.erase(it2);
+	    if (it->second.waiting_on.empty()) {
+	      pg->repop_all_committed(it->second.repop.get());
+	      pg->log_entry_update_waiting_on.erase(it);
 	    }
-	    pg->unlock();
 	  }
-	};
-	t.register_on_commit(
-	  new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
-      } else {
-	if (on_complete) {
-	  struct OnComplete : public Context {
-	    PrimaryLogPGRef pg;
-	    std::function<void(void)> on_complete;
-	    epoch_t epoch;
-	    OnComplete(
-	      PrimaryLogPGRef pg,
-	      const std::function<void(void)> &on_complete,
-	      epoch_t epoch)
-	      : pg(pg),
-		on_complete(std::move(on_complete)),
-		epoch(epoch) {}
-	    void finish(int) override {
-	      pg->lock();
-	      if (!pg->pg_has_reset_since(epoch))
-		on_complete();
-	      pg->unlock();
-	    }
-	  };
-	  t.register_on_complete(
-	    new OnComplete{
-	      this, *on_complete, get_osdmap()->get_epoch()
-		});
+	  pg->unlock();
 	}
-      }
+      };
+      t.register_on_commit(
+	new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
       t.register_on_applied(
 	new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
       int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
@@ -10915,7 +10914,6 @@ void PrimaryLogPG::_committed_pushed_object(
 
 void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
 {
-  lock();
   dout(20) << __func__ << dendl;
   if (obc) {
     dout(20) << "obc = " << *obc << dendl;
@@ -10932,12 +10930,10 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
       requeue_scrub(false);
     }
   }
-  unlock();
 }
 
 void PrimaryLogPG::_applied_recovered_object_replica()
 {
-  lock();
   dout(20) << __func__ << dendl;
   assert(active_pushes >= 1);
   --active_pushes;
@@ -10957,7 +10953,6 @@ void PrimaryLogPG::_applied_recovered_object_replica()
 	get_osdmap()->get_epoch()));
     scrubber.active_rep_scrub.reset();
   }
-  unlock();
 }
 
 void PrimaryLogPG::recover_got(hobject_t oid, eversion_t v)
@@ -12725,10 +12720,10 @@ void PrimaryLogPG::update_range(
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
+    osr->flush();
     if (last_update_applied >= info.log_tail) {
       bi->version = last_update_applied;
     } else {
-      osr->flush();
       bi->version = info.last_update;
     }
     scan_range(local_min, local_max, bi, handle);
