@@ -632,7 +632,11 @@ int FileJournal::_fdump(Formatter &f, bool simple)
 void FileJournal::start_writer()
 {
   write_stop = false;
+  aio_lock.Lock();
   aio_stop = false;
+  aio_cond.Signal();
+  write_finish_cond.Signal();
+  aio_lock.Unlock();
   write_thread.create("journal_write");
 #ifdef HAVE_LIBAIO
   if (aio)
