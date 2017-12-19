@@ -525,6 +525,35 @@ void PrimaryLogPG::backfill_add_missing(
   missing_loc.add_missing(oid, v, eversion_t());
 }
 
+bool PrimaryLogPG::should_send_op(
+  pg_shard_t peer,
+  const hobject_t &hoid) {
+  if (peer == get_primary())
+    return true;
+  assert(peer_info.count(peer));
+  bool should_send =
+      hoid.pool != (int64_t)info.pgid.pool() ||
+      hoid <= last_backfill_started ||
+      hoid <= peer_info[peer].last_backfill;
+  if (!should_send) {
+    assert(is_backfill_targets(peer));
+    dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
+             << ", object " << hoid
+             << " beyond std::max(last_backfill_started "
+             << ", peer_info[peer].last_backfill "
+             << peer_info[peer].last_backfill << ")" << dendl;
+    return should_send;
+  }
+  if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(hoid)) {
+    should_send = false;
+    dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
+             << ", object " << hoid
+             << " which is pending recovery in async_recovery_targets" << dendl;
+  }
+  return should_send;
+}
+
+
 ConnectionRef PrimaryLogPG::get_con_osd_cluster(
   int peer, epoch_t from_epoch)
 {
