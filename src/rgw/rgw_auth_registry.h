@@ -30,7 +30,7 @@ class StrategyRegistry {
     using s3_main_strategy_plain_t = \
       s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor, true>;
     using s3_main_strategy_boto2_t = \
-      s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor, true>;
+      s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor>;
 
     s3_main_strategy_plain_t s3_main_strategy_plain;
     s3_main_strategy_boto2_t s3_main_strategy_boto2;
