@@ -4173,10 +4173,11 @@ def main_activate_space(name, args):
             reactivate=args.reactivate,
         )
 
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
-        )
+        if not args.no_start_daemon:
+            start_daemon(
+                cluster=cluster,
+                osd_id=osd_id,
+            )
 
 
 ###########################
@@ -4215,10 +4216,11 @@ def main_activate_all(args):
                         dmcrypt=False,
                         dmcrypt_key_dir='',
                     )
-                    start_daemon(
-                        cluster=cluster,
-                        osd_id=osd_id,
-                    )
+                    if not args.no_start_daemon:
+                        start_daemon(
+                            cluster=cluster,
+                            osd_id=osd_id,
+                        )
 
                 except Exception as e:
                     print(
@@ -4801,6 +4803,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate',
+                '--no-start-daemon',
                 args.dev,
             ]
         )
@@ -4811,6 +4814,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate',
+                '--no-start-daemon',
                 '--dmcrypt',
                 args.dev,
             ]
@@ -4822,6 +4826,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate-journal',
+                '--no-start-daemon',
                 args.dev,
             ]
         )
@@ -4832,6 +4837,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate-journal',
+                '--no-start-daemon',
                 '--dmcrypt',
                 args.dev,
             ]
@@ -4847,6 +4853,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate-block',
+                '--no-start-daemon',
                 args.dev,
             ]
         )
@@ -4861,6 +4868,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate-block',
+                '--no-start-daemon',
                 '--dmcrypt',
                 args.dev,
             ]
@@ -4872,6 +4880,7 @@ def main_trigger(args):
             ceph_disk +
             [
                 'activate-lockbox',
+                '--no-start-daemon',
                 args.dev,
             ]
         )
@@ -5360,6 +5369,11 @@ def make_activate_lockbox_parser(subparsers):
         help='directory where dm-crypt keys are stored',
     )
     parser.add_argument(
+        '--no-start-daemon',
+        action='store_true', default=None,
+        help='do not start the daemon',
+    )
+    parser.add_argument(
         'path',
         metavar='PATH',
         help='path to block device',
@@ -5411,6 +5425,11 @@ def make_activate_space_parser(name, subparsers):
         choices=INIT_SYSTEMS,
     )
     activate_space_parser.add_argument(
+        '--no-start-daemon',
+        action='store_true', default=None,
+        help='do not start the daemon',
+    )
+    activate_space_parser.add_argument(
         '--dmcrypt',
         action='store_true', default=None,
         help=('map data and/or auxiliariy (journal, etc.) '
@@ -5456,6 +5475,11 @@ def make_activate_all_parser(subparsers):
         help='init system to manage this dir',
         default='auto',
         choices=INIT_SYSTEMS,
+    )
+    activate_all_parser.add_argument(
+        '--no-start-daemon',
+        action='store_true', default=None,
+        help='do not start the daemon',
     )
     activate_all_parser.set_defaults(
         activate_key_template='{statedir}/bootstrap-osd/{cluster}.keyring',
