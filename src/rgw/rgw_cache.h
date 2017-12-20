@@ -242,7 +242,8 @@ public:
                      RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                      bufferlist& bl, off_t ofs, off_t end,
                      map<string, bufferlist> *attrs,
-                     rgw_cache_entry_info *cache_info);
+                     rgw_cache_entry_info *cache_info,
+		     boost::optional<obj_version> refresh_version = boost::none) override;
 
   int raw_obj_stat(rgw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
                    bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker);
@@ -287,7 +288,8 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
                      RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
                      bufferlist& obl, off_t ofs, off_t end,
                      map<string, bufferlist> *attrs,
-                     rgw_cache_entry_info *cache_info)
+		     rgw_cache_entry_info *cache_info,
+		     boost::optional<obj_version> refresh_version)
 {
   rgw_bucket bucket;
   string oid;
@@ -304,8 +306,9 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
-  
-  if (cache.get(name, info, flags, cache_info) == 0) {
+
+  if ((cache.get(name, info, flags, cache_info) == 0) &&
+      (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
       return info.status;
 
