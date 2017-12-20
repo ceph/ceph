@@ -3726,34 +3726,24 @@ struct pg_missing_item {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
-   //encoding two new eversion_t type variables to differentiate OSD_RECOVERY_DELETES, OSD_PARTIAL_RECOVERY and
-    //legacy unversioned encoding
-    eversion_t  e, l;
-    if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
-      if (HAVE_FEATURE(features, OSD_PARTIAL_RECOVERY)) {
+    //encoding two new eversion_t type variables to differentiate OSD_RECOVERY_DELETES, OSD_PARTIAL_RECOVERY and legacy unversioned encoding
+    eversion_t e, l;
+    if (HAVE_FEATURE(features, OSD_PARTIAL_RECOVERY)) {
 	::encode(e, bl);
 	::encode(l, bl);// 0 0 -->support all
 	::encode(need, bl);
 	::encode(have, bl);
 	::encode(static_cast<uint8_t>(flags), bl);
 	::encode(clean_regions, bl);
-      } else {
+      } else if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
 	::encode(e, bl);
 	::encode(need, bl);// 0 need -->support delete
 	::encode(have, bl);
 	::encode(static_cast<uint8_t>(flags), bl);
-      }
-    } else { 
-      if (HAVE_FEATURE(features, OSD_PARTIAL_RECOVERY)) {
-	::encode(need, bl);
-	::encode(e, bl);//need 0 -->support partial
-	::encode(have, bl);
-	::encode(clean_regions, bl);
       } else { 
 	::encode(need, bl);
 	::encode(have, bl);//need have ->both not support
       } 
-    }
   }
   
   void decode(bufferlist::iterator& bl) {
@@ -3775,16 +3765,10 @@ struct pg_missing_item {
 	::decode(f, bl);
 	flags = static_cast<missing_flags_t>(f);
       }
-    } else {
-      if((e != eversion_t())) { //need 0 -->support partial
-	e = need;
-	::decode(have, bl);
-	::decode(clean_regions, bl);
-      } else { //need have -->both not support
-	need = e;
-	have = l;
-      } 
-    }
+    } else { //need have -->both not support
+      need = e;
+      have = l;
+    } 
   }
 
   void set_delete(bool is_delete) {
