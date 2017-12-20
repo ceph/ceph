@@ -131,6 +131,7 @@ struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
     }								   \
   };
 
+TrivialEvent(NullEvt)
 TrivialEvent(RemoteBackfillReserved)
 TrivialEvent(RemoteReservationRejected)
 TrivialEvent(RemoteReservationRevokedTooFull)

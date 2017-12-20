@@ -4077,7 +4077,7 @@ int OSD::handle_pg_peering_evt(
     }
 
     const bool is_mon_create =
-      evt->get_event().dynamic_type() == PG::NullEvt::static_type();
+      evt->get_event().dynamic_type() == NullEvt::static_type();
     if (maybe_wait_for_max_pg(pgid, is_mon_create)) {
       return -EAGAIN;
     }
@@ -7997,13 +7997,13 @@ void OSD::consume_map()
     for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
         it != pg_map.end();
         ++it) {
-      PG *pg = it->second;
-      if (pg->is_deleted()) {
-	continue;
-      }
-      pg->lock();
-      pg->queue_null(osdmap->get_epoch(), osdmap->get_epoch());
-      pg->unlock();
+      enqueue_peering_evt(
+	it->first,
+	PGPeeringEventRef(
+	  std::make_shared<PGPeeringEvent>(
+	    osdmap->get_epoch(),
+	    osdmap->get_epoch(),
+	    NullEvt())));
     }
 
     logger->set(l_osd_pg, pg_map.size());
@@ -8291,10 +8291,10 @@ void OSD::handle_pg_create(OpRequestRef op)
           pi,
           osdmap->get_epoch(),
           PGPeeringEventRef(
-	    new PGPeeringEvent(
+	    std::make_shared<PGPeeringEvent>(
 	      osdmap->get_epoch(),
 	      osdmap->get_epoch(),
-	      PG::NullEvt()))
+	      NullEvt()))
           ) == -EEXIST) {
       service.send_pg_created(pgid.pgid);
     }
