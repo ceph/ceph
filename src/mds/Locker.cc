@@ -2298,7 +2298,7 @@ uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
   uint64_t new_max = (size + 1) << 1;
   uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
   if (max_inc > 0) {
-    max_inc *= pi->get_layout_size_increment();
+    max_inc *= pi->layout.object_size;
     new_max = std::min(new_max, size + max_inc);
   }
   return ROUND_UP_TO(new_max, pi->get_layout_size_increment());
