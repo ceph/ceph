@@ -43,7 +43,7 @@ bool LCRule::valid()
 void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 {
   string id;
-  rule->get_id(id); // note that this will return false for groups, but that's ok, we won't search groups
+  rule->get_id(id); // not that this will return false for groups, but that's ok, we won't search groups
   rule_map.insert(pair<string, LCRule>(id, *rule));
 }
 
@@ -145,12 +145,12 @@ void *RGWLC::LCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
-      ldout(cct, 2) << "life cycle: start" << dendl;
+      dout(2) << "life cycle: start" << dendl;
       int r = lc->process();
       if (r < 0) {
-        ldout(cct, 0) << "ERROR: do life cycle process() returned error r=" << r << dendl;
+        dout(0) << "ERROR: do life cycle process() returned error r=" << r << dendl;
       }
-      ldout(cct, 2) << "life cycle: stop" << dendl;
+      dout(2) << "life cycle: stop" << dendl;
     }
     if (lc->going_down())
       break;
@@ -160,7 +160,7 @@ void *RGWLC::LCWorker::entry() {
     utime_t next;
     next.set_from_double(end + secs);
 
-    ldout(cct, 5) << "schedule life cycle next start time: " << rgw_to_asctime(next) << dendl;
+    dout(5) << "schedule life cycle next start time: " << rgw_to_asctime(next) <<dendl;
 
     lock.Lock();
     cond.WaitInterval(lock, utime_t(secs, 0));
@@ -237,11 +237,13 @@ int RGWLC::bucket_lc_prepare(int index)
       pair<string, int > entry(iter->first, lc_uninitial);
       ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
-        ldout(cct, 0) << "RGWLC::bucket_lc_prepare() failed to set entry on "
-            << obj_names[index] << dendl;
-        break;
+        dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry on " << obj_names[index] << dendl;
+        return ret;
       }
-      marker = iter->first;
+    }
+
+    if (!entries.empty()) {
+      marker = std::move(entries.rbegin()->first);
     }
   } while (!entries.empty());
 
@@ -352,13 +354,13 @@ int RGWLC::bucket_lc_process(string& shard_id)
   string bucket_id = result[2];
   int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, &bucket_attrs);
   if (ret < 0) {
-    ldout(cct, 0) << "LC:get_bucket_info for " << bucket_name << " failed" << dendl;
+    ldout(cct, 0) << "LC:get_bucket_info failed" << bucket_name <<dendl;
     return ret;
   }
 
   ret = bucket_info.bucket.bucket_id.compare(bucket_id) ;
-  if (ret != 0) {
-    ldout(cct, 0) << "LC:old bucket id found. " << bucket_name << " should be deleted" << dendl;
+  if (ret !=0) {
+    ldout(cct, 0) << "LC:old bucket id find, should be delete" << bucket_name <<dendl;
     return -ENOENT;
   }
 
@@ -589,19 +591,17 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
-      ldout(cct, 0) << "RGWLC::bucket_lc_post() failed to acquire lock on "
-          << obj_names[index] << ", sleep 5, try again" << dendl;
+      dout(0) << "RGWLC::bucket_lc_post() failed to acquire lock on " << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (ret < 0)
       return 0;
-    ldout(cct, 20) << "RGWLC::bucket_lc_post() lock " << obj_names[index] << dendl;
+    dout(20) << "RGWLC::bucket_lc_post()  get lock" << obj_names[index] << dendl;
     if (result ==  -ENOENT) {
       ret = cls_rgw_lc_rm_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
-        ldout(cct, 0) << "RGWLC::bucket_lc_post() failed to remove entry "
-            << obj_names[index] << dendl;
+        dout(0) << "RGWLC::bucket_lc_post() failed to remove entry " << obj_names[index] << dendl;
       }
       goto clean;
     } else if (result < 0) {
@@ -612,12 +612,11 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
 
     ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to set entry on "
-          << obj_names[index] << dendl;
+      dout(0) << "RGWLC::process() failed to set entry on " << obj_names[index] << dendl;
     }
 clean:
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
-    ldout(cct, 20) << "RGWLC::bucket_lc_post() unlock " << obj_names[index] << dendl;
+    dout(20) << "RGWLC::bucket_lc_post()  unlock" << obj_names[index] << dendl;
     return 0;
   } while (true);
 }
@@ -631,7 +630,7 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<stri
     int ret = cls_rgw_lc_list(store->lc_pool_ctx, obj_names[index], marker, max_entries, entries);
     if (ret < 0) {
       if (ret == -ENOENT) {
-        ldout(cct, 10) << __func__ << "() ignoring unfound lc object="
+        dout(10) << __func__ << "() ignoring unfound lc object="
                              << obj_names[index] << dendl;
         continue;
       } else {
@@ -676,19 +675,18 @@ int RGWLC::process(int index, int max_lock_secs)
 
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
     if (ret == -EBUSY) { /* already locked by another lc processor */
-      ldout(cct, 0) << "RGWLC::process() failed to acquire lock on "
-          << obj_names[index] << ", sleep 5, try again" << dendl;
+      dout(0) << "RGWLC::process() failed to acquire lock on " << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (ret < 0)
       return 0;
 
+    string marker;
     cls_rgw_lc_obj_head head;
     ret = cls_rgw_lc_get_head(store->lc_pool_ctx, obj_names[index], head);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to get obj head "
-          << obj_names[index] << ", ret=" << ret << dendl;
+      dout(0) << "RGWLC::process() failed to get obj head " << obj_names[index] << ret << dendl;
       goto exit;
     }
 
@@ -697,16 +695,14 @@ int RGWLC::process(int index, int max_lock_secs)
       head.marker.clear();
       ret = bucket_lc_prepare(index);
       if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to update lc object "
-          << obj_names[index] << ", ret=" << ret << dendl;
+      dout(0) << "RGWLC::process() failed to update lc object " << obj_names[index] << ret << dendl;
       goto exit;
       }
     }
 
     ret = cls_rgw_lc_get_next_entry(store->lc_pool_ctx, obj_names[index], head.marker, entry);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to get obj entry "
-          << obj_names[index] << dendl;
+      dout(0) << "RGWLC::process() failed to get obj entry " << obj_names[index] << dendl;
       goto exit;
     }
 
@@ -716,15 +712,14 @@ int RGWLC::process(int index, int max_lock_secs)
     entry.second = lc_processing;
     ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to set obj entry " << obj_names[index]
-          << " (" << entry.first << "," << entry.second << ")" << dendl;
+      dout(0) << "RGWLC::process() failed to set obj entry " << obj_names[index] << entry.first << entry.second << dendl;
       goto exit;
     }
 
     head.marker = entry.first;
     ret = cls_rgw_lc_put_head(store->lc_pool_ctx, obj_names[index],  head);
     if (ret < 0) {
-      ldout(cct, 0) << "RGWLC::process() failed to put head " << obj_names[index] << dendl;
+      dout(0) << "RGWLC::process() failed to put head " << obj_names[index] << dendl;
       goto exit;
     }
     l.unlock(&store->lc_pool_ctx, obj_names[index]);
