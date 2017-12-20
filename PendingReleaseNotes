@@ -20,6 +20,8 @@
       - mds remove_data_pool -> fs rm_data_pool
       - mds rm_data_pool -> fs rm_data_pool
 
+  * The JSON format of `ceph fs status` and `ceph mds stat` has changed
+    for the "up" and "info" sections of the mds_map.
 
 >= 12.2.2
 ---------
