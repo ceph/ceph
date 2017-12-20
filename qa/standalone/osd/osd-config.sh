@@ -44,9 +44,9 @@ function TEST_config_init() {
     local stale=1000
     local cache=500
     run_osd $dir 0 \
-        --osd-map-max-advance $advance \
-        --osd-map-cache-size $cache \
-        --osd-pg-epoch-persisted-max-stale $stale \
+        --osd-map-max-advance=$advance \
+        --osd-map-cache-size=$cache \
+        --osd-pg-epoch-persisted-max-stale=$stale \
         || return 1
     CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.0) log flush || return 1
     grep 'is not > osd_map_max_advance' $dir/osd.0.log || return 1
