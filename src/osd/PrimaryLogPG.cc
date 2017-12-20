@@ -12544,7 +12544,7 @@ uint64_t PrimaryLogPG::recover_backfill(
   }
 
   hobject_t backfill_pos =
-    std::min(backfill_info.begin, earliest_peer_backfill());
+    MIN(backfill_info.begin, earliest_peer_backfill());
 
   for (set<hobject_t>::iterator i = add_to_stat.begin();
        i != add_to_stat.end();

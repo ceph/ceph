@@ -1234,11 +1234,11 @@ protected:
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
     const pg_info_t &info,
     epoch_t oldest_map) {
-    epoch_t start = std::max(
+    epoch_t start = MAX(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
        info.history.epoch_pool_created,
       oldest_map);
-    epoch_t end = std::max(
+    epoch_t end = MAX(
       info.history.same_interval_since,
       info.history.epoch_pool_created);
     return make_pair(start, end);
