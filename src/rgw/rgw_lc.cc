@@ -238,9 +238,12 @@ int RGWLC::bucket_lc_prepare(int index)
       ret = cls_rgw_lc_set_entry(store->lc_pool_ctx, obj_names[index],  entry);
       if (ret < 0) {
         dout(0) << "RGWLC::bucket_lc_prepare() failed to set entry on " << obj_names[index] << dendl;
-        break;
+        return ret;
       }
-      marker = iter->first;
+    }
+
+    if (!entries.empty()) {
+      marker = std::move(entries.rbegin()->first);
     }
   } while (!entries.empty());
 
