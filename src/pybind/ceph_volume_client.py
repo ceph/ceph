@@ -399,7 +399,7 @@ class CephFSVolumeClient(object):
 
         log.info("evict clients with {0}".format(', '.join(client_spec)))
 
-        mds_map = get_mds_map()
+        mds_map = self.get_mds_map()
         up = {}
         for name, gid in mds_map['up'].items():
             # Quirk of the MDSMap JSON dump: keys in the up dict are like "mds_0"
