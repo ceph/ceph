@@ -119,12 +119,14 @@ class CephAnsible(Task):
         # If there is an installer.0 node, use that for the installer.
         # Otherwise, use the first mon node as installer node.
         ansible_loc = self.ctx.cluster.only('installer.0')
+        (ceph_first_mon,) = self.ctx.cluster.only(
+            misc.get_first_mon(self.ctx,
+                               self.config)).remotes.iterkeys()
         if ansible_loc.remotes:
             (ceph_installer,) = ansible_loc.remotes.iterkeys()
         else:
-            (ceph_installer,) = self.ctx.cluster.only(
-                misc.get_first_mon(self.ctx,
-                                   self.config)).remotes.iterkeys()
+            ceph_installer = ceph_first_mon
+        self.ceph_first_mon = ceph_first_mon
         self.ceph_installer = ceph_installer
         self.args = args
         if self.config.get('rhbuild'):
@@ -480,7 +482,7 @@ class CephAnsible(Task):
             ceph_installer.run(args=('cat', 'ceph-ansible/group_vars/all'))
 
     def _create_rbd_pool(self):
-        mon_node = self.ceph_installer
+        mon_node = self.ceph_first_mon
         log.info('Creating RBD pool')
         mon_node.run(
             args=[
