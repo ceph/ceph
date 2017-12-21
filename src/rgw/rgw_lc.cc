@@ -334,6 +334,34 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
   return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
 }
 
+static inline int check_objtags(CephContext *cct, RGWRados *store, map<string, lc_op>::iterator& prefix_iter, RGWBucketInfo& bucket_info, rgw_obj& obj)
+{
+  RGWObjectCtx rctx(store);
+  bufferlist tags_bl;
+  int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
+  if (ret < 0) {
+    if (ret != -ENODATA)
+      ldout(cct, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
+    return 1;
+  }
+  RGWObjTags dest_obj_tags;
+  try {
+    auto iter = tags_bl.begin();
+    dest_obj_tags.decode(iter);
+  } catch (buffer::error& err) {
+    ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    return -EIO;
+  }
+
+  if (!includes(dest_obj_tags.get_tags().begin(),
+    dest_obj_tags.get_tags().end(),
+    prefix_iter->second.obj_tags->get_tags().begin(),
+    prefix_iter->second.obj_tags->get_tags().end())){
+    ldout(cct, 20) << __func__ << "() skipping obj " << obj.key << " as tags do not match" << dendl;
+    return 1;
+  }
+  return 0;
+}
 
 int RGWLC::bucket_lc_process(string& shard_id)
 {
@@ -408,29 +436,11 @@ int RGWLC::bucket_lc_process(string& shard_id)
           rgw_obj obj(bucket_info.bucket, key);
           RGWObjectCtx rctx(store);
           if (prefix_iter->second.obj_tags != boost::none) {
-            bufferlist tags_bl;
-            int ret = read_obj_tags(store, bucket_info, obj, rctx, tags_bl);
-            if (ret < 0) {
-              if (ret != -ENODATA)
-                ldout(cct, 5) << "ERROR: read_obj_tags returned r=" << ret << dendl;
+            ret = check_objtags(cct, store, prefix_iter, bucket_info, obj);
+            if (ret > 0)
               continue;
-            }
-            RGWObjTags dest_obj_tags;
-            try {
-              auto iter = tags_bl.begin();
-              dest_obj_tags.decode(iter);
-            } catch (buffer::error& err) {
-               ldout(cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
-              return -EIO;
-            }
-
-            if (!includes(dest_obj_tags.get_tags().begin(),
-                          dest_obj_tags.get_tags().end(),
-                          prefix_iter->second.obj_tags->get_tags().begin(),
-                          prefix_iter->second.obj_tags->get_tags().end())){
-              ldout(cct, 20) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
-              continue;
-            }
+            else if (ret == -EIO)
+              return ret;
           }
 
           if (!key.ns.empty()) {
@@ -503,6 +513,16 @@ int RGWLC::bucket_lc_process(string& shard_id)
         bool skip_expiration;
         bool is_expired;
         for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
+          rgw_obj_key key(obj_iter->key);
+          rgw_obj obj(bucket_info.bucket, key);
+          if (prefix_iter->second.obj_tags != boost::none) {
+            ret = check_objtags(cct, store, prefix_iter, bucket_info, obj);
+            if (ret > 0)
+              continue;
+            else if (ret == -EIO)
+              return ret;
+          }
+
           skip_expiration = false;
           is_expired = false;
           if (obj_iter->is_current()) {
