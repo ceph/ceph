@@ -6907,6 +6907,129 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   g_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, BluestoreRepairTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  const size_t offs_base = 65536 / 2;
+
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "false");
+  g_ceph_context->_conf->set_val("bluestore_max_blob_size", stringify(2 * offs_base));
+  g_ceph_context->_conf->set_val("bluestore_extent_map_shard_max_size", "12000");
+  g_ceph_context->_conf->apply_changes(NULL);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  // fill the store with some data
+  coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
+  auto ch = store->create_new_collection(cid);
+
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid_dup(hobject_t(sobject_t("Object 1(dup)", CEPH_NOSNAP)));
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  ghobject_t hoid_cloned = hoid2;
+  hoid_cloned.hobj.snap = 1;
+  ghobject_t hoid3(hobject_t(sobject_t("Object 3", CEPH_NOSNAP)));
+  ghobject_t hoid3_cloned = hoid3;
+  hoid3_cloned.hobj.snap = 1;
+  bufferlist bl;
+  bl.append("1234512345");
+  int r;
+  const size_t repeats = 16;
+  {
+    cerr << "create collection + write" << std::endl;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid, i * offs_base, bl.length(), bl);
+      t.write(cid, hoid_dup, i * offs_base, bl.length(), bl);
+    }
+    for( auto i = 0ul; i < repeats; ++i ) {
+      t.write(cid, hoid2, i * offs_base, bl.length(), bl);
+    }
+    t.clone(cid, hoid2, hoid_cloned);
+
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  bstore->umount();
+  //////////// leaked pextent fix ////////////
+  cerr << "fix leaked pextents" << std::endl;
+  ASSERT_EQ(bstore->fsck(false), 0);
+  ASSERT_EQ(bstore->repair(false), 0);
+  bstore->mount();
+  bstore->inject_leaked(0x30000);
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  //////////// false free fix ////////////
+  cerr << "fix false free pextents" << std::endl;
+  bstore->mount();
+  bstore->inject_false_free(cid, hoid);
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 2);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  //////////// verify invalid statfs ///////////
+  cerr << "fix invalid statfs" << std::endl;
+  store_statfs_t statfs0, statfs;
+  bstore->mount();
+  ASSERT_EQ(bstore->statfs(&statfs0), 0);
+  statfs = statfs0;
+  statfs.allocated += 0x10000;
+  statfs.stored += 0x10000;
+  ASSERT_FALSE(statfs0 == statfs);
+  bstore->inject_statfs(statfs);
+  bstore->umount();
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+  ASSERT_EQ(bstore->mount(), 0);
+  ASSERT_EQ(bstore->statfs(&statfs), 0);
+  // adjust free space to success in comparison
+  statfs0.available = statfs.available;
+  ASSERT_EQ(statfs0, statfs);
+
+  ///////// undecodable shared blob key / stray shared blob records ///////
+  cerr << "undecodable shared blob key" << std::endl;
+  bstore->inject_broken_shared_blob_key("undec1",
+			    bufferlist());
+  bstore->inject_broken_shared_blob_key("undecodable key 2",
+			    bufferlist());
+  bstore->inject_broken_shared_blob_key("undecodable key 3",
+			    bufferlist());
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 3);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  cerr << "misreferencing" << std::endl;
+  bstore->mount();
+  bstore->inject_misreference(cid, hoid, cid, hoid_dup, 0);
+  bstore->inject_misreference(cid, hoid, cid, hoid_dup, (offs_base * repeats) / 2);
+  bstore->inject_misreference(cid, hoid, cid, hoid_dup, offs_base * (repeats -1) );
+  
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 6);
+  ASSERT_EQ(bstore->repair(false), 0);
+
+  ASSERT_EQ(bstore->fsck(true), 0);
+
+  cerr << "Completing" << std::endl;
+  bstore->mount();
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_ceph_context->_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf->set_val("bluestore_max_alloc_size", "0");
+  g_ceph_context->_conf->set_val("bluestore_extent_map_shard_max_size", "1200");
+
+  g_ceph_context->_conf->apply_changes(NULL);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
