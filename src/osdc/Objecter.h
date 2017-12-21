@@ -2277,10 +2277,11 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     osd_reqid_t reqid = osd_reqid_t()) {
-    Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
-			      oncommit, objver, reqid);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+        prepare_mutate_op(
+          oid, oloc, op, snapc, mtime, flags, oncommit, objver, reqid),
+        &tid);
     return tid;
   }
   Op *prepare_read_op(
@@ -2348,10 +2349,11 @@ public:
     ObjectOperation& op, bufferlist *pbl, int flags,
     Context *onack, epoch_t *reply_epoch,
     int *ctx_budget) {
-    Op *o = prepare_pg_read_op(hash, oloc, op, pbl, flags,
-			       onack, reply_epoch, ctx_budget);
     ceph_tid_t tid;
-    op_submit(o, &tid, ctx_budget);
+    op_submit(
+      prepare_pg_read_op(
+        hash, oloc, op, pbl, flags, onack, reply_epoch, ctx_budget),
+      &tid, ctx_budget);
     return tid;
   }
 
@@ -2424,10 +2426,11 @@ public:
     snapid_t snap, uint64_t *psize, ceph::real_time *pmtime,
     int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_stat_op(oid, oloc, snap, psize, pmtime, flags,
-			    onfinish, objver, extra_ops);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_stat_op(
+        oid, oloc, snap, psize, pmtime, flags, onfinish, objver, extra_ops),
+      &tid);
     return tid;
   }
 
@@ -2456,10 +2459,12 @@ public:
     uint64_t off, uint64_t len, snapid_t snap, bufferlist *pbl,
     int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_read_op(oid, oloc, off, len, snap, pbl, flags,
-			    onfinish, objver, extra_ops, op_flags);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_read_op(
+        oid, oloc, off, len, snap, pbl, flags, onfinish, objver, extra_ops,
+        op_flags),
+      &tid);
     return tid;
   }
 
@@ -2488,10 +2493,12 @@ public:
     uint64_t off, bufferlist &cmp_bl,
     snapid_t snap, int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_cmpext_op(oid, oloc, off, cmp_bl, snap,
-			      flags, onfinish, objver, extra_ops, op_flags);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_cmpext_op(
+        oid, oloc, off, cmp_bl, snap, flags, onfinish, objver,extra_ops,
+        op_flags),
+      &tid);
     return tid;
   }
 
@@ -2625,10 +2632,12 @@ public:
     const bufferlist &bl, ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_write_op(oid, oloc, off, len, snapc, bl, mtime, flags,
-			     oncommit, objver, extra_ops, op_flags);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_write_op(
+        oid, oloc, off, len, snapc, bl, mtime, flags, oncommit, objver,
+        extra_ops, op_flags),
+      &tid);
     return tid;
   }
   Op *prepare_append_op(
@@ -2659,10 +2668,11 @@ public:
     Context *oncommit,
     version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_append_op(oid, oloc, len, snapc, bl, mtime, flags,
-			      oncommit, objver, extra_ops);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_append_op(
+        oid, oloc, len, snapc, bl, mtime, flags, oncommit, objver, extra_ops),
+        &tid);
     return tid;
   }
   ceph_tid_t write_trunc(const object_t& oid, const object_locator_t& oloc,
@@ -2714,10 +2724,12 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    Op *o = prepare_write_full_op(oid, oloc, snapc, bl, mtime, flags,
-				  oncommit, objver, extra_ops, op_flags);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_write_full_op(
+        oid, oloc, snapc, bl, mtime, flags, oncommit, objver, extra_ops,
+        op_flags),
+      &tid);
     return tid;
   }
   Op *prepare_writesame_op(
@@ -2749,13 +2761,12 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-
-    Op *o = prepare_writesame_op(oid, oloc, write_len, off, snapc, bl,
-				 mtime, flags, oncommit, objver,
-				 extra_ops, op_flags);
-
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_writesame_op(
+        oid, oloc, write_len, off, snapc, bl, mtime, flags, oncommit, objver,
+        extra_ops, op_flags),
+      &tid);
     return tid;
   }
   ceph_tid_t trunc(const object_t& oid, const object_locator_t& oloc,
@@ -2846,10 +2857,11 @@ public:
     const SnapContext& snapc, ceph::real_time mtime, int flags,
     Context *oncommit,
     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    Op *o = prepare_remove_op(oid, oloc, snapc, mtime, flags,
-			      oncommit, objver, extra_ops);
     ceph_tid_t tid;
-    op_submit(o, &tid);
+    op_submit(
+      prepare_remove_op(
+        oid, oloc, snapc, mtime, flags, oncommit, objver, extra_ops),
+      &tid);
     return tid;
   }
 

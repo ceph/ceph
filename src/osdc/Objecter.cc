@@ -237,12 +237,13 @@ void Objecter::update_crush_location()
 void Objecter::update_mclock_service_tracker()
 {
   unique_lock wl(rwlock);
-  if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
+  auto _mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
+  if (_mclock_service_tracker && (!mclock_service_tracker)) {
     qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
-  } else if (!cct->_conf->objecter_mclock_service_tracker) {
+  } else if (!_mclock_service_tracker) {
     qos_trk.reset();
   }
-  mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
+  mclock_service_tracker = _mclock_service_tracker;
 }
 
 // messages ------------------------------
@@ -875,8 +876,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
   _calc_target(&info->target, nullptr);
 
   // Create LingerOp<->OSDSession relation
-  int r = _get_session(info->target.osd, &s, sul);
-  assert(r == 0);
+  assert(_get_session(info->target.osd, &s, sul) == 0);
   OSDSession::unique_lock sl(s->lock);
   _session_linger_op_assign(s, info);
   sl.unlock();
@@ -1296,8 +1296,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
     Op *op = p->second;
     if (op->target.epoch < osdmap->get_epoch()) {
       ldout(cct, 10) << __func__ << "  checking op " << p->first << dendl;
-      int r = _calc_target(&op->target, nullptr);
-      if (r == RECALC_OP_TARGET_POOL_DNE) {
+      if (_calc_target(&op->target, nullptr) == RECALC_OP_TARGET_POOL_DNE) {
 	p = need_resend.erase(p);
 	_check_op_pool_dne(op, nullptr);
       } else {
@@ -1353,9 +1352,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
     if (!op->session) {
       _calc_target(&op->target, nullptr);
       OSDSession *s = NULL;
-      const int r = _get_session(op->target.osd, &s, sul);
-      assert(r == 0);
-      assert(s != NULL);
+      assert(_get_session(op->target.osd, &s, sul) == 0);
+      assert(s);
       op->session = s;
       put_session(s);
     }
@@ -1571,7 +1569,7 @@ void Objecter::_check_op_pool_dne(Op *op, unique_lock *sl)
 
       OSDSession *s = op->session;
       if (s) {
-	assert(s != NULL);
+	assert(s);
 	assert(sl->mutex() == &s->lock);
 	bool session_locked = sl->owns_lock();
 	if (!session_locked) {
@@ -2400,7 +2398,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   ldout(cct, 10) << __func__ << " op " << op << dendl;
 
   // pick target
-  assert(op->session == NULL);
+  assert(!op->session);
   OSDSession *s = NULL;
 
   bool check_for_latest_map = _calc_target(&op->target, nullptr)
@@ -2430,7 +2428,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     }
   }
   if (r == -EAGAIN) {
-    assert(s == NULL);
+    assert(!s);
     r = _get_session(op->target.osd, &s, sul);
   }
   assert(r == 0);
@@ -2999,7 +2997,7 @@ int Objecter::_map_session(op_target_t *target, OSDSession **s,
 void Objecter::_session_op_assign(OSDSession *to, Op *op)
 {
   // to->lock is locked
-  assert(op->session == NULL);
+  assert(!op->session);
   assert(op->tid);
 
   get_session(to);
@@ -3032,7 +3030,7 @@ void Objecter::_session_op_remove(OSDSession *from, Op *op)
 void Objecter::_session_linger_op_assign(OSDSession *to, LingerOp *op)
 {
   // to lock is locked unique
-  assert(op->session == NULL);
+  assert(!op->session);
 
   if (to->is_homeless()) {
     num_homeless_ops++;
@@ -3082,7 +3080,7 @@ void Objecter::_session_command_op_remove(OSDSession *from, CommandOp *op)
 void Objecter::_session_command_op_assign(OSDSession *to, CommandOp *op)
 {
   // to->lock is locked
-  assert(op->session == NULL);
+  assert(!op->session);
   assert(op->tid);
 
   if (to->is_homeless()) {
