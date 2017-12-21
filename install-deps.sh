@@ -40,8 +40,8 @@ function ensure_decent_gcc_on_deb {
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
-deb http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
-deb http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
+deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
+deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
 EOF
 	# import PPA's signing key into APT's keyring
 	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
