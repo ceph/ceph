@@ -97,36 +97,14 @@ class Device {
 class DeviceList {
   struct ibv_device ** device_list;
   int num;
-  Device** devices;
+  //Device** devices;
+  std::map<std::string, std::string> m_dev_name; // <ib0, mlx4_0>
+  std::map<std::string, Device*> m_device; // <mlx4_0, Device *>
  public:
-  DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
-    if (device_list == NULL || num == 0) {
-      lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      ceph_abort();
-    }
-    devices = new Device*[num];
+  DeviceList(CephContext *cct);
+  ~DeviceList();
 
-    for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i]);
-    }
-  }
-  ~DeviceList() {
-    for (int i=0; i < num; ++i) {
-      delete devices[i];
-    }
-    delete []devices;
-    ibv_free_device_list(device_list);
-  }
-
-  Device* get_device(const char* device_name) {
-    assert(devices);
-    for (int i = 0; i < num; ++i) {
-      if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
-        return devices[i];
-      }
-    }
-    return NULL;
-  }
+  Device* get_device(CephContext *cct, const char* device_name);
 };
 
 // stat counters
@@ -366,11 +344,11 @@ class Infiniband {
   CephContext *cct;
   Mutex lock;
   bool initialized = false;
-  const std::string &device_name;
+  std::string device_name;
   uint8_t port_num;
 
  public:
-  explicit Infiniband(CephContext *c);
+  explicit Infiniband(CephContext *c, string mname);
   ~Infiniband();
   void init();
   static void verify_prereq(CephContext *cct);

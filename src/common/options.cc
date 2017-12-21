@@ -775,7 +775,11 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description(""),
 
-    Option("ms_async_rdma_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    Option("ms_async_rdma_public_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description(""),
+
+    Option("ms_async_rdma_cluster_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),
 

@@ -217,9 +217,9 @@ struct StackSingleton {
   std::shared_ptr<NetworkStack> stack;
 
   StackSingleton(CephContext *c): cct(c) {}
-  void ready(std::string &type) {
+  void ready(std::string &type, string mname = "empty") {
     if (!stack)
-      stack = NetworkStack::create(cct, type);
+      stack = NetworkStack::create(cct, type, mname);
   }
   ~StackSingleton() {
     stack->stop();
@@ -258,8 +258,21 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
     transport_type = "dpdk";
 
   StackSingleton *single;
-  cct->lookup_or_create_singleton_object<StackSingleton>(single, "AsyncMessenger::NetworkStack::"+transport_type);
-  single->ready(transport_type);
+  string _stack_name;
+
+  if ("rdma" != transport_type ||
+      cct->_conf->ms_async_rdma_cluster_device_name ==
+      cct->_conf->ms_async_rdma_public_device_name)
+    _stack_name = "AsyncMessenger::NetworkStack";
+  else {
+    if ("hb_back_client" == mname || "hb_back_server" == mname || "cluster" == mname)
+      _stack_name = "AsyncMessenger::NetworkStack::Cluster";
+    else
+      _stack_name = "AsyncMessenger::NetworkStack::Public";
+  }
+
+  cct->lookup_or_create_singleton_object<StackSingleton>(single, _stack_name+"::"+transport_type);
+  single->ready(transport_type, mname);
   stack = single->stack.get();
   stack->start();
   local_worker = stack->get_worker();

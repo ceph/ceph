@@ -42,7 +42,7 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
       sprintf(tp_name, "msgr-worker-%u", w->id);
       ceph_pthread_setname(pthread_self(), tp_name);
       const uint64_t EventMaxWaitUs = 30000000;
-      w->center.set_owner();
+      w->center.set_owner(mname);
       ldout(cct, 10) << __func__ << " starting" << dendl;
       w->initialize();
       w->init_done();
@@ -63,17 +63,17 @@ std::function<void ()> NetworkStack::add_thread(unsigned i)
   };
 }
 
-std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t)
+std::shared_ptr<NetworkStack> NetworkStack::create(CephContext *c, const string &t, string mname)
 {
   if (t == "posix")
-    return std::make_shared<PosixNetworkStack>(c, t);
+    return std::make_shared<PosixNetworkStack>(c, t, mname);
 #ifdef HAVE_RDMA
   else if (t == "rdma")
-    return std::make_shared<RDMAStack>(c, t);
+    return std::make_shared<RDMAStack>(c, t, mname);
 #endif
 #ifdef HAVE_DPDK
   else if (t == "dpdk")
-    return std::make_shared<DPDKStack>(c, t);
+    return std::make_shared<DPDKStack>(c, t, mname);
 #endif
 
   lderr(c) << __func__ << " ms_async_transport_type " << t <<
@@ -101,7 +101,7 @@ Worker* NetworkStack::create_worker(CephContext *c, const string &type, unsigned
   return nullptr;
 }
 
-NetworkStack::NetworkStack(CephContext *c, const string &t): type(t), started(false), cct(c)
+NetworkStack::NetworkStack(CephContext *c, const string &t, string mname): type(t), started(false), mname(mname), cct(c)
 {
   assert(cct->_conf->ms_async_op_threads > 0);
 

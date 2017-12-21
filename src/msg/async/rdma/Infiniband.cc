@@ -14,6 +14,11 @@
  *
  */
 
+#include <stdlib.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include "Infiniband.h"
 #include "common/errno.h"
 #include "common/debug.h"
@@ -147,6 +152,107 @@ void Device::binding_port(CephContext *cct, int port_num) {
   }
 }
 
+DeviceList::DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)) {
+  if (device_list == NULL || num == 0) {
+    lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
+    assert(0);
+  }
+
+  int iRet = -1;
+  FILE *fd = NULL;
+  Device *pstDevice;
+  fd = fopen("/dev/devinfo.txt", "r");
+  if (NULL == fd)
+  {
+    iRet = system("/usr/bin/ibdev2netdev > /dev/devinfo.txt");
+    if (0 != iRet)
+    {
+      lderr(cct) << __func__ << " failed to execute ibdev2netdev. " << cpp_strerror(errno) << dendl;
+      assert(0);
+    }
+    fd = fopen("/dev/devinfo.txt", "r");
+    if (NULL == fd)
+    {
+      lderr(cct) << __func__ << " failed to open file /dev/devinfo.txt. " << cpp_strerror(errno) << dendl;
+      assert(0);
+    }
+  }
+
+  //devices = new Device*[num];
+
+  char szDevName[16];  // mlx4_0 or mlx4_1 or mlx5_0
+  char szNetName[16];  // ib0 or ib1
+  char szDevStatus[8]; // Up or Down
+  for (int i = 0;i < num; ++i) {
+    szDevName[0] = '\0';
+    szNetName[0] = '\0';
+    szDevStatus[0] = '\0';
+    iRet = fscanf(fd, "%15s port 1 ==> %15s (%7s)", szDevName, szNetName, szDevStatus);
+    if (3 != iRet)
+    {
+      fclose(fd);
+      lderr(cct) << __func__ << " failed to analyze the dev name. " << cpp_strerror(errno) << dendl;
+      assert(0);
+    }
+    int iLen = 0;
+    iLen = strlen(szDevStatus);
+    szDevStatus[iLen - 1] = '\0';
+    m_dev_name.insert(make_pair<std::string, std::string>(szNetName, szDevName));
+    pstDevice = new Device(cct, device_list[i]);
+    if (NULL == pstDevice)
+    {
+      fclose(fd);
+      lderr(cct) << __func__ << " failed to new the struct of Device. " << cpp_strerror(errno) << dendl;
+      assert(0);
+    }
+    m_device[pstDevice->get_name()] = pstDevice;
+  }
+  fclose(fd);
+}
+
+Device* DeviceList::get_device(CephContext *cct, const char* net_dev_name) {
+  string ib_dev_name;
+
+  //assert(devices);
+
+  ib_dev_name = m_dev_name[net_dev_name];
+
+  ldout(cct, 1) << __func__ << " number of device: " << num
+    << ", net_dev_name: " << net_dev_name << ", ib_dev_name: " << ib_dev_name << dendl;
+
+  return m_device[ib_dev_name];
+/*
+  for (int i = 0; i < num; ++i) {
+    if (!strlen(device_name) || !strcmp(device_name, devices[i]->get_name())) {
+      return devices[i];
+    }
+  }
+
+  return NULL;
+*/
+}
+
+DeviceList::~DeviceList() {
+  std::map<std::string, Device*>::iterator dev_it;
+  for (dev_it = m_device.begin(); dev_it != m_device.end(); dev_it++)
+  {
+    delete dev_it->second;
+    dev_it = m_device.erase(dev_it);
+  }
+
+  std::map<std::string, std::string>::iterator name_it;
+  for (name_it = m_dev_name.begin(); name_it != m_dev_name.end(); name_it++)
+  {
+    name_it = m_dev_name.erase(name_it);
+  }
+  /*
+  for (int i=0; i < num; ++i) {
+    delete devices[i];
+  }
+  delete []devices;
+  */
+  ibv_free_device_list(device_list);
+}
 
 Infiniband::QueuePair::QueuePair(
     CephContext *c, Infiniband& infiniband, ibv_qp_type type,
@@ -863,13 +969,23 @@ void Infiniband::verify_prereq(CephContext *cct) {
    init_prereq = true;
 }
 
-Infiniband::Infiniband(CephContext *cct)
-  : cct(cct), lock("IB lock"),
-    device_name(cct->_conf->ms_async_rdma_device_name),
-    port_num( cct->_conf->ms_async_rdma_port_num)
+Infiniband::Infiniband(CephContext *cct, string mname)
+  : cct(cct), lock("IB lock"), port_num(cct->_conf->ms_async_rdma_port_num)
 {
   if (!init_prereq)
     verify_prereq(cct);
+  if (cct->_conf->ms_async_rdma_cluster_device_name ==
+      cct->_conf->ms_async_rdma_public_device_name) {
+    /* share use one device */
+	device_name = cct->_conf->ms_async_rdma_public_device_name;
+  } else if ("hb_back_client" == mname || "hb_back_server" == mname || "cluster" == mname) {
+    /* these messengers should use cluster network device */
+	device_name = cct->_conf->ms_async_rdma_cluster_device_name;
+  } else {
+    /* these messengers should use public network device */
+	device_name = cct->_conf->ms_async_rdma_public_device_name;
+  }
+
   ldout(cct, 20) << __func__ << " constructing Infiniband..." << dendl;
 }
 
@@ -883,9 +999,9 @@ void Infiniband::init()
   device_list = new DeviceList(cct);
   initialized = true;
 
-  device = device_list->get_device(device_name.c_str());
-  device->binding_port(cct, port_num);
+  device = device_list->get_device(cct, device_name.c_str());
   assert(device);
+  device->binding_port(cct, port_num);
   ib_physical_port = device->active_port->get_port_num();
   pd = new ProtectionDomain(cct, device);
   assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
