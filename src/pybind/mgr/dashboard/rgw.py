@@ -7,6 +7,7 @@ import logging
 
 log = logging.getLogger("dashboard")
 
+
 class RGWDaemons(RemoteViewCache):
 
     def _get(self):
@@ -25,6 +26,7 @@ class RGWDaemons(RemoteViewCache):
                     try:
                         status = json.loads(status['json'])
                     except:
+                        log.warn("{0} had invalid status json".format(service['id']))
                         status = {}
                     
                     # extract per-daemon service data and health
