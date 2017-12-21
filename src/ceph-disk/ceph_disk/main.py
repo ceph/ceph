@@ -4751,6 +4751,49 @@ def main_zap(args):
         zap(dev)
 
 
+def is_osd_mounted(osd_id):
+    with open(PROCDIR + '/mounts', 'rb') as proc_mounts:
+        for line in proc_mounts:
+            fields = line.split()
+            if len(fields) < 3:
+                continue
+            mounts_dev = fields[0]
+            path = fields[1]
+            if os.path.isabs(mounts_dev) and os.path.exists(mounts_dev):
+                mounts_dev = os.path.realpath(mounts_dev)
+                if path == '/var/lib/ceph/osd/ceph-{id}'.format(id=osd_id):
+                    return mounts_dev
+    return None
+
+
+def get_cluster(dev):
+    umount = False
+    path = is_mounted(dev)
+    if not path:
+        path = tempfile.mkdtemp(
+            prefix='mnt.',
+            dir=STATEDIR + '/tmp',
+        )
+        args_t = ['mount', '-o', 'ro',
+                  dev,
+                  path]
+        command_check_call(args_t)
+        umount = True
+    ceph_fsid = read_one_line(path, 'ceph_fsid')
+    if ceph_fsid is None:
+        raise Error('No cluster uuid assigned.')
+    LOG.debug('Cluster uuid is %s', ceph_fsid)
+    cluster = find_cluster_by_uuid(ceph_fsid)
+    if cluster is None:
+        raise Error('No cluster conf found in ' + SYSCONFDIR +
+                    ' with fsid %s' % ceph_fsid)
+    LOG.debug('Cluster name is %s', cluster)
+    osd_id = get_osd_id(path)
+    if umount:
+        command_check_call(['umount', path])
+    return (osd_id, cluster)
+
+
 def main_trigger(args):
     LOG.debug("main_trigger: " + str(args))
     if is_systemd() and not args.sync:
@@ -4781,9 +4824,30 @@ def main_trigger(args):
         return
 
     if get_ceph_user() == 'ceph':
-        command_check_call(['chown', 'ceph:ceph', args.dev])
+        command_check_call(['chown', 'ceph:ceph', args.dev, ])
     parttype = get_partition_type(args.dev)
     partid = get_partition_uuid(args.dev)
+    osd_id = -1
+    dev = None
+    for ptype in ['regular', ]:
+        if parttype in PTYPE[ptype]['osd']['ready']:
+            (osd_id, cluster) = get_cluster(args.dev)
+            dev = is_osd_mounted(osd_id)
+            if dev and dev != args.dev:
+                command_check_call(['umount', args.dev])
+                stop_daemon(cluster, osd_id)
+        elif parttype in PTYPE[ptype]['journal']['ready']:
+            osd_uuid = get_space_osd_uuid('journal', args.dev)
+            path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
+            (osd_id, cluster) = get_cluster(path)
+            stop_daemon(cluster, osd_id)
+        elif parttype in (PTYPE[ptype]['block']['ready'],
+                          PTYPE[ptype]['block.db']['ready'],
+                          PTYPE[ptype]['block.wal']['ready']):
+            osd_uuid = get_space_osd_uuid('block', args.dev)
+            path = os.path.join('/dev/disk/by-partuuid/', osd_uuid.lower())
+            (osd_id, cluster) = get_cluster(path)
+            stop_daemon(cluster, osd_id)
 
     LOG.info('trigger {dev} parttype {parttype} uuid {partid}'.format(
         dev=args.dev,
