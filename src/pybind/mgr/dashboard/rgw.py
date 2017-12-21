@@ -1,8 +1,6 @@
 # -*- code: utf-8 -*-
 
 import json
-import re
-import rados
 from remote_view_cache import RemoteViewCache
 
 import logging
