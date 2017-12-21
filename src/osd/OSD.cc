@@ -779,9 +779,9 @@ void OSDService::check_full_status(float ratio)
     return;
   }
   float nearfull_ratio = osdmap->get_nearfull_ratio();
-  float backfillfull_ratio = std::max(osdmap->get_backfillfull_ratio(), nearfull_ratio);
-  float full_ratio = std::max(osdmap->get_full_ratio(), backfillfull_ratio);
-  float failsafe_ratio = std::max(get_failsafe_full_ratio(), full_ratio);
+  float backfillfull_ratio = MAX(osdmap->get_backfillfull_ratio(), nearfull_ratio);
+  float full_ratio = MAX(osdmap->get_full_ratio(), backfillfull_ratio);
+  float failsafe_ratio = MAX(get_failsafe_full_ratio(), full_ratio);
 
   if (osdmap->require_osd_release < CEPH_RELEASE_LUMINOUS) {
     // use the failsafe for nearfull and full; the mon isn't using the
@@ -7266,7 +7266,7 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 
 void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
 {
-  epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  epoch_t min = MIN(oldest, service.map_cache.cached_key_lower_bound());
   if (min <= superblock.oldest_map)
     return;
 

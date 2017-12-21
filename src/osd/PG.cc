@@ -1265,7 +1265,7 @@ void PG::calc_replicated_acting(
   // select replicas that have log contiguity with primary.
   // prefer up, then acting, then any peer_info osds
   eversion_t oldest_auth_log_entry =
-    std::min(primary->second.log_tail, auth_log_shard->second.log_tail);
+    MIN(primary->second.log_tail, auth_log_shard->second.log_tail);
   for (vector<int>::const_iterator i = up.begin();
        i != up.end();
        ++i) {

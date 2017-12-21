@@ -46,6 +46,13 @@
 #include "compressor/Compressor.h"
 #include <atomic>
 
+#ifndef MIN
+#define MIN(a,b)  ((a)<=(b) ? (a):(b))
+#endif
+#ifndef MAX
+#define MAX(a,b)  ((a)>=(b) ? (a):(b))
+#endif
+
 #define CEPH_OSD_ONDISK_MAGIC "ceph osd volume v026"
 
 #define CEPH_OSD_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "initial feature set(~v.18)")
