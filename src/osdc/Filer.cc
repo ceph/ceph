@@ -119,13 +119,14 @@ int Filer::probe_impl(Probe* probe, file_layout_t *layout,
 
   // start with 1+ periods.
   probe->probing_len = period;
+  auto div = start_from % period;
   if (probe->fwd) {
-    if (start_from % period)
-      probe->probing_len += period - (start_from % period);
+    if (div)
+      probe->probing_len += period - div;
   } else {
     assert(start_from > *end);
-    if (start_from % period)
-      probe->probing_len -= period - (start_from % period);
+    if (div)
+      probe->probing_len -= period - div;
     probe->probing_off -= probe->probing_len;
   }
 
@@ -327,10 +328,10 @@ int Filer::purge_range(inodeno_t ino,
     return 0;
   }
 
-  PurgeRange *pr = new PurgeRange(ino, *layout, snapc, first_obj,
-				  num_obj, mtime, flags, oncommit);
-
-  _do_purge_range(pr, 0);
+  _do_purge_range(
+    new PurgeRange(
+      ino, *layout, snapc, first_obj, num_obj, mtime, flags, oncommit),
+    0);
   return 0;
 }
 
@@ -372,9 +373,10 @@ void Filer::_do_purge_range(PurgeRange *pr, int fin)
 
   // Issue objecter ops outside pr->lock to avoid lock dependency loop
   for (const auto& oid : remove_oids) {
-    object_locator_t oloc = OSDMap::file_to_object_locator(pr->layout);
-    objecter->remove(oid, oloc, pr->snapc, pr->mtime, pr->flags,
-		     new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
+    objecter->remove(oid,
+      OSDMap::file_to_object_locator(pr->layout),
+      pr->snapc, pr->mtime, pr->flags,
+      new C_OnFinisher(new C_PurgeRange(this, pr), finisher));
   }
 }
 
@@ -427,9 +429,10 @@ void Filer::truncate(inodeno_t ino,
   if (len > 0 && (offset + len) % period)
     len += period - ((offset + len) % period);
 
-  TruncRange *tr = new TruncRange(ino, *layout, snapc, mtime, flags, oncommit,
-				  offset, len, truncate_seq);
-  _do_truncate_range(tr, 0);
+  _do_truncate_range(
+    new TruncRange(
+      ino, *layout, snapc, mtime, flags, oncommit, offset, len, truncate_seq),
+    0);
 }
 
 struct C_TruncRange : public Context {
