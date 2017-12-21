@@ -444,6 +444,9 @@ public:
   const PExtentVector& get_extents() const {
     return extents;
   }
+  PExtentVector& dirty_extents() {
+    return extents;
+  }
 
   DENC_HELPERS;
   void bound_encode(size_t& p, uint64_t struct_v) const {
@@ -852,6 +855,9 @@ struct bluestore_shared_blob_t {
   bluestore_extent_ref_map_t ref_map;  ///< shared blob extents
 
   bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
+  bluestore_shared_blob_t(uint64_t _sbid,
+			  bluestore_extent_ref_map_t&& _ref_map ) 
+    : sbid(_sbid), ref_map(std::move(_ref_map)) {}
 
   DENC(bluestore_shared_blob_t, v, p) {
     DENC_START(1, 1, p);

@@ -1441,7 +1441,95 @@ TEST(GarbageCollector, BasicTest)
     em.clear();
     old_extents.clear();
   }
- }
+}
+
+TEST(BlueStoreRepairer, StoreSpaceTracker)
+{
+  BlueStoreRepairer::StoreSpaceTracker bmap0;
+  bmap0.init((uint64_t)4096 * 1024 * 1024 * 1024, 0x1000);
+  ASSERT_EQ(bmap0.granularity, 2 * 1024 * 1024);
+  ASSERT_EQ(bmap0.collections_bfs.size(), 2048 * 1024);
+  ASSERT_EQ(bmap0.objects_bfs.size(), 2048 * 1024);
+
+  BlueStoreRepairer::StoreSpaceTracker bmap;
+  bmap.init(0x2000 * 0x1000 - 1, 0x1000, 512 * 1024);
+  ASSERT_EQ(bmap.granularity, 0x1000);
+  ASSERT_EQ(bmap.collections_bfs.size(), 0x2000);
+  ASSERT_EQ(bmap.objects_bfs.size(), 0x2000);
+
+  coll_t cid;
+  ghobject_t hoid;
+
+  ASSERT_FALSE(bmap.is_used(cid, 0));
+  ASSERT_FALSE(bmap.is_used(hoid, 0));
+  bmap.set_used(0, 1, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0));
+  ASSERT_TRUE(bmap.is_used(hoid, 0));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0x1023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x1023));
+  ASSERT_FALSE(bmap.is_used(cid, 0x2023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x2023));
+  ASSERT_FALSE(bmap.is_used(cid, 0x3023));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x3023));
+  bmap.set_used(0x1023, 0x3000, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x1023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x1023));
+  ASSERT_TRUE(bmap.is_used(cid, 0x2023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x2023));
+  ASSERT_TRUE(bmap.is_used(cid, 0x3023));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x3023));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0x9001));
+  ASSERT_FALSE(bmap.is_used(hoid, 0x9001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xa001));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xa001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xb000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xb000));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+  bmap.set_used(0x9001, 0x2fff, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xb001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xb001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+
+  bmap.set_used(0xa001, 0x2, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0x9001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xa001));
+  ASSERT_TRUE(bmap.is_used(cid, 0xb001));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xb001));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc000));
+
+  ASSERT_FALSE(bmap.is_used(cid, 0xc0000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc0000));
+  ASSERT_FALSE(bmap.is_used(cid, 0xc1000));
+  ASSERT_FALSE(bmap.is_used(hoid, 0xc1000));
+
+  bmap.set_used(0xc0000, 0x2000, cid, hoid);
+  ASSERT_TRUE(bmap.is_used(cid, 0xc0000));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xc0000));
+  ASSERT_TRUE(bmap.is_used(cid, 0xc1000));
+  ASSERT_TRUE(bmap.is_used(hoid, 0xc1000));
+
+  interval_set<uint64_t> extents;
+  extents.insert(0,0x500);
+  extents.insert(0x800,0x100);
+  extents.insert(0x1000,0x1000);
+  extents.insert(0xa001,1);
+  extents.insert(0xa0000,0xff8);
+
+  ASSERT_EQ(bmap.filter_out(extents), 3);
+  ASSERT_TRUE(bmap.is_used(cid));
+  ASSERT_TRUE(bmap.is_used(hoid));
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
