@@ -272,22 +272,23 @@ template <uint8_t _b>
 void BitVector<_b>::encode_header(bufferlist& bl) const {
   bufferlist header_bl;
   ENCODE_START(1, 1, header_bl);
-  ::encode(m_size, header_bl);
+  encode(m_size, header_bl);
   ENCODE_FINISH(header_bl);
   m_header_crc = header_bl.crc32c(0);
 
-  ::encode(header_bl, bl);
+  encode(header_bl, bl);
 }
 
 template <uint8_t _b>
 void BitVector<_b>::decode_header(bufferlist::iterator& it) {
+  using ceph::decode;
   bufferlist header_bl;
-  ::decode(header_bl, it);
+  decode(header_bl, it);
 
   bufferlist::iterator header_it = header_bl.begin();
   uint64_t size;
   DECODE_START(1, header_it);
-  ::decode(size, header_it);
+  decode(size, header_it);
   DECODE_FINISH(header_it);
 
   resize(size);
@@ -385,31 +386,33 @@ void BitVector<_b>::get_data_extents(uint64_t offset, uint64_t length,
 
 template <uint8_t _b>
 void BitVector<_b>::encode_footer(bufferlist& bl) const {
+  using ceph::encode;
   bufferlist footer_bl;
   if (m_crc_enabled) {
-    ::encode(m_header_crc, footer_bl);
-    ::encode(m_data_crcs, footer_bl);
+    encode(m_header_crc, footer_bl);
+    encode(m_data_crcs, footer_bl);
   }
-  ::encode(footer_bl, bl);
+  encode(footer_bl, bl);
 }
 
 template <uint8_t _b>
 void BitVector<_b>::decode_footer(bufferlist::iterator& it) {
+  using ceph::decode;
   bufferlist footer_bl;
-  ::decode(footer_bl, it);
+  decode(footer_bl, it);
 
   m_crc_enabled = (footer_bl.length() > 0);
   if (m_crc_enabled) {
     bufferlist::iterator footer_it = footer_bl.begin();
 
     __u32 header_crc;
-    ::decode(header_crc, footer_it);
+    decode(header_crc, footer_it);
     if (m_header_crc != header_crc) {
       throw buffer::malformed_input("incorrect header CRC");
     }
 
     uint64_t block_count = (m_data.length() + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    ::decode(m_data_crcs, footer_it);
+    decode(m_data_crcs, footer_it);
     if (m_data_crcs.size() != block_count) {
       throw buffer::malformed_input("invalid data block CRCs");
     }
@@ -505,7 +508,6 @@ void BitVector<_b>::generate_test_instances(std::list<BitVector *> &o) {
   o.push_back(b);
 }
 
-}
 
 WRITE_CLASS_ENCODER(ceph::BitVector<2>)
 
@@ -515,6 +517,7 @@ inline std::ostream& operator<<(std::ostream& out, const ceph::BitVector<_b> &b)
   out << "ceph::BitVector<" << _b << ">(size=" << b.size() << ", data="
       << b.get_data() << ")";
   return out;
+}
 }
 
 #endif // BIT_VECTOR_HPP

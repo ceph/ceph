@@ -1176,7 +1176,7 @@ namespace librbd {
     int object_map_load_finish(bufferlist::iterator *it,
                                ceph::BitVector<2> *object_map) {
       try {
-        ::decode(*object_map, *it);
+        decode(*object_map, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1206,7 +1206,7 @@ namespace librbd {
       object_map_copy.set_crc_enabled(false);
 
       bufferlist in;
-      ::encode(object_map_copy, in);
+      encode(object_map_copy, in);
       rados_op->exec("rbd", "object_map_save", in);
     }
 
@@ -1245,7 +1245,7 @@ namespace librbd {
       object_map_copy.set_crc_enabled(false);
 
       bufferlist in;
-      ::encode(object_map_copy, in);
+      encode(object_map_copy, in);
       rados_op->exec("rbd", "object_map_snap_remove", in);
     }
 

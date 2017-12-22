@@ -137,7 +137,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   }
 
   bufferlist bl;
-  ::encode(bit_vector, bl);
+  encode(bit_vector, bl);
   bit_vector.clear();
 
   bufferlist header_bl;
@@ -197,7 +197,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     ASSERT_EQ(bl, updated_bl);
 
     bufferlist::iterator updated_it = updated_bl.begin();
-    ::decode(bit_vector, updated_it);
+    decode(bit_vector, updated_it);
   }
 }
 
