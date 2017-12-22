@@ -3349,6 +3349,7 @@ void BlueStore::Collection::split_cache(
 void *BlueStore::MempoolThread::entry()
 {
   Mutex::Locker l(lock);
+  utime_t wait;
   while (!stop) {
     uint64_t meta_bytes =
       mempool::bluestore_cache_other::allocated_bytes() +
@@ -3375,7 +3376,6 @@ void *BlueStore::MempoolThread::entry()
 
     store->_update_cache_logger();
 
-    utime_t wait;
     wait += store->cct->_conf->bluestore_cache_trim_interval;
     cond.WaitInterval(lock, wait);
   }
