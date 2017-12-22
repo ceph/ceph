@@ -14,7 +14,7 @@ public:
 
 TEST(MD5, Simple) {
   ceph::crypto::MD5 h;
-  h.Update((const byte*)"foo", 3);
+  h.Update((const ::byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -28,11 +28,11 @@ TEST(MD5, Simple) {
 
 TEST(MD5, MultiUpdate) {
   ceph::crypto::MD5 h;
-  h.Update((const byte*)"", 0);
-  h.Update((const byte*)"fo", 2);
-  h.Update((const byte*)"", 0);
-  h.Update((const byte*)"o", 1);
-  h.Update((const byte*)"", 0);
+  h.Update((const ::byte*)"", 0);
+  h.Update((const ::byte*)"fo", 2);
+  h.Update((const ::byte*)"", 0);
+  h.Update((const ::byte*)"o", 1);
+  h.Update((const ::byte*)"", 0);
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -46,9 +46,9 @@ TEST(MD5, MultiUpdate) {
 
 TEST(MD5, Restart) {
   ceph::crypto::MD5 h;
-  h.Update((const byte*)"bar", 3);
+  h.Update((const ::byte*)"bar", 3);
   h.Restart();
-  h.Update((const byte*)"foo", 3);
+  h.Update((const ::byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -61,8 +61,8 @@ TEST(MD5, Restart) {
 }
 
 TEST(HMACSHA1, Simple) {
-  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
-  h.Update((const byte*)"foo", 3);
+  ceph::crypto::HMACSHA1 h((const ::byte*)"sekrit", 6);
+  h.Update((const ::byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -75,12 +75,12 @@ TEST(HMACSHA1, Simple) {
 }
 
 TEST(HMACSHA1, MultiUpdate) {
-  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
-  h.Update((const byte*)"", 0);
-  h.Update((const byte*)"fo", 2);
-  h.Update((const byte*)"", 0);
-  h.Update((const byte*)"o", 1);
-  h.Update((const byte*)"", 0);
+  ceph::crypto::HMACSHA1 h((const ::byte*)"sekrit", 6);
+  h.Update((const ::byte*)"", 0);
+  h.Update((const ::byte*)"fo", 2);
+  h.Update((const ::byte*)"", 0);
+  h.Update((const ::byte*)"o", 1);
+  h.Update((const ::byte*)"", 0);
   unsigned char digest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -93,10 +93,10 @@ TEST(HMACSHA1, MultiUpdate) {
 }
 
 TEST(HMACSHA1, Restart) {
-  ceph::crypto::HMACSHA1 h((const byte*)"sekrit", 6);
-  h.Update((const byte*)"bar", 3);
+  ceph::crypto::HMACSHA1 h((const ::byte*)"sekrit", 6);
+  h.Update((const ::byte*)"bar", 3);
   h.Restart();
-  h.Update((const byte*)"foo", 3);
+  h.Update((const ::byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_HMACSHA1_DIGESTSIZE];
   h.Final(digest);
   int err;
@@ -133,7 +133,7 @@ void do_simple_crypto() {
   // not exit status 0
   ceph::crypto::init(g_ceph_context);
   ceph::crypto::MD5 h;
-  h.Update((const byte*)"foo", 3);
+  h.Update((const ::byte*)"foo", 3);
   unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
   h.Final(digest);
   exit(0);

@@ -50,7 +50,7 @@ public:
   do {									\
   if (cct->_conf->subsys.should_gather(sub, v)) {			\
     if (0) {								\
-      char __array[((v >= -1) && (v <= 200)) ? 0 : -1] __attribute__((unused)); \
+      [[maybe_unused]] char __array[((v >= -1) && (v <= 200)) ? 0 : -1] = {}; \
     }									\
     static size_t _log_exp_length = 80; 				\
     ceph::logging::Entry *_dout_e = cct->_log->create_entry(v, sub, &_log_exp_length);	\
