@@ -93,7 +93,7 @@ public:
     ::encode(EVENT_NEW_ENCODING, bl);
     ENCODE_START(1, 1, bl)
     ::encode(_type, bl);
-    encode(bl, features);
+    this->encode(bl, features);
     ENCODE_FINISH(bl);
   }
 
