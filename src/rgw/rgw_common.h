@@ -520,17 +520,17 @@ struct RGWAccessKey {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(id, bl);
-    ::encode(key, bl);
-    ::encode(subuser, bl);
+    encode(id, bl);
+    encode(key, bl);
+    encode(subuser, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     ::decode(id, bl);
-     ::decode(key, bl);
-     ::decode(subuser, bl);
+     decode(id, bl);
+     decode(key, bl);
+     decode(subuser, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -550,15 +550,15 @@ struct RGWSubUser {
   RGWSubUser() : perm_mask(0) {}
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(name, bl);
-    ::encode(perm_mask, bl);
+    encode(name, bl);
+    encode(perm_mask, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     ::decode(name, bl);
-     ::decode(perm_mask, bl);
+     decode(name, bl);
+     decode(perm_mask, bl);
      DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -583,12 +583,12 @@ public:
 
   void encode(bufferlist& bl) const {
      ENCODE_START(1, 1, bl);
-     ::encode(caps, bl);
+     encode(caps, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
-     ::decode(caps, bl);
+     decode(caps, bl);
      DECODE_FINISH(bl);
   }
   int check_cap(const string& cap, uint32_t perm);
@@ -654,7 +654,7 @@ struct RGWUserInfo
 
   void encode(bufferlist& bl) const {
      ENCODE_START(19, 9, bl);
-     ::encode(auid, bl);
+     encode(auid, bl);
      string access_key;
      string secret_key;
      if (!access_keys.empty()) {
@@ -663,10 +663,10 @@ struct RGWUserInfo
        access_key = k.id;
        secret_key = k.key;
      }
-     ::encode(access_key, bl);
-     ::encode(secret_key, bl);
-     ::encode(display_name, bl);
-     ::encode(user_email, bl);
+     encode(access_key, bl);
+     encode(secret_key, bl);
+     encode(display_name, bl);
+     encode(user_email, bl);
      string swift_name;
      string swift_key;
      if (!swift_keys.empty()) {
@@ -675,100 +675,100 @@ struct RGWUserInfo
        swift_name = k.id;
        swift_key = k.key;
      }
-     ::encode(swift_name, bl);
-     ::encode(swift_key, bl);
-     ::encode(user_id.id, bl);
-     ::encode(access_keys, bl);
-     ::encode(subusers, bl);
-     ::encode(suspended, bl);
-     ::encode(swift_keys, bl);
-     ::encode(max_buckets, bl);
-     ::encode(caps, bl);
-     ::encode(op_mask, bl);
-     ::encode(system, bl);
-     ::encode(default_placement, bl);
-     ::encode(placement_tags, bl);
-     ::encode(bucket_quota, bl);
-     ::encode(temp_url_keys, bl);
-     ::encode(user_quota, bl);
-     ::encode(user_id.tenant, bl);
-     ::encode(admin, bl);
-     ::encode(type, bl);
+     encode(swift_name, bl);
+     encode(swift_key, bl);
+     encode(user_id.id, bl);
+     encode(access_keys, bl);
+     encode(subusers, bl);
+     encode(suspended, bl);
+     encode(swift_keys, bl);
+     encode(max_buckets, bl);
+     encode(caps, bl);
+     encode(op_mask, bl);
+     encode(system, bl);
+     encode(default_placement, bl);
+     encode(placement_tags, bl);
+     encode(bucket_quota, bl);
+     encode(temp_url_keys, bl);
+     encode(user_quota, bl);
+     encode(user_id.tenant, bl);
+     encode(admin, bl);
+     encode(type, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(19, 9, 9, bl);
-     if (struct_v >= 2) ::decode(auid, bl);
+     if (struct_v >= 2) decode(auid, bl);
      else auid = CEPH_AUTH_UID_DEFAULT;
      string access_key;
      string secret_key;
-    ::decode(access_key, bl);
-    ::decode(secret_key, bl);
+    decode(access_key, bl);
+    decode(secret_key, bl);
     if (struct_v < 6) {
       RGWAccessKey k;
       k.id = access_key;
       k.key = secret_key;
       access_keys[access_key] = k;
     }
-    ::decode(display_name, bl);
-    ::decode(user_email, bl);
+    decode(display_name, bl);
+    decode(user_email, bl);
     /* We populate swift_keys map later nowadays, but we have to decode. */
     string swift_name;
     string swift_key;
-    if (struct_v >= 3) ::decode(swift_name, bl);
-    if (struct_v >= 4) ::decode(swift_key, bl);
+    if (struct_v >= 3) decode(swift_name, bl);
+    if (struct_v >= 4) decode(swift_key, bl);
     if (struct_v >= 5)
-      ::decode(user_id.id, bl);
+      decode(user_id.id, bl);
     else
       user_id.id = access_key;
     if (struct_v >= 6) {
-      ::decode(access_keys, bl);
-      ::decode(subusers, bl);
+      decode(access_keys, bl);
+      decode(subusers, bl);
     }
     suspended = 0;
     if (struct_v >= 7) {
-      ::decode(suspended, bl);
+      decode(suspended, bl);
     }
     if (struct_v >= 8) {
-      ::decode(swift_keys, bl);
+      decode(swift_keys, bl);
     }
     if (struct_v >= 10) {
-      ::decode(max_buckets, bl);
+      decode(max_buckets, bl);
     } else {
       max_buckets = RGW_DEFAULT_MAX_BUCKETS;
     }
     if (struct_v >= 11) {
-      ::decode(caps, bl);
+      decode(caps, bl);
     }
     if (struct_v >= 12) {
-      ::decode(op_mask, bl);
+      decode(op_mask, bl);
     } else {
       op_mask = RGW_OP_TYPE_ALL;
     }
     if (struct_v >= 13) {
-      ::decode(system, bl);
-      ::decode(default_placement, bl);
-      ::decode(placement_tags, bl); /* tags of allowed placement rules */
+      decode(system, bl);
+      decode(default_placement, bl);
+      decode(placement_tags, bl); /* tags of allowed placement rules */
     }
     if (struct_v >= 14) {
-      ::decode(bucket_quota, bl);
+      decode(bucket_quota, bl);
     }
     if (struct_v >= 15) {
-     ::decode(temp_url_keys, bl);
+     decode(temp_url_keys, bl);
     }
     if (struct_v >= 16) {
-      ::decode(user_quota, bl);
+      decode(user_quota, bl);
     }
     if (struct_v >= 17) {
-      ::decode(user_id.tenant, bl);
+      decode(user_id.tenant, bl);
     } else {
       user_id.tenant.clear();
     }
     if (struct_v >= 18) {
-      ::decode(admin, bl);
+      decode(admin, bl);
     }
     if (struct_v >= 19) {
-      ::decode(type, bl);
+      decode(type, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -812,8 +812,8 @@ struct rgw_pool {
 
   void encode(bufferlist& bl) const {
      ENCODE_START(10, 10, bl);
-    ::encode(name, bl);
-    ::encode(ns, bl);
+    encode(name, bl);
+    encode(ns, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -822,7 +822,7 @@ struct rgw_pool {
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
 
-    ::decode(name, bl);
+    decode(name, bl);
 
     if (struct_v < 10) {
 
@@ -835,7 +835,7 @@ struct rgw_pool {
      */
 
     } else {
-      ::decode(ns, bl);
+      decode(ns, bl);
     }
 
     DECODE_FINISH(bl);
@@ -931,9 +931,9 @@ struct rgw_raw_obj {
 
   void encode(bufferlist& bl) const {
      ENCODE_START(6, 6, bl);
-    ::encode(pool, bl);
-    ::encode(oid, bl);
-    ::encode(loc, bl);
+    encode(pool, bl);
+    encode(oid, bl);
+    encode(loc, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -951,9 +951,9 @@ struct rgw_raw_obj {
       decode_from_rgw_obj(bl);
       return;
     }
-    ::decode(pool, bl);
-    ::decode(oid, bl);
-    ::decode(loc, bl);
+    decode(pool, bl);
+    decode(oid, bl);
+    decode(loc, bl);
     DECODE_FINISH(bl);
   }
 
@@ -1017,57 +1017,57 @@ struct rgw_bucket {
 
   void encode(bufferlist& bl) const {
      ENCODE_START(10, 10, bl);
-    ::encode(name, bl);
-    ::encode(marker, bl);
-    ::encode(bucket_id, bl);
-    ::encode(tenant, bl);
+    encode(name, bl);
+    encode(marker, bl);
+    encode(bucket_id, bl);
+    encode(tenant, bl);
     bool encode_explicit = !explicit_placement.data_pool.empty();
-    ::encode(encode_explicit, bl);
+    encode(encode_explicit, bl);
     if (encode_explicit) {
-      ::encode(explicit_placement.data_pool, bl);
-      ::encode(explicit_placement.data_extra_pool, bl);
-      ::encode(explicit_placement.index_pool, bl);
+      encode(explicit_placement.data_pool, bl);
+      encode(explicit_placement.data_extra_pool, bl);
+      encode(explicit_placement.index_pool, bl);
     }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(10, 3, 3, bl);
-    ::decode(name, bl);
+    decode(name, bl);
     if (struct_v < 10) {
-      ::decode(explicit_placement.data_pool.name, bl);
+      decode(explicit_placement.data_pool.name, bl);
     }
     if (struct_v >= 2) {
-      ::decode(marker, bl);
+      decode(marker, bl);
       if (struct_v <= 3) {
         uint64_t id;
-        ::decode(id, bl);
+        decode(id, bl);
         char buf[16];
         snprintf(buf, sizeof(buf), "%llu", (long long)id);
         bucket_id = buf;
       } else {
-        ::decode(bucket_id, bl);
+        decode(bucket_id, bl);
       }
     }
     if (struct_v < 10) {
       if (struct_v >= 5) {
-        ::decode(explicit_placement.index_pool.name, bl);
+        decode(explicit_placement.index_pool.name, bl);
       } else {
         explicit_placement.index_pool = explicit_placement.data_pool;
       }
       if (struct_v >= 7) {
-        ::decode(explicit_placement.data_extra_pool.name, bl);
+        decode(explicit_placement.data_extra_pool.name, bl);
       }
     }
     if (struct_v >= 8) {
-      ::decode(tenant, bl);
+      decode(tenant, bl);
     }
     if (struct_v >= 10) {
       bool decode_explicit = !explicit_placement.data_pool.empty();
-      ::decode(decode_explicit, bl);
+      decode(decode_explicit, bl);
       if (decode_explicit) {
-        ::decode(explicit_placement.data_pool, bl);
-        ::decode(explicit_placement.data_extra_pool, bl);
-        ::decode(explicit_placement.index_pool, bl);
+        decode(explicit_placement.data_pool, bl);
+        decode(explicit_placement.data_extra_pool, bl);
+        decode(explicit_placement.index_pool, bl);
       }
     }
     DECODE_FINISH(bl);
@@ -1244,77 +1244,77 @@ struct RGWBucketInfo
 
   void encode(bufferlist& bl) const {
      ENCODE_START(19, 4, bl);
-     ::encode(bucket, bl);
-     ::encode(owner.id, bl);
-     ::encode(flags, bl);
-     ::encode(zonegroup, bl);
+     encode(bucket, bl);
+     encode(owner.id, bl);
+     encode(flags, bl);
+     encode(zonegroup, bl);
      uint64_t ct = real_clock::to_time_t(creation_time);
-     ::encode(ct, bl);
-     ::encode(placement_rule, bl);
-     ::encode(has_instance_obj, bl);
-     ::encode(quota, bl);
-     ::encode(num_shards, bl);
-     ::encode(bucket_index_shard_hash_type, bl);
-     ::encode(requester_pays, bl);
-     ::encode(owner.tenant, bl);
-     ::encode(has_website, bl);
+     encode(ct, bl);
+     encode(placement_rule, bl);
+     encode(has_instance_obj, bl);
+     encode(quota, bl);
+     encode(num_shards, bl);
+     encode(bucket_index_shard_hash_type, bl);
+     encode(requester_pays, bl);
+     encode(owner.tenant, bl);
+     encode(has_website, bl);
      if (has_website) {
-       ::encode(website_conf, bl);
+       encode(website_conf, bl);
      }
-     ::encode((uint32_t)index_type, bl);
-     ::encode(swift_versioning, bl);
+     encode((uint32_t)index_type, bl);
+     encode(swift_versioning, bl);
      if (swift_versioning) {
-       ::encode(swift_ver_location, bl);
+       encode(swift_ver_location, bl);
      }
-     ::encode(creation_time, bl);
-     ::encode(mdsearch_config, bl);
-     ::encode(reshard_status, bl);
-     ::encode(new_bucket_instance_id, bl);
+     encode(creation_time, bl);
+     encode(mdsearch_config, bl);
+     encode(reshard_status, bl);
+     encode(new_bucket_instance_id, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(19, 4, 4, bl);
-     ::decode(bucket, bl);
+     decode(bucket, bl);
      if (struct_v >= 2) {
        string s;
-       ::decode(s, bl);
+       decode(s, bl);
        owner.from_str(s);
      }
      if (struct_v >= 3)
-       ::decode(flags, bl);
+       decode(flags, bl);
      if (struct_v >= 5)
-       ::decode(zonegroup, bl);
+       decode(zonegroup, bl);
      if (struct_v >= 6) {
        uint64_t ct;
-       ::decode(ct, bl);
+       decode(ct, bl);
        if (struct_v < 17)
 	 creation_time = ceph::real_clock::from_time_t((time_t)ct);
      }
      if (struct_v >= 7)
-       ::decode(placement_rule, bl);
+       decode(placement_rule, bl);
      if (struct_v >= 8)
-       ::decode(has_instance_obj, bl);
+       decode(has_instance_obj, bl);
      if (struct_v >= 9)
-       ::decode(quota, bl);
+       decode(quota, bl);
      if (struct_v >= 10)
-       ::decode(num_shards, bl);
+       decode(num_shards, bl);
      if (struct_v >= 11)
-       ::decode(bucket_index_shard_hash_type, bl);
+       decode(bucket_index_shard_hash_type, bl);
      if (struct_v >= 12)
-       ::decode(requester_pays, bl);
+       decode(requester_pays, bl);
      if (struct_v >= 13)
-       ::decode(owner.tenant, bl);
+       decode(owner.tenant, bl);
      if (struct_v >= 14) {
-       ::decode(has_website, bl);
+       decode(has_website, bl);
        if (has_website) {
-         ::decode(website_conf, bl);
+         decode(website_conf, bl);
        } else {
          website_conf = RGWBucketWebsiteConf();
        }
      }
      if (struct_v >= 15) {
        uint32_t it;
-       ::decode(it, bl);
+       decode(it, bl);
        index_type = (RGWBucketIndexType)it;
      } else {
        index_type = RGWBIType_Normal;
@@ -1322,20 +1322,20 @@ struct RGWBucketInfo
      swift_versioning = false;
      swift_ver_location.clear();
      if (struct_v >= 16) {
-       ::decode(swift_versioning, bl);
+       decode(swift_versioning, bl);
        if (swift_versioning) {
-         ::decode(swift_ver_location, bl);
+         decode(swift_ver_location, bl);
        }
      }
      if (struct_v >= 17) {
-       ::decode(creation_time, bl);
+       decode(creation_time, bl);
      }
      if (struct_v >= 18) {
-       ::decode(mdsearch_config, bl);
+       decode(mdsearch_config, bl);
      }
      if (struct_v >= 19) {
-       ::decode(reshard_status, bl);
-       ::decode(new_bucket_instance_id, bl);
+       decode(reshard_status, bl);
+       decode(new_bucket_instance_id, bl);
      }
      DECODE_FINISH(bl);
   }
@@ -1373,13 +1373,13 @@ struct RGWBucketEntryPoint
 
   void encode(bufferlist& bl) const {
     ENCODE_START(10, 8, bl);
-    ::encode(bucket, bl);
-    ::encode(owner.id, bl);
-    ::encode(linked, bl);
+    encode(bucket, bl);
+    encode(owner.id, bl);
+    encode(linked, bl);
     uint64_t ctime = (uint64_t)real_clock::to_time_t(creation_time);
-    ::encode(ctime, bl);
-    ::encode(owner, bl);
-    ::encode(creation_time, bl);
+    encode(ctime, bl);
+    encode(owner, bl);
+    encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -1392,19 +1392,19 @@ struct RGWBucketEntryPoint
       return;
     }
     has_bucket_info = false;
-    ::decode(bucket, bl);
-    ::decode(owner.id, bl);
-    ::decode(linked, bl);
+    decode(bucket, bl);
+    decode(owner.id, bl);
+    decode(linked, bl);
     uint64_t ctime;
-    ::decode(ctime, bl);
+    decode(ctime, bl);
     if (struct_v < 10) {
       creation_time = real_clock::from_time_t((time_t)ctime);
     }
     if (struct_v >= 9) {
-      ::decode(owner, bl);
+      decode(owner, bl);
     }
     if (struct_v >= 10) {
-      ::decode(creation_time, bl);
+      decode(creation_time, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1717,17 +1717,17 @@ struct rgw_obj_key {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(name, bl);
-    ::encode(instance, bl);
-    ::encode(ns, bl);
+    encode(name, bl);
+    encode(instance, bl);
+    encode(ns, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(name, bl);
-    ::decode(instance, bl);
+    decode(name, bl);
+    decode(instance, bl);
     if (struct_v >= 2) {
-      ::decode(ns, bl);
+      decode(ns, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1934,15 +1934,15 @@ struct RGWBucketEnt {
     uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
     string empty_str;  // originally had the bucket name here, but we encode bucket later
-    ::encode(empty_str, bl);
-    ::encode(s, bl);
-    ::encode(mt, bl);
-    ::encode(count, bl);
-    ::encode(bucket, bl);
+    encode(empty_str, bl);
+    encode(s, bl);
+    encode(mt, bl);
+    encode(count, bl);
+    encode(bucket, bl);
     s = size_rounded;
-    ::encode(s, bl);
-    ::encode(creation_time, bl);
-    ::encode(placement_rule, bl);
+    encode(s, bl);
+    encode(creation_time, bl);
+    encode(placement_rule, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
@@ -1950,24 +1950,24 @@ struct RGWBucketEnt {
     __u32 mt;
     uint64_t s;
     string empty_str;  // backward compatibility
-    ::decode(empty_str, bl);
-    ::decode(s, bl);
-    ::decode(mt, bl);
+    decode(empty_str, bl);
+    decode(s, bl);
+    decode(mt, bl);
     size = s;
     if (struct_v < 6) {
       creation_time = ceph::real_clock::from_time_t(mt);
     }
     if (struct_v >= 2)
-      ::decode(count, bl);
+      decode(count, bl);
     if (struct_v >= 3)
-      ::decode(bucket, bl);
+      decode(bucket, bl);
     if (struct_v >= 4)
-      ::decode(s, bl);
+      decode(s, bl);
     size_rounded = s;
     if (struct_v >= 6)
-      ::decode(creation_time, bl);
+      decode(creation_time, bl);
     if (struct_v >= 7)
-      ::decode(placement_rule, bl);
+      decode(placement_rule, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -2030,32 +2030,32 @@ struct rgw_obj {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 6, bl);
-    ::encode(bucket, bl);
-    ::encode(key.ns, bl);
-    ::encode(key.name, bl);
-    ::encode(key.instance, bl);
-//    ::encode(placement_id, bl);
+    encode(bucket, bl);
+    encode(key.ns, bl);
+    encode(key.name, bl);
+    encode(key.instance, bl);
+//    encode(placement_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
     if (struct_v < 6) {
       string s;
-      ::decode(bucket.name, bl); /* bucket.name */
-      ::decode(s, bl); /* loc */
-      ::decode(key.ns, bl);
-      ::decode(key.name, bl);
+      decode(bucket.name, bl); /* bucket.name */
+      decode(s, bl); /* loc */
+      decode(key.ns, bl);
+      decode(key.name, bl);
       if (struct_v >= 2)
-        ::decode(bucket, bl);
+        decode(bucket, bl);
       if (struct_v >= 4)
-        ::decode(key.instance, bl);
+        decode(key.instance, bl);
       if (key.ns.empty() && key.instance.empty()) {
         if (key.name[0] == '_') {
           key.name = key.name.substr(1);
         }
       } else {
         if (struct_v >= 5) {
-          ::decode(key.name, bl);
+          decode(key.name, bl);
         } else {
           ssize_t pos = key.name.find('_', 1);
           if (pos < 0) {
@@ -2065,11 +2065,11 @@ struct rgw_obj {
         }
       }
     } else {
-      ::decode(bucket, bl);
-      ::decode(key.ns, bl);
-      ::decode(key.name, bl);
-      ::decode(key.instance, bl);
-//      ::decode(placement_id, bl);
+      decode(bucket, bl);
+      decode(key.ns, bl);
+      decode(key.name, bl);
+      decode(key.instance, bl);
+//      decode(placement_id, bl);
     }
     DECODE_FINISH(bl);
   }

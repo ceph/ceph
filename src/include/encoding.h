@@ -24,6 +24,7 @@
 
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
+#include "common/ceph_time.h"
 
 #include "include/int_types.h"
 
@@ -268,16 +269,32 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::iterator& p)
   p.copy(len, s);
 }
 
+// Time, since the templates are defined in std::chrono
 
-// full bl decoder
-template<class T>
-inline void decode(T &o, bufferlist& bl)
-{
-  bufferlist::iterator p = bl.begin();
-  decode(o, p);
-  assert(p.end());
+template<typename Clock, typename Duration>
+void encode(const std::chrono::time_point<Clock, Duration>& t,
+	    ceph::bufferlist &bl) {
+  auto ts = Clock::to_timespec(t);
+  // A 32 bit count of seconds causes me vast unhappiness.
+  uint32_t s = ts.tv_sec;
+  uint32_t ns = ts.tv_nsec;
+  encode(s, bl);
+  encode(ns, bl);
 }
 
+template<typename Clock, typename Duration>
+void decode(std::chrono::time_point<Clock, Duration>& t,
+	    bufferlist::iterator& p) {
+  uint32_t s;
+  uint32_t ns;
+  decode(s, p);
+  decode(ns, p);
+  struct timespec ts = {
+    static_cast<time_t>(s),
+    static_cast<long int>(ns)};
+
+  t = Clock::from_timespec(ts);
+}
 
 // -----------------------------
 // STL container types
@@ -465,6 +482,17 @@ encode(const std::array<T, N>& v, bufferlist& bl);
 template<class T, size_t N, typename traits = denc_traits<T>>
 inline std::enable_if_t<!traits::supported>
 decode(std::array<T, N>& v, bufferlist::iterator& p);
+
+// full bl decoder
+template<class T>
+inline void decode(T &o, bufferlist& bl)
+{
+  bufferlist::iterator p = bl.begin();
+  decode(o, p);
+  assert(p.end());
+}
+
+
 
 
 // boost optional
