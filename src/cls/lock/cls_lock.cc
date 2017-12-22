@@ -54,7 +54,7 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
 
   try {
     bufferlist::iterator it = bl.begin();
-    ::decode(*lock, it);
+    decode(*lock, it);
   } catch (const buffer::error &err) {
     CLS_ERR("error decoding %s", key.c_str());
     return -EIO;
@@ -88,7 +88,7 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
   key.append(name);
 
   bufferlist lock_bl;
-  ::encode(lock, lock_bl, cls_get_client_features(hctx));
+  encode(lock, lock_bl, cls_get_client_features(hctx));
 
   int r = cls_cxx_setxattr(hctx, key.c_str(), &lock_bl);
   if (r < 0)

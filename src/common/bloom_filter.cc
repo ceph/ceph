@@ -8,12 +8,12 @@ MEMPOOL_DEFINE_FACTORY(unsigned char, byte, bloom_filter);
 void bloom_filter::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode((uint64_t)salt_count_, bl);
-  ::encode((uint64_t)insert_count_, bl);
-  ::encode((uint64_t)target_element_count_, bl);
-  ::encode((uint64_t)random_seed_, bl);
+  encode((uint64_t)salt_count_, bl);
+  encode((uint64_t)insert_count_, bl);
+  encode((uint64_t)target_element_count_, bl);
+  encode((uint64_t)random_seed_, bl);
   bufferptr bp((const char*)bit_table_, table_size_);
-  ::encode(bp, bl);
+  encode(bp, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -21,16 +21,16 @@ void bloom_filter::decode(bufferlist::iterator& p)
 {
   DECODE_START(2, p);
   uint64_t v;
-  ::decode(v, p);
+  decode(v, p);
   salt_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   insert_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   target_element_count_ = v;
-  ::decode(v, p);
+  decode(v, p);
   random_seed_ = v;
   bufferlist t;
-  ::decode(t, p);
+  decode(t, p);
 
   salt_.clear();
   generate_unique_salt();
@@ -86,10 +86,10 @@ void compressible_bloom_filter::encode(bufferlist& bl) const
   bloom_filter::encode(bl);
 
   uint32_t s = size_list.size();
-  ::encode(s, bl);
+  encode(s, bl);
   for (std::vector<size_t>::const_iterator p = size_list.begin();
        p != size_list.end(); ++p)
-    ::encode((uint64_t)*p, bl);
+    encode((uint64_t)*p, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -100,11 +100,11 @@ void compressible_bloom_filter::decode(bufferlist::iterator& p)
   bloom_filter::decode(p);
 
   uint32_t s;
-  ::decode(s, p);
+  decode(s, p);
   size_list.resize(s);
   for (unsigned i = 0; i < s; i++) {
     uint64_t v;
-    ::decode(v, p);
+    decode(v, p);
     size_list[i] = v;
   }
 

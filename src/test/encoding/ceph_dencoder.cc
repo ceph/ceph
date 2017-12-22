@@ -112,7 +112,9 @@ public:
     bufferlist::iterator p = bl.begin();
     p.seek(seek);
     try {
-      ::decode(*m_object, p);
+      using ::decode;
+      using ceph::decode;
+      decode(*m_object, p);
     }
     catch (buffer::error& e) {
       return e.what();
@@ -158,7 +160,9 @@ public:
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   void encode(bufferlist& out, uint64_t features) override {
     out.clear();
-    ::encode(*this->m_object, out);
+    using ::encode;
+    using ceph::encode;
+    encode(*this->m_object, out);
   }
 };
 
@@ -187,7 +191,9 @@ public:
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   void encode(bufferlist& out, uint64_t features) override {
     out.clear();
-    ::encode(*(this->m_object), out, features);
+    using ::encode;
+    using ceph::encode;
+    encode(*(this->m_object), out, features);
   }
 };
 

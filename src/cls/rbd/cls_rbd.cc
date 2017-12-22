@@ -2284,7 +2284,7 @@ int object_map_read(cls_method_context_t hctx, BitVector<2> &object_map)
 
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(object_map, iter);
+    decode(object_map, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode object map: %s", err.what());
     return -EINVAL;
@@ -2311,7 +2311,7 @@ int object_map_load(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   object_map.set_crc_enabled(false);
-  ::encode(object_map, *out);
+  encode(object_map, *out);
   return 0;
 }
 
@@ -2329,7 +2329,7 @@ int object_map_save(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   BitVector<2> object_map;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(object_map, iter);
+    decode(object_map, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -2337,7 +2337,7 @@ int object_map_save(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   object_map.set_crc_enabled(true);
 
   bufferlist bl;
-  ::encode(object_map, bl);
+  encode(object_map, bl);
   CLS_LOG(20, "object_map_save: object size=%" PRIu64 ", byte size=%u",
 	  object_map.size(), bl.length());
   return cls_cxx_write_full(hctx, &bl);
@@ -2394,7 +2394,7 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   }
 
   bufferlist map;
-  ::encode(object_map, map);
+  encode(object_map, map);
   CLS_LOG(20, "object_map_resize: object size=%" PRIu64 ", byte size=%u",
 	  object_count, map.length());
   return cls_cxx_write_full(hctx, &map);
@@ -2567,7 +2567,7 @@ int object_map_snap_add(cls_method_context_t hctx, bufferlist *in,
 
   if (updated) {
     bufferlist bl;
-    ::encode(object_map, bl);
+    encode(object_map, bl);
     r = cls_cxx_write_full(hctx, &bl);
   }
   return r;
@@ -2589,7 +2589,7 @@ int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
   BitVector<2> src_object_map;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(src_object_map, iter);
+    decode(src_object_map, iter);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
@@ -2611,7 +2611,7 @@ int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
 
   if (updated) {
     bufferlist bl;
-    ::encode(dst_object_map, bl);
+    encode(dst_object_map, bl);
     r = cls_cxx_write_full(hctx, &bl);
   }
   return r;
