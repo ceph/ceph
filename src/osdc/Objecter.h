@@ -161,7 +161,7 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(op);
     osd_op.op.pgls.count = count;
     osd_op.op.pgls.start_epoch = start_epoch;
-    ::encode(cookie, osd_op.indata);
+    encode(cookie, osd_op.indata);
   }
   void add_pgls_filter(int op, uint64_t count, const bufferlist& filter,
 		       collection_list_handle_t cookie, epoch_t start_epoch) {
@@ -170,10 +170,10 @@ struct ObjectOperation {
     osd_op.op.pgls.start_epoch = start_epoch;
     string cname = "pg";
     string mname = "filter";
-    ::encode(cname, osd_op.indata);
-    ::encode(mname, osd_op.indata);
+    encode(cname, osd_op.indata);
+    encode(mname, osd_op.indata);
     osd_op.indata.append(filter);
-    ::encode(cookie, osd_op.indata);
+    encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
                       uint64_t expected_write_size,
@@ -239,8 +239,8 @@ struct ObjectOperation {
 	try {
 	  uint64_t size;
 	  ceph::real_time mtime;
-	  ::decode(size, p);
-	  ::decode(mtime, p);
+	  decode(size, p);
+	  decode(mtime, p);
 	  if (psize)
 	    *psize = size;
 	  if (pmtime)
@@ -341,8 +341,8 @@ struct ObjectOperation {
         // potential IO path.
         if (bl.length() > 0) {
 	  try {
-	    ::decode(*extents, iter);
-	    ::decode(*data_bl, iter);
+	    decode(*extents, iter);
+	    decode(*data_bl, iter);
 	  } catch (buffer::error& e) {
 	    if (prval)
               *prval = -EIO;
@@ -447,15 +447,15 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
-	    ::decode(*pattrs, p);
+	    decode(*pattrs, p);
 	  if (ptruncated) {
 	    std::map<std::string,bufferlist> ignore;
 	    if (!pattrs) {
-	      ::decode(ignore, p);
+	      decode(ignore, p);
 	      pattrs = &ignore;
 	    }
 	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
+	      decode(*ptruncated, p);
 	    } else {
 	      // the OSD did not provide this.  since old OSDs do not
 	      // enfoce omap result limits either, we can infer it from
@@ -489,15 +489,15 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
-	    ::decode(*pattrs, p);
+	    decode(*pattrs, p);
 	  if (ptruncated) {
 	    std::set<std::string> ignore;
 	    if (!pattrs) {
-	      ::decode(ignore, p);
+	      decode(ignore, p);
 	      pattrs = &ignore;
 	    }
 	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
+	      decode(*ptruncated, p);
 	    } else {
 	      // the OSD did not provide this.  since old OSDs do not
 	      // enforce omap result limits either, we can infer it from
@@ -524,7 +524,7 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  obj_list_watch_response_t resp;
-	  ::decode(resp, p);
+	  decode(resp, p);
 	  if (pwatchers) {
 	    for (list<watch_item_t>::iterator i = resp.entries.begin() ;
 		 i != resp.entries.end() ; ++i) {
@@ -557,7 +557,7 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  obj_list_snap_response_t resp;
-	  ::decode(resp, p);
+	  decode(resp, p);
 	  if (psnaps) {
 	    psnaps->clones.clear();
 	    for (vector<clone_info>::iterator ci = resp.clones.begin();
@@ -612,12 +612,12 @@ struct ObjectOperation {
   }
   void setxattrs(map<string, bufferlist>& attrs) {
     bufferlist bl;
-    ::encode(attrs, bl);
+    encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl.length());
   }
   void resetxattrs(const char *prefix, map<string, bufferlist>& attrs) {
     bufferlist bl;
-    ::encode(attrs, bl);
+    encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, prefix, bl);
   }
 
@@ -651,8 +651,8 @@ struct ObjectOperation {
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
-    ::encode(start_after, bl);
-    ::encode(max_to_get, bl);
+    encode(start_after, bl);
+    encode(max_to_get, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -674,9 +674,9 @@ struct ObjectOperation {
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
-    ::encode(start_after, bl);
-    ::encode(max_to_get, bl);
-    ::encode(filter_prefix, bl);
+    encode(start_after, bl);
+    encode(max_to_get, bl);
+    encode(filter_prefix, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -695,7 +695,7 @@ struct ObjectOperation {
 			    int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEYS);
     bufferlist bl;
-    ::encode(to_get, bl);
+    encode(to_get, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -713,7 +713,7 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
     bufferlist bl;
-    ::encode(assertions, bl);
+    encode(assertions, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -770,7 +770,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	object_copy_data_t copy_reply;
-	::decode(copy_reply, p);
+	decode(copy_reply, p);
 	if (r == -ENOENT) {
 	  if (out_reqids)
 	    *out_reqids = copy_reply.reqids;
@@ -831,8 +831,8 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
-    ::encode(*cursor, osd_op.indata);
-    ::encode(max, osd_op.indata);
+    encode(*cursor, osd_op.indata);
+    encode(max, osd_op.indata);
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
@@ -862,7 +862,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	bool isdirty;
-	::decode(isdirty, p);
+	decode(isdirty, p);
 	if (pisdirty)
 	  *pisdirty = isdirty;
       } catch (buffer::error& e) {
@@ -898,7 +898,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	std::list< std::pair<ceph::real_time, ceph::real_time> > ls;
-	::decode(ls, p);
+	decode(ls, p);
 	if (ptls) {
 	  ptls->clear();
 	  for (auto p = ls.begin(); p != ls.end(); ++p)
@@ -978,7 +978,7 @@ struct ObjectOperation {
 
   void omap_set(const map<string, bufferlist> &map) {
     bufferlist bl;
-    ::encode(map, bl);
+    encode(map, bl);
     add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
   }
 
@@ -992,7 +992,7 @@ struct ObjectOperation {
 
   void omap_rm_keys(const std::set<std::string> &to_remove) {
     bufferlist bl;
-    ::encode(to_remove, bl);
+    encode(to_remove, bl);
     add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
@@ -1018,9 +1018,9 @@ struct ObjectOperation {
               bufferlist &bl, bufferlist *inbl) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY);
     osd_op.op.notify.cookie = cookie;
-    ::encode(prot_ver, *inbl);
-    ::encode(timeout, *inbl);
-    ::encode(bl, *inbl);
+    encode(prot_ver, *inbl);
+    encode(timeout, *inbl);
+    encode(bl, *inbl);
     osd_op.indata.append(*inbl);
   }
 
@@ -1028,9 +1028,9 @@ struct ObjectOperation {
 		  bufferlist& reply_bl) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY_ACK);
     bufferlist bl;
-    ::encode(notify_id, bl);
-    ::encode(cookie, bl);
-    ::encode(reply_bl, bl);
+    encode(notify_id, bl);
+    encode(cookie, bl);
+    encode(reply_bl, bl);
     osd_op.indata.append(bl);
   }
 
@@ -1085,8 +1085,8 @@ struct ObjectOperation {
     osd_op.op.copy_from.src_version = src_version;
     osd_op.op.copy_from.flags = flags;
     osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
-    ::encode(src, osd_op.indata);
-    ::encode(src_oloc, osd_op.indata);
+    encode(src, osd_op.indata);
+    encode(src_oloc, osd_op.indata);
   }
 
   /**
@@ -1138,18 +1138,18 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = tgt_version;
-    ::encode(tgt, osd_op.indata);
-    ::encode(tgt_oloc, osd_op.indata);
+    encode(tgt, osd_op.indata);
+    encode(tgt_oloc, osd_op.indata);
   }
 
   void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
 		 object_t tgt_oid, uint64_t tgt_offset) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
-    ::encode(src_offset, osd_op.indata);
-    ::encode(src_length, osd_op.indata);
-    ::encode(tgt_oloc, osd_op.indata);
-    ::encode(tgt_oid, osd_op.indata);
-    ::encode(tgt_offset, osd_op.indata);
+    encode(src_offset, osd_op.indata);
+    encode(src_length, osd_op.indata);
+    encode(tgt_oloc, osd_op.indata);
+    encode(tgt_oid, osd_op.indata);
+    encode(tgt_offset, osd_op.indata);
   }
 
   void set_alloc_hint(uint64_t expected_object_size,
@@ -1480,8 +1480,8 @@ public:
 	bufferlist::iterator p = bl.begin();
 	uint64_t s;
 	ceph::real_time m;
-	::decode(s, p);
-	::decode(m, p);
+	decode(s, p);
+	decode(m, p);
 	if (psize)
 	  *psize = s;
 	if (pmtime)
@@ -1500,7 +1500,7 @@ public:
     void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
-	::decode(attrset, p);
+	decode(attrset, p);
       }
       fin->complete(r);
     }

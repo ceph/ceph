@@ -113,10 +113,12 @@ public:
   RGWUserBuckets& operator=(const RGWUserBuckets&) = default;
 
   void encode(bufferlist& bl) const {
-    ::encode(buckets, bl);
+    using ceph::encode;
+    encode(buckets, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(buckets, bl);
+    using ceph::decode;
+    decode(buckets, bl);
   }
   /**
    * Check if the user owns a bucket by the given name.
@@ -355,19 +357,19 @@ struct rgw_data_change {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     uint8_t t = (uint8_t)entity_type;
-    ::encode(t, bl);
-    ::encode(key, bl);
-    ::encode(timestamp, bl);
+    encode(t, bl);
+    encode(key, bl);
+    encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
      uint8_t t;
-     ::decode(t, bl);
+     decode(t, bl);
      entity_type = (DataLogEntityType)t;
-     ::decode(key, bl);
-     ::decode(timestamp, bl);
+     decode(key, bl);
+     decode(timestamp, bl);
      DECODE_FINISH(bl);
   }
 
@@ -383,17 +385,17 @@ struct rgw_data_change_log_entry {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(log_id, bl);
-    ::encode(log_timestamp, bl);
-    ::encode(entry, bl);
+    encode(log_id, bl);
+    encode(log_timestamp, bl);
+    encode(entry, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START(1, bl);
-     ::decode(log_id, bl);
-     ::decode(log_timestamp, bl);
-     ::decode(entry, bl);
+     decode(log_id, bl);
+     decode(log_timestamp, bl);
+     decode(entry, bl);
      DECODE_FINISH(bl);
   }
 
