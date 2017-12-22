@@ -1,10 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iomanip>
+#include <sstream>
+
 #include "iso_8601.h"
 #include "include/timegm.h"
-
-#include <sstream>
 
 namespace ceph {
 using std::chrono::duration_cast;
