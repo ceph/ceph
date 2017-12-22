@@ -66,6 +66,9 @@ def recurse_refs(root, path):
 def get_prefixed_url(url):
     return global_instance().url_prefix + url
 
+def to_sorted_array(data):
+    assert isinstance(data, dict)
+    return sorted(data.iteritems())
 
 
 class StandbyModule(MgrStandbyModule):
@@ -997,7 +1000,7 @@ class Module(MgrModule):
                     global_instance().log.error("Failed to load histogram for OSD {}".format(osd_id))
                 else:
                     histogram = json.loads(outb)
-
+		# TODO(chang liu): use to_sorted_array to simpify javascript code
                 return {
                     "osd": osd,
                     "osd_metadata": osd_metadata,
@@ -1160,8 +1163,7 @@ class Module(MgrModule):
             @cherrypy.tools.json_out()
             def rgw_daemons_data(self):
                 return self._rgw_daemons()
-
-            
+           
             def _rgw(self, rgw_id):
                 daemons = self.rgw_daemons_data()
                 rgw_metadata = {}
@@ -1176,8 +1178,8 @@ class Module(MgrModule):
 
                 return {
                     "rgw_id": rgw_id,
-                    "rgw_metadata": rgw_metadata,
-                    "rgw_status": rgw_status,
+                    "rgw_metadata": to_sorted_array(rgw_metadata),
+                    "rgw_status": to_sorted_array(rgw_status),
                 }
               
             @cherrypy.expose
