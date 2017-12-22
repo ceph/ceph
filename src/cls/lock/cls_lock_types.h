@@ -129,8 +129,5 @@ namespace rados {
     }
   }
 }
-WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::locker_info_t)
-WRITE_CLASS_ENCODER(rados::cls::lock::locker_id_t)
-WRITE_CLASS_ENCODER_FEATURES(rados::cls::lock::lock_info_t)
 
 #endif
