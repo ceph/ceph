@@ -38,7 +38,7 @@ class RGWDaemons(RemoteViewCache):
                         'server': server,
                         'metadata': metadata,
                         'status': status,
-                        'url': "/rgw/detail/{0}".format(service['id'])
+                        'url': "/rgw/{0}".format(service['id'])
                     }
 
                     daemons.append(daemon)
