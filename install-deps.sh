@@ -45,7 +45,7 @@ deb http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
 EOF
 	# import PPA's signing key into APT's keyring
 	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
-	$SUDO apt-get update
+	$SUDO apt-get -y update -o Acquire::Languages=none -o Acquire::Translation=none || true
 	$SUDO apt-get install -y g++-7
     fi
 
