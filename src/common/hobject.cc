@@ -104,13 +104,13 @@ string hobject_t::to_str() const
 void hobject_t::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 3, bl);
-  ::encode(key, bl);
-  ::encode(oid, bl);
-  ::encode(snap, bl);
-  ::encode(hash, bl);
-  ::encode(max, bl);
-  ::encode(nspace, bl);
-  ::encode(pool, bl);
+  encode(key, bl);
+  encode(oid, bl);
+  encode(snap, bl);
+  encode(hash, bl);
+  encode(max, bl);
+  encode(nspace, bl);
+  encode(pool, bl);
   assert(!max || (*this == hobject_t(hobject_t::get_max())));
   ENCODE_FINISH(bl);
 }
@@ -119,17 +119,17 @@ void hobject_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 1)
-    ::decode(key, bl);
-  ::decode(oid, bl);
-  ::decode(snap, bl);
-  ::decode(hash, bl);
+    decode(key, bl);
+  decode(oid, bl);
+  decode(snap, bl);
+  decode(hash, bl);
   if (struct_v >= 2)
-    ::decode(max, bl);
+    decode(max, bl);
   else
     max = false;
   if (struct_v >= 4) {
-    ::decode(nspace, bl);
-    ::decode(pool, bl);
+    decode(nspace, bl);
+    decode(pool, bl);
     // for compat with hammer, which did not handle the transition
     // from pool -1 -> pool INT64_MIN for MIN properly.  this object
     // name looks a bit like a pgmeta object for the meta collection,
@@ -359,16 +359,16 @@ void ghobject_t::encode(bufferlist& bl) const
 {
   // when changing this, remember to update encoded_size() too.
   ENCODE_START(6, 3, bl);
-  ::encode(hobj.key, bl);
-  ::encode(hobj.oid, bl);
-  ::encode(hobj.snap, bl);
-  ::encode(hobj.hash, bl);
-  ::encode(hobj.max, bl);
-  ::encode(hobj.nspace, bl);
-  ::encode(hobj.pool, bl);
-  ::encode(generation, bl);
-  ::encode(shard_id, bl);
-  ::encode(max, bl);
+  encode(hobj.key, bl);
+  encode(hobj.oid, bl);
+  encode(hobj.snap, bl);
+  encode(hobj.hash, bl);
+  encode(hobj.max, bl);
+  encode(hobj.nspace, bl);
+  encode(hobj.pool, bl);
+  encode(generation, bl);
+  encode(shard_id, bl);
+  encode(max, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -417,17 +417,17 @@ void ghobject_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 3, 3, bl);
   if (struct_v >= 1)
-    ::decode(hobj.key, bl);
-  ::decode(hobj.oid, bl);
-  ::decode(hobj.snap, bl);
-  ::decode(hobj.hash, bl);
+    decode(hobj.key, bl);
+  decode(hobj.oid, bl);
+  decode(hobj.snap, bl);
+  decode(hobj.hash, bl);
   if (struct_v >= 2)
-    ::decode(hobj.max, bl);
+    decode(hobj.max, bl);
   else
     hobj.max = false;
   if (struct_v >= 4) {
-    ::decode(hobj.nspace, bl);
-    ::decode(hobj.pool, bl);
+    decode(hobj.nspace, bl);
+    decode(hobj.pool, bl);
     // for compat with hammer, which did not handle the transition from
     // pool -1 -> pool INT64_MIN for MIN properly (see hobject_t::decode()).
     if (hobj.pool == -1 &&
@@ -440,14 +440,14 @@ void ghobject_t::decode(bufferlist::iterator& bl)
     }
   }
   if (struct_v >= 5) {
-    ::decode(generation, bl);
-    ::decode(shard_id, bl);
+    decode(generation, bl);
+    decode(shard_id, bl);
   } else {
     generation = ghobject_t::NO_GEN;
     shard_id = shard_id_t::NO_SHARD;
   }
   if (struct_v >= 6) {
-    ::decode(max, bl);
+    decode(max, bl);
   } else {
     max = false;
   }

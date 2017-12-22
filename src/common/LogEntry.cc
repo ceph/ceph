@@ -13,16 +13,18 @@
 
 void LogEntryKey::encode(bufferlist& bl, uint64_t features) const
 {
-  ::encode(who, bl, features);
-  ::encode(stamp, bl);
-  ::encode(seq, bl);
+  using ceph::encode;
+  encode(who, bl, features);
+  encode(stamp, bl);
+  encode(seq, bl);
 }
 
 void LogEntryKey::decode(bufferlist::iterator& bl)
 {
-  ::decode(who, bl);
-  ::decode(stamp, bl);
-  ::decode(seq, bl);
+  using ceph::decode;
+  decode(who, bl);
+  decode(stamp, bl);
+  decode(seq, bl);
   _calc_hash();
 }
 
@@ -208,13 +210,13 @@ void LogEntry::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(4, 2, bl);
   __u16 t = prio;
-  ::encode(who, bl, features);
-  ::encode(stamp, bl);
-  ::encode(seq, bl);
-  ::encode(t, bl);
-  ::encode(msg, bl);
-  ::encode(channel, bl);
-  ::encode(name, bl);
+  encode(who, bl, features);
+  encode(stamp, bl);
+  encode(seq, bl);
+  encode(t, bl);
+  encode(msg, bl);
+  encode(channel, bl);
+  encode(name, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -222,14 +224,14 @@ void LogEntry::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
   __u16 t;
-  ::decode(who, bl);
-  ::decode(stamp, bl);
-  ::decode(seq, bl);
-  ::decode(t, bl);
+  decode(who, bl);
+  decode(stamp, bl);
+  decode(seq, bl);
+  decode(t, bl);
   prio = (clog_type)t;
-  ::decode(msg, bl);
+  decode(msg, bl);
   if (struct_v >= 3) {
-    ::decode(channel, bl);
+    decode(channel, bl);
   } else {
     // prior to having logging channels we only had a cluster log.
     // Ensure we keep that appearance when the other party has no
@@ -237,7 +239,7 @@ void LogEntry::decode(bufferlist::iterator& bl)
     channel = CLOG_CHANNEL_CLUSTER;
   }
   if (struct_v >= 4) {
-    ::decode(name, bl);
+    decode(name, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -264,16 +266,16 @@ void LogEntry::generate_test_instances(list<LogEntry*>& o)
 void LogSummary::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(version, bl);
-  ::encode(tail, bl, features);
+  encode(version, bl);
+  encode(tail, bl, features);
   ENCODE_FINISH(bl);
 }
 
 void LogSummary::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(version, bl);
-  ::decode(tail, bl);
+  decode(version, bl);
+  decode(tail, bl);
   DECODE_FINISH(bl);
   keys.clear();
   for (auto& p : tail) {

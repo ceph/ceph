@@ -28,14 +28,14 @@ void pow2_hist_t::dump(Formatter *f) const
 void pow2_hist_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(h, bl);
+  encode(h, bl);
   ENCODE_FINISH(bl);
 }
 
 void pow2_hist_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(h, p);
+  decode(h, p);
   DECODE_FINISH(p);
 }
 

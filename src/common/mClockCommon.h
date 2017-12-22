@@ -30,12 +30,12 @@ WRITE_RAW_ENCODER(dmc::ReqParams)
 inline void encode(const dmc::PhaseType &phase, bufferlist& bl,
                    uint64_t features=0)
 {
-  ::encode(static_cast<uint8_t>(phase), bl);
+  encode(static_cast<uint8_t>(phase), bl);
 }
 
 inline void decode(dmc::PhaseType &phase, bufferlist::iterator& p)
 {
   uint8_t int_phase;
-  ::decode((uint8_t&)int_phase, p);
+  decode((uint8_t&)int_phase, p);
   phase = static_cast<dmc::PhaseType>(int_phase);
 }

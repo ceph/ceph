@@ -6,16 +6,18 @@ void SnapRealmInfo::encode(bufferlist& bl) const
 {
   h.num_snaps = my_snaps.size();
   h.num_prior_parent_snaps = prior_parent_snaps.size();
-  ::encode(h, bl);
-  ::encode_nohead(my_snaps, bl);
-  ::encode_nohead(prior_parent_snaps, bl);
+  using ceph::encode;
+  encode(h, bl);
+  encode_nohead(my_snaps, bl);
+  encode_nohead(prior_parent_snaps, bl);
 }
 
 void SnapRealmInfo::decode(bufferlist::iterator& bl)
 {
-  ::decode(h, bl);
-  ::decode_nohead(h.num_snaps, my_snaps, bl);
-  ::decode_nohead(h.num_prior_parent_snaps, prior_parent_snaps, bl);
+  using ceph::decode;
+  decode(h, bl);
+  decode_nohead(h.num_snaps, my_snaps, bl);
+  decode_nohead(h.num_prior_parent_snaps, prior_parent_snaps, bl);
 }
 
 void SnapRealmInfo::dump(Formatter *f) const
