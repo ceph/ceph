@@ -192,7 +192,7 @@ template<typename T, typename F, typename U>
 auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
   std::result_of_t<F(const std::decay_t<T>)>
 {
-  static_assert(ceph::is_convertible_v<U, std::result_of_t<F(T)>>,
+  static_assert(std::is_convertible_v<U, std::result_of_t<F(T)>>,
 		"Alternate value must be convertible to function return type.");
   if (t)
     return std::forward<F>(f)(*t);
