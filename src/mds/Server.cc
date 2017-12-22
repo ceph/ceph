@@ -6120,8 +6120,12 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (in->is_projected_snaprealm_global()) {
       sr_t *new_srnode = in->prepare_new_srnode(0);
       in->record_snaprealm_parent_dentry(new_srnode, NULL, dn, dnl->is_primary());
-      // dropping the last linkage, detch the inode from global snaprealm
-      if (in->get_projected_inode()->nlink == 1)
+      // dropping the last linkage or dropping the last remote linkage,
+      // detch the inode from global snaprealm
+      auto nlink = in->get_projected_inode()->nlink;
+      if (nlink == 1 ||
+	  (nlink == 2 && !dnl->is_primary() &&
+	   !in->get_projected_parent_dir()->inode->is_stray()))
 	in->clear_snaprealm_global(new_srnode);
       mdr->more()->desti_srnode = new_srnode;
     } else if (dnl->is_primary()) {
@@ -7078,13 +7082,27 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 
   // -- prepare snaprealm ---
 
-  if (!linkmerge) {
+  if (linkmerge) {
+    if (!mdr->more()->srci_srnode &&
+	srci->get_projected_inode()->nlink == 1 &&
+	srci->is_projected_snaprealm_global()) {
+      sr_t *new_srnode = srci->prepare_new_srnode(0);
+      srci->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, false);
+
+      srci->clear_snaprealm_global(new_srnode);
+      mdr->more()->srci_srnode = new_srnode;
+    }
+  } else {
     if (oldin && !mdr->more()->desti_srnode) {
       if (oldin->is_projected_snaprealm_global()) {
 	sr_t *new_srnode = oldin->prepare_new_srnode(0);
 	oldin->record_snaprealm_parent_dentry(new_srnode, NULL, destdn, destdnl->is_primary());
-	// dropping the last linkage, detch the inode from global snaprealm
-	if (oldin->get_projected_inode()->nlink == 1)
+	// dropping the last linkage or dropping the last remote linkage,
+	// detch the inode from global snaprealm
+	auto nlink = oldin->get_projected_inode()->nlink;
+	if (nlink == 1 ||
+	    (nlink == 2 && !destdnl->is_primary() &&
+	     !oldin->get_projected_parent_dir()->inode->is_stray()))
 	  oldin->clear_snaprealm_global(new_srnode);
 	mdr->more()->desti_srnode = new_srnode;
       } else if (destdnl->is_primary()) {
