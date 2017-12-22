@@ -26,21 +26,27 @@ function munge_ceph_spec_in {
 
 function ensure_decent_gcc_on_deb {
     # point gcc to the one offered by distro if the used one is different
-    local old=$(readlink -e /usr/bin/gcc | cut -d'-' -f2)
+    local old=$(gcc -dumpversion)
     local new=$1
-    if [ ! -f /usr/bin/gcc-${old} ]; then
-        $SUDO rm -f /usr/bin/gcc-${old}
-        $SUDO ln -sf /usr/bin/gcc-${new} /usr/bin/gcc
-        return
-    elif dpkg --compare-versions $old eq $new; then
+    if dpkg --compare-versions $old eq $new; then
 	    return
     fi
+
+    case $old in
+        4*)
+            old=4.8;;
+        5*)
+            old=5;;
+        7*)
+            old=7;;
+    esac
 
     cat <<EOF
 /usr/bin/gcc now points to gcc-$old, which is not the version shipped with the
 distro: gcc-$new. Reverting...
 EOF
 
+    $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
 	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
