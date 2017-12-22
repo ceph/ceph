@@ -9795,11 +9795,15 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
     }
     if (obc->obs.oi.size == chunks_size) { 
       t->truncate(oid, 0);
-      ctx->new_obs.oi.size = 0;
+      interval_set<uint64_t> trim;
+      trim.insert(0, ctx->new_obs.oi.size);
+      ctx->modified_ranges.union_of(trim);
+      truncate_update_size_and_usage(ctx->delta_stats,
+				     ctx->new_obs.oi,
+				     0);
       ctx->new_obs.oi.new_object();
       for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
 	p.second.flags = chunk_info_t::FLAG_MISSING;
-	ctx->delta_stats.num_bytes -= p.second.length;
       }
     } else {
       for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
