@@ -8187,12 +8187,19 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 {
   bufferlist first_chunk;
   RGWObjManifest manifest;
+  string dest_obj_name;
 
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
+  /* if oid starts with __, that's a name with *One* _ */
+  dest_obj_name = dest_obj.get_oid();
+  if (dest_obj_name.size() > 2
+	&& dest_obj_name[0] == '_' && dest_obj_name[1] == '_') {
+    dest_obj_name.erase(0,1);
+  }
   RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.get_oid(),
+                                      dest_bucket_info, dest_obj.bucket, dest_obj_name,
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   if (version_id) {
     processor.set_version_id(*version_id);
