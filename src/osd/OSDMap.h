@@ -480,6 +480,10 @@ public:
       }
 
       new_state[osd] &= ~state;
+      if (!new_state[osd]) {
+        // all flags cleared
+        new_state.erase(osd);
+      }
       return true;
     }
 
