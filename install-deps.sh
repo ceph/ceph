@@ -232,7 +232,7 @@ else
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=6
+			    dts_ver=7
 			    ;;
 		    esac
                 elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
