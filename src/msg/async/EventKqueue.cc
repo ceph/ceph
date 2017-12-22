@@ -156,8 +156,13 @@ int KqueueDriver::add_event(int fd, int cur_mask, int add_mask)
     }
   }
   // keep what we set
-  if (fd >= sav_max)
-    resize_events(sav_max+5000);
+  if (fd >= sav_max) {
+    r = resize_events(sav_max+5000);
+    if (r < 0) {
+      lderr(cct) << __func__ << " event count is exceed." << dendl;
+      return r;
+    }
+  }
   sav_events[fd].mask = cur_mask | add_mask;
   return 0;
 }
@@ -199,13 +204,17 @@ int KqueueDriver::resize_events(int newsize)
   ldout(cct,30) << __func__ << " kqfd = " << kqfd << "newsize = " << newsize 
                 << dendl;
   if(newsize > sav_max) {
-    sav_events = (struct SaveEvent*)realloc( sav_events, 
-                    sizeof(struct SaveEvent)*newsize);
-    if (!sav_events) {
+    void *_realloc = NULL;
+    _realloc = realloc(sav_events,
+                          sizeof(struct SaveEvent)*newsize);
+    if (_realloc == NULL) {
       lderr(cct) << __func__ << " unable to realloc memory: "
                              << cpp_strerror(errno) << dendl;
+      free(sav_events);
+      sav_events = NULL;
       return -ENOMEM;
     }
+    sav_events = (struct SaveEvent *)_realloc;
     memset(&sav_events[size], 0, sizeof(struct SaveEvent)*(newsize-sav_max));
     sav_max = newsize;
   }
