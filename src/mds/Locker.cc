@@ -3643,7 +3643,7 @@ void Locker::caps_tick()
     Capability *cap = *p;
 
     utime_t age = now - cap->get_last_revoke_stamp();
-    dout(20) << __func__ << " age = " << age << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+    dout(20) << __func__ << " age = " << age << " client." << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
     if (age <= mds->mdsmap->get_session_timeout()) {
       dout(20) << __func__ << " age below timeout " << mds->mdsmap->get_session_timeout() << dendl;
       break;
@@ -3665,7 +3665,7 @@ void Locker::caps_tick()
       mds->clog->warn() << ss.str();
       dout(20) << __func__ << " " << ss.str() << dendl;
     } else {
-      dout(20) << __func__ << " silencing log message (backoff) for " << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+      dout(20) << __func__ << " silencing log message (backoff) for " << "client." << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
     }
   }
 }
