@@ -34,8 +34,6 @@ using std::uint64_t;
 using std::unordered_map;
 
 using boost::container::flat_set;
-using boost::none;
-using boost::optional;
 using boost::regex;
 using boost::regex_constants::ECMAScript;
 using boost::regex_constants::optimize;
@@ -63,8 +61,8 @@ struct actpair {
 };
 
 namespace {
-optional<Partition> to_partition(const smatch::value_type& p,
-				 bool wildcards) {
+boost::optional<Partition> to_partition(const smatch::value_type& p,
+					bool wildcards) {
   if (p == "aws") {
     return Partition::aws;
   } else if (p == "aws-cn") {
@@ -74,14 +72,14 @@ optional<Partition> to_partition(const smatch::value_type& p,
   } else if (p == "*" && wildcards) {
     return Partition::wildcard;
   } else {
-    return none;
+    return boost::none;
   }
 
   ceph_abort();
 }
 
-optional<Service> to_service(const smatch::value_type& s,
-			     bool wildcards) {
+boost::optional<Service> to_service(const smatch::value_type& s,
+				    bool wildcards) {
   static const unordered_map<string, Service> services = {
     { "acm", Service::acm },
     { "apigateway", Service::apigateway },
@@ -170,7 +168,7 @@ optional<Service> to_service(const smatch::value_type& s,
 
   auto i = services.find(s);
   if (i == services.end()) {
-    return none;
+    return boost::none;
   } else {
     return i->second;
   }
@@ -205,7 +203,7 @@ ARN::ARN(const rgw_bucket& b, const string& o)
   resource.append(o);
 }
 
-optional<ARN> ARN::parse(const string& s, bool wildcards) {
+boost::optional<ARN> ARN::parse(const string& s, bool wildcards) {
   static const char str_wild[] = "arn:([^:]*):([^:]*):([^:]*):([^:]*):([^:]*)";
   static const regex rx_wild(str_wild,
 				    sizeof(str_wild) - 1,
@@ -228,7 +226,7 @@ optional<ARN> ARN::parse(const string& s, bool wildcards) {
       }
     }
   }
-  return none;
+  return boost::none;
 }
 
 string ARN::to_string() const {
@@ -721,8 +719,8 @@ bool ParseState::key(const char* s, size_t l) {
 
 // I should just rewrite a few helper functions to use iterators,
 // which will make all of this ever so much nicer.
-static optional<Principal> parse_principal(CephContext* cct, TokenID t,
-					   string&& s) {
+static boost::optional<Principal> parse_principal(CephContext* cct, TokenID t,
+						  string&& s) {
   // Wildcard!
   if ((t == TokenID::AWS) && (s == "*")) {
     return Principal::wildcard();
@@ -1048,10 +1046,10 @@ bool Condition::eval(const Environment& env) const {
   }
 }
 
-optional<MaskedIP> Condition::as_network(const string& s) {
+boost::optional<MaskedIP> Condition::as_network(const string& s) {
   MaskedIP m;
   if (s.empty()) {
-    return none;
+    return boost::none;
   }
 
   m.v6 = (s.find(':') == string::npos) ? false : true;
@@ -1064,7 +1062,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     m.prefix = strtoul(s.data() + slash + 1, &end, 10);
     if (*end != 0 || (m.v6 && m.prefix > 128) ||
 	(!m.v6 && m.prefix > 32)) {
-      return none;
+      return boost::none;
     }
   }
 
@@ -1079,7 +1077,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   if (m.v6) {
     struct in6_addr a;
     if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a)) != 1) {
-      return none;
+      return boost::none;
     }
 
     m.addr |= Address(a.s6_addr[15]) << 0;
@@ -1101,7 +1099,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   } else {
     struct in_addr a;
     if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
-      return none;
+      return boost::none;
     }
 
     m.addr = ntohl(a.s_addr);
@@ -1233,7 +1231,7 @@ ostream& operator <<(ostream& m, const Condition& c) {
 }
 
 Effect Statement::eval(const Environment& e,
-		       optional<const rgw::auth::Identity&> ida,
+		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
   if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
     return Effect::Pass;
@@ -1538,7 +1536,7 @@ Policy::Policy(CephContext* cct, const string& tenant,
 }
 
 Effect Policy::eval(const Environment& e,
-		    optional<const rgw::auth::Identity&> ida,
+		    boost::optional<const rgw::auth::Identity&> ida,
 		    std::uint64_t action, const ARN& resource) const {
   auto allowed = false;
   for (auto& s : statements) {
