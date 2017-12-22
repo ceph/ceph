@@ -2131,6 +2131,10 @@ bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 	dout(10) << " removing last failure_info for osd." << target_osd
 		 << dendl;
 	failure_info.erase(target_osd);
+	if (pending_inc.pending_osd_state_clear(target_osd, CEPH_OSD_UP)) {
+	  dout(10) << " cancel pending osd." << target_osd << " failure"
+		   << dendl;
+        }
       } else {
 	dout(10) << " failure_info for osd." << target_osd << " now "
 		 << fi.reporters.size() << " reporters" << dendl;
