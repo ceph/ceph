@@ -12,8 +12,9 @@
  *
  */
 
+#include <cstddef>
+#include <utility>
 #include <type_traits>
-#include "common/backport_std.h"
 
 namespace ceph {
 // `static_ptr`

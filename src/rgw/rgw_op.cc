@@ -16,7 +16,6 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
-#include "common/backport_std.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
