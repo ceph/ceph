@@ -16,7 +16,6 @@
 #define CEPH_CONFIG_H
 
 #include <map>
-#include "common/backport_std.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"

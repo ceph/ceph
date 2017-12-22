@@ -20,7 +20,6 @@
 
 #include <boost/optional.hpp>
 
-#include "common/backport_std.h"
 #include "common/shunique_lock.h"
 
 #include "include/assert.h" // I despise you. Not you the reader, I'm talking

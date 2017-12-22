@@ -3,15 +3,16 @@
 
 
 #include <cstring>
+#include <iostream>
 #include <sstream>
 #include <stack>
 #include <utility>
 
+#include <experimental/iterator>
+
 #include <boost/regex.hpp>
-#include <iostream>
 #include "rapidjson/reader.h"
 
-#include "common/backport_std.h"
 #include "rgw_auth.h"
 #include <arpa/inet.h>
 #include "rgw_iam_policy.h"
@@ -1204,7 +1205,7 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
     m << "[]";
   } else {
     m << "[ ";
-    std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+    std::copy(begin, end, std::experimental::make_ostream_joiner(m, ", "));
     m << " ]";
   }
   return m;
@@ -1213,7 +1214,7 @@ ostream& print_array(ostream& m, Iterator begin, Iterator end) {
 template<typename Iterator>
 ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
   m << "{ ";
-  std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+  std::copy(begin, end, std::experimental::make_ostream_joiner(m, ", "));
   m << " }";
   return m;
 }
