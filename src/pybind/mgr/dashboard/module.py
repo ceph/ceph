@@ -1117,24 +1117,37 @@ class Module(MgrModule):
                     content_data=json.dumps(content_data, indent=2)
                 )
 
+        @cherrypy.popargs('rgw_id')
         class RGWEndpoint(EndPoint):
 
             @cherrypy.expose
-            def index(self):
-                """ List all RGW servers """
+            def index(self, rgw_id=None):
+                if rgw_id is not None:
+		    template = env.get_template("rgw_detail.html")
+		    toplevel_data = self._toplevel_data()
+		    return template.render(
+			    url_prefix=global_instance().url_prefix,
+			    ceph_version=global_instance().version,
+			    path_info='/rgw' + cherrypy.request.path_info,
+			    toplevel_data=json.dumps(toplevel_data, indent=2),
+			    content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
+			)
+                else:
 
-                template = env.get_template("rgw.html")
-                toplevel_data = self._toplevel_data()
+		    """ List all RGW servers """
 
-                content_data = self._rgw_daemons()
+		    template = env.get_template("rgw.html")
+		    toplevel_data = self._toplevel_data()
 
-                return template.render(
-                    url_prefix = global_instance().url_prefix,
-                    ceph_version=global_instance().version,
-                    path_info='/rgw' + cherrypy.request.path_info,
-                    toplevel_data=json.dumps(toplevel_data, indent=2),
-                    content_data=json.dumps(content_data, indent=2)
-                )
+		    content_data = self._rgw_daemons()
+
+		    return template.render(
+			url_prefix = global_instance().url_prefix,
+			ceph_version=global_instance().version,
+			path_info='/rgw' + cherrypy.request.path_info,
+			toplevel_data=json.dumps(toplevel_data, indent=2),
+			content_data=json.dumps(content_data, indent=2)
+		    )
             
             def _rgw_daemons(self):
                 status, data = global_instance().rgw_daemons.get()
@@ -1167,17 +1180,6 @@ class Module(MgrModule):
                     "rgw_status": rgw_status,
                 }
               
-            @cherrypy.expose
-            def detail(self, rgw_id):
-                template = env.get_template("rgw_detail.html")
-                toplevel_data = self._toplevel_data()
-                return template.render(
-                        url_prefix=global_instance().url_prefix,
-                        ceph_version=global_instance().version,
-                        path_info='/rgw' + cherrypy.request.path_info,
-                        toplevel_data=json.dumps(toplevel_data, indent=2),
-                        content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
-                    )
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def rgw_data(self, rgw_id):
