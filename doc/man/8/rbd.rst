@@ -171,27 +171,17 @@ Commands
 
 .. TODO rst "option" directive seems to require --foo style options, parsing breaks on subcommands.. the args show up as bold too
 
-:command:`ls` [-l | --long] [*pool-name*]
-  Will list all rbd images listed in the rbd_directory object.  With
-  -l, also show snapshots, and use longer-format output including
-  size, parent (if clone), format, etc.
+:command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
+  Generate a series of IOs to the image and measure the IO throughput and
+  latency.  If no suffix is given, unit B is assumed for both --io-size and
+  --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
+  --io-pattern seq, --rw-mix-read 50.
 
-:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*]
-  Will calculate the provisioned and actual disk usage of all images and
-  associated snapshots within the specified pool.  It can also be used against
-  individual images and snapshots.
+:command:`children` *snap-spec*
+  List the clones of the image at the given snapshot. This checks
+  every pool, and outputs the resulting poolname/imagename.
 
-  If the RBD fast-diff feature is not enabled on images, this operation will
-  require querying the OSDs for every potential object within the image.
-
-:command:`info` *image-spec* | *snap-spec*
-  Will dump information (such as size and object size) about a specific rbd image.
-  If image is a clone, information about its parent is also displayed.
-  If a snapshot is specified, whether it is protected is shown as well.
-
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
-  Will create a new rbd image. You must also specify the size via --size.  The
-  --stripe-unit and --stripe-count arguments are optional, but must be used together.
+  This requires image format 2.
 
 :command:`clone` [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--image-shared] *parent-snap-spec* *child-image-spec*
   Will create a clone (copy-on-write child) of the parent snapshot.
@@ -202,6 +192,49 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
+  Copy the content of a src-image into the newly created dest-image.
+  dest-image will have the same size, object size, and image format as src-image.
+
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+  Will create a new rbd image. You must also specify the size via --size.  The
+  --stripe-unit and --stripe-count arguments are optional, but must be used together.
+
+:command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
+  Dump a list of byte extents in the image that have changed since the specified start
+  snapshot, or since the image was created.  Each output line includes the starting offset
+  (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
+  whether the region is known to be zeros or may contain other data.
+
+:command:`du` [-p | --pool *pool-name*] [*image-spec* | *snap-spec*]
+  Will calculate the provisioned and actual disk usage of all images and
+  associated snapshots within the specified pool.  It can also be used against
+  individual images and snapshots.
+
+  If the RBD fast-diff feature is not enabled on images, this operation will
+  require querying the OSDs for every potential object within the image.
+
+:command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
+  Export image to dest path (use - for stdout).
+  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
+  of image, but also the snapshots and other properties, such as image_order, features.
+
+:command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
+  Export an incremental diff for an image to dest path (use - for stdout).  If
+  an initial snapshot is specified, only changes since that snapshot are included; otherwise,
+  any regions of the image that contain data are included.  The end snapshot is specified
+  using the standard --snap option or @snap syntax (see below).  The image diff format includes
+  metadata about image size changes, and the start and end snapshots.  It efficiently represents
+  discarded or 'zero' regions of the image.
+
+:command:`feature disable` *image-spec* *feature-name*...
+  Disable the specified feature on the specified image. Multiple features can
+  be specified.
+
+:command:`feature enable` *image-spec* *feature-name*...
+  Enable the specified feature on the specified image. Multiple features can
+  be specified.
+
 :command:`flatten` *image-spec*
   If image is a clone, copy all shared blocks from the parent snapshot and
   make the child independent of the parent, severing the link between
@@ -210,24 +243,36 @@ Commands
 
   This requires image format 2.
 
-:command:`children` *snap-spec*
-  List the clones of the image at the given snapshot. This checks
-  every pool, and outputs the resulting poolname/imagename.
+:command:`group create` *group-spec*
+  Create a consistency group.
 
-  This requires image format 2.
+:command:`group image add` *group-spec* *image-spec*
+  Add an image to a consistency group.
 
-:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
-  Resize rbd image. The size parameter also needs to be specified.
-  The --allow-shrink option lets the size be reduced.
+:command:`group image list` *group-spec*
+  List images in a consistency group.
 
-:command:`rm` *image-spec*
-  Delete an rbd image (including all data blocks). If the image has
-  snapshots, this fails and nothing is deleted.
+:command:`group image remove` *group-spec* *image-spec*
+  Remove an image from a consistency group.
 
-:command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
-  Export image to dest path (use - for stdout).
-  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
-  of image, but also the snapshots and other properties, such as image_order, features.
+:command:`group ls` [-p | --pool *pool-name*]
+  List rbd consistency groups.
+
+:command:`group rm` *group-spec*
+  Delete a consistency group.
+
+:command:`image-meta get` *image-spec* *key*
+  Get metadata value with the key.
+
+:command:`image-meta list` *image-spec*
+  Show metadata held on the image. The first column is the key
+  and the second column is the value.
+
+:command:`image-meta remove` *image-spec* *key*
+  Remove metadata key with the value.
+
+:command:`image-meta set` *image-spec* *key* *value*
+  Set metadata key with the value. They will displayed in `image-meta list`.
 
 :command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *src-path* [*image-spec*]
   Create a new image and imports its data from path (use - for
@@ -241,13 +286,40 @@ Commands
   The --export-format accepts '1' or '2' currently. Format 2 allow us to import not only the content
   of image, but also the snapshots and other properties, such as image_order, features.
 
-:command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
-  Export an incremental diff for an image to dest path (use - for stdout).  If
-  an initial snapshot is specified, only changes since that snapshot are included; otherwise,
-  any regions of the image that contain data are included.  The end snapshot is specified
-  using the standard --snap option or @snap syntax (see below).  The image diff format includes
-  metadata about image size changes, and the start and end snapshots.  It efficiently represents
-  discarded or 'zero' regions of the image.
+:command:`import-diff` *src-path* *image-spec*
+  Import an incremental diff of an image and applies it to the current image.  If the diff
+  was generated relative to a start snapshot, we verify that snapshot already exists before
+  continuing.  If there was an end snapshot we verify it does not already exist before
+  applying the changes, and create the snapshot when we are done.
+  
+:command:`info` *image-spec* | *snap-spec*
+  Will dump information (such as size and object size) about a specific rbd image.
+  If image is a clone, information about its parent is also displayed.
+  If a snapshot is specified, whether it is protected is shown as well.
+
+:command:`lock add` [--shared *lock-tag*] *image-spec* *lock-id*
+  Lock an image. The lock-id is an arbitrary name for the user's
+  convenience. By default, this is an exclusive lock, meaning it
+  will fail if the image is already locked. The --shared option
+  changes this behavior. Note that locking does not affect
+  any operation other than adding a lock. It does not
+  protect an image from being deleted.
+
+:command:`lock ls` *image-spec*
+  Show locks held on the image. The first column is the locker
+  to use with the `lock remove` command.
+
+:command:`lock rm` *image-spec* *lock-id* *locker*
+  Release a lock on an image. The lock id and locker are
+  as output by lock ls.
+
+:command:`ls` [-l | --long] [*pool-name*]
+  Will list all rbd images listed in the rbd_directory object.  With
+  -l, also show snapshots, and use longer-format output including
+  size, parent (if clone), format, etc.
+
+:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
+  Map the specified image to a block device via the rbd kernel module.
 
 :command:`merge-diff` *first-diff-path* *second-diff-path* *merged-diff-path*
   Merge two continuous incremental diffs of an image into one single diff. The
@@ -257,57 +329,45 @@ Commands
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
 
-:command:`import-diff` *src-path* *image-spec*
-  Import an incremental diff of an image and applies it to the current image.  If the diff
-  was generated relative to a start snapshot, we verify that snapshot already exists before
-  continuing.  If there was an end snapshot we verify it does not already exist before
-  applying the changes, and create the snapshot when we are done.
-
-:command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
-  Dump a list of byte extents in the image that have changed since the specified start
-  snapshot, or since the image was created.  Each output line includes the starting offset
-  (in bytes), the length of the region (in bytes), and either 'zero' or 'data' to indicate
-  whether the region is known to be zeros or may contain other data.
-
-:command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
-  Copy the content of a src-image into the newly created dest-image.
-  dest-image will have the same size, object size, and image format as src-image.
-
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
-:command:`image-meta list` *image-spec*
-  Show metadata held on the image. The first column is the key
-  and the second column is the value.
+:command:`nbd ls`
+  Show the list of used nbd devices via the rbd-nbd tool.
 
-:command:`image-meta get` *image-spec* *key*
-  Get metadata value with the key.
+:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
+  Map the specified image to a block device via the rbd-nbd tool.
 
-:command:`image-meta set` *image-spec* *key* *value*
-  Set metadata key with the value. They will displayed in `image-meta list`.
-
-:command:`image-meta remove` *image-spec* *key*
-  Remove metadata key with the value.
+:command:`nbd unmap` *device-path*
+  Unmap the block device that was mapped via the rbd-nbd tool.
 
 :command:`object-map rebuild` *image-spec* | *snap-spec*
   Rebuild an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
 
-:command:`snap ls` *image-spec*
-  Dump the list of snapshots inside a specific image.
+:command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
+  Resize rbd image. The size parameter also needs to be specified.
+  The --allow-shrink option lets the size be reduced.
+  
+:command:`rm` *image-spec*
+  Delete an rbd image (including all data blocks). If the image has
+  snapshots, this fails and nothing is deleted.
+
+:command:`showmapped`
+  Show the rbd images that are mapped via the rbd kernel module.
 
 :command:`snap create` *snap-spec*
   Create a new snapshot. Requires the snapshot name parameter specified.
 
-:command:`snap rollback` *snap-spec*
-  Rollback image content to snapshot. This will iterate through the entire blocks
-  array and update the data head content to the snapshotted version.
+:command:`snap limit clear` *image-spec*
+  Remove any previously set limit on the number of snapshots allowed on
+  an image.
 
-:command:`snap rm` [--force] *snap-spec*
-  Remove the specified snapshot.
+:command:`snap limit set` [--limit] *limit* *image-spec*
+  Set a limit for the number of snapshots allowed on an image.
 
-:command:`snap purge` *image-spec*
-  Remove all snapshots from an image.
+:command:`snap ls` *image-spec*
+  Dump the list of snapshots inside a specific image.
 
 :command:`snap protect` *snap-spec*
   Protect a snapshot from deletion, so that clones can be made of it
@@ -318,6 +378,16 @@ Commands
 
   This requires image format 2.
 
+:command:`snap purge` *image-spec*
+  Remove all snapshots from an image.
+
+:command:`snap rm` [--force] *snap-spec*
+  Remove the specified snapshot.
+
+:command:`snap rollback` *snap-spec*
+  Rollback image content to snapshot. This will iterate through the entire blocks
+  array and update the data head content to the snapshotted version.
+
 :command:`snap unprotect` *snap-spec*
   Unprotect a snapshot from deletion (undo `snap protect`).  If cloned
   children remain, `snap unprotect` fails.  (Note that clones may exist
@@ -325,63 +395,8 @@ Commands
 
   This requires image format 2.
 
-:command:`snap limit set` [--limit] *limit* *image-spec*
-  Set a limit for the number of snapshots allowed on an image.
-
-:command:`snap limit clear` *image-spec*
-  Remove any previously set limit on the number of snapshots allowed on
-  an image.
-
-:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd kernel module.
-
-:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
-  Unmap the block device that was mapped via the rbd kernel module.
-
-:command:`showmapped`
-  Show the rbd images that are mapped via the rbd kernel module.
-
-:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd-nbd tool.
-
-:command:`nbd unmap` *device-path*
-  Unmap the block device that was mapped via the rbd-nbd tool.
-
-:command:`nbd list`
-  Show the list of used nbd devices via the rbd-nbd tool.
-
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
-
-:command:`feature disable` *image-spec* *feature-name*...
-  Disable the specified feature on the specified image. Multiple features can
-  be specified.
-
-:command:`feature enable` *image-spec* *feature-name*...
-  Enable the specified feature on the specified image. Multiple features can
-  be specified.
-
-:command:`lock list` *image-spec*
-  Show locks held on the image. The first column is the locker
-  to use with the `lock remove` command.
-
-:command:`lock add` [--shared *lock-tag*] *image-spec* *lock-id*
-  Lock an image. The lock-id is an arbitrary name for the user's
-  convenience. By default, this is an exclusive lock, meaning it
-  will fail if the image is already locked. The --shared option
-  changes this behavior. Note that locking does not affect
-  any operation other than adding a lock. It does not
-  protect an image from being deleted.
-
-:command:`lock remove` *image-spec* *lock-id* *locker*
-  Release a lock on an image. The lock id and locker are
-  as output by lock ls.
-
-:command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
-  Generate a series of IOs to the image and measure the IO throughput and
-  latency.  If no suffix is given, unit B is assumed for both --io-size and
-  --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
-  --io-pattern seq, --rw-mix-read 50.
 
 :command:`trash ls` [*pool-name*]
   List all entries from trash.
@@ -390,31 +405,16 @@ Commands
   Move an image to the trash. Images, even ones actively in-use by 
   clones, can be moved to the trash and deleted at a later time.
 
+:command:`trash restore` *image-id*  
+  Restore an image from trash.
+
 :command:`trash rm` *image-id* 
   Delete an image from trash. If image deferment time has not expired
   you can not removed it unless use force. But an actively in-use by clones 
   or has snapshots can not be removed.
 
-:command:`trash restore` *image-id*  
-  Restore an image from trash.
-
-:command:`group create` *group-spec*
-  Create a consistency group.
-
-:command:`group list` [-p | --pool *pool-name*]
-  List rbd consistency groups.
-
-:command:`group remove` *group-spec*
-  Delete a consistency group.
-
-:command:`group image add` *group-spec* *image-spec*
-  Add an image to a consistency group.
-
-:command:`group image list` *group-spec*
-  List images in a consistency group.
-
-:command:`group image remove` *group-spec* *image-spec*
-  Remove an image from a consistency group.
+:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
+  Unmap the block device that was mapped via the rbd kernel module.
 
 Image, snap and group specs
 ===========================
