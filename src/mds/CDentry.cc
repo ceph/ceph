@@ -395,19 +395,19 @@ bool CDentry::is_freezing() const
 void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 {
   __u32 nonce;
-  ::decode(nonce, p);
+  decode(nonce, p);
   replica_nonce = nonce;
   
-  ::decode(first, p);
+  decode(first, p);
 
   inodeno_t rino;
   unsigned char rdtype;
-  ::decode(rino, p);
-  ::decode(rdtype, p);
+  decode(rino, p);
+  decode(rdtype, p);
   lock.decode_state(p, is_new);
 
   bool need_recover;
-  ::decode(need_recover, p);
+  decode(need_recover, p);
 
   if (is_new) {
     if (rino)
@@ -429,19 +429,19 @@ void CDentry::set_object_info(MDSCacheObjectInfo &info)
 
 void CDentry::encode_lock_state(int type, bufferlist& bl)
 {
-  ::encode(first, bl);
+  encode(first, bl);
 
   // null, ino, or remote_ino?
   char c;
   if (linkage.is_primary()) {
     c = 1;
-    ::encode(c, bl);
-    ::encode(linkage.get_inode()->inode.ino, bl);
+    encode(c, bl);
+    encode(linkage.get_inode()->inode.ino, bl);
   }
   else if (linkage.is_remote()) {
     c = 2;
-    ::encode(c, bl);
-    ::encode(linkage.get_remote_ino(), bl);
+    encode(c, bl);
+    encode(linkage.get_remote_ino(), bl);
   }
   else if (linkage.is_null()) {
     // encode nothing.
@@ -454,7 +454,7 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
   bufferlist::iterator p = bl.begin();
 
   snapid_t newfirst;
-  ::decode(newfirst, p);
+  decode(newfirst, p);
 
   if (!is_auth() && newfirst != first) {
     dout(10) << __func__ << " first " << first << " -> " << newfirst << dendl;
@@ -470,12 +470,12 @@ void CDentry::decode_lock_state(int type, bufferlist& bl)
 
   char c;
   inodeno_t ino;
-  ::decode(c, p);
+  decode(c, p);
 
   switch (c) {
   case 1:
   case 2:
-    ::decode(ino, p);
+    decode(ino, p);
     // newly linked?
     if (linkage.is_null() && !is_auth()) {
       // force trim from cache!

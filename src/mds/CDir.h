@@ -543,31 +543,31 @@ private:
     if (is_auth()) 
       get_dist_spec(dist, whoami);
 
-    ::encode(frag, bl);
-    ::encode(auth, bl);
-    ::encode(dist, bl);
+    encode(frag, bl);
+    encode(auth, bl);
+    encode(dist, bl);
   }
 
   void _encode_base(bufferlist& bl) {
-    ::encode(first, bl);
-    ::encode(fnode, bl);
-    ::encode(dir_rep, bl);
-    ::encode(dir_rep_by, bl);
+    encode(first, bl);
+    encode(fnode, bl);
+    encode(dir_rep, bl);
+    encode(dir_rep_by, bl);
   }
   void _decode_base(bufferlist::iterator& p) {
-    ::decode(first, p);
-    ::decode(fnode, p);
-    ::decode(dir_rep, p);
-    ::decode(dir_rep_by, p);
+    decode(first, p);
+    decode(fnode, p);
+    decode(dir_rep, p);
+    decode(dir_rep_by, p);
   }
   void encode_replica(mds_rank_t who, bufferlist& bl) {
     __u32 nonce = add_replica(who);
-    ::encode(nonce, bl);
+    encode(nonce, bl);
     _encode_base(bl);
   }
   void decode_replica(bufferlist::iterator& p) {
     __u32 nonce;
-    ::decode(nonce, p);
+    decode(nonce, p);
     replica_nonce = nonce;
     _decode_base(p);
   }

@@ -23,20 +23,20 @@
 void SnapInfo::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(snapid, bl);
-  ::encode(ino, bl);
-  ::encode(stamp, bl);
-  ::encode(name, bl);
+  encode(snapid, bl);
+  encode(ino, bl);
+  encode(stamp, bl);
+  encode(name, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapInfo::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(snapid, bl);
-  ::decode(ino, bl);
-  ::decode(stamp, bl);
-  ::decode(name, bl);
+  decode(snapid, bl);
+  decode(ino, bl);
+  decode(stamp, bl);
+  decode(name, bl);
   DECODE_FINISH(bl);
 }
 
@@ -83,16 +83,16 @@ const string& SnapInfo::get_long_name()
 void snaplink_t::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(ino, bl);
-  ::encode(first, bl);
+  encode(ino, bl);
+  encode(first, bl);
   ENCODE_FINISH(bl);
 }
 
 void snaplink_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(ino, bl);
-  ::decode(first, bl);
+  decode(ino, bl);
+  decode(first, bl);
   DECODE_FINISH(bl);
 }
 
@@ -122,13 +122,13 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 void sr_t::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);
-  ::encode(seq, bl);
-  ::encode(created, bl);
-  ::encode(last_created, bl);
-  ::encode(last_destroyed, bl);
-  ::encode(current_parent_since, bl);
-  ::encode(snaps, bl);
-  ::encode(past_parents, bl);
+  encode(seq, bl);
+  encode(created, bl);
+  encode(last_created, bl);
+  encode(last_destroyed, bl);
+  encode(current_parent_since, bl);
+  encode(snaps, bl);
+  encode(past_parents, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -137,15 +137,15 @@ void sr_t::decode(bufferlist::iterator& p)
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
   if (struct_v == 2) {
     __u8 struct_v;
-    ::decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
+    decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
   }
-  ::decode(seq, p);
-  ::decode(created, p);
-  ::decode(last_created, p);
-  ::decode(last_destroyed, p);
-  ::decode(current_parent_since, p);
-  ::decode(snaps, p);
-  ::decode(past_parents, p);
+  decode(seq, p);
+  decode(created, p);
+  decode(last_created, p);
+  decode(last_destroyed, p);
+  decode(current_parent_since, p);
+  decode(snaps, p);
+  decode(past_parents, p);
   DECODE_FINISH(p);
 }
 

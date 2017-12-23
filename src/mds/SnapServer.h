@@ -42,29 +42,29 @@ public:
   void reset_state() override;
   void encode_server_state(bufferlist& bl) const override {
     ENCODE_START(3, 3, bl);
-    ::encode(last_snap, bl);
-    ::encode(snaps, bl);
-    ::encode(need_to_purge, bl);
-    ::encode(pending_update, bl);
-    ::encode(pending_destroy, bl);
-    ::encode(pending_noop, bl);
+    encode(last_snap, bl);
+    encode(snaps, bl);
+    encode(need_to_purge, bl);
+    encode(pending_update, bl);
+    encode(pending_destroy, bl);
+    encode(pending_noop, bl);
     ENCODE_FINISH(bl);
   }
   void decode_server_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
-    ::decode(last_snap, bl);
-    ::decode(snaps, bl);
-    ::decode(need_to_purge, bl);
-    ::decode(pending_update, bl);
+    decode(last_snap, bl);
+    decode(snaps, bl);
+    decode(need_to_purge, bl);
+    decode(pending_update, bl);
     if (struct_v >= 2)
-      ::decode(pending_destroy, bl);
+      decode(pending_destroy, bl);
     else {
       map<version_t, snapid_t> t;
-      ::decode(t, bl);
+      decode(t, bl);
       for (map<version_t, snapid_t>::iterator p = t.begin(); p != t.end(); ++p)
 	pending_destroy[p->first].first = p->second; 
     } 
-    ::decode(pending_noop, bl);
+    decode(pending_noop, bl);
     DECODE_FINISH(bl);
   }
 

@@ -31,26 +31,26 @@ static ostream& _prefix(std::ostream *_dout, mds_rank_t rank) {
 void PurgeItem::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode((uint8_t)action, bl);
-  ::encode(ino, bl);
-  ::encode(size, bl);
-  ::encode(layout, bl, CEPH_FEATURE_FS_FILE_LAYOUT_V2);
-  ::encode(old_pools, bl);
-  ::encode(snapc, bl);
-  ::encode(fragtree, bl);
+  encode((uint8_t)action, bl);
+  encode(ino, bl);
+  encode(size, bl);
+  encode(layout, bl, CEPH_FEATURE_FS_FILE_LAYOUT_V2);
+  encode(old_pools, bl);
+  encode(snapc, bl);
+  encode(fragtree, bl);
   ENCODE_FINISH(bl);
 }
 
 void PurgeItem::decode(bufferlist::iterator &p)
 {
   DECODE_START(1, p);
-  ::decode((uint8_t&)action, p);
-  ::decode(ino, p);
-  ::decode(size, p);
-  ::decode(layout, p);
-  ::decode(old_pools, p);
-  ::decode(snapc, p);
-  ::decode(fragtree, p);
+  decode((uint8_t&)action, p);
+  decode(ino, p);
+  decode(size, p);
+  decode(layout, p);
+  decode(old_pools, p);
+  decode(snapc, p);
+  decode(fragtree, p);
   DECODE_FINISH(p);
 }
 
@@ -260,7 +260,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 
   bufferlist bl;
 
-  ::encode(pi, bl);
+  encode(pi, bl);
   journaler.append_entry(bl);
   journaler.wait_for_flush(completion);
 
@@ -385,7 +385,7 @@ bool PurgeQueue::_consume()
     PurgeItem item;
     bufferlist::iterator q = bl.begin();
     try {
-      ::decode(item, q);
+      decode(item, q);
     } catch (const buffer::error &err) {
       derr << "Decode error at read_pos=0x" << std::hex
            << journaler.get_read_pos() << dendl;

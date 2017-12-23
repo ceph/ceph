@@ -190,7 +190,8 @@ public:
     if (s == LOCK_MIX || s == LOCK_MIX_LOCK || s == LOCK_MIX_SYNC)
       mark_need_recover();
 
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
 
   void decode_state_rejoin(bufferlist::iterator& p, list<MDSInternalContextBase*>& waiters, bool survivor) {
