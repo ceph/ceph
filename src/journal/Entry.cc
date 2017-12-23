@@ -25,42 +25,44 @@ uint32_t Entry::get_fixed_size() {
 }
 
 void Entry::encode(bufferlist &bl) const {
+  using ceph::encode;
   bufferlist data_bl;
-  ::encode(preamble, data_bl);
-  ::encode(static_cast<uint8_t>(1), data_bl);
-  ::encode(m_entry_tid, data_bl);
-  ::encode(m_tag_tid, data_bl);
-  ::encode(m_data, data_bl);
+  encode(preamble, data_bl);
+  encode(static_cast<uint8_t>(1), data_bl);
+  encode(m_entry_tid, data_bl);
+  encode(m_tag_tid, data_bl);
+  encode(m_data, data_bl);
 
   uint32_t crc = data_bl.crc32c(0);
   uint32_t bl_offset = bl.length();
   bl.claim_append(data_bl);
-  ::encode(crc, bl);
+  encode(crc, bl);
   assert(get_fixed_size() + m_data.length() + bl_offset == bl.length());
 }
 
 void Entry::decode(bufferlist::iterator &iter) {
+  using ceph::decode;
   uint32_t start_offset = iter.get_off();
   uint64_t bl_preamble;
-  ::decode(bl_preamble, iter);
+  decode(bl_preamble, iter);
   if (bl_preamble != preamble) {
     throw buffer::malformed_input("incorrect preamble: " +
                                   stringify(bl_preamble));
   }
 
   uint8_t version;
-  ::decode(version, iter);
+  decode(version, iter);
   if (version != 1) {
     throw buffer::malformed_input("unknown version: " + stringify(version));
   }
 
-  ::decode(m_entry_tid, iter);
-  ::decode(m_tag_tid, iter);
-  ::decode(m_data, iter);
+  decode(m_entry_tid, iter);
+  decode(m_tag_tid, iter);
+  decode(m_data, iter);
   uint32_t end_offset = iter.get_off();
 
   uint32_t crc;
-  ::decode(crc, iter);
+  decode(crc, iter);
 
   bufferlist data_bl;
   data_bl.substr_of(iter.get_bl(), start_offset, end_offset - start_offset);
@@ -81,13 +83,14 @@ void Entry::dump(Formatter *f) const {
 }
 
 bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
+  using ceph::decode;
   uint32_t start_off = iter.get_off();
   if (iter.get_remaining() < HEADER_FIXED_SIZE) {
     *bytes_needed = HEADER_FIXED_SIZE - iter.get_remaining();
     return false;
   }
   uint64_t bl_preamble;
-  ::decode(bl_preamble, iter);
+  decode(bl_preamble, iter);
   if (bl_preamble != preamble) {
     *bytes_needed = 0;
     return false;
@@ -99,7 +102,7 @@ bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
     return false;
   }
   uint32_t data_size;
-  ::decode(data_size, iter);
+  decode(data_size, iter);
 
   if (iter.get_remaining() < data_size) {
     *bytes_needed = data_size - iter.get_remaining();
@@ -118,7 +121,7 @@ bool Entry::is_readable(bufferlist::iterator iter, uint32_t *bytes_needed) {
 
   *bytes_needed = 0;
   uint32_t crc;
-  ::decode(crc, iter);
+  decode(crc, iter);
   if (crc != crc_bl.crc32c(0)) {
     return false;
   }

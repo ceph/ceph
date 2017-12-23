@@ -103,8 +103,8 @@ Future JournalRecorder::append(uint64_t tag_tid,
   m_lock.Unlock();
 
   bufferlist entry_bl;
-  ::encode(Entry(future->get_tag_tid(), future->get_entry_tid(), payload_bl),
-           entry_bl);
+  encode(Entry(future->get_tag_tid(), future->get_entry_tid(), payload_bl),
+	 entry_bl);
   assert(entry_bl.length() <= m_journal_metadata->get_object_size());
 
   bool object_full = object_ptr->append_unlock({{future, entry_bl}});
