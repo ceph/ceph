@@ -866,7 +866,7 @@ static int clslua_eval(lua_State *L)
 
         try {
           bufferlist::iterator it = ctx->inbl->begin();
-          ::decode(op, it);
+          decode(op, it);
         } catch (const buffer::error &err) {
           CLS_ERR("error: could not decode ceph encoded input");
           ctx->ret = -EINVAL;

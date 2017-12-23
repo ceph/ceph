@@ -30,13 +30,15 @@ private:
 } // anonymous namespace
 
 void ImageAddedPayload::encode(bufferlist &bl) const {
+  using ceph::encode;
   ::encode(image_id, bl);
-  ::encode(trash_image_spec, bl);
+  encode(trash_image_spec, bl);
 }
 
 void ImageAddedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  using ceph::decode;
   ::decode(image_id, iter);
-  ::decode(trash_image_spec, iter);
+  decode(trash_image_spec, iter);
 }
 
 void ImageAddedPayload::dump(Formatter *f) const {

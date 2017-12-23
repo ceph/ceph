@@ -19,27 +19,27 @@ struct cls_lock_lock_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
+    encode(name, bl);
     uint8_t t = (uint8_t)type;
-    ::encode(t, bl);
-    ::encode(cookie, bl);
-    ::encode(tag, bl);
-    ::encode(description, bl);
-    ::encode(duration, bl);
-    ::encode(flags, bl);
+    encode(t, bl);
+    encode(cookie, bl);
+    encode(tag, bl);
+    encode(description, bl);
+    encode(duration, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
+    decode(name, bl);
     uint8_t t;
-    ::decode(t, bl);
+    decode(t, bl);
     type = (ClsLockType)t;
-    ::decode(cookie, bl);
-    ::decode(tag, bl);
-    ::decode(description, bl);
-    ::decode(duration, bl);
-    ::decode(flags, bl);
+    decode(cookie, bl);
+    decode(tag, bl);
+    decode(description, bl);
+    decode(duration, bl);
+    decode(flags, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -56,14 +56,14 @@ struct cls_lock_unlock_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
-    ::encode(cookie, bl);
+    encode(name, bl);
+    encode(cookie, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
-    ::decode(cookie, bl);
+    decode(name, bl);
+    decode(cookie, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -81,16 +81,16 @@ struct cls_lock_break_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
-    ::encode(locker, bl);
-    ::encode(cookie, bl);
+    encode(name, bl);
+    encode(locker, bl);
+    encode(cookie, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
-    ::decode(locker, bl);
-    ::decode(cookie, bl);
+    decode(name, bl);
+    decode(locker, bl);
+    decode(cookie, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -106,12 +106,12 @@ struct cls_lock_get_info_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
+    encode(name, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
+    decode(name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -129,19 +129,19 @@ struct cls_lock_get_info_reply
 
   void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(lockers, bl, features);
+    encode(lockers, bl, features);
     uint8_t t = (uint8_t)lock_type;
-    ::encode(t, bl);
-    ::encode(tag, bl);
+    encode(t, bl);
+    encode(tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(lockers, bl);
+    decode(lockers, bl);
     uint8_t t;
-    ::decode(t, bl);
+    decode(t, bl);
     lock_type = (ClsLockType)t; 
-    ::decode(tag, bl);
+    decode(tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -157,12 +157,12 @@ struct cls_lock_list_locks_reply
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(locks, bl);
+    encode(locks, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(locks, bl);
+    decode(locks, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -181,21 +181,21 @@ struct cls_lock_assert_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
+    encode(name, bl);
     uint8_t t = (uint8_t)type;
-    ::encode(t, bl);
-    ::encode(cookie, bl);
-    ::encode(tag, bl);
+    encode(t, bl);
+    encode(cookie, bl);
+    encode(tag, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
+    decode(name, bl);
     uint8_t t;
-    ::decode(t, bl);
+    decode(t, bl);
     type = (ClsLockType)t;
-    ::decode(cookie, bl);
-    ::decode(tag, bl);
+    decode(cookie, bl);
+    decode(tag, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -215,23 +215,23 @@ struct cls_lock_set_cookie_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(name, bl);
+    encode(name, bl);
     uint8_t t = (uint8_t)type;
-    ::encode(t, bl);
-    ::encode(cookie, bl);
-    ::encode(tag, bl);
-    ::encode(new_cookie, bl);
+    encode(t, bl);
+    encode(cookie, bl);
+    encode(tag, bl);
+    encode(new_cookie, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(name, bl);
+    decode(name, bl);
     uint8_t t;
-    ::decode(t, bl);
+    decode(t, bl);
     type = (ClsLockType)t;
-    ::decode(cookie, bl);
-    ::decode(tag, bl);
-    ::decode(new_cookie, bl);
+    decode(cookie, bl);
+    decode(tag, bl);
+    decode(new_cookie, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

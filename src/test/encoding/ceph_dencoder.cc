@@ -190,6 +190,8 @@ public:
   DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
     : DencoderBase<T>(stray_ok, nondeterministic) {}
   void encode(bufferlist& out, uint64_t features) override {
+    using ceph::encode;
+    using ::encode;
     out.clear();
     using ::encode;
     using ceph::encode;

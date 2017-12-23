@@ -69,7 +69,7 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
 
                              bufferlist::iterator bl_it = in_bl.begin();
                              ::decode(id, bl_it);
-                             ::decode(trash_image_spec, bl_it);
+                             decode(trash_image_spec, bl_it);
 
                              EXPECT_EQ(id, image_id);
                              EXPECT_EQ(trash_image_spec.source,

@@ -244,7 +244,7 @@ public:
 
     bufferlist bl;
     ::encode(image_id, bl);
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"),

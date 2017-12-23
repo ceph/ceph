@@ -95,7 +95,7 @@ public:
     mirror_image.global_image_id = global_id;
 
     bufferlist bl;
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"), _, _, _))
