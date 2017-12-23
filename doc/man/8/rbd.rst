@@ -146,6 +146,7 @@ Parameters
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
    * journaling: journaled IO support (requires exclusive-lock)
+   * data-pool: erasure coded pool support
 
 .. option:: --image-shared
 
@@ -297,6 +298,30 @@ Commands
   If image is a clone, information about its parent is also displayed.
   If a snapshot is specified, whether it is protected is shown as well.
 
+:command:`journal client disconnect` *journal-spec*
+  Flag image journal client as disconnected.
+
+:command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
+  Export image journal to path (use - for stdout). It can be make a bakcup
+  of the image journal especially before attempting dangerous operations.
+
+  Note that this command may not always work if the journal is badly corrupted.
+
+:command:`journal import` [--verbose] [--no-error] *path-name* *dest-journal-spec*
+  Import image journal from path (use - for stdin).
+
+:command:`journal info` *journal-spec*
+  Show information about image journal.
+
+:command:`journal inspect` [--verbose] *journal-spec*
+  Inspect and report image journal for structural errors.
+
+:command:`journal reset` *journal-spec*
+  Reset image journal.
+
+:command:`journal status` *journal-spec*
+  Show status of image journal.
+
 :command:`lock add` [--shared *lock-tag*] *image-spec* *lock-id*
   Lock an image. The lock-id is an arbitrary name for the user's
   convenience. By default, this is an exclusive lock, meaning it
@@ -329,6 +354,82 @@ Commands
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
 
+:command:`mirror image demote` *image-spec*
+  Demote a primary image to non-primary for RBD mirroring.
+
+:command:`mirror image disable` [--force] *image-spec*
+  Disable RBD mirroring for an image. If the mirroring is
+  configured in ``image`` mode for the image's pool, then it
+  can be explicitly disabled mirroring for each image within
+  the pool.
+
+:command:`mirror image enable` *image-spec*
+  Enable RBD mirroring for an image. If the mirroring is
+  configured in ``image`` mode for the image's pool, then it
+  can be explicitly enabled mirroring for each image within
+  the pool.
+
+  This requires the RBD journaling feature is enabled.
+
+:command:`mirror image promote` [--force] *image-spec*
+  Promote a non-primary image to primary for RBD mirroring.
+
+:command:`mirror image resync` *image-spec*
+  Force resync to primary image for RBD mirroring.
+
+:command:`mirror image status` *image-spec*
+  Show RBD mirroring status for an image.
+
+:command:`mirror pool demote` [*pool-name*]
+  Demote all primary images within a pool to non-primary.
+  Every mirroring enabled image will demoted in the pool.
+
+:command:`mirror pool disable` [*pool-name*]
+  Disable RBD mirroring by default within a pool. When mirroring
+  is disabled on a pool in this way, mirroring will also be
+  disabled on any images (within the pool) for which mirroring
+  was enabled explicitly.
+
+:command:`mirror pool enable` [*pool-name*] *mode*
+  Enable RBD mirroring by default within a pool.
+  The mirroring mode can either be ``pool`` or ``image``.
+  If configured in ``pool`` mode, all images in the pool
+  with the journaling feature enabled are mirrored.
+  If configured in ``image`` mode, mirroring needs to be
+  explicitly enabled (by ``mirror image enable`` command)
+  on each image.
+
+:command:`mirror pool info` [*pool-name*]
+  Show information about the pool mirroring configuration.
+  It includes mirroring mode, peer UUID, remote cluster name,
+  and remote client name.
+
+:command:`mirror pool peer add` [*pool-name*] *remote-cluster-spec*
+  Add a mirroring peer to a pool.
+  *remote-cluster-spec* is [*remote client name*\ @\ ]\ *remote cluster name*.
+
+  The default for *remote client name* is "client.admin".
+
+  This requires mirroring mode is enabled.
+
+:command:`mirror pool peer remove` [*pool-name*] *uuid*
+  Remove a mirroring peer from a pool. The peer uuid is available
+  from ``mirror pool info`` command.
+
+:command:`mirror pool peer set` [*pool-name*] *uuid* *key* *value*
+  Update mirroring peer settings.
+  The key can be either ``client`` or ``cluster``, and the value
+  is corresponding to remote client name or remote cluster name.
+
+:command:`mirror pool promote` [--force] [*pool-name*]
+  Promote all non-primary images within a pool to primary.
+  Every mirroring enabled image will promoted in the pool.
+
+:command:`mirror pool status` [--verbose] [*pool-name*]
+  Show status for all mirrored images in the pool.
+  With --verbose, also show additionally output status
+  details for every mirroring image in the pool.
+
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
@@ -341,9 +442,16 @@ Commands
 :command:`nbd unmap` *device-path*
   Unmap the block device that was mapped via the rbd-nbd tool.
 
+:command:`object-map check` *image-spec* | *snap-spec*
+  Verify the object map is correct.
+
 :command:`object-map rebuild` *image-spec* | *snap-spec*
   Rebuild an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
+
+:command:`pool init` [*pool-name*] [--force]
+  Initialize pool for use by RBD. Newly created pools must initialized
+  prior to use.
 
 :command:`resize` (-s | --size *size-in-M/G/T*) [--allow-shrink] *image-spec*
   Resize rbd image. The size parameter also needs to be specified.
@@ -381,6 +489,9 @@ Commands
 :command:`snap purge` *image-spec*
   Remove all snapshots from an image.
 
+:command:`snap rename` *src-snap-spec* *dest-snap-spec*
+  Rename a snapshot. Note: rename across pools and images is not supported.
+
 :command:`snap rm` [--force] *snap-spec*
   Remove the specified snapshot.
 
@@ -416,15 +527,21 @@ Commands
 :command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
   Unmap the block device that was mapped via the rbd kernel module.
 
-Image, snap and group specs
-===========================
+:command:`watch` *image-spec*
+  Watch events on image.
 
-| *image-spec* is [*pool-name*]/*image-name*
-| *snap-spec*  is [*pool-name*]/*image-name*\ @\ *snap-name*
-| *group-spec* is [*pool-name*]/*group-name*
+Image, snap, group and journal specs
+====================================
+
+| *image-spec*   is [*pool-name*/]\ *image-name*
+| *snap-spec*    is [*pool-name*/]\ *image-name*\ @\ *snap-name*
+| *group-spec*   is [*pool-name*/]\ *group-name*
+| *journal-spec* is [*pool-name*/]\ *journal-name*
 
 The default for *pool-name* is "rbd".  If an image name contains a slash
 character ('/'), *pool-name* is required.
+
+The *journal-name* is *image-id*.
 
 You may specify each name individually, using --pool, --image and --snap
 options, but this is discouraged in favor of the above spec syntax.
