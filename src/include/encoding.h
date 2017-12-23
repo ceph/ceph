@@ -22,13 +22,8 @@
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 
-#ifndef _BACKWARD_BACKWARD_WARNING_H
-#define _BACKWARD_BACKWARD_WARNING_H   // make gcc 4.3 shut up about hash_*
-#endif
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
-
-
 
 #include "include/int_types.h"
 
