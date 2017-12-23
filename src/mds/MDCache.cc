@@ -11985,7 +11985,7 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
     }
   }
 
-  auto dump_func = [this, fd, f, depth, &dump_root](CInode *in) {
+  auto dump_func = [fd, f, depth, &dump_root](CInode *in) {
     int r;
     if (!dump_root.empty()) {
       string ipath;
