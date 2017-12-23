@@ -1493,7 +1493,7 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
     return r;
 
   bufferlist::iterator iter = bl.begin();
-  ::decode(m, iter);
+  decode(m, iter);
 
   return m.size();
 }
