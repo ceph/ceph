@@ -38,7 +38,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     /* authenticate */
     CephXRequestHeader header;
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
-    ::encode(header, bl);
+    encode(header, bl);
 
     CryptoKey secret;
     const bool got = keyring->get_secret(cct->_conf->name, secret);
@@ -69,7 +69,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
       ldout(cct, 20) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
     }
 
-    ::encode(req, bl);
+    encode(req, bl);
 
     ldout(cct, 10) << "get auth session key: client_challenge "
 		   << hex << req.client_challenge << dendl;
@@ -82,7 +82,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     CephXRequestHeader header;
     header.request_type = CEPHX_GET_PRINCIPAL_SESSION_KEY;
-    ::encode(header, bl);
+    encode(header, bl);
 
     CephXAuthorizer *authorizer = ticket_handler->build_authorizer(global_id);
     if (!authorizer)
@@ -92,7 +92,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     CephXServiceTicketRequest req;
     req.keys = need;
-    ::encode(req, bl);
+    encode(req, bl);
   }
 
   return 0;
@@ -117,7 +117,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
 
   if (starting) {
     CephXServerChallenge ch;
-    ::decode(ch, indata);
+    decode(ch, indata);
     server_challenge = ch.server_challenge;
     ldout(cct, 10) << " got initial server challenge "
 		   << hex << server_challenge << dendl;
@@ -128,7 +128,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   }
 
   struct CephXResponseHeader header;
-  ::decode(header, indata);
+  decode(header, indata);
 
   switch (header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
@@ -215,7 +215,7 @@ bool CephxClientHandler::build_rotating_request(bufferlist& bl) const
   ldout(cct, 10) << "build_rotating_request" << dendl;
   CephXRequestHeader header;
   header.request_type = CEPHX_GET_ROTATING_KEY;
-  ::encode(header, bl);
+  encode(header, bl);
   return true;
 }
 
@@ -249,4 +249,3 @@ bool CephxClientHandler::need_tickets()
 
   return _need_tickets();
 }
-
