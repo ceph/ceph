@@ -183,7 +183,7 @@ struct GetTagsRequest {
     librbd::journal::ClientData client_data;
     bufferlist::iterator bl_it = client->data.begin();
     try {
-      ::decode(client_data, bl_it);
+      decode(client_data, bl_it);
     } catch (const buffer::error &err) {
       lderr(cct) << this << " OpenJournalerRequest::" << __func__ << ": "
                  << "failed to decode client data" << dendl;
@@ -253,7 +253,7 @@ int allocate_journaler_tag(CephContext *cct, J *journaler,
   tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
-  ::encode(tag_data, tag_bl);
+  encode(tag_data, tag_bl);
 
   C_SaferCond allocate_tag_ctx;
   journaler->allocate_tag(tag_class, tag_bl, new_tag, &allocate_tag_ctx);
@@ -483,7 +483,7 @@ int Journal<I>::request_resync(I *image_ctx) {
 
   journal::ClientData client_data(client_meta);
   bufferlist client_data_bl;
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   C_SaferCond update_client_ctx;
   journaler.update_client(client_data_bl, &update_client_ctx);
@@ -681,7 +681,7 @@ void Journal<I>::allocate_tag(const std::string &mirror_uuid,
   tag_data.predecessor = predecessor;
 
   bufferlist tag_bl;
-  ::encode(tag_data, tag_bl);
+  encode(tag_data, tag_bl);
 
   C_DecodeTag *decode_tag_ctx = new C_DecodeTag(cct, &m_lock, &m_tag_tid,
                                                 &m_tag_data, on_finish);
@@ -723,7 +723,7 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                     ceph_clock_now());
 
     bufferlists.emplace_back();
-    ::encode(event_entry, bufferlists.back());
+    encode(event_entry, bufferlists.back());
 
     event_offset += event_length;
     bytes_remaining -= event_length;
@@ -740,7 +740,7 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
                                      bool flush_entry, int filter_ret_val) {
   bufferlist bl;
   event_entry.timestamp = ceph_clock_now();
-  ::encode(event_entry, bl);
+  encode(event_entry, bl);
   return append_io_events(event_entry.get_event_type(), {bl}, requests, offset,
                           length, flush_entry, filter_ret_val);
 }
@@ -851,7 +851,7 @@ void Journal<I>::append_op_event(uint64_t op_tid,
 
   bufferlist bl;
   event_entry.timestamp = ceph_clock_now();
-  ::encode(event_entry, bl);
+  encode(event_entry, bl);
 
   Future future;
   {
@@ -888,7 +888,7 @@ void Journal<I>::commit_op_event(uint64_t op_tid, int r, Context *on_safe) {
                                   ceph_clock_now());
 
   bufferlist bl;
-  ::encode(event_entry, bl);
+  encode(event_entry, bl);
 
   Future op_start_future;
   Future op_finish_future;
@@ -1585,7 +1585,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
   librbd::journal::ClientData client_data;
   bufferlist::iterator bl_it = client.data.begin();
   try {
-    ::decode(client_data, bl_it);
+    decode(client_data, bl_it);
   } catch (const buffer::error &err) {
     lderr(cct) << this << " " << __func__ << ": "
                << "failed to decode client data: " << err << dendl;

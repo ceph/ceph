@@ -107,7 +107,7 @@ public:
     try {
       bufferlist data_bl = replay_entry.get_data();
       bufferlist::iterator it = data_bl.begin();
-      ::decode(*event_entry, it);
+      decode(*event_entry, it);
     } catch (const buffer::error &err) {
       return false;
     }

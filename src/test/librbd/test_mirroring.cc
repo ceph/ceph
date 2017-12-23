@@ -279,7 +279,7 @@ public:
     ASSERT_EQ(-ENOENT, init_ctx.wait());
 
     bufferlist client_data_bl;
-    ::encode(client_data, client_data_bl);
+    encode(client_data, client_data_bl);
     ASSERT_EQ(0, journaler.register_client(client_data_bl));
 
     C_SaferCond shut_down_ctx;

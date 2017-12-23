@@ -89,7 +89,7 @@ MATCHER_P(IsLockType, exclusive, "") {
   bufferlist bl;
   bl.share(arg);
   bufferlist::iterator iter = bl.begin();
-  ::decode(op, iter);
+  decode(op, iter);
   return op.type == (exclusive ? LOCK_EXCLUSIVE : LOCK_SHARED);
 }
 

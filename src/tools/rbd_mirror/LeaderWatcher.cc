@@ -886,7 +886,7 @@ void LeaderWatcher<I>::notify_lock_acquired() {
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_notify_lock_acquired>(this);
 
   bufferlist bl;
-  ::encode(NotifyMessage{LockAcquiredPayload{}}, bl);
+  encode(NotifyMessage{LockAcquiredPayload{}}, bl);
 
   send_notify(bl, nullptr, ctx);
 }
@@ -920,7 +920,7 @@ void LeaderWatcher<I>::notify_lock_released() {
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_notify_lock_released>(this);
 
   bufferlist bl;
-  ::encode(NotifyMessage{LockReleasedPayload{}}, bl);
+  encode(NotifyMessage{LockReleasedPayload{}}, bl);
 
   send_notify(bl, nullptr, ctx);
 }
@@ -961,7 +961,7 @@ void LeaderWatcher<I>::notify_heartbeat() {
     LeaderWatcher<I>, &LeaderWatcher<I>::handle_notify_heartbeat>(this);
 
   bufferlist bl;
-  ::encode(NotifyMessage{HeartbeatPayload{}}, bl);
+  encode(NotifyMessage{HeartbeatPayload{}}, bl);
 
   m_heartbeat_response.acks.clear();
   send_notify(bl, &m_heartbeat_response, ctx);
@@ -1079,7 +1079,7 @@ void LeaderWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   NotifyMessage notify_message;
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(notify_message, iter);
+    decode(notify_message, iter);
   } catch (const buffer::error &err) {
     derr << ": error decoding image notification: " << err.what() << dendl;
     ctx->complete(0);

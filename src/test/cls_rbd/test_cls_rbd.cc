@@ -26,6 +26,8 @@ using namespace std;
 using namespace librbd::cls_client;
 using ::librbd::ParentInfo;
 using ::librbd::ParentSpec;
+using ceph::encode;
+using ceph::decode;
 
 static int snapshot_add(librados::IoCtx *ioctx, const std::string &oid,
                         uint64_t snap_id, const std::string &snap_name) {

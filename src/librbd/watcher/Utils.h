@@ -43,7 +43,8 @@ public:
 
   template <typename P>
   inline void operator()(const P &payload) const {
-    ::encode(static_cast<uint32_t>(P::NOTIFY_OP), m_bl);
+    using ceph::encode;
+    encode(static_cast<uint32_t>(P::NOTIFY_OP), m_bl);
     payload.encode(m_bl);
   }
 

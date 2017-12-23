@@ -296,7 +296,7 @@ public:
     client_data.client_meta = client_meta;
 
     cls::journal::Client client;
-    ::encode(client_data, client.data);
+    encode(client_data, client.data);
 
     EXPECT_CALL(mock_journaler, get_cached_client("", _))
                   .WillOnce(DoAll(SetArgPointee<1>(client),
@@ -1331,7 +1331,7 @@ TEST_F(TestMockJournal, ResyncRequested) {
   tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
 
   bufferlist tag_data_bl;
-  ::encode(tag_data, tag_data_bl);
+  encode(tag_data, tag_data_bl);
   expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
                             {{0, 0, tag_data_bl}}, 0);
 
@@ -1383,7 +1383,7 @@ TEST_F(TestMockJournal, ForcePromoted) {
   tag_data.mirror_uuid = Journal<>::LOCAL_MIRROR_UUID;
 
   bufferlist tag_data_bl;
-  ::encode(tag_data, tag_data_bl);
+  encode(tag_data, tag_data_bl);
   expect_get_journaler_tags(mock_image_ctx, mock_journaler, 0,
                             {{100, 0, tag_data_bl}}, 0);
 

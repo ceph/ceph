@@ -356,16 +356,17 @@ struct ResponseMessage {
   static void generate_test_instances(std::list<ResponseMessage *> &o);
 };
 
+std::ostream &operator<<(std::ostream &out,
+                         const NotifyOp &op);
+std::ostream &operator<<(std::ostream &out,
+                         const AsyncRequestId &request);
+
+WRITE_CLASS_ENCODER(AsyncRequestId);
+WRITE_CLASS_ENCODER(NotifyMessage);
+WRITE_CLASS_ENCODER(ResponseMessage);
+
 } // namespace watch_notify
 } // namespace librbd
 
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::NotifyOp &op);
-std::ostream &operator<<(std::ostream &out,
-                         const librbd::watch_notify::AsyncRequestId &request);
-
-WRITE_CLASS_ENCODER(librbd::watch_notify::AsyncRequestId);
-WRITE_CLASS_ENCODER(librbd::watch_notify::NotifyMessage);
-WRITE_CLASS_ENCODER(librbd::watch_notify::ResponseMessage);
 
 #endif // LIBRBD_WATCH_NOTIFY_TYPES_H

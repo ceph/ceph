@@ -324,7 +324,7 @@ void ImageSync<I>::send_update_sync_point() {
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(*m_client_meta);
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_update_sync_point>(
@@ -385,7 +385,7 @@ void ImageSync<I>::send_flush_sync_point() {
 
   bufferlist client_data_bl;
   librbd::journal::ClientData client_data(*m_client_meta);
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_context_callback<
     ImageSync<I>, &ImageSync<I>::handle_flush_sync_point>(

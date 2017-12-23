@@ -673,11 +673,11 @@ struct Listener {
   virtual void handle_resync() = 0;
 };
 
+WRITE_CLASS_ENCODER(EventEntry);
+WRITE_CLASS_ENCODER(ClientData);
+WRITE_CLASS_ENCODER(TagData);
+
 } // namespace journal
 } // namespace librbd
-
-WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
-WRITE_CLASS_ENCODER(librbd::journal::ClientData);
-WRITE_CLASS_ENCODER(librbd::journal::TagData);
 
 #endif // CEPH_LIBRBD_JOURNAL_TYPES_H

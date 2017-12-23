@@ -67,7 +67,7 @@ public:
 	bufferlist payload;
 	bufferlist::iterator iter = bl.begin();
 	DECODE_START(1, iter);
-	::decode(op, iter);
+	decode(op, iter);
 	iter.copy_all(payload);
 	DECODE_FINISH(iter);
 
@@ -146,7 +146,7 @@ public:
 
   bufferlist create_response_message(int r) {
     bufferlist bl;
-    ::encode(ResponseMessage(r), bl);
+    encode(ResponseMessage(r), bl);
     return bl;
   }
 
@@ -189,14 +189,14 @@ public:
   int notify_async_progress(librbd::ImageCtx *ictx, const AsyncRequestId &id,
                             uint64_t offset, uint64_t total) {
     bufferlist bl;
-    ::encode(NotifyMessage(AsyncProgressPayload(id, offset, total)), bl);
+    encode(NotifyMessage(AsyncProgressPayload(id, offset, total)), bl);
     return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
   }
 
   int notify_async_complete(librbd::ImageCtx *ictx, const AsyncRequestId &id,
                             int r) {
     bufferlist bl;
-    ::encode(NotifyMessage(AsyncCompletePayload(id, r)), bl);
+    encode(NotifyMessage(AsyncCompletePayload(id, r)), bl);
     return m_ioctx.notify2(ictx->header_oid, bl, 5000, NULL);
   }
 
