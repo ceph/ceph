@@ -63,7 +63,7 @@ Skip test on FreeBSD as it generates different output there.
                                         mirroring.
       mirror image resync               Force resync to primary image for RBD
                                         mirroring.
-      mirror image status               Show RDB mirroring status for an image.
+      mirror image status               Show RBD mirroring status for an image.
       mirror pool demote                Demote all primary images in the pool.
       mirror pool disable               Disable RBD mirroring by default within a
                                         pool.
@@ -1000,7 +1000,7 @@ Skip test on FreeBSD as it generates different output there.
                                  [--format <format>] [--pretty-format] 
                                  <image-spec> 
   
-  Show RDB mirroring status for an image.
+  Show RBD mirroring status for an image.
   
   Positional arguments
     <image-spec>         image specification
@@ -1075,7 +1075,7 @@ Skip test on FreeBSD as it generates different output there.
   Positional arguments
     <pool-name>              pool name
     <remote-cluster-spec>    remote cluster spec
-                             (example: [<client name>@]<cluster name>
+                             (example: [<client name>@]<cluster name>)
   
   Optional arguments
     -p [ --pool ] arg        pool name
