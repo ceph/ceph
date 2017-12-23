@@ -186,17 +186,19 @@ class filepath {
 
   // encoding
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ino, bl);
-    ::encode(path, bl);
+    encode(struct_v, bl);
+    encode(ino, bl);
+    encode(path, bl);
   }
   void decode(bufferlist::iterator& blp) {
+    using ceph::decode;
     bits.clear();
     __u8 struct_v;
-    ::decode(struct_v, blp);
-    ::decode(ino, blp);
-    ::decode(path, blp);
+    decode(struct_v, blp);
+    decode(ino, blp);
+    decode(path, blp);
     encoded = true;
   }
   void dump(Formatter *f) const {
