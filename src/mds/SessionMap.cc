@@ -111,7 +111,7 @@ void SessionMapStore::decode_header(
 {
   bufferlist::iterator q = header_bl.begin();
   DECODE_START(1, q)
-  ::decode(version, q);
+  decode(version, q);
   DECODE_FINISH(q);
 }
 
@@ -119,7 +119,7 @@ void SessionMapStore::encode_header(
     bufferlist *header_bl)
 {
   ENCODE_START(1, 1, *header_bl);
-  ::encode(version, *header_bl);
+  encode(version, *header_bl);
   ENCODE_FINISH(*header_bl);
 }
 
@@ -482,16 +482,16 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 {
   utime_t now = ceph_clock_now();
   uint64_t pre;
-  ::decode(pre, p);
+  decode(pre, p);
   if (pre == (uint64_t)-1) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, p);
     assert(struct_v >= 2);
     
-    ::decode(version, p);
+    decode(version, p);
     
     while (!p.end()) {
       entity_inst_t inst;
-      ::decode(inst.name, p);
+      decode(inst.name, p);
       Session *s = get_or_add_session(inst);
       if (s->is_closed())
         s->set_state(Session::STATE_OPEN);
@@ -505,7 +505,7 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
 
     // this is a meaningless upper bound.  can be ignored.
     __u32 n;
-    ::decode(n, p);
+    decode(n, p);
     
     while (n-- && !p.end()) {
       bufferlist::iterator p2 = p;

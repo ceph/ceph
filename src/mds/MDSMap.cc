@@ -456,62 +456,63 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(7, 4, bl);
-  ::encode(global_id, bl);
-  ::encode(name, bl);
-  ::encode(rank, bl);
-  ::encode(inc, bl);
-  ::encode((int32_t)state, bl);
-  ::encode(state_seq, bl);
-  ::encode(addr, bl, features);
-  ::encode(laggy_since, bl);
-  ::encode(standby_for_rank, bl);
-  ::encode(standby_for_name, bl);
-  ::encode(export_targets, bl);
-  ::encode(mds_features, bl);
-  ::encode(standby_for_fscid, bl);
-  ::encode(standby_replay, bl);
+  encode(global_id, bl);
+  encode(name, bl);
+  encode(rank, bl);
+  encode(inc, bl);
+  encode((int32_t)state, bl);
+  encode(state_seq, bl);
+  encode(addr, bl, features);
+  encode(laggy_since, bl);
+  encode(standby_for_rank, bl);
+  encode(standby_for_name, bl);
+  encode(export_targets, bl);
+  encode(mds_features, bl);
+  encode(standby_for_fscid, bl);
+  encode(standby_replay, bl);
   ENCODE_FINISH(bl);
 }
 
 void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 {
   __u8 struct_v = 3;
-  ::encode(struct_v, bl);
-  ::encode(global_id, bl);
-  ::encode(name, bl);
-  ::encode(rank, bl);
-  ::encode(inc, bl);
-  ::encode((int32_t)state, bl);
-  ::encode(state_seq, bl);
-  ::encode(addr, bl, 0);
-  ::encode(laggy_since, bl);
-  ::encode(standby_for_rank, bl);
-  ::encode(standby_for_name, bl);
-  ::encode(export_targets, bl);
+  using ceph::encode;
+  encode(struct_v, bl);
+  encode(global_id, bl);
+  encode(name, bl);
+  encode(rank, bl);
+  encode(inc, bl);
+  encode((int32_t)state, bl);
+  encode(state_seq, bl);
+  encode(addr, bl, 0);
+  encode(laggy_since, bl);
+  encode(standby_for_rank, bl);
+  encode(standby_for_name, bl);
+  encode(export_targets, bl);
 }
 
 void MDSMap::mds_info_t::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(7, 4, 4, bl);
-  ::decode(global_id, bl);
-  ::decode(name, bl);
-  ::decode(rank, bl);
-  ::decode(inc, bl);
-  ::decode((int32_t&)(state), bl);
-  ::decode(state_seq, bl);
-  ::decode(addr, bl);
-  ::decode(laggy_since, bl);
-  ::decode(standby_for_rank, bl);
-  ::decode(standby_for_name, bl);
+  decode(global_id, bl);
+  decode(name, bl);
+  decode(rank, bl);
+  decode(inc, bl);
+  decode((int32_t&)(state), bl);
+  decode(state_seq, bl);
+  decode(addr, bl);
+  decode(laggy_since, bl);
+  decode(standby_for_rank, bl);
+  decode(standby_for_name, bl);
   if (struct_v >= 2)
-    ::decode(export_targets, bl);
+    decode(export_targets, bl);
   if (struct_v >= 5)
-    ::decode(mds_features, bl);
+    decode(mds_features, bl);
   if (struct_v >= 6) {
-    ::decode(standby_for_fscid, bl);
+    decode(standby_for_fscid, bl);
   }
   if (struct_v >= 7) {
-    ::decode(standby_replay, bl);
+    decode(standby_replay, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -533,107 +534,108 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     inc.insert(std::make_pair(rank, epoch));
   }
 
+  using ceph::encode;
   if ((features & CEPH_FEATURE_PGID64) == 0) {
     __u16 v = 2;
-    ::encode(v, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
+    encode(v, bl);
+    encode(epoch, bl);
+    encode(flags, bl);
+    encode(last_failure, bl);
+    encode(root, bl);
+    encode(session_timeout, bl);
+    encode(session_autoclose, bl);
+    encode(max_file_size, bl);
+    encode(max_mds, bl);
     __u32 n = mds_info.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
 	i != mds_info.end(); ++i) {
-      ::encode(i->first, bl);
-      ::encode(i->second, bl, features);
+      encode(i->first, bl);
+      encode(i->second, bl, features);
     }
     n = data_pools.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (const auto p: data_pools) {
       n = p;
-      ::encode(n, bl);
+      encode(n, bl);
     }
 
     int32_t m = cas_pool;
-    ::encode(m, bl);
+    encode(m, bl);
     return;
   } else if ((features & CEPH_FEATURE_MDSENC) == 0) {
     __u16 v = 3;
-    ::encode(v, bl);
-    ::encode(epoch, bl);
-    ::encode(flags, bl);
-    ::encode(last_failure, bl);
-    ::encode(root, bl);
-    ::encode(session_timeout, bl);
-    ::encode(session_autoclose, bl);
-    ::encode(max_file_size, bl);
-    ::encode(max_mds, bl);
+    encode(v, bl);
+    encode(epoch, bl);
+    encode(flags, bl);
+    encode(last_failure, bl);
+    encode(root, bl);
+    encode(session_timeout, bl);
+    encode(session_autoclose, bl);
+    encode(max_file_size, bl);
+    encode(max_mds, bl);
     __u32 n = mds_info.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (map<mds_gid_t, mds_info_t>::const_iterator i = mds_info.begin();
 	i != mds_info.end(); ++i) {
-      ::encode(i->first, bl);
-      ::encode(i->second, bl, features);
+      encode(i->first, bl);
+      encode(i->second, bl, features);
     }
-    ::encode(data_pools, bl);
-    ::encode(cas_pool, bl);
+    encode(data_pools, bl);
+    encode(cas_pool, bl);
 
     // kclient ignores everything from here
     __u16 ev = 5;
-    ::encode(ev, bl);
-    ::encode(compat, bl);
-    ::encode(metadata_pool, bl);
-    ::encode(created, bl);
-    ::encode(modified, bl);
-    ::encode(tableserver, bl);
-    ::encode(in, bl);
-    ::encode(inc, bl);
-    ::encode(up, bl);
-    ::encode(failed, bl);
-    ::encode(stopped, bl);
-    ::encode(last_failure_osd_epoch, bl);
+    encode(ev, bl);
+    encode(compat, bl);
+    encode(metadata_pool, bl);
+    encode(created, bl);
+    encode(modified, bl);
+    encode(tableserver, bl);
+    encode(in, bl);
+    encode(inc, bl);
+    encode(up, bl);
+    encode(failed, bl);
+    encode(stopped, bl);
+    encode(last_failure_osd_epoch, bl);
     return;
   }
 
   ENCODE_START(5, 4, bl);
-  ::encode(epoch, bl);
-  ::encode(flags, bl);
-  ::encode(last_failure, bl);
-  ::encode(root, bl);
-  ::encode(session_timeout, bl);
-  ::encode(session_autoclose, bl);
-  ::encode(max_file_size, bl);
-  ::encode(max_mds, bl);
-  ::encode(mds_info, bl, features);
-  ::encode(data_pools, bl);
-  ::encode(cas_pool, bl);
+  encode(epoch, bl);
+  encode(flags, bl);
+  encode(last_failure, bl);
+  encode(root, bl);
+  encode(session_timeout, bl);
+  encode(session_autoclose, bl);
+  encode(max_file_size, bl);
+  encode(max_mds, bl);
+  encode(mds_info, bl, features);
+  encode(data_pools, bl);
+  encode(cas_pool, bl);
 
   // kclient ignores everything from here
   __u16 ev = 12;
-  ::encode(ev, bl);
-  ::encode(compat, bl);
-  ::encode(metadata_pool, bl);
-  ::encode(created, bl);
-  ::encode(modified, bl);
-  ::encode(tableserver, bl);
-  ::encode(in, bl);
-  ::encode(inc, bl);
-  ::encode(up, bl);
-  ::encode(failed, bl);
-  ::encode(stopped, bl);
-  ::encode(last_failure_osd_epoch, bl);
-  ::encode(ever_allowed_features, bl);
-  ::encode(explicitly_allowed_features, bl);
-  ::encode(inline_data_enabled, bl);
-  ::encode(enabled, bl);
-  ::encode(fs_name, bl);
-  ::encode(damaged, bl);
-  ::encode(balancer, bl);
-  ::encode(standby_count_wanted, bl);
+  encode(ev, bl);
+  encode(compat, bl);
+  encode(metadata_pool, bl);
+  encode(created, bl);
+  encode(modified, bl);
+  encode(tableserver, bl);
+  encode(in, bl);
+  encode(inc, bl);
+  encode(up, bl);
+  encode(failed, bl);
+  encode(stopped, bl);
+  encode(last_failure_osd_epoch, bl);
+  encode(ever_allowed_features, bl);
+  encode(explicitly_allowed_features, bl);
+  encode(inline_data_enabled, bl);
+  encode(enabled, bl);
+  encode(fs_name, bl);
+  encode(damaged, bl);
+  encode(balancer, bl);
+  encode(standby_count_wanted, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -660,71 +662,71 @@ void MDSMap::decode(bufferlist::iterator& p)
 
   cached_up_features = 0;
   DECODE_START_LEGACY_COMPAT_LEN_16(5, 4, 4, p);
-  ::decode(epoch, p);
-  ::decode(flags, p);
-  ::decode(last_failure, p);
-  ::decode(root, p);
-  ::decode(session_timeout, p);
-  ::decode(session_autoclose, p);
-  ::decode(max_file_size, p);
-  ::decode(max_mds, p);
-  ::decode(mds_info, p);
+  decode(epoch, p);
+  decode(flags, p);
+  decode(last_failure, p);
+  decode(root, p);
+  decode(session_timeout, p);
+  decode(session_autoclose, p);
+  decode(max_file_size, p);
+  decode(max_mds, p);
+  decode(mds_info, p);
   if (struct_v < 3) {
     __u32 n;
-    ::decode(n, p);
+    decode(n, p);
     while (n--) {
       __u32 m;
-      ::decode(m, p);
+      decode(m, p);
       data_pools.push_back(m);
     }
     __s32 s;
-    ::decode(s, p);
+    decode(s, p);
     cas_pool = s;
   } else {
-    ::decode(data_pools, p);
-    ::decode(cas_pool, p);
+    decode(data_pools, p);
+    decode(cas_pool, p);
   }
 
   // kclient ignores everything from here
   __u16 ev = 1;
   if (struct_v >= 2)
-    ::decode(ev, p);
+    decode(ev, p);
   if (ev >= 3)
-    ::decode(compat, p);
+    decode(compat, p);
   else
     compat = get_mdsmap_compat_set_base();
   if (ev < 5) {
     __u32 n;
-    ::decode(n, p);
+    decode(n, p);
     metadata_pool = n;
   } else {
-    ::decode(metadata_pool, p);
+    decode(metadata_pool, p);
   }
-  ::decode(created, p);
-  ::decode(modified, p);
-  ::decode(tableserver, p);
-  ::decode(in, p);
-  ::decode(inc, p);
-  ::decode(up, p);
-  ::decode(failed, p);
-  ::decode(stopped, p);
+  decode(created, p);
+  decode(modified, p);
+  decode(tableserver, p);
+  decode(in, p);
+  decode(inc, p);
+  decode(up, p);
+  decode(failed, p);
+  decode(stopped, p);
   if (ev >= 4)
-    ::decode(last_failure_osd_epoch, p);
+    decode(last_failure_osd_epoch, p);
   if (ev >= 6) {
     if (ev < 10) {
       // previously this was a bool about snaps, not a flag map
       bool flag;
-      ::decode(flag, p);
+      decode(flag, p);
       ever_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
       ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS|CEPH_MDSMAP_ALLOW_DIRFRAGS;
-      ::decode(flag, p);
+      decode(flag, p);
       explicitly_allowed_features = flag ? CEPH_MDSMAP_ALLOW_SNAPS : 0;
       if (max_mds > 1) {
 	set_multimds_allowed();
       }
     } else {
-      ::decode(ever_allowed_features, p);
-      ::decode(explicitly_allowed_features, p);
+      decode(ever_allowed_features, p);
+      decode(explicitly_allowed_features, p);
     }
   } else {
     ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
@@ -734,12 +736,12 @@ void MDSMap::decode(bufferlist::iterator& p)
     }
   }
   if (ev >= 7)
-    ::decode(inline_data_enabled, p);
+    decode(inline_data_enabled, p);
 
   if (ev >= 8) {
     assert(struct_v >= 5);
-    ::decode(enabled, p);
-    ::decode(fs_name, p);
+    decode(enabled, p);
+    decode(fs_name, p);
   } else {
     if (epoch > 1) {
       // If an MDS has ever been started, epoch will be greater than 1,
@@ -753,15 +755,15 @@ void MDSMap::decode(bufferlist::iterator& p)
   }
 
   if (ev >= 9) {
-    ::decode(damaged, p);
+    decode(damaged, p);
   }
 
   if (ev >= 11) {
-    ::decode(balancer, p);
+    decode(balancer, p);
   }
 
   if (ev >= 12) {
-    ::decode(standby_count_wanted, p);
+    decode(standby_count_wanted, p);
   }
 
   DECODE_FINISH(p);
