@@ -40,7 +40,7 @@ class LZ4Compressor : public Compressor {
     unsigned num = src.get_num_buffers();
     uint32_t origin_len;
     int compressed_len;
-    ::encode((uint32_t)num, dst);
+    encode((uint32_t)num, dst);
     while (left) {
       origin_len = p.get_ptr_and_advance(left, &data);
       compressed_len = LZ4_compress_fast_continue(
@@ -50,8 +50,8 @@ class LZ4Compressor : public Compressor {
         return -1;
       pos += compressed_len;
       left -= origin_len;
-      ::encode(origin_len, dst);
-      ::encode((uint32_t)compressed_len, dst);
+      encode(origin_len, dst);
+      encode((uint32_t)compressed_len, dst);
     }
     assert(p.end());
 
@@ -69,12 +69,12 @@ class LZ4Compressor : public Compressor {
 		 bufferlist &dst) override {
     uint32_t count;
     std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
-    ::decode(count, p);
+    decode(count, p);
     compressed_pairs.resize(count);
     uint32_t total_origin = 0;
     for (unsigned i = 0; i < count; ++i) {
-      ::decode(compressed_pairs[i].first, p);
-      ::decode(compressed_pairs[i].second, p);
+      decode(compressed_pairs[i].first, p);
+      decode(compressed_pairs[i].second, p);
       total_origin += compressed_pairs[i].first;
     }
     compressed_len -= (sizeof(uint32_t) + sizeof(uint32_t) * count * 2);
