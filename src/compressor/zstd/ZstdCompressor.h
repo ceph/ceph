@@ -58,7 +58,7 @@ class ZstdCompressor : public Compressor {
     ZSTD_freeCStream(s);
 
     // prefix with decompressed length
-    ::encode((uint32_t)src.length(), dst);
+    encode((uint32_t)src.length(), dst);
     dst.append(outptr, 0, outbuf.pos);
     return 0;
   }
@@ -76,7 +76,7 @@ class ZstdCompressor : public Compressor {
     }
     compressed_len -= 4;
     uint32_t dst_len;
-    ::decode(dst_len, p);
+    decode(dst_len, p);
 
     bufferptr dstptr(dst_len);
     ZSTD_outBuffer_s outbuf;
