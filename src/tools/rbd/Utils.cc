@@ -69,7 +69,7 @@ int read_string(int fd, unsigned max, std::string *out) {
   bl.append(buf, 4);
   bufferlist::iterator p = bl.begin();
   uint32_t len;
-  ::decode(len, p);
+  decode(len, p);
   if (len > max)
     return -EINVAL;
 

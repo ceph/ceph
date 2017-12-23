@@ -68,7 +68,7 @@ public:
 
     librbd::journal::ClientData client_data(m_client_meta);
     bufferlist client_data_bl;
-    ::encode(client_data, client_data_bl);
+    encode(client_data, client_data_bl);
 
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
   }

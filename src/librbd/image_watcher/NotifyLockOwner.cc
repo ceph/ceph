@@ -76,7 +76,8 @@ void NotifyLockOwner::handle_notify(int r) {
     bufferlist::iterator iter = response.begin();
 
     ResponseMessage response_message;
-    ::decode(response_message, iter);
+    using ceph::decode;
+    decode(response_message, iter);
 
     r = response_message.result;
   } catch (const buffer::error &err) {

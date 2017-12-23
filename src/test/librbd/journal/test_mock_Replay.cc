@@ -292,7 +292,7 @@ public:
                     EventEntry &&event_entry, Context *on_ready,
                     Context *on_safe) {
     bufferlist bl;
-    ::encode(event_entry, bl);
+    encode(event_entry, bl);
 
     bufferlist::iterator it = bl.begin();
     when_process(mock_journal_replay, &it, on_ready, on_safe);
@@ -1812,7 +1812,7 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
 
   bufferlist bl;
   ENCODE_START(1, 1, bl);
-  ::encode(static_cast<uint32_t>(-1), bl);
+  encode(static_cast<uint32_t>(-1), bl);
   ENCODE_FINISH(bl);
 
   bufferlist::iterator it = bl.begin();

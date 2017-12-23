@@ -153,7 +153,7 @@ void PrepareRemoteImageRequest<I>::register_client() {
 
   librbd::journal::ClientData client_data{mirror_peer_client_meta};
   bufferlist client_data_bl;
-  ::encode(client_data, client_data_bl);
+  encode(client_data, client_data_bl);
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<
@@ -187,7 +187,7 @@ bool PrepareRemoteImageRequest<I>::decode_client_meta() {
   librbd::journal::ClientData client_data;
   bufferlist::iterator it = m_client.data.begin();
   try {
-    ::decode(client_data, it);
+    decode(client_data, it);
   } catch (const buffer::error &err) {
     derr << "failed to decode client meta data: " << err.what() << dendl;
     return false;

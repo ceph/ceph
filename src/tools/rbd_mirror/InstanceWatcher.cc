@@ -185,7 +185,7 @@ struct InstanceWatcher<I>::C_NotifyInstanceRequest : public Context {
         try {
           auto iter = bl.begin();
           NotifyAckPayload ack;
-          ::decode(ack, iter);
+          decode(ack, iter);
           if (ack.instance_id != instance_watcher->get_instance_id()) {
             derr << "C_NotifyInstanceRequest: " << this << " " << __func__
                  << ": ack instance_id (" << ack.instance_id << ") "
@@ -410,7 +410,7 @@ void InstanceWatcher<I>::notify_image_acquire(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
+    encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
              bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -434,7 +434,7 @@ void InstanceWatcher<I>::notify_image_release(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
+    encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
              bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -458,7 +458,7 @@ void InstanceWatcher<I>::notify_peer_image_removed(
   } else {
     uint64_t request_id = ++m_request_seq;
     bufferlist bl;
-    ::encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
+    encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
                                                    peer_mirror_uuid}}, bl);
     auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
                                            std::move(bl), on_notify_ack);
@@ -478,7 +478,7 @@ void InstanceWatcher<I>::notify_sync_request(const std::string &sync_id,
   uint64_t request_id = ++m_request_seq;
 
   bufferlist bl;
-  ::encode(NotifyMessage{SyncRequestPayload{request_id, sync_id}}, bl);
+  encode(NotifyMessage{SyncRequestPayload{request_id, sync_id}}, bl);
 
   auto sync_ctx = new C_SyncRequest(this, sync_id, on_sync_start);
   sync_ctx->req = new C_NotifyInstanceRequest(this, "", request_id,
@@ -520,7 +520,7 @@ void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
   uint64_t request_id = ++m_request_seq;
 
   bufferlist bl;
-  ::encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
+  encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
 
   auto ctx = new FunctionContext(
     [this, sync_id] (int r) {
@@ -1092,7 +1092,7 @@ void InstanceWatcher<I>::complete_request(const std::string &instance_id,
     m_requests.erase(it);
   }
 
-  ::encode(NotifyAckPayload(instance_id, request_id, r), on_notify_ack->out);
+  encode(NotifyAckPayload(instance_id, request_id, r), on_notify_ack->out);
   on_notify_ack->complete(0);
 }
 
@@ -1107,7 +1107,7 @@ void InstanceWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   NotifyMessage notify_message;
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(notify_message, iter);
+    decode(notify_message, iter);
   } catch (const buffer::error &err) {
     derr << "error decoding image notification: " << err.what() << dendl;
     ctx->complete(0);
