@@ -65,18 +65,20 @@ void SnapServer::reset_state()
 
 void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 {
+  using ceph::decode;
+  using ceph::encode;
   bufferlist::iterator p = bl.begin();
   __u32 op;
-  ::decode(op, p);
+  decode(op, p);
 
   switch (op) {
   case TABLE_OP_CREATE:
     {
       SnapInfo info;
-      ::decode(info.ino, p);
+      decode(info.ino, p);
       if (!p.end()) {
-	::decode(info.name, p);
-	::decode(info.stamp, p);
+	decode(info.name, p);
+	decode(info.stamp, p);
 	info.snapid = ++last_snap;
 	pending_update[version] = info;
 	dout(10) << "prepare v" << version << " create " << info << dendl;
@@ -85,7 +87,7 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 	dout(10) << "prepare v" << version << " noop" << dendl;
       }
       bl.clear();
-      ::encode(last_snap, bl);
+      encode(last_snap, bl);
     }
     break;
 
@@ -93,8 +95,8 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
     {
       inodeno_t ino;
       snapid_t snapid;
-      ::decode(ino, p);    // not used, currently.
-      ::decode(snapid, p);
+      decode(ino, p);    // not used, currently.
+      decode(snapid, p);
 
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
@@ -103,17 +105,17 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       dout(10) << "prepare v" << version << " destroy " << snapid << " seq " << last_snap << dendl;
 
       bl.clear();
-      ::encode(last_snap, bl);
+      encode(last_snap, bl);
     }
     break;
 
   case TABLE_OP_UPDATE:
     {
       SnapInfo info;
-      ::decode(info.ino, p);
-      ::decode(info.snapid, p);
-      ::decode(info.name, p);
-      ::decode(info.stamp, p);
+      decode(info.ino, p);
+      decode(info.snapid, p);
+      decode(info.name, p);
+      decode(info.stamp, p);
 
       // bump last_snap... we use it as a version value on the snaprealm.
       ++last_snap;
@@ -132,22 +134,23 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
 
 void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
 {
+  using ceph::encode;
   auto p = pending_update.find(tid);
   if (p != pending_update.end()) {
     if (pbl && !snaps.count(p->second.snapid)) // create
-      ::encode(p->second.snapid, *pbl);
+      encode(p->second.snapid, *pbl);
     return;
   }
   auto q = pending_destroy.find(tid);
   if (q != pending_destroy.end()) {
     if (pbl)
-      ::encode(q->second.second, *pbl);
+      encode(q->second.second, *pbl);
     return;
   }
   auto r = pending_noop.find(tid);
   if (r != pending_noop.end()) {
     if (pbl)
-      ::encode(last_snap, *pbl);
+      encode(last_snap, *pbl);
     return;
   }
   assert (0 == "tid not found");
@@ -224,9 +227,10 @@ void SnapServer::_rollback(version_t tid)
 
 void SnapServer::_server_update(bufferlist& bl)
 {
+  using ceph::decode;
   bufferlist::iterator p = bl.begin();
   map<int, vector<snapid_t> > purge;
-  ::decode(purge, p);
+  decode(purge, p);
 
   dout(7) << "_server_update purged " << purge << dendl;
   for (map<int, vector<snapid_t> >::iterator p = purge.begin();
@@ -285,7 +289,8 @@ void SnapServer::check_osd_map(bool force)
   if (!all_purged.empty()) {
     // prepare to remove from need_to_purge list
     bufferlist bl;
-    ::encode(all_purged, bl);
+    using ceph::encode;
+    encode(all_purged, bl);
     do_server_update(bl);
   }
 

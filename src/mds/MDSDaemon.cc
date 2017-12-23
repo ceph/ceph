@@ -1354,7 +1354,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
       bufferlist::iterator p = caps_info.caps.begin();
       string auth_cap_str;
       try {
-        ::decode(auth_cap_str, p);
+        decode(auth_cap_str, p);
 
         dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
         std::ostringstream errstr;
