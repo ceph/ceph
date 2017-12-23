@@ -208,8 +208,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
 
   void expect_copyup(MockCopyupRequest& mock_copyup_request, int r) {
     EXPECT_CALL(mock_copyup_request, send())
-      .WillOnce(Invoke([&mock_copyup_request, r]() {
-                }));
+      .WillOnce(Invoke([]() {}));
   }
 
   void expect_copyup(MockCopyupRequest& mock_copyup_request,
