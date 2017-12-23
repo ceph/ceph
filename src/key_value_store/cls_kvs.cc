@@ -72,7 +72,7 @@ static int get_idata_from_key_op(cls_method_context_t hctx,
   idata_from_key_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     CLS_LOG(20, "error decoding idata_from_key_args.");
     return -EINVAL;
@@ -81,7 +81,7 @@ static int get_idata_from_key_op(cls_method_context_t hctx,
   if (r < 0) {
     return r;
   } else {
-    ::encode(op, *out);
+    encode(op, *out);
     return 0;
   }
 }
@@ -125,7 +125,7 @@ static int get_next_idata_op(cls_method_context_t hctx,
   idata_from_idata_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -187,7 +187,7 @@ static int get_prev_idata_op(cls_method_context_t hctx,
   idata_from_idata_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -231,7 +231,7 @@ static int read_many_op(cls_method_context_t hctx, bufferlist *in,
   map<string, bufferlist> outmap;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error & err) {
     return -EINVAL;
   }
@@ -318,7 +318,7 @@ static int assert_size_in_bound_op(cls_method_context_t hctx,
   assert_size_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -414,7 +414,7 @@ static int omap_insert_op(cls_method_context_t hctx,
   omap_set_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -468,7 +468,7 @@ static int create_with_omap_op(cls_method_context_t hctx,
   map<string, bufferlist> omap;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(omap, it);
+    decode(omap, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -559,7 +559,7 @@ static int omap_remove_op(cls_method_context_t hctx,
   omap_rm_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
@@ -623,7 +623,7 @@ static int maybe_read_for_balance_op(cls_method_context_t hctx,
   rebalance_args op;
   bufferlist::iterator it = in->begin();
   try {
-    ::decode(op, it);
+    decode(op, it);
   } catch (buffer::error& err) {
     return -EINVAL;
   }
