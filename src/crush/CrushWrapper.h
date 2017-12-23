@@ -39,17 +39,19 @@ namespace CrushTreeDumper {
 
 WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
 
-inline static void encode(const crush_rule_step &s, bufferlist &bl)
+inline void encode(const crush_rule_step &s, bufferlist &bl)
 {
-  ::encode(s.op, bl);
-  ::encode(s.arg1, bl);
-  ::encode(s.arg2, bl);
+  using ceph::encode;
+  encode(s.op, bl);
+  encode(s.arg1, bl);
+  encode(s.arg2, bl);
 }
-inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
+inline void decode(crush_rule_step &s, bufferlist::iterator &p)
 {
-  ::decode(s.op, p);
-  ::decode(s.arg1, p);
-  ::decode(s.arg2, p);
+  using ceph::decode;
+  decode(s.op, p);
+  decode(s.arg1, p);
+  decode(s.arg2, p);
 }
 
 class CrushWrapper {
