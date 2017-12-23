@@ -186,15 +186,17 @@ void ResizePayload::dump(Formatter *f) const {
 }
 
 void SnapPayloadBase::encode(bufferlist &bl) const {
+  using ceph::encode;
   ::encode(snap_name, bl);
-  ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void SnapPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
+  using ceph::decode;
   ::decode(snap_name, iter);
   if (version >= 6) {
     cls::rbd::SnapshotNamespaceOnDisk sn;
-    ::decode(sn, iter);
+    decode(sn, iter);
     snap_namespace = sn.snapshot_namespace;
   }
 }
@@ -210,10 +212,11 @@ void SnapCreatePayload::encode(bufferlist &bl) const {
 }
 
 void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
+  using ceph::decode;
   SnapPayloadBase::decode(version, iter);
   if (version == 5) {
     cls::rbd::SnapshotNamespaceOnDisk sn;
-    ::decode(sn, iter);
+    decode(sn, iter);
     snap_namespace = sn.snapshot_namespace;
   }
 }

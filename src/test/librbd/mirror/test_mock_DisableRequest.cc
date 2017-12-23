@@ -117,8 +117,9 @@ public:
   void expect_get_mirror_image(MockTestImageCtx &mock_image_ctx,
                                const cls::rbd::MirrorImage &mirror_image,
                                int r) {
+    using ceph::encode;
     bufferlist bl;
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),

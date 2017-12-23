@@ -37,13 +37,15 @@ enum GroupImageLinkState {
 inline void encode(const GroupImageLinkState &state, bufferlist& bl,
 		   uint64_t features=0)
 {
-  ::encode(static_cast<uint8_t>(state), bl);
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
 }
 
 inline void decode(GroupImageLinkState &state, bufferlist::iterator& it)
 {
   uint8_t int_state;
-  ::decode(int_state, it);
+  using ceph::decode;
+  decode(int_state, it);
   state = static_cast<GroupImageLinkState>(int_state);
 }
 
@@ -121,13 +123,15 @@ enum MirrorImageStatusState {
 inline void encode(const MirrorImageStatusState &state, bufferlist& bl,
 		   uint64_t features=0)
 {
-  ::encode(static_cast<uint8_t>(state), bl);
+  using ceph::encode;
+  encode(static_cast<uint8_t>(state), bl);
 }
 
 inline void decode(MirrorImageStatusState &state, bufferlist::iterator& it)
 {
   uint8_t int_state;
-  ::decode(int_state, it);
+  using ceph::decode;
+  decode(int_state, it);
   state = static_cast<MirrorImageStatusState>(int_state);
 }
 
@@ -407,13 +411,15 @@ enum TrashImageSource {
 inline void encode(const TrashImageSource &source, bufferlist& bl,
 		   uint64_t features=0)
 {
-  ::encode(static_cast<uint8_t>(source), bl);
+  using ceph::encode;
+  encode(static_cast<uint8_t>(source), bl);
 }
 
 inline void decode(TrashImageSource &source, bufferlist::iterator& it)
 {
   uint8_t int_source;
-  ::decode(int_source, it);
+  using ceph::decode;
+  decode(int_source, it);
   source = static_cast<TrashImageSource>(int_source);
 }
 
@@ -475,8 +481,5 @@ WRITE_CLASS_ENCODER(MirrorImageMap);
 
 } // namespace rbd
 } // namespace cls
-
-using cls::rbd::encode;
-using cls::rbd::decode;
 
 #endif // CEPH_CLS_RBD_TYPES_H

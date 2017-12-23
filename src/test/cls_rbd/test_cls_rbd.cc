@@ -2147,7 +2147,7 @@ TEST_F(TestClsRbd, group_image_clean) {
 
   cls::rbd::GroupImageLinkState ref_state;
   bufferlist::iterator it = vals[image_key].begin();
-  ::decode(ref_state, it);
+  decode(ref_state, it);
   ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED, ref_state);
 }
 
@@ -2171,7 +2171,7 @@ TEST_F(TestClsRbd, image_add_group) {
 
   cls::rbd::GroupSpec val_spec;
   bufferlist::iterator it = vals[RBD_GROUP_REF].begin();
-  ::decode(val_spec, it);
+  decode(val_spec, it);
 
   ASSERT_EQ(group_id, val_spec.group_id);
   ASSERT_EQ(pool_id, val_spec.pool_id);

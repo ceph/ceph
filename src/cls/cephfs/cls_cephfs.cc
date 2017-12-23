@@ -38,7 +38,7 @@ std::ostream &operator<<(std::ostream &out, const ObjCeiling &in)
  * If the xattr is missing, then it is set to the input integer.
  *
  * @param xattr_name: name of xattr to compare against and set
- * @param input_val: candidate new value, of ::encode()'able type
+ * @param input_val: candidate new value, of encode()'able type
  * @returns 0 on success (irrespective of whether our new value
  *          was used) else an error code
  */
@@ -56,7 +56,7 @@ static int set_if_greater(cls_method_context_t hctx,
     bufferlist::iterator existing_p = existing_val_bl.begin();
     try {
       A existing_val;
-      ::decode(existing_val, existing_p);
+      decode(existing_val, existing_p);
       if (!existing_p.end()) {
         // Trailing junk?  Consider it invalid and overwrite
         set_val = true;
@@ -75,7 +75,7 @@ static int set_if_greater(cls_method_context_t hctx,
   // Conditionally set the new xattr
   if (set_val) {
     bufferlist set_bl;
-    ::encode(input_val, set_bl);
+    encode(input_val, set_bl);
     return cls_cxx_setxattr(hctx, xattr_name.c_str(), &set_bl);
   } else {
     return 0;
@@ -169,7 +169,7 @@ bool PGLSCephFSFilter::filter(const hobject_t &obj,
     std::string tag_ondisk;
     bufferlist::iterator q = xattr_data.begin();
     try {
-      ::decode(tag_ondisk, q);
+      decode(tag_ondisk, q);
       if (tag_ondisk == scrub_tag)
 	return false;
     } catch (const buffer::error &err) {
