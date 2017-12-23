@@ -53,8 +53,8 @@ static string make_key(const string &prefix, const string &value)
 
 void MemDB::_encode(mdb_iter_t iter, bufferlist &bl)
 {
-  ::encode(iter->first, bl);
-  ::encode(iter->second, bl);
+  encode(iter->first, bl);
+  encode(iter->second, bl);
 }
 
 std::string MemDB::_get_data_fn()
