@@ -387,19 +387,21 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
 
 void CryptoKey::encode(bufferlist& bl) const
 {
-  ::encode(type, bl);
-  ::encode(created, bl);
+  using ceph::encode;
+  encode(type, bl);
+  encode(created, bl);
   __u16 len = secret.length();
-  ::encode(len, bl);
+  encode(len, bl);
   bl.append(secret);
 }
 
 void CryptoKey::decode(bufferlist::iterator& bl)
 {
-  ::decode(type, bl);
-  ::decode(created, bl);
+  using ceph::decode;
+  decode(type, bl);
+  decode(created, bl);
   __u16 len;
-  ::decode(len, bl);
+  decode(len, bl);
   bufferptr tmp;
   bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
