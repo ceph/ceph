@@ -14,7 +14,7 @@ CLS_NAME(user)
 static int write_entry(cls_method_context_t hctx, const string& key, const cls_user_bucket_entry& entry)
 {
   bufferlist bl;
-  ::encode(entry, bl);
+  encode(entry, bl);
 
   int ret = cls_cxx_map_set_val(hctx, key, &bl);
   if (ret < 0)
@@ -55,7 +55,7 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   }
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(entry, iter);
+    decode(entry, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
     return -EIO;
@@ -78,7 +78,7 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
   }
 
   try {
-    ::decode(*header, bl);
+    decode(*header, bl);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: failed to decode user header");
     return -EIO;
@@ -114,7 +114,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
   cls_user_set_buckets_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -179,7 +179,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
   if (header.last_stats_update < op.time)
     header.last_stats_update = op.time;
 
-  ::encode(header, bl);
+  encode(header, bl);
   
   ret = cls_cxx_map_write_header(hctx, &bl);
   if (ret < 0)
@@ -194,7 +194,7 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 
   cls_user_complete_stats_sync_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -212,7 +212,7 @@ static int cls_user_complete_stats_sync(cls_method_context_t hctx, bufferlist *i
 
   bufferlist bl;
 
-  ::encode(header, bl);
+  encode(header, bl);
 
   ret = cls_cxx_map_write_header(hctx, &bl);
   if (ret < 0)
@@ -227,7 +227,7 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
 
   cls_user_remove_bucket_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_add_op(): failed to decode op");
     return -EINVAL;
@@ -273,7 +273,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
 
   cls_user_list_buckets_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_list_op(): failed to decode op");
     return -EINVAL;
@@ -320,7 +320,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     bufferlist::iterator biter = bl.begin();
     try {
       cls_user_bucket_entry e;
-      ::decode(e, biter);
+      decode(e, biter);
       entries.push_back(e);
     } catch (buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_user_list: could not decode entry, index=%s", index.c_str());
@@ -331,7 +331,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
     ret.marker = marker;
   }
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -342,7 +342,7 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
 
   cls_user_get_header_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_user_get_header_op(): failed to decode op");
     return -EINVAL;
@@ -354,7 +354,7 @@ static int cls_user_get_header(cls_method_context_t hctx, bufferlist *in, buffer
   if (ret < 0)
     return ret;
 
-  ::encode(op_ret, *out);
+  encode(op_ret, *out);
 
   return 0;
 }

@@ -16,12 +16,12 @@ namespace librbd {
     void get_initial_metadata_start(librados::ObjectReadOperation *op) {
       bufferlist bl, empty_bl, features_bl;
       snapid_t snap = CEPH_NOSNAP;
-      ::encode(snap, bl);
+      encode(snap, bl);
       op->exec("rbd", "get_size", bl);
       op->exec("rbd", "get_object_prefix", empty_bl);
 
-      ::encode(snap, features_bl);
-      ::encode(true, features_bl);
+      encode(snap, features_bl);
+      encode(true, features_bl);
       op->exec("rbd", "get_features", features_bl);
     }
 
@@ -33,13 +33,13 @@ namespace librbd {
 	uint64_t size;
 	uint64_t incompatible_features;
 	// get_size
-	::decode(*order, *it);
-	::decode(size, *it);
+	decode(*order, *it);
+	decode(size, *it);
 	// get_object_prefix
-	::decode(*object_prefix, *it);
+	decode(*object_prefix, *it);
 	// get_features
-	::decode(*features, *it);
-	::decode(incompatible_features, *it);
+	decode(*features, *it);
+	decode(incompatible_features, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -67,19 +67,19 @@ namespace librbd {
                                     bool read_only) {
       snapid_t snap = CEPH_NOSNAP;
       bufferlist size_bl;
-      ::encode(snap, size_bl);
+      encode(snap, size_bl);
       op->exec("rbd", "get_size", size_bl);
 
       bufferlist features_bl;
-      ::encode(snap, features_bl);
-      ::encode(read_only, features_bl);
+      encode(snap, features_bl);
+      encode(read_only, features_bl);
       op->exec("rbd", "get_features", features_bl);
 
       bufferlist empty_bl;
       op->exec("rbd", "get_snapcontext", empty_bl);
 
       bufferlist parent_bl;
-      ::encode(snap, parent_bl);
+      encode(snap, parent_bl);
       op->exec("rbd", "get_parent", parent_bl);
 
       rados::cls::lock::get_lock_info_start(op, RBD_LOCK_NAME);
@@ -103,18 +103,18 @@ namespace librbd {
       try {
 	uint8_t order;
 	// get_size
-	::decode(order, *it);
-	::decode(*size, *it);
+	decode(order, *it);
+	decode(*size, *it);
 	// get_features
-	::decode(*features, *it);
-	::decode(*incompatible_features, *it);
+	decode(*features, *it);
+	decode(*incompatible_features, *it);
 	// get_snapcontext
-	::decode(*snapc, *it);
+	decode(*snapc, *it);
 	// get_parent
-	::decode(parent->spec.pool_id, *it);
-	::decode(parent->spec.image_id, *it);
-	::decode(parent->spec.snap_id, *it);
-	::decode(parent->overlap, *it);
+	decode(parent->spec.pool_id, *it);
+	decode(parent->spec.image_id, *it);
+	decode(parent->spec.snap_id, *it);
+	decode(parent->overlap, *it);
 
 	// get_lock_info
 	ClsLockType lock_type = LOCK_NONE;
@@ -163,11 +163,11 @@ namespace librbd {
                       const std::string &object_prefix, int64_t data_pool_id)
     {
       bufferlist bl;
-      ::encode(size, bl);
-      ::encode(order, bl);
-      ::encode(features, bl);
-      ::encode(object_prefix, bl);
-      ::encode(data_pool_id, bl);
+      encode(size, bl);
+      encode(order, bl);
+      encode(features, bl);
+      encode(object_prefix, bl);
+      encode(data_pool_id, bl);
 
       op->exec("rbd", "create", bl);
     }
@@ -186,7 +186,7 @@ namespace librbd {
 		     snapid_t snap_id, uint64_t *features)
     {
       bufferlist inbl, outbl;
-      ::encode(snap_id, inbl);
+      encode(snap_id, inbl);
 
       int r = ioctx->exec(oid, "rbd", "get_features", inbl, outbl);
       if (r < 0)
@@ -194,7 +194,7 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = outbl.begin();
-	::decode(*features, iter);
+	decode(*features, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -206,8 +206,8 @@ namespace librbd {
                       uint64_t mask)
     {
       bufferlist bl;
-      ::encode(features, bl);
-      ::encode(mask, bl);
+      encode(features, bl);
+      encode(mask, bl);
 
       op->exec("rbd", "set_features", bl);
     }
@@ -231,7 +231,7 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = outbl.begin();
-	::decode(*object_prefix, iter);
+	decode(*object_prefix, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -246,7 +246,7 @@ namespace librbd {
 
     int get_data_pool_finish(bufferlist::iterator *it, int64_t *data_pool_id) {
       try {
-	::decode(*data_pool_id, *it);
+	decode(*data_pool_id, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -272,7 +272,7 @@ namespace librbd {
 		 snapid_t snap_id, uint64_t *size, uint8_t *order)
     {
       bufferlist inbl, outbl;
-      ::encode(snap_id, inbl);
+      encode(snap_id, inbl);
 
       int r = ioctx->exec(oid, "rbd", "get_size", inbl, outbl);
       if (r < 0)
@@ -280,8 +280,8 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = outbl.begin();
-	::decode(*order, iter);
-	::decode(*size, iter);
+	decode(*order, iter);
+	decode(*size, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -300,7 +300,7 @@ namespace librbd {
     void set_size(librados::ObjectWriteOperation *op, uint64_t size)
     {
       bufferlist bl;
-      ::encode(size, bl);
+      encode(size, bl);
       op->exec("rbd", "set_size", bl);
     }
 
@@ -309,7 +309,7 @@ namespace librbd {
 		   uint64_t *parent_overlap)
     {
       bufferlist inbl, outbl;
-      ::encode(snap_id, inbl);
+      encode(snap_id, inbl);
 
       int r = ioctx->exec(oid, "rbd", "get_parent", inbl, outbl);
       if (r < 0)
@@ -317,10 +317,10 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = outbl.begin();
-	::decode(pspec->pool_id, iter);
-	::decode(pspec->image_id, iter);
-	::decode(pspec->snap_id, iter);
-	::decode(*parent_overlap, iter);
+	decode(pspec->pool_id, iter);
+	decode(pspec->image_id, iter);
+	decode(pspec->snap_id, iter);
+	decode(*parent_overlap, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -339,10 +339,10 @@ namespace librbd {
     void set_parent(librados::ObjectWriteOperation *op,
                     const ParentSpec &pspec, uint64_t parent_overlap) {
       bufferlist in_bl;
-      ::encode(pspec.pool_id, in_bl);
-      ::encode(pspec.image_id, in_bl);
-      ::encode(pspec.snap_id, in_bl);
-      ::encode(parent_overlap, in_bl);
+      encode(pspec.pool_id, in_bl);
+      encode(pspec.image_id, in_bl);
+      encode(pspec.snap_id, in_bl);
+      encode(parent_overlap, in_bl);
 
       op->exec("rbd", "set_parent", in_bl);
     }
@@ -350,12 +350,12 @@ namespace librbd {
     void get_flags_start(librados::ObjectReadOperation *op,
                          const std::vector<snapid_t> &snap_ids) {
       bufferlist in_bl;
-      ::encode(static_cast<snapid_t>(CEPH_NOSNAP), in_bl);
+      encode(static_cast<snapid_t>(CEPH_NOSNAP), in_bl);
 
       op->exec("rbd", "get_flags", in_bl);
       for (size_t i = 0; i < snap_ids.size(); ++i) {
         bufferlist snap_bl;
-        ::encode(snap_ids[i], snap_bl);
+        encode(snap_ids[i], snap_bl);
         op->exec("rbd", "get_flags", snap_bl);
       }
 
@@ -366,9 +366,9 @@ namespace librbd {
                          std::vector<uint64_t> *snap_flags) {
       snap_flags->resize(snap_ids.size());
       try {
-        ::decode(*flags, *it);
+        decode(*flags, *it);
 	for (size_t i = 0; i < snap_flags->size(); ++i) {
-	  ::decode((*snap_flags)[i], *it);
+	  decode((*snap_flags)[i], *it);
 	}
       } catch (const buffer::error &err) {
         return -EBADMSG;
@@ -397,9 +397,9 @@ namespace librbd {
                    uint64_t flags, uint64_t mask)
     {
       bufferlist inbl;
-      ::encode(flags, inbl);
-      ::encode(mask, inbl);
-      ::encode(snap_id, inbl);
+      encode(flags, inbl);
+      encode(mask, inbl);
+      encode(snap_id, inbl);
       op->exec("rbd", "set_flags", inbl);
     }
 
@@ -428,10 +428,10 @@ namespace librbd {
 		  const ParentSpec pspec, const std::string &c_imageid)
     {
       bufferlist in;
-      ::encode(pspec.pool_id, in);
-      ::encode(pspec.image_id, in);
-      ::encode(pspec.snap_id, in);
-      ::encode(c_imageid, in);
+      encode(pspec.pool_id, in);
+      encode(pspec.image_id, in);
+      encode(pspec.snap_id, in);
+      encode(c_imageid, in);
 
       op->exec("rbd", "add_child", in);
     }
@@ -440,10 +440,10 @@ namespace librbd {
 		      const ParentSpec &pspec, const std::string &c_imageid)
     {
       bufferlist in;
-      ::encode(pspec.pool_id, in);
-      ::encode(pspec.image_id, in);
-      ::encode(pspec.snap_id, in);
-      ::encode(c_imageid, in);
+      encode(pspec.pool_id, in);
+      encode(pspec.image_id, in);
+      encode(pspec.snap_id, in);
+      encode(c_imageid, in);
       op->exec("rbd", "remove_child", in);
     }
 
@@ -458,16 +458,16 @@ namespace librbd {
     void get_children_start(librados::ObjectReadOperation *op,
                             const ParentSpec &pspec) {
       bufferlist in_bl;
-      ::encode(pspec.pool_id, in_bl);
-      ::encode(pspec.image_id, in_bl);
-      ::encode(pspec.snap_id, in_bl);
+      encode(pspec.pool_id, in_bl);
+      encode(pspec.image_id, in_bl);
+      encode(pspec.snap_id, in_bl);
       op->exec("rbd", "get_children", in_bl);
     }
 
     int get_children_finish(bufferlist::iterator *it,
                             std::set<std::string>* children) {
       try {
-        ::decode(*children, *it);
+        decode(*children, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -494,16 +494,16 @@ namespace librbd {
 		      const std::string &snap_name, const cls::rbd::SnapshotNamespace &snap_namespace)
     {
       bufferlist bl;
-      ::encode(snap_name, bl);
-      ::encode(snap_id, bl);
-      ::encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+      encode(snap_name, bl);
+      encode(snap_id, bl);
+      encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
       op->exec("rbd", "snapshot_add", bl);
     }
 
     void snapshot_remove(librados::ObjectWriteOperation *op, snapid_t snap_id)
     {
       bufferlist bl;
-      ::encode(snap_id, bl);
+      encode(snap_id, bl);
       op->exec("rbd", "snapshot_remove", bl);
     }
 
@@ -512,8 +512,8 @@ namespace librbd {
 		         const std::string &dst_name)
     {
       bufferlist bl;
-      ::encode(src_snap_id, bl);
-      ::encode(dst_name, bl);
+      encode(src_snap_id, bl);
+      encode(dst_name, bl);
       op->exec("rbd", "snapshot_rename", bl);
     }
 
@@ -527,7 +527,7 @@ namespace librbd {
                                ::SnapContext *snapc)
     {
       try {
-	::decode(*snapc, *it);
+	decode(*snapc, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -557,13 +557,13 @@ namespace librbd {
                              const std::vector<snapid_t> &ids) {
       for (auto snap_id : ids) {
         bufferlist bl1, bl2, bl3, bl4;
-        ::encode(snap_id, bl1);
+        encode(snap_id, bl1);
         op->exec("rbd", "get_snapshot_name", bl1);
-        ::encode(snap_id, bl2);
+        encode(snap_id, bl2);
         op->exec("rbd", "get_size", bl2);
-        ::encode(snap_id, bl3);
+        encode(snap_id, bl3);
         op->exec("rbd", "get_parent", bl3);
-        ::encode(snap_id, bl4);
+        encode(snap_id, bl4);
         op->exec("rbd", "get_protection_status", bl4);
       }
     }
@@ -583,17 +583,17 @@ namespace librbd {
 	for (size_t i = 0; i < names->size(); ++i) {
 	  uint8_t order;
 	  // get_snapshot_name
-	  ::decode((*names)[i], *it);
+	  decode((*names)[i], *it);
 	  // get_size
-	  ::decode(order, *it);
-	  ::decode((*sizes)[i], *it);
+	  decode(order, *it);
+	  decode((*sizes)[i], *it);
 	  // get_parent
-	  ::decode((*parents)[i].spec.pool_id, *it);
-	  ::decode((*parents)[i].spec.image_id, *it);
-	  ::decode((*parents)[i].spec.snap_id, *it);
-	  ::decode((*parents)[i].overlap, *it);
+	  decode((*parents)[i].spec.pool_id, *it);
+	  decode((*parents)[i].spec.image_id, *it);
+	  decode((*parents)[i].spec.snap_id, *it);
+	  decode((*parents)[i].overlap, *it);
 	  // get_protection_status
-	  ::decode((*protection_statuses)[i], *it);
+	  decode((*protection_statuses)[i], *it);
 	}
       } catch (const buffer::error &err) {
         return -EBADMSG;
@@ -627,7 +627,7 @@ namespace librbd {
     {
       for (auto snap_id : ids) {
         bufferlist bl;
-        ::encode(snap_id, bl);
+        encode(snap_id, bl);
         op->exec("rbd", "get_snapshot_timestamp", bl);
       }
     }
@@ -640,7 +640,7 @@ namespace librbd {
       try {
         for (size_t i = 0; i < timestamps->size(); ++i) {
           utime_t t;
-          ::decode(t, *it);
+          decode(t, *it);
           (*timestamps)[i] = t;
         }
       } catch (const buffer::error &err) {
@@ -671,7 +671,7 @@ namespace librbd {
     {
       for (auto snap_id : ids) {
         bufferlist bl;
-        ::encode(snap_id, bl);
+        encode(snap_id, bl);
         op->exec("rbd", "get_snapshot_namespace", bl);
       }
     }
@@ -684,7 +684,7 @@ namespace librbd {
       try {
 	for (size_t i = 0; i < namespaces->size(); ++i) {
 	  cls::rbd::SnapshotNamespaceOnDisk e;
-	  ::decode(e, *it);
+	  decode(e, *it);
 	  (*namespaces)[i] = e.snapshot_namespace;
 	}
       } catch (const buffer::error &err) {
@@ -714,8 +714,8 @@ namespace librbd {
 			  snapid_t snap_id, const std::string &snap_name)
     {
       bufferlist bl;
-      ::encode(snap_name, bl);
-      ::encode(snap_id, bl);
+      encode(snap_name, bl);
+      encode(snap_id, bl);
       op->exec("rbd", "snap_add", bl);
     }
 
@@ -723,7 +723,7 @@ namespace librbd {
 			     const std::string &snap_name)
     {
       bufferlist bl;
-      ::encode(snap_name, bl);
+      encode(snap_name, bl);
       op->exec("rbd", "snap_remove", bl);
     }
 
@@ -731,8 +731,8 @@ namespace librbd {
 			     snapid_t src_snap_id, const std::string &dst_name)
     {
       bufferlist bl;
-      ::encode(src_snap_id, bl);
-      ::encode(dst_name, bl);
+      encode(src_snap_id, bl);
+      encode(dst_name, bl);
       op->exec("rbd", "snap_rename", bl);
     }
 
@@ -747,16 +747,16 @@ namespace librbd {
                                  ::SnapContext *snapc) {
       try {
 	uint32_t num_snaps;
-	::decode(snapc->seq, *it);
-	::decode(num_snaps, *it);
+	decode(snapc->seq, *it);
+	decode(num_snaps, *it);
 
 	names->resize(num_snaps);
 	sizes->resize(num_snaps);
 	snapc->snaps.resize(num_snaps);
 	for (uint32_t i = 0; i < num_snaps; ++i) {
-	  ::decode(snapc->snaps[i], *it);
-	  ::decode((*sizes)[i], *it);
-	  ::decode((*names)[i], *it);
+	  decode(snapc->snaps[i], *it);
+	  decode((*sizes)[i], *it);
+	  decode((*names)[i], *it);
 	}
       } catch (const buffer::error &err) {
         return -EBADMSG;
@@ -790,7 +790,7 @@ namespace librbd {
     int get_all_features_finish(bufferlist::iterator *it,
                                 uint64_t *all_features) {
       try {
-	::decode(*all_features, *it);
+	decode(*all_features, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -822,7 +822,7 @@ namespace librbd {
 			      snapid_t snap_id, uint8_t *protection_status)
     {
       bufferlist in, out;
-      ::encode(snap_id.val, in);
+      encode(snap_id.val, in);
 
       int r = ioctx->exec(oid, "rbd", "get_protection_status", in, out);
       if (r < 0)
@@ -830,7 +830,7 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = out.begin();
-	::decode(*protection_status, iter);
+	decode(*protection_status, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -851,8 +851,8 @@ namespace librbd {
                                snapid_t snap_id, uint8_t protection_status)
     {
       bufferlist in;
-      ::encode(snap_id, in);
-      ::encode(protection_status, in);
+      encode(snap_id, in);
+      encode(protection_status, in);
       op->exec("rbd", "set_protection_status", in);
     }
 
@@ -868,7 +868,7 @@ namespace librbd {
 
       try {
 	bufferlist::iterator iter = out.begin();
-	::decode(*limit, iter);
+	decode(*limit, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -879,7 +879,7 @@ namespace librbd {
     void snapshot_set_limit(librados::ObjectWriteOperation *op, uint64_t limit)
     {
       bufferlist in;
-      ::encode(limit, in);
+      encode(limit, in);
       op->exec("rbd", "snapshot_set_limit", in);
     }
 
@@ -895,8 +895,8 @@ namespace librbd {
       assert(stripe_count);
 
       try {
-	::decode(*stripe_unit, *it);
-	::decode(*stripe_count, *it);
+	decode(*stripe_unit, *it);
+	decode(*stripe_count, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -923,8 +923,8 @@ namespace librbd {
 			       uint64_t stripe_unit, uint64_t stripe_count)
     {
       bufferlist bl;
-      ::encode(stripe_unit, bl);
-      ::encode(stripe_count, bl);
+      encode(stripe_unit, bl);
+      encode(stripe_count, bl);
 
       op->exec("rbd", "set_stripe_unit_count", bl);
     }
@@ -948,7 +948,7 @@ namespace librbd {
       assert(timestamp);
 
       try {
-        ::decode(*timestamp, *it);
+        decode(*timestamp, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -980,7 +980,7 @@ namespace librbd {
 
     int get_id_finish(bufferlist::iterator *it, std::string *id) {
       try {
-	::decode(*id, *it);
+	decode(*id, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1005,7 +1005,7 @@ namespace librbd {
     void set_id(librados::ObjectWriteOperation *op, const std::string id)
     {
       bufferlist bl;
-      ::encode(id, bl);
+      encode(id, bl);
       op->exec("rbd", "set_id", bl);
     }
 
@@ -1022,14 +1022,14 @@ namespace librbd {
     void dir_get_id_start(librados::ObjectReadOperation *op,
                           const std::string &image_name) {
       bufferlist bl;
-      ::encode(image_name, bl);
+      encode(image_name, bl);
 
       op->exec("rbd", "dir_get_id", bl);
     }
 
     int dir_get_id_finish(bufferlist::iterator *iter, std::string *image_id) {
       try {
-        ::decode(*image_id, *iter);
+        decode(*image_id, *iter);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1055,13 +1055,13 @@ namespace librbd {
     void dir_get_name_start(librados::ObjectReadOperation *op,
 			    const std::string &id) {
       bufferlist in_bl;
-      ::encode(id, in_bl);
+      encode(id, in_bl);
       op->exec("rbd", "dir_get_name", in_bl);
     }
 
     int dir_get_name_finish(bufferlist::iterator *it, std::string *name) {
       try {
-	::decode(*name, *it);
+	decode(*name, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1087,8 +1087,8 @@ namespace librbd {
                         const std::string &start, uint64_t max_return)
     {
       bufferlist in_bl;
-      ::encode(start, in_bl);
-      ::encode(max_return, in_bl);
+      encode(start, in_bl);
+      encode(max_return, in_bl);
 
       op->exec("rbd", "dir_list", in_bl);
     }
@@ -1096,7 +1096,7 @@ namespace librbd {
     int dir_list_finish(bufferlist::iterator *it, map<string, string> *images)
     {
       try {
-        ::decode(*images, *it);
+        decode(*images, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1124,8 +1124,8 @@ namespace librbd {
 		       const std::string &name, const std::string &id)
     {
       bufferlist bl;
-      ::encode(name, bl);
-      ::encode(id, bl);
+      encode(name, bl);
+      encode(id, bl);
       op->exec("rbd", "dir_add_image", bl);
     }
 
@@ -1151,8 +1151,8 @@ namespace librbd {
 			  const std::string &name, const std::string &id)
     {
       bufferlist bl;
-      ::encode(name, bl);
-      ::encode(id, bl);
+      encode(name, bl);
+      encode(id, bl);
 
       op->exec("rbd", "dir_remove_image", bl);
     }
@@ -1162,9 +1162,9 @@ namespace librbd {
 			 const std::string &id)
     {
       bufferlist in;
-      ::encode(src, in);
-      ::encode(dest, in);
-      ::encode(id, in);
+      encode(src, in);
+      encode(dest, in);
+      encode(id, in);
       op->exec("rbd", "dir_rename_image", in);
     }
 
@@ -1214,8 +1214,8 @@ namespace librbd {
                            uint64_t object_count, uint8_t default_state)
     {
       bufferlist in;
-      ::encode(object_count, in);
-      ::encode(default_state, in);
+      encode(object_count, in);
+      encode(default_state, in);
       rados_op->exec("rbd", "object_map_resize", in);
     }
 
@@ -1225,10 +1225,10 @@ namespace librbd {
 			   const boost::optional<uint8_t> &current_object_state)
     {
       bufferlist in;
-      ::encode(start_object_no, in);
-      ::encode(end_object_no, in);
-      ::encode(new_object_state, in);
-      ::encode(current_object_state, in);
+      encode(start_object_no, in);
+      encode(end_object_no, in);
+      encode(new_object_state, in);
+      encode(current_object_state, in);
       rados_op->exec("rbd", "object_map_update", in);
     }
 
@@ -1253,7 +1253,7 @@ namespace librbd {
                      const map<string, bufferlist> &data)
     {
       bufferlist bl;
-      ::encode(data, bl);
+      encode(data, bl);
 
       op->exec("rbd", "metadata_set", bl);
     }
@@ -1271,7 +1271,7 @@ namespace librbd {
                          const std::string &key)
     {
       bufferlist bl;
-      ::encode(key, bl);
+      encode(key, bl);
 
       op->exec("rbd", "metadata_remove", bl);
     }
@@ -1306,8 +1306,8 @@ namespace librbd {
                              const std::string &start, uint64_t max_return)
     {
       bufferlist in_bl;
-      ::encode(start, in_bl);
-      ::encode(max_return, in_bl);
+      encode(start, in_bl);
+      encode(max_return, in_bl);
       op->exec("rbd", "metadata_list", in_bl);
     }
 
@@ -1316,7 +1316,7 @@ namespace librbd {
     {
       assert(pairs);
       try {
-        ::decode(*pairs, *it);
+        decode(*pairs, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1328,14 +1328,14 @@ namespace librbd {
     {
       assert(s);
       bufferlist in, out;
-      ::encode(key, in);
+      encode(key, in);
       int r = ioctx->exec(oid, "rbd", "metadata_get", in, out);
       if (r < 0)
         return r;
 
       bufferlist::iterator iter = out.begin();
       try {
-        ::decode(*s, iter);
+        decode(*s, iter);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1351,7 +1351,7 @@ namespace librbd {
     int mirror_uuid_get_finish(bufferlist::iterator *it,
                                std::string *uuid) {
       try {
-        ::decode(*uuid, *it);
+        decode(*uuid, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1378,7 +1378,7 @@ namespace librbd {
 
     int mirror_uuid_set(librados::IoCtx *ioctx, const std::string &uuid) {
       bufferlist in_bl;
-      ::encode(uuid, in_bl);
+      encode(uuid, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_uuid_set", in_bl,
@@ -1398,7 +1398,7 @@ namespace librbd {
 			       cls::rbd::MirrorMode *mirror_mode) {
       try {
 	uint32_t mirror_mode_decode;
-	::decode(mirror_mode_decode, *it);
+	decode(mirror_mode_decode, *it);
 	*mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode_decode);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
@@ -1432,7 +1432,7 @@ namespace librbd {
     int mirror_mode_set(librados::IoCtx *ioctx,
                         cls::rbd::MirrorMode mirror_mode) {
       bufferlist in_bl;
-      ::encode(static_cast<uint32_t>(mirror_mode), in_bl);
+      encode(static_cast<uint32_t>(mirror_mode), in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_mode_set", in_bl,
@@ -1456,7 +1456,7 @@ namespace librbd {
       peers->clear();
       try {
         bufferlist::iterator bl_it = out_bl.begin();
-        ::decode(*peers, bl_it);
+        decode(*peers, bl_it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1468,7 +1468,7 @@ namespace librbd {
                         const std::string &client_name, int64_t pool_id) {
       cls::rbd::MirrorPeer peer(uuid, cluster_name, client_name, pool_id);
       bufferlist in_bl;
-      ::encode(peer, in_bl);
+      encode(peer, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_add", in_bl,
@@ -1482,7 +1482,7 @@ namespace librbd {
     int mirror_peer_remove(librados::IoCtx *ioctx,
                            const std::string &uuid) {
       bufferlist in_bl;
-      ::encode(uuid, in_bl);
+      encode(uuid, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_remove", in_bl,
@@ -1497,8 +1497,8 @@ namespace librbd {
                                const std::string &uuid,
                                const std::string &client_name) {
       bufferlist in_bl;
-      ::encode(uuid, in_bl);
-      ::encode(client_name, in_bl);
+      encode(uuid, in_bl);
+      encode(client_name, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_client",
@@ -1513,8 +1513,8 @@ namespace librbd {
                                 const std::string &uuid,
                                 const std::string &cluster_name) {
       bufferlist in_bl;
-      ::encode(uuid, in_bl);
-      ::encode(cluster_name, in_bl);
+      encode(uuid, in_bl);
+      encode(cluster_name, in_bl);
 
       bufferlist out_bl;
       int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_set_cluster",
@@ -1529,8 +1529,8 @@ namespace librbd {
                                  const std::string &start, uint64_t max_return)
     {
       bufferlist in_bl;
-      ::encode(start, in_bl);
-      ::encode(max_return, in_bl);
+      encode(start, in_bl);
+      encode(max_return, in_bl);
       op->exec("rbd", "mirror_image_list", in_bl);
     }
 
@@ -1538,7 +1538,7 @@ namespace librbd {
                                  std::map<string, string> *mirror_image_ids)
     {
       try {
-        ::decode(*mirror_image_ids, *it);
+        decode(*mirror_image_ids, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1564,14 +1564,14 @@ namespace librbd {
     void mirror_image_get_image_id_start(librados::ObjectReadOperation *op,
                                          const std::string &global_image_id) {
       bufferlist in_bl;
-      ::encode(global_image_id, in_bl);
+      encode(global_image_id, in_bl);
       op->exec( "rbd", "mirror_image_get_image_id", in_bl);
     }
 
     int mirror_image_get_image_id_finish(bufferlist::iterator *it,
                                          std::string *image_id) {
       try {
-	::decode(*image_id, *it);
+	decode(*image_id, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1616,7 +1616,7 @@ namespace librbd {
     void mirror_image_get_start(librados::ObjectReadOperation *op,
                                 const std::string &image_id) {
       bufferlist in_bl;
-      ::encode(image_id, in_bl);
+      encode(image_id, in_bl);
 
       op->exec("rbd", "mirror_image_get", in_bl);
     }
@@ -1624,7 +1624,7 @@ namespace librbd {
     int mirror_image_get_finish(bufferlist::iterator *iter,
 			        cls::rbd::MirrorImage *mirror_image) {
       try {
-        ::decode(*mirror_image, *iter);
+        decode(*mirror_image, *iter);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1635,8 +1635,8 @@ namespace librbd {
 			  const std::string &image_id,
 			  const cls::rbd::MirrorImage &mirror_image) {
       bufferlist bl;
-      ::encode(image_id, bl);
-      ::encode(mirror_image, bl);
+      encode(image_id, bl);
+      encode(mirror_image, bl);
 
       op->exec("rbd", "mirror_image_set", bl);
     }
@@ -1656,7 +1656,7 @@ namespace librbd {
     void mirror_image_remove(librados::ObjectWriteOperation *op,
 			     const std::string &image_id) {
       bufferlist bl;
-      ::encode(image_id, bl);
+      encode(image_id, bl);
 
       op->exec("rbd", "mirror_image_remove", bl);
     }
@@ -1684,8 +1684,8 @@ namespace librbd {
 				 const std::string &global_image_id,
 				 const cls::rbd::MirrorImageStatus &status) {
       bufferlist bl;
-      ::encode(global_image_id, bl);
-      ::encode(status, bl);
+      encode(global_image_id, bl);
+      encode(status, bl);
       op->exec("rbd", "mirror_image_status_set", bl);
     }
 
@@ -1699,7 +1699,7 @@ namespace librbd {
     void mirror_image_status_remove(librados::ObjectWriteOperation *op,
 				    const std::string &global_image_id) {
       bufferlist bl;
-      ::encode(global_image_id, bl);
+      encode(global_image_id, bl);
       op->exec("rbd", "mirror_image_status_remove", bl);
     }
 
@@ -1726,14 +1726,14 @@ namespace librbd {
     void mirror_image_status_get_start(librados::ObjectReadOperation *op,
 				       const std::string &global_image_id) {
       bufferlist bl;
-      ::encode(global_image_id, bl);
+      encode(global_image_id, bl);
       op->exec("rbd", "mirror_image_status_get", bl);
     }
 
     int mirror_image_status_get_finish(bufferlist::iterator *iter,
 				       cls::rbd::MirrorImageStatus *status) {
       try {
-	::decode(*status, *iter);
+	decode(*status, *iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1765,8 +1765,8 @@ namespace librbd {
 					const std::string &start,
 					uint64_t max_return) {
       bufferlist bl;
-      ::encode(start, bl);
-      ::encode(max_return, bl);
+      encode(start, bl);
+      encode(max_return, bl);
       op->exec("rbd", "mirror_image_status_list", bl);
     }
 
@@ -1776,8 +1776,8 @@ namespace librbd {
       images->clear();
       statuses->clear();
       try {
-	::decode(*images, *iter);
-	::decode(*statuses, *iter);
+	decode(*images, *iter);
+	decode(*statuses, *iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1812,7 +1812,7 @@ namespace librbd {
     int mirror_image_status_get_summary_finish(bufferlist::iterator *iter,
 	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
       try {
-	::decode(*states, *iter);
+	decode(*states, *iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1839,7 +1839,7 @@ namespace librbd {
                                      std::vector<std::string> *instance_ids) {
       instance_ids->clear();
       try {
-	::decode(*instance_ids, *iter);
+	decode(*instance_ids, *iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1868,7 +1868,7 @@ namespace librbd {
     void mirror_instances_add(librados::ObjectWriteOperation *op,
                               const std::string &instance_id) {
       bufferlist bl;
-      ::encode(instance_id, bl);
+      encode(instance_id, bl);
       op->exec("rbd", "mirror_instances_add", bl);
     }
 
@@ -1882,7 +1882,7 @@ namespace librbd {
     void mirror_instances_remove(librados::ObjectWriteOperation *op,
                                  const std::string &instance_id) {
       bufferlist bl;
-      ::encode(instance_id, bl);
+      encode(instance_id, bl);
       op->exec("rbd", "mirror_instances_remove", bl);
     }
 
@@ -1897,8 +1897,8 @@ namespace librbd {
                                      const std::string &start_after,
                                      uint64_t max_read) {
       bufferlist bl;
-      ::encode(start_after, bl);
-      ::encode(max_read, bl);
+      encode(start_after, bl);
+      encode(max_read, bl);
 
       op->exec("rbd", "mirror_image_map_list", bl);
     }
@@ -1906,7 +1906,7 @@ namespace librbd {
     int mirror_image_map_list_finish(bufferlist::iterator *iter,
                                      std::map<std::string, cls::rbd::MirrorImageMap> *image_mapping) {
       try {
-        ::decode(*image_mapping, *iter);
+        decode(*image_mapping, *iter);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
@@ -1917,8 +1917,8 @@ namespace librbd {
                                  const std::string &global_image_id,
                                  const cls::rbd::MirrorImageMap &image_map) {
       bufferlist bl;
-      ::encode(global_image_id, bl);
-      ::encode(image_map, bl);
+      encode(global_image_id, bl);
+      encode(image_map, bl);
 
       op->exec("rbd", "mirror_image_map_update", bl);
     }
@@ -1926,7 +1926,7 @@ namespace librbd {
     void mirror_image_map_remove(librados::ObjectWriteOperation *op,
                                  const std::string &global_image_id) {
       bufferlist bl;
-      ::encode(global_image_id, bl);
+      encode(global_image_id, bl);
 
       op->exec("rbd", "mirror_image_map_remove", bl);
     }
@@ -1944,15 +1944,15 @@ namespace librbd {
 		     map<string, string> *cgs)
     {
       bufferlist in, out;
-      ::encode(start, in);
-      ::encode(max_return, in);
+      encode(start, in);
+      encode(max_return, in);
       int r = ioctx->exec(oid, "rbd", "group_dir_list", in, out);
       if (r < 0)
 	return r;
 
       bufferlist::iterator iter = out.begin();
       try {
-	::decode(*cgs, iter);
+	decode(*cgs, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -1964,8 +1964,8 @@ namespace librbd {
 		   const std::string &name, const std::string &id)
     {
       bufferlist in, out;
-      ::encode(name, in);
-      ::encode(id, in);
+      encode(name, in);
+      encode(id, in);
       return ioctx->exec(oid, "rbd", "group_dir_add", in, out);
     }
 
@@ -1973,8 +1973,8 @@ namespace librbd {
 	              const std::string &name, const std::string &id)
     {
       bufferlist in, out;
-      ::encode(name, in);
-      ::encode(id, in);
+      encode(name, in);
+      encode(id, in);
       return ioctx->exec(oid, "rbd", "group_dir_remove", in, out);
     }
 
@@ -1982,7 +1982,7 @@ namespace librbd {
 			   const cls::rbd::GroupImageSpec &spec)
     {
       bufferlist bl, bl2;
-      ::encode(spec, bl);
+      encode(spec, bl);
 
       return ioctx->exec(oid, "rbd", "group_image_remove", bl, bl2);
     }
@@ -1994,8 +1994,8 @@ namespace librbd {
 			 std::vector<cls::rbd::GroupImageStatus> *images)
     {
       bufferlist bl, bl2;
-      ::encode(start, bl);
-      ::encode(max_return, bl);
+      encode(start, bl);
+      encode(max_return, bl);
 
       int r = ioctx->exec(oid, "rbd", "group_image_list", bl, bl2);
       if (r < 0)
@@ -2003,7 +2003,7 @@ namespace librbd {
 
       bufferlist::iterator iter = bl2.begin();
       try {
-	::decode(*images, iter);
+	decode(*images, iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -2015,7 +2015,7 @@ namespace librbd {
 			const cls::rbd::GroupImageStatus &st)
     {
       bufferlist bl, bl2;
-      ::encode(st, bl);
+      encode(st, bl);
 
       return ioctx->exec(oid, "rbd", "group_image_set", bl, bl2);
     }
@@ -2024,7 +2024,7 @@ namespace librbd {
 	                const cls::rbd::GroupSpec &group_spec)
     {
       bufferlist bl, bl2;
-      ::encode(group_spec, bl);
+      encode(group_spec, bl);
 
       return ioctx->exec(oid, "rbd", "image_add_group", bl, bl2);
     }
@@ -2033,7 +2033,7 @@ namespace librbd {
 			   const cls::rbd::GroupSpec &group_spec)
     {
       bufferlist bl, bl2;
-      ::encode(group_spec, bl);
+      encode(group_spec, bl);
 
       return ioctx->exec(oid, "rbd", "image_remove_group", bl, bl2);
     }
@@ -2048,7 +2048,7 @@ namespace librbd {
                                cls::rbd::GroupSpec *group_spec)
     {
       try {
-	::decode(*group_spec, *iter);
+	decode(*group_spec, *iter);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -2077,8 +2077,8 @@ namespace librbd {
                    const cls::rbd::TrashImageSpec &trash_spec)
     {
       bufferlist bl;
-      ::encode(id, bl);
-      ::encode(trash_spec, bl);
+      encode(id, bl);
+      encode(trash_spec, bl);
       op->exec("rbd", "trash_add", bl);
     }
 
@@ -2095,7 +2095,7 @@ namespace librbd {
 		      const std::string &id)
     {
       bufferlist bl;
-      ::encode(id, bl);
+      encode(id, bl);
       op->exec("rbd", "trash_remove", bl);
     }
 
@@ -2111,8 +2111,8 @@ namespace librbd {
                           const std::string &start, uint64_t max_return)
     {
       bufferlist bl;
-      ::encode(start, bl);
-      ::encode(max_return, bl);
+      encode(start, bl);
+      encode(max_return, bl);
       op->exec("rbd", "trash_list", bl);
     }
 
@@ -2122,7 +2122,7 @@ namespace librbd {
       assert(entries);
 
       try {
-	::decode(*entries, *it);
+	decode(*entries, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -2151,7 +2151,7 @@ namespace librbd {
 		         const std::string &id)
     {
       bufferlist bl;
-      ::encode(id, bl);
+      encode(id, bl);
       op->exec("rbd", "trash_get", bl);
     }
 
@@ -2159,7 +2159,7 @@ namespace librbd {
                           cls::rbd::TrashImageSpec *trash_spec) {
       assert(trash_spec);
       try {
-        ::decode(*trash_spec, *it);
+        decode(*trash_spec, *it);
       } catch (const buffer::error &err) {
         return -EBADMSG;
       }
