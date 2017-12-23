@@ -15,13 +15,15 @@ enum health_status_t {
   HEALTH_OK = 2,
 };
 
-static inline void encode(health_status_t hs, bufferlist& bl) {
+inline void encode(health_status_t hs, bufferlist& bl) {
+  using ceph::encode;
   uint8_t v = hs;
-  ::encode(v, bl);
+  encode(v, bl);
 }
-static inline void decode(health_status_t& hs, bufferlist::iterator& p) {
+inline void decode(health_status_t& hs, bufferlist::iterator& p) {
+  using ceph::decode;
   uint8_t v;
-  ::decode(v, p);
+  decode(v, p);
   hs = health_status_t(v);
 }
 template<>
