@@ -10,6 +10,9 @@
 namespace librbd {
 namespace journal {
 
+using ceph::encode;
+using ceph::decode;
+
 namespace {
 
 template <typename E>
@@ -28,7 +31,7 @@ public:
 
   template <typename T>
   inline void operator()(const T& t) const {
-    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    encode(static_cast<uint32_t>(T::TYPE), m_bl);
     t.encode(m_bl);
   }
 private:
@@ -69,16 +72,18 @@ private:
 } // anonymous namespace
 
 void AioDiscardEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(skip_partial_discard, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(skip_partial_discard, bl);
 }
 
 void AioDiscardEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
   if (version >= 4) {
-    ::decode(skip_partial_discard, it);
+    decode(skip_partial_discard, it);
   }
 }
 
@@ -93,15 +98,17 @@ uint32_t AioWriteEvent::get_fixed_size() {
 }
 
 void AioWriteEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(data, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(data, bl);
 }
 
 void AioWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
-  ::decode(data, it);
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(data, it);
 }
 
 void AioWriteEvent::dump(Formatter *f) const {
@@ -110,15 +117,17 @@ void AioWriteEvent::dump(Formatter *f) const {
 }
 
 void AioWriteSameEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(data, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(data, bl);
 }
 
 void AioWriteSameEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
-  ::decode(data, it);
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(data, it);
 }
 
 void AioWriteSameEvent::dump(Formatter *f) const {
@@ -131,17 +140,19 @@ uint32_t AioCompareAndWriteEvent::get_fixed_size() {
 }
 
 void AioCompareAndWriteEvent::encode(bufferlist& bl) const {
-  ::encode(offset, bl);
-  ::encode(length, bl);
-  ::encode(cmp_data, bl);
-  ::encode(write_data, bl);
+  using ceph::encode;
+  encode(offset, bl);
+  encode(length, bl);
+  encode(cmp_data, bl);
+  encode(write_data, bl);
 }
 
 void AioCompareAndWriteEvent::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(offset, it);
-  ::decode(length, it);
-  ::decode(cmp_data, it);
-  ::decode(write_data, it);
+  using ceph::decode;
+  decode(offset, it);
+  decode(length, it);
+  decode(cmp_data, it);
+  decode(write_data, it);
 }
 
 void AioCompareAndWriteEvent::dump(Formatter *f) const {
@@ -159,11 +170,13 @@ void AioFlushEvent::dump(Formatter *f) const {
 }
 
 void OpEventBase::encode(bufferlist& bl) const {
-  ::encode(op_tid, bl);
+  using ceph::encode;
+  encode(op_tid, bl);
 }
 
 void OpEventBase::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(op_tid, it);
+  using ceph::decode;
+  decode(op_tid, it);
 }
 
 void OpEventBase::dump(Formatter *f) const {
@@ -172,14 +185,16 @@ void OpEventBase::dump(Formatter *f) const {
 
 void OpFinishEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(op_tid, bl);
-  ::encode(r, bl);
+  using ceph::encode;
+  encode(op_tid, bl);
+  encode(r, bl);
 }
 
 void OpFinishEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(op_tid, it);
-  ::decode(r, it);
+  using ceph::decode;
+  decode(op_tid, it);
+  decode(r, it);
 }
 
 void OpFinishEvent::dump(Formatter *f) const {
@@ -191,14 +206,15 @@ void OpFinishEvent::dump(Formatter *f) const {
 void SnapEventBase::encode(bufferlist& bl) const {
   using ceph::encode;
   OpEventBase::encode(bl);
-  ::encode(snap_name, bl);
+  encode(snap_name, bl);
   encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
   using ceph::decode;
   OpEventBase::decode(version, it);
-  ::decode(snap_name, it);
+  using ceph::decode;
+  decode(snap_name, it);
   if (version >= 4) {
     cls::rbd::SnapshotNamespaceOnDisk sn;
     decode(sn, it);
@@ -232,12 +248,14 @@ void SnapCreateEvent::dump(Formatter *f) const {
 
 void SnapLimitEvent::encode(bufferlist &bl) const {
   OpEventBase::encode(bl);
-  ::encode(limit, bl);
+  using ceph::encode;
+  encode(limit, bl);
 }
 
 void SnapLimitEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(limit, it);
+  using ceph::decode;
+  decode(limit, it);
 }
 
 void SnapLimitEvent::dump(Formatter *f) const {
@@ -247,17 +265,19 @@ void SnapLimitEvent::dump(Formatter *f) const {
 
 void SnapRenameEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(dst_snap_name, bl);
-  ::encode(snap_id, bl);
-  ::encode(src_snap_name, bl);
+  using ceph::encode;
+  encode(dst_snap_name, bl);
+  encode(snap_id, bl);
+  encode(src_snap_name, bl);
 }
 
 void SnapRenameEvent::decode(__u8 version, bufferlist::iterator& it) {
+  using ceph::decode;
   OpEventBase::decode(version, it);
-  ::decode(dst_snap_name, it);
-  ::decode(snap_id, it);
+  decode(dst_snap_name, it);
+  decode(snap_id, it);
   if (version >= 2) {
-    ::decode(src_snap_name, it);
+    decode(src_snap_name, it);
   }
 }
 
@@ -270,12 +290,14 @@ void SnapRenameEvent::dump(Formatter *f) const {
 
 void RenameEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(image_name, bl);
+  using ceph::encode;
+  encode(image_name, bl);
 }
 
 void RenameEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(image_name, it);
+  using ceph::decode;
+  decode(image_name, it);
 }
 
 void RenameEvent::dump(Formatter *f) const {
@@ -285,12 +307,14 @@ void RenameEvent::dump(Formatter *f) const {
 
 void ResizeEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(size, bl);
+  using ceph::encode;
+  encode(size, bl);
 }
 
 void ResizeEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(size, it);
+  using ceph::decode;
+  decode(size, it);
 }
 
 void ResizeEvent::dump(Formatter *f) const {
@@ -309,14 +333,16 @@ void DemotePromoteEvent::dump(Formatter *f) const {
 
 void UpdateFeaturesEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(features, bl);
-  ::encode(enabled, bl);
+  using ceph::encode;
+  encode(features, bl);
+  encode(enabled, bl);
 }
 
 void UpdateFeaturesEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(features, it);
-  ::decode(enabled, it);
+  using ceph::decode;
+  decode(features, it);
+  decode(enabled, it);
 }
 
 void UpdateFeaturesEvent::dump(Formatter *f) const {
@@ -327,14 +353,16 @@ void UpdateFeaturesEvent::dump(Formatter *f) const {
 
 void MetadataSetEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(key, bl);
-  ::encode(value, bl);
+  using ceph::encode;
+  encode(key, bl);
+  encode(value, bl);
 }
 
 void MetadataSetEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(key, it);
-  ::decode(value, it);
+  using ceph::decode;
+  decode(key, it);
+  decode(value, it);
 }
 
 void MetadataSetEvent::dump(Formatter *f) const {
@@ -345,12 +373,14 @@ void MetadataSetEvent::dump(Formatter *f) const {
 
 void MetadataRemoveEvent::encode(bufferlist& bl) const {
   OpEventBase::encode(bl);
-  ::encode(key, bl);
+  using ceph::encode;
+  encode(key, bl);
 }
 
 void MetadataRemoveEvent::decode(__u8 version, bufferlist::iterator& it) {
   OpEventBase::decode(version, it);
-  ::decode(key, it);
+  using ceph::decode;
+  decode(key, it);
 }
 
 void MetadataRemoveEvent::dump(Formatter *f) const {
@@ -383,7 +413,7 @@ void EventEntry::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
 
   uint32_t event_type;
-  ::decode(event_type, it);
+  decode(event_type, it);
 
   // select the correct payload variant based upon the encoded op
   switch (event_type) {
@@ -463,13 +493,13 @@ void EventEntry::dump(Formatter *f) const {
 
 void EventEntry::encode_metadata(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(timestamp, bl);
+  encode(timestamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void EventEntry::decode_metadata(bufferlist::iterator& it) {
   DECODE_START(1, it);
-  ::decode(timestamp, it);
+  decode(timestamp, it);
   DECODE_FINISH(it);
 }
 
@@ -528,13 +558,15 @@ void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
 // Journal Client
 
 void ImageClientMeta::encode(bufferlist& bl) const {
-  ::encode(tag_class, bl);
-  ::encode(resync_requested, bl);
+  using ceph::encode;
+  encode(tag_class, bl);
+  encode(resync_requested, bl);
 }
 
 void ImageClientMeta::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(tag_class, it);
-  ::decode(resync_requested, it);
+  using ceph::decode;
+  decode(tag_class, it);
+  decode(resync_requested, it);
 }
 
 void ImageClientMeta::dump(Formatter *f) const {
@@ -544,17 +576,17 @@ void ImageClientMeta::dump(Formatter *f) const {
 
 void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   using ceph::encode;
-  ::encode(snap_name, bl);
-  ::encode(from_snap_name, bl);
-  ::encode(object_number, bl);
+  encode(snap_name, bl);
+  encode(from_snap_name, bl);
+  encode(object_number, bl);
   encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
 }
 
 void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
   using ceph::decode;
-  ::decode(snap_name, it);
-  ::decode(from_snap_name, it);
-  ::decode(object_number, it);
+  decode(snap_name, it);
+  decode(from_snap_name, it);
+  decode(object_number, it);
   if (version >= 2) {
     cls::rbd::SnapshotNamespaceOnDisk sn;
     decode(sn, it);
@@ -572,33 +604,35 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
 }
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {
-  ::encode(image_id, bl);
-  ::encode(static_cast<uint32_t>(state), bl);
-  ::encode(sync_object_count, bl);
-  ::encode(static_cast<uint32_t>(sync_points.size()), bl);
+  using ceph::encode;
+  encode(image_id, bl);
+  encode(static_cast<uint32_t>(state), bl);
+  encode(sync_object_count, bl);
+  encode(static_cast<uint32_t>(sync_points.size()), bl);
   for (auto &sync_point : sync_points) {
     sync_point.encode(bl);
   }
-  ::encode(snap_seqs, bl);
+  encode(snap_seqs, bl);
 }
 
 void MirrorPeerClientMeta::decode(__u8 version, bufferlist::iterator& it) {
-  ::decode(image_id, it);
+  using ceph::decode;
+  decode(image_id, it);
 
   uint32_t decode_state;
-  ::decode(decode_state, it);
+  decode(decode_state, it);
   state = static_cast<MirrorPeerState>(decode_state);
 
-  ::decode(sync_object_count, it);
+  decode(sync_object_count, it);
 
   uint32_t sync_point_count;
-  ::decode(sync_point_count, it);
+  decode(sync_point_count, it);
   sync_points.resize(sync_point_count);
   for (auto &sync_point : sync_points) {
     sync_point.decode(version, it);
   }
 
-  ::decode(snap_seqs, it);
+  decode(snap_seqs, it);
 }
 
 void MirrorPeerClientMeta::dump(Formatter *f) const {
@@ -655,7 +689,7 @@ void ClientData::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
 
   uint32_t client_meta_type;
-  ::decode(client_meta_type, it);
+  decode(client_meta_type, it);
 
   // select the correct payload variant based upon the encoded op
   switch (client_meta_type) {
@@ -694,17 +728,19 @@ void ClientData::generate_test_instances(std::list<ClientData *> &o) {
 // Journal Tag
 
 void TagPredecessor::encode(bufferlist& bl) const {
-  ::encode(mirror_uuid, bl);
-  ::encode(commit_valid, bl);
-  ::encode(tag_tid, bl);
-  ::encode(entry_tid, bl);
+  using ceph::encode;
+  encode(mirror_uuid, bl);
+  encode(commit_valid, bl);
+  encode(tag_tid, bl);
+  encode(entry_tid, bl);
 }
 
 void TagPredecessor::decode(bufferlist::iterator& it) {
-  ::decode(mirror_uuid, it);
-  ::decode(commit_valid, it);
-  ::decode(tag_tid, it);
-  ::decode(entry_tid, it);
+  using ceph::decode;
+  decode(mirror_uuid, it);
+  decode(commit_valid, it);
+  decode(tag_tid, it);
+  decode(entry_tid, it);
 }
 
 void TagPredecessor::dump(Formatter *f) const {
@@ -715,12 +751,14 @@ void TagPredecessor::dump(Formatter *f) const {
 }
 
 void TagData::encode(bufferlist& bl) const {
-  ::encode(mirror_uuid, bl);
+  using ceph::encode;
+  encode(mirror_uuid, bl);
   predecessor.encode(bl);
 }
 
 void TagData::decode(bufferlist::iterator& it) {
-  ::decode(mirror_uuid, it);
+  using ceph::decode;
+  decode(mirror_uuid, it);
   predecessor.decode(it);
 }
 

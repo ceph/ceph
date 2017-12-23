@@ -63,7 +63,7 @@ public:
   void expect_metadata_list(librbd::MockTestImageCtx &mock_image_ctx,
                             const Metadata& metadata, int r) {
     bufferlist out_bl;
-    ::encode(metadata, out_bl);
+    encode(metadata, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
@@ -75,7 +75,7 @@ public:
   void expect_metadata_set(librbd::MockTestImageCtx &mock_image_ctx,
                            const Metadata& metadata, int r) {
     bufferlist in_bl;
-    ::encode(metadata, in_bl);
+    encode(metadata, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"),

@@ -112,7 +112,7 @@ public:
   void expect_mirror_uuid_get(librados::IoCtx &io_ctx,
                               const std::string &mirror_uuid, int r) {
     bufferlist bl;
-    ::encode(mirror_uuid, bl);
+    encode(mirror_uuid, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"), _, _, _))
@@ -138,7 +138,7 @@ public:
                                         const librbd::journal::ClientData &client_data,
                                         int r) {
     bufferlist bl;
-    ::encode(client_data, bl);
+    encode(client_data, bl);
 
     EXPECT_CALL(mock_journaler, register_client(ContentsEqual(bl), _))
       .WillOnce(WithArg<1>(Invoke([this, r](Context *on_finish) {
@@ -165,7 +165,7 @@ TEST_F(TestMockImageReplayerPrepareRemoteImageRequest, Success) {
   librbd::journal::ClientData client_data{mirror_peer_client_meta};
   cls::journal::Client client;
   client.state = cls::journal::CLIENT_STATE_DISCONNECTED;
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   expect_journaler_get_client(mock_remote_journaler, "local mirror uuid",
                               client, 0);
 

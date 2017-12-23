@@ -16,7 +16,8 @@ namespace util {
 
 int C_DecodeTag::decode(bufferlist::iterator *it, TagData *tag_data) {
   try {
-    ::decode(*tag_data, *it);
+    using ceph::decode;
+    decode(*tag_data, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }

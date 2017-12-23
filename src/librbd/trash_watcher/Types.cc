@@ -31,13 +31,13 @@ private:
 
 void ImageAddedPayload::encode(bufferlist &bl) const {
   using ceph::encode;
-  ::encode(image_id, bl);
+  encode(image_id, bl);
   encode(trash_image_spec, bl);
 }
 
 void ImageAddedPayload::decode(__u8 version, bufferlist::iterator &iter) {
   using ceph::decode;
-  ::decode(image_id, iter);
+  decode(image_id, iter);
   decode(trash_image_spec, iter);
 }
 
@@ -49,11 +49,13 @@ void ImageAddedPayload::dump(Formatter *f) const {
 }
 
 void ImageRemovedPayload::encode(bufferlist &bl) const {
-  ::encode(image_id, bl);
+  using ceph::encode;
+  encode(image_id, bl);
 }
 
 void ImageRemovedPayload::decode(__u8 version, bufferlist::iterator &iter) {
-  ::decode(image_id, iter);
+  using ceph::decode;
+  decode(image_id, iter);
 }
 
 void ImageRemovedPayload::dump(Formatter *f) const {
@@ -80,7 +82,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;
-  ::decode(notify_op, iter);
+  decode(notify_op, iter);
 
   // select the correct payload variant based upon the encoded op
   switch (notify_op) {

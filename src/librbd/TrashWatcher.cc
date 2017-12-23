@@ -38,7 +38,7 @@ void TrashWatcher<I>::notify_image_added(
   ldout(cct, 20) << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage{ImageAddedPayload{image_id, trash_image_spec}}, bl);
+  encode(NotifyMessage{ImageAddedPayload{image_id, trash_image_spec}}, bl);
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_TRASH, comp, bl, NOTIFY_TIMEOUT_MS, nullptr);
@@ -54,7 +54,7 @@ void TrashWatcher<I>::notify_image_removed(librados::IoCtx &io_ctx,
   ldout(cct, 20) << dendl;
 
   bufferlist bl;
-  ::encode(NotifyMessage{ImageRemovedPayload{image_id}}, bl);
+  encode(NotifyMessage{ImageRemovedPayload{image_id}}, bl);
 
   librados::AioCompletion *comp = create_rados_callback(on_finish);
   int r = io_ctx.aio_notify(RBD_TRASH, comp, bl, NOTIFY_TIMEOUT_MS, nullptr);
@@ -73,7 +73,7 @@ void TrashWatcher<I>::handle_notify(uint64_t notify_id, uint64_t handle,
   NotifyMessage notify_message;
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(notify_message, iter);
+    decode(notify_message, iter);
   } catch (const buffer::error &err) {
     lderr(cct) << "error decoding image notification: " << err.what()
                << dendl;
