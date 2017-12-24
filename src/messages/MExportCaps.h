@@ -37,15 +37,16 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(cap_bl, payload);
-    ::encode(client_map, payload, features);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(cap_bl, payload);
+    encode(client_map, payload, features);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(cap_bl, p);
-    ::decode(client_map, p);
+    decode(ino, p);
+    decode(cap_bl, p);
+    decode(client_map, p);
   }
 
 };
