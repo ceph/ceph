@@ -28,6 +28,7 @@
 #include "librbd/Journal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
+#include "librbd/TrashWatcher.h"
 #include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
@@ -45,6 +46,7 @@
 #include "librbd/managed_lock/Types.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/operation/TrimRequest.h"
+#include "librbd/trash/MoveRequest.h"
 
 #include "journal/Journaler.h"
 
@@ -1351,103 +1353,69 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     ldout(cct, 20) << "trash_move " << &io_ctx << " " << image_name
                    << dendl;
 
+    // try to get image id from the directory
     std::string image_id;
-    ImageCtx *ictx = new ImageCtx(image_name, "", nullptr, io_ctx, false);
-    int r = ictx->state->open(true);
-    if (r < 0) {
-      ictx = nullptr;
-
-      if (r != -ENOENT) {
-        ldout(cct, 2) << "error opening image: " << cpp_strerror(-r) << dendl;
-        return r;
-      }
-
-      // try to get image id from the directory
-      r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name, &image_id);
-      if (r < 0) {
-        if (r != -ENOENT) {
-          ldout(cct, 2) << "error reading image id from dirctory: "
-                        << cpp_strerror(-r) << dendl;
-        }
-        return r;
-      }
-    } else {
-      if (ictx->old_format) {
-        ictx->state->close();
-        return -EOPNOTSUPP;
-      }
-
-      image_id = ictx->id;
-      ictx->owner_lock.get_read();
-      if (ictx->exclusive_lock != nullptr) {
-        r = ictx->operations->prepare_image_update(false);
-        if (r < 0) {
-	  lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
-	  ictx->owner_lock.put_read();
-	  ictx->state->close();
-          return -EBUSY;
-        }
-      }
-    }
-
-    BOOST_SCOPE_EXIT_ALL(ictx, cct) {
-      if (ictx == nullptr)
-        return;
-
-      bool is_locked = ictx->exclusive_lock != nullptr &&
-                       ictx->exclusive_lock->is_lock_owner();
-      if (is_locked) {
-        C_SaferCond ctx;
-        auto exclusive_lock = ictx->exclusive_lock;
-        exclusive_lock->shut_down(&ctx);
-        ictx->owner_lock.put_read();
-        int r = ctx.wait();
-        if (r < 0) {
-          lderr(cct) << "error shutting down exclusive lock" << dendl;
-        }
-        delete exclusive_lock;
-      } else {
-        ictx->owner_lock.put_read();
-      }
-      ictx->state->close();
-    };
-
-    ldout(cct, 2) << "adding image entry to rbd_trash" << dendl;
-    utime_t ts = ceph_clock_now();
-    utime_t deferment_end_time = ts;
-    deferment_end_time += (double)delay;
-    cls::rbd::TrashImageSource trash_source =
-        static_cast<cls::rbd::TrashImageSource>(source);
-    cls::rbd::TrashImageSpec trash_spec(trash_source, image_name, ts,
-                                        deferment_end_time);
-    r = cls_client::trash_add(&io_ctx, image_id, trash_spec);
-    if (r < 0 && r != -EEXIST) {
-      lderr(cct) << "error adding image " << image_name << " to rbd_trash"
-                 << dendl;
-      return r;
-    } else if (r == -EEXIST) {
-      ldout(cct, 10) << "found previous unfinished deferred remove for image:"
-                     << image_id << dendl;
-      // continue with removing image from directory
-    }
-
-    ldout(cct, 2) << "removing id object..." << dendl;
-    r = io_ctx.remove(util::id_obj_name(image_name));
+    int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
+                                   &image_id);
     if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error removing id object: " << cpp_strerror(r)
-                 << dendl;
+      lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
       return r;
     }
 
-    ldout(cct, 2) << "removing rbd image from v2 directory..." << dendl;
-    r = cls_client::dir_remove_image(&io_ctx, RBD_DIRECTORY, image_name,
-                                     image_id);
-    if (r < 0) {
-      if (r != -ENOENT) {
-        lderr(cct) << "error removing image from v2 directory: "
-                   << cpp_strerror(-r) << dendl;
-      }
+    ImageCtx *ictx = new ImageCtx((image_id.empty() ? image_name : ""),
+                                  image_id, nullptr, io_ctx, false);
+    r = ictx->state->open(true);
+    if (r == -ENOENT) {
       return r;
+    } else if (r < 0) {
+      lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;
+      return r;
+    } else if (ictx->old_format) {
+      ldout(cct, 10) << "cannot move v1 image to trash" << dendl;
+      ictx->state->close();
+      return -EOPNOTSUPP;
+    }
+
+    image_id = ictx->id;
+    ictx->owner_lock.get_read();
+    if (ictx->exclusive_lock != nullptr) {
+      ictx->exclusive_lock->block_requests(0);
+
+      r = ictx->operations->prepare_image_update(false);
+      if (r < 0) {
+        lderr(cct) << "cannot obtain exclusive lock - not removing" << dendl;
+        ictx->owner_lock.put_read();
+        ictx->state->close();
+        return -EBUSY;
+      }
+    }
+    ictx->owner_lock.put_read();
+
+    utime_t delete_time{ceph_clock_now()};
+    utime_t deferment_end_time{delete_time};
+    deferment_end_time += delay;
+    cls::rbd::TrashImageSpec trash_image_spec{
+      static_cast<cls::rbd::TrashImageSource>(source), ictx->name,
+      delete_time, deferment_end_time};
+
+    C_SaferCond ctx;
+    auto req = trash::MoveRequest<>::create(io_ctx, ictx->id, trash_image_spec,
+                                            &ctx);
+    req->send();
+
+    r = ctx.wait();
+    ictx->state->close();
+    if (r < 0) {
+      return r;
+    }
+
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_added(io_ctx, image_id, trash_image_spec,
+                                       &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
     }
 
     return 0;
@@ -1544,6 +1512,15 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
                  << " from rbd_trash object" << dendl;
       return r;
     }
+
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_removed(io_ctx, image_id, &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
+    }
+
     return 0;
   }
 
@@ -1614,6 +1591,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       lderr(cct) << "error removing image id " << image_id << " from trash: "
                  << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    C_SaferCond notify_ctx;
+    TrashWatcher<>::notify_image_removed(io_ctx, image_id, &notify_ctx);
+    r = notify_ctx.wait();
+    if (r < 0) {
+      lderr(cct) << "failed to send update notification: " << cpp_strerror(r)
+                 << dendl;
     }
 
     return 0;

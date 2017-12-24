@@ -196,6 +196,7 @@ namespace librbd {
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
+    uint64_t mirroring_delete_delay;
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
