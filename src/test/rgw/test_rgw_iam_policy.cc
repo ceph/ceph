@@ -25,6 +25,7 @@
 #include "global/global_init.h"
 #include "rgw/rgw_auth.h"
 #include "rgw/rgw_iam_policy.h"
+#include "rgw/rgw_op.h"
 
 
 using std::string;
@@ -579,6 +580,39 @@ TEST_F(IPPolicyTest, asNetworkInvalid) {
   EXPECT_FALSE(rgw::IAM::Condition::as_network("2001:db8:85a3:0:0:8a2e:370:7334/129"));
   EXPECT_FALSE(rgw::IAM::Condition::as_network("192.168.1.1:"));
   EXPECT_FALSE(rgw::IAM::Condition::as_network("1.2.3.10000"));
+}
+
+TEST_F(IPPolicyTest, IPEnvironment) {
+  // Unfortunately RGWCivetWeb is too tightly tied to civetweb to test RGWCivetWeb::init_env.
+  RGWEnv rgw_env;
+  RGWUserInfo user;
+  RGWRados rgw_rados;
+  rgw_env.set("REMOTE_ADDR", "192.168.1.1");
+  rgw_env.set("HTTP_HOST", "1.2.3.4");
+  req_state rgw_req_state(cct.get(), &rgw_env, &user);
+  Environment iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  auto ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.1");
+
+  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "SOME_VAR"), 0);
+  EXPECT_EQ(cct.get()->_conf->rgw_remote_addr_param, "SOME_VAR");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  EXPECT_EQ(ip, iam_env.end());
+
+  rgw_env.set("SOME_VAR", "192.168.1.2");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.2");
+
+  ASSERT_EQ(cct.get()->_conf->set_val("rgw_remote_addr_param", "HTTP_X_FORWARDED_FOR"), 0);
+  rgw_env.set("HTTP_X_FORWARDED_FOR", "192.168.1.3");
+  iam_env = rgw_build_iam_environment(&rgw_rados, &rgw_req_state);
+  ip = iam_env.find("aws:SourceIp");
+  ASSERT_NE(ip, iam_env.end());
+  EXPECT_EQ(ip->second, "192.168.1.3");
 }
 
 TEST_F(IPPolicyTest, ParseIPAddress) {
