@@ -900,14 +900,14 @@ bool ParseState::array_end() {
 ostream& operator <<(ostream& m, const MaskedIP& ip) {
   // I have a theory about why std::bitset is the way it is.
   if (ip.v6) {
-    for (int i = 15; i >= 0; --i) {
-      uint8_t b = 0;
-      for (int j = 7; j >= 0; --j) {
-	b |= (ip.addr[(i * 8) + j] << j);
+    for (int i = 7; i >= 0; --i) {
+      uint16_t hextet = 0;
+      for (int j = 15; j >= 0; --j) {
+	hextet |= (ip.addr[(i * 16) + j] << j);
       }
-      m << hex << b;
+      m << hex << (unsigned int) hextet;
       if (i != 0) {
-	m << "::";
+	m << ":";
       }
     }
   } else {
@@ -923,7 +923,7 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
       }
     }
   }
-  m << "/" << ip.prefix;
+  m << "/" << dec << ip.prefix;
   // It would explain a lot
   return m;
 }
@@ -1077,27 +1077,27 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   }
 
   if (m.v6) {
-    struct sockaddr_in6 a;
-    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a.sin6_addr)) != 1) {
+    struct in6_addr a;
+    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a)) != 1) {
       return none;
     }
 
-    m.addr |= Address(a.sin6_addr.s6_addr[0]) << 0;
-    m.addr |= Address(a.sin6_addr.s6_addr[1]) << 8;
-    m.addr |= Address(a.sin6_addr.s6_addr[2]) << 16;
-    m.addr |= Address(a.sin6_addr.s6_addr[3]) << 24;
-    m.addr |= Address(a.sin6_addr.s6_addr[4]) << 32;
-    m.addr |= Address(a.sin6_addr.s6_addr[5]) << 40;
-    m.addr |= Address(a.sin6_addr.s6_addr[6]) << 48;
-    m.addr |= Address(a.sin6_addr.s6_addr[7]) << 56;
-    m.addr |= Address(a.sin6_addr.s6_addr[8]) << 64;
-    m.addr |= Address(a.sin6_addr.s6_addr[9]) << 72;
-    m.addr |= Address(a.sin6_addr.s6_addr[10]) << 80;
-    m.addr |= Address(a.sin6_addr.s6_addr[11]) << 88;
-    m.addr |= Address(a.sin6_addr.s6_addr[12]) << 96;
-    m.addr |= Address(a.sin6_addr.s6_addr[13]) << 104;
-    m.addr |= Address(a.sin6_addr.s6_addr[14]) << 112;
-    m.addr |= Address(a.sin6_addr.s6_addr[15]) << 120;
+    m.addr |= Address(a.s6_addr[15]) << 0;
+    m.addr |= Address(a.s6_addr[14]) << 8;
+    m.addr |= Address(a.s6_addr[13]) << 16;
+    m.addr |= Address(a.s6_addr[12]) << 24;
+    m.addr |= Address(a.s6_addr[11]) << 32;
+    m.addr |= Address(a.s6_addr[10]) << 40;
+    m.addr |= Address(a.s6_addr[9]) << 48;
+    m.addr |= Address(a.s6_addr[8]) << 56;
+    m.addr |= Address(a.s6_addr[7]) << 64;
+    m.addr |= Address(a.s6_addr[6]) << 72;
+    m.addr |= Address(a.s6_addr[5]) << 80;
+    m.addr |= Address(a.s6_addr[4]) << 88;
+    m.addr |= Address(a.s6_addr[3]) << 96;
+    m.addr |= Address(a.s6_addr[2]) << 104;
+    m.addr |= Address(a.s6_addr[1]) << 112;
+    m.addr |= Address(a.s6_addr[0]) << 120;
   } else {
     struct in_addr a;
     if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
