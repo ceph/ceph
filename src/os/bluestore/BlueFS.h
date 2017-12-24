@@ -13,6 +13,8 @@
 #include "boost/intrusive/list.hpp"
 #include <boost/intrusive_ptr.hpp>
 
+#define CEPH_BLOCK_SIZE  4096
+
 class PerfCounters;
 
 class Allocator;
@@ -76,10 +78,8 @@ public:
 	num_reading(0)
       {}
     ~File() override {
-      assert(num_readers.load() == 0);
-      assert(num_writers.load() == 0);
-      assert(num_reading.load() == 0);
-      assert(!locked);
+      assert(num_readers.load() == 0 && num_writers.load() == 0 &&
+        num_reading.load() == 0 && !locked);
     }
 
     friend void intrusive_ptr_add_ref(File *f) {
@@ -319,10 +319,10 @@ private:
   // always put the super in the second 4k block.  FIXME should this be
   // block size independent?
   unsigned get_super_offset() {
-    return 4096;
+    return CEPH_BLOCK_SIZE;
   }
   unsigned get_super_length() {
-    return 4096;
+    return CEPH_BLOCK_SIZE;
   }
 
 public:
