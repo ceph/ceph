@@ -3296,7 +3296,6 @@ void RGWPutObj::execute()
   MD5 hash;
   bufferlist bl, aclbl, bs;
   int len;
-  map<string, string>::iterator iter;
   bool multipart;
   
   off_t fst;
