@@ -932,7 +932,7 @@ ostream& operator <<(ostream& m, const MaskedIP& ip) {
       for (int j = 7; j >= 0; --j) {
 	b |= (ip.addr[(i * 8) + j] << j);
       }
-      m << b;
+      m << (unsigned int) b;
       if (i != 0) {
 	m << ".";
       }
@@ -1039,8 +1039,24 @@ bool Condition::eval(const Environment& env) const {
     return shortible(std::equal_to<MaskedIP>(), as_network, s, vals);
 
   case TokenID::NotIpAddress:
-    return shortible(ceph::not_fn(std::equal_to<MaskedIP>()), as_network, s,
-		     vals);
+    {
+      auto xc = as_network(s);
+      if (!xc) {
+	return false;
+      }
+
+      for (const string& d : vals) {
+	auto xd = as_network(d);
+	if (!xd) {
+	  continue;
+	}
+
+	if (xc == xd) {
+	  return false;
+	}
+      }
+      return true;
+    }
 
 #if 0
     // Amazon Resource Names! (Does S3 need this?)
@@ -1060,7 +1076,6 @@ optional<MaskedIP> Condition::as_network(const string& s) {
   }
 
   m.v6 = (s.find(':') == string::npos) ? false : true;
-
   auto slash = s.find('/');
   if (slash == string::npos) {
     m.prefix = m.v6 ? 128 : 32;
@@ -1104,11 +1119,12 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     m.addr |= Address(a.sin6_addr.s6_addr[14]) << 112;
     m.addr |= Address(a.sin6_addr.s6_addr[15]) << 120;
   } else {
-    struct sockaddr_in a;
-    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a.sin_addr)) != 1) {
+    struct in_addr a;
+    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
       return none;
     }
-    m.addr = ntohl(a.sin_addr.s_addr);
+
+    m.addr = ntohl(a.s_addr);
   }
 
   return m;
