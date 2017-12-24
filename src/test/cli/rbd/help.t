@@ -1051,13 +1051,20 @@ Skip test on FreeBSD as it generates different output there.
     --max_part arg        override module param max_part
   
   rbd help nbd unmap
-  usage: rbd nbd unmap 
-                       <device-spec> 
+  usage: rbd nbd unmap [--pool <pool>] [--image <image>] [--snap <snap>] 
+                       <image-or-snap-or-device-spec> 
   
   Unmap a nbd device.
   
   Positional arguments
-    <device-spec>        specify nbd device
+    <image-or-snap-or-device-spec>  image, snapshot, or device specification
+                                    [<pool-name>/]<image-name>[@<snapshot-name>]
+                                    or <device-path>
+  
+  Optional arguments
+    -p [ --pool ] arg               pool name
+    --image arg                     image name
+    --snap arg                      snapshot name
   
   rbd help object-map check
   usage: rbd object-map check [--pool <pool>] [--image <image>] [--snap <snap>] 
