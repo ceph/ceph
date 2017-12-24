@@ -70,21 +70,22 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(query_epoch, p);
-    ::decode(type, p);
-    ::decode(pgid.shard, p);
+    decode(pgid.pgid, p);
+    decode(query_epoch, p);
+    decode(type, p);
+    decode(pgid.shard, p);
     if (header.version >= 3) {
-      ::decode(priority, p);
+      decode(priority, p);
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(query_epoch, payload);
-    ::encode(type, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(priority, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(query_epoch, payload);
+    encode(type, payload);
+    encode(pgid.shard, payload);
+    encode(priority, payload);
   }
 };
 

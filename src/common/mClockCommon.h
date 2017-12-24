@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include "include/encoding.h"
 #include "dmclock/src/dmclock_recs.h"
 
 // the following is done to unclobber _ASSERT_H so it returns to the
@@ -22,20 +24,27 @@
 
 
 namespace ceph {
-  namespace dmc = crimson::dmclock;
+namespace dmc = ::crimson::dmclock;
 }
 
-WRITE_RAW_ENCODER(dmc::ReqParams)
+namespace crimson {
+namespace dmclock {
 
-inline void encode(const dmc::PhaseType &phase, bufferlist& bl,
+WRITE_RAW_ENCODER(ReqParams)
+
+inline void encode(const PhaseType &phase, bufferlist& bl,
                    uint64_t features=0)
 {
-  encode(static_cast<uint8_t>(phase), bl);
+  using ceph::encode;
+  encode(static_cast<std::uint8_t>(phase), bl);
 }
 
-inline void decode(dmc::PhaseType &phase, bufferlist::iterator& p)
+inline void decode(PhaseType &phase, bufferlist::iterator& p)
 {
-  uint8_t int_phase;
-  decode((uint8_t&)int_phase, p);
+  using ceph::decode;
+  std::uint8_t int_phase;
+  decode((std::uint8_t&)int_phase, p);
   phase = static_cast<dmc::PhaseType>(int_phase);
+}
+}
 }

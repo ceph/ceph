@@ -53,12 +53,12 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(map_epoch, p);
-    ::decode(query_epoch, p);
-    ::decode(pgid.pgid, p);
-    ::decode(begin, p);
-    ::decode(end, p);
+    decode(op, p);
+    decode(map_epoch, p);
+    decode(query_epoch, p);
+    decode(pgid.pgid, p);
+    decode(begin, p);
+    decode(end, p);
 
     // handle hobject_t format upgrade
     if (!begin.is_max() && begin.pool == -1)
@@ -66,19 +66,20 @@ public:
     if (!end.is_max() && end.pool == -1)
       end.pool = pgid.pool();
 
-    ::decode(from, p);
-    ::decode(pgid.shard, p);
+    decode(from, p);
+    decode(pgid.shard, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(op, payload);
-    ::encode(map_epoch, payload);
-    ::encode(query_epoch, payload);
-    ::encode(pgid.pgid, payload);
-    ::encode(begin, payload);
-    ::encode(end, payload);
-    ::encode(from, payload);
-    ::encode(pgid.shard, payload);
+    using ceph::encode;
+    encode(op, payload);
+    encode(map_epoch, payload);
+    encode(query_epoch, payload);
+    encode(pgid.pgid, payload);
+    encode(begin, payload);
+    encode(end, payload);
+    encode(from, payload);
+    encode(pgid.shard, payload);
   }
 
   MOSDPGScan()

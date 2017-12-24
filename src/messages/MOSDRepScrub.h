@@ -85,32 +85,33 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(scrub_from, payload);
-    ::encode(scrub_to, payload);
-    ::encode(map_epoch, payload);
-    ::encode(chunky, payload);
-    ::encode(start, payload);
-    ::encode(end, payload);
-    ::encode(deep, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(seed, payload);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(scrub_from, payload);
+    encode(scrub_to, payload);
+    encode(map_epoch, payload);
+    encode(chunky, payload);
+    encode(start, payload);
+    encode(end, payload);
+    encode(deep, payload);
+    encode(pgid.shard, payload);
+    encode(seed, payload);
+    encode(min_epoch, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(scrub_from, p);
-    ::decode(scrub_to, p);
-    ::decode(map_epoch, p);
-    ::decode(chunky, p);
-    ::decode(start, p);
-    ::decode(end, p);
-    ::decode(deep, p);
-    ::decode(pgid.shard, p);
-    ::decode(seed, p);
+    decode(pgid.pgid, p);
+    decode(scrub_from, p);
+    decode(scrub_to, p);
+    decode(map_epoch, p);
+    decode(chunky, p);
+    decode(start, p);
+    decode(end, p);
+    decode(deep, p);
+    decode(pgid.shard, p);
+    decode(seed, p);
     if (header.version >= 7) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
     } else {
       min_epoch = map_epoch;
     }

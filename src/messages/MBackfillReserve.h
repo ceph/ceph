@@ -78,32 +78,33 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(query_epoch, p);
-    ::decode(type, p);
-    ::decode(priority, p);
-    ::decode(pgid.shard, p);
+    decode(pgid.pgid, p);
+    decode(query_epoch, p);
+    decode(type, p);
+    decode(priority, p);
+    decode(pgid.shard, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (!HAVE_FEATURE(features, RECOVERY_RESERVATION_2)) {
       header.version = 3;
       header.compat_version = 3;
-      ::encode(pgid.pgid, payload);
-      ::encode(query_epoch, payload);
-      ::encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
+      encode(pgid.pgid, payload);
+      encode(query_epoch, payload);
+      encode((type == RELEASE || type == TOOFULL || type == REVOKE) ?
 	       REJECT : type, payload);
-      ::encode(priority, payload);
-      ::encode(pgid.shard, payload);
+      encode(priority, payload);
+      encode(pgid.shard, payload);
       return;
     }
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
-    ::encode(pgid.pgid, payload);
-    ::encode(query_epoch, payload);
-    ::encode(type, payload);
-    ::encode(priority, payload);
-    ::encode(pgid.shard, payload);
+    encode(pgid.pgid, payload);
+    encode(query_epoch, payload);
+    encode(type, payload);
+    encode(priority, payload);
+    encode(pgid.shard, payload);
   }
 };
 

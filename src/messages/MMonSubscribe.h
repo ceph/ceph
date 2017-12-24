@@ -54,7 +54,7 @@ public:
     bufferlist::iterator p = payload.begin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
-      ::decode(oldwhat, p);
+      decode(oldwhat, p);
       what.clear();
       for (map<string, ceph_mon_subscribe_item_old>::iterator q = oldwhat.begin();
 	   q != oldwhat.end();
@@ -68,12 +68,13 @@ public:
 	  what[q->first].flags |= CEPH_SUBSCRIBE_ONETIME;
       }
     } else {
-      ::decode(what, p);
+      decode(what, p);
     }
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (features & CEPH_FEATURE_SUBSCRIBE2) {
-      ::encode(what, payload);
+      encode(what, payload);
       header.version = HEAD_VERSION;
     } else {
       header.version = 0;
@@ -88,7 +89,7 @@ public:
 	  oldwhat[q->first].have = 0;
 	oldwhat[q->first].onetime = q->second.flags & CEPH_SUBSCRIBE_ONETIME;
       }
-      ::encode(oldwhat, payload);
+      encode(oldwhat, payload);
     }
   }
 };
