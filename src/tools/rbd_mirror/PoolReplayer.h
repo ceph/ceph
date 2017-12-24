@@ -42,7 +42,6 @@ class PoolReplayer {
 public:
   PoolReplayer(Threads<librbd::ImageCtx> *threads,
                ServiceDaemon<librbd::ImageCtx>* service_daemon,
-	       ImageDeleter<>* image_deleter,
 	       int64_t local_pool_id, const peer_t &peer,
 	       const std::vector<const char*> &args);
   ~PoolReplayer();
@@ -99,6 +98,12 @@ private:
   void handle_init_local_pool_watcher(int r, Context *on_finish);
 
   void init_remote_pool_watcher(Context *on_finish);
+  void handle_init_remote_pool_watcher(int r, Context *on_finish);
+
+  void init_image_deleter(Context* on_finish);
+
+  void shut_down_image_deleter(Context* on_finish);
+  void handle_shut_down_image_deleter(int r, Context* on_finish);
 
   void shut_down_pool_watchers(Context *on_finish);
   void handle_shut_down_pool_watchers(int r, Context *on_finish);
@@ -110,7 +115,6 @@ private:
 
   Threads<librbd::ImageCtx> *m_threads;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
-  ImageDeleter<>* m_image_deleter;
   int64_t m_local_pool_id = -1;
   peer_t m_peer;
   std::vector<const char*> m_args;
@@ -134,6 +138,7 @@ private:
   std::unique_ptr<PoolWatcher<> > m_remote_pool_watcher;
 
   std::unique_ptr<InstanceReplayer<librbd::ImageCtx>> m_instance_replayer;
+  std::unique_ptr<ImageDeleter<>> m_image_deleter;
 
   std::string m_asok_hook_name;
   AdminSocketHook *m_asok_hook = nullptr;

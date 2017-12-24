@@ -47,7 +47,6 @@ namespace journal { template <typename> class Replay; }
 namespace rbd {
 namespace mirror {
 
-template <typename> struct ImageDeleter;
 template <typename> struct InstanceWatcher;
 template <typename> struct Threads;
 
@@ -62,20 +61,17 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-    Threads<ImageCtxT> *threads, ImageDeleter<ImageCtxT>* image_deleter,
-    InstanceWatcher<ImageCtxT> *instance_watcher,
+    Threads<ImageCtxT> *threads, InstanceWatcher<ImageCtxT> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
-    return new ImageReplayer(threads, image_deleter, instance_watcher,
-                             local, local_mirror_uuid, local_pool_id,
-                             global_image_id);
+    return new ImageReplayer(threads, instance_watcher, local,
+                             local_mirror_uuid, local_pool_id, global_image_id);
   }
   void destroy() {
     delete this;
   }
 
   ImageReplayer(Threads<ImageCtxT> *threads,
-                ImageDeleter<ImageCtxT>* image_deleter,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
                 RadosRef local, const std::string &local_mirror_uuid,
                 int64_t local_pool_id, const std::string &global_image_id);
@@ -137,9 +133,6 @@ protected:
    *    |                                                   ^
    *    v                                                   *
    * <starting>                                             *
-   *    |                                                   *
-   *    v                                                   *
-   * WAIT_FOR_DELETION                                      *
    *    |                                                   *
    *    v                                           (error) *
    * PREPARE_LOCAL_IMAGE  * * * * * * * * * * * * * * * * * *
@@ -276,7 +269,6 @@ private:
   };
 
   Threads<ImageCtxT> *m_threads;
-  ImageDeleter<ImageCtxT>* m_image_deleter;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
 
   Peers m_peers;
@@ -389,9 +381,6 @@ private:
   void shut_down(int r);
   void handle_shut_down(int r);
   void handle_remote_journal_metadata_updated();
-
-  void wait_for_deletion();
-  void handle_wait_for_deletion(int r);
 
   void prepare_local_image();
   void handle_prepare_local_image(int r);

@@ -5873,6 +5873,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("automatically start image resync after mirroring is disconnected due to being laggy"),
 
+    Option("rbd_mirroring_delete_delay", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("time-delay in seconds for rbd-mirror delete propagation"),
+
     Option("rbd_mirroring_replay_delay", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("time-delay in seconds for rbd-mirror asynchronous replication"),
