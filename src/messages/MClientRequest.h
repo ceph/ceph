@@ -63,13 +63,15 @@ public:
       item(rel), dname(name) {}
 
     void encode(bufferlist& bl) const {
+      using ceph::encode;
       item.dname_len = dname.length();
-      ::encode(item, bl);
-      ::encode_nohead(dname, bl);
+      encode(item, bl);
+      encode_nohead(dname, bl);
     }
     void decode(bufferlist::iterator& bl) {
-      ::decode(item, bl);
-      ::decode_nohead(item.dname_len, dname, bl);
+      using ceph::decode;
+      decode(item, bl);
+      decode_nohead(item.dname_len, dname, bl);
     }
   };
   vector<Release> releases;
@@ -174,11 +176,11 @@ public:
     bufferlist::iterator p = payload.begin();
 
     if (header.version >= 4) {
-      ::decode(head, p);
+      decode(head, p);
     } else {
       struct ceph_mds_request_head_legacy old_mds_head;
 
-      ::decode(old_mds_head, p);
+      decode(old_mds_head, p);
       copy_from_legacy_head(&head, &old_mds_head);
       head.version = 0;
 
@@ -193,33 +195,34 @@ public:
       }
     }
 
-    ::decode(path, p);
-    ::decode(path2, p);
-    ::decode_nohead(head.num_releases, releases, p);
+    decode(path, p);
+    decode(path2, p);
+    decode_nohead(head.num_releases, releases, p);
     if (header.version >= 2)
-      ::decode(stamp, p);
+      decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
-      ::decode(gid_list, p);
+      decode(gid_list, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     head.num_releases = releases.size();
     head.version = CEPH_MDS_REQUEST_HEAD_VERSION;
 
     if (features & CEPH_FEATURE_FS_BTIME) {
-      ::encode(head, payload);
+      encode(head, payload);
     } else {
       struct ceph_mds_request_head_legacy old_mds_head;
 
       copy_to_legacy_head(&old_mds_head, &head);
-      ::encode(old_mds_head, payload);
+      encode(old_mds_head, payload);
     }
 
-    ::encode(path, payload);
-    ::encode(path2, payload);
-    ::encode_nohead(releases, payload);
-    ::encode(stamp, payload);
-    ::encode(gid_list, payload);
+    encode(path, payload);
+    encode(path2, payload);
+    encode_nohead(releases, payload);
+    encode(stamp, payload);
+    encode(gid_list, payload);
   }
 
   const char *get_type_name() const override { return "creq"; }

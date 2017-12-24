@@ -65,20 +65,22 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(basedir, p);
-    ::decode(bounds, p);
-    ::decode(traces, p);
-    ::decode(bystanders, p);
+    decode(dirfrag, p);
+    decode(basedir, p);
+    decode(bounds, p);
+    decode(traces, p);
+    decode(bystanders, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(basedir, payload);
-    ::encode(bounds, payload);
-    ::encode(traces, payload);
-    ::encode(bystanders, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(basedir, payload);
+    encode(bounds, payload);
+    encode(traces, payload);
+    encode(bystanders, payload);
   }
 };
 

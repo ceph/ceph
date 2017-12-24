@@ -48,12 +48,13 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(success, p);
+    decode(dirfrag, p);
+    decode(success, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(success, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(success, payload);
   }
 };
 

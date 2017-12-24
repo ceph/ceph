@@ -41,24 +41,24 @@ public:
     // encoding here, we could rely on the MgrReport
     // verisoning instead.
     ENCODE_START(2, 1, bl);
-    ::encode(path, bl);
-    ::encode(description, bl);
-    ::encode(nick, bl);
+    encode(path, bl);
+    encode(description, bl);
+    encode(nick, bl);
     static_assert(sizeof(type) == 1, "perfcounter_type_d must be one byte");
-    ::encode((uint8_t)type, bl);
-    ::encode(priority, bl);
+    encode((uint8_t)type, bl);
+    encode(priority, bl);
     ENCODE_FINISH(bl);
   }
   
   void decode(bufferlist::iterator &p)
   {
     DECODE_START(2, p);
-    ::decode(path, p);
-    ::decode(description, p);
-    ::decode(nick, p);
-    ::decode((uint8_t&)type, p);
+    decode(path, p);
+    decode(description, p);
+    decode(nick, p);
+    decode((uint8_t&)type, p);
     if (struct_v >= 2) {
-      ::decode(priority, p);
+      decode(priority, p);
     }
     DECODE_FINISH(p);
   }
@@ -98,28 +98,29 @@ public:
   void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
-    ::decode(daemon_name, p);
-    ::decode(declare_types, p);
-    ::decode(packed, p);
+    decode(daemon_name, p);
+    decode(declare_types, p);
+    decode(packed, p);
     if (header.version >= 2)
-      ::decode(undeclare_types, p);
+      decode(undeclare_types, p);
     if (header.version >= 3) {
-      ::decode(service_name, p);
-      ::decode(daemon_status, p);
+      decode(service_name, p);
+      decode(daemon_status, p);
     }
     if (header.version >= 5) {
-      ::decode(osd_health_metrics, p);
+      decode(osd_health_metrics, p);
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(daemon_name, payload);
-    ::encode(declare_types, payload);
-    ::encode(packed, payload);
-    ::encode(undeclare_types, payload);
-    ::encode(service_name, payload);
-    ::encode(daemon_status, payload);
-    ::encode(osd_health_metrics, payload);
+    using ceph::encode;
+    encode(daemon_name, payload);
+    encode(declare_types, payload);
+    encode(packed, payload);
+    encode(undeclare_types, payload);
+    encode(service_name, payload);
+    encode(daemon_status, payload);
+    encode(osd_health_metrics, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }

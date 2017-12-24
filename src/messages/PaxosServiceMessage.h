@@ -27,15 +27,16 @@ class PaxosServiceMessage : public Message {
 
  public:
   void paxos_encode() {
-    ::encode(version, payload);
-    ::encode(deprecated_session_mon, payload);
-    ::encode(deprecated_session_mon_tid, payload);
+    using ceph::encode;
+    encode(version, payload);
+    encode(deprecated_session_mon, payload);
+    encode(deprecated_session_mon_tid, payload);
   }
 
   void paxos_decode( bufferlist::iterator& p ) {
-    ::decode(version, p);
-    ::decode(deprecated_session_mon, p);
-    ::decode(deprecated_session_mon_tid, p);
+    decode(version, p);
+    decode(deprecated_session_mon, p);
+    decode(deprecated_session_mon_tid, p);
   }
 
   void encode_payload(uint64_t features) override {

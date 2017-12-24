@@ -29,12 +29,14 @@ public:
     bool committing;
     slave_request() : committing(false) {}
     void encode(bufferlist &bl) const {
-      ::encode(inode_caps, bl);
-      ::encode(committing, bl);
+      using ceph::encode;
+      encode(inode_caps, bl);
+      encode(committing, bl);
     }
     void decode(bufferlist::iterator &bl) {
-      ::decode(inode_caps, bl);
-      ::decode(committing, bl);
+      using ceph::decode;
+      decode(inode_caps, bl);
+      decode(committing, bl);
     }
   };
   WRITE_CLASS_ENCODER(slave_request)
@@ -74,15 +76,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(subtrees, payload);
-    ::encode(ambiguous_imports, payload);
-    ::encode(slave_requests, payload);
+    using ceph::encode;
+    encode(subtrees, payload);
+    encode(ambiguous_imports, payload);
+    encode(slave_requests, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
-    ::decode(subtrees, p);
-    ::decode(ambiguous_imports, p);
-    ::decode(slave_requests, p);
+    decode(subtrees, p);
+    decode(ambiguous_imports, p);
+    decode(slave_requests, p);
   }
 };
 

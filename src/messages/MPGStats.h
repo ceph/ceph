@@ -44,21 +44,22 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(osd_stat, payload);
-    ::encode(pg_stat, payload);
-    ::encode(epoch, payload);
-    ::encode(had_map_for, payload);
+    encode(fsid, payload);
+    encode(osd_stat, payload);
+    encode(pg_stat, payload);
+    encode(epoch, payload);
+    encode(had_map_for, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(osd_stat, p);
-    ::decode(pg_stat, p);
-    ::decode(epoch, p);
-    ::decode(had_map_for, p);
+    decode(fsid, p);
+    decode(osd_stat, p);
+    decode(pg_stat, p);
+    decode(epoch, p);
+    decode(had_map_for, p);
   }
 };
 

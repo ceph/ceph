@@ -49,18 +49,19 @@ public:
   
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(subtree, p);
-    ::decode(dirfrag, p);
-    ::decode(dn, p);
-    ::decode(is_primary, p);
-    ::decode(bl, p);
+    decode(subtree, p);
+    decode(dirfrag, p);
+    decode(dn, p);
+    decode(is_primary, p);
+    decode(bl, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(subtree, payload);
-    ::encode(dirfrag, payload);
-    ::encode(dn, payload);
-    ::encode(is_primary, payload);
-    ::encode(bl, payload);
+    using ceph::encode;
+    encode(subtree, payload);
+    encode(dirfrag, payload);
+    encode(dn, payload);
+    encode(is_primary, payload);
+    encode(bl, payload);
   }
 };
 

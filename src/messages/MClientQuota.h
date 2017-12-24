@@ -28,21 +28,22 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(rstat.rctime, payload);
-    ::encode(rstat.rbytes, payload);
-    ::encode(rstat.rfiles, payload);
-    ::encode(rstat.rsubdirs, payload);
-    ::encode(quota, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(rstat.rctime, payload);
+    encode(rstat.rbytes, payload);
+    encode(rstat.rfiles, payload);
+    encode(rstat.rsubdirs, payload);
+    encode(quota, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(rstat.rctime, p);
-    ::decode(rstat.rbytes, p);
-    ::decode(rstat.rfiles, p);
-    ::decode(rstat.rsubdirs, p);
-    ::decode(quota, p);
+    decode(ino, p);
+    decode(rstat.rctime, p);
+    decode(rstat.rbytes, p);
+    decode(rstat.rfiles, p);
+    decode(rstat.rsubdirs, p);
+    decode(quota, p);
     assert(p.end());
   }
 };
