@@ -1936,6 +1936,14 @@ bool MDSRankDispatcher::handle_asok_command(
       return true;
     }
     command_export_dir(f, path, (mds_rank_t)rank);
+  } else if (command == "dump inode") {
+    Mutex::Locker l(mds_lock);
+    string path;
+    if (!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
+      ss << "malformed path";
+      return true;
+    }
+    mdcache->dump_inode(path, f, ss); 
   } else if (command == "dump cache") {
     Mutex::Locker l(mds_lock);
     string path;
