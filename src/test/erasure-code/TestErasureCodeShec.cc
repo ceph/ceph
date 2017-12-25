@@ -947,6 +947,7 @@ TEST(ErasureCodeShec, init2_5)
 
   delete shec;
   delete profile;
+  delete profile2;
 }
 
 TEST(ErasureCodeShec, minimum_to_decode_8)
@@ -2717,7 +2718,7 @@ void* thread3(void* pParam)
 {
   ErasureCodeShec* shec = (ErasureCodeShec*) pParam;
 
-  CrushWrapper *crush = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> crush = std::make_unique<CrushWrapper>();
   crush->create();
   crush->set_type_name(2, "root");
   crush->set_type_name(1, "host");
