@@ -13,9 +13,13 @@
 #include <assert.h>
 
 #include <iostream>
+#include <memory>
+#include <boost/algorithm/string/predicate.hpp>
 #include <boost/regex.hpp>
 
+#include "common/Formatter.h"
 #include "common/Preforker.h"
+#include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -25,6 +29,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "include/stringify.h"
 
 #include "Driver.h"
 #include "Server.h"
@@ -39,10 +44,15 @@ static void usage() {
   std::cout << "Usage: rbd-ggate [options] map <image-or-snap-spec>  Map an image to ggate device\n"
             << "                           unmap <device path>       Unmap ggate device\n"
             << "                           list                      List mapped ggate devices\n"
-            << "Options:\n"
+            << "\n"
+            << "Map options:\n"
             << "  --device <device path>  Specify ggate device path\n"
             << "  --read-only             Map readonly\n"
             << "  --exclusive             Forbid writes by other clients\n"
+            << "\n"
+            << "List options:\n"
+            << "  --format plain|json|xml Output format (default: plain)\n"
+            << "  --pretty-format         Pretty formatting (json and xml)\n"
             << std::endl;
   generic_server_usage();
 }
@@ -110,7 +120,7 @@ static int do_map(int argc, const char *argv[])
     poolname = g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
   }
 
-  std::string devname = (devpath.compare(0, 5, "/dev/") == 0) ?
+  std::string devname = boost::starts_with(devpath, "/dev/") ?
     devpath.substr(5) : devpath;
   std::unique_ptr<rbd::ggate::Watcher> watcher;
   uint64_t handle;
@@ -228,7 +238,7 @@ done:
 
 static int do_unmap()
 {
-  std::string devname = (devpath.compare(0, 5, "/dev/") == 0) ?
+  std::string devname = boost::starts_with(devpath, "/dev/") ?
     devpath.substr(5) : devpath;
 
   int r = rbd::ggate::Driver::kill(devname);
@@ -241,8 +251,8 @@ static int do_unmap()
   return 0;
 }
 
-static int parse_imgpath(const std::string &imgpath)
-{
+static int parse_imgpath(const std::string &imgpath, std::string *poolname,
+                         std::string *imgname, std::string *snapname) {
   boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
   boost::smatch match;
   if (!boost::regex_match(imgpath, match, pattern)) {
@@ -251,31 +261,86 @@ static int parse_imgpath(const std::string &imgpath)
   }
 
   if (match[1].matched) {
-    poolname = match[1];
+    *poolname = match[1];
   }
 
-  imgname = match[2];
+  *imgname = match[2];
 
   if (match[3].matched) {
-    snapname = match[3];
+    *snapname = match[3];
   }
 
   return 0;
 }
 
-static int do_list()
+static int do_list(const std::string &format, bool pretty_format)
 {
   rbd::ggate::Driver::load();
 
-  std::list<std::string> devs;
-  int r = rbd::ggate::Driver::list(devs);
+  std::map<std::string, rbd::ggate::Driver::DevInfo> devs;
+  int r = rbd::ggate::Driver::list(&devs);
   if (r < 0) {
     return -r;
   }
 
-  for (auto &devname : devs) {
-    cout << "/dev/" << devname << std::endl;
+  std::unique_ptr<ceph::Formatter> f;
+  TextTable tbl;
+
+  if (format == "json") {
+    f.reset(new JSONFormatter(pretty_format));
+  } else if (format == "xml") {
+    f.reset(new XMLFormatter(pretty_format));
+  } else if (!format.empty() && format != "plain") {
+    std::cerr << "rbd-ggate: invalid output format: " << format << std::endl;
+    return -EINVAL;
   }
+
+  if (f) {
+    f->open_object_section("devices");
+  } else {
+    tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  int count = 0;
+
+  for (auto &it : devs) {
+    auto &id = it.first;
+    auto &name = it.second.first;
+    auto &info = it.second.second;
+    if (!boost::starts_with(info, "RBD ")) {
+      continue;
+    }
+
+    std::string poolname;
+    std::string imgname;
+    std::string snapname(f ? "" : "-");
+    parse_imgpath(info.substr(4), &poolname, &imgname, &snapname);
+
+    if (f) {
+      f->open_object_section(stringify(id).c_str());
+      f->dump_string("pool", poolname);
+      f->dump_string("image", imgname);
+      f->dump_string("snap", snapname);
+      f->dump_string("device", "/dev/" + name);
+      f->close_section();
+    } else {
+      tbl << id << poolname << imgname << snapname << "/dev/" + name
+          << TextTable::endrow;
+    }
+    count++;
+  }
+
+  if (f) {
+    f->close_section(); // devices
+    f->flush(std::cout);
+  } else if (count > 0) {
+    std::cout << tbl;
+  }
+
   return 0;
 }
 
@@ -293,6 +358,8 @@ int main(int argc, const char *argv[]) {
   argv_to_vec(argc, argv, args);
   md_config_t().parse_argv(args);
 
+  std::string format;
+  bool pretty_format = false;
   std::vector<const char*>::iterator i;
 
   for (i = args.begin(); i != args.end(); ) {
@@ -305,6 +372,10 @@ int main(int argc, const char *argv[]) {
       readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       exclusive = true;
+    } else if (ceph_argparse_witharg(args, i, &format, "--format",
+                                     (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
+      pretty_format = true;
     } else {
       ++i;
     }
@@ -335,8 +406,9 @@ int main(int argc, const char *argv[]) {
         cerr << "rbd-ggate: must specify image-or-snap-spec" << std::endl;
         return EXIT_FAILURE;
       }
-      if (parse_imgpath(string(*args.begin())) < 0)
+      if (parse_imgpath(*args.begin(), &poolname, &imgname, &snapname) < 0) {
         return EXIT_FAILURE;
+      }
       args.erase(args.begin());
       break;
     case Disconnect:
@@ -373,7 +445,7 @@ int main(int argc, const char *argv[]) {
         return EXIT_FAILURE;
       break;
     case List:
-      r = do_list();
+      r = do_list(format, pretty_format);
       if (r < 0)
         return EXIT_FAILURE;
       break;
