@@ -181,7 +181,7 @@ int main(int argc, char **argv)
     ("log-file,l", po::value<string>(&log_file), "log file")
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
     ("dev", po::value<vector<string>>(&devs), "device(s)")
-    ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
+    ("deep", po::value<bool>(&fsck_deep), "deep fsck | repair (read all data)")
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
     ;
