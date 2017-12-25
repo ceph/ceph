@@ -236,6 +236,11 @@ void MDSDaemon::set_up_admin_socket()
                                      "name=rank,type=CephInt",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
+  r = admin_socket->register_command("dump inode",
+                                     "dump inode name=path,type=CephString,req=false",
+                                     asok_hook,
+                                     "dump a specific inode");
+                                     
   assert(r == 0);
   r = admin_socket->register_command("dump cache",
                                      "dump cache name=path,type=CephString,req=false",
@@ -325,6 +330,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("tag path");
   admin_socket->unregister_command("flush_path");
   admin_socket->unregister_command("export dir");
+  admin_socket->unregister_command("dump inode");
   admin_socket->unregister_command("dump cache");
   admin_socket->unregister_command("cache status");
   admin_socket->unregister_command("dump tree");

@@ -11952,6 +11952,7 @@ void MDCache::dump_inode(std::string const &path, Formatter *f, std::ostream &ss
   CInode *in = cache_traverse(fp);
   if (NULL == in) {
     ss << "inode not in mds cache";
+    return;
   }
   f->open_object_section("inode");
   in->dump(f); 

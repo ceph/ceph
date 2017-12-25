@@ -1174,7 +1174,7 @@ protected:
 		  const std::string& dump_root = "",
 		  int depth = -1);
 public:
-  int dump_inode(const std::string &path, Formatter *f, std::ostream &ss);
+  void dump_inode(const std::string &path, Formatter *f, std::ostream &ss);
  
   int dump_cache() { return dump_cache(NULL, NULL); }
   int dump_cache(const std::string &filename);
