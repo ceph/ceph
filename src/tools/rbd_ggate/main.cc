@@ -47,7 +47,7 @@ static void usage() {
   generic_server_usage();
 }
 
-static std::string devpath, poolname("rbd"), imgname, snapname;
+static std::string devpath, poolname, imgname, snapname;
 static bool readonly = false;
 static bool exclusive = false;
 
@@ -105,6 +105,10 @@ static int do_map(int argc, const char *argv[])
 
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
+
+  if (poolname.empty()) {
+    poolname = g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
+  }
 
   std::string devname = (devpath.compare(0, 5, "/dev/") == 0) ?
     devpath.substr(5) : devpath;
