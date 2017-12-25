@@ -1637,7 +1637,7 @@ void MDSMonitor::update_metadata(mds_gid_t gid,
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   bufferlist bl;
-  ::encode(pending_metadata, bl);
+  encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
@@ -1657,7 +1657,7 @@ void MDSMonitor::remove_from_metadata(MonitorDBStore::TransactionRef t)
   if (!update)
     return;
   bufferlist bl;
-  ::encode(pending_metadata, bl);
+  encode(pending_metadata, bl);
   t->put(MDS_METADATA_PREFIX, "last_metadata", bl);
 }
 
@@ -1671,7 +1671,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   }
 
   bufferlist::iterator it = bl.begin();
-  ::decode(m, it);
+  decode(m, it);
   return 0;
 }
 

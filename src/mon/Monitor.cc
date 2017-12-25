@@ -682,7 +682,7 @@ int Monitor::preinit()
         // Attempt to decode and extract keyring only if it is found.
         KeyRing keyring;
         bufferlist::iterator p = bl.begin();
-        ::decode(keyring, p);
+        decode(keyring, p);
         extract_save_mon_key(keyring);
       }
     }
@@ -809,7 +809,7 @@ void Monitor::refresh_from_paxos(bool *need_bootstrap)
   if (r >= 0) {
     try {
       bufferlist::iterator p = bl.begin();
-      ::decode(fingerprint, p);
+      decode(fingerprint, p);
     }
     catch (buffer::error& e) {
       dout(10) << __func__ << " failed to decode cluster_fingerprint" << dendl;
@@ -1433,7 +1433,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
     sync_providers.erase(sp.cookie);
   }
 
-  ::encode(*tx, reply->chunk_bl);
+  encode(*tx, reply->chunk_bl);
 
   m->get_connection()->send_message(reply);
 }
@@ -1951,7 +1951,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
     // do that anyway for other reasons, though.
     MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
     bufferlist bl;
-    ::encode(m, bl);
+    encode(m, bl);
     t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   }
 
@@ -4270,7 +4270,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   f->close_section();
   stringstream ss;
   f->flush(ss);
-  ::encode(ss.str(), payload);
+  encode(ss.str(), payload);
   reply->set_payload(payload);
   dout(10) << __func__ << " reply payload len " << reply->get_payload().length() << dendl;
   messenger->send_message(reply, inst);
@@ -4903,7 +4903,7 @@ void Monitor::update_mon_metadata(int from, Metadata&& m)
 
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   bufferlist bl;
-  ::encode(pending_metadata, bl);
+  encode(pending_metadata, bl);
   t->put(MONITOR_STORE_PREFIX, "last_metadata", bl);
   paxos->trigger_propose();
 }
@@ -4915,7 +4915,7 @@ int Monitor::load_metadata()
   if (r)
     return r;
   bufferlist::iterator it = bl.begin();
-  ::decode(mon_metadata, it);
+  decode(mon_metadata, it);
 
   pending_metadata = mon_metadata;
   return 0;
@@ -5389,7 +5389,7 @@ void Monitor::prepare_new_fingerprint(MonitorDBStore::TransactionRef t)
   dout(10) << __func__ << " proposing cluster_fingerprint " << nf << dendl;
 
   bufferlist bl;
-  ::encode(nf, bl);
+  encode(nf, bl);
   t->put(MONITOR_NAME, "cluster_fingerprint", bl);
 }
 
@@ -5645,11 +5645,11 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
     return false;
   }
   bufferlist ticket_data;
-  ::encode(blob, ticket_data);
+  encode(blob, ticket_data);
 
   bufferlist::iterator iter = ticket_data.begin();
   CephXTicketHandler handler(g_ceph_context, service_id);
-  ::decode(handler.ticket, iter);
+  decode(handler.ticket, iter);
 
   handler.session_key = info.session_key;
 

@@ -58,14 +58,16 @@ public:
     int32_t up = 0;
     int32_t primary = 0;
     void encode(bufferlist& bl) const {
-      ::encode(acting, bl);
-      ::encode(up, bl);
-      ::encode(primary, bl);
+      using ceph::encode;
+      encode(acting, bl);
+      encode(up, bl);
+      encode(primary, bl);
     }
     void decode(bufferlist::iterator& p) {
-      ::decode(acting, p);
-      ::decode(up, p);
-      ::decode(primary, p);
+      using ceph::decode;
+      decode(acting, p);
+      decode(up, p);
+      decode(primary, p);
     }
   };
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;

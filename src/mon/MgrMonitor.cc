@@ -113,7 +113,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
         derr << "Failed to load mgr commands: " << cpp_strerror(r) << dendl;
       } else {
         auto p = loaded_commands.begin();
-        ::decode(command_descs, p);
+        decode(command_descs, p);
       }
     }
   }
@@ -189,7 +189,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       p.set_flag(MonCommand::FLAG_MGR);
     }
     bufferlist bl;
-    ::encode(pending_command_descs, bl);
+    encode(pending_command_descs, bl);
     t->put(command_descs_prefix, "", bl);
     pending_command_descs.clear();
   }
@@ -366,7 +366,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
     pending_map.available_modules = m->get_available_modules();
-    ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+    encode(m->get_metadata(), pending_metadata[m->get_name()]);
     pending_metadata_rm.erase(m->get_name());
 
     mon->clog->info() << "Activating manager daemon "
@@ -392,7 +392,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
                          << " started";
       pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
 					    m->get_available_modules()};
-      ::encode(m->get_metadata(), pending_metadata[m->get_name()]);
+      encode(m->get_metadata(), pending_metadata[m->get_name()]);
       pending_metadata_rm.erase(m->get_name());
       updated = true;
     }
@@ -935,7 +935,7 @@ int MgrMonitor::load_metadata(const string& name, std::map<string, string>& m,
     return r;
   try {
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
   }
   catch (buffer::error& e) {
     if (err)
