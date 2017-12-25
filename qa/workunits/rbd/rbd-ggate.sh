@@ -184,4 +184,19 @@ _sudo rbd-ggate unmap ${DEV}
 DEV=
 rbd bench -p ${POOL} ${IMAGE} --io-type=write --io-size=1024 --io-total=1024
 
+# unmap by image name test
+DEV=`_sudo rbd-ggate map ${POOL}/${IMAGE}`
+_sudo rbd-ggate list | grep " ${DEV} *$"
+_sudo rbd-ggate unmap "${POOL}/${IMAGE}"
+rbd-ggate list-mapped | expect_false grep " ${DEV} *$"
+DEV=
+
+# map/unmap snap test
+rbd snap create ${POOL}/${IMAGE}@snap
+DEV=`_sudo rbd-ggate map ${POOL}/${IMAGE}@snap`
+_sudo rbd-ggate list | grep " ${DEV} *$"
+_sudo rbd-ggate unmap "${POOL}/${IMAGE}@snap"
+rbd-ggate list-mapped | expect_false grep " ${DEV} *$"
+DEV=
+
 echo OK
