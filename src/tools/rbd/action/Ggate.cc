@@ -77,14 +77,23 @@ static int call_ggate_cmd(const po::variables_map &vm,
 }
 
 void get_list_arguments(po::options_description *positional,
-                        po::options_description *options)
-{ }
+                        po::options_description *options) {
+  at::add_format_options(options);
+}
 
 int execute_list(const po::variables_map &vm)
 {
   std::vector<const char*> args;
 
   args.push_back("list");
+
+  if (vm.count("format")) {
+    args.push_back("--format");
+    args.push_back(vm["format"].as<at::Format>().value.c_str());
+  }
+  if (vm["pretty-format"].as<bool>()) {
+    args.push_back("--pretty-format");
+  }
 
   return call_ggate_cmd(vm, args);
 }
