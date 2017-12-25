@@ -153,7 +153,8 @@ epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
 }
 
 
-struct C_UpdateCreatingPGs : public Context {
+class C_UpdateCreatingPGs : public Context {
+public:
   OSDMonitor *osdmon;
   utime_t start;
   epoch_t epoch;
@@ -1179,7 +1180,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 		 << " legacy removed_snaps" << dendl;
 	string k = make_snap_epoch_key(p.first, pending_inc.epoch);
 	bufferlist v;
-	::encode(p.second.removed_snaps, v);
+	encode(p.second.removed_snaps, v);
 	t->put(OSD_SNAP_PREFIX, k, v);
 	for (auto q = p.second.removed_snaps.begin();
 	     q != p.second.removed_snaps.end();
@@ -1253,7 +1254,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
     bufferlist fullbl;
-    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
+    encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
@@ -1265,7 +1266,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
   bufferlist bl;
-  ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
+  encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
   dout(20) << " full_crc " << tmp.get_crc()
 	   << " inc_crc " << pending_inc.inc_crc << dendl;
@@ -1289,7 +1290,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // and pg creating, also!
   auto pending_creatings = update_pending_pgs(pending_inc);
   bufferlist creatings_bl;
-  ::encode(pending_creatings, creatings_bl);
+  encode(pending_creatings, creatings_bl);
   t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
   // removed_snaps
@@ -1299,7 +1300,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	// all snaps removed this epoch
 	string k = make_snap_epoch_key(i.first, pending_inc.epoch);
 	bufferlist v;
-	::encode(i.second, v);
+	encode(i.second, v);
 	t->put(OSD_SNAP_PREFIX, k, v);
       }
       for (auto q = i.second.begin();
@@ -1355,7 +1356,7 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
     return r;
   try {
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
   }
   catch (buffer::error& e) {
     if (err)
@@ -2382,7 +2383,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
     // metadata
     bufferlist osd_metadata;
-    ::encode(m->metadata, osd_metadata);
+    encode(m->metadata, osd_metadata);
     pending_metadata[from] = osd_metadata;
     pending_metadata_rm.erase(from);
 
@@ -3101,7 +3102,7 @@ void OSDMonitor::get_removed_snaps_range(
       if (v.length()) {
 	auto q = v.begin();
 	OSDMap::snap_interval_set_t snaps;
-	::decode(snaps, q);
+	decode(snaps, q);
 	t.union_of(snaps);
       }
     }
@@ -4984,9 +4985,9 @@ string OSDMonitor::make_snap_key_value(
 {
   // encode the *last* epoch in the key so that we can use forward
   // iteration only to search for an epoch in an interval.
-  ::encode(snap, *v);
-  ::encode(snap + num, *v);
-  ::encode(epoch, *v);
+  encode(snap, *v);
+  encode(snap + num, *v);
+  encode(epoch, *v);
   return make_snap_key(pool, snap + num - 1);
 }
 
@@ -5003,9 +5004,9 @@ string OSDMonitor::make_snap_purged_key_value(
 {
   // encode the *last* epoch in the key so that we can use forward
   // iteration only to search for an epoch in an interval.
-  ::encode(snap, *v);
-  ::encode(snap + num, *v);
-  ::encode(epoch, *v);
+  encode(snap, *v);
+  encode(snap + num, *v);
+  encode(epoch, *v);
   return make_snap_purged_key(pool, snap + num - 1);
 }
 
@@ -5023,8 +5024,8 @@ int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
   }
   bufferlist v = it->value();
   auto p = v.begin();
-  ::decode(*begin, p);
-  ::decode(*end, p);
+  decode(*begin, p);
+  decode(*end, p);
   if (snap < *begin || snap >= *end) {
     return -ENOENT;
   }
@@ -5408,7 +5409,7 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  stringstream& ss)
 {
   OSDMap::Incremental new_pending = pending_inc;
-  ::encode(*newcrush, new_pending.crush, mon->get_quorum_con_features());
+  encode(*newcrush, new_pending.crush, mon->get_quorum_con_features());
   OSDMap newmap;
   newmap.deepish_copy_from(osdmap);
   newmap.apply_incremental(new_pending);
@@ -11136,7 +11137,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     {
       uint64_t snapid;
       pp.add_unmanaged_snap(snapid);
-      ::encode(snapid, reply_data);
+      encode(snapid, reply_data);
       changed = true;
     }
     break;
