@@ -90,7 +90,7 @@ static int do_map(int argc, const char *argv[])
     std::string err;
     r = forker.prefork(err);
     if (r < 0) {
-      cerr << err << std::endl;
+      std::cerr << err << std::endl;
       return r;
     }
 
@@ -122,24 +122,30 @@ static int do_map(int argc, const char *argv[])
 
   r = rados.connect();
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to connect to cluster: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
   r = rados.ioctx_create(poolname.c_str(), io_ctx);
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to acces pool " << poolname << ": "
+              << cpp_strerror(r) << std::endl;
     goto done;
   }
 
   r = rbd.open(io_ctx, image, imgname.c_str());
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to open image " << imgname << ": "
+              << cpp_strerror(r) << std::endl;
     goto done;
   }
 
   if (exclusive) {
     r = image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE);
     if (r < 0) {
-      cerr << "rbd-ggate: failed to acquire exclusive lock: " << cpp_strerror(r)
-           << std::endl;
+      std::cerr << "rbd-ggate: failed to acquire exclusive lock: "
+                << cpp_strerror(r) << std::endl;
       goto done;
     }
   }
@@ -149,6 +155,8 @@ static int do_map(int argc, const char *argv[])
   if (!snapname.empty()) {
     r = image.snap_set(snapname.c_str());
     if (r < 0) {
+      std::cerr << "rbd-ggate: failed to set snapshot " << snapname << ": "
+                << cpp_strerror(r) << std::endl;
       goto done;
     }
     readonly = true;
@@ -157,6 +165,8 @@ static int do_map(int argc, const char *argv[])
 
   r = image.stat(info, sizeof(info));
   if (r < 0) {
+    std::cerr << "rbd-ggate: image stat failed: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
@@ -165,12 +175,16 @@ static int do_map(int argc, const char *argv[])
   r = drv->init();
   if (r < 0) {
     r = -errno;
+    std::cerr << "rbd-ggate: failed to create ggate device: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
   watcher.reset(new rbd::ggate::Watcher(drv.get(), io_ctx, image, info.size));
   r = image.update_watch(watcher.get(), &handle);
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to set watcher: " << cpp_strerror(r)
+              << std::endl;
     drv->shut_down();
     goto done;
   }
@@ -202,6 +216,10 @@ done:
   image.close();
   io_ctx.close();
   rados.shutdown();
+
+  if (r < 0) {
+    std::cerr << "rbd-ggate: failed to map: " << cpp_strerror(r) << std::endl;
+  }
 
   forker.exit(r < 0 ? EXIT_FAILURE : 0);
   // Unreachable;
