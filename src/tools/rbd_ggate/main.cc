@@ -273,6 +273,46 @@ static int parse_imgpath(const std::string &imgpath, std::string *poolname,
   return 0;
 }
 
+static bool find_mapped_dev_by_spec(const std::string &spec,
+                                    std::string *devname) {
+  std::string poolname, imgname, snapname;
+  int r = parse_imgpath(spec, &poolname, &imgname, &snapname);
+  if (r < 0) {
+    return false;
+  }
+  if (poolname.empty()) {
+    // We could use rbd_default_pool config to set pool name but then
+    // we would need to initialize the global context. So right now it
+    // is mandatory for the user to specify a pool. Fortunately the
+    // preferred way for users to call rbd-ggate is via rbd, which
+    // cares to set the pool name.
+    return false;
+  }
+
+  std::map<std::string, rbd::ggate::Driver::DevInfo> devs;
+  r = rbd::ggate::Driver::list(&devs);
+  if (r < 0) {
+    return false;
+  }
+
+  for (auto &it : devs) {
+    auto &name = it.second.first;
+    auto &info = it.second.second;
+    if (!boost::starts_with(info, "RBD ")) {
+      continue;
+    }
+
+    std::string p, i, s;
+    parse_imgpath(info.substr(4), &p, &i, &s);
+    if (p == poolname && i == imgname && s == snapname) {
+      *devname = name;
+      return true;
+    }
+  }
+
+  return false;
+}
+
 static int do_list(const std::string &format, bool pretty_format)
 {
   rbd::ggate::Driver::load();
@@ -413,10 +453,14 @@ int main(int argc, const char *argv[]) {
       break;
     case Disconnect:
       if (args.begin() == args.end()) {
-        cerr << "rbd-ggate: must specify ggate device path" << std::endl;
+        std::cerr << "rbd-ggate: must specify ggate device or image-or-snap-spec"
+                  << std::endl;
         return EXIT_FAILURE;
       }
-      devpath = *args.begin();
+      if (boost::starts_with(*args.begin(), "/dev/") ||
+          !find_mapped_dev_by_spec(*args.begin(), &devpath)) {
+        devpath = *args.begin();
+      }
       args.erase(args.begin());
       break;
     default:
