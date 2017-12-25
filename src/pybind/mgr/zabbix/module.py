@@ -174,6 +174,8 @@ class Module(MgrModule):
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
+            if osd['kb'] == 0:
+                continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
             osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
             osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
