@@ -170,6 +170,8 @@ _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
 	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 _sudo rbd-nbd unmap ${DEV}
+DEV=
+rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 # auto unmap test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
@@ -183,8 +185,5 @@ for i in `seq 10`; do
   sleep 1
 done
 rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}"
-
-DEV=
-rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 echo OK
