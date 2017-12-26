@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
  *
@@ -23,16 +25,15 @@ protected:
       map = new Map;
   }
   void free_internal() {
-    if (map) {
-      delete map;
-      map = 0;
-    }
+    assert(map);
+    delete map;
+    map = nullptr;
   }
   template <class It>
   class const_iterator_base {
     const compact_map_base *map;
     It it;
-    const_iterator_base() : map(0) { }
+    const_iterator_base() : map(nullptr) { }
     const_iterator_base(const compact_map_base* m) : map(m) { }
     const_iterator_base(const compact_map_base *m, const It& i) : map(m), it(i) { }
     friend class compact_map_base;
@@ -46,7 +47,7 @@ protected:
       return (map == o.map) && (!map->map || it == o.it);
     }
     bool operator!=(const const_iterator_base& o) const {
-      return !(*this == o);;
+      return !(*this == o);
     }
     const_iterator_base& operator=(const const_iterator_base& o) {
       map = o.map;
@@ -73,7 +74,7 @@ protected:
   private:
     const compact_map_base* map;
     It it;
-    iterator_base() : map(0) { }
+    iterator_base() : map(nullptr) { }
     iterator_base(compact_map_base* m) : map(m) { }
     iterator_base(compact_map_base* m, const It& i) : map(m), it(i) { }
     friend class compact_map_base;
@@ -86,7 +87,7 @@ protected:
       return (map == o.map) && (!map->map || it == o.it);
     }
     bool operator!=(const iterator_base& o) const {
-      return !(*this == o);;
+      return !(*this == o);
     }
     iterator_base& operator=(const iterator_base& o) {
       map = o.map;
@@ -154,8 +155,8 @@ public:
       const_reverse_iterator(const compact_map_base* m, const typename Map::const_reverse_iterator& i)
 	: const_iterator_base<typename Map::const_reverse_iterator>(m, i) { }
   };
-  compact_map_base() : map(0) {}
-  compact_map_base(const compact_map_base& o) : map(0) {
+  compact_map_base() : map(nullptr) {}
+  compact_map_base(const compact_map_base& o) : map(nullptr) {
     if (o.map) {
       alloc_internal();
       *map = *o.map;
@@ -182,20 +183,23 @@ public:
     if (map) {
       assert(this == p.map);
       map->erase(p.it);
-      if (map->empty())
+      if (map && map->empty()) {
 	free_internal();
+      }
     }
   }
   size_t erase (const Key& k) {
     if (!map)
       return 0;
     size_t r = map->erase(k);
-    if (map->empty())
+    if (map && map->empty()) {
 	free_internal();
+    }
     return r;
   }
   void clear() {
-    free_internal();
+    if (map)
+      free_internal();
   }
   void swap(compact_map_base& o) {
     Map *tmp = map;
@@ -206,8 +210,9 @@ public:
     if (o.map) {
       alloc_internal();
       *map = *o.map;
-    } else
+    } else if (map) {
       free_internal();
+    }
     return *this;
   }
   iterator insert(const std::pair<const Key, T>& val) {
@@ -215,86 +220,52 @@ public:
     return iterator(this, map->insert(val));
   }
   iterator begin() {
-   if (!map)
-     return iterator(this);
-   return iterator(this, map->begin());
+    return !map ? iterator(this) : iterator(this, map->begin());
   }
   iterator end() {
-   if (!map)
-     return iterator(this);
-   return iterator(this, map->end());
+    return !map ? iterator(this) : iterator(this, map->end());
   }
   reverse_iterator rbegin() {
-   if (!map)
-     return reverse_iterator(this);
-   return reverse_iterator(this, map->rbegin());
+    return !map ? reverse_iterator(this) : reverse_iterator(this, map->rbegin());
   }
   reverse_iterator rend() {
-   if (!map)
-     return reverse_iterator(this);
-   return reverse_iterator(this, map->rend());
+    return !map ? reverse_iterator(this) : reverse_iterator(this, map->rend());
   }
   iterator find(const Key& k) {
-    if (!map)
-      return iterator(this);
-    return iterator(this, map->find(k));
+    return !map ? iterator(this) : iterator(this, map->find(k));
   }
   iterator lower_bound(const Key& k) {
-    if (!map)
-      return iterator(this);
-    return iterator(this, map->lower_bound(k));
+    return !map ? iterator(this) : iterator(this, map->lower_bound(k));
   }
   iterator upper_bound(const Key& k) {
-    if (!map)
-      return iterator(this);
-    return iterator(this, map->upper_bound(k));
+    return !map ? iterator(this) : iterator(this, map->upper_bound(k));
   }
   const_iterator begin() const {
-   if (!map)
-     return const_iterator(this);
-   return const_iterator(this, map->begin());
+   return !map ? const_iterator(this) : const_iterator(this, map->begin());
   }
   const_iterator end() const {
-   if (!map)
-     return const_iterator(this);
-   return const_iterator(this, map->end());
+   return !map ? const_iterator(this) : const_iterator(this, map->end());
   }
   const_reverse_iterator rbegin() const {
-   if (!map)
-     return const_reverse_iterator(this);
-   return const_reverse_iterator(this, map->rbegin());
+   return !map ? const_reverse_iterator(this) : const_reverse_iterator(this, map->rbegin());
   }
   const_reverse_iterator rend() const {
-   if (!map)
-     return const_reverse_iterator(this);
-   return const_reverse_iterator(this, map->rend());
+   return !map ? const_reverse_iterator(this) : const_reverse_iterator(this, map->rend());
   }
   const_iterator find(const Key& k) const {
-    if (!map)
-      return const_iterator(this);
-    return const_iterator(this, map->find(k));
+    return !map ? const_iterator(this) : const_iterator(this, map->find(k));
   }
   const_iterator lower_bound(const Key& k) const {
-    if (!map)
-      return const_iterator(this);
-    return const_iterator(this, map->lower_bound(k));
+    return !map ? const_iterator(this) : const_iterator(this, map->lower_bound(k));
   }
   const_iterator upper_bound(const Key& k) const {
-    if (!map)
-      return const_iterator(this);
-    return const_iterator(this, map->upper_bound(k));
+    return !map ? const_iterator(this) : const_iterator(this, map->upper_bound(k));
   }
   void encode(bufferlist &bl) const {
-    if (map)
-      ::encode(*map, bl);
-    else
-      ::encode((uint32_t)0, bl);
+    map ? ::encode(*map, bl) : ::encode((uint32_t)0, bl);
   }
   void encode(bufferlist &bl, uint64_t features) const {
-    if (map)
-      ::encode(*map, bl, features);
-    else
-      ::encode((uint32_t)0, bl);
+    map ? ::encode(*map, bl, features) : ::encode((uint32_t)0, bl);
   }
   void decode(bufferlist::iterator& p) {
     uint32_t n;
@@ -302,8 +273,9 @@ public:
     if (n > 0) {
       alloc_internal();
       ::decode_nohead(n, *map, p);
-    } else
+    } else if (map) {
       free_internal();
+    }
   }
 };
 
@@ -353,7 +325,7 @@ template <class Key, class T>
 inline std::ostream& operator<<(std::ostream& out, const compact_multimap<Key, T>& m)
 {
   out << "{{";
-  for (typename compact_map<Key, T>::const_iterator it = m.begin(); !it.end(); ++it) {
+  for (typename compact_map<Key, T>::const_iterator it = m.begin(); it != it.end(); ++it) {
     if (it != m.begin())
       out << ",";
     out << it->first << "=" << it->second;
