@@ -1,15 +1,18 @@
 #ifndef CEPH_RGW_SYNC_H
 #define CEPH_RGW_SYNC_H
 
-#include "rgw_coroutine.h"
-#include "rgw_http_client.h"
-#include "rgw_meta_sync_status.h"
-#include "rgw_sync_trace.h"
+#include <atomic>
 
 #include "include/stringify.h"
 #include "common/RWLock.h"
 
-#include <atomic>
+#include "rgw_coroutine.h"
+#include "rgw_http_client.h"
+#include "rgw_metadata.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_rados.h"
+#include "rgw_sync_trace.h"
+
 
 #define ERROR_LOGGER_SHARDS 32
 #define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
@@ -41,7 +44,7 @@ struct rgw_mdlog_entry {
     timestamp = le.timestamp.to_real_time();
     try {
       bufferlist::iterator iter = le.data.begin();
-      ::decode(log_data, iter);
+      decode(log_data, iter);
     } catch (buffer::error& err) {
       return false;
     }
@@ -87,17 +90,17 @@ struct rgw_sync_error_info {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(source_zone, bl);
-    ::encode(error_code, bl);
-    ::encode(message, bl);
+    encode(source_zone, bl);
+    encode(error_code, bl);
+    encode(message, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(source_zone, bl);
-    ::decode(error_code, bl);
-    ::decode(message, bl);
+    decode(source_zone, bl);
+    decode(error_code, bl);
+    decode(message, bl);
     DECODE_FINISH(bl);
   }
 

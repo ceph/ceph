@@ -428,9 +428,10 @@ static int build_token(const string& swift_user,
                        const utime_t& expiration,
                        bufferlist& bl)
 {
-  ::encode(swift_user, bl);
-  ::encode(nonce, bl);
-  ::encode(expiration, bl);
+  using ceph::encode;
+  encode(swift_user, bl);
+  encode(nonce, bl);
+  encode(expiration, bl);
 
   bufferptr p(CEPH_CRYPTO_HMACSHA1_DIGESTSIZE);
 
@@ -508,9 +509,10 @@ SignedTokenEngine::authenticate(const std::string& token,
   try {
     /*const*/ auto iter = tok_bl.begin();
 
-    ::decode(swift_user, iter);
-    ::decode(nonce, iter);
-    ::decode(expiration, iter);
+    using ceph::decode;
+    decode(swift_user, iter);
+    decode(nonce, iter);
+    decode(expiration, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "NOTICE: failed to decode token" << dendl;
     throw -EINVAL;

@@ -62,22 +62,22 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(max_age, bl);
-    ::encode(allowed_methods, bl);
-    ::encode(id, bl);
-    ::encode(allowed_hdrs, bl);
-    ::encode(allowed_origins, bl);
-    ::encode(exposable_hdrs, bl);
+    encode(max_age, bl);
+    encode(allowed_methods, bl);
+    encode(id, bl);
+    encode(allowed_hdrs, bl);
+    encode(allowed_origins, bl);
+    encode(exposable_hdrs, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(max_age, bl);
-    ::decode(allowed_methods, bl);
-    ::decode(id, bl);
-    ::decode(allowed_hdrs, bl);
-    ::decode(allowed_origins, bl);
-    ::decode(exposable_hdrs, bl);
+    decode(max_age, bl);
+    decode(allowed_methods, bl);
+    decode(id, bl);
+    decode(allowed_hdrs, bl);
+    decode(allowed_origins, bl);
+    decode(exposable_hdrs, bl);
     DECODE_FINISH(bl);
   }
   bool has_wildcard_origin();
@@ -100,12 +100,12 @@ class RGWCORSConfiguration
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(rules, bl);
+    encode(rules, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(rules, bl);
+    decode(rules, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

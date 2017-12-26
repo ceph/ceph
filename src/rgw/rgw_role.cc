@@ -25,10 +25,11 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 int RGWRole::store_info(bool exclusive)
 {
+  using ceph::encode;
   string oid = get_info_oid_prefix() + id;
 
   bufferlist bl;
-  ::encode(*this, bl);
+  encode(*this, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
                 bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
 }
@@ -41,7 +42,8 @@ int RGWRole::store_name(bool exclusive)
   string oid = tenant + get_names_oid_prefix() + name;
 
   bufferlist bl;
-  ::encode(nameToId, bl);
+  using ceph::encode;
+  encode(nameToId, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
               bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
 }
@@ -301,7 +303,8 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
   RGWNameToId nameToId;
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(nameToId, iter);
+    using ceph::decode;
+    decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role from pool: " << pool.name << ": "
                   << role_name << dendl;
@@ -326,8 +329,9 @@ int RGWRole::read_info()
   }
 
   try {
+    using ceph::decode;
     bufferlist::iterator iter = bl.begin();
-    ::decode(*this, iter);
+    decode(*this, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role info from pool: " << pool.name <<
                   ": " << id << dendl;
@@ -353,8 +357,9 @@ int RGWRole::read_name()
 
   RGWNameToId nameToId;
   try {
+    using ceph::decode;
     bufferlist::iterator iter = bl.begin();
-    ::decode(nameToId, iter);
+    decode(nameToId, iter);
   } catch (buffer::error& err) {
     ldout(cct, 0) << "ERROR: failed to decode role name from pool: " << pool.name << ": "
                   << name << dendl;

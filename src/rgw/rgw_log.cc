@@ -420,7 +420,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
   entry.bucket_id = bucket_id;
 
   bufferlist bl;
-  ::encode(entry, bl);
+  encode(entry, bl);
 
   struct tm bdt;
   time_t t = entry.time.sec();

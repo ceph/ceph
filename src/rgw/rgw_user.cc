@@ -192,11 +192,11 @@ int rgw_store_user_info(RGWRados *store,
   ui.user_id = info.user_id;
 
   bufferlist link_bl;
-  ::encode(ui, link_bl);
+  encode(ui, link_bl);
 
   bufferlist data_bl;
-  ::encode(ui, data_bl);
-  ::encode(info, data_bl);
+  encode(ui, data_bl);
+  encode(info, data_bl);
 
   string key;
   info.user_id.to_str(key);
@@ -283,7 +283,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
 
   bufferlist::iterator iter = bl.begin();
   try {
-    ::decode(uid, iter);
+    decode(uid, iter);
     int ret = rgw_get_user_info_by_uid(store, uid.user_id, e.info, &e.objv_tracker, NULL, &cache_info);
     if (ret < 0) {
       return ret;
@@ -328,13 +328,13 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 
   bufferlist::iterator iter = bl.begin();
   try {
-    ::decode(user_id, iter);
+    decode(user_id, iter);
     if (user_id.user_id.compare(uid) != 0) {
       lderr(store->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << uid << dendl;
       return -EIO;
     }
     if (!iter.end()) {
-      ::decode(info, iter);
+      decode(info, iter);
     }
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;

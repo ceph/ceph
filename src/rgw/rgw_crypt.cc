@@ -652,7 +652,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
   if (manifest_bl.length()) {
     bufferlist::iterator miter = manifest_bl.begin();
     try {
-      ::decode(manifest, miter);
+      decode(manifest, miter);
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;

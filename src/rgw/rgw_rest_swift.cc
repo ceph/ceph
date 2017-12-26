@@ -1220,7 +1220,7 @@ static void dump_object_metadata(struct req_state * const s,
     if (aiter != std::end(rgw_to_http_attrs)) {
       response_attrs[aiter->second] = kv.second.c_str();
     } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
-      // this attr has an extra length prefix from ::encode() in prior versions
+      // this attr has an extra length prefix from encode() in prior versions
       dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
     } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
@@ -1252,7 +1252,7 @@ static void dump_object_metadata(struct req_state * const s,
   if (iter != std::end(attrs)) {
     utime_t delete_at;
     try {
-      ::decode(delete_at, iter->second);
+      decode(delete_at, iter->second);
       if (!delete_at.is_zero()) {
         dump_header(s, "X-Delete-At", delete_at.sec());
       }

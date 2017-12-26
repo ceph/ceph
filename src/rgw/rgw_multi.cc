@@ -122,7 +122,7 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
     bufferlist::iterator bli = bl.begin();
     RGWUploadPartInfo info;
     try {
-      ::decode(info, bli);
+      decode(info, bli);
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
       return -EIO;

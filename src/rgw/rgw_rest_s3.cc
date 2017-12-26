@@ -158,7 +158,7 @@ int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr
   }
   bufferlist::iterator bliter = bl.begin();
   try {
-    ::decode(*result, bliter);
+    decode(*result, bliter);
   } catch (buffer::error& err) {
     return -EIO;
   }
@@ -287,7 +287,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           content_type = iter->second.c_str();
         }
       } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
-        // this attr has an extra length prefix from ::encode() in prior versions
+        // this attr has an extra length prefix from encode() in prior versions
         dump_header(s, "X-Object-Meta-Static-Large-Object", "True");
       } else if (strncmp(name, RGW_ATTR_META_PREFIX,
 			 sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
@@ -1423,14 +1423,14 @@ static inline int get_obj_attrs(RGWRados *store, struct req_state *s, rgw_obj& o
 static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const std::string& value)
 {
   bufferlist bl;
-  ::encode(value,bl);
+  encode(value,bl);
   attrs.emplace(key, std::move(bl));
 }
 
 static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
 {
   bufferlist bl;
-  ::encode(value,bl);
+  encode(value,bl);
   attrs.emplace(key, std::move(bl));
 }
 
