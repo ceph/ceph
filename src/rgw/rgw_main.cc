@@ -197,6 +197,7 @@ int main(int argc, const char **argv)
           flags);
 
   list<string> frontends;
+  g_conf->early_expand_meta(g_conf->rgw_frontends, &cerr);
   get_str_list(g_conf->rgw_frontends, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
