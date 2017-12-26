@@ -249,7 +249,7 @@ int Dumper::undump(const char *dump_file)
   h.layout.pool_id = fs->mds_map.get_metadata_pool();
   
   bufferlist hbl;
-  ::encode(h, hbl);
+  encode(h, hbl);
 
   object_t oid = file_object_t(ino, 0);
   object_locator_t oloc(fs->mds_map.get_metadata_pool());
