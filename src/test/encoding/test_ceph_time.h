@@ -2,7 +2,10 @@
 #define TEST_CEPH_TIME_H
 
 #include <list>
+
+#include "include/encoding.h"
 #include "common/ceph_time.h"
+#include "common/Formatter.h"
 
 // wrapper for ceph::real_time that implements the dencoder interface
 class real_time_wrapper {
@@ -12,10 +15,12 @@ class real_time_wrapper {
   real_time_wrapper(const ceph::real_time& t) : t(t) {}
 
   void encode(bufferlist& bl) const {
-    ::encode(t, bl);
+    using ceph::encode;
+    encode(t, bl);
   }
   void decode(bufferlist::iterator &p) {
-    ::decode(t, p);
+    using ceph::decode;
+    decode(t, p);
   }
   void dump(Formatter* f) {
     auto epoch_time = ceph::real_clock::to_time_t(t);

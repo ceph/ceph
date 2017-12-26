@@ -428,7 +428,7 @@ TEST_P(StoreTest, FiemapEmpty) {
     store->fiemap(cid, oid, 0, 100000, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     e[0] = 100000;
     EXPECT_TRUE(m == e || m.empty());
@@ -467,7 +467,7 @@ TEST_P(StoreTest, FiemapHoles) {
     store->fiemap(cid, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
     ASSERT_GE(m[0], 3u);
@@ -487,7 +487,7 @@ TEST_P(StoreTest, FiemapHoles) {
     store->fiemap(cid, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
     map<uint64_t,uint64_t> m, e;
     auto p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
     // kstore always returns [0, object_size] regardless of offset and length
@@ -612,8 +612,8 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
     t.create_collection(cid, 5);
     cerr << "create collection" << std::endl;
     bufferlist hint;
-    ::encode(pg_num, hint);
-    ::encode(expected_num_objs, hint);
+    encode(pg_num, hint);
+    encode(expected_num_objs, hint);
     t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
     cerr << "collection hint" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));

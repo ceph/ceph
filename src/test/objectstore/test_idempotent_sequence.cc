@@ -118,7 +118,7 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
   int32_t txn = 0;
   if (bl.length()) {
     bufferlist::iterator p = bl.begin();
-    ::decode(txn, p);
+    decode(txn, p);
   }
 
   store->umount();

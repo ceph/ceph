@@ -133,7 +133,7 @@ int DeterministicOpSequence::_gen_obj_id(rngen_t& gen)
 void DeterministicOpSequence::note_txn(ObjectStore::Transaction *t)
 {
   bufferlist bl;
-  ::encode(txn, bl);
+  encode(txn, bl);
   t->truncate(txn_coll, ghobject_t(txn_object), 0);
   t->write(txn_coll, ghobject_t(txn_object), 0, bl.length(), bl);
   dout(10) << __func__ << " " << txn << dendl;
@@ -448,8 +448,8 @@ void DeterministicOpSequence::_do_coll_create(coll_t cid, uint32_t pg_num, uint6
   note_txn(&t);
   t.create_collection(cid, 32);
   bufferlist hint;
-  ::encode(pg_num, hint);
-  ::encode(num_objs, hint);
+  encode(pg_num, hint);
+  encode(num_objs, hint);
   t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
   dout(0) << "Give collection: " << cid << " a hint, pg_num is: " << pg_num << ", num_objs is: "
     << num_objs << dendl;

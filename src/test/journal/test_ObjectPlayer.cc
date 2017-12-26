@@ -158,7 +158,7 @@ TYPED_TEST(TestObjectPlayer, FetchCorrupt) {
 
   bufferlist bl;
   encode(entry1, bl);
-  ::encode(this->create_payload("corruption"), bl);
+  encode(this->create_payload("corruption"), bl);
   encode(entry2, bl);
   ASSERT_EQ(0, this->append(this->get_object_name(oid), bl));
 

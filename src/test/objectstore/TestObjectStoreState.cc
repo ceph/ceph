@@ -54,8 +54,8 @@ void TestObjectStoreState::init(int colls, int objs)
     bufferlist hint;
     uint32_t pg_num = colls;
     uint64_t num_objs = uint64_t(objs / colls);
-    ::encode(pg_num, hint);
-    ::encode(num_objs, hint);
+    encode(pg_num, hint);
+    encode(num_objs, hint);
     t->collection_hint(entry->m_coll, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
     dout(5) << "give collection hint, number of objects per collection: " << num_objs << dendl;
     t->touch(coll_t::meta(), entry->m_meta_obj);
