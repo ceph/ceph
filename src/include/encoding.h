@@ -1339,9 +1339,4 @@ inline ssize_t decode_file(int fd, bufferptr &bp)
 }
 }
 
-using ceph::encode;
-using ceph::decode;
-using ceph::encode_nohead;
-using ceph::decode_nohead;
-
 #endif
