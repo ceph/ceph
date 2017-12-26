@@ -533,7 +533,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, session->info.inst.name.num());
+      mds->locker->remove_client_cap(in, session->get_client());
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -773,7 +773,7 @@ void Server::find_idle_sessions()
 
     if (g_conf->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
-      mds->evict_client(session->info.inst.name.num(), false, true,
+      mds->evict_client(session->get_client().v, false, true,
                         ss, nullptr);
     } else {
       kill_session(session, NULL);
@@ -1042,7 +1042,7 @@ void Server::reconnect_tick()
 
       if (g_conf->mds_session_blacklist_on_timeout) {
         std::stringstream ss;
-        mds->evict_client(session->info.inst.name.num(), false, true, ss,
+        mds->evict_client(session->get_client().v, false, true, ss,
                           gather.new_sub());
       } else {
         kill_session(session, NULL);

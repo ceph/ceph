@@ -2050,7 +2050,7 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, MCommand *m)
   C_GatherBuilder gather(g_ceph_context, reply);
   for (const auto s : victims) {
     std::stringstream ss;
-    evict_client(s->info.inst.name.num(), false,
+    evict_client(s->get_client().v, false,
                  g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
   }
   gather.activate();

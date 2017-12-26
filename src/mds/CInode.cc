@@ -3034,7 +3034,7 @@ int CInode::get_xlocker_mask(client_t client) const
 
 int CInode::get_caps_allowed_for_client(Session *session, inode_t *file_i) const
 {
-  client_t client = session->info.inst.name.num();
+  client_t client = session->get_client();
   int allowed;
   if (client == get_loner()) {
     // as the loner, we get the loner_caps AND any xlocker_caps for things we have xlocked
@@ -3161,7 +3161,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 			     unsigned max_bytes,
 			     int getattr_caps)
 {
-  client_t client = session->info.inst.name.num();
+  client_t client = session->get_client();
   assert(snapid);
   assert(session->connection);
   
