@@ -1815,8 +1815,9 @@ string rgw_pool::to_str() const
 
 void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
 {
+  using ceph::decode;
   rgw_obj old_obj;
-  ::decode(old_obj, bl);
+  decode(old_obj, bl);
 
   get_obj_bucket_and_oid_loc(old_obj, oid, loc);
   pool = old_obj.get_explicit_data_pool();
