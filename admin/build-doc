@@ -22,7 +22,11 @@ if command -v dpkg >/dev/null; then
 elif command -v yum >/dev/null; then
     for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
 	if ! rpm -q $package >/dev/null ; then
-		missing="${missing:+$missing }$package"
+		command -v `echo $package | tr '[:upper:]' '[:lower:]' | awk -F "-" '{ if ($2 == "") print $1; else print $2}'`   > /dev/null;
+		ret_code=$?
+		if [ $ret_code -ne 0 ]; then
+			missing="${missing:+$missing }$package"
+		fi
 	fi
     done
     if [ -n "$missing" ]; then
