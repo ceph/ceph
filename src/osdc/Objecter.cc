@@ -618,7 +618,7 @@ void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
     // make note of the notify_id
     bufferlist::iterator p = outbl.begin();
     try {
-      ::decode(info->notify_id, p);
+      decode(info->notify_id, p);
       ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id
 		     << dendl;
     }
@@ -3806,9 +3806,9 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   bufferlist::iterator iter = list_context->bl.begin();
   pg_nls_response_t response;
   bufferlist extra_info;
-  ::decode(response, iter);
+  decode(response, iter);
   if (!iter.end()) {
-    ::decode(extra_info, iter);
+    decode(extra_info, iter);
   }
 
   // if the osd returns 1 (newer code), or handle MAX, it means we
@@ -3902,7 +3902,7 @@ struct C_SelfmanagedSnap : public Context {
   void finish(int r) override {
     if (r == 0) {
       bufferlist::iterator p = bl.begin();
-      ::decode(*psnapid, p);
+      decode(*psnapid, p);
     }
     fin->complete(r);
   }
@@ -5182,9 +5182,9 @@ void Objecter::_enumerate_reply(
 
   // XXX extra_info doesn't seem used anywhere?
   bufferlist extra_info;
-  ::decode(response, iter);
+  decode(response, iter);
   if (!iter.end()) {
-    ::decode(extra_info, iter);
+    decode(extra_info, iter);
   }
 
   ldout(cct, 10) << __func__ << ": got " << response.entries.size()
