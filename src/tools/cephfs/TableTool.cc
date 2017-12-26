@@ -118,7 +118,7 @@ public:
       try {
         if (mds_table) {
           version_t version;
-          ::decode(version, q);
+          decode(version, q);
           f->dump_int("version", version);
         }
         A table_inst;
@@ -155,7 +155,7 @@ protected:
     bufferlist new_bl;
     if (mds_table) {
       version_t version = 1;
-      ::encode(version, new_bl);
+      encode(version, new_bl);
     }
     table_inst.encode_state(new_bl);
 

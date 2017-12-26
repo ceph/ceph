@@ -483,7 +483,7 @@ int main(int argc, const char *argv[])
         std::cerr << "error reading version: " << errstr << std::endl;
         return 1;
       }
-      ::encode(v, val);
+      encode(v, val);
     } else if (subcmd == "in") {
       int ret = val.read_file(argv[7], &errstr);
       if (ret < 0 || !errstr.empty()) {
