@@ -363,7 +363,7 @@ void MDBalancer::send_heartbeat()
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch, last_epoch_under);
+    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
     hb->get_import_map() = import_map;
     messenger->send_message(hb,
                             mds->mdsmap->get_inst(*p));
@@ -417,7 +417,6 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
 
   mds_load[who] = m->get_load();
   mds_import_map[who] = m->get_import_map();
-  mds_last_epoch_under_info[who] = m->get_last_epoch_under();
 
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
@@ -646,13 +645,18 @@ void MDBalancer::prep_rebalance(int beat)
 	    << dendl;
 
     // under or over?
-    if (my_load < target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
-      dout(5) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
-      last_epoch_under = beat_epoch;
-      mds->mdcache->show_subtrees();
-      return;
+    for (auto p : load_map) {
+      if (p.first < target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
+	dout(5) << " mds." << p.second << " is underloaded or barely overloaded." << dendl;
+	mds_last_epoch_under_map[p.second] = beat_epoch;
+      }
     }
 
+    int last_epoch_under = mds_last_epoch_under_map[whoami];
+    if (last_epoch_under == beat_epoch) {
+      dout(5) << "  i am underloaded or barely overloaded, doing nothing." << dendl;
+      return;
+    }
     // am i over long enough?
     if (last_epoch_under && beat_epoch - last_epoch_under < 2) {
       dout(5) << "  i am overloaded, but only for " << (beat_epoch - last_epoch_under) << " epochs" << dendl;
@@ -675,13 +679,13 @@ void MDBalancer::prep_rebalance(int beat)
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
-      } else if (it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
-        int mds_last_epoch_under = (it->second == whoami) ? 0 : mds_last_epoch_under_info[it->second];
-        if (!mds_last_epoch_under || beat_epoch - mds_last_epoch_under >= 2) {
+      } else {
+	int mds_last_epoch_under = mds_last_epoch_under_map[it->second];
+	if (!(mds_last_epoch_under && beat_epoch - mds_last_epoch_under < 2)) {
 	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
 	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
 	  exporter_set.insert(it->second);
-        }
+	}
       }
     }
 
@@ -1291,7 +1295,7 @@ void MDBalancer::adjust_pop_for_rename(CDir *pdir, CDir *dir, utime_t now, bool 
 void MDBalancer::handle_mds_failure(mds_rank_t who)
 {
   if (0 == who) {
-    last_epoch_under = 0;
+    mds_last_epoch_under_map.clear();
   }
 }
 
