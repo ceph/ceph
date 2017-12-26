@@ -144,6 +144,7 @@ private:
   map<mds_rank_t, mds_load_t>  mds_load;
   map<mds_rank_t, double>       mds_meta_load;
   map<mds_rank_t, map<mds_rank_t, float> > mds_import_map;
+  map<mds_rank_t, int> mds_last_epoch_under_info;
 
   // per-epoch state
   double          my_load, target_load;
