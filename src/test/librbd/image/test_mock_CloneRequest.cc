@@ -237,7 +237,7 @@ public:
                             const std::map<std::string, bufferlist>& metadata,
                             int r) {
     bufferlist out_bl;
-    ::encode(metadata, out_bl);
+    encode(metadata, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("metadata_list"), _, _, _))
@@ -252,7 +252,7 @@ public:
                            const std::map<std::string, bufferlist>& metadata,
                            int r) {
     bufferlist in_bl;
-    ::encode(metadata, in_bl);
+    encode(metadata, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(mock_image_ctx.header_oid, _, StrEq("rbd"), StrEq("metadata_set"),
@@ -269,7 +269,7 @@ public:
   void expect_mirror_mode_get(MockTestImageCtx &mock_image_ctx,
                               cls::rbd::MirrorMode mirror_mode, int r) {
     bufferlist out_bl;
-    ::encode(static_cast<uint32_t>(mirror_mode), out_bl);
+    encode(static_cast<uint32_t>(mirror_mode), out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_mode_get"),

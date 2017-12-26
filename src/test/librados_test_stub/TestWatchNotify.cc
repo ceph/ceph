@@ -302,8 +302,8 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 		 << ": completing" << dendl;
 
   if (notify_handle->pbl != NULL) {
-    ::encode(notify_handle->notify_responses, *notify_handle->pbl);
-    ::encode(notify_handle->pending_watcher_ids, *notify_handle->pbl);
+    encode(notify_handle->notify_responses, *notify_handle->pbl);
+    encode(notify_handle->pending_watcher_ids, *notify_handle->pbl);
   }
 
   notify_handle->rados_client->get_aio_finisher()->queue(
