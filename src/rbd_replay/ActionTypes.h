@@ -330,13 +330,10 @@ private:
 
 WRITE_CLASS_ENCODER(ActionEntry);
 
-} // namespace action
-} // namespace rbd_replay
-
 std::ostream &operator<<(std::ostream &out,
                          const rbd_replay::action::ActionType &type);
 
-using rbd_replay::action::decode;
-using rbd_replay::action::encode;
+} // namespace action
+} // namespace rbd_replay
 
 #endif // CEPH_RBD_REPLAY_ACTION_TYPES_H
