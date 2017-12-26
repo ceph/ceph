@@ -76,6 +76,11 @@
  */
 #define P2ROUNDUP(x, align)		(-(-(x) & -(align)))
 
+template <typename T>
+T round_up_to(T a, T b) {
+  return a%b ? a+b-a%b : a;
+}
+
 // count trailing zeros.
 // NOTE: the builtin is nondeterministic on 0 input
 template<class T>

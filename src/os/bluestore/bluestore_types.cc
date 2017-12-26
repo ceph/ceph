@@ -386,7 +386,7 @@ void bluestore_blob_use_tracker_t::init(
   assert(_au_size > 0);
   assert(full_length > 0);
   clear();  
-  uint32_t _num_au = ROUND_UP_TO(full_length, _au_size) / _au_size;
+  uint32_t _num_au = round_up_to<uint32_t>(full_length, _au_size) / _au_size;
   au_size = _au_size;
   if( _num_au > 1 ) {
     num_au = _num_au;

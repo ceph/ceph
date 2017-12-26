@@ -182,7 +182,7 @@ void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
            << dendl;
   uint64_t size = m_bit_alloc->size() * m_block_size;
 
-  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t offset_adj = round_up_to<uint64_t>(offset, m_block_size);
   uint64_t length_adj = ((length - (offset_adj - offset)) /
                          m_block_size) * m_block_size;
 
@@ -203,7 +203,7 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 
   // we use the same adjustment/alignment that init_add_free does
   // above so that we can yank back some of the space.
-  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t offset_adj = round_up_to<uint64_t>(offset, m_block_size);
   uint64_t length_adj = ((length - (offset_adj - offset)) /
                          m_block_size) * m_block_size;
 

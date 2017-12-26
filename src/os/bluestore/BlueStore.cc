@@ -589,7 +589,8 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
   assert(start_offset <= start_touch_offset && end_offset>= end_touch_offset);
 
   uint64_t lookup_start_offset = P2ALIGN(start_offset, min_alloc_size);
-  uint64_t lookup_end_offset = ROUND_UP_TO(end_offset, min_alloc_size);
+  uint64_t lookup_end_offset =
+    round_up_to<uint64_t>(end_offset, min_alloc_size);
 
   dout(30) << __func__ << " (hex): [" << std::hex
            << lookup_start_offset << ", " << lookup_end_offset 
@@ -681,7 +682,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
     if (bi.referenced_bytes == 0) {
       uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
       int64_t blob_expected_for_release =
-        ROUND_UP_TO(len_on_disk, min_alloc_size) / min_alloc_size;
+        round_up_to<uint64_t>(len_on_disk, min_alloc_size) / min_alloc_size;
 
       dout(30) << __func__ << " " << *(b_it->first)
                << " expected4release=" << blob_expected_for_release
@@ -4246,14 +4247,15 @@ int BlueStore::_open_fm(bool create)
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    uint64_t reserved = ROUND_UP_TO(MAX(SUPER_RESERVED, min_alloc_size),
-				    min_alloc_size);
+    uint64_t reserved = round_up_to<uint64_t>(
+      std::max((uint64_t)SUPER_RESERVED, min_alloc_size), min_alloc_size);
     fm->allocate(0, reserved, t);
 
     if (cct->_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = ROUND_UP_TO(p.get_start() + p.get_len(), min_alloc_size);
+      reserved = round_up_to<uint64_t>(
+        p.get_start() + p.get_len(), min_alloc_size);
       dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
 	       << " for bluefs" << dendl;
       bufferlist bl;
@@ -5562,7 +5564,7 @@ static void apply(uint64_t off,
                   BlueStore::mempool_dynamic_bitset &bitset,
                   std::function<void(uint64_t,
 				     BlueStore::mempool_dynamic_bitset &)> f) {
-  auto end = ROUND_UP_TO(off + len, granularity);
+  auto end = round_up_to<uint64_t>(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
     f(pos, bitset);
@@ -5908,7 +5910,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
 	  uint64_t start = l.blob_offset / chunk_size;
 	  uint64_t end =
-	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
+	    round_up_to<uint64_t>(
+              l.blob_offset + l.length, chunk_size) / chunk_size;
 	  for (auto i = start; i < end; ++i) {
 	    (*pu) |= (1u << i);
 	  }

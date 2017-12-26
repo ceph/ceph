@@ -353,7 +353,7 @@ struct bluestore_blob_use_tracker_t {
   }
   void prune_tail(uint32_t new_len) {
     if (num_au) {
-      new_len = ROUND_UP_TO(new_len, au_size);
+      new_len = round_up_to<uint32_t>(new_len, au_size);
       uint32_t _num_au = new_len / au_size;
       assert(_num_au <= num_au);
       if (_num_au) {
@@ -378,7 +378,7 @@ struct bluestore_blob_use_tracker_t {
       bytes_per_au[0] = old_total;
     } else {
       assert(_au_size == au_size);
-      new_len = ROUND_UP_TO(new_len, au_size);
+      new_len = round_up_to<uint32_t>(new_len, au_size);
       uint32_t _num_au = new_len / au_size;
       assert(_num_au >= num_au);
       if (_num_au > num_au) {
@@ -688,7 +688,8 @@ public:
     assert(offset + length <= blob_len);
     uint64_t chunk_size = blob_len / (sizeof(unused)*8);
     uint64_t start = offset / chunk_size;
-    uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+    uint64_t end =
+      round_up_to<uint64_t>(offset + length, chunk_size) / chunk_size;
     auto i = start;
     while (i < end && (unused & (1u << i))) {
       i++;
@@ -702,7 +703,7 @@ public:
     assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
     uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
+    uint64_t start = round_up_to<uint64_t>(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     for (auto i = start; i < end; ++i) {
       unused |= (1u << i);
@@ -720,7 +721,8 @@ public:
       assert(offset + length <= blob_len);
       uint64_t chunk_size = blob_len / (sizeof(unused)*8);
       uint64_t start = offset / chunk_size;
-      uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+      uint64_t end =
+        round_up_to<uint64_t>(offset + length, chunk_size) / chunk_size;
       for (auto i = start; i < end; ++i) {
         unused &= ~(1u << i);
       }
