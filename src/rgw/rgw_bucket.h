@@ -20,7 +20,7 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-// define as static when RGWBucket implementation compete
+// define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
