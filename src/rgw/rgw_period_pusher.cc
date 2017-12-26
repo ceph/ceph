@@ -180,7 +180,7 @@ void RGWPeriodPusher::handle_notify(RGWRealmNotify type,
   // decode the period
   RGWZonesNeedPeriod info;
   try {
-    ::decode(info, p);
+    decode(info, p);
   } catch (buffer::error& e) {
     lderr(cct) << "Failed to decode the period: " << e.what() << dendl;
     return;

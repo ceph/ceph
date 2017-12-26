@@ -285,7 +285,7 @@ struct es_obj_metadata {
       if (name == "acl") {
         try {
           auto i = val.begin();
-          ::decode(policy, i);
+          decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
         }
@@ -305,7 +305,7 @@ struct es_obj_metadata {
         }
       } else if (name == "x-amz-tagging") {
         auto tags_bl = val.begin();
-        ::decode(obj_tags, tags_bl);
+        decode(obj_tags, tags_bl);
       } else {
         if (name != "pg_ver" &&
             name != "source_zone" &&

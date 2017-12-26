@@ -974,18 +974,20 @@ namespace rgw {
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
   {
+    using ceph::encode;
     fh_key fhk(this->fh.fh_hk);
-    rgw::encode(fhk, ux_key1);
-    rgw::encode(*this, ux_attrs1);
+    encode(fhk, ux_key1);
+    encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
                                                 const ceph::buffer::list* ux_attrs1)
   {
+    using ceph::decode;
     DecodeAttrsResult dar { false, false };
     fh_key fhk;
     auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
-    rgw::decode(fhk, bl_iter_key1);
+    decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
       assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
@@ -993,7 +995,7 @@ namespace rgw {
     }
 
     auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
-    rgw::decode(*this, bl_iter_unix1);
+    decode(*this, bl_iter_unix1);
     if (this->state.version < 2) {
       get<1>(dar) = true;
     }
@@ -1448,7 +1450,7 @@ namespace rgw {
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.blocks = std::move(compressor->get_compression_blocks());
-      ::encode(cs_info, tmp);
+      encode(cs_info, tmp);
       attrs[RGW_ATTR_COMPRESSION] = tmp;
       ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
 			<< " with type=" << cs_info.compression_type
@@ -1492,7 +1494,8 @@ namespace rgw {
      * processing any input from user in order to prohibit overwriting. */
     if (unlikely(!! slo_info)) {
       buffer::list slo_userindicator_bl;
-      ::encode("True", slo_userindicator_bl);
+      using ceph::encode;
+      encode("True", slo_userindicator_bl);
       emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
