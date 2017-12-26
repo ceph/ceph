@@ -567,7 +567,7 @@ public:
 #ifdef CACHE_BLOB_BL
     void _encode() const {
       if (blob_bl.length() == 0 ) {
-	::encode(blob, blob_bl);
+	encode(blob, blob_bl);
       } else {
 	assert(blob_bl.length());
       }
@@ -1466,14 +1466,16 @@ public:
 	values[STATFS_COMPRESSED_ALLOCATED] == 0;
     }
     void decode(bufferlist::iterator& it) {
+      using ceph::decode;
       for (size_t i = 0; i < STATFS_LAST; i++) {
-	::decode(values[i], it);
+	decode(values[i], it);
       }
     }
 
     void encode(bufferlist& bl) {
+      using ceph::encode;
       for (size_t i = 0; i < STATFS_LAST; i++) {
-	::encode(values[i], bl);
+	encode(values[i], bl);
       }
     }
   };

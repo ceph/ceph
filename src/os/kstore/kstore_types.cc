@@ -21,14 +21,14 @@
 void kstore_cnode_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(bits, bl);
+  encode(bits, bl);
   ENCODE_FINISH(bl);
 }
 
 void kstore_cnode_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(bits, p);
+  decode(bits, p);
   DECODE_FINISH(p);
 }
 
@@ -50,28 +50,28 @@ void kstore_cnode_t::generate_test_instances(list<kstore_cnode_t*>& o)
 void kstore_onode_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(nid, bl);
-  ::encode(size, bl);
-  ::encode(attrs, bl);
-  ::encode(omap_head, bl);
-  ::encode(stripe_size, bl);
-  ::encode(expected_object_size, bl);
-  ::encode(expected_write_size, bl);
-  ::encode(alloc_hint_flags, bl);
+  encode(nid, bl);
+  encode(size, bl);
+  encode(attrs, bl);
+  encode(omap_head, bl);
+  encode(stripe_size, bl);
+  encode(expected_object_size, bl);
+  encode(expected_write_size, bl);
+  encode(alloc_hint_flags, bl);
   ENCODE_FINISH(bl);
 }
 
 void kstore_onode_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(nid, p);
-  ::decode(size, p);
-  ::decode(attrs, p);
-  ::decode(omap_head, p);
-  ::decode(stripe_size, p);
-  ::decode(expected_object_size, p);
-  ::decode(expected_write_size, p);
-  ::decode(alloc_hint_flags, p);
+  decode(nid, p);
+  decode(size, p);
+  decode(attrs, p);
+  decode(omap_head, p);
+  decode(stripe_size, p);
+  decode(expected_object_size, p);
+  decode(expected_write_size, p);
+  decode(alloc_hint_flags, p);
   DECODE_FINISH(p);
 }
 

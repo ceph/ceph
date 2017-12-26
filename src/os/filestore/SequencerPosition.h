@@ -23,16 +23,16 @@ struct SequencerPosition {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(seq, bl);
-    ::encode(trans, bl);
-    ::encode(op, bl);
+    encode(seq, bl);
+    encode(trans, bl);
+    encode(op, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(1, p);
-    ::decode(seq, p);
-    ::decode(trans, p);
-    ::decode(op, p);
+    decode(seq, p);
+    decode(trans, p);
+    decode(op, p);
     DECODE_FINISH(p);
   }
   void dump(Formatter *f) const {
