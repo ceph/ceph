@@ -222,30 +222,32 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 void entity_addrvec_t::encode(bufferlist& bl, uint64_t features) const
 {
+  using ceph::encode;
   if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
     // encode a single legacy entity_addr_t for unfeatured peers
     if (v.size() > 0) {
       for (vector<entity_addr_t>::const_iterator p = v.begin();
            p != v.end(); ++p) {
         if ((*p).type == entity_addr_t::TYPE_LEGACY) {
-	  ::encode(*p, bl, 0);
+	  encode(*p, bl, 0);
 	  return;
 	}
       }
-      ::encode(v[0], bl, 0);
+      encode(v[0], bl, 0);
     } else {
-      ::encode(entity_addr_t(), bl, 0);
+      encode(entity_addr_t(), bl, 0);
     }
     return;
   }
-  ::encode((__u8)2, bl);
-  ::encode(v, bl, features);
+  encode((__u8)2, bl);
+  encode(v, bl, features);
 }
 
 void entity_addrvec_t::decode(bufferlist::iterator& bl)
 {
+  using ceph::decode;
   __u8 marker;
-  ::decode(marker, bl);
+  decode(marker, bl);
   if (marker == 0) {
     // legacy!
     entity_addr_t addr;
@@ -257,10 +259,10 @@ void entity_addrvec_t::decode(bufferlist::iterator& bl)
   if (marker == 1) {
     entity_addr_t addr;
     DECODE_START(1, bl);
-    ::decode(addr.type, bl);
-    ::decode(addr.nonce, bl);
+    decode(addr.type, bl);
+    decode(addr.nonce, bl);
     __u32 elen;
-    ::decode(elen, bl);
+    decode(elen, bl);
     if (elen) {
       bl.copy(elen, (char*)addr.get_sockaddr());
     }
@@ -271,7 +273,7 @@ void entity_addrvec_t::decode(bufferlist::iterator& bl)
   }
   if (marker > 2)
     throw buffer::malformed_input("entity_addrvec_marker > 2");
-  ::decode(v, bl);
+  decode(v, bl);
 }
 
 void entity_addrvec_t::dump(Formatter *f) const
