@@ -287,7 +287,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
 
     dout(4) << "Writing object..." << dendl;
     bufferlist header_bl;
-    ::encode(*(js.header), header_bl);
+    encode(*(js.header), header_bl);
     output.write_full(js.obj_name(0), header_bl);
     dout(4) << "Write complete." << dendl;
     std::cout << "Successfully updated header." << std::endl;
@@ -766,9 +766,9 @@ int JournalTool::recover_dentries(
         bufferlist::iterator q = old_dentry.begin();
 
         snapid_t dnfirst;
-        ::decode(dnfirst, q);
+        decode(dnfirst, q);
         char dentry_type;
-        ::decode(dentry_type, q);
+        decode(dentry_type, q);
 
         if (dentry_type == 'L') {
           // leave write_dentry false, we have no version to
@@ -802,8 +802,8 @@ int JournalTool::recover_dentries(
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
-        ::encode(fb.dnfirst, dentry_bl);
-        ::encode('I', dentry_bl);
+        encode(fb.dnfirst, dentry_bl);
+        encode('I', dentry_bl);
         encode_fullbit_as_inode(fb, true, &dentry_bl);
 
         // Record for writing to RADOS
@@ -835,9 +835,9 @@ int JournalTool::recover_dentries(
         bufferlist::iterator q = old_dentry.begin();
 
         snapid_t dnfirst;
-        ::decode(dnfirst, q);
+        decode(dnfirst, q);
         char dentry_type;
-        ::decode(dentry_type, q);
+        decode(dentry_type, q);
 
         if (dentry_type == 'L') {
           dout(10) << "Existing hardlink inode in slot to be (maybe) written "
@@ -864,10 +864,10 @@ int JournalTool::recover_dentries(
 
         // Compose: Dentry format is dnfirst, [I|L], InodeStore(bare=true)
         bufferlist dentry_bl;
-        ::encode(rb.dnfirst, dentry_bl);
-        ::encode('L', dentry_bl);
-        ::encode(rb.ino, dentry_bl);
-        ::encode(rb.d_type, dentry_bl);
+        encode(rb.dnfirst, dentry_bl);
+        encode('L', dentry_bl);
+        encode(rb.ino, dentry_bl);
+        encode(rb.d_type, dentry_bl);
 
         // Record for writing to RADOS
         write_vals[key] = dentry_bl;
@@ -890,9 +890,9 @@ int JournalTool::recover_dentries(
 
 	bufferlist::iterator q = it->second.begin();
 	snapid_t dnfirst;
-	::decode(dnfirst, q);
+	decode(dnfirst, q);
 	char dentry_type;
-	::decode(dentry_type, q);
+	decode(dentry_type, q);
 
 	bool remove_dentry = false;
 	if (dentry_type == 'L') {
@@ -966,7 +966,7 @@ int JournalTool::recover_dentries(
         << ")" << dendl;
       bufferlist::iterator inode_bl_iter = old_root_ino_bl.begin(); 
       std::string magic;
-      ::decode(magic, inode_bl_iter);
+      decode(magic, inode_bl_iter);
       if (magic == CEPH_FS_ONDISK_MAGIC) {
         dout(4) << "magic ok" << dendl;
         old_inode.decode(inode_bl_iter);
@@ -990,7 +990,7 @@ int JournalTool::recover_dentries(
 
       // Compose: root ino format is magic,InodeStore(bare=false)
       bufferlist new_root_ino_bl;
-      ::encode(std::string(CEPH_FS_ONDISK_MAGIC), new_root_ino_bl);
+      encode(std::string(CEPH_FS_ONDISK_MAGIC), new_root_ino_bl);
       encode_fullbit_as_inode(fb, false, &new_root_ino_bl);
 
       // Write to RADOS
@@ -1158,7 +1158,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
     // Deserialize InoTable
     version_t inotable_ver;
     bufferlist::iterator q = inotable_bl.begin();
-    ::decode(inotable_ver, q);
+    decode(inotable_ver, q);
     InoTable ino_table(NULL);
     ino_table.decode(q);
     
@@ -1180,7 +1180,7 @@ int JournalTool::consume_inos(const std::set<inodeno_t> &inos)
       inotable_ver += 1;
       dout(4) << "writing modified inotable version " << inotable_ver << dendl;
       bufferlist inotable_new_bl;
-      ::encode(inotable_ver, inotable_new_bl);
+      encode(inotable_ver, inotable_new_bl);
       ino_table.encode_state(inotable_new_bl);
       int write_r = output.write_full(inotable_oid.name, inotable_new_bl);
       if (write_r != 0) {

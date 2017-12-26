@@ -113,7 +113,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
         }
         bufferlist::iterator bp = attr.begin();
         try {
-	  ::decode(oi, bp);
+	  decode(oi, bp);
         } catch (...) {
 	  r = -EINVAL;
 	  cerr << "Error getting attr on : " << make_pair(coll, *obj) << ", "
@@ -404,7 +404,7 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   // new omap key
   cout << "setting '_remove' omap key" << std::endl;
   map<string,bufferlist> values;
-  ::encode((char)1, values["_remove"]);
+  encode((char)1, values["_remove"]);
   t->omap_setkeys(coll, pgmeta_oid, values);
   return 0;
 }
@@ -1698,7 +1698,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
     // mark this coll for removal until we're done
     map<string,bufferlist> values;
-    ::encode((char)1, values["_remove"]);
+    encode((char)1, values["_remove"]);
     t.omap_setkeys(coll, pgid.make_pgmeta_oid(), values);
 
     store->apply_transaction(&osr, std::move(t));
@@ -2276,7 +2276,7 @@ struct do_fix_lost : public action_on_object_t {
         return 0;
       oi.clear_flag(object_info_t::FLAG_LOST);
       bufferlist bl;
-      ::encode(oi, bl, -1);  /* fixme: using full features */
+      encode(oi, bl, -1);  /* fixme: using full features */
       ObjectStore::Transaction t;
       t.setattr(coll, ghobj, OI_ATTR, bl);
       int r = store->apply_transaction(osr, std::move(t));
@@ -2303,7 +2303,7 @@ int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss,
   }
   bufferlist::iterator bp = attr.begin();
   try {
-    ::decode(ss, bp);
+    decode(ss, bp);
   } catch (...) {
     r = -EINVAL;
     cerr << "Error decoding snapset on : " << make_pair(coll, ghobj) << ", "
@@ -2331,7 +2331,7 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
     object_info_t oi;
     bufferlist::iterator bp = attr.begin();
     try {
-      ::decode(oi, bp);
+      decode(oi, bp);
       formatter->open_object_section("info");
       oi.dump(formatter);
       formatter->close_section();
@@ -2390,7 +2390,7 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   object_info_t oi;
   bufferlist::iterator bp = attr.begin();
   try {
-    ::decode(oi, bp);
+    decode(oi, bp);
   } catch (...) {
     r = -EINVAL;
     cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
@@ -2455,12 +2455,12 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
       // Changing objectstore size will invalidate data_digest, so clear it.
       oi.clear_data_digest();
     }
-    ::encode(oi, attr, -1);  /* fixme: using full features */
+    encode(oi, attr, -1);  /* fixme: using full features */
     t.setattr(coll, ghobj, OI_ATTR, attr);
     if (is_snap) {
       bufferlist snapattr;
       snapattr.clear();
-      ::encode(ss, snapattr);
+      encode(ss, snapattr);
       t.setattr(coll, head, SS_ATTR, snapattr);
     }
     r = store->apply_transaction(&osr, std::move(t));
@@ -2506,7 +2506,7 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
 
   if (!dry_run) {
     bufferlist bl;
-    ::encode(ss, bl);
+    encode(ss, bl);
     ObjectStore::Transaction t;
     t.setattr(coll, ghobj, SS_ATTR, bl);
     int r = store->apply_transaction(&osr, std::move(t));
@@ -2604,7 +2604,7 @@ int remove_clone(ObjectStore *store, coll_t coll, ghobject_t &ghobj, snapid_t cl
     return 0;
 
   bufferlist bl;
-  ::encode(snapset, bl);
+  encode(snapset, bl);
   ObjectStore::Transaction t;
   t.setattr(coll, ghobj, SS_ATTR, bl);
   int r = store->apply_transaction(&osr, std::move(t));
@@ -3306,7 +3306,7 @@ int main(int argc, char **argv)
   }
 
   p = bl.begin();
-  ::decode(superblock, p);
+  decode(superblock, p);
 
   if (debug) {
     cerr << "Cluster fsid=" << superblock.cluster_fsid << std::endl;

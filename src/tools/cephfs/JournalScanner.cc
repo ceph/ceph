@@ -196,7 +196,7 @@ int JournalScanner::scan_events()
       do {
         bufferlist::iterator p = read_buf.begin();
         uint64_t candidate_sentinel;
-        ::decode(candidate_sentinel, p);
+        decode(candidate_sentinel, p);
 
         dout(4) << "Data at 0x" << std::hex << read_offset << " = 0x" << candidate_sentinel << std::dec << dendl;
 
