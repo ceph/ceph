@@ -443,7 +443,7 @@ void ECBackend::handle_recovery_read_complete(
     if (op.obc->obs.oi.size > 0) {
       assert(op.xattrs.count(ECUtil::get_hinfo_key()));
       bufferlist::iterator bp = op.xattrs[ECUtil::get_hinfo_key()].begin();
-      ::decode(hinfo, bp);
+      decode(hinfo, bp);
     }
     op.hinfo = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
   }
@@ -552,7 +552,7 @@ void ECBackend::continue_recovery_op(
 	op.hinfo = get_hash_info(op.hoid);
 	assert(op.hinfo);
 	op.xattrs = op.obc->attr_cache;
-	::encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
+	encode(*(op.hinfo), op.xattrs[ECUtil::get_hinfo_key()]);
       }
 
       map<pg_shard_t, vector<pair<int, int>>> to_read;
@@ -1775,7 +1775,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       }
       if (bl.length() > 0) {
 	bufferlist::iterator bp = bl.begin();
-	::decode(hinfo, bp);
+	decode(hinfo, bp);
 	if (checks && hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
 	  dout(0) << __func__ << ": Mismatch of total_chunk_size "
 			       << hinfo.get_total_chunk_size() << dendl;
