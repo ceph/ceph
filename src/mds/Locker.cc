@@ -1915,7 +1915,7 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   // my needs
   assert(session->info.inst.name.is_client());
-  client_t my_client = session->info.inst.name.num();
+  client_t my_client = session->get_client();
   int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
