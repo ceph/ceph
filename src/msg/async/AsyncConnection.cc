@@ -948,8 +948,8 @@ ssize_t AsyncConnection::_process_connection()
         bl.append(state_buffer+banner_len, sizeof(ceph_entity_addr)*2);
         bufferlist::iterator p = bl.begin();
         try {
-          ::decode(paddr, p);
-          ::decode(peer_addr_for_me, p);
+          decode(paddr, p);
+          decode(peer_addr_for_me, p);
         } catch (const buffer::error& e) {
           lderr(async_msgr->cct) << __func__ <<  " decode peer addr failed " << dendl;
           goto fail;
@@ -989,7 +989,7 @@ ssize_t AsyncConnection::_process_connection()
           return 0;
         }
 
-        ::encode(async_msgr->get_myaddr(), myaddrbl, 0); // legacy
+        encode(async_msgr->get_myaddr(), myaddrbl, 0); // legacy
         r = try_send(myaddrbl);
         if (r == 0) {
           state = STATE_CONNECTING_SEND_CONNECT_MSG;
@@ -1206,9 +1206,9 @@ ssize_t AsyncConnection::_process_connection()
 
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
-        ::encode(async_msgr->get_myaddr(), bl, 0); // legacy
+        encode(async_msgr->get_myaddr(), bl, 0); // legacy
         port = async_msgr->get_myaddr().get_port();
-        ::encode(socket_addr, bl, 0); // legacy
+        encode(socket_addr, bl, 0); // legacy
         ldout(async_msgr->cct, 1) << __func__ << " sd=" << cs.fd() << " " << socket_addr << dendl;
 
         r = try_send(bl);
@@ -1249,7 +1249,7 @@ ssize_t AsyncConnection::_process_connection()
         addr_bl.append(state_buffer+strlen(CEPH_BANNER), sizeof(ceph_entity_addr));
         try {
           bufferlist::iterator ti = addr_bl.begin();
-          ::decode(peer_addr, ti);
+          decode(peer_addr, ti);
         } catch (const buffer::error& e) {
 	  lderr(async_msgr->cct) << __func__ <<  " decode peer_addr failed " << dendl;
           goto fail;
