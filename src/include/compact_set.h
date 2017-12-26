@@ -27,17 +27,16 @@ protected:
       set = new Set;
   }
   void free_internal() {
-    if (set) {
-      delete set;
-      set = 0;
-    }
+    assert(set);
+    delete set;
+    set = nullptr;
   }
   template <class It>
   class iterator_base {
   private:
     const compact_set_base* set;
     It it;
-    iterator_base() : set(0) { }
+    iterator_base() : set(nullptr) { }
     iterator_base(const compact_set_base* s) : set(s) { }
     iterator_base(const compact_set_base* s, const It& i) : set(s), it(i) { }
     friend class compact_set_base;
@@ -118,8 +117,8 @@ public:
       }
   };
 
-  compact_set_base() : set(0) {}
-  compact_set_base(const compact_set_base& o) : set(0) {
+  compact_set_base() : set(nullptr) {}
+  compact_set_base(const compact_set_base& o) : set(nullptr) {
     if (o.set) {
       alloc_internal();
       *set = *o.set;
@@ -147,20 +146,23 @@ public:
     if (set) {
       assert(this == p.set);
       set->erase(p.it);
-      if (set->empty())
+      if (set && set->empty()) {
 	free_internal();
+      }
     }
   }
   size_t erase (const T& t) {
     if (!set)
       return 0;
     size_t r = set->erase(t);
-    if (set->empty())
+    if (set && set->empty()) {
 	free_internal();
+    }
     return r;
   }
   void clear() {
-    free_internal();
+    if (set)
+      free_internal();
   }
   void swap(compact_set_base& o) {
     Set *tmp = set;
@@ -171,8 +173,9 @@ public:
     if (o.set) {
       alloc_internal();
       *set = *o.set;
-    } else
+    } else if (set) {
       free_internal();
+    }
     return *this;
   }
   std::pair<iterator,bool> insert(const T& t) {
@@ -181,80 +184,49 @@ public:
     return std::make_pair(iterator(this, r.first), r.second);
   }
   iterator begin() {
-   if (!set)
-     return iterator(this);
-   return iterator(this, set->begin());
+    return !set ? iterator(this) : iterator(this, set->begin());
   }
   iterator end() {
-   if (!set)
-     return iterator(this);
-   return iterator(this, set->end());
+    return !set ? iterator(this) : iterator(this, set->end());
   }
   reverse_iterator rbegin() {
-   if (!set)
-     return reverse_iterator(this);
-   return reverse_iterator(this, set->rbegin());
+    return !set ? reverse_iterator(this) : reverse_iterator(this, set->rbegin());
   }
   reverse_iterator rend() {
-   if (!set)
-     return reverse_iterator(this);
-   return reverse_iterator(this, set->rend());
+    return !set ? reverse_iterator(this) : reverse_iterator(this, set->rend());
   }
   iterator find(const T& t) {
-    if (!set)
-      return iterator(this);
-    return iterator(this, set->find(t));
+    return !set ? iterator(this) : iterator(this, set->find(t));
   }
   iterator lower_bound(const T& t) {
-    if (!set)
-      return iterator(this);
-    return iterator(this, set->lower_bound(t));
+    return !set ? iterator(this) : iterator(this, set->lower_bound(t));
   }
   iterator upper_bound(const T& t) {
-    if (!set)
-      return iterator(this);
-    return iterator(this, set->upper_bound(t));
+    return !set ? iterator(this) : iterator(this, set->upper_bound(t));
   }
   const_iterator begin() const {
-   if (!set)
-     return const_iterator(this);
-   return const_iterator(this, set->begin());
+    return !set ? const_iterator(this) : const_iterator(this, set->begin());
   }
   const_iterator end() const {
-   if (!set)
-     return const_iterator(this);
-   return const_iterator(this, set->end());
+    return !set ? const_iterator(this) : const_iterator(this, set->end());
   }
   const_reverse_iterator rbegin() const {
-   if (!set)
-     return const_reverse_iterator(this);
-   return const_reverse_iterator(this, set->rbegin());
+    return !set ? const_reverse_iterator(this) : const_reverse_iterator(this, set->rbegin());
   }
   const_reverse_iterator rend() const {
-   if (!set)
-     return const_reverse_iterator(this);
-   return const_reverse_iterator(this, set->rend());
+    return !set ? const_reverse_iterator(this) : const_reverse_iterator(this, set->rend());
   }
   const_iterator find(const T& t) const {
-    if (!set)
-      return const_iterator(this);
-    return const_iterator(this, set->find(t));
+    return !set ? const_iterator(this) : const_iterator(this, set->find(t));
   }
   const_iterator lower_bound(const T& t) const {
-    if (!set)
-      return const_iterator(this);
-    return const_iterator(this, set->lower_bound(t));
+    return !set ? const_iterator(this) : const_iterator(this, set->lower_bound(t));
   }
   const_iterator upper_bound(const T& t) const {
-    if (!set)
-      return const_iterator(this);
-    return const_iterator(this, set->upper_bound(t));
+    return !set ? const_iterator(this) : const_iterator(this, set->upper_bound(t));
   }
   void encode(bufferlist &bl) const {
-    if (set)
-      ::encode(*set, bl);
-    else
-      ::encode((uint32_t)0, bl);
+    set ? ::encode(*set, bl) : ::encode((uint32_t)0, bl);
   }
   void decode(bufferlist::iterator& p) {
     uint32_t n;
@@ -262,8 +234,9 @@ public:
     if (n > 0) {
       alloc_internal();
       ::decode_nohead(n, *set, p);
-    } else
+    } else if (set) {
       free_internal();
+    }
   }
 };
 
