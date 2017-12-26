@@ -79,7 +79,7 @@ int MemStore::_save()
 
   string fn = path + "/collections";
   bufferlist bl;
-  ::encode(collections, bl);
+  encode(collections, bl);
   int r = bl.write_file(fn.c_str());
   if (r < 0)
     return r;
@@ -148,7 +148,7 @@ int MemStore::_load()
 
   set<coll_t> collections;
   bufferlist::iterator p = bl.begin();
-  ::decode(collections, p);
+  decode(collections, p);
 
   for (set<coll_t>::iterator q = collections.begin();
        q != collections.end();
@@ -209,7 +209,7 @@ int MemStore::mkfs()
   derr << path << dendl;
   bufferlist bl;
   set<coll_t> collections;
-  ::encode(collections, bl);
+  encode(collections, bl);
   r = bl.write_file(fn.c_str());
   if (r < 0)
     return r;
@@ -357,7 +357,7 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
   map<uint64_t, uint64_t> destmap;
   int r = fiemap(cid, oid, offset, len, destmap);
   if (r >= 0)
-    ::encode(destmap, bl);
+    encode(destmap, bl);
   return r;
 }
 
@@ -884,8 +884,8 @@ void MemStore::_do_transaction(Transaction& t)
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           r = _collection_hint_expected_num_objs(cid, pg_num, num_objs);
         } else {
           // Ignore the hint
@@ -1294,11 +1294,11 @@ int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
   std::lock_guard<std::mutex> lock(o->omap_mutex);
   bufferlist::iterator p = aset_bl.begin();
   __u32 num;
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
-    ::decode(o->omap[key], p);
+    decode(key, p);
+    decode(o->omap[key], p);
   }
   return 0;
 }
@@ -1317,10 +1317,10 @@ int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
   std::lock_guard<std::mutex> lock(o->omap_mutex);
   bufferlist::iterator p = keys_bl.begin();
   __u32 num;
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
+    decode(key, p);
     o->omap.erase(key);
   }
   return 0;
@@ -1495,13 +1495,13 @@ struct BufferlistObject : public MemStore::Object {
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(data, bl);
+    encode(data, bl);
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) override {
     DECODE_START(1, p);
-    ::decode(data, p);
+    decode(data, p);
     decode_base(p);
     DECODE_FINISH(p);
   }
@@ -1603,14 +1603,14 @@ struct MemStore::PageSetObject : public Object {
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(data_len, bl);
+    encode(data_len, bl);
     data.encode(bl);
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) override {
     DECODE_START(1, p);
-    ::decode(data_len, p);
+    decode(data_len, p);
     data.decode(p);
     decode_base(p);
     DECODE_FINISH(p);

@@ -48,11 +48,11 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
   bl.append(stringify(osd_uuid));
   bl.append("\n");
   ENCODE_START(2, 1, bl);
-  ::encode(osd_uuid, bl);
-  ::encode(size, bl);
-  ::encode(btime, bl);
-  ::encode(description, bl);
-  ::encode(meta, bl);
+  encode(osd_uuid, bl);
+  encode(size, bl);
+  encode(btime, bl);
+  encode(description, bl);
+  encode(meta, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -60,12 +60,12 @@ void bluestore_bdev_label_t::decode(bufferlist::iterator& p)
 {
   p.advance(60); // see above
   DECODE_START(2, p);
-  ::decode(osd_uuid, p);
-  ::decode(size, p);
-  ::decode(btime, p);
-  ::decode(description, p);
+  decode(osd_uuid, p);
+  decode(size, p);
+  decode(btime, p);
+  decode(description, p);
   if (struct_v >= 2) {
-    ::decode(meta, p);
+    decode(meta, p);
   }
   DECODE_FINISH(p);
 }
