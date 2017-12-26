@@ -775,14 +775,14 @@ void Paxos::handle_accept(MonOpRequestRef op)
     op->mark_paxos_event("have higher pn, ignore");
     return;
   }
-  if (last_committed > 0 &&
-      accept->last_committed < last_committed-1) {
-    dout(10) << " this is from an old round, ignoring" << dendl;
-    op->mark_paxos_event("old round, ignore");
+
+  if (accept->last_committed != last_committed){
+    dout(10) << " this is from another round, ignoring" <<dendl;
+    op->mark_paxos_event("another round, ignoring");
     return;
   }
-  assert(accept->last_committed == last_committed ||   // not committed
-	 accept->last_committed == last_committed-1);  // committed
+
+  assert(accept->last_committed == last_committed);
 
   assert(is_updating() || is_updating_previous());
   assert(accepted.count(from) == 0);
