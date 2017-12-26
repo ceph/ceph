@@ -62,7 +62,7 @@ TEST_F(TestEntry, IsReadableBadPreamble) {
 
   uint64_t stray_bytes = 0x1122334455667788;
   bufferlist full_bl;
-  ::encode(stray_bytes, full_bl);
+  encode(stray_bytes, full_bl);
   encode(entry, full_bl);
 
   uint32_t bytes_needed;
@@ -85,7 +85,7 @@ TEST_F(TestEntry, IsReadableBadCRC) {
 
   bufferlist bad_bl;
   bad_bl.substr_of(full_bl, 0, full_bl.length() - 4);
-  ::encode(full_bl.crc32c(1), bad_bl);
+  encode(full_bl.crc32c(1), bad_bl);
 
   uint32_t bytes_needed;
   ASSERT_FALSE(journal::Entry::is_readable(bad_bl.begin(), &bytes_needed));

@@ -165,12 +165,12 @@ public:
 
   friend void decode(ConstructorCounter &s, bufferlist::iterator& p)
   {
-    ::decode(s.data, p);
+    decode(s.data, p);
   }
 
   friend void encode(const ConstructorCounter &s, bufferlist& p)
   {
-    ::encode(s.data, p);
+    encode(s.data, p);
   }
 
   friend ostream& operator<<(ostream &oss, const ConstructorCounter &cc)

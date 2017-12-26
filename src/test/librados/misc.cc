@@ -284,13 +284,13 @@ static std::string read_key_from_tmap(IoCtx& ioctx, const std::string &obj,
   bufferlist::iterator p = bl.begin();
   bufferlist header;
   map<string, bufferlist> m;
-  ::decode(header, p);
-  ::decode(m, p);
+  decode(header, p);
+  decode(m, p);
   map<string, bufferlist>::iterator i = m.find(key);
   if (i == m.end())
     return "";
   std::string retstring;
-  ::decode(retstring, i->second);
+  decode(retstring, i->second);
   return retstring;
 }
 
@@ -300,11 +300,11 @@ static std::string add_key_to_tmap(IoCtx &ioctx, const std::string &obj,
   __u8 c = CEPH_OSD_TMAP_SET;
 
   bufferlist tmbl;
-  ::encode(c, tmbl);
-  ::encode(key, tmbl);
+  encode(c, tmbl);
+  encode(key, tmbl);
   bufferlist blbl;
-  ::encode(val, blbl);
-  ::encode(blbl, tmbl);
+  encode(val, blbl);
+  encode(blbl, tmbl);
   int ret = ioctx.tmap_update(obj, tmbl);
   if (ret) {
     ostringstream oss;
@@ -321,8 +321,8 @@ static int remove_key_from_tmap(IoCtx &ioctx, const std::string &obj,
   __u8 c = CEPH_OSD_TMAP_RM;
 
   bufferlist tmbl;
-  ::encode(c, tmbl);
-  ::encode(key, tmbl);
+  encode(c, tmbl);
+  encode(key, tmbl);
   int ret = ioctx.tmap_update(obj, tmbl);
   if (ret) {
     ostringstream oss;
@@ -340,9 +340,9 @@ TEST_F(LibRadosMiscPP, TmapUpdatePP) {
     bufferlist emptybl;
 
     bufferlist tmbl;
-    ::encode(c, tmbl);
-    ::encode(my_tmap, tmbl);
-    ::encode(emptybl, tmbl);
+    encode(c, tmbl);
+    encode(my_tmap, tmbl);
+    encode(emptybl, tmbl);
     ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
   }
 
@@ -369,9 +369,9 @@ TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPP) {
     bufferlist emptybl;
 
     bufferlist tmbl;
-    ::encode(c, tmbl);
-    ::encode(my_tmap, tmbl);
-    ::encode(emptybl, tmbl);
+    encode(c, tmbl);
+    encode(my_tmap, tmbl);
+    encode(emptybl, tmbl);
     ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
   }
 
@@ -379,19 +379,19 @@ TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPP) {
   {
     __u8 c = CEPH_OSD_TMAP_SET;
     bufferlist tmbl;
-    ::encode(c, tmbl);
-    ::encode("a", tmbl);
+    encode(c, tmbl);
+    encode("a", tmbl);
     bufferlist blbl;
-    ::encode("old", blbl);
-    ::encode(blbl, tmbl);
+    encode("old", blbl);
+    encode(blbl, tmbl);
 
-    ::encode(c, tmbl);
-    ::encode("b", tmbl);
-    ::encode(blbl, tmbl);
+    encode(c, tmbl);
+    encode("b", tmbl);
+    encode(blbl, tmbl);
 
-    ::encode(c, tmbl);
-    ::encode("c", tmbl);
-    ::encode(blbl, tmbl);
+    encode(c, tmbl);
+    encode("c", tmbl);
+    encode(blbl, tmbl);
 
     ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
   }
@@ -400,19 +400,19 @@ TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPP) {
   {
     __u8 c = CEPH_OSD_TMAP_SET;
     bufferlist tmbl;
-    ::encode(c, tmbl);
-    ::encode("b", tmbl);
+    encode(c, tmbl);
+    encode("b", tmbl);
     bufferlist blbl;
-    ::encode("new", blbl);
-    ::encode(blbl, tmbl);
+    encode("new", blbl);
+    encode(blbl, tmbl);
 
-    ::encode(c, tmbl);
-    ::encode("a", tmbl);
-    ::encode(blbl, tmbl);
+    encode(c, tmbl);
+    encode("a", tmbl);
+    encode(blbl, tmbl);
 
-    ::encode(c, tmbl);
-    ::encode("c", tmbl);
-    ::encode(blbl, tmbl);
+    encode(c, tmbl);
+    encode("c", tmbl);
+    encode(blbl, tmbl);
 
     ASSERT_EQ(0, ioctx.tmap_update("foo", tmbl));
   }
@@ -433,15 +433,15 @@ TEST_F(LibRadosMiscPP, TmapUpdateMisorderedPutPP) {
   // create unsorted tmap
   string h("header");
   bufferlist bl;
-  ::encode(h, bl);
+  encode(h, bl);
   uint32_t n = 3;
-  ::encode(n, bl);
-  ::encode(string("b"), bl);
-  ::encode(string("bval"), bl);
-  ::encode(string("a"), bl);
-  ::encode(string("aval"), bl);
-  ::encode(string("c"), bl);
-  ::encode(string("cval"), bl);
+  encode(n, bl);
+  encode(string("b"), bl);
+  encode(string("bval"), bl);
+  encode(string("a"), bl);
+  encode(string("aval"), bl);
+  encode(string("c"), bl);
+  encode(string("cval"), bl);
   bufferlist orig = bl;  // tmap_put steals bl content
   ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
 
@@ -461,8 +461,8 @@ TEST_F(LibRadosMiscPP, Tmap2OmapPP) {
   omap["3"].append("c");
   {
     bufferlist bl;
-    ::encode(hdr, bl);
-    ::encode(omap, bl);
+    encode(hdr, bl);
+    encode(omap, bl);
     ASSERT_EQ(0, ioctx.tmap_put("foo", bl));
   }
 
@@ -519,7 +519,7 @@ TEST_F(LibRadosMisc, Exec) {
   bl.append(buf2, res);
   bufferlist::iterator iter = bl.begin();
   uint64_t all_features;
-  ::decode(all_features, iter);
+  decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
   ASSERT_NE(all_features, (unsigned)0);
 }
@@ -532,7 +532,7 @@ TEST_F(LibRadosMiscPP, ExecPP) {
   ASSERT_EQ(0, r);
   bufferlist::iterator iter = out.begin();
   uint64_t all_features;
-  ::decode(all_features, iter);
+  decode(all_features, iter);
   // make sure *some* features are specified; don't care which ones
   ASSERT_NE(all_features, (unsigned)0);
 }
@@ -1134,7 +1134,7 @@ TYPED_TEST(LibRadosChecksum, Subset) {
 
   typename TestFixture::init_value_t init_value = -1;
   bufferlist init_value_bl;
-  ::encode(init_value, init_value_bl);
+  encode(init_value, init_value_bl);
 
   std::vector<bufferlist> checksum_bls(csum_count);
   std::vector<int> checksum_rvals(csum_count);
@@ -1152,11 +1152,11 @@ TYPED_TEST(LibRadosChecksum, Subset) {
 
     auto bl_it = checksum_bls[i].begin();
     uint32_t count;
-    ::decode(count, bl_it);
+    decode(count, bl_it);
     ASSERT_EQ(1U, count);
 
     typename TestFixture::value_t value;
-    ::decode(value, bl_it);
+    decode(value, bl_it);
 
     bufferlist content_sub_bl;
     content_sub_bl.substr_of(this->content_bl, i * chunk_size, chunk_size);
@@ -1177,7 +1177,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
 
   typename TestFixture::init_value_t init_value = -1;
   bufferlist init_value_bl;
-  ::encode(init_value, init_value_bl);
+  encode(init_value, init_value_bl);
 
   bufferlist checksum_bl;
   int checksum_rval;
@@ -1191,7 +1191,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
 
   auto bl_it = checksum_bl.begin();
   uint32_t count;
-  ::decode(count, bl_it);
+  decode(count, bl_it);
   ASSERT_EQ(csum_count, count);
 
   std::vector<typename TestFixture::value_t> expected_values(csum_count);
@@ -1205,7 +1205,7 @@ TYPED_TEST(LibRadosChecksum, Chunked) {
 
   for (uint32_t i = 0; i < csum_count; ++i) {
     typename TestFixture::value_t value;
-    ::decode(value, bl_it);
+    decode(value, bl_it);
     ASSERT_EQ(expected_values[i], value);
   }
 }
