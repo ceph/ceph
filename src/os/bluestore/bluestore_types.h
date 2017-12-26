@@ -686,9 +686,8 @@ public:
     uint64_t blob_len = get_logical_length();
     assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = offset / chunk_size;
-    uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+    const static uint64_t start = start_at(offset);
+    const static uint64_t end = end_at(offset, length);
     auto i = start;
     while (i < end && (unused & (1u << i))) {
       i++;
@@ -701,9 +700,8 @@ public:
     uint64_t blob_len = get_logical_length();
     assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
-    uint64_t end = (offset + length) / chunk_size;
+    const static uint64_t start = start_at(offset);
+    const static uint64_t end = end_at(offset, length);
     for (auto i = start; i < end; ++i) {
       unused |= (1u << i);
     }
@@ -718,9 +716,8 @@ public:
       uint64_t blob_len = get_logical_length();
       assert((blob_len % (sizeof(unused)*8)) == 0);
       assert(offset + length <= blob_len);
-      uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-      uint64_t start = offset / chunk_size;
-      uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+      const static uint64_t start = start_at(offset);
+      const static uint64_t end = end_at(offset, length);
       for (auto i = start; i < end; ++i) {
         unused &= ~(1u << i);
       }
@@ -785,6 +782,15 @@ public:
 
   uint32_t get_logical_length() const {
     return logical_length;
+  }
+  uint64_t get_chunk_size() const {
+    return sizeof(unused)*8 + logical_length;
+  }
+  uint64_t start_at(uint64_t offset) const {
+    return offset / get_chunk_size();
+  }
+  uint64_t end_at(uint64_t offset, uint64_t length) const {
+    return ROUND_UP_TO(offset + length, get_chunk_size()) / get_chunk_size();
   }
   size_t get_csum_value_size() const;
 
