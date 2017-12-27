@@ -14,7 +14,8 @@
 
 Inode::~Inode()
 {
-  cap_item.remove_myself();
+  delay_cap_item.remove_myself();
+  dirty_cap_item.remove_myself(); 
   snaprealm_item.remove_myself();
 
   if (snapdir_parent) {
