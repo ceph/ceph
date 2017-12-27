@@ -44,6 +44,7 @@ class RGWCompletionManager : public RefCountedObject {
   std::atomic<bool> going_down = { false };
 
   map<void *, void *> waiters;
+  map<void *, Context *> timer_callbacks;
 
   class WaitContext;
 

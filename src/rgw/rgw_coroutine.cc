@@ -104,7 +104,8 @@ void RGWCompletionManager::wait_interval(void *opaque, const utime_t& interval, 
   Mutex::Locker l(lock);
   assert(waiters.find(opaque) == waiters.end());
   waiters[opaque] = user_info;
-  timer.add_event_after(interval, new WaitContext(this, opaque));
+  Context *callback = timer.add_event_after(interval, new WaitContext(this, opaque));
+  timer_callbacks[opaque] = callback;
 }
 
 void RGWCompletionManager::wakeup(void *opaque)
@@ -119,6 +120,11 @@ void RGWCompletionManager::_wakeup(void *opaque)
   if (iter != waiters.end()) {
     void *user_id = iter->second;
     waiters.erase(iter);
+    auto it = timer_callbacks.find(opaque);
+    if (it != timer_callbacks.end()) {
+      timer.cancel_event(it->second);
+      timer_callbacks.erase(it);
+    }
     _complete(NULL, user_id);
   }
 }
