@@ -3200,7 +3200,7 @@ int Client::get_caps_used(Inode *in)
 
 void Client::cap_delay_requeue(Inode *in)
 {
-  ldout(cct, 10) << "cap_delay_requeue on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << dendl;
   in->hold_caps_until = ceph_clock_now();
   in->hold_caps_until += cct->_conf->client_caps_release_delay;
   delayed_caps.push_back(&in->cap_item);
@@ -3389,13 +3389,6 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (!in->cap_snaps.empty())
     flush_snaps(in);
 
-  if (flags & CHECK_CAPS_NODELAY)
-    in->hold_caps_until = utime_t();
-  else
-    cap_delay_requeue(in);
-
-  utime_t now = ceph_clock_now();
-
   for (auto &it : in->caps) {
     mds_rank_t mds = it.first;
     Cap &cap = it.second;
@@ -3445,8 +3438,9 @@ void Client::check_caps(Inode *in, unsigned flags)
 	!in->dirty_caps)                 // and we have no dirty caps
       continue;
 
-    if (now < in->hold_caps_until) {
+    if (!(flags & CHECK_CAPS_NODELAY)) {
       ldout(cct, 10) << "delaying cap release" << dendl;
+      cap_delay_requeue(in);
       continue;
     }
 
