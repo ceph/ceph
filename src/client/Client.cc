@@ -3232,7 +3232,7 @@ void Client::cap_delay_requeue(Inode *in)
   ldout(cct, 10) << "cap_delay_requeue on " << *in << dendl;
   in->hold_caps_until = ceph_clock_now();
   in->hold_caps_until += cct->_conf->client_caps_release_delay;
-  delayed_caps.push_back(&in->cap_item);
+  delayed_list.push_back(&in->delay_cap_item);
 }
 
 void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
@@ -3901,7 +3901,6 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     cap->session = mds_session;
     cap->inode = in;
     cap->gen = mds_session->cap_gen;
-    cap_list.push_back(&in->cap_item);
   }
 
   check_cap_issue(in, cap, issued);
@@ -4020,7 +4019,7 @@ void Client::remove_session_caps(MetaSession *s)
 	in->flushing_cap_tids.clear();
       }
       in->flushing_caps = 0;
-      in->dirty_caps = 0;
+      mark_caps_clean(in);
       put_inode(in);
     }
   }
@@ -4161,11 +4160,19 @@ void Client::force_session_readonly(MetaSession *s)
 
 void Client::mark_caps_dirty(Inode *in, int caps)
 {
-  ldout(cct, 10) << "mark_caps_dirty " << *in << " " << ccap_string(in->dirty_caps) << " -> "
+  ldout(cct, 10) << __func__ << " " << *in << " " << ccap_string(in->dirty_caps) << " -> "
 	   << ccap_string(in->dirty_caps | caps) << dendl;
   if (caps && !in->caps_dirty())
     in->get();
   in->dirty_caps |= caps;
+  dirty_list.push_back(&in->dirty_cap_item);
+}
+
+void Client::mark_caps_clean(Inode *in)
+{
+  ldout(cct, 10) << __func__ << " " << *in << dendl;
+  in->dirty_caps = 0;
+  in->dirty_cap_item.remove_myself(); 
 }
 
 int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
@@ -4186,7 +4193,7 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
   }
 
   in->flushing_caps |= flushing;
-  in->dirty_caps = 0;
+  mark_caps_clean(in);
  
   if (!in->flushing_cap_item.is_on_list())
     session->flushing_caps.push_back(&in->flushing_cap_item);
@@ -4222,20 +4229,20 @@ void Client::adjust_session_flushing_caps(Inode *in, MetaSession *old_s,  MetaSe
 void Client::flush_caps_sync()
 {
   ldout(cct, 10) << __func__ << dendl;
-  xlist<Inode*>::iterator p = delayed_caps.begin();
+  xlist<Inode*>::iterator p = delayed_list.begin();
   while (!p.end()) {
     unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
 
     ++p;
-    delayed_caps.pop_front();
-    if (p.end() && cap_list.empty())
+    delayed_list.pop_front();
+    if (p.end() && dirty_list.empty())
       flags |= CHECK_CAPS_SYNCHRONOUS;
     check_caps(in, flags);
   }
 
   // other caps, too
-  p = cap_list.begin();
+  p = dirty_list.begin();
   while (!p.end()) {
     unsigned flags = CHECK_CAPS_NODELAY;
     Inode *in = *p;
@@ -6054,14 +6061,13 @@ void Client::tick()
   }
 
   // delayed caps
-  xlist<Inode*>::iterator p = delayed_caps.begin();
+  xlist<Inode*>::iterator p = delayed_list.begin();
   while (!p.end()) {
     Inode *in = *p;
     ++p;
     if (in->hold_caps_until > now)
       break;
-    delayed_caps.pop_front();
-    cap_list.push_back(&in->cap_item);
+    delayed_list.pop_front();
     check_caps(in, CHECK_CAPS_NODELAY);
   }
 
