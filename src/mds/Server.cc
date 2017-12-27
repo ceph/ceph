@@ -8981,13 +8981,18 @@ struct C_MDS_mksnap_finish : public ServerLogContext {
 /* This function takes responsibility for the passed mdr*/
 void Server::handle_client_mksnap(MDRequestRef& mdr)
 {
+  MClientRequest *req = mdr->client_request;
+  // make sure we have as new a map as the client
+  if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
+    mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
   if (!mds->mdsmap->allows_snaps()) {
     // you can't make snapshots until you set an option right now
     respond_to_request(mdr, -EPERM);
     return;
   }
 
-  MClientRequest *req = mdr->client_request;
   CInode *diri = mdcache->get_inode(req->get_filepath().get_ino());
   if (!diri || diri->state_test(CInode::STATE_PURGING)) {
     respond_to_request(mdr, -ESTALE);
