@@ -2841,10 +2841,10 @@ void RGWDeleteBucket::pre_exec()
 
 void RGWDeleteBucket::execute()
 {
-  op_ret = -EINVAL;
-
-  if (s->bucket_name.empty())
+  if (s->bucket_name.empty()) {
+    op_ret = -EINVAL;
     return;
+  }
 
   if (!s->bucket_exists) {
     ldout(s->cct, 0) << "ERROR: bucket " << s->bucket_name << " not found" << dendl;
@@ -2933,12 +2933,6 @@ void RGWDeleteBucket::execute()
 		       << dendl;
     }
   }
-
-  if (op_ret < 0) {
-    return;
-  }
-
-
 }
 
 int RGWPutObj::verify_permission()
