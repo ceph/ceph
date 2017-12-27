@@ -1140,9 +1140,13 @@ Skip test on FreeBSD as it generates different output there.
     --verbose            be verbose
   
   rbd help nbd list
-  usage: rbd nbd list 
+  usage: rbd nbd list [--format <format>] [--pretty-format] 
   
   List the nbd devices already used.
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
   
   rbd help nbd map
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
