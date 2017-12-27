@@ -66,6 +66,7 @@ struct PGLog : DoutPrefixProvider {
   class read_log_and_missing_error : public buffer::error {
   public:
     explicit read_log_and_missing_error(const char *what) {
+      memset(buf, 0, sizeof(buf));
       snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
     }
     const char *what() const throw () override {

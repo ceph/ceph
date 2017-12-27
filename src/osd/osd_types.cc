@@ -462,6 +462,7 @@ char *spg_t::calc_name(char *buf, const char *suffix_backwords) const
 ostream& operator<<(ostream& out, const spg_t &pg)
 {
   char buf[spg_t::calc_name_buf_size];
+  memset(buf, 0, sizeof(buf));
   buf[spg_t::calc_name_buf_size - 1] = '\0';
   out << pg.calc_name(buf + spg_t::calc_name_buf_size - 1, "");
   return out;
@@ -597,6 +598,7 @@ char *pg_t::calc_name(char *buf, const char *suffix_backwords) const
 ostream& operator<<(ostream& out, const pg_t &pg)
 {
   char buf[pg_t::calc_name_buf_size];
+  memset(buf, 0, sizeof(buf));
   buf[pg_t::calc_name_buf_size - 1] = '\0';
   out << pg.calc_name(buf + pg_t::calc_name_buf_size - 1, "");
   return out;
@@ -1384,6 +1386,7 @@ uint32_t pg_pool_t::hash_key(const string& key, const string& ns) const
   int nsl = ns.length();
   int len = key.length() + nsl + 1;
   char buf[len];
+  memset(buf, 0, sizeof(buf));
   memcpy(&buf[0], ns.data(), nsl);
   buf[nsl] = '\037';
   memcpy(&buf[nsl+1], key.data(), key.length());
