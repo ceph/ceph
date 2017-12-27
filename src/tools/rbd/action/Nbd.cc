@@ -105,14 +105,23 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
 }
 
 void get_show_arguments(po::options_description *positional,
-                        po::options_description *options)
-{ }
+                        po::options_description *options) {
+  at::add_format_options(options);
+}
 
 int execute_show(const po::variables_map &vm)
 {
   std::vector<const char*> args;
 
   args.push_back("list-mapped");
+
+  if (vm.count("format")) {
+    args.push_back("--format");
+    args.push_back(vm["format"].as<at::Format>().value.c_str());
+  }
+  if (vm["pretty-format"].as<bool>()) {
+    args.push_back("--pretty-format");
+  }
 
   return call_nbd_cmd(vm, args);
 }
