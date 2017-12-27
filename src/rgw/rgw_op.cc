@@ -6792,14 +6792,13 @@ int RGWHandler::init(RGWRados *_store,
 int RGWHandler::do_init_permissions()
 {
   int ret = rgw_build_bucket_policies(store, s);
-  s->env = rgw_build_iam_environment(store, s);
-
   if (ret < 0) {
-    ldout(s->cct, 10) << "read_permissions on " << s->bucket << " ret=" << ret << dendl;
-    if (ret == -ENODATA)
-      ret = -EACCES;
+    ldout(s->cct, 10) << "init_permissions on " << s->bucket
+        << " failed, ret=" << ret << dendl;
+    return ret==-ENODATA ? -EACCES : ret;
   }
 
+  s->env = rgw_build_iam_environment(store, s);
   return ret;
 }
 
