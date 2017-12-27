@@ -402,7 +402,7 @@ public:
 
     /// put logical references, and get back any released extents
     void put_ref(uint64_t offset, uint32_t length,
-		 PExtentVector *r, set<SharedBlob*> *maybe_unshared_blobs);
+		 PExtentVector *r, bool *unshare);
 
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
