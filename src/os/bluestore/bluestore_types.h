@@ -683,10 +683,10 @@ public:
     if (!has_unused()) {
       return false;
     }
-    uint64_t blob_len = get_logical_length();
+    uint32_t blob_len = get_logical_length();
     assert((blob_len % (sizeof(unused)*8)) == 0);
-    assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+    assert(offset + length <= (uint64_t)blob_len);
+    uint64_t chunk_size = (uint64_t)blob_len / (sizeof(unused)*8);
     uint64_t start = offset / chunk_size;
     uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
     auto i = start;
@@ -698,10 +698,10 @@ public:
 
   /// mark a range that has never been used
   void add_unused(uint64_t offset, uint64_t length) {
-    uint64_t blob_len = get_logical_length();
+    uint32_t blob_len = get_logical_length();
     assert((blob_len % (sizeof(unused)*8)) == 0);
-    assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+    assert(offset + length <= (uint64_t)blob_len);
+    uint64_t chunk_size = (uint64_t)blob_len / (sizeof(unused)*8);
     uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     for (auto i = start; i < end; ++i) {
@@ -715,10 +715,10 @@ public:
   /// indicate that a range has (now) been used.
   void mark_used(uint64_t offset, uint64_t length) {
     if (has_unused()) {
-      uint64_t blob_len = get_logical_length();
+      uint32_t blob_len = get_logical_length();
       assert((blob_len % (sizeof(unused)*8)) == 0);
-      assert(offset + length <= blob_len);
-      uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+      assert(offset + length <= (uint64_t)blob_len);
+      uint64_t chunk_size = (uint64_t)blob_len / (sizeof(unused)*8);
       uint64_t start = offset / chunk_size;
       uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
       for (auto i = start; i < end; ++i) {

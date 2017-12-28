@@ -1793,7 +1793,7 @@ void BlueStore::Blob::get_ref(
   if (used_in_blob.is_empty()) {
     uint32_t min_release_size =
       get_blob().get_release_size(coll->store->min_alloc_size);
-    uint64_t l = get_blob().get_logical_length();
+    uint32_t l = get_blob().get_logical_length();
     dout(20) << __func__ << " init 0x" << std::hex << l << ", "
              << min_release_size << std::dec << dendl;
     used_in_blob.init(l, min_release_size);
@@ -1850,7 +1850,7 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
     return false;
   }
 
-  auto blen = get_blob().get_logical_length();
+  uint32_t blen = get_blob().get_logical_length();
   uint32_t new_blen = blen;
 
   // make sure target_blob_size isn't less than current blob len
@@ -5902,10 +5902,10 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  } else {
 	    pu = &p->second;
 	  }
-	  uint64_t blob_len = blob.get_logical_length();
+	  uint32_t blob_len = blob.get_logical_length();
 	  assert((blob_len % (sizeof(*pu)*8)) == 0);
-	  assert(l.blob_offset + l.length <= blob_len);
-	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
+	  assert(l.blob_offset + l.length <= (uint64_t)blob_len);
+	  uint64_t chunk_size = (uint64_t)blob_len / (sizeof(*pu)*8);
 	  uint64_t start = l.blob_offset / chunk_size;
 	  uint64_t end =
 	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
@@ -5926,8 +5926,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	if (blob.has_csum()) {
-	  uint64_t blob_len = blob.get_logical_length();
-	  uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused)*8);
+	  uint32_t blob_len = blob.get_logical_length();
+	  uint64_t unused_chunk_size = (uint64_t)blob_len / (sizeof(blob.unused)*8);
 	  unsigned csum_count = blob.get_csum_count();
 	  unsigned csum_chunk_size = blob.get_csum_chunk_size();
 	  for (unsigned p = 0; p < csum_count; ++p) {
