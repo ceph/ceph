@@ -2417,59 +2417,58 @@ void ECBackend::rollback_append(
       old_size));
 }
 
-void ECBackend::be_deep_scrub(
+int ECBackend::be_deep_scrub(
   const hobject_t &poid,
-  uint32_t seed,
-  ScrubMap::object &o,
-  ThreadPool::TPHandle &handle,
-  ScrubMap* const map) {
-  bufferhash h(-1); // we always used -1
+  ScrubMap &map,
+  ScrubMapBuilder &pos,
+  ScrubMap::object &o)
+{
+  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
-  uint64_t stride = cct->_conf->osd_deep_scrub_stride;
-  if (stride % sinfo.get_chunk_size())
-    stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
-  utime_t sleeptime;
-  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
-  uint64_t pos = 0;
   bool skip_data_digest = store->has_builtin_csum() &&
     g_conf->osd_skip_data_digest;
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
-  while (true) {
-    if (sleeptime != utime_t()) {
-      lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
-      sleeptime.sleep();
-    }
-    bufferlist bl;
-    handle.reset_tp_timeout();
-    r = store->read(
-      ch,
-      ghobject_t(
-	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      pos,
-      stride, bl,
-      fadvise_flags);
-    if (r < 0)
-      break;
-    if (bl.length() % sinfo.get_chunk_size()) {
-      r = -EIO;
-      break;
-    }
-    pos += r;
-    if (!skip_data_digest) {
-      h << bl;
-    }
-    if ((unsigned)r < stride)
-      break;
+  utime_t sleeptime;
+  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
+
+  if (pos.data_pos == 0) {
+    pos.data_hash = bufferhash(pos.seed);
   }
 
-  if (r == -EIO) {
-    dout(0) << "_scan_list  " << poid << " got "
-	    << r << " on read, read_error" << dendl;
+  uint64_t stride = cct->_conf->osd_deep_scrub_stride;
+  if (stride % sinfo.get_chunk_size())
+    stride += sinfo.get_chunk_size() - (stride % sinfo.get_chunk_size());
+
+  bufferlist bl;
+  r = store->read(
+    ch,
+    ghobject_t(
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    pos.data_pos,
+    stride, bl,
+    fadvise_flags);
+  if (r < 0) {
+    dout(20) << __func__ << "  " << poid << " got "
+	     << r << " on read, read_error" << dendl;
     o.read_error = true;
-    return;
+    return 0;
+  }
+  if (bl.length() % sinfo.get_chunk_size()) {
+    dout(20) << __func__ << "  " << poid << " got "
+	     << r << " on read, not chunk size " << sinfo.get_chunk_size() << " aligned"
+	     << dendl;
+    o.read_error = true;
+    return 0;
+  }
+  if (r > 0 && !skip_data_digest) {
+    pos.data_hash << bl;
+  }
+  pos.data_pos += r;
+  if (r == (int)stride) {
+    return -EINPROGRESS;
   }
 
   ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
@@ -2477,21 +2476,22 @@ void ECBackend::be_deep_scrub(
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
     o.digest_present = false;
-    return;
+    return 0;
   } else {
     if (!get_parent()->get_pool().allows_ecoverwrites()) {
       assert(hinfo->has_chunk_hash());
-      if (hinfo->get_total_chunk_size() != pos) {
+      if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
 	dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
 	o.ec_size_mismatch = true;
-	return;
+	return 0;
       }
 
       if (!skip_data_digest &&
-          hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) != h.digest()) {
+          hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
+	  pos.data_hash.digest()) {
 	dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
 	o.ec_hash_mismatch = true;
-	return;
+	return 0;
       }
 
       /* We checked above that we match our own stored hash.  We cannot
@@ -2511,6 +2511,7 @@ void ECBackend::be_deep_scrub(
     }
   }
 
-  o.omap_digest = seed;
+  o.omap_digest = pos.seed;
   o.omap_digest_present = true;
+  return 0;
 }

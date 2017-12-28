@@ -671,12 +671,11 @@ public:
 
   bool auto_repair_supported() const override { return true; }
 
-  void be_deep_scrub(
-    const hobject_t &obj,
-    uint32_t seed,
-    ScrubMap::object &o,
-    ThreadPool::TPHandle &handle,
-    ScrubMap* const map = nullptr) override;
+  int be_deep_scrub(
+    const hobject_t &poid,
+    ScrubMap &map,
+    ScrubMapBuilder &pos,
+    ScrubMap::object &o) override;
   uint64_t be_get_ondisk_size(uint64_t logical_size) override {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }

@@ -570,58 +570,53 @@ PGBackend *PGBackend::build_pg_backend(
   }
 }
 
-/*
- * pg lock may or may not be held
- */
-void PGBackend::be_scan_list(
-  ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
-  ThreadPool::TPHandle &handle)
+int PGBackend::be_scan_list(
+  ScrubMap &map,
+  ScrubMapBuilder &pos)
 {
-  dout(10) << __func__ << " scanning " << ls.size() << " objects"
-           << (deep ? " deeply" : "") << dendl;
-  int i = 0;
-  for (vector<hobject_t>::const_iterator p = ls.begin();
-       p != ls.end();
-       ++p, i++) {
-    handle.reset_tp_timeout();
-    hobject_t poid = *p;
+  dout(10) << __func__ << " " << pos << dendl;
+  assert(!pos.done());
+  assert(pos.pos < pos.ls.size());
+  hobject_t& poid = pos.ls[pos.pos];
 
-    struct stat st;
-    int r = store->stat(
+  struct stat st;
+  int r = store->stat(
+    ch,
+    ghobject_t(
+      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+    &st,
+    true);
+  if (r == 0) {
+    ScrubMap::object &o = map.objects[poid];
+    o.size = st.st_size;
+    assert(!o.negative);
+    store->getattrs(
       ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      &st,
-      true);
-    if (r == 0) {
-      ScrubMap::object &o = map.objects[poid];
-      o.size = st.st_size;
-      assert(!o.negative);
-      store->getattrs(
-	ch,
-	ghobject_t(
-	  poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	o.attrs);
+      o.attrs);
 
-      // calculate the CRC32 on deep scrubs
-      if (deep) {
-	be_deep_scrub(*p, seed, o, handle, &map);
-      }
-
-      dout(25) << __func__ << "  " << poid << dendl;
-    } else if (r == -ENOENT) {
-      dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", skipping" << dendl;
-    } else if (r == -EIO) {
-      dout(25) << __func__ << "  " << poid << " got " << r
-	       << ", stat_error" << dendl;
-      ScrubMap::object &o = map.objects[poid];
-      o.stat_error = true;
-    } else {
-      derr << __func__ << " got: " << cpp_strerror(r) << dendl;
-      ceph_abort();
+    if (pos.deep) {
+      r = be_deep_scrub(poid, map, pos, o);
     }
+    dout(25) << __func__ << "  " << poid << dendl;
+  } else if (r == -ENOENT) {
+    dout(25) << __func__ << "  " << poid << " got " << r
+	     << ", skipping" << dendl;
+  } else if (r == -EIO) {
+    dout(25) << __func__ << "  " << poid << " got " << r
+	     << ", stat_error" << dendl;
+    ScrubMap::object &o = map.objects[poid];
+    o.stat_error = true;
+  } else {
+    derr << __func__ << " got: " << cpp_strerror(r) << dendl;
+    ceph_abort();
   }
+  if (r == -EINPROGRESS) {
+    return -EINPROGRESS;
+  }
+  pos.next_object();
+  return 0;
 }
 
 bool PGBackend::be_compare_scrub_objects(
