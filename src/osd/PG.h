@@ -1459,6 +1459,10 @@ public:
     int large_omap_objects = 0;
     int fixed;
     ScrubMap primary_scrubmap;
+    ScrubMapBuilder primary_scrubmap_pos;
+    epoch_t replica_scrub_start = 0;
+    ScrubMap replica_scrubmap;
+    ScrubMapBuilder replica_scrubmap_pos;
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
@@ -1501,10 +1505,12 @@ public:
       WAIT_PUSHES,
       WAIT_LAST_UPDATE,
       BUILD_MAP,
+      BUILD_MAP_DONE,
       WAIT_REPLICAS,
       COMPARE_MAPS,
       WAIT_DIGEST_UPDATES,
       FINISH,
+      BUILD_MAP_REPLICA,
     } state;
 
     std::unique_ptr<Scrub::Store> store;
@@ -1535,10 +1541,12 @@ public:
         case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
         case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
         case BUILD_MAP: ret = "BUILD_MAP"; break;
+        case BUILD_MAP_DONE: ret = "BUILD_MAP_DONE"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
         case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
         case WAIT_DIGEST_UPDATES: ret = "WAIT_DIGEST_UPDATES"; break;
         case FINISH: ret = "FINISH"; break;
+        case BUILD_MAP_REPLICA: ret = "BUILD_MAP_REPLICA"; break;
       }
       return ret;
     }
@@ -1580,6 +1588,10 @@ public:
       missing.clear();
       authoritative.clear();
       num_digest_updates_pending = 0;
+      primary_scrubmap = ScrubMap();
+      primary_scrubmap_pos.reset();
+      replica_scrubmap = ScrubMap();
+      replica_scrubmap_pos.reset();
       cleaned_meta_map = ScrubMap();
       sleeping = false;
       needs_sleep = true;
@@ -1618,6 +1630,7 @@ protected:
 			  uint32_t seed);
   int build_scrub_map_chunk(
     ScrubMap &map,
+    ScrubMapBuilder &pos,
     hobject_t start, hobject_t end, bool deep, uint32_t seed,
     ThreadPool::TPHandle &handle);
   /**
