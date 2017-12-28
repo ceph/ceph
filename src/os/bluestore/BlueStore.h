@@ -520,7 +520,7 @@ public:
              get_blob().can_split_at(blob_offset);
     }
 
-    bool can_reuse_blob(uint32_t min_alloc_size,
+    bool can_reuse_blob(uint64_t min_alloc_size,
 			uint32_t target_blob_size,
 			uint32_t b_offset,
 			uint32_t *length0);
