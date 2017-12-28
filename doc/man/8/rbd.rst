@@ -205,6 +205,25 @@ Commands
   Deep copy the content of a src-image into the newly created dest-image.
   Dest-image will have the same size, object size, image format, and snapshots as src-image.
 
+:command:`device list` [-t | --device-type *device-type*] [--format plain | json | xml] --pretty-format
+  Show the rbd images that are mapped via the rbd kernel module
+  (default) or other supported device.
+
+:command:`device map` [-t | --device-type *device-type*] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
+  Map the specified image to a block device via the rbd kernel module
+  (default) or other supported device (*nbd* on Linux or *ggate* on
+  FreeBSD).
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
+
+:command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
+  Unmap the block device that was mapped via the rbd kernel module
+  (default) or other supported device.
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
+
 :command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset
@@ -347,9 +366,6 @@ Commands
   -l, also show snapshots, and use longer-format output including
   size, parent (if clone), format, etc.
 
-:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd kernel module.
-
 :command:`merge-diff` *first-diff-path* *second-diff-path* *merged-diff-path*
   Merge two continuous incremental diffs of an image into one single diff. The
   first diff's end snapshot must be equal with the second diff's start snapshot.
@@ -437,15 +453,6 @@ Commands
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
-:command:`nbd ls`
-  Show the list of used nbd devices via the rbd-nbd tool.
-
-:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd-nbd tool.
-
-:command:`nbd unmap` *device-path*
-  Unmap the block device that was mapped via the rbd-nbd tool.
-
 :command:`object-map check` *image-spec* | *snap-spec*
   Verify the object map is correct.
 
@@ -464,9 +471,6 @@ Commands
 :command:`rm` *image-spec*
   Delete an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
-
-:command:`showmapped`
-  Show the rbd images that are mapped via the rbd kernel module.
 
 :command:`snap create` *snap-spec*
   Create a new snapshot. Requires the snapshot name parameter specified.
@@ -528,9 +532,6 @@ Commands
   you can not removed it unless use force. But an actively in-use by clones 
   or has snapshots can not be removed.
 
-:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
-  Unmap the block device that was mapped via the rbd kernel module.
-
 :command:`watch` *image-spec*
   Watch events on image.
 
@@ -589,7 +590,7 @@ Most of these options are useful mainly for debugging and benchmarking.  The
 default values are set in the kernel and may therefore depend on the version of
 the running kernel.
 
-Per client instance `rbd map` options:
+Per client instance `rbd device map` options:
 
 * fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
   the client.
@@ -619,16 +620,16 @@ Per client instance `rbd map` options:
 
 * nocephx_sign_messages - Disable message signing (since 4.4).
 
-* mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
-  sequences (default is 60 seconds).  In particular, since 4.2 this can be used
-  to ensure that `rbd unmap` eventually times out when there is no network
-  connection to a cluster.
+* mount_timeout=x - A timeout on various steps in `rbd device map` and
+  `rbd device unmap` sequences (default is 60 seconds).  In particular,
+  since 4.2 this can be used to ensure that `rbd device unmap` eventually
+  times out when there is no network connection to a cluster.
 
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
 
-Per mapping (block device) `rbd map` options:
+Per mapping (block device) `rbd device map` options:
 
 * rw - Map the image read-write (default).
 
@@ -641,7 +642,7 @@ Per mapping (block device) `rbd map` options:
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
 
-`rbd unmap` options:
+`rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
   driver will wait for running requests to complete and then unmap; requests
@@ -681,15 +682,15 @@ To delete a snapshot::
 
 To map an image via the kernel with cephx enabled::
 
-       rbd map mypool/myimage --id admin --keyfile secretfile
+       rbd device map mypool/myimage --id admin --keyfile secretfile
 
 To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster cluster-name
+       rbd device map mypool/myimage --cluster cluster-name
 
 To unmap an image::
 
-       rbd unmap /dev/rbd0
+       rbd device unmap /dev/rbd0
 
 To create an image and a clone from it::
 
