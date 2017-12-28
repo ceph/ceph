@@ -12,8 +12,8 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 
+#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/predicate.hpp>
-#include <boost/scope_exit.hpp>
 #include <boost/program_options.hpp>
 
 #include <iostream>
@@ -75,13 +75,25 @@ int get_image_or_snap_spec(const po::variables_map &vm, std::string *spec) {
   return 0;
 }
 
-void get_list_arguments(po::options_description *positional,
-                        po::options_description *options) {
-  at::add_format_options(options);
+int parse_options(const std::vector<std::string> &options,
+                  std::vector<std::string> *args) {
+  for (auto &opts : options) {
+    std::vector<std::string> args_;
+    boost::split(args_, opts, boost::is_any_of(","));
+    for (auto &o : args_) {
+      args->push_back("--" + o);
+    }
+  }
+
+  return 0;
 }
 
 int execute_list(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#endif
   std::vector<std::string> args;
 
   args.push_back("list");
@@ -97,19 +109,12 @@ int execute_list(const po::variables_map &vm,
   return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
-void get_map_arguments(po::options_description *positional,
-                       po::options_description *options)
-{
-  at::add_image_or_snap_spec_options(positional, options,
-                                     at::ARGUMENT_MODIFIER_NONE);
-  options->add_options()
-    ("read-only", po::bool_switch(), "map read-only")
-    ("exclusive", po::bool_switch(), "forbid writes by other clients")
-    ("device", po::value<std::string>(), "specify ggate device");
-}
-
 int execute_map(const po::variables_map &vm,
                 const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#endif
   std::vector<std::string> args;
 
   args.push_back("map");
@@ -120,34 +125,30 @@ int execute_map(const po::variables_map &vm,
   }
   args.push_back(img);
 
-  if (vm["read-only"].as<bool>())
+  if (vm["read-only"].as<bool>()) {
     args.push_back("--read-only");
+  }
 
-  if (vm["exclusive"].as<bool>())
+  if (vm["exclusive"].as<bool>()) {
     args.push_back("--exclusive");
+  }
 
-  if (vm.count("device")) {
-    args.push_back("--device");
-    args.push_back(vm["device"].as<std::string>());
+  if (vm.count("options")) {
+    r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
+    if (r < 0) {
+      return r;
+    }
   }
 
   return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
-void get_unmap_arguments(po::options_description *positional,
-                         po::options_description *options)
-{
-  positional->add_options()
-    ("image-or-snap-or-device-spec",
-     "image, snapshot, or device specification\n"
-     "[<pool-name>/]<image-name>[@<snapshot-name>] or <device-path>");
-  at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
-}
-
 int execute_unmap(const po::variables_map &vm,
                   const std::vector<std::string> &ceph_global_init_args) {
+#if !defined(__FreeBSD__)
+  std::cerr << "rbd: ggate is only supported on FreeBSD" << std::endl;
+  return -EOPNOTSUPP;
+#endif
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -172,22 +173,15 @@ int execute_unmap(const po::variables_map &vm,
   args.push_back("unmap");
   args.push_back(device_name.empty() ? image_name : device_name);
 
+  if (vm.count("options")) {
+    int r = parse_options(vm["options"].as<std::vector<std::string>>(), &args);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
-
-Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
-
-Shell::Action action_list(
-  {"ggate", "list"}, {"ggate", "ls"}, "List mapped ggate devices.", "",
-  &get_list_arguments, &execute_list);
-
-Shell::Action action_map(
-  {"ggate", "map"}, {}, "Map an image to a ggate device.", "",
-  &get_map_arguments, &execute_map);
-
-Shell::Action action_unmap(
-  {"ggate", "unmap"}, {}, "Unmap a ggate device.", "",
-  &get_unmap_arguments, &execute_unmap);
 
 } // namespace ggate
 } // namespace action
