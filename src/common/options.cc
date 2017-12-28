@@ -2619,67 +2619,80 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_scrubs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("Maximum concurrent scrubs on a single OSD"),
 
     Option("osd_scrub_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
 
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Restrict scrubbing to this hour of the day or later")
+    .add_see_also("osd_scrub_end_hour"),
 
     Option("osd_scrub_end_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(24)
-    .set_description(""),
+    .set_description("Restrict scrubbing to hours of the day earlier than this")
+    .add_see_also("osd_scrub_begin_hour"),
 
     Option("osd_scrub_begin_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("The begin week day permits to scrub, include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+    .set_description("Restrict scrubbing to this day of the week or later")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_end_week_day"),
 
     Option("osd_scrub_end_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(7)
-    .set_description("The end week day permits to scrub, not include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+    .set_description("Restrict scrubbing to days of the week earlier than this")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_begin_week_day"),
 
     Option("osd_scrub_load_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Allow scrubbing when system load divided by number of CPUs is below this value"),
 
     Option("osd_scrub_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_day)
-    .set_description(""),
+    .set_description("Scrub each PG no more often than this interval")
+    .add_see_also("osd_scrub_max_interval"),
 
     Option("osd_scrub_max_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Scrub each PG no less often than this interval")
+    .add_see_also("osd_scrub_min_interval"),
 
     Option("osd_scrub_interval_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Ratio of scrub interval to randomly vary")
+    .set_long_description("This prevents a scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_scrub_min_interval"),
 
-    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.66)
-    .set_description(""),
+    .set_description("Backoff ratio after a failed scrub scheduling attempt"),
 
     Option("osd_scrub_chunk_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Minimum number of objects to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_max"),
 
     Option("osd_scrub_chunk_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
-    .set_description(""),
+    .set_description("Maximum number of object to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_min"),
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Duration to inject a delay during scrubbing"),
 
     Option("osd_scrub_auto_repair", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Automatically repair damaged objects detected during scrub"),
 
     Option("osd_scrub_auto_repair_num_errors", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Maximum number of detected errors to automatically repair")
+    .add_see_also("osd_scrub_auto_repair"),
 
     Option("osd_scrub_max_preemptions", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
@@ -2687,33 +2700,35 @@ std::vector<Option> get_global_options() {
 
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Deep scrub each PG (i.e., verify data checksums) at least this often"),
 
     Option("osd_deep_scrub_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.15)
-    .set_description(""),
+    .set_description("Ratio of deep scrub interval to randomly vary")
+    .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_deep_scrub_interval"),
 
     Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(524288)
-    .set_description(""),
+    .set_description("Number of bytes to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
-    .set_description(""),
+    .set_description("Number of keys to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_update_digest_min_age", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
-    .set_description(""),
+    .set_description("Update overall object digest only if object was last modified longer ago than this"),
 
     Option("osd_deep_scrub_large_omap_object_key_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2000000)
-    .set_description("threshold for number of keys to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap keys than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
     Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_G)
-    .set_description("threshold for summed size (bytes) of all key values to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
 
@@ -2898,7 +2913,8 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_debug_deep_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(0),
+    .set_default(0)
+    .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -3141,11 +3157,11 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Priority for scrub operations in work queue"),
 
     Option("osd_scrub_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50<<20)
-    .set_description(""),
+    .set_description("Cost for scrub operations in work queue"),
 
     Option("osd_requested_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(120)
