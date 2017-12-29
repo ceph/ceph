@@ -83,10 +83,7 @@ struct ceph_pg {
  */
 static inline int ceph_stable_mod(int x, int b, int bmask)
 {
-	if ((x & bmask) < b)
-		return x & bmask;
-	else
-		return x & (bmask >> 1);
+   return ((x & bmask) < b ? x & bmask : x & (bmask >> 1));
 }
 
 /*
@@ -123,7 +120,7 @@ struct ceph_eversion {
 #define CEPH_OSD_NOIN         (1<<10) /* osd can not be marked in */
 #define CEPH_OSD_NOOUT        (1<<11) /* osd can not be marked out */
 
-extern const char *ceph_osd_state_name(int s);
+const char *ceph_osd_state_name(int s);
 
 /* osd weights.  fixed point value: 0x10000 == 1.0 ("in"), 0 == "out" */
 #define CEPH_OSD_IN  0x10000
@@ -189,10 +186,10 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_RELEASE_NAUTILUS   14
 #define CEPH_RELEASE_MAX        15  /* highest + 1 */
 
-extern const char *ceph_release_name(int r);
-extern int ceph_release_from_name(const char *s);
-extern uint64_t ceph_release_features(int r);
-extern int ceph_release_from_features(uint64_t features);
+const char *ceph_release_name(int r);
+int ceph_release_from_name(const char *s);
+uint64_t ceph_release_features(int r);
+int ceph_release_from_features(uint64_t features);
 
 /*
  * The error code to return when an OSD can't handle a write
@@ -420,7 +417,7 @@ static inline int ceph_osd_op_uses_extent(int op)
 #define CEPH_OSD_TMAP_RM  'r'
 #define CEPH_OSD_TMAP_RMSLOPPY 'R'
 
-extern const char *ceph_osd_op_name(int op);
+const char *ceph_osd_op_name(int op);
 
 /*
  * osd op flags
