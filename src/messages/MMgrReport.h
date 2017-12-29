@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 
 #include "common/perf_counters.h"
+#include "osd/OSDHealthMetric.h"
 
 class PerfCounterType
 {
@@ -66,7 +67,7 @@ WRITE_CLASS_ENCODER(PerfCounterType)
 
 class MMgrReport : public Message
 {
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
 public:
@@ -92,6 +93,8 @@ public:
   // for service registration
   boost::optional<std::map<std::string,std::string>> daemon_status;
 
+  std::vector<OSDHealthMetric> osd_health_metrics;
+
   void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
@@ -104,6 +107,9 @@ public:
       ::decode(service_name, p);
       ::decode(daemon_status, p);
     }
+    if (header.version >= 5) {
+      ::decode(osd_health_metrics, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -113,6 +119,7 @@ public:
     ::encode(undeclare_types, payload);
     ::encode(service_name, payload);
     ::encode(daemon_status, payload);
+    ::encode(osd_health_metrics, payload);
   }
 
   const char *get_type_name() const override { return "mgrreport"; }
@@ -129,6 +136,9 @@ public:
         << " packed " << packed.length();
     if (daemon_status) {
       out << " status=" << daemon_status->size();
+    }
+    if (!osd_health_metrics.empty()) {
+      out << " osd_metrics=" << osd_health_metrics.size();
     }
     out << ")";
   }

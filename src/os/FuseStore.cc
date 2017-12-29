@@ -1103,7 +1103,10 @@ static int os_statfs(const char *path, struct statvfs *stbuf)
   stbuf->f_bsize = 4096;   // LIES!
   stbuf->f_blocks = s.total / 4096;
   stbuf->f_bavail = s.available / 4096;
+  stbuf->f_bfree = stbuf->f_bavail;
 
+  ldout(fs->store->cct, 10) << __func__ << " " << path << ": " 
+    << stbuf->f_bavail << "/" << stbuf->f_blocks << dendl;
   return 0;
 }
 
@@ -1152,7 +1155,8 @@ int FuseStore::main()
     "-d", // debug
   };
   int c = 3;
-  if (store->cct->_conf->fuse_debug)
+  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  if (fuse_debug)
     ++c;
   return fuse_main(c, (char**)v, &fs_oper, (void*)this);
 }
@@ -1169,7 +1173,8 @@ int FuseStore::start()
     "-d", // debug
   };
   int c = 3;
-  if (store->cct->_conf->fuse_debug)
+  auto fuse_debug = store->cct->_conf->get_val<bool>("fuse_debug");
+  if (fuse_debug)
     ++c;
   fuse_args a = FUSE_ARGS_INIT(c, (char**)v);
   info->args = a;

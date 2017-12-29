@@ -14,7 +14,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 #define SWIFT_PERM_READ  RGW_PERM_READ_OBJS
 #define SWIFT_PERM_WRITE RGW_PERM_WRITE_OBJS

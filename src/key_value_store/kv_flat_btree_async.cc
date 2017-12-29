@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <iterator>
 
-using namespace std;
 using ceph::bufferlist;
 
 bool index_data::is_timed_out(utime_t now, utime_t timeout) const {

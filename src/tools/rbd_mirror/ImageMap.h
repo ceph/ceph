@@ -57,10 +57,16 @@ private:
   struct Update {
     std::string global_image_id;
     std::string instance_id;
+    utime_t mapped_time;
 
-    Update(const std::string &global_image_id, const std::string &instance_id)
+    Update(const std::string &global_image_id, const std::string &instance_id,
+           utime_t mapped_time)
       : global_image_id(global_image_id),
-        instance_id(instance_id) {
+        instance_id(instance_id),
+        mapped_time(mapped_time) {
+    }
+    Update(const std::string &global_image_id, const std::string &instance_id)
+      : Update(global_image_id, instance_id, ceph_clock_now()) {
     }
   };
   typedef std::list<Update> Updates;
@@ -109,6 +115,8 @@ private:
     }
   };
 
+  // context callbacks which are retry-able get deleted after
+  // transiting to the next state.
   struct C_UpdateMap : Context {
     ImageMap *image_map;
     std::string global_image_id;

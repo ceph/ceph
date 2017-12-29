@@ -74,8 +74,10 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
-  if (m_state == STATE_REMOVE_SOURCE_HEADER) {
+  if (m_state == STATE_UPDATE_DIRECTORY) {
+    // update in-memory name before removing source header
     apply();
+  } else if (m_state == STATE_REMOVE_SOURCE_HEADER) {
     return true;
   }
 
@@ -102,7 +104,13 @@ int RenameRequest<I>::filter_state_return_code(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  if (m_state == STATE_REMOVE_SOURCE_HEADER && r < 0) {
+  if (m_state == STATE_READ_SOURCE_HEADER && r == -ENOENT) {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if (image_ctx.name == m_dest_name) {
+      // signal that replay raced with itself
+      return -EEXIST;
+    }
+  } else if (m_state == STATE_REMOVE_SOURCE_HEADER && r < 0) {
     if (r != -ENOENT) {
       lderr(cct) << "warning: couldn't remove old source object ("
                  << m_source_oid << ")" << dendl;

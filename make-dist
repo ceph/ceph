@@ -46,9 +46,18 @@ download_boost() {
         fi
     done
     set -e
-    tar xjf $boost_fname -C src
+    tar xjf $boost_fname -C src \
+        --exclude="$boost_version_underscore/libs/*/doc" \
+        --exclude="$boost_version_underscore/libs/*/example" \
+        --exclude="$boost_version_underscore/libs/*/examples" \
+        --exclude="$boost_version_underscore/libs/*/meta" \
+        --exclude="$boost_version_underscore/libs/*/test" \
+        --exclude="$boost_version_underscore/tools/boostbook" \
+        --exclude="$boost_version_underscore/tools/quickbook" \
+        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude='doc' --exclude='more' --exclude='status'
     mv src/boost_${boost_version_underscore} src/boost
-    tar cf ${outfile}.boost.tar src/boost
+    tar cf ${outfile}.boost.tar ${outfile}/src/boost
     rm -rf src/boost
 }
 
@@ -81,14 +90,6 @@ else
 	rpm_release=0
 fi
 
-# NOTE: If you change this version number make sure the package is available
-# at the three URLs referenced below (may involve uploading to download.ceph.com)
-boost_version=1.63.0
-download_boost $boost_version 1c837ecd990bb022d07e7aab32b09847 \
-               https://dl.bintray.com/boostorg/release/$boost_version/source \
-               https://downloads.sourceforge.net/project/boost/boost/$boost_version \
-               https://download.ceph.com/qa
-
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |
         sed "s/@VERSION@/$rpm_version/g" |
@@ -97,6 +98,13 @@ for spec in ceph.spec.in alpine/APKBUILD.in; do
 done
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
+# NOTE: If you change this version number make sure the package is available
+# at the three URLs referenced below (may involve uploading to download.ceph.com)
+boost_version=1.63.0
+download_boost $boost_version 1c837ecd990bb022d07e7aab32b09847 \
+               https://dl.bintray.com/boostorg/release/$boost_version/source \
+               https://downloads.sourceforge.net/project/boost/boost/$boost_version \
+               https://download.ceph.com/qa
 tar --concatenate -f $outfile.all.tar $outfile.version.tar
 tar --concatenate -f $outfile.all.tar $outfile.boost.tar
 tar --concatenate -f $outfile.all.tar $outfile.tar

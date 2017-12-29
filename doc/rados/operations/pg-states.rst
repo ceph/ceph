@@ -20,7 +20,10 @@ map is ``active + clean``.
   A replica with necessary data is down, so the placement group is offline.
 
 *Scrubbing*
-  Ceph is checking the placement group for inconsistencies.
+  Ceph is checking the placement group metadata for inconsistencies.
+
+*Deep*
+  Ceph is checking the placement group data against stored checksums.
 
 *Degraded*
   Ceph has not replicated some objects in the placement group the correct number of times yet.

@@ -7,7 +7,6 @@
 #endif
 
 #include <iostream>
-using namespace std;
 
 #include "include/types.h"
 

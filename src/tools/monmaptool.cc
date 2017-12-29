@@ -20,7 +20,6 @@
 #include "include/str_list.h"
 #include "mon/MonMap.h"
 
-using namespace std;
 
 void usage()
 {

@@ -405,16 +405,15 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
   assert(r == 0);
   assert(overlap <= m_image_ctx.size);
 
-  uint64_t object_size = m_image_ctx.get_object_size();
-  uint64_t  overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
-                                                       overlap);
+  uint64_t overlap_objects = Striper::get_num_objects(m_image_ctx.layout,
+                                                      overlap);
 
   m_image_ctx.parent_lock.put_read();
   m_image_ctx.snap_lock.put_read();
 
   operation::FlattenRequest<I> *req = new operation::FlattenRequest<I>(
-    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), object_size,
-    overlap_objects, snapc, prog_ctx);
+    m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), overlap_objects,
+    snapc, prog_ctx);
   req->send();
 }
 

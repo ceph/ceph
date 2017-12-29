@@ -342,27 +342,38 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   if (g_conf->rocksdb_separate_wal_dir) {
     opt.wal_dir = path + ".wal";
   }
-  if (g_conf->get_val<std::string>("rocksdb_db_paths").length()) {
-    list<string> paths;
-    get_str_list(g_conf->get_val<std::string>("rocksdb_db_paths"), "; \t", paths);
-    for (auto& p : paths) {
-      size_t pos = p.find(',');
-      if (pos == std::string::npos) {
-	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
-	return -EINVAL;
-      }
-      string path = p.substr(0, pos);
-      string size_str = p.substr(pos + 1);
-      uint64_t size = atoll(size_str.c_str());
-      if (!size) {
-	derr << __func__ << " invalid db path item " << p << " in "
-	     << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
-	return -EINVAL;
-      }
-      opt.db_paths.push_back(rocksdb::DbPath(path, size));
-      dout(10) << __func__ << " db_path " << path << " size " << size << dendl;
-    }
+
+  // Since ceph::for_each_substr doesn't return a value and
+  // std::stoull does throw, we may as well just catch everything here.
+  try {
+    g_conf->with_val<std::string>(
+      "rocksdb_db_paths", [&opt, this](const std::string& paths) {
+	ceph::for_each_substr(
+	  paths, "; \t",
+	  [&paths, &opt, this](boost::string_view s) {
+	    size_t pos = s.find(',');
+	    if (pos == std::string::npos) {
+	      derr << __func__ << " invalid db path item " << s << " in "
+		   << paths << dendl;
+	      throw std::system_error(std::make_error_code(
+					std::errc::invalid_argument));
+	    }
+	    // And we have to use string because RocksDB doesn't know any better.
+	    auto path = string(s.substr(0, pos));
+	    auto size = std::stoull(string(s.substr(pos + 1)));
+	    if (!size) {
+	      derr << __func__ << " invalid db path item " << s << " in "
+		   << g_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+	      throw std::system_error(std::make_error_code(
+					std::errc::invalid_argument));
+	    }
+	    opt.db_paths.push_back(rocksdb::DbPath(path, size));
+	    dout(10) << __func__ << " db_path " << path << " size " << size
+		     << dendl;
+	  });
+      });
+  } catch (const std::system_error& e) {
+    return -e.code().value();
   }
 
   if (g_conf->rocksdb_log_to_ceph_log) {
@@ -412,11 +423,18 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 	     << bloom_bits << dendl;
     bbt_opts.filter_policy.reset(rocksdb::NewBloomFilterPolicy(bloom_bits));
   }
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "binary_search")
+  using std::placeholders::_1;
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "binary_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kBinarySearch;
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "hash_search")
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "hash_search")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kHashSearch;
-  if (g_conf->get_val<std::string>("rocksdb_index_type") == "two_level")
+  if (g_conf->with_val<std::string>("rocksdb_index_type",
+				    std::bind(std::equal_to<std::string>(), _1,
+					      "two_level")))
     bbt_opts.index_type = rocksdb::BlockBasedTableOptions::IndexType::kTwoLevelIndexSearch;
   bbt_opts.cache_index_and_filter_blocks = 
       g_conf->get_val<bool>("rocksdb_cache_index_and_filter_blocks");

@@ -2006,6 +2006,19 @@ namespace librbd {
     return r;
   }
 
+  int Image::list_watchers(std::list<librbd::image_watcher_t> &watchers) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+    int r = librbd::list_watchers(ictx, watchers);
+    if (r >= 0) {
+      for (auto &watcher : watchers) {
+	tracepoint(librbd, list_watchers_entry, watcher.addr.c_str(), watcher.id, watcher.cookie);
+      }
+    }
+    tracepoint(librbd, list_watchers_exit, r, watchers.size());
+    return r;
+  }
+
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)
@@ -4494,5 +4507,43 @@ extern "C" void rbd_group_image_status_list_cleanup(
 					      size_t len) {
   for (size_t i = 0; i < len; ++i) {
     rbd_group_image_status_cleanup(&images[i]);
+  }
+}
+
+extern "C" int rbd_watchers_list(rbd_image_t image,
+				 rbd_image_watcher_t *watchers,
+				 size_t *max_watchers) {
+  std::list<librbd::image_watcher_t> watcher_list;
+  librbd::ImageCtx *ictx = (librbd::ImageCtx*)image;
+
+  tracepoint(librbd, list_watchers_enter, ictx, ictx->name.c_str(), ictx->snap_name.c_str(), ictx->read_only);
+  int r = librbd::list_watchers(ictx, watcher_list);
+  if (r < 0) {
+    return r;
+  }
+
+  if (watcher_list.size() > *max_watchers) {
+    *max_watchers = watcher_list.size();
+    tracepoint(librbd, list_watchers_exit, -ERANGE, watcher_list.size());
+    return -ERANGE;
+  }
+
+  *max_watchers = 0;
+  for (auto &watcher : watcher_list) {
+    tracepoint(librbd, list_watchers_entry, watcher.addr.c_str(), watcher.id, watcher.cookie);
+    watchers[*max_watchers].addr = strdup(watcher.addr.c_str());
+    watchers[*max_watchers].id = watcher.id;
+    watchers[*max_watchers].cookie = watcher.cookie;
+    *max_watchers += 1;
+  }
+
+  tracepoint(librbd, list_watchers_exit, r, watcher_list.size());
+  return 0;
+}
+
+extern "C" void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
+					  size_t num_watchers) {
+  for (size_t i = 0; i < num_watchers; ++i) {
+    free(watchers[i].addr);
   }
 }

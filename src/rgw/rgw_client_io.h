@@ -315,8 +315,8 @@ public:
   }
 };
 
-} /* namespace rgw */
 } /* namespace io */
+} /* namespace rgw */
 
 
 /* We're doing this nasty thing only because of extensive usage of templates

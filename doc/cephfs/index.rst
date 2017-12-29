@@ -84,6 +84,7 @@ authentication keyring.
 
     Deployment best practices <best-practices>
     Administrative commands <administration>
+    Understanding MDS Cache Size Limits <cache-size-limits>
     POSIX compatibility <posix>
     Experimental Features <experimental-features>
     CephFS Quotas <quota>

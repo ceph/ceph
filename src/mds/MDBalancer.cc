@@ -70,7 +70,7 @@ int MDBalancer::proc_message(Message *m)
     break;
 
   default:
-    dout(0) << " balancer unknown message " << m->get_type() << dendl;
+    derr << " balancer unknown message " << m->get_type() << dendl_impl;
     assert(0 == "balancer unknown message");
   }
 
@@ -236,7 +236,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
   else
-    dout(0) << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl;
+    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl_impl;
   
   dout(15) << "get_load " << load << dendl;
   return load;
@@ -280,7 +280,7 @@ int MDBalancer::localize_balancer()
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
-    dout(0) << "localized balancer, bal_code=" << bal_code << dendl;
+    dout(10) << "localized balancer, bal_code=" << bal_code << dendl;
   }
   return r;
 }
@@ -300,9 +300,11 @@ void MDBalancer::send_heartbeat()
     return;
   }
 
-  mds_load.clear();
-  if (mds->get_nodeid() == 0)
+  if (mds->get_nodeid() == 0) {
     beat_epoch++;
+   
+    mds_load.clear();
+  }
 
   // my load
   mds_load_t load = get_load(now);
@@ -338,7 +340,7 @@ void MDBalancer::send_heartbeat()
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    MHeartbeat *hb = new MHeartbeat(load, beat_epoch, last_epoch_under);
     hb->get_import_map() = import_map;
     messenger->send_message(hb,
                             mds->mdsmap->get_inst(*p));
@@ -367,8 +369,19 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     goto out;
   }
 
+  if (mds->get_nodeid() != 0 && m->get_beat() > beat_epoch) {
+    dout(10) << "receive next epoch " << m->get_beat() << " from mds." << who << " before mds0" << dendl;
+
+    beat_epoch = m->get_beat();
+    // clear the mds load info whose epoch is less than beat_epoch 
+    mds_load.clear();
+  }
+
   if (who == 0) {
-    dout(20) << " from mds0, new epoch" << dendl;
+    dout(20) << " from mds0, new epoch " << m->get_beat() << dendl;
+    if (beat_epoch != m->get_beat()) {
+      mds_load.clear();
+    }
     beat_epoch = m->get_beat();
     send_heartbeat();
 
@@ -384,8 +397,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     }
   }
   mds_import_map[ who ] = m->get_import_map();
-
-  //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
+  mds_last_epoch_under_info[who] = m->get_last_epoch_under();
 
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
@@ -604,6 +616,8 @@ void MDBalancer::prep_rebalance(int beat)
 	      << dendl;
     }
 
+    mds_meta_load.clear();
+
     double total_load = 0.0;
     multimap<double,mds_rank_t> load_map;
     for (mds_rank_t i=mds_rank_t(0); i < mds_rank_t(cluster_size); i++) {
@@ -615,7 +629,7 @@ void MDBalancer::prep_rebalance(int beat)
       mds_meta_load[i] = l;
 
       if (whoami == 0)
-	dout(0) << "  mds." << i
+	dout(5) << "  mds." << i
 		<< " " << load
 		<< " = " << load.mds_load()
 		<< " ~ " << l << dendl;
@@ -663,10 +677,13 @@ void MDBalancer::prep_rebalance(int beat)
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
-      } else {
-	dout(15) << "   mds." << it->second << " is exporter" << dendl;
-	exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
-	exporter_set.insert(it->second);
+      } else if (it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
+        int mds_last_epoch_under = (it->second == whoami) ? 0 : mds_last_epoch_under_info[it->second];
+        if (!mds_last_epoch_under || beat_epoch - mds_last_epoch_under >= 2) {
+	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
+	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
+	  exporter_set.insert(it->second);
+        }
       }
     }
 
@@ -809,7 +826,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	pop < g_conf->mds_bal_idle_threshold &&
 	im->inode != mds->mdcache->get_root() &&
 	im->inode->authority().first != mds->get_nodeid()) {
-      dout(0) << " exporting idle (" << pop << ") import " << *im
+      dout(5) << " exporting idle (" << pop << ") import " << *im
 	      << " back to mds." << im->inode->authority().first
 	      << dendl;
       mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
@@ -861,7 +878,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
 	if (pop <= amount-have) {
-	  dout(0) << "reexporting " << *dir
+	  dout(5) << "reexporting " << *dir
 		  << " pop " << pop
 		  << " back to mds." << target << dendl;
 	  mds->mdcache->migrator->export_dir_nicely(dir, target);
@@ -890,7 +907,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
 	double pop = (*import).first;
 	if (pop < amount-have || pop < MIN_REEXPORT) {
-	  dout(0) << "reexporting " << *imp
+	  dout(5) << "reexporting " << *imp
 		  << " pop " << pop
 		  << " back to mds." << imp->inode->authority()
 		  << dendl;
@@ -921,7 +938,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     //fudge = amount - have;
 
     for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
-      dout(0) << "   - exporting "
+      dout(5) << "   - exporting "
 	       << (*it)->pop_auth_subtree
 	       << " "
 	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
@@ -1066,7 +1083,7 @@ void MDBalancer::hit_inode(utime_t now, CInode *in, int type, int who)
 void MDBalancer::maybe_fragment(CDir *dir, bool hot)
 {
   // split/merge
-  if (g_conf->mds_bal_frag && g_conf->mds_bal_fragment_interval > 0 &&
+  if (g_conf->mds_bal_fragment_interval > 0 &&
       !dir->inode->is_base() &&        // not root/base (for now at least)
       dir->is_auth()) {
 
@@ -1139,7 +1156,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
 	rd_adj /= 2.0;  // temper somewhat
 
-	dout(0) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
+	dout(5) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
 
 	dir->dir_rep = CDir::REP_ALL;
 	mds->mdcache->send_dir_updates(dir, true);
@@ -1153,7 +1170,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	  dir->is_rep() &&
 	  dir_pop < g_conf->mds_bal_unreplicate_threshold) {
 	// unreplicate
-	dout(0) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
+	dout(5) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
 
 	dir->dir_rep = CDir::REP_NONE;
 	mds->mdcache->send_dir_updates(dir);
@@ -1231,4 +1248,102 @@ void MDBalancer::handle_mds_failure(mds_rank_t who)
   if (0 == who) {
     last_epoch_under = 0;
   }
+}
+
+int MDBalancer::dump_loads(Formatter *f)
+{
+  utime_t now = ceph_clock_now();
+  DecayRate& decayrate = mds->mdcache->decayrate;
+
+  list<CDir*> dfs;
+  if (mds->mdcache->get_root()) {
+    mds->mdcache->get_root()->get_dirfrags(dfs);
+  } else {
+    dout(5) << "dump_load no root" << dendl;
+  }
+
+  f->open_object_section("loads");
+
+  f->open_array_section("dirfrags");
+  while (!dfs.empty()) {
+    CDir *dir = dfs.front();
+    dfs.pop_front();
+
+    if (f) {
+      f->open_object_section("dir");
+      dir->dump_load(f, now, decayrate);
+      f->close_section();
+    }
+
+    for (CDir::map_t::iterator it = dir->begin(); it != dir->end(); ++it) {
+      CInode *in = it->second->get_linkage()->get_inode();
+      if (!in || !in->is_dir())
+	continue;
+
+      list<CDir*> ls;
+      in->get_dirfrags(ls);
+      for (auto subdir : ls) {
+	if (subdir->pop_nested.meta_load() < .001)
+	  continue;
+	dfs.push_back(subdir);
+      }
+    }
+  }
+  f->close_section();  // dirfrags array
+
+  f->open_object_section("mds_load");
+  {
+
+    auto dump_mds_load = [this, f, now](mds_load_t& load) {
+      f->dump_float("request_rate", load.req_rate);
+      f->dump_float("cache_hit_rate", load.cache_hit_rate);
+      f->dump_float("queue_length", load.queue_len);
+      f->dump_float("cpu_load", load.cpu_load_avg);
+      f->dump_float("mds_load", load.mds_load());
+
+      DecayRate rate; // no decay
+      f->open_object_section("auth_dirfrags");
+      load.auth.dump(f, now, rate);
+      f->close_section();
+      f->open_object_section("all_dirfrags");
+      load.all.dump(f, now, rate);
+      f->close_section();
+    };
+
+    for (auto p : mds_load) {
+      stringstream name;
+      name << "mds." << p.first;
+      f->open_object_section(name.str().c_str());
+      dump_mds_load(p.second);
+      f->close_section();
+    }
+  }
+  f->close_section(); // mds_load
+
+  f->open_object_section("mds_meta_load");
+  for (auto p : mds_meta_load) {
+    stringstream name;
+    name << "mds." << p.first;
+    f->dump_float(name.str().c_str(), p.second);
+  }
+  f->close_section(); // mds_meta_load
+
+  f->open_object_section("mds_import_map");
+  for (auto p : mds_import_map) {
+    stringstream name1;
+    name1 << "mds." << p.first;
+    f->open_array_section(name1.str().c_str());
+    for (auto q : p.second) {
+      f->open_object_section("from");
+      stringstream name2;
+      name2 << "mds." << q.first;
+      f->dump_float(name2.str().c_str(), q.second);
+      f->close_section();
+    }
+    f->close_section(); // mds.? array
+  }
+  f->close_section(); // mds_import_map
+
+  f->close_section(); // loads
+  return 0;
 }

@@ -58,12 +58,32 @@ void Action::execute_state_callback(StateTransition::State state) {
   }
 }
 
-void Action::execute_completion_callback(int r) {
-  auto it = context_map.find(StateTransition::STATE_COMPLETE);
-  assert(it != context_map.end());
+void Action::state_callback_complete(StateTransition::State state, bool delete_context) {
+  Context *on_state = nullptr;
 
+  auto it = context_map.find(state);
+  if (it != context_map.end()) {
+    std::swap(it->second, on_state);
+  }
+
+  if (on_state && delete_context) {
+    delete on_state;
+  }
+}
+
+void Action::execute_completion_callback(int r) {
   Context *on_finish = nullptr;
-  std::swap(it->second, on_finish); // just called once so its swap'd
+
+  for (auto &ctx : context_map) {
+    Context *on_state = nullptr;
+    std::swap(ctx.second, on_state);
+
+    if (ctx.first == StateTransition::STATE_COMPLETE) {
+      on_finish = on_state;
+    } else if (on_state != nullptr) {
+      delete on_state;
+    }
+  }
 
   if (on_finish != nullptr) {
     on_finish->complete(r);

@@ -301,7 +301,7 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
     const uint64_t num = (item.size > 0) ?
       Striper::get_num_objects(item.layout, item.size) : 1;
 
-    ops_required = MIN(num, g_conf->filer_max_purge_ops);
+    ops_required = std::min(num, g_conf->filer_max_purge_ops);
 
     // Account for removing (or zeroing) backtrace
     ops_required += 1;
@@ -564,7 +564,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
 
   // User may also specify a hard limit, apply this if so.
   if (cct->_conf->mds_max_purge_ops) {
-    max_purge_ops = MIN(max_purge_ops, cct->_conf->mds_max_purge_ops);
+    max_purge_ops = std::min(max_purge_ops, cct->_conf->mds_max_purge_ops);
   }
 }
 
@@ -620,7 +620,7 @@ bool PurgeQueue::drain(
     max_purge_ops = 0xffff;
   }
 
-  drain_initial = ceph::max(bytes_remaining, drain_initial);
+  drain_initial = std::max(bytes_remaining, drain_initial);
 
   *progress = drain_initial - bytes_remaining;
   *progress_total = drain_initial;

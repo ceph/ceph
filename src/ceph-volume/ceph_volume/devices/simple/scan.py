@@ -74,7 +74,11 @@ class Scan(object):
             if system.is_binary(file_path):
                 continue
             if os.path.isfile(file_path):
-                osd_metadata[_file] = self.get_contents(file_path)
+                content = self.get_contents(file_path)
+                try:
+                    osd_metadata[_file] = int(content)
+                except ValueError:
+                    osd_metadata[_file] = content
 
         device = path_mounts.get(path)
         # it is possible to have more than one device, pick the first one, and
@@ -129,6 +133,7 @@ class Scan(object):
         else:
             with open(json_path, 'w') as fp:
                 json.dump(osd_metadata, fp, indent=4, sort_keys=True, ensure_ascii=False)
+                fp.write(os.linesep)
             terminal.success(
                 'OSD %s got scanned and metadata persisted to file: %s' % (
                     osd_id,

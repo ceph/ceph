@@ -85,7 +85,10 @@ macro(build_dpdk)
   # create the directory so cmake won't complain when looking at the imported
   # target
   file(MAKE_DIRECTORY ${DPDK_INCLUDE_DIR})
-  foreach(c eal mempool mempool_ring mempool_stack ring)
+  foreach(c
+      pci bus_pci
+      eal
+      mempool mempool_ring mempool_stack ring)
     add_library(dpdk::${c} STATIC IMPORTED)
     add_dependencies(dpdk::${c} dpdk-ext)
     set(dpdk_${c}_LIBRARY

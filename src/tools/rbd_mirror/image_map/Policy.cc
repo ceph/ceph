@@ -36,11 +36,11 @@ void Policy::init(const std::map<std::string, cls::rbd::MirrorImageMap> &image_m
   RWLock::WLocker map_lock(m_map_lock);
 
   for (auto const &it : image_mapping) {
-    map(it.first, it.second.instance_id, utime_t(0, 0), m_map_lock);
+    map(it.first, it.second.instance_id, it.second.mapped_time, m_map_lock);
   }
 }
 
-std::string Policy::lookup(const std::string &global_image_id) {
+Policy::LookupInfo Policy::lookup(const std::string &global_image_id) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
 
   RWLock::RLocker map_lock(m_map_lock);
@@ -173,9 +173,9 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
   bool complete;
   if (r == 0) {
     post_execute_state_callback(global_image_id, action_state.transition.next_state);
-    complete = perform_transition(&action_state, action.get_action_type());
+    complete = perform_transition(&action_state, &action);
   } else {
-    complete = abort_or_retry(&action_state);
+    complete = abort_or_retry(&action_state, &action);
   }
 
   if (complete) {
@@ -229,13 +229,15 @@ bool Policy::is_transition_complete(StateTransition::ActionType action_type, Sta
   return complete;
 }
 
-bool Policy::perform_transition(ActionState *action_state, StateTransition::ActionType action_type) {
+bool Policy::perform_transition(ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
   StateTransition::State state = action_state->transition.next_state;
+  // delete context based on retry_on_error flag
+  action->state_callback_complete(state, action_state->transition.retry_on_error);
 
-  bool complete = is_transition_complete(action_type, &state);
+  bool complete = is_transition_complete(action->get_action_type(), &state);
   dout(10) << ": advancing state: " << action_state->current_state << " -> "
            << state << dendl;
 
@@ -248,15 +250,19 @@ bool Policy::perform_transition(ActionState *action_state, StateTransition::Acti
   return complete;
 }
 
-bool Policy::abort_or_retry(ActionState *action_state) {
+bool Policy::abort_or_retry(ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
   bool complete = !action_state->transition.retry_on_error;
-  if (complete && action_state->last_idle_state) {
-    dout(10) << ": using last idle state=" << action_state->last_idle_state.get()
-             << " as current state" << dendl;
-    action_state->current_state = action_state->last_idle_state.get();
+  if (complete) {
+    // we aborted, so the context need not be freed
+    action->state_callback_complete(action_state->transition.next_state, false);
+    if (action_state->last_idle_state) {
+      dout(10) << ": using last idle state=" << action_state->last_idle_state.get()
+               << " as current state" << dendl;
+      action_state->current_state = action_state->last_idle_state.get();
+    }
   }
 
   return complete;
@@ -328,16 +334,19 @@ bool Policy::remove_pending(const std::string &global_image_id) {
   return r_it != it->second.actions.rend();
 }
 
-std::string Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
+Policy::LookupInfo Policy::lookup(const std::string &global_image_id, const RWLock &lock) {
   assert(m_map_lock.is_locked());
+
+  LookupInfo info;
 
   for (auto it = m_map.begin(); it != m_map.end(); ++it) {
     if (it->second.find(global_image_id) != it->second.end()) {
-      return it->first;
+      info.instance_id = it->first;
+      info.mapped_time = get_image_mapped_timestamp(global_image_id);
     }
   }
 
-  return UNMAPPED_INSTANCE_ID;
+  return info;
 }
 
 void Policy::map(const std::string &global_image_id, const std::string &instance_id,
@@ -347,9 +356,7 @@ void Policy::map(const std::string &global_image_id, const std::string &instance
   auto ins = m_map[instance_id].emplace(global_image_id);
   assert(ins.second);
 
-  auto it = m_actions.find(global_image_id);
-  assert(it != m_actions.end());
-  it->second.map_time = map_time;
+  set_image_mapped_timestamp(global_image_id, map_time);
 }
 
 void Policy::unmap(const std::string &global_image_id, const std::string &instance_id,
@@ -369,7 +376,9 @@ void Policy::map(const std::string &global_image_id, utime_t map_time) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
   assert(m_map_lock.is_wlocked());
 
-  std::string instance_id = lookup(global_image_id, m_map_lock);
+  LookupInfo info = lookup(global_image_id, m_map_lock);
+  std::string instance_id = info.instance_id;
+
   if (instance_id != UNMAPPED_INSTANCE_ID && !is_dead_instance(instance_id)) {
     return;
   }
@@ -385,12 +394,12 @@ void Policy::unmap(const std::string &global_image_id) {
   dout(20) << ": global_image_id=" << global_image_id << dendl;
   assert(m_map_lock.is_wlocked());
 
-  std::string instance_id = lookup(global_image_id, m_map_lock);
-  if (instance_id == UNMAPPED_INSTANCE_ID) {
+  LookupInfo info = lookup(global_image_id, m_map_lock);
+  if (info.instance_id == UNMAPPED_INSTANCE_ID) {
     return;
   }
 
-  unmap(global_image_id, instance_id, m_map_lock);
+  unmap(global_image_id, info.instance_id, m_map_lock);
 }
 
 bool Policy::can_shuffle_image(const std::string &global_image_id) {
@@ -400,10 +409,7 @@ bool Policy::can_shuffle_image(const std::string &global_image_id) {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   int migration_throttle = cct->_conf->get_val<int64_t>("rbd_mirror_image_policy_migration_throttle");
 
-  auto it = m_actions.find(global_image_id);
-  assert(it != m_actions.end());
-
-  utime_t last_shuffled_time = it->second.map_time;
+  utime_t last_shuffled_time = get_image_mapped_timestamp(global_image_id);
   dout(10) << ": migration_throttle=" << migration_throttle << ", last_shuffled_time="
            << last_shuffled_time << dendl;
 

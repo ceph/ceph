@@ -147,7 +147,7 @@ class NativeConnectedSocketImpl : public ConnectedSocketImpl {
         // space for next ptr.
         if (len > 0)
           break;
-        seglen = MIN(seglen, available);
+        seglen = std::min(seglen, available);
       }
       len += seglen;
       frags.push_back(fragment{(char*)pb->c_str(), seglen});

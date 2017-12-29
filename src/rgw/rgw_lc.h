@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
 
 #include "common/debug.h"
 
@@ -144,6 +143,7 @@ class LCFilter
     }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
@@ -261,6 +261,7 @@ public:
      }
      DECODE_FINISH(bl);
    }
+  void dump(Formatter *f) const;
 
 };
 WRITE_CLASS_ENCODER(LCRule)
@@ -276,6 +277,7 @@ struct lc_op
   boost::optional<RGWObjTags> obj_tags;
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
+  void dump(Formatter *f) const;
 };
 
 class RGWLifecycleConfiguration
@@ -314,7 +316,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<RGWAccessControlList*>& o);
+  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
   void add_rule(LCRule* rule);
 

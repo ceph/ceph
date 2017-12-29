@@ -159,8 +159,9 @@ void CDentry::_mark_dirty(LogSegment *ls)
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dir->inc_num_dirty();
     get(PIN_DIRTY);
+    dir->inc_num_dirty();
+    dir->dirty_dentries.push_back(&item_dir_dirty);
     assert(ls);
   }
   if (ls) 
@@ -189,15 +190,14 @@ void CDentry::mark_clean()
   // not always true for recalc_auth_bits during resolve finish
   //assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
-  // state+pin
-  state_clear(STATE_DIRTY);
+  state_clear(STATE_DIRTY|STATE_NEW);
   dir->dec_num_dirty();
-  put(PIN_DIRTY);
-  
+
+  item_dir_dirty.remove_myself();
   item_dirty.remove_myself();
 
-  clear_new();
-}    
+  put(PIN_DIRTY);
+}
 
 void CDentry::mark_new() 
 {

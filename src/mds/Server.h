@@ -36,34 +36,34 @@ enum {
   l_mdss_handle_client_request,
   l_mdss_handle_client_session,
   l_mdss_handle_slave_request,
-  l_mdss_req_create,
-  l_mdss_req_getattr,
-  l_mdss_req_getfilelock,
-  l_mdss_req_link,
-  l_mdss_req_lookup,
-  l_mdss_req_lookuphash,
-  l_mdss_req_lookupino,
-  l_mdss_req_lookupname,
-  l_mdss_req_lookupparent,
-  l_mdss_req_lookupsnap,
-  l_mdss_req_lssnap,
-  l_mdss_req_mkdir,
-  l_mdss_req_mknod,
-  l_mdss_req_mksnap,
-  l_mdss_req_open,
-  l_mdss_req_readdir,
-  l_mdss_req_rename,
-  l_mdss_req_renamesnap,
-  l_mdss_req_rmdir,
-  l_mdss_req_rmsnap,
-  l_mdss_req_rmxattr,
-  l_mdss_req_setattr,
-  l_mdss_req_setdirlayout,
-  l_mdss_req_setfilelock,
-  l_mdss_req_setlayout,
-  l_mdss_req_setxattr,
-  l_mdss_req_symlink,
-  l_mdss_req_unlink,
+  l_mdss_req_create_latency,
+  l_mdss_req_getattr_latency,
+  l_mdss_req_getfilelock_latency,
+  l_mdss_req_link_latency,
+  l_mdss_req_lookup_latency,
+  l_mdss_req_lookuphash_latency,
+  l_mdss_req_lookupino_latency,
+  l_mdss_req_lookupname_latency,
+  l_mdss_req_lookupparent_latency,
+  l_mdss_req_lookupsnap_latency,
+  l_mdss_req_lssnap_latency,
+  l_mdss_req_mkdir_latency,
+  l_mdss_req_mknod_latency,
+  l_mdss_req_mksnap_latency,
+  l_mdss_req_open_latency,
+  l_mdss_req_readdir_latency,
+  l_mdss_req_rename_latency,
+  l_mdss_req_renamesnap_latency,
+  l_mdss_req_rmdir_latency,
+  l_mdss_req_rmsnap_latency,
+  l_mdss_req_rmxattr_latency,
+  l_mdss_req_setattr_latency,
+  l_mdss_req_setdirlayout_latency,
+  l_mdss_req_setfilelock_latency,
+  l_mdss_req_setlayout_latency,
+  l_mdss_req_setxattr_latency,
+  l_mdss_req_symlink_latency,
+  l_mdss_req_unlink_latency,
   l_mdss_last,
 };
 
@@ -144,6 +144,7 @@ public:
   void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
                           MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
+  void perf_gather_op_latency(const MClientRequest* req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
   void set_trace_dist(Session *session, MClientReply *reply, CInode *in, CDentry *dn,
@@ -192,6 +193,7 @@ public:
   void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
   void handle_client_lookup_ino(MDRequestRef& mdr,
 				bool want_parent, bool want_dentry);
+  void _lookup_snap_ino(MDRequestRef& mdr);
   void _lookup_ino_2(MDRequestRef& mdr, int r);
   void handle_client_readdir(MDRequestRef& mdr);
   void handle_client_file_setlock(MDRequestRef& mdr);
@@ -256,7 +258,7 @@ public:
   void handle_client_unlink(MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
-  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
+  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn, snapid_t follows);
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);

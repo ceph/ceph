@@ -503,7 +503,7 @@ int cls_rgw_usage_log_read(librados::IoCtx& io_ctx, string& oid, string& user,
                            string& read_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage,
                            bool *is_truncated);
 
-void cls_rgw_usage_log_trim(librados::ObjectWriteOperation& op, string& user,
+int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const string& oid, string& user,
                            uint64_t start_epoch, uint64_t end_epoch);
 
 void cls_rgw_usage_log_add(librados::ObjectWriteOperation& op, rgw_usage_log_info& info);

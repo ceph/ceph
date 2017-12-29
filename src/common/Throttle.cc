@@ -6,7 +6,6 @@
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
 #include "common/perf_counters.h"
-#include "common/Throttle.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
@@ -578,7 +577,7 @@ C_OrderedThrottle *OrderedThrottle::start_op(Context *on_finish) {
   auto l = uniquely_lock(m_lock);
   uint64_t tid = m_next_tid++;
   m_tid_result[tid] = Result(on_finish);
-  auto ctx = make_unique<C_OrderedThrottle>(this, tid);
+  auto ctx = std::make_unique<C_OrderedThrottle>(this, tid);
 
   complete_pending_ops(l);
   while (m_max == m_current) {

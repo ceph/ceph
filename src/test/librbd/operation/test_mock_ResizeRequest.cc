@@ -44,7 +44,6 @@ TrimRequest<MockImageCtx> *TrimRequest<MockImageCtx>::s_instance = nullptr;
 
 // template definitions
 #include "librbd/operation/ResizeRequest.cc"
-#include "librbd/operation/TrimRequest.cc"
 
 namespace librbd {
 namespace operation {

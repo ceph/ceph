@@ -473,6 +473,28 @@ class TestImage(object):
         self._test_copy(features, self.image.stat()['order'],
                         self.image.stripe_unit(), self.image.stripe_count())
 
+    def test_deep_copy(self):
+        global ioctx
+        global features
+        self.image.write(b'a' * 256, 0)
+        self.image.create_snap('snap1')
+        self.image.write(b'b' * 256, 0)
+        dst_name = get_temp_image_name()
+        self.image.deep_copy(ioctx, dst_name, features=features,
+                             order=self.image.stat()['order'],
+                             stripe_unit=self.image.stripe_unit(),
+                             stripe_count=self.image.stripe_count(),
+                             data_pool=None)
+        self.image.remove_snap('snap1')
+        with Image(ioctx, dst_name, 'snap1') as copy:
+            copy_data = copy.read(0, 256)
+            eq(b'a' * 256, copy_data)
+        with Image(ioctx, dst_name) as copy:
+            copy_data = copy.read(0, 256)
+            eq(b'b' * 256, copy_data)
+            copy.remove_snap('snap1')
+        self.rbd.remove(ioctx, dst_name)
+
     def test_create_snap(self):
         global ioctx
         self.image.create_snap('snap1')
@@ -828,6 +850,7 @@ class TestImage(object):
     def test_metadata(self):
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
+        assert_raises(KeyError, self.image.metadata_get, "key1")
         self.image.metadata_set("key1", "value1")
         self.image.metadata_set("key2", "value2")
         value = self.image.metadata_get("key1")
@@ -841,6 +864,7 @@ class TestImage(object):
         eq(len(metadata), 1)
         eq(metadata[0], ("key2", "value2"))
         self.image.metadata_remove("key2")
+        assert_raises(KeyError, self.image.metadata_remove, "key2")
         metadata = list(self.image.metadata_list())
         eq(len(metadata), 0)
 
@@ -853,6 +877,41 @@ class TestImage(object):
             self.image.metadata_remove("key" + str(i))
             metadata = list(self.image.metadata_list())
             eq(len(metadata), N - i - 1)
+
+    def test_watchers_list(self):
+        watchers = list(self.image.watchers_list())
+        # The image is open (in r/w mode) from setup, so expect there to be one
+        # watcher.
+        eq(len(watchers), 1)
+
+class TestImageId(object):
+
+    def setUp(self):
+        self.rbd = RBD()
+        create_image()
+        self.image = Image(ioctx, image_name)
+        self.image2 = Image(ioctx, None, None, False, self.image.id())
+
+    def tearDown(self):
+        self.image.close()
+        self.image2.close()
+        remove_image()
+        self.image = None
+        self.image2 = None
+
+    def test_read(self):
+        data = self.image2.read(0, 20)
+        eq(data, b'\0' * 20)
+
+    def test_write(self):
+        data = rand_data(256)
+        self.image2.write(data, 0)
+
+    def test_resize(self):
+        new_size = IMG_SIZE * 2
+        self.image2.resize(new_size)
+        info = self.image2.stat()
+        check_stat(info, new_size, IMG_ORDER)
 
 def check_diff(image, offset, length, from_snapshot, expected):
     extents = []

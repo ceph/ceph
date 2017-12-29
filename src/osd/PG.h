@@ -43,6 +43,7 @@
 #include "messages/MOSDPGLog.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
+#include "PGPeeringEvent.h"
 
 #include <atomic>
 #include <list>
@@ -50,7 +51,6 @@
 #include <stack>
 #include <string>
 #include <tuple>
-using namespace std;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
@@ -222,6 +222,7 @@ struct PGPool {
   pg_pool_t info;      
   SnapContext snapc;   // the default pool snapc, ready to go.
 
+  // these two sets are for < mimic only
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
@@ -235,10 +236,12 @@ struct PGPool {
     assert(pi);
     info = *pi;
     snapc = pi->get_snap_context();
-    pi->build_removed_snaps(cached_removed_snaps);
+    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+      pi->build_removed_snaps(cached_removed_snaps);
+    }
   }
 
-  void update(OSDMapRef map);
+  void update(CephContext *cct, OSDMapRef map);
 };
 
 /** PG - Replica Placement Group
@@ -255,33 +258,6 @@ public:
   ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   ObjectStore::CollectionHandle ch;
-
-  // -- classes --
-  class CephPeeringEvt {
-    epoch_t epoch_sent;
-    epoch_t epoch_requested;
-    boost::intrusive_ptr< const boost::statechart::event_base > evt;
-    string desc;
-  public:
-    MEMPOOL_CLASS_HELPERS();
-    template <class T>
-    CephPeeringEvt(epoch_t epoch_sent,
-		   epoch_t epoch_requested,
-		   const T &evt_) :
-      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt_.intrusive_from_this()) {
-      stringstream out;
-      out << "epoch_sent: " << epoch_sent
-	  << " epoch_requested: " << epoch_requested << " ";
-      evt_.print(&out);
-      desc = out.str();
-    }
-    epoch_t get_epoch_sent() { return epoch_sent; }
-    epoch_t get_epoch_requested() { return epoch_requested; }
-    const boost::statechart::event_base &get_event() { return *evt; }
-    string get_desc() { return desc; }
-  };
-  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
 
   class RecoveryCtx;
 
@@ -432,8 +408,8 @@ public:
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);
 
-  void queue_peering_event(CephPeeringEvtRef evt);
-  void process_peering_event(RecoveryCtx *rctx);
+  void queue_peering_event(PGPeeringEventRef evt);
+  void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
@@ -862,6 +838,10 @@ protected:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
+    bool sync_finish(int r) override {
+      pg->last_rollback_info_trimmed_to_applied = v;
+      return true;
+    }
     void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
@@ -1254,11 +1234,11 @@ protected:
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
     const pg_info_t &info,
     epoch_t oldest_map) {
-    epoch_t start = MAX(
+    epoch_t start = std::max(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
        info.history.epoch_pool_created,
       oldest_map);
-    epoch_t end = MAX(
+    epoch_t end = std::max(
       info.history.same_interval_since,
       info.history.epoch_pool_created);
     return make_pair(start, end);
@@ -1493,7 +1473,7 @@ public:
     bool must_scrub, must_deep_scrub, must_repair;
 
     // Priority to use for scrub scheduling
-    unsigned priority;
+    unsigned priority = 0;
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
@@ -1686,8 +1666,8 @@ protected:
       pg(pg), epoch(epoch), evt(evt) {}
     void finish(int r) override {
       pg->lock();
-      pg->queue_peering_event(PG::CephPeeringEvtRef(
-				new PG::CephPeeringEvt(
+      pg->queue_peering_event(PGPeeringEventRef(
+				new PGPeeringEvent(
 				  epoch,
 				  epoch,
 				  evt)));
@@ -1696,8 +1676,7 @@ protected:
   };
 
 
-  list<CephPeeringEvtRef> peering_queue;  // op queue
-  list<CephPeeringEvtRef> peering_waiters;
+  list<PGPeeringEventRef> peering_waiters;
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -1965,6 +1944,36 @@ protected:
     friend class RecoveryMachine;
 
     /* States */
+    // Initial
+    // Reset
+    // Start
+    //   Started
+    //     Primary
+    //       WaitActingChange
+    //       Peering
+    //         GetInfo
+    //         GetLog
+    //         GetMissing
+    //         WaitUpThru
+    //         Incomplete
+    //       Active
+    //         Activating
+    //         Clean
+    //         Recovered
+    //         Backfilling
+    //         WaitRemoteBackfillReserved
+    //         WaitLocalBackfillReserved
+    //         NotBackfilling
+    //         NotRecovering
+    //         Recovering
+    //         WaitRemoteRecoveryReserved
+    //         WaitLocalRecoveryReserved
+    //     ReplicaActive
+    //       RepNotRecovering
+    //       RepRecovering
+    //       RepWaitBackfillReserved
+    //       RepWaitRecoveryReserved
+    //     Stray
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       explicit Crashed(my_context ctx);
@@ -1977,13 +1986,14 @@ protected:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Reset >,
+	boost::statechart::custom_reaction< Initialize >,
 	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const Load&);
+      boost::statechart::result react(const Initialize&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
@@ -2130,7 +2140,8 @@ protected:
 	boost::statechart::custom_reaction< UnfoundRecovery >,
 	boost::statechart::custom_reaction< UnfoundBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
-	boost::statechart::custom_reaction< RemoteReservationRevoked>
+	boost::statechart::custom_reaction< RemoteReservationRevoked>,
+	boost::statechart::custom_reaction< DoRecovery>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -2158,6 +2169,9 @@ protected:
 	return discard_event();
       }
       boost::statechart::result react(const RemoteReservationRevoked&) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DoRecovery&) {
 	return discard_event();
       }
     };
@@ -2577,7 +2591,7 @@ protected:
       end_handle();
     }
 
-    void handle_event(CephPeeringEvtRef evt,
+    void handle_event(PGPeeringEventRef evt,
 		      RecoveryCtx *rctx) {
       start_handle(rctx);
       machine.process_event(evt->get_event());
@@ -2593,6 +2607,9 @@ protected:
   uint64_t upacting_features;
 
   epoch_t last_epoch;
+
+  /// most recently consumed osdmap's require_osd_version
+  unsigned last_require_osd_release = 0;
 
 protected:
   void reset_min_peer_features() {
@@ -2809,7 +2826,7 @@ protected:
   bool can_discard_replica_op(OpRequestRef& op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
-  bool old_peering_evt(CephPeeringEvtRef evt) {
+  bool old_peering_evt(PGPeeringEventRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
   static bool have_same_or_newer_map(epoch_t cur_epoch, epoch_t e) {

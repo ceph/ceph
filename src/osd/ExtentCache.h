@@ -235,8 +235,8 @@ private:
 	extent *ext = &*p;
 	++p;
 
-	uint64_t extoff = MAX(ext->offset, offset);
-	uint64_t extlen = MIN(
+	uint64_t extoff = std::max(ext->offset, offset);
+	uint64_t extlen = std::min(
 	  ext->length - (extoff - ext->offset),
 	  offset + length - extoff);
 

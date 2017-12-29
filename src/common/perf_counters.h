@@ -352,6 +352,24 @@ private:
 };
 
 
+class PerfGuard {
+  const ceph::real_clock::time_point start;
+  PerfCounters* const counters;
+  const int event;
+
+public:
+  PerfGuard(PerfCounters* const counters,
+            const int event)
+  : start(ceph::real_clock::now()),
+    counters(counters),
+    event(event) {
+  }
+
+  ~PerfGuard() {
+    counters->tinc(event, ceph::real_clock::now() - start);
+  }
+};
+
 
 class PerfCountersDeleter {
   CephContext* cct;
