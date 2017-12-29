@@ -133,6 +133,51 @@ Note that if blacklisting is disabled, then evicting a client will
 only have an effect on the MDS you send the command to.  On a system
 with multiple active MDS daemons, you would need to send an
 eviction command to each active daemon.  When blacklisting is enabled 
-(the default), sending an eviction to command to just a single
+(the default), sending an eviction command to just a single
 MDS is sufficient, because the blacklist propagates it to the others.
 
+.. _background_blacklisting_and_osd_epoch_barrier:
+
+Background: Blacklisting and OSD epoch barrier
+==============================================
+
+After a client is blacklisted, it is necessary to make sure that
+other clients and MDS daemons have the latest OSDMap (including
+the blacklist entry) before they try to access any data objects
+that the blacklisted client might have been accessing.
+
+This is ensured using an internal "osdmap epoch barrier" mechanism.
+
+The purpose of the barrier is to ensure that when we hand out any
+capabilities which might allow touching the same RADOS objects, the
+clients we hand out the capabilities to must have a sufficiently recent
+OSD map to not race with cancelled operations (from ENOSPC) or
+blacklisted clients (from evictions).
+
+More specifically, the cases where an epoch barrier is set are:
+
+ * Client eviction (where the client is blacklisted and other clients
+   must wait for a post-blacklist epoch to touch the same objects).
+ * OSD map full flag handling in the client (where the client may
+   cancel some OSD ops from a pre-full epoch, so other clients must
+   wait until the full epoch or later before touching the same objects).
+ * MDS startup, because we don't persist the barrier epoch, so must
+   assume that latest OSD map is always required after a restart.
+
+Note that this is a global value for simplicity. We could maintain this on
+a per-inode basis. But we don't, because:
+
+ * It would be more complicated.
+ * It would use an extra 4 bytes of memory for every inode.
+ * It would not be much more efficient as almost always everyone has the latest.
+   OSD map anyway, in most cases everyone will breeze through this barrier
+   rather than waiting.
+ * This barrier is done in very rare cases, so any benefit from per-inode
+   granularity would only very rarely be seen.
+
+The epoch barrier is transmitted along with all capability messages, and
+instructs the receiver of the message to avoid sending any more RADOS
+operations to OSDs until it has seen this OSD epoch.  This mainly applies
+to clients (doing their data writes directly to files), but also applies
+to the MDS because things like file size probing and file deletion are
+done directly from the MDS.
