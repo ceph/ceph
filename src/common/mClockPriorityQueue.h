@@ -39,11 +39,12 @@ namespace ceph {
 
     using priority_t = unsigned;
     using cost_t = unsigned;
+    using Retn = std::pair<T, dmc::PhaseType>;
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
     static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (const T&)> f,
+				      std::function<bool (T&&)> f,
 				      std::list<T>* out = nullptr) {
       unsigned ret = 0;
       for (typename ListPairs::iterator i = l->end();
@@ -52,9 +53,9 @@ namespace ceph {
 	) {
 	auto next = i;
 	--next;
-	if (f(next->second)) {
+	if (f(std::move(next->second))) {
 	  ++ret;
-	  if (out) out->push_back(next->second);
+	  if (out) out->push_back(std::move(next->second));
 	  l->erase(next);
 	} else {
 	  i = next;
@@ -115,21 +116,27 @@ namespace ceph {
 	}
       }
 
-      void enqueue(K cl, cost_t cost, T item) {
-	q[cl].push_back(std::make_pair(cost, item));
+      void enqueue(K cl, cost_t cost, T&& item) {
+	q[cl].emplace_back(cost, std::move(item));
 	if (cur == q.end())
 	  cur = q.begin();
 	size++;
       }
 
-      void enqueue_front(K cl, cost_t cost, T item) {
-	q[cl].push_front(std::make_pair(cost, item));
+      void enqueue_front(K cl, cost_t cost, T&& item) {
+	q[cl].emplace_front(cost, std::move(item));
 	if (cur == q.end())
 	  cur = q.begin();
 	size++;
       }
 
-      std::pair<cost_t, T> front() const {
+      const std::pair<cost_t, T>& front() const {
+	assert(!(q.empty()));
+	assert(cur != q.end());
+	return cur->second.front();
+      }
+
+      std::pair<cost_t, T>& front() {
 	assert(!(q.empty()));
 	assert(cur != q.end());
 	return cur->second.front();
@@ -161,7 +168,7 @@ namespace ceph {
 	return q.empty();
       }
 
-      void remove_by_filter(std::function<bool (const T&)> f) {
+      void remove_by_filter(std::function<bool (T&&)> f) {
 	for (typename Classes::iterator i = q.begin();
 	     i != q.end();
 	     /* no-inc */) {
@@ -189,7 +196,7 @@ namespace ceph {
 	}
 	if (out) {
 	  for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
-	    out->push_front(j->second);
+	    out->push_front(std::move(j->second));
 	  }
 	}
 	q.erase(i);
@@ -206,7 +213,7 @@ namespace ceph {
 
     SubQueues high_queue;
 
-    dmc::PullPriorityQueue<K,T> queue;
+    dmc::PullPriorityQueue<K,T,true> queue;
 
     // when enqueue_front is called, rather than try to re-calc tags
     // to put in mClock priority queue, we'll just keep a separate
@@ -217,7 +224,7 @@ namespace ceph {
   public:
 
     mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T>::ClientInfoFunc& info_func) :
+      const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func) :
       queue(info_func, true)
     {
       // empty
@@ -237,11 +244,11 @@ namespace ceph {
     // be sure to do things in reverse priority order and push_front
     // to the list so items end up on list in front-to-back priority
     // order
-    void remove_by_filter(std::function<bool (const T&)> filter_accum) {
+    void remove_by_filter(std::function<bool (T&&)> filter_accum) {
       queue.remove_by_req_filter(filter_accum, true);
 
       for (auto i = queue_front.rbegin(); i != queue_front.rend(); /* no-inc */) {
-	if (filter_accum(i->second)) {
+	if (filter_accum(std::move(i->second))) {
 	  i = decltype(i){ queue_front.erase(std::next(i).base()) };
 	} else {
 	  ++i;
@@ -264,14 +271,16 @@ namespace ceph {
       if (out) {
 	queue.remove_by_client(k,
 			       true,
-			       [&out] (const T& t) { out->push_front(t); });
+			       [&out] (T&& t) {
+				 out->push_front(std::move(t));
+			       });
       } else {
 	queue.remove_by_client(k, true);
       }
 
       for (auto i = queue_front.rbegin(); i != queue_front.rend(); /* no-inc */) {
 	if (k == i->first) {
-	  if (nullptr != out) out->push_front(i->second);
+	  if (nullptr != out) out->push_front(std::move(i->second));
 	  i = decltype(i){ queue_front.erase(std::next(i).base()) };
 	} else {
 	  ++i;
@@ -288,24 +297,30 @@ namespace ceph {
       }
     }
 
-    void enqueue_strict(K cl, unsigned priority, T item) override final {
-      high_queue[priority].enqueue(cl, 0, item);
+    void enqueue_strict(K cl, unsigned priority, T&& item) override final {
+      high_queue[priority].enqueue(cl, 0, std::move(item));
     }
 
-    void enqueue_strict_front(K cl, unsigned priority, T item) override final {
-      high_queue[priority].enqueue_front(cl, 0, item);
+    void enqueue_strict_front(K cl, unsigned priority, T&& item) override final {
+      high_queue[priority].enqueue_front(cl, 0, std::move(item));
     }
 
-    void enqueue(K cl, unsigned priority, unsigned cost, T item) override final {
+    void enqueue(K cl, unsigned priority, unsigned cost, T&& item) override final {
       // priority is ignored
       queue.add_request(std::move(item), cl, cost);
+    }
+
+    void enqueue_distributed(K cl, unsigned priority, unsigned cost, T&& item,
+			     const dmc::ReqParams& req_params) {
+      // priority is ignored
+      queue.add_request(std::move(item), cl, req_params, cost);
     }
 
     void enqueue_front(K cl,
 		       unsigned priority,
 		       unsigned cost,
-		       T item) override final {
-      queue_front.emplace_front(std::pair<K,T>(cl, item));
+		       T&& item) override final {
+      queue_front.emplace_front(std::pair<K,T>(cl, std::move(item)));
     }
 
     bool empty() const override final {
@@ -315,8 +330,8 @@ namespace ceph {
     T dequeue() override final {
       assert(!empty());
 
-      if (!(high_queue.empty())) {
-	T ret = high_queue.rbegin()->second.front().second;
+      if (!high_queue.empty()) {
+	T ret = std::move(high_queue.rbegin()->second.front().second);
 	high_queue.rbegin()->second.pop_front();
 	if (high_queue.rbegin()->second.empty()) {
 	  high_queue.erase(high_queue.rbegin()->first);
@@ -325,7 +340,7 @@ namespace ceph {
       }
 
       if (!queue_front.empty()) {
-	T ret = queue_front.front().second;
+	T ret = std::move(queue_front.front().second);
 	queue_front.pop_front();
 	return ret;
       }
@@ -333,7 +348,33 @@ namespace ceph {
       auto pr = queue.pull_request();
       assert(pr.is_retn());
       auto& retn = pr.get_retn();
-      return *(retn.request);
+      return std::move(*(retn.request));
+    }
+
+    Retn dequeue_distributed() {
+      assert(!empty());
+      dmc::PhaseType resp_params = dmc::PhaseType();
+
+      if (!high_queue.empty()) {
+	T ret = std::move(high_queue.rbegin()->second.front().second);
+	high_queue.rbegin()->second.pop_front();
+	if (high_queue.rbegin()->second.empty()) {
+	  high_queue.erase(high_queue.rbegin()->first);
+	}
+	return std::make_pair(std::move(ret), resp_params);
+      }
+
+      if (!queue_front.empty()) {
+	T ret = std::move(queue_front.front().second);
+	queue_front.pop_front();
+	return std::make_pair(std::move(ret), resp_params);
+      }
+
+      auto pr = queue.pull_request();
+      assert(pr.is_retn());
+      auto& retn = pr.get_retn();
+      resp_params = retn.phase;
+      return std::make_pair(std::move(*(retn.request)), resp_params);
     }
 
     void dump(ceph::Formatter *f) const override final {

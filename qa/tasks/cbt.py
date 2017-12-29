@@ -53,10 +53,10 @@ class CBT(Task):
 
         if system_type == 'rpm':
             install_cmd = ['sudo', 'yum', '-y', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-devel', 'pdsh', 'collectl']
         else:
             install_cmd = ['sudo', 'apt-get', '-y', '--force-yes', 'install']
-            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev']
+            cbt_depends = ['python-yaml', 'python-lxml', 'librbd-dev', 'collectl']
         self.first_mon.run(args=install_cmd + cbt_depends)
          
         # install fio
@@ -78,13 +78,13 @@ class CBT(Task):
 
     def checkout_cbt(self):
         testdir = misc.get_testdir(self.ctx)
+        repo = self.config.get('repo', 'https://github.com/ceph/cbt.git')
         branch = self.config.get('branch', 'master')
         branch = self.config.get('force-branch', branch)
         sha1 = self.config.get('sha1')
         self.first_mon.run(
             args=[
-                'git', 'clone', '-b', branch,
-                'https://github.com/ceph/cbt.git',
+                'git', 'clone', '-b', branch, repo,
                 '{tdir}/cbt'.format(tdir=testdir)
             ]
         )
@@ -118,6 +118,8 @@ class CBT(Task):
                 '{cbtdir}/cbt_config.yaml'.format(cbtdir=self.cbt_dir),
             ],
         )
+        preserve_file = os.path.join(self.ctx.archive, '.preserve')
+        open(preserve_file, 'a').close()
 
     def end(self):
         super(CBT, self).end()

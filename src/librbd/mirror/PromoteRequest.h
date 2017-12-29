@@ -55,7 +55,7 @@ private:
   Context *m_on_finish;
 
   cls::rbd::MirrorImage m_mirror_image;
-  PromotionState m_promotion_state;
+  PromotionState m_promotion_state = PROMOTION_STATE_PRIMARY;
 
   void get_info();
   void handle_get_info(int r);

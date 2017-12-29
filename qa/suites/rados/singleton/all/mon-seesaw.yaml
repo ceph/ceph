@@ -17,6 +17,10 @@ tasks:
       osd:
         debug monc: 1
         debug ms: 1
+    log-whitelist:
+      - overall HEALTH
+      - Manager daemon
+      - \(MGR_DOWN\)
 - mon_seesaw:
 - ceph_manager.create_pool:
     kwargs:

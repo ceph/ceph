@@ -11,7 +11,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -26,7 +26,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 
 static RGWMetadataHandler *user_meta_handler = NULL;
@@ -903,7 +902,6 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
   RGWAccessKey new_key;
   RGWUserInfo duplicate_check;
 
-  int ret = 0;
   int key_type = op_state.get_key_type();
   bool gen_access = op_state.will_gen_access();
   bool gen_secret = op_state.will_gen_secret();
@@ -956,13 +954,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
     key = op_state.get_secret_key();
   } else {
     char secret_key_buf[SECRET_KEY_LEN + 1];
-
-    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-    if (ret < 0) {
-      set_err_msg(err_msg, "unable to generate secret key");
-      return ret;
-    }
-
+    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
     key = secret_key_buf;
   }
 
@@ -972,14 +964,7 @@ int RGWAccessKeyPool::generate_key(RGWUserAdminOpState& op_state, std::string *e
 
     do {
       int id_buf_size = sizeof(public_id_buf);
-      ret = gen_rand_alphanumeric_upper(g_ceph_context,
-               public_id_buf, id_buf_size);
-
-      if (ret < 0) {
-        set_err_msg(err_msg, "unable to generate access key");
-        return ret;
-      }
-
+      gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, id_buf_size);
       id = public_id_buf;
       if (!validate_access_key(id))
         continue;
@@ -1068,15 +1053,8 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
 
   if (op_state.will_gen_secret()) {
     char secret_key_buf[SECRET_KEY_LEN + 1];
-
-    int ret;
     int key_buf_size = sizeof(secret_key_buf);
-    ret = gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
-    if (ret < 0) {
-      set_err_msg(err_msg, "unable to generate secret key");
-      return ret;
-    }
-
+    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, key_buf_size);
     key = secret_key_buf;
   }
 
@@ -1760,7 +1738,7 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
 {
   bool found = false;
   std::string swift_user;
-  rgw_user& uid = op_state.get_user_id();
+  user_id = op_state.get_user_id();
   std::string user_email = op_state.get_user_email();
   std::string access_key = op_state.get_access_key();
   std::string subuser = op_state.get_subuser();
@@ -1775,16 +1753,16 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
 
   clear_populated();
 
-  if (uid.empty() && !subuser.empty()) {
+  if (user_id.empty() && !subuser.empty()) {
     size_t pos = subuser.find(':');
     if (pos != string::npos) {
-      uid = subuser.substr(0, pos);
-      op_state.set_user_id(uid);
+      user_id = subuser.substr(0, pos);
+      op_state.set_user_id(user_id);
     }
   }
 
-  if (!uid.empty() && (uid.compare(RGW_USER_ANON_ID) != 0)) {
-    found = (rgw_get_user_info_by_uid(store, uid, user_info, &op_state.objv) >= 0);
+  if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
+    found = (rgw_get_user_info_by_uid(store, user_id, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }
   if (!user_email.empty() && !found) {
@@ -1809,7 +1787,9 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     set_populated();
   }
 
-  user_id = user_info.user_id;
+  if (user_id.empty()) {
+    user_id = user_info.user_id;
+  }
   op_state.set_initialized();
 
   // this may have been called by a helper object
@@ -2363,6 +2343,13 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   if (ret < 0)
     return ret;
 
+  if (op_state.sync_stats) {
+    ret = rgw_user_sync_all_stats(store, info.user_id);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
@@ -2775,7 +2762,7 @@ public:
 
   int list_keys_init(RGWRados *store, const string& marker, void **phandle) override
   {
-    auto info = ceph::make_unique<list_keys_info>();
+    auto info = std::make_unique<list_keys_info>();
 
     info->store = store;
 

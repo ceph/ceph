@@ -484,7 +484,7 @@ class MonitorDBStore
   Synchronizer get_synchronizer(pair<string,string> &key,
 				set<string> &prefixes) {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_iterator();
+    iter = db->get_wholespace_iterator();
 
     if (!key.first.empty() && !key.second.empty())
       iter->upper_bound(key.first, key.second);
@@ -505,7 +505,7 @@ class MonitorDBStore
 
   KeyValueDB::WholeSpaceIterator get_iterator() {
     KeyValueDB::WholeSpaceIterator iter;
-    iter = db->get_iterator();
+    iter = db->get_wholespace_iterator();
     iter->seek_to_first();
     return iter;
   }
@@ -624,6 +624,8 @@ class MonitorDBStore
       db->init(g_conf->mon_rocksdb_options);
     else
       db->init();
+
+
   }
 
   int open(ostream &out) {
@@ -640,6 +642,16 @@ class MonitorDBStore
     r = db->open(out);
     if (r < 0)
       return r;
+
+    // Monitors are few in number, so the resource cost of exposing 
+    // very detailed stats is low: ramp up the priority of all the
+    // KV store's perf counters.  Do this after open, because backend may
+    // not have constructed PerfCounters earlier.
+    if (db->get_perf_counters()) {
+      db->get_perf_counters()->set_prio_adjust(
+          PerfCountersBuilder::PRIO_USEFUL - PerfCountersBuilder::PRIO_DEBUGONLY);
+    }
+
     io_work.start();
     is_open = true;
     return 0;

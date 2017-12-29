@@ -1,5 +1,7 @@
+import os
 import pytest
-from ceph_volume.devices.lvm import api
+from ceph_volume.api import lvm as lvm_api
+
 
 class Capture(object):
 
@@ -12,6 +14,18 @@ class Capture(object):
         self.calls.append({'args': a, 'kwargs': kw})
 
 
+class Factory(object):
+
+    def __init__(self, **kw):
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+
+@pytest.fixture
+def factory():
+    return Factory
+
+
 @pytest.fixture
 def capture():
     return Capture()
@@ -20,7 +34,7 @@ def capture():
 @pytest.fixture
 def volumes(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
-    volumes = api.Volumes()
+    volumes = lvm_api.Volumes()
     volumes._purge()
     return volumes
 
@@ -28,7 +42,7 @@ def volumes(monkeypatch):
 @pytest.fixture
 def volume_groups(monkeypatch):
     monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
-    vgs = api.VolumeGroups()
+    vgs = lvm_api.VolumeGroups()
     vgs._purge()
     return vgs
 
@@ -40,3 +54,17 @@ def is_root(monkeypatch):
     is root (or is sudoing to superuser) can continue as-is
     """
     monkeypatch.setattr('os.getuid', lambda: 0)
+
+
+@pytest.fixture
+def tmpfile(tmpdir):
+    """
+    Create a temporary file, optionally filling it with contents, returns an
+    absolute path to the file when called
+    """
+    def generate_file(name='file', contents=''):
+        path = os.path.join(str(tmpdir), name)
+        with open(path, 'w') as fp:
+            fp.write(contents)
+        return path
+    return generate_file

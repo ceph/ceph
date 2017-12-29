@@ -5,6 +5,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
@@ -76,34 +77,6 @@ struct C_FlushJournalCommit : public Context {
     ldout(cct, 20) << "C_FlushJournalCommit: journal committed" << dendl;
     aio_comp->complete_request(r);
   }
-};
-
-template <typename ImageCtxT>
-class C_ObjectCacheRead : public Context {
-public:
-  explicit C_ObjectCacheRead(ImageCtxT &ictx, ObjectReadRequest<ImageCtxT> *req)
-    : m_image_ctx(ictx), m_req(req), m_enqueued(false) {}
-
-  void complete(int r) override {
-    if (!m_enqueued) {
-      // cache_lock creates a lock ordering issue -- so re-execute this context
-      // outside the cache_lock
-      m_enqueued = true;
-      m_image_ctx.op_work_queue->queue(this, r);
-      return;
-    }
-    Context::complete(r);
-  }
-
-protected:
-  void finish(int r) override {
-    m_req->complete(r);
-  }
-
-private:
-  ImageCtxT &m_image_ctx;
-  ObjectReadRequest<ImageCtxT> *m_req;
-  bool m_enqueued;
 };
 
 } // anonymous namespace
@@ -352,23 +325,12 @@ void ImageReadRequest<I>::send_request() {
                      << dendl;
 
       auto req_comp = new io::ReadResult::C_SparseReadRequest<I>(
-        aio_comp);
+        aio_comp, std::move(extent.buffer_extents), true);
       ObjectReadRequest<I> *req = ObjectReadRequest<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
-        extent.length, extent.buffer_extents, snap_id, true, m_op_flags,
-	this->m_trace, req_comp);
+        extent.length, snap_id, m_op_flags, false, this->m_trace, req_comp);
       req_comp->request = req;
-
-      if (image_ctx.object_cacher) {
-        C_ObjectCacheRead<I> *cache_comp = new C_ObjectCacheRead<I>(image_ctx,
-                                                                    req);
-        image_ctx.aio_read_from_cache(
-          extent.oid, extent.objectno, &req->data(), extent.length,
-          extent.offset, cache_comp, m_op_flags,
-          (this->m_trace.valid() ? &this->m_trace : nullptr));
-      } else {
-        req->send();
-      }
+      req->send();
     }
   }
 
@@ -605,7 +567,7 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(
                                                              this->m_skip_partial_discard));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              requests, extent.first,
-                                             extent.second, synchronous);
+                                             extent.second, synchronous, 0);
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -680,22 +642,10 @@ ObjectRequestHandle *ImageDiscardRequest<I>::create_object_request(
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
-  ObjectRequest<I> *req;
-  if (object_extent.length == image_ctx.layout.object_size) {
-    req = ObjectRequest<I>::create_remove(
-      &image_ctx, object_extent.oid.name, object_extent.objectno, snapc,
-      this->m_trace, on_finish);
-  } else if (object_extent.offset + object_extent.length ==
-               image_ctx.layout.object_size) {
-    req = ObjectRequest<I>::create_truncate(
-      &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, snapc, this->m_trace, on_finish);
-  } else {
-    req = ObjectRequest<I>::create_zero(
-      &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, object_extent.length, snapc,
-      this->m_trace, on_finish);
-  }
+  auto req = ObjectRequest<I>::create_discard(
+    &image_ctx, object_extent.oid.name, object_extent.objectno,
+    object_extent.offset, object_extent.length, snapc, true, true,
+    this->m_trace, on_finish);
   return req;
 }
 
@@ -723,7 +673,7 @@ void ImageFlushRequest<I>::send_request() {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()),
-      ObjectRequests(), 0, 0, false);
+      ObjectRequests(), 0, 0, false, 0);
 
     aio_comp->set_request_count(1);
     aio_comp->associate_journal_event(journal_tid);
@@ -750,7 +700,7 @@ void ImageFlushRequest<I>::send_request() {
     aio_comp->put();
   }
 
-  image_ctx.perfcounter->inc(l_librbd_aio_flush);
+  image_ctx.perfcounter->inc(l_librbd_flush);
 }
 
 template <typename I>
@@ -822,7 +772,7 @@ uint64_t ImageWriteSameRequest<I>::append_journal_event(
                                                                m_data_bl));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              requests, extent.first,
-                                             extent.second, synchronous);
+                                             extent.second, synchronous, 0);
   }
 
   if (image_ctx.object_cacher == NULL) {
@@ -923,7 +873,7 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
                                                                    m_cmp_bl, m_bl));
   tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                            requests, extent.first,
-                                           extent.second, synchronous);
+                                           extent.second, synchronous, -EILSEQ);
 
   AioCompletion *aio_comp = this->m_aio_comp;
   aio_comp->associate_journal_event(tid);

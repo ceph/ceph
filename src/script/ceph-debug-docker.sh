@@ -86,7 +86,7 @@ COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc
 RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/latest/${env/://}/repo)" && \
     apt-get update --yes && \
-    apt-get install --yes --allow-unauthenticated ceph ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
+    apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
 EOF
         time run docker build $CACHE --tag "$image" .
     else # try RHEL flavor

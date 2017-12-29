@@ -44,7 +44,6 @@ struct MonSession : public RefCountedObject {
   uint64_t con_features = 0;  // zero if AnonConnection
   entity_inst_t inst;
   utime_t session_timeout;
-  utime_t time_established;
   bool closed;
   xlist<MonSession*>::item item;
   set<uint64_t> routed_request_tids;
@@ -72,7 +71,6 @@ struct MonSession : public RefCountedObject {
     osd_epoch(0),
     auth_handler(NULL),
     proxy_con(NULL), proxy_tid(0) {
-    time_established = ceph_clock_now();
     if (c->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
       con_features = c->get_features();
@@ -225,9 +223,10 @@ struct MonSessionMap {
 
 inline ostream& operator<<(ostream& out, const MonSession& s)
 {
-  out << "MonSession(" << s.inst << " is "
-      << (s.closed ? "closed" : "open");
-  out << " " << s.caps << ")";
+  out << "MonSession(" << s.inst << " is " << (s.closed ? "closed" : "open")
+      << " " << s.caps << ", features 0x" << std::hex << s.con_features << std::dec
+      <<  " (" << ceph_release_name(ceph_release_from_features(s.con_features))
+      << "))";
   return out;
 }
 

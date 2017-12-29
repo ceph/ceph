@@ -1368,9 +1368,13 @@ JNIEXPORT jint JNICALL Java_com_ceph_fs_CephMount_native_1ceph_1setattr
 	stx.stx_mode = env->GetIntField(j_cephstat, cephstat_mode_fid);
 	stx.stx_uid = env->GetIntField(j_cephstat, cephstat_uid_fid);
 	stx.stx_gid = env->GetIntField(j_cephstat, cephstat_gid_fid);
-	stx.stx_mtime.tv_sec = env->GetLongField(j_cephstat, cephstat_m_time_fid);
-	stx.stx_atime.tv_sec = env->GetLongField(j_cephstat, cephstat_a_time_fid);
-
+	long mtime_msec = env->GetLongField(j_cephstat, cephstat_m_time_fid);
+	long atime_msec = env->GetLongField(j_cephstat, cephstat_a_time_fid);
+	stx.stx_mtime.tv_sec = mtime_msec / 1000;
+	stx.stx_mtime.tv_nsec = (mtime_msec % 1000) * 1000000;
+	stx.stx_atime.tv_sec = atime_msec / 1000;
+	stx.stx_atime.tv_nsec = (atime_msec % 1000) * 1000000;
+	
 	ldout(cct, 10) << "jni: setattr: path " << c_path << " mask " << mask << dendl;
 
 	ret = ceph_setattrx(cmount, c_path, &stx, mask, 0);

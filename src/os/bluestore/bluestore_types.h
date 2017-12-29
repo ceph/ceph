@@ -36,6 +36,8 @@ struct bluestore_bdev_label_t {
   utime_t btime;       ///< birth time
   string description;  ///< device description
 
+  map<string,string> meta; ///< {read,write}_meta() content from ObjectStore
+
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& p);
   void dump(Formatter *f) const;
@@ -558,6 +560,7 @@ public:
       int len;
       denc_varint(len, p);
       csum_data = p.get_ptr(len);
+      csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
     if (has_unused()) {
       denc(unused, p);
@@ -660,6 +663,7 @@ public:
       ++p;
     }
     assert(0 == "we should not get here");
+    return false;
   }
 
   /// return true if the entire range is allocated
@@ -823,6 +827,7 @@ public:
     csum_chunk_order = order;
     csum_data = buffer::create(get_csum_value_size() * len / get_csum_chunk_size());
     csum_data.zero();
+    csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
   }
 
   /// calculate csum for the buffer at the given b_off
@@ -950,7 +955,8 @@ struct bluestore_onode_t {
   uint8_t flags = 0;
 
   enum {
-    FLAG_OMAP = 1,
+    FLAG_OMAP = 1,       ///< object may have omap data
+    FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
   };
 
   string get_flags_string() const {
@@ -975,6 +981,9 @@ struct bluestore_onode_t {
 
   bool has_omap() const {
     return has_flag(FLAG_OMAP);
+  }
+  bool is_pgmeta_omap() const {
+    return has_flag(FLAG_PGMETA_OMAP);
   }
 
   void set_omap_flag() {

@@ -163,7 +163,6 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     if (!op.add){
       apply_entry_stats(update_entry, &entry);
     }
-
     entry.user_stats_sync = true;
 
     ret = write_entry(hctx, key, entry);

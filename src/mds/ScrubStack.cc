@@ -59,7 +59,7 @@ void ScrubStack::pop_inode(CInode *in)
 }
 
 void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
-				const ScrubHeaderRefConst& header,
+				ScrubHeaderRef& header,
 				MDSInternalContextBase *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *in << "}"
@@ -72,7 +72,7 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
     push_inode_bottom(in);
 }
 
-void ScrubStack::enqueue_inode(CInode *in, const ScrubHeaderRefConst& header,
+void ScrubStack::enqueue_inode(CInode *in, ScrubHeaderRef& header,
                                MDSInternalContextBase *on_finish, bool top)
 {
   _enqueue_inode(in, NULL, header, on_finish, top);
@@ -134,7 +134,8 @@ void ScrubStack::scrub_dir_inode(CInode *in,
   bool all_frags_terminal = true;
   bool all_frags_done = true;
 
-  const ScrubHeaderRefConst& header = in->scrub_info()->header;
+  ScrubHeaderRef header = in->get_scrub_header();
+  assert(header != nullptr);
 
   if (header->get_recursive()) {
     list<frag_t> scrubbing_frags;
@@ -289,7 +290,7 @@ void ScrubStack::scrub_dir_inode_final(CInode *in)
 }
 
 void ScrubStack::scrub_dirfrag(CDir *dir,
-			       const ScrubHeaderRefConst& header,
+			       ScrubHeaderRef& header,
 			       bool *added_children, bool *is_terminal,
 			       bool *done)
 {
@@ -376,7 +377,9 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     in->make_path_string(path, true);
   }
 
-  if (result.backtrace.checked && !result.backtrace.passed) {
+  if (result.backtrace.checked && !result.backtrace.passed
+      && !result.backtrace.repaired)
+  {
     // Record backtrace fails as remote linkage damage, as
     // we may not be able to resolve hard links to this inode
     mdcache->mds->damage_table.notify_remote_damaged(in->inode.ino, path);
@@ -393,9 +396,14 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 
   // Inform the cluster log if we found an error
   if (!result.passed_validation) {
-    clog->warn() << "Scrub error on inode " << in->ino()
-                 << " (" << path << ") see " << g_conf->name
-                 << " log and `damage ls` output for details";
+    if (result.all_damage_repaired()) {
+      clog->info() << "Scrub repaired inode " << in->ino()
+                   << " (" << path << ")";
+    } else {
+      clog->warn() << "Scrub error on inode " << in->ino()
+                   << " (" << path << ") see " << g_conf->name
+                   << " log and `damage ls` output for details";
+    }
 
     // Put the verbose JSON output into the MDS log for later inspection
     JSONFormatter f;

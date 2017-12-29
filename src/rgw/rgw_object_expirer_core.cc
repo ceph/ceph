@@ -6,7 +6,6 @@
 #include <sstream>
 #include <string>
 
-using namespace std;
 
 #include "auth/Crypto.h"
 

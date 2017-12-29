@@ -6,6 +6,11 @@
 
 .. program:: ceph-disk
 
+Deprecation Notice
+==================
+This tool is now deprecated in favor of ceph-volume. Please see :doc:`ceph-volume <ceph-volume>`\(8)
+for usage and examples to deploy OSDs.
+
 Synopsis
 ========
 
@@ -92,6 +97,7 @@ the Ceph documentation at http://ceph.com/docs for more information.
 See also
 ========
 
+:doc:`ceph-volume <ceph-volume>`\(8)
 :doc:`ceph-detect-init <ceph-detect-init>`\(8)
 :doc:`ceph-osd <ceph-osd>`\(8),
 :doc:`ceph-deploy <ceph-deploy>`\(8)

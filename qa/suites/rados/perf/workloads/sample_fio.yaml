@@ -19,6 +19,6 @@ tasks:
       iterations: 1
       pool_profiles:
         rbd:
-          pg_size: 512
-          pgp_size: 512
+          pg_size: 128
+          pgp_size: 128
           replication: 3

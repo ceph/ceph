@@ -1,54 +1,50 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
-#include "include/types.h"
 #include "include/str_list.h"
-
-#include <list>
-#include <vector>
-#include <string>
 
 #include "gtest/gtest.h"
 
+// SplitTest is parameterized for list/vector/set
+using Types = ::testing::Types<std::list<std::string>,
+                               std::vector<std::string>,
+                               std::set<std::string>>;
 
-const char *tests[][10] = {
-  { "foo,bar", "foo", "bar", 0 },
-  { "foo", "foo", 0 },
-  { "foo;bar", "foo", "bar", 0 },
-  { "foo bar", "foo", "bar", 0 },
-  { " foo bar", "foo", "bar", 0 },
-  { " foo bar ", "foo", "bar", 0 },
-  { "a,b,c", "a", "b", "c", 0 },
-  { " a\tb\tc\t", "a", "b", "c", 0 },
-  { "a, b, c", "a", "b", "c", 0 },
-  { "a b c", "a", "b", "c", 0 },
-  { "a=b=c", "a", "b", "c", 0 },
-  { 0 },
+template <typename T>
+struct SplitTest : ::testing::Test {
+  void test(const char* input, const char *delim,
+            const std::list<std::string>& expected) {
+    EXPECT_EQ(expected, get_str_list(input, delim));
+  }
+  void test(const char* input, const char *delim,
+            const std::vector<std::string>& expected) {
+    EXPECT_EQ(expected, get_str_vec(input, delim));
+  }
+  void test(const char* input, const char *delim,
+            const std::set<std::string>& expected) {
+    EXPECT_EQ(expected, get_str_set(input, delim));
+  }
 };
 
-TEST(StrList, get_str_list)
-{
-  for (unsigned i=0; tests[i][0]; ++i) {
-    std::string src = tests[i][0];
-    std::list<std::string> expected;
-    for (unsigned j=1; tests[i][j]; ++j)
-      expected.push_back(tests[i][j]);
-    std::list<std::string> actual;
-    get_str_list(src, actual);
-    std::cout << "'" << src << "' -> " << actual << std::endl;
-    ASSERT_EQ(actual, expected);
-  }
-}
+TYPED_TEST_CASE(SplitTest, Types);
 
-TEST(StrList, get_str_vec)
+TYPED_TEST(SplitTest, Get)
 {
-  for (unsigned i=0; tests[i][0]; ++i) {
-    std::string src = tests[i][0];
-    std::vector<std::string> expected;
-    for (unsigned j=1; tests[i][j]; ++j)
-      expected.push_back(tests[i][j]);
-    std::vector<std::string> actual;
-    get_str_vec (src, actual);
-    std::cout << "'" << src << "' -> " << actual << std::endl;
-    ASSERT_EQ(actual, expected);
-  }
+  this->test("", " ", TypeParam{});
+  this->test(" ", " ", TypeParam{});
+  this->test("foo", " ", TypeParam{"foo"});
+  this->test("foo bar", " ", TypeParam{"foo","bar"});
+  this->test(" foo bar", " ", TypeParam{"foo","bar"});
+  this->test("foo bar ", " ", TypeParam{"foo","bar"});
+  this->test("foo bar ", " ", TypeParam{"foo","bar"});
 
+  // default delimiter
+  const char *delims = ";,= \t";
+  this->test(" ; , = \t ", delims, TypeParam{});
+  this->test(" ; foo = \t ", delims, TypeParam{"foo"});
+  this->test("a,b,c", delims, TypeParam{"a","b","c"});
+  this->test("a\tb\tc\t", delims, TypeParam{"a","b","c"});
+  this->test("a, b, c", delims, TypeParam{"a","b","c"});
+  this->test("a b c", delims, TypeParam{"a","b","c"});
+  this->test("a=b=c", delims, TypeParam{"a","b","c"});
 }

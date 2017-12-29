@@ -4,33 +4,53 @@
 #ifndef CEPH_CLIENT_INODE_H
 #define CEPH_CLIENT_INODE_H
 
+#include <numeric>
+
+#include "include/assert.h"
 #include "include/types.h"
 #include "include/xlist.h"
 
+#include "mds/flock.h"
 #include "mds/mdstypes.h" // hrm
 
 #include "osdc/ObjectCacher.h"
-#include "include/assert.h"
 
 #include "InodeRef.h"
+#include "MetaSession.h"
 #include "UserPerm.h"
+#include "Delegation.h"
 
 class Client;
-struct MetaSession;
 class Dentry;
 class Dir;
 struct SnapRealm;
 struct Inode;
-class ceph_lock_state_t;
 class MetaRequest;
 class filepath;
 class Fh;
 
-struct Cap {
+class Cap {
+public:
+  Cap() = delete;
+  Cap(Inode *i, MetaSession *s) :
+      session(s), inode(i), cap_id(0), issued(0),
+      implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(s->cap_gen),
+      latest_perms(), cap_item(this) {
+    s->caps.push_back(&cap_item);
+  }
+  ~Cap() {
+    cap_item.remove_myself();
+  }
+
+  void touch(void) {
+    // move to back of LRU
+    session->caps.push_back(&cap_item);
+  }
+
+  void dump(Formatter *f) const;
+
   MetaSession *session;
   Inode *inode;
-  xlist<Cap*>::item cap_item;
-
   uint64_t cap_id;
   unsigned issued;
   unsigned implemented;
@@ -40,11 +60,15 @@ struct Cap {
   __u32 gen;
   UserPerm latest_perms;
 
-  Cap() : session(NULL), inode(NULL), cap_item(this), cap_id(0), issued(0),
-	  implemented(0), wanted(0), seq(0), issue_seq(0), mseq(0), gen(0),
-	  latest_perms()  {}
-
-  void dump(Formatter *f) const;
+private:
+  /* Note that this Cap will not move (see Inode::caps):
+   *
+   * Section 23.1.2#8
+   * The insert members shall not affect the validity of iterators and
+   * references to the container, and the erase members shall invalidate only
+   * iterators and references to the erased elements.
+   */
+  xlist<Cap *>::item cap_item;
 };
 
 struct CapSnap {
@@ -165,7 +189,7 @@ struct Inode {
   bool dir_hashed, dir_replicated;
 
   // per-mds caps
-  map<mds_rank_t, Cap*> caps;            // mds -> Cap
+  std::map<mds_rank_t, Cap> caps;            // mds -> Cap
   Cap *auth_cap;
   int64_t cap_dirtier_uid;
   int64_t cap_dirtier_gid;
@@ -191,17 +215,18 @@ struct Inode {
 
   int       _ref;      // ref count. 1 for each dentry, fh that links to me.
   int       ll_ref;   // separate ref count for ll client
-  set<Dentry*> dn_set;      // if i'm linked to a dentry.
+  xlist<Dentry *> dentries; // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
   list<Cond*>       waitfor_caps;
   list<Cond*>       waitfor_commit;
+  list<Cond*>	    waitfor_deleg;
 
   Dentry *get_first_parent() {
-    assert(!dn_set.empty());
-    return *dn_set.begin();
+    assert(!dentries.empty());
+    return *dentries.begin();
   }
 
   void make_long_path(filepath& p);
@@ -223,8 +248,10 @@ struct Inode {
   }
 
   // file locks
-  ceph_lock_state_t *fcntl_locks;
-  ceph_lock_state_t *flock_locks;
+  std::unique_ptr<ceph_lock_state_t> fcntl_locks;
+  std::unique_ptr<ceph_lock_state_t> flock_locks;
+
+  list<Delegation> delegations;
 
   xlist<MetaRequest*> unsafe_ops;
 
@@ -245,8 +272,7 @@ struct Inode {
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
-      _ref(0), ll_ref(0), dn_set(),
-      fcntl_locks(NULL), flock_locks(NULL)
+      _ref(0), ll_ref(0)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
@@ -273,9 +299,8 @@ struct Inode {
   void get_cap_ref(int cap);
   int put_cap_ref(int cap);
   bool is_any_caps();
-  bool cap_is_valid(Cap* cap) const;
+  bool cap_is_valid(const Cap &cap) const;
   int caps_issued(int *implemented = 0) const;
-  void touch_cap(Cap *cap);
   void try_touch_cap(mds_rank_t mds);
   bool caps_issued_mask(unsigned mask);
   int caps_used();
@@ -292,6 +317,33 @@ struct Inode {
   void rm_fh(Fh *f) {fhs.erase(f);}
   void set_async_err(int r);
   void dump(Formatter *f) const;
+
+  void break_all_delegs() { break_deleg(false); };
+
+  void recall_deleg(bool skip_read);
+  bool has_recalled_deleg();
+  int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
+  void unset_deleg(Fh *fh);
+
+private:
+  // how many opens for write on this Inode?
+  long open_count_for_write()
+  {
+    return (long)(open_by_mode[CEPH_FILE_MODE_RDWR] +
+		  open_by_mode[CEPH_FILE_MODE_WR]);
+  };
+
+  // how many opens of any sort on this inode?
+  long open_count()
+  {
+    return (long) std::accumulate(open_by_mode.begin(), open_by_mode.end(), 0,
+				  [] (int value, const std::map<int, int>::value_type& p)
+                   { return value + p.second; });
+  };
+
+  void break_deleg(bool skip_read);
+  bool delegations_broken(bool skip_read);
+
 };
 
 ostream& operator<<(ostream &out, const Inode &in);

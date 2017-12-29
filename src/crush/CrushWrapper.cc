@@ -13,7 +13,7 @@
 
 #define dout_subsys ceph_subsys_crush
 
-bool CrushWrapper::has_legacy_rulesets() const
+bool CrushWrapper::has_legacy_rule_ids() const
 {
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
@@ -25,51 +25,17 @@ bool CrushWrapper::has_legacy_rulesets() const
   return false;
 }
 
-int CrushWrapper::renumber_rules_by_ruleset()
+std::map<int, int> CrushWrapper::renumber_rules()
 {
-  int max_ruleset = 0;
+  std::map<int, int> result;
   for (unsigned i=0; i<crush->max_rules; i++) {
     crush_rule *r = crush->rules[i];
-    if (r && r->mask.ruleset >= max_ruleset) {
-      max_ruleset = r->mask.ruleset + 1;
+    if (r && r->mask.ruleset != i) {
+      result[r->mask.ruleset] = i;
+      r->mask.ruleset = i;
     }
   }
-  struct crush_rule **newrules =
-    (crush_rule**)calloc(1, max_ruleset * sizeof(crush_rule*));
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    if (newrules[r->mask.ruleset]) {
-      // collision, we can't do it.
-      free(newrules);
-      return -EINVAL;
-    }
-    newrules[r->mask.ruleset] = r;
-  }
-
-  // success, swap!
-  free(crush->rules);
-  crush->rules = newrules;
-  crush->max_rules = max_ruleset;
-  return 0;
-}
-
-bool CrushWrapper::has_multirule_rulesets() const
-{
-  for (unsigned i=0; i<crush->max_rules; i++) {
-    crush_rule *r = crush->rules[i];
-    if (!r)
-      continue;
-    for (unsigned j=i+1; j<crush->max_rules; j++) {
-      crush_rule *s = crush->rules[j];
-      if (!s)
-	continue;
-      if (r->mask.ruleset == s->mask.ruleset)
-	return true;
-    }
-  }
-  return false;
+  return result;
 }
 
 bool CrushWrapper::has_non_straw2_buckets() const
@@ -1057,6 +1023,18 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
   return bucket_weight;
 }
 
+bool CrushWrapper::is_parent_of(int child, int p) const
+{
+  int parent = 0;
+  while (!get_immediate_parent_id(child, &parent)) {
+    if (parent == p) {
+      return true;
+    }
+    child = parent;
+  }
+  return false;
+}
+
 int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 {
   if (src >= 0 || dst >= 0)
@@ -1065,6 +1043,9 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     return -EINVAL;
   crush_bucket *a = get_bucket(src);
   crush_bucket *b = get_bucket(dst);
+  if (is_parent_of(a->id, b->id) || is_parent_of(b->id, a->id)) {
+    return -EINVAL;
+  }
   unsigned aw = a->weight;
   unsigned bw = b->weight;
 
@@ -1858,6 +1839,16 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       arg->ids_size = new_size;
     }
   }
+  return 0;
+}
+
+int CrushWrapper::bucket_set_alg(int bid, int alg)
+{
+  crush_bucket *b = get_bucket(bid);
+  if (!b) {
+    return -ENOENT;
+  }
+  b->alg = alg;
   return 0;
 }
 
@@ -3013,7 +3004,7 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  int crush_ruleset = cct->_conf->get_val<int64_t>("osd_pool_default_crush_rule");
   if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {

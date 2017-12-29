@@ -106,6 +106,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const hobject_t oid) = 0;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
+     virtual void finish_degraded_object(const hobject_t& oid) = 0;
      virtual void primary_failed(const hobject_t &soid) = 0;
      virtual bool primary_error(const hobject_t& soid, eversion_t v) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
@@ -118,6 +119,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
       * Called when a read on the primary fails when pushing
       */
      virtual void on_primary_error(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
+
+     virtual void backfill_add_missing(
        const hobject_t &oid,
        eversion_t v
        ) = 0;
@@ -215,6 +221,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual bool should_send_op(
        pg_shard_t peer,
        const hobject_t &hoid) = 0;
+
+     virtual bool pg_is_undersized() const = 0;
 
      virtual void log_operation(
        const vector<pg_log_entry_t> &logv,
@@ -389,10 +397,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    virtual void on_change() = 0;
    virtual void clear_recovery_state() = 0;
 
-   virtual void on_flushed() = 0;
-
-   virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() = 0;
-   virtual IsPGReadablePredicate *get_is_readable_predicate() = 0;
+   virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
+   virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
@@ -550,7 +556,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 		pair<bufferlist*, Context*> > > &to_read,
      Context *on_complete, bool fast_read = false) = 0;
 
-   virtual bool scrub_supported() = 0;
    virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
      ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
@@ -571,11 +576,13 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      inconsistent_obj_wrapper &object_error);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
+     const set<hobject_t> &master_set,
      bool repair,
      map<hobject_t, set<pg_shard_t>> &missing,
      map<hobject_t, set<pg_shard_t>> &inconsistent,
      map<hobject_t, list<pg_shard_t>> &authoritative,
-     map<hobject_t, pair<uint32_t,uint32_t>> &missing_digest,
+     map<hobject_t, pair<boost::optional<uint32_t>,
+                         boost::optional<uint32_t>>> &missing_digest,
      int &shallow_errors, int &deep_errors,
      Scrub::Store *store,
      const spg_t& pgid,
@@ -587,7 +594,13 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const hobject_t &poid,
      uint32_t seed,
      ScrubMap::object &o,
-     ThreadPool::TPHandle &handle) = 0;
+     ThreadPool::TPHandle &handle,
+     ScrubMap* const map = nullptr) = 0;
+   void be_large_omap_check(
+     const map<pg_shard_t,ScrubMap*> &maps,
+     const set<hobject_t> &master_set,
+     int& large_omap_objects,
+     ostream &warnstream) const;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,

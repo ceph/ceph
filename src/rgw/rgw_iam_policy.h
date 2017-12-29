@@ -29,8 +29,6 @@
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
 
-#include "include/assert.h" // razzin' frazzin' ...grrr.
-
 class RGWRados;
 namespace rgw {
 namespace auth {
@@ -203,7 +201,7 @@ struct ARN {
   Partition partition;
   Service service;
   std::string region;
-  // Once we refity tenant, we should probably use that instead of a
+  // Once we refit tenant, we should probably use that instead of a
   // string.
   std::string account;
   std::string resource;
@@ -249,12 +247,10 @@ struct MaskedIP {
 };
 
 std::ostream& operator <<(std::ostream& m, const MaskedIP& ip);
-string to_string(const MaskedIP& m);
 
 inline bool operator ==(const MaskedIP& l, const MaskedIP& r) {
   auto shift = std::max((l.v6 ? 128 : 32) - l.prefix,
 			(r.v6 ? 128 : 32) - r.prefix);
-  ceph_assert(shift > 0);
   return (l.addr >> shift) == (r.addr >> shift);
 }
 
@@ -401,8 +397,6 @@ struct Condition {
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
 
-std::string to_string(const Condition& c);
-
 struct Statement {
   boost::optional<std::string> sid = boost::none;
 
@@ -427,7 +421,6 @@ struct Statement {
 };
 
 std::ostream& operator <<(ostream& m, const Statement& s);
-std::string to_string(const Statement& s);
 
 struct PolicyParseException : public std::exception {
   rapidjson::ParseResult pr;
@@ -455,7 +448,6 @@ struct Policy {
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);
-std::string to_string(const Policy& p);
 }
 }
 

@@ -1,7 +1,7 @@
 #!/bin/sh -ex
 
 POOL_NAME=rbd_test_validate_pool
-PG_NUM=100
+PG_NUM=32
 
 tear_down () {
   ceph osd pool delete $POOL_NAME $POOL_NAME --yes-i-really-really-mean-it || true

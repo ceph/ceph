@@ -50,7 +50,7 @@ void TestClassHandler::open_all_classes() {
   std::string CEPH_LIB(env ? env : ".libs");
   DIR *dir = ::opendir(CEPH_LIB.c_str());
   if (dir == NULL) {
-    assert(false);;
+    ceph_abort();;
   }
 
   struct dirent *pde = nullptr;

@@ -40,9 +40,20 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 const static std::string command_descs_prefix = "mgr_command_descs";
 
 
+version_t MgrMonitor::get_trim_to() const
+{
+  int64_t max = g_conf->get_val<int64_t>("mon_max_mgrmap_epochs");
+  if (map.epoch > max) {
+    return map.epoch - max;
+  }
+  return 0;
+}
+
 void MgrMonitor::create_initial()
 {
-  boost::tokenizer<> tok(g_conf->mgr_initial_modules);
+  // Take a local copy of initial_modules for tokenizer to iterate over.
+  auto initial_modules = g_conf->get_val<std::string>("mgr_initial_modules");
+  boost::tokenizer<> tok(initial_modules);
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
@@ -50,6 +61,13 @@ void MgrMonitor::create_initial()
   dout(10) << __func__ << " initial modules " << pending_map.modules
 	   << ", " << pending_command_descs.size() << " commands"
 	   << dendl;
+}
+
+void MgrMonitor::get_store_prefixes(std::set<string>& s) const
+{
+  s.insert(service_name);
+  s.insert(command_descs_prefix);
+  s.insert(MGR_METADATA_PREFIX);
 }
 
 void MgrMonitor::update_from_paxos(bool *need_bootstrap)
@@ -84,8 +102,9 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
     check_subs();
 
     if (version == 1
-	|| (map.get_available()
-	    && (!old_available || old_gid != map.get_active_gid()))) {
+        || command_descs.empty()
+        || (map.get_available()
+            && (!old_available || old_gid != map.get_active_gid()))) {
       dout(4) << "mkfs or daemon transitioned to available, loading commands"
 	      << dendl;
       bufferlist loaded_commands;
@@ -119,10 +138,10 @@ health_status_t MgrMonitor::should_warn_about_mgr_down()
   // no OSDs are ever created.
   if (ever_had_active_mgr ||
       (mon->osdmon()->osdmap.get_num_osds() > 0 &&
-       now > mon->monmap->created + g_conf->mon_mgr_mkfs_grace)) {
+       now > mon->monmap->created + g_conf->get_val<int64_t>("mon_mgr_mkfs_grace"))) {
     health_status_t level = HEALTH_WARN;
     if (first_seen_inactive != utime_t() &&
-	now - first_seen_inactive > g_conf->mon_mgr_inactive_grace) {
+	now - first_seen_inactive > g_conf->get_val<int64_t>("mon_mgr_inactive_grace")) {
       level = HEALTH_ERR;
     }
     return level;
@@ -292,6 +311,13 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
   bool updated = false;
 
   if (pending_map.active_gid == m->get_gid()) {
+    if (pending_map.services != m->get_services()) {
+      dout(4) << "updated services from mgr." << m->get_name()
+              << ": " << m->get_services() << dendl;
+      pending_map.services = m->get_services();
+      updated = true;
+    }
+
     // A beacon from the currently active daemon
     if (pending_map.active_addr != m->get_server_addr()) {
       dout(4) << "learned address " << m->get_server_addr()
@@ -425,14 +451,15 @@ void MgrMonitor::send_digests()
 {
   cancel_timer();
 
-  if (!is_active()) {
-    return;
-  }
-  dout(10) << __func__ << dendl;
-
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
     return;
+
+  if (!is_active()) {
+    // if paxos is currently not active, don't send a digest but reenable timer
+    goto timer;
+  }
+  dout(10) << __func__ << dendl;
 
   for (auto sub : *(mon->session_map.subs[type])) {
     dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
@@ -452,8 +479,9 @@ void MgrMonitor::send_digests()
     sub->session->con->send_message(mdigest);
   }
 
+timer:
   digest_event = mon->timer.add_event_after(
-    g_conf->mon_mgr_digest_period,
+    g_conf->get_val<int64_t>("mon_mgr_digest_period"),
     new C_MonContext(mon, [this](int) {
       send_digests();
   }));
@@ -480,7 +508,28 @@ void MgrMonitor::tick()
     return;
 
   const auto now = ceph::coarse_mono_clock::now();
-  const auto cutoff = now - std::chrono::seconds(g_conf->mon_mgr_beacon_grace);
+
+  const auto mgr_beacon_grace = std::chrono::seconds(
+      g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+
+  // Note that this is the mgr daemon's tick period, not ours (the
+  // beacon is sent with this period).
+  const auto mgr_tick_period = std::chrono::seconds(
+      g_conf->get_val<int64_t>("mgr_tick_period"));
+
+  if (last_tick != ceph::coarse_mono_clock::time_point::min()
+      && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
+    // This case handles either local slowness (calls being delayed
+    // for whatever reason) or cluster election slowness (a long gap
+    // between calls while an election happened)
+    dout(4) << __func__ << ": resetting beacon timeouts due to mon delay "
+            "(slow election?) of " << now - last_tick << " seconds" << dendl;
+    for (auto &i : last_beacon) {
+      i.second = now;
+    }
+  }
+
+  last_tick = now;
 
   // Populate any missing beacons (i.e. no beacon since MgrMonitor
   // instantiation) with the current time, so that they will
@@ -498,6 +547,7 @@ void MgrMonitor::tick()
   // Cull standbys first so that any remaining standbys
   // will be eligible to take over from the active if we cull him.
   std::list<uint64_t> dead_standbys;
+  const auto cutoff = now - mgr_beacon_grace;
   for (const auto &i : pending_map.standbys) {
     auto last_beacon_time = last_beacon.at(i.first);
     if (last_beacon_time < cutoff) {
@@ -533,7 +583,7 @@ void MgrMonitor::tick()
     if (promote_standby()) {
       dout(4) << "Promoted standby " << pending_map.active_gid << dendl;
       mon->clog->info() << "Activating manager daemon "
-                        << pending_map.active_name;
+                      << pending_map.active_name;
       propose = true;
     }
   }
@@ -541,8 +591,9 @@ void MgrMonitor::tick()
   if (!pending_map.available &&
       !ever_had_active_mgr &&
       should_warn_about_mgr_down() != HEALTH_OK) {
-    dout(10) << " exceeded mon_mgr_mkfs_grace " << g_conf->mon_mgr_mkfs_grace
-	     << " seconds" << dendl;
+    dout(10) << " exceeded mon_mgr_mkfs_grace "
+             << g_conf->get_val<int64_t>("mon_mgr_mkfs_grace")
+             << " seconds" << dendl;
     propose = true;
   }
 
@@ -555,6 +606,7 @@ void MgrMonitor::on_restart()
 {
   // Clear out the leader-specific state.
   last_beacon.clear();
+  last_tick = ceph::coarse_mono_clock::now();
 }
 
 
@@ -589,6 +641,7 @@ void MgrMonitor::drop_active()
   pending_map.active_gid = 0;
   pending_map.available = false;
   pending_map.active_addr = entity_addr_t();
+  pending_map.services.clear();
 
   // So that when new active mgr subscribes to mgrdigest, it will
   // get an immediate response instead of waiting for next timer
@@ -655,9 +708,27 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr module ls") {
-    f->open_array_section("modules");
-    for (auto& p : map.modules) {
-      f->dump_string("module", p);
+    f->open_object_section("modules");
+    {
+      f->open_array_section("enabled_modules");
+      for (auto& p : map.modules) {
+        f->dump_string("module", p);
+      }
+      f->close_section();
+      f->open_array_section("disabled_modules");
+      for (auto& p : map.available_modules) {
+        if (map.modules.count(p) == 0) {
+          f->dump_string("module", p);
+        }
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->flush(rdata);
+  } else if (prefix == "mgr services") {
+    f->open_object_section("services");
+    for (const auto &i : map.services) {
+      f->dump_string(i.first.c_str(), i.second);
     }
     f->close_section();
     f->flush(rdata);

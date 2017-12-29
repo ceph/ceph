@@ -6,7 +6,7 @@ build tree (ie. using relative paths). If you would like to build the examples a
 your system librados and headers, use "make all-system".
 
 And executed using
-./librados_hello_world -c ../../src/ceph.conf
+./hello_world_cpp -c ../../src/ceph.conf
 (or whatever path to a ceph.conf is appropriate to you, or
 by explicitly specifying monitors, user id, and keys).
 

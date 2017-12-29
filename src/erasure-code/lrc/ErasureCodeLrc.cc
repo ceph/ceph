@@ -569,9 +569,9 @@ unsigned int ErasureCodeLrc::get_chunk_size(unsigned int object_size) const
 
 void p(const set<int> &s) { cerr << s; } // for gdb
 
-int ErasureCodeLrc::minimum_to_decode(const set<int> &want_to_read,
-				      const set<int> &available_chunks,
-				      set<int> *minimum)
+int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
+				       const set<int> &available_chunks,
+				       set<int> *minimum)
 {
   dout(20) << __func__ << " want_to_read " << want_to_read
 	   << " available_chunks " << available_chunks << dendl;

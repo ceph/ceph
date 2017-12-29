@@ -127,7 +127,7 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
-usage="usage: $0 [option]... \nex: $0 -n -d --mon_num 3 --osd_num 3 --mds_num 1 --rgw_num 1\n"
+usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
 usage=$usage"\t-s, --standby_mds: Generate standby-replay MDS for each active\n"
@@ -145,11 +145,6 @@ usage=$usage"\t-X disable cephx\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
-usage=$usage"\t--mon_num specify ceph monitor count\n"
-usage=$usage"\t--osd_num specify ceph osd count\n"
-usage=$usage"\t--mds_num specify ceph mds count\n"
-usage=$usage"\t--rgw_num specify ceph rgw count\n"
-usage=$usage"\t--mgr_num specify ceph mgr count\n"
 usage=$usage"\t--rgw_port specify ceph rgw http listen port\n"
 usage=$usage"\t--rgw_frontend specify the rgw frontend configuration\n"
 usage=$usage"\t--rgw_compression specify the rgw compression plugin\n"
@@ -234,27 +229,6 @@ case $1 in
     --smallmds )
 	    smallmds=1
 	    ;;
-    --mon_num )
-            echo "mon_num:$2"
-            CEPH_NUM_MON="$2"
-            shift
-            ;;
-    --osd_num )
-            CEPH_NUM_OSD=$2
-            shift
-            ;;
-    --mds_num )
-            CEPH_NUM_MDS=$2
-            shift
-            ;;
-    --rgw_num )
-            CEPH_NUM_RGW=$2
-            shift
-            ;;
-    --mgr_num )
-            CEPH_NUM_MGR=$2
-            shift
-            ;;
     --rgw_port )
             CEPH_RGW_PORT=$2
             shift
@@ -366,13 +340,24 @@ fi
 
 ARGS="-c $conf_fn"
 
+quoted_print() {
+    for s in "$@"; do
+        if [[ "$s" =~ \  ]]; then
+            printf -- "'%s' " "$s"
+        else
+            printf -- "$s "
+        fi
+    done
+    printf '\n'
+}
+
 prunb() {
-    printf "'%s' " "$@"; echo '&'
+    quoted_print "$@" '&'
     "$@" &
 }
 
 prun() {
-    printf "'%s' " "$@"; echo
+    quoted_print "$@"
     "$@"
 }
 
@@ -435,11 +420,6 @@ prepare_conf() {
         erasure code dir = $EC_PATH
         plugin dir = $CEPH_LIB
         osd pool default erasure code profile = plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd
-        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        rgw lc debug interval = 10
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
@@ -474,6 +454,11 @@ EOF
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 $extra_conf
 [client.rgw]
+        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        rgw lc debug interval = 10
 
 [mds]
 $DAEMONOPTS
@@ -515,8 +500,10 @@ $DAEMONOPTS
         osd copyfrom max chunk = 524288
         bluestore fsck on mount = true
         bluestore block create = true
+	bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
         bluestore block db create = true
+	bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true
 $COSDDEBUG
@@ -569,6 +556,12 @@ start_mon() {
 			--cap osd 'allow *' \
 			--cap mds 'allow *' \
 			--cap mgr 'allow *' \
+			"$keyring_fn"
+
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		   --cap mon 'allow r' \
+			--cap osd 'allow rw tag cephfs data=*' \
+			--cap mds 'allow rwp' \
 			"$keyring_fn"
 
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
@@ -633,9 +626,14 @@ EOF
             echo "add osd$osd $uuid"
             ceph_adm osd create $uuid
             ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --mkkey --osd-uuid $uuid
+	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
+	    cat > $key_fn<<EOF
+[osd.$osd]
+	key = $OSD_SECRET
+EOF
             echo adding osd$osd key to auth repository
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
@@ -690,24 +688,6 @@ EOF
 }
 
 start_mds() {
-    if [ $new -eq 1 ]; then
-        if [ "$CEPH_NUM_FS" -gt "0" ] ; then
-            if [ "$CEPH_NUM_FS" -gt "1" ] ; then
-                ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
-            fi
-
-            local fs=0
-            for name in a b c d e f g h i j k l m n o p
-            do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-                fs=$(($fs + 1))
-                [ $fs -eq $CEPH_NUM_FS ] && break
-            done
-        fi
-    fi
-
     local mds=0
     for name in a b c d e f g h i j k l m n o p
     do
@@ -731,7 +711,7 @@ EOF
 EOF
 	        fi
 	        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
-	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
+	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow rw tag cephfs *=*' mds 'allow' mgr 'allow profile mds'
 	        if [ "$standby" -eq 1 ]; then
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
@@ -749,6 +729,26 @@ EOF
         #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
         #ceph_adm mds set max_mds 2
     done
+
+    if [ $new -eq 1 ]; then
+        if [ "$CEPH_NUM_FS" -gt "0" ] ; then
+            if [ "$CEPH_NUM_FS" -gt "1" ] ; then
+                ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
+            fi
+
+            local fs=0
+            for name in a b c d e f g h i j k l m n o p
+            do
+                ceph_adm osd pool create "cephfs_data_${name}" 8
+                ceph_adm osd pool create "cephfs_metadata_${name}" 8
+                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
+                fs=$(($fs + 1))
+                [ $fs -eq $CEPH_NUM_FS ] && break
+            done
+        fi
+    fi
+
 }
 
 if [ "$debug" -eq 0 ]; then
@@ -781,7 +781,7 @@ else
         debug bluefs = 20
         debug rocksdb = 10
         debug bdev = 20
-        debug rgw = 20
+        debug reserver = 10
         debug objclass = 20'
     CMDSDEBUG='
         debug ms = 1
@@ -805,9 +805,13 @@ if [ -n "$MON_ADDR" ]; then
 	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
-if [ -z "$CEPH_PORT" ]; then
-    CEPH_PORT=6789
-    [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
+if [ -z "$CEPH_PORT" ]
+then
+  while [ true ]
+  do
+    CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
+    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
+  done
 fi
 
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
@@ -1004,14 +1008,22 @@ do_rgw()
         RGWDEBUG="--debug-rgw=20"
     fi
 
+    local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
+    local CEPH_RGW_HTTPS="${CEPH_RGW_PORT: -1}"
+    if [[ "${CEPH_RGW_HTTPS}" = "s" ]]; then
+        CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT::-1}"
+    else
+        CEPH_RGW_HTTPS=""
+    fi
     RGWSUDO=
-    [ $CEPH_RGW_PORT -lt 1024 ] && RGWSUDO=sudo
+    [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
     n=$(($CEPH_NUM_RGW - 1))
     i=0
     for rgw in j k l m n o p q r s t u v; do
-	echo start rgw on http://localhost:$((CEPH_RGW_PORT + i))
-	run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT + i))"
-	i=$(($i + 1))
+        current_port=$((CEPH_RGW_PORT_NUM + i))
+        echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done
 }

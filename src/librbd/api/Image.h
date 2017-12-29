@@ -13,6 +13,9 @@ namespace librados { struct IoCtx; }
 
 namespace librbd {
 
+class ImageOptions;
+class ProgressContext;
+
 struct ImageCtx;
 
 namespace api {
@@ -30,6 +33,11 @@ struct Image {
   static int list_children(ImageCtxT *ictx, const ParentSpec &parent_spec,
                            PoolImageIds *pool_image_ids);
 
+  static int deep_copy(ImageCtxT *ictx, librados::IoCtx& dest_md_ctx,
+                       const char *destname, ImageOptions& opts,
+                       ProgressContext &prog_ctx);
+  static int deep_copy(ImageCtxT *src, ImageCtxT *dest,
+                       ProgressContext &prog_ctx);
 };
 
 } // namespace api

@@ -351,7 +351,7 @@ int FileJournal::create()
     goto free_buf;
   }
 
-  needed_space = ((int64_t)cct->_conf->osd_max_write_size) << 20;
+  needed_space = cct->_conf->osd_max_write_size << 20;
   needed_space += (2 * sizeof(entry_header_t)) + get_top();
   if (header.max_size - header.start < needed_space) {
     derr << "FileJournal::create: OSD journal is not large enough to hold "
@@ -1973,6 +1973,8 @@ bool FileJournal::read_entry(
         journaled_seq = seq;
       return true;
     }
+  } else {
+    derr << "do_read_entry(" << pos << "): " << ss.str() << dendl;
   }
 
   if (seq && seq < header.committed_up_to) {
@@ -1988,7 +1990,6 @@ bool FileJournal::read_entry(
     }
   }
 
-  dout(25) << ss.str() << dendl;
   dout(2) << "No further valid entries found, journal is most likely valid"
 	  << dendl;
   return false;

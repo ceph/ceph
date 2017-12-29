@@ -109,7 +109,7 @@ enum {
 
 /**
  * @name Operation Flags
- * Flags for rados_read_op_opeprate(), rados_write_op_operate(),
+ * Flags for rados_read_op_operate(), rados_write_op_operate(),
  * rados_aio_read_op_operate(), and rados_aio_write_op_operate().
  * See librados.hpp for details.
  * @{

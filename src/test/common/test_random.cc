@@ -83,9 +83,6 @@ TEST(util, test_random)
     /* Technically, this can still collide and cause a false negative, but let's 
     be optimistic: */
     if (std::numeric_limits<int>::max() > 32767) {
-       ASSERT_GT(a, -1);
-       ASSERT_GT(b, -1);
- 
        ASSERT_NE(a, b);
      }
   }
@@ -104,7 +101,7 @@ TEST(util, test_random)
  
   for (auto n = 100000; n; --n) {
      constexpr int min = 0, max = 6;
-     int a = ceph::util::generate_random_number<min, max>();
+     int a = ceph::util::generate_random_number(min, max);
      ASSERT_GT(a, -1);
      ASSERT_LT(a, 7);
    }

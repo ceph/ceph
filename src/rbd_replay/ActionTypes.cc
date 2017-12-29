@@ -30,7 +30,7 @@ void decode_big_endian_string(std::string &str, bufferlist::iterator &it) {
   str.clear();
   it.copy(length, str);
 #else
-  assert(false);
+  ceph_abort();
 #endif
 }
 
@@ -245,7 +245,7 @@ void AioOpenImageAction::dump(Formatter *f) const {
 }
 
 void UnknownAction::encode(bufferlist &bl) const {
-  assert(false);
+  ceph_abort();
 }
 
 void UnknownAction::decode(__u8 version, bufferlist::iterator &it) {

@@ -72,6 +72,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     capspec = spaces >> (
         lit("*")[_val = MDSCapSpec(true, true, true, true)]
         |
+        lit("all")[_val = MDSCapSpec(true, true, true, true)]
+        |
         (lit("rwp"))[_val = MDSCapSpec(true, true, false, true)]
         |
         (lit("rw"))[_val = MDSCapSpec(true, true, false, false)]
@@ -116,19 +118,21 @@ bool MDSCapMatch::match(const std::string &target_path,
   if (uid != MDS_AUTH_UID_ANY) {
     if (uid != caller_uid)
       return false;
-    bool gid_matched = false;
-    if (std::find(gids.begin(), gids.end(), caller_gid) != gids.end())
-      gid_matched = true;
-    if (caller_gid_list) {
-      for (auto i = caller_gid_list->begin(); i != caller_gid_list->end(); ++i) {
-	if (std::find(gids.begin(), gids.end(), *i) != gids.end()) {
-	  gid_matched = true;
-	  break;
+    if (!gids.empty()) {
+      bool gid_matched = false;
+      if (std::find(gids.begin(), gids.end(), caller_gid) != gids.end())
+	gid_matched = true;
+      if (caller_gid_list) {
+	for (auto i = caller_gid_list->begin(); i != caller_gid_list->end(); ++i) {
+	  if (std::find(gids.begin(), gids.end(), *i) != gids.end()) {
+	    gid_matched = true;
+	    break;
+	  }
 	}
       }
+      if (!gid_matched)
+	return false;
     }
-    if (!gid_matched)
-      return false;
   }
 
   if (!match_path(target_path)) {

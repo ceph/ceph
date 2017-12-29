@@ -39,11 +39,11 @@ void usage()
  */
 void traverse_dentries(Inode *ino, std::vector<Dentry*> &parts)
 {
-  if (ino->dn_set.empty()) {
+  if (ino->dentries.empty()) {
     return;
   }
   
-  Dentry* dn = *(ino->dn_set.begin());
+  Dentry* dn = *(ino->dentries.begin());
   parts.push_back(dn);
   traverse_dentries(dn->dir->parent_inode, parts);
 }
@@ -61,8 +61,8 @@ int lookup_trace(ceph_mount_info *client, inodeno_t const ino)
   if (r != 0) {
     return r;
   } else {
-    if (!inode->dn_set.empty()) {
-      Dentry *dn = *(inode->dn_set.begin());
+    if (!inode->dentries.empty()) {
+      Dentry *dn = *(inode->dentries.begin());
       assert(dn->dir);
       assert(dn->dir->parent_inode);
       r = lookup_trace(client, dn->dir->parent_inode->ino);

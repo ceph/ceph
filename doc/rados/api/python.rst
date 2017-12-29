@@ -162,14 +162,22 @@ Input/Output Context
 --------------------
 
 Reading from and writing to the Ceph Storage Cluster requires an input/output
-context (ioctx). You can create an ioctx with the ``open_ioctx()`` method of the
-``Rados`` class. The ``ioctx_name`` parameter is the name of the  pool you wish
-to use.
+context (ioctx). You can create an ioctx with the ``open_ioctx()`` or
+``open_ioctx2()`` method of the ``Rados`` class. The ``ioctx_name`` parameter
+is the name of the  pool and ``pool_id`` is the ID of the pool you wish to use.
 
 .. code-block:: python
    :linenos:
 
 	ioctx = cluster.open_ioctx('data')
+
+
+or
+
+.. code-block:: python
+   :linenos:
+
+        ioctx = cluster.open_ioctx(pool_id)
 
 
 Once you have an I/O context, you can read/write objects, extended attributes,
@@ -316,9 +324,9 @@ Input/Output Context API
 ========================
 
 To write data to and read data from the Ceph Object Store, you must create
-an Input/Output context (ioctx). The `Rados` class provides a `open_ioctx()`
-method. The remaining ``ioctx`` operations involve invoking methods of the
-`Ioctx` and other classes.
+an Input/Output context (ioctx). The `Rados` class provides `open_ioctx()`
+and `open_ioctx2()` methods. The remaining ``ioctx`` operations involve
+invoking methods of the `Ioctx` and other classes.
 
 .. automethod:: Rados.open_ioctx(ioctx_name)
 .. automethod:: Ioctx.require_ioctx_open()

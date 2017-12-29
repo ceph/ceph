@@ -252,13 +252,13 @@ struct GroupSnapshotNamespace {
 
   GroupSnapshotNamespace(int64_t _group_pool,
 			 const string &_group_id,
-			 const snapid_t &_snapshot_id) :group_pool(_group_pool),
-							group_id(_group_id),
-							snapshot_id(_snapshot_id) {}
+                         snapid_t _snapshot_id)
+    : group_id(_group_id), group_pool(_group_pool), snapshot_id(_snapshot_id) {
+  }
 
-  int64_t group_pool;
-  string group_id;
-  snapid_t snapshot_id;
+  std::string group_id;
+  int64_t group_pool = 0;
+  snapid_t snapshot_id = CEPH_NOSNAP;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
@@ -354,13 +354,22 @@ struct TrashImageSpec {
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
-                   utime_t deletion_time, utime_t deferment_end_time) :
-    source(source), name(name), deletion_time(deletion_time),
-    deferment_end_time(deferment_end_time) {}
+                 const utime_t& deletion_time,
+                 const utime_t& deferment_end_time)
+    : source(source), name(name), deletion_time(deletion_time),
+      deferment_end_time(deferment_end_time) {
+  }
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
+
+  inline bool operator==(const TrashImageSpec& rhs) const {
+    return (source == rhs.source &&
+            name == rhs.name &&
+            deletion_time == rhs.deletion_time &&
+            deferment_end_time == rhs.deferment_end_time);
+  }
 };
 WRITE_CLASS_ENCODER(TrashImageSpec);
 
@@ -368,13 +377,15 @@ struct MirrorImageMap {
   MirrorImageMap() {
   }
 
-  MirrorImageMap(const std::string &instance_id,
+  MirrorImageMap(const std::string &instance_id, utime_t mapped_time,
                  const bufferlist &data)
     : instance_id(instance_id),
+      mapped_time(mapped_time),
       data(data) {
   }
 
   std::string instance_id;
+  utime_t mapped_time;
   bufferlist data;
 
   void encode(bufferlist &bl) const;

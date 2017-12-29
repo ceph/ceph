@@ -882,7 +882,7 @@ To make this warning go away, you have two options:
    For the change to take effect, you will need to restart the monitors, or
    apply the option to running monitors with::
 
-      ceph tell mon.\* injectargs --no-mon-warn-on-legacy-crush-tunables
+      ceph tell mon.\* config set mon_warn_on_legacy_crush_tunables false
 
 
 A few important points

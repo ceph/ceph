@@ -201,6 +201,8 @@ namespace rgw {
 	  if (req.matched) {
 	    /* we need rgw object's key name equal to file name, if
 	     * not return NULL */
+#if 0 /* original behavior which motivated FLAG_EXACT_MATCH
+       * no longer reproduces */
 	    if ((flags & RGWFileHandle::FLAG_EXACT_MATCH) &&
 		!req.exact_matched) {
 	      lsubdout(get_context(), rgw, 15)
@@ -209,6 +211,7 @@ namespace rgw {
 		<< path << dendl;
 	      goto done;
 	    }
+#endif
 	    fhr = lookup_fh(parent, path,
 			    RGWFileHandle::FLAG_CREATE|
 			    ((req.is_dir) ?
@@ -1023,31 +1026,41 @@ namespace rgw {
     return false;
   }
 
-  int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset,
+  std::ostream& operator<<(std::ostream &os,
+			   RGWFileHandle::readdir_offset const &offset)
+  {
+    using boost::get;
+    if (unlikely(!! get<uint64_t*>(&offset))) {
+      uint64_t* ioff = get<uint64_t*>(offset);
+      os << *ioff;
+    }
+    else
+      os << get<const char*>(offset);
+    return os;
+  }
+
+  int RGWFileHandle::readdir(rgw_readdir_cb rcb, void *cb_arg,
+			     readdir_offset offset,
 			     bool *eof, uint32_t flags)
   {
     using event = RGWLibFS::event;
+    using boost::get;
     int rc = 0;
     struct timespec now;
     CephContext* cct = fs->get_context();
-
-    if ((*offset == 0) &&
-	(flags & RGW_READDIR_FLAG_DOTDOT)) {
-      /* send '.' and '..' with their NFS-defined offsets */
-      rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
-      rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
-    }
-
-    lsubdout(fs->get_context(), rgw, 15)
-      << __func__
-      << " offset=" << *offset
-      << dendl;
 
     directory* d = get<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
       lock_guard guard(mtx);
       d->last_readdir = now;
+    }
+
+    bool initial_off;
+    if (likely(!! get<const char*>(&offset))) {
+      initial_off = ! get<const char*>(offset);
+    } else {
+      initial_off = (*get<uint64_t*>(offset) == 0);
     }
 
     if (is_root()) {
@@ -1058,7 +1071,7 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
-	if (*offset == 0)
+	if (initial_off)
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
@@ -1073,7 +1086,7 @@ namespace rgw {
 	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
 	lock_guard guard(mtx);
 	state.atime = now;
-	if (*offset == 0)
+	if (initial_off)
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
@@ -1159,6 +1172,15 @@ namespace rgw {
       }
     }
 
+    int overlap = 0;
+    if ((static_cast<off_t>(off) < f->write_req->real_ofs) &&
+        ((f->write_req->real_ofs - off) <= len)) {
+      overlap = f->write_req->real_ofs - off;
+      off = f->write_req->real_ofs;
+      buffer = static_cast<char*>(buffer) + overlap;
+      len -= overlap;
+    }
+
     buffer::list bl;
     /* XXXX */
 #if 0
@@ -1195,7 +1217,7 @@ namespace rgw {
       rc = -EIO;
     }
 
-    *bytes_written = (rc == 0) ? len : 0;
+    *bytes_written = (rc == 0) ? (len + overlap) : 0;
     return rc;
   } /* RGWFileHandle::write */
 
@@ -1403,7 +1425,7 @@ namespace rgw {
     struct timespec omtime = rgw_fh->get_mtime();
     real_time appx_t = real_clock::now();
 
-    s->obj_size = ofs; // XXX check ofs
+    s->obj_size = bytes_written;
     perfcounter->inc(l_rgw_put_b, s->obj_size);
 
     op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
@@ -1412,7 +1434,8 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket,
+					      bucket_quota);
     if (op_ret < 0) {
       goto done;
     }
@@ -1458,7 +1481,10 @@ namespace rgw {
       attrbl.append(val.c_str(), val.size() + 1);
     }
 
-    rgw_get_request_metadata(s->cct, s->info, attrs);
+    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+    if (op_ret < 0) {
+      goto done;
+    }
     encode_delete_at_attr(delete_at, attrs);
 
     /* Add a custom metadata to expose the information whether an object
@@ -1881,9 +1907,50 @@ int rgw_readdir(struct rgw_fs *rgw_fs,
     /* bad parent */
     return -EINVAL;
   }
+
+  lsubdout(parent->get_fs()->get_context(), rgw, 15)
+    << __func__
+    << " offset=" << *offset
+    << dendl;
+
+  if ((*offset == 0) &&
+      (flags & RGW_READDIR_FLAG_DOTDOT)) {
+    /* send '.' and '..' with their NFS-defined offsets */
+    rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
+    rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
+  }
+
   int rc = parent->readdir(rcb, cb_arg, offset, eof, flags);
   return rc;
-}
+} /* rgw_readdir */
+
+/* enumeration continuing from name */
+int rgw_readdir2(struct rgw_fs *rgw_fs,
+		 struct rgw_file_handle *parent_fh, const char *name,
+		 rgw_readdir_cb rcb, void *cb_arg, bool *eof,
+		 uint32_t flags)
+{
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+  if (! parent) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  lsubdout(parent->get_fs()->get_context(), rgw, 15)
+    << __func__
+    << " offset=" << name
+    << dendl;
+
+  if ((! name) &&
+      (flags & RGW_READDIR_FLAG_DOTDOT)) {
+    /* send '.' and '..' with their NFS-defined offsets */
+    rcb(".", cb_arg, 1, RGW_LOOKUP_FLAG_DIR);
+    rcb("..", cb_arg, 2, RGW_LOOKUP_FLAG_DIR);
+  }
+
+  int rc = parent->readdir(rcb, cb_arg, name, eof, flags);
+  return rc;
+} /* rgw_readdir2 */
 
 /* project offset of dirent name */
 int rgw_dirent_offset(struct rgw_fs *rgw_fs,
@@ -1931,8 +1998,14 @@ int rgw_write(struct rgw_fs *rgw_fs,
   if (! rgw_fh->is_file())
     return -EISDIR;
 
-  if (! rgw_fh->is_open())
-    return -EPERM;
+  if (! rgw_fh->is_open()) {
+    if (flags & RGW_OPEN_FLAG_V3) {
+      rc = rgw_fh->open(flags);
+      if (!! rc)
+	return rc;
+    } else
+      return -EPERM;
+  }
 
   rc = rgw_fh->write(offset, length, bytes_written, buffer);
 
