@@ -52,6 +52,7 @@ set<string> hobject_t::get_prefixes(
   }
 
   char buf[20];
+  memset(buf, 0, sizeof(buf));
   char *t = buf;
   uint64_t poolid(pool);
   t += snprintf(t, sizeof(buf), "%.*llX", 16, (long long unsigned)poolid);
@@ -73,6 +74,7 @@ string hobject_t::to_str() const
   string out;
 
   char snap_with_hash[1000];
+  memset(snap_with_hash, 0, sizeof(snap_with_hash));
   char *t = snap_with_hash;
   const char *end = t + sizeof(snap_with_hash);
 
@@ -206,6 +208,7 @@ static void append_out_escaped(const string &in, string *out)
     if (*i == '%' || *i == ':' || *i == '/' || *i < 32 || *i >= 127) {
       out->push_back('%');
       char buf[3];
+      memset(buf, 0, sizeof(buf));
       snprintf(buf, sizeof(buf), "%02x", (int)(unsigned char)*i);
       out->append(buf);
     } else {
@@ -263,13 +266,12 @@ bool hobject_t::parse(const string &s)
 {
   if (s == "MIN") {
     *this = hobject_t();
-    return true;
-  }
-  if (s == "MAX") {
+  } else if (s == "MAX") {
     *this = hobject_t::get_max();
+  }
+  if (s == "MIN" || s == "MAX") {
     return true;
   }
-
   const char *start = s.c_str();
   long long po;
   unsigned h;
@@ -351,8 +353,6 @@ int cmp(const hobject_t& l, const hobject_t& r)
   return 0;
 }
 
-
-
 // This is compatible with decode for hobject_t prior to
 // version 5.
 void ghobject_t::encode(bufferlist& bl) const
@@ -378,39 +378,27 @@ size_t ghobject_t::encoded_size() const
   // in order of known constants first, so it can be (mostly) computed
   // at compile time.
   //  - encoding header + 3 string lengths
-  size_t r = sizeof(ceph_le32) + 2 * sizeof(__u8) + 3 * sizeof(__u32);
-
-  // hobj.snap
-  r += sizeof(uint64_t);
-
-  // hobj.hash
-  r += sizeof(uint32_t);
-
-  // hobj.max
-  r += sizeof(bool);
-
-  // hobj.pool
-  r += sizeof(uint64_t);
-
-  // hobj.generation
-  r += sizeof(uint64_t);
-
-  // hobj.shard_id
-  r += sizeof(int8_t);
-
-  // max
-  r += sizeof(bool);
-
-  // hobj.key
-  r += hobj.key.size();
-
-  // hobj.oid
-  r += hobj.oid.name.size();
-
-  // hobj.nspace
-  r += hobj.nspace.size();
-
-  return r;
+  return sizeof(ceph_le32) + 2 * sizeof(__u8) + 3 * sizeof(__u32)
+    // hobj.snap
+    + sizeof(uint64_t)
+    // hobj.hash
+    + sizeof(uint32_t)
+    // hobj.max
+    + sizeof(bool)
+    // hobj.pool
+    + sizeof(uint64_t)
+    // hobj.generation
+    + sizeof(uint64_t)
+    // hobj.shard_id
+    + sizeof(int8_t)
+    // max
+    + sizeof(bool)
+    // hobj.key
+    + hobj.key.size()
+    // hobj.oid
+    + hobj.oid.name.size()
+    // hobj.nspace
+    + hobj.nspace.size();
 }
 
 void ghobject_t::decode(bufferlist::iterator& bl)
@@ -524,13 +512,12 @@ bool ghobject_t::parse(const string& s)
 {
   if (s == "GHMIN") {
     *this = ghobject_t();
-    return true;
-  }
-  if (s == "GHMAX") {
+  } else if (s == "GHMAX") {
     *this = ghobject_t::get_max();
+  }
+  if (s == "GHMIN" || s == "GHMAX") {
     return true;
   }
-
   // look for shard# prefix
   const char *start = s.c_str();
   const char *p;
@@ -574,20 +561,12 @@ bool ghobject_t::parse(const string& s)
 
 int cmp(const ghobject_t& l, const ghobject_t& r)
 {
-  if (l.max < r.max)
+  if (l.max < r.max || l.shard_id < r.shard_id || l.generation < r.generation)
     return -1;
-  if (l.max > r.max)
-    return 1;
-  if (l.shard_id < r.shard_id)
-    return -1;
-  if (l.shard_id > r.shard_id)
+  if (l.max > r.max || l.shard_id > r.shard_id || l.generation > r.generation)
     return 1;
   int ret = cmp(l.hobj, r.hobj);
   if (ret != 0)
     return ret;
-  if (l.generation < r.generation)
-    return -1;
-  if (l.generation > r.generation)
-    return 1;
   return 0;
 }
