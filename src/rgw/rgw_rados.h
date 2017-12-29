@@ -2667,6 +2667,8 @@ public:
 
     void invalidate_state();
 
+    void invalidate_state();
+
     RGWRados *get_store() { return store; }
     rgw_raw_obj& get_obj() { return obj; }
     RGWObjectCtx& get_ctx() { return ctx; }

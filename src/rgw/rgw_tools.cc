@@ -51,6 +51,11 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
     original_readv = objv_tracker->read_version;
   }
 
+  obj_version original_readv;
+  if (objv_tracker && !objv_tracker->read_version.empty()) {
+    original_readv = objv_tracker->read_version;
+  }
+
   do {
     RGWRados::SystemObject source(rgwstore, obj_ctx, obj);
     RGWRados::SystemObject::Read rop(&source);
