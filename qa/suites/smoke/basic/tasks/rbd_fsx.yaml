@@ -9,7 +9,7 @@ overrides:
       - \(CACHE_POOL_
       - \(SMALLER_PGP_NUM\)
       - \(OBJECT_
-      - \(REQUEST_SLOW\)
+      - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
     conf:
       client:

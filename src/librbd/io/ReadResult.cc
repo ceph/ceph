@@ -62,7 +62,7 @@ struct ReadResult::AssembleResultVisitor : public boost::static_visitor<void> {
     size_t offset = 0;
     int idx = 0;
     for (; offset < length && idx < vector.iov_count; idx++) {
-      size_t len = MIN(vector.iov[idx].iov_len, length - offset);
+      size_t len = std::min(vector.iov[idx].iov_len, length - offset);
       it.copy(len, static_cast<char *>(vector.iov[idx].iov_base));
       offset += len;
     }

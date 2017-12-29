@@ -13,7 +13,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 
 #define RGW_URI_ALL_USERS	"http://acs.amazonaws.com/groups/global/AllUsers"

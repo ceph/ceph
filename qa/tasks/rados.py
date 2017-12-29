@@ -145,6 +145,8 @@ def task(ctx, config):
         args.extend(['--write-fadvise-dontneed'])
     if config.get('set_redirect', False):
         args.extend(['--set_redirect'])
+    if config.get('set_chunk', False):
+        args.extend(['--set_chunk'])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([

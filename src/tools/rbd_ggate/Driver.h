@@ -4,7 +4,7 @@
 #ifndef CEPH_RBD_GGATE_DRIVER_H
 #define CEPH_RBD_GGATE_DRIVER_H
 
-#include <list>
+#include <map>
 #include <string>
 
 #include "ggate_drv.h"
@@ -16,9 +16,10 @@ struct Request;
 
 class Driver {
 public:
+  typedef std::pair<std::string, std::string> DevInfo;
   static int load();
   static int kill(const std::string &devname);
-  static int list(std::list<std::string> &devs);
+  static int list(std::map<std::string, DevInfo> *devices);
 
   Driver(const std::string &devname, size_t sectorsize, size_t mediasize,
          bool readonly, const std::string &info);

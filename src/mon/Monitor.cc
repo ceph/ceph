@@ -1177,7 +1177,7 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
     sync_stash_critical_state(t);
     t->put("mon_sync", "in_sync", 1);
 
-    sync_last_committed_floor = MAX(sync_last_committed_floor, paxos->get_version());
+    sync_last_committed_floor = std::max(sync_last_committed_floor, paxos->get_version());
     dout(10) << __func__ << " marking sync in progress, storing sync_last_committed_floor "
 	     << sync_last_committed_floor << dendl;
     t->put("mon_sync", "last_committed_floor", sync_last_committed_floor);

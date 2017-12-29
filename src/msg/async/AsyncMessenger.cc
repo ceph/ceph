@@ -552,7 +552,7 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
 
 int AsyncMessenger::_send_message(Message *m, const entity_inst_t& dest)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   assert(m);
 
   if (m->get_type() == CEPH_MSG_OSD_OP)

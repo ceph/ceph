@@ -9,7 +9,6 @@
 #include "librbd/internal.h"
 #include "librbd/deep_copy/ImageCopyRequest.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
-#include "librbd/deep_copy/SetHeadRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
 #include "test/librbd/mock/MockImageCtx.h"
 #include "test/librbd/mock/MockObjectMap.h"
@@ -85,28 +84,6 @@ public:
 };
 
 template <>
-class SetHeadRequest<librbd::MockTestImageCtx> {
-public:
-  static SetHeadRequest* s_instance;
-  Context *on_finish;
-
-  static SetHeadRequest* create(librbd::MockTestImageCtx *image_ctx,
-                                uint64_t size,
-                                const librbd::ParentSpec &parent_spec,
-                                uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = on_finish;
-    return s_instance;
-  }
-
-  SetHeadRequest() {
-    s_instance = this;
-  }
-
-  MOCK_METHOD0(send, void());
-};
-
-template <>
 class SnapshotCopyRequest<librbd::MockTestImageCtx> {
 public:
   static SnapshotCopyRequest* s_instance;
@@ -114,6 +91,7 @@ public:
 
   static SnapshotCopyRequest* create(librbd::MockTestImageCtx *src_image_ctx,
                                      librbd::MockTestImageCtx *dst_image_ctx,
+                                     librados::snap_t snap_id_end,
                                      ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                      Context *on_finish) {
     assert(s_instance != nullptr);
@@ -137,7 +115,6 @@ public:
 
 ImageCopyRequest<librbd::MockTestImageCtx>* ImageCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 MetadataCopyRequest<librbd::MockTestImageCtx>* MetadataCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-SetHeadRequest<librbd::MockTestImageCtx>* SetHeadRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 SnapshotCopyRequest<librbd::MockTestImageCtx>* SnapshotCopyRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace deep_copy
@@ -160,7 +137,6 @@ public:
   typedef librbd::DeepCopyRequest<librbd::MockTestImageCtx> MockDeepCopyRequest;
   typedef librbd::deep_copy::ImageCopyRequest<librbd::MockTestImageCtx> MockImageCopyRequest;
   typedef librbd::deep_copy::MetadataCopyRequest<librbd::MockTestImageCtx> MockMetadataCopyRequest;
-  typedef librbd::deep_copy::SetHeadRequest<librbd::MockTestImageCtx> MockSetHeadRequest;
   typedef librbd::deep_copy::SnapshotCopyRequest<librbd::MockTestImageCtx> MockSnapshotCopyRequest;
 
   librbd::ImageCtx *m_src_image_ctx;
@@ -225,13 +201,6 @@ public:
           }));
   }
 
-  void expect_set_head(MockSetHeadRequest &mock_set_head_request, int r) {
-    EXPECT_CALL(mock_set_head_request, send())
-      .WillOnce(Invoke([this, &mock_set_head_request, r]() {
-            mock_set_head_request.on_finish->complete(r);
-          }));
-  }
-
   void expect_copy_image(MockImageCopyRequest &mock_image_copy_request, int r) {
     EXPECT_CALL(mock_image_copy_request, send())
       .WillOnce(Invoke([this, &mock_image_copy_request, r]() {
@@ -266,7 +235,6 @@ TEST_F(TestMockDeepCopyRequest, SimpleCopy) {
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockImageCopyRequest mock_image_copy_request;
   MockMetadataCopyRequest mock_metadata_copy_request;
-  MockSetHeadRequest mock_set_head_request;
   MockSnapshotCopyRequest mock_snapshot_copy_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
@@ -281,7 +249,6 @@ TEST_F(TestMockDeepCopyRequest, SimpleCopy) {
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
-  expect_set_head(mock_set_head_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
   if (mock_object_map != nullptr) {
     expect_refresh_object_map(mock_dst_image_ctx, mock_object_map);
@@ -316,36 +283,14 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopySnapshots) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockDeepCopyRequest, ErrorOnSetHead) {
-  librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
-  librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
-  MockSetHeadRequest mock_set_head_request;
-  MockSnapshotCopyRequest mock_snapshot_copy_request;
-
-  InSequence seq;
-  expect_copy_snapshots(mock_snapshot_copy_request, 0);
-  expect_set_head(mock_set_head_request, -EINVAL);
-
-  C_SaferCond ctx;
-  librbd::SnapSeqs snap_seqs;
-  librbd::NoOpProgressContext no_op;
-  auto request = librbd::DeepCopyRequest<librbd::MockTestImageCtx>::create(
-      &mock_src_image_ctx, &mock_dst_image_ctx, 0, CEPH_NOSNAP, boost::none,
-      m_work_queue, &snap_seqs, &no_op, &ctx);
-  request->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
 TEST_F(TestMockDeepCopyRequest, ErrorOnCopyImage) {
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockImageCopyRequest mock_image_copy_request;
-  MockSetHeadRequest mock_set_head_request;
   MockSnapshotCopyRequest mock_snapshot_copy_request;
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
-  expect_set_head(mock_set_head_request, 0);
   expect_copy_image(mock_image_copy_request, -EINVAL);
 
   C_SaferCond ctx;
@@ -363,7 +308,6 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyMetadata) {
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);
   MockImageCopyRequest mock_image_copy_request;
   MockMetadataCopyRequest mock_metadata_copy_request;
-  MockSetHeadRequest mock_set_head_request;
   MockSnapshotCopyRequest mock_snapshot_copy_request;
 
   librbd::MockExclusiveLock mock_exclusive_lock;
@@ -378,7 +322,6 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyMetadata) {
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
-  expect_set_head(mock_set_head_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
   if (mock_object_map != nullptr) {
     expect_refresh_object_map(mock_dst_image_ctx, mock_object_map);

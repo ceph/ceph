@@ -1,12 +1,16 @@
 from __future__ import print_function
 import json
+import logging
 import uuid
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import system, disk
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.api import lvm as api
-from .common import prepare_parser
+from .common import prepare_parser, rollback_osd
+
+
+logger = logging.getLogger(__name__)
 
 
 def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
@@ -79,6 +83,7 @@ class Prepare(object):
 
     def __init__(self, argv):
         self.argv = argv
+        self.osd_id = None
 
     def get_ptuuid(self, argument):
         uuid = disk.get_partuuid(argument)
@@ -155,11 +160,24 @@ class Prepare(object):
                 tags={'ceph.type': device_type})
         else:
             error = [
-                'Cannot use device (%s).',
-                'A vg/lv path or an existing device is needed' % arg]
+                'Cannot use device (%s).' % arg,
+                'A vg/lv path or an existing device is needed']
             raise RuntimeError(' '.join(error))
 
         raise RuntimeError('no data logical volume found with: %s' % arg)
+
+    def safe_prepare(self, args):
+        """
+        An intermediate step between `main()` and `prepare()` so that we can
+        capture the `self.osd_id` in case we need to rollback
+        """
+        try:
+            self.prepare(args)
+        except Exception:
+            logger.error('lvm prepare was unable to complete')
+            logger.info('will rollback OSD ID creation')
+            rollback_osd(args, self.osd_id)
+            raise
 
     @decorators.needs_root
     def prepare(self, args):
@@ -172,7 +190,7 @@ class Prepare(object):
         cluster_fsid = conf.ceph.get('global', 'fsid')
         osd_fsid = args.osd_fsid or system.generate_uuid()
         # allow re-using an id, in case a prepare failed
-        osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
+        self.osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
         if args.filestore:
             if not args.journal:
                 raise RuntimeError('--journal is required when using --filestore')
@@ -183,7 +201,7 @@ class Prepare(object):
 
             tags = {
                 'ceph.osd_fsid': osd_fsid,
-                'ceph.osd_id': osd_id,
+                'ceph.osd_id': self.osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
                 'ceph.cluster_name': conf.cluster,
                 'ceph.data_device': data_lv.lv_path,
@@ -199,7 +217,7 @@ class Prepare(object):
                 data_lv.lv_path,
                 journal_device,
                 secrets,
-                id_=osd_id,
+                id_=self.osd_id,
                 fsid=osd_fsid,
             )
         elif args.bluestore:
@@ -209,7 +227,7 @@ class Prepare(object):
 
             tags = {
                 'ceph.osd_fsid': osd_fsid,
-                'ceph.osd_id': osd_id,
+                'ceph.osd_id': self.osd_id,
                 'ceph.cluster_fsid': cluster_fsid,
                 'ceph.cluster_name': conf.cluster,
                 'ceph.block_device': block_lv.lv_path,
@@ -227,7 +245,7 @@ class Prepare(object):
                 wal_device,
                 db_device,
                 secrets,
-                id_=osd_id,
+                id_=self.osd_id,
                 fsid=osd_fsid,
             )
 
@@ -283,6 +301,6 @@ class Prepare(object):
         args = parser.parse_args(self.argv)
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if args.bluestore is None and args.filestore is None:
+        if not args.bluestore and not args.filestore:
             args.bluestore = True
-        self.prepare(args)
+        self.safe_prepare(args)

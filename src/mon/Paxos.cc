@@ -180,7 +180,7 @@ void Paxos::collect(version_t oldpn)
   }
 
   // pick new pn
-  accepted_pn = get_new_proposal_number(MAX(accepted_pn, oldpn));
+  accepted_pn = get_new_proposal_number(std::max(accepted_pn, oldpn));
   accepted_pn_from = last_committed;
   num_last = 1;
   dout(10) << "collect with pn " << accepted_pn << dendl;
@@ -1225,7 +1225,7 @@ void Paxos::lease_renew_timeout()
 void Paxos::trim()
 {
   assert(should_trim());
-  version_t end = MIN(get_version() - g_conf->paxos_min,
+  version_t end = std::min(get_version() - g_conf->paxos_min,
 		      get_first_committed() + g_conf->paxos_trim_max);
 
   if (first_committed >= end)

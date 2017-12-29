@@ -485,16 +485,16 @@ or add a new OSDs and the PG will automatically use them.
 CRUSH constraints cannot be satisfied
 -------------------------------------
 
-If the cluster has enough OSDs, it is possible that the CRUSH ruleset
+If the cluster has enough OSDs, it is possible that the CRUSH rule
 imposes constraints that cannot be satisfied. If there are 10 OSDs on
-two hosts and the CRUSH rulesets require that no two OSDs from the
+two hosts and the CRUSH rule requires that no two OSDs from the
 same host are used in the same PG, the mapping may fail because only
-two OSD will be found. You can check the constraint by displaying the
-ruleset::
+two OSDs will be found. You can check the constraint by displaying ("dumping")
+the rule::
 
     $ ceph osd crush rule ls
     [
-        "replicated_ruleset",
+        "replicated_rule",
         "erasurepool"]
     $ ceph osd crush rule dump erasurepool
     { "rule_id": 1,
@@ -534,8 +534,8 @@ mapping. It can be resolved by:
 * adding more OSDs to the cluster (that does not require the erasure
   coded pool to be modified, it will become clean automatically)
 
-* use a hand made CRUSH ruleset that tries more times to find a good
-  mapping. It can be done by setting ``set_choose_tries`` to a value
+* use a handmade CRUSH rule that tries more times to find a good
+  mapping. This can be done by setting ``set_choose_tries`` to a value
   greater than the default.
 
 You should first verify the problem with ``crushtool`` after
@@ -566,19 +566,19 @@ modify the Ceph cluster and only work on a local files::
     bad mapping rule 8 x 79 num_rep 9 result [6,0,2,1,4,7,2147483647,5,8]
     bad mapping rule 8 x 173 num_rep 9 result [0,4,6,8,2,1,3,7,2147483647]
 
-Where ``--num-rep`` is the number of OSDs the erasure code crush
-ruleset needs, ``--rule`` is the value of the ``ruleset`` field
+Where ``--num-rep`` is the number of OSDs the erasure code CRUSH
+rule needs, ``--rule`` is the value of the ``ruleset`` field
 displayed by ``ceph osd crush rule dump``.  The test will try mapping
 one million values (i.e. the range defined by ``[--min-x,--max-x]``)
 and must display at least one bad mapping. If it outputs nothing it
 means all mappings are successfull and you can stop right there: the
 problem is elsewhere.
 
-The crush ruleset can be edited by decompiling the crush map::
+The CRUSH rule can be edited by decompiling the crush map::
 
     $ crushtool --decompile crush.map > crush.txt
 
-and adding the following line to the ruleset::
+and adding the following line to the rule::
 
     step set_choose_tries 100
 

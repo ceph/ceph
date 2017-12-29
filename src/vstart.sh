@@ -558,6 +558,12 @@ start_mon() {
 			--cap mgr 'allow *' \
 			"$keyring_fn"
 
+		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs --set-uid=0 \
+		   --cap mon 'allow r' \
+			--cap osd 'allow rw tag cephfs data=*' \
+			--cap mds 'allow rwp' \
+			"$keyring_fn"
+
 		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
 		    --cap mon 'allow rw' \
 		    --cap osd 'allow rwx' \
@@ -705,7 +711,7 @@ EOF
 EOF
 	        fi
 	        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
-	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
+	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow rw tag cephfs *=*' mds 'allow' mgr 'allow profile mds'
 	        if [ "$standby" -eq 1 ]; then
 			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
 				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
@@ -736,6 +742,7 @@ EOF
                 ceph_adm osd pool create "cephfs_data_${name}" 8
                 ceph_adm osd pool create "cephfs_metadata_${name}" 8
                 ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
+					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
@@ -798,9 +805,13 @@ if [ -n "$MON_ADDR" ]; then
 	CMDS_ARGS=" -m "$MON_ADDR
 fi
 
-if [ -z "$CEPH_PORT" ]; then
-    CEPH_PORT=6789
-    [ -e ".ceph_port" ] && CEPH_PORT=`cat .ceph_port`
+if [ -z "$CEPH_PORT" ]
+then
+  while [ true ]
+  do
+    CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
+    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
+  done
 fi
 
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
@@ -1009,8 +1020,9 @@ do_rgw()
     n=$(($CEPH_NUM_RGW - 1))
     i=0
     for rgw in j k l m n o p q r s t u v; do
-        echo start rgw on http${CEPH_RGW_HTTPS}://localhost:$((CEPH_RGW_PORT_NUM + i))
-        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/rgw.$rgw.log ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=$((CEPH_RGW_PORT_NUM + i))${CEPH_RGW_HTTPS}"
+        current_port=$((CEPH_RGW_PORT_NUM + i))
+        echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done

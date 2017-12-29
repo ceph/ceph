@@ -63,6 +63,7 @@
 struct Config {
   int nbds_max = 0;
   int max_part = 255;
+  int timeout = -1;
 
   bool exclusive = false;
   bool readonly = false;
@@ -85,6 +86,7 @@ static void usage()
             << "  --nbds_max <limit>      Override for module param nbds_max\n"
             << "  --max_part <limit>      Override for module param max_part\n"
             << "  --exclusive             Forbid writes by other clients\n"
+            << "  --timeout <seconds>     Set nbd request timeout\n"
             << std::endl;
   generic_server_usage();
 }
@@ -745,6 +747,16 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     goto close_nbd;
   }
 
+  if (cfg->timeout >= 0) {
+    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->timeout);
+    if (r < 0) {
+      r = -errno;
+      cerr << "rbd-nbd: failed to set timeout: " << cpp_strerror(r)
+           << std::endl;
+      goto close_nbd;
+    }
+  }
+
   {
     uint64_t handle;
 
@@ -989,6 +1001,16 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *
       cfg->readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->timeout, err, "--timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->timeout < 0) {
+        *err_msg << "rbd-nbd: Invalid argument for timeout!";
+        return -EINVAL;
+      }
     } else {
       ++i;
     }

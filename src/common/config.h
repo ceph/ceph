@@ -15,6 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
+#include "common/backport_std.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -163,8 +164,15 @@ public:
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
-  const Option::value_t& get_val_generic(const std::string &key) const;
-  template<typename T> const T& get_val(const std::string &key) const;
+  Option::value_t get_val_generic(const std::string &key) const;
+  template<typename T> const T get_val(const std::string &key) const;
+  template<typename T, typename Callback, typename...Args>
+  auto with_val(const string& key, Callback&& cb, Args&&... args) const ->
+    std::result_of_t<Callback(const T&, Args...)> {
+    return std::forward<Callback>(cb)(
+      boost::get<T>(this->get_val_generic(key)),
+      std::forward<Args>(args)...);
+  }
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -202,7 +210,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  const Option::value_t& _get_val_generic(const std::string &key) const;
+  Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -326,7 +334,7 @@ public:
 };
 
 template<typename T>
-const T& md_config_t::get_val(const std::string &key) const {
+const T md_config_t::get_val(const std::string &key) const {
   return boost::get<T>(this->get_val_generic(key));
 }
 

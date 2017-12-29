@@ -365,12 +365,13 @@ TEST(LibCephFS, DirLs) {
 
   // test getdents
   struct dirent *getdents_entries;
-  getdents_entries = (struct dirent *)malloc((r + 2) * sizeof(*getdents_entries));
+  size_t getdents_entries_len = (r + 2) * sizeof(*getdents_entries);
+  getdents_entries = (struct dirent *)malloc(getdents_entries_len);
 
   int count = 0;
   std::vector<std::string> found;
   while (true) {
-    int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, r * sizeof(*getdents_entries));
+    int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, getdents_entries_len);
     if (len == 0)
       break;
     ASSERT_GT(len, 0);

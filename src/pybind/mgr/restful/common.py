@@ -12,7 +12,7 @@ OSD_IMPLEMENTED_COMMANDS = [
 # Valid values for the 'var' argument to 'ceph osd pool set'
 POOL_PROPERTIES_1 = [
     'size', 'min_size', 'pg_num',
-    'crush_rule', 'hashpspool',
+    'crush_rule', 'hashpspool', 'auid',
 ]
 
 POOL_PROPERTIES_2 = [
@@ -86,6 +86,7 @@ def pool_update_commands(pool_name, args):
                 'prefix': 'osd pool set',
                 'pool': pool_name,
                 'var': var,
+                'val': args[var],
             })
 
     return commands

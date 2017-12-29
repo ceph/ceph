@@ -561,7 +561,7 @@ Running Multiple Clusters
 
 With Ceph, you can run multiple Ceph Storage Clusters on the same hardware.
 Running multiple clusters provides a higher level of isolation compared to 
-using different pools on the same cluster with different CRUSH rulesets. A 
+using different pools on the same cluster with different CRUSH rules. A 
 separate cluster will have separate monitor, OSD and metadata server processes. 
 When running Ceph with  default settings, the default cluster name is ``ceph``, 
 which means you would  save your Ceph configuration file with the file name

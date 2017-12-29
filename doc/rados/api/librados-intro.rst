@@ -157,7 +157,7 @@ and retrieve data. To interact with OSDs, the client app must invoke
 ``librados``  and connect to a Ceph Monitor. Once connected, ``librados``
 retrieves the  :term:`Cluster Map` from the Ceph Monitor. When the client app
 wants to read or write data, it creates an I/O context and binds to a
-:term:`pool`. The pool has an associated :term:`ruleset` that defines how it
+:term:`pool`. The pool has an associated :term:`CRUSH Rule` that defines how it
 will place data in the storage cluster. Via the I/O context, the client 
 provides the object name to ``librados``, which takes the object name
 and the cluster map (i.e., the topology of the cluster) and `computes`_ the
@@ -177,7 +177,7 @@ of the cluster directly.
                  |      To
                  v
             +--------+           +---------------+
-            |  Pool  |---------->| CRUSH Ruleset |
+            |  Pool  |---------->| CRUSH Rule |
             +--------+  Selects  +---------------+
 
 

@@ -195,9 +195,11 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EAGAIN;
     }
     mon->osdmon()->do_application_enable(data,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", fs_name);
     mon->osdmon()->do_application_enable(metadata,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS);
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "metadata", fs_name);
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
@@ -451,6 +453,36 @@ public:
       {
         fs->mds_map.set_standby_count_wanted(n);
       });
+    } else if (var == "session_timeout") {
+      if (interr.length()) {
+       ss << var << " requires an integer value";
+       return -EINVAL;
+      }
+      if (n < 30) {
+       ss << var << " must be at least 30s";
+       return -ERANGE;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_session_timeout((uint32_t)n);
+      });
+    } else if (var == "session_autoclose") {
+      if (interr.length()) {
+       ss << var << " requires an integer value";
+       return -EINVAL;
+      }
+      if (n < 30) {
+       ss << var << " must be at least 30s";
+       return -ERANGE;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_session_autoclose((uint32_t)n);
+      });
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
@@ -522,7 +554,9 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(poolid, pg_pool_t::APPLICATION_NAME_CEPHFS);
+    mon->osdmon()->do_application_enable(poolid,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", poolname);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(

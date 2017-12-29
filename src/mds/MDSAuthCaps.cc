@@ -72,6 +72,8 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     capspec = spaces >> (
         lit("*")[_val = MDSCapSpec(true, true, true, true)]
         |
+        lit("all")[_val = MDSCapSpec(true, true, true, true)]
+        |
         (lit("rwp"))[_val = MDSCapSpec(true, true, false, true)]
         |
         (lit("rw"))[_val = MDSCapSpec(true, true, false, false)]

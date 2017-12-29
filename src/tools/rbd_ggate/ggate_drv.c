@@ -330,7 +330,17 @@ int ggate_drv_send(ggate_drv_t drv_, ggate_drv_req_t req) {
   return r;
 }
 
-int ggate_drv_list(char **devs, size_t *size) {
+static const char * get_conf(struct ggeom *gp, const char *name) {
+	struct gconfig *conf;
+
+	LIST_FOREACH(conf, &gp->lg_config, lg_config) {
+		if (strcmp(conf->lg_name, name) == 0)
+			return (conf->lg_val);
+	}
+	return "";
+}
+
+int ggate_drv_list(struct ggate_drv_info *info, size_t *size) {
   struct gmesh mesh;
   struct gclass *class;
   struct ggeom *gp;
@@ -355,8 +365,10 @@ int ggate_drv_list(char **devs, size_t *size) {
         goto done;
       }
       LIST_FOREACH(gp, &class->lg_geom, lg_geom) {
-        *devs = strdup(gp->lg_name);
-        devs++;
+        strlcpy(info->id, get_conf(gp, "unit"), sizeof(info->id));
+        strlcpy(info->name, gp->lg_name, sizeof(info->name));
+        strlcpy(info->info, get_conf(gp, "info"), sizeof(info->info));
+        info++;
       }
     }
   }
@@ -364,12 +376,4 @@ int ggate_drv_list(char **devs, size_t *size) {
 done:
   geom_deletetree(&mesh);
   return r;
-}
-
-void ggate_drv_list_free(char **devs, size_t size) {
-  size_t i;
-
-  for (i = 0; i < size; i++) {
-    free(devs[i]);
-  }
 }

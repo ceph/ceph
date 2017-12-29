@@ -274,6 +274,8 @@ TYPE(librbd::journal::ClientData)
 TYPE(librbd::journal::TagData)
 #include "librbd/mirroring_watcher/Types.h"
 TYPE(librbd::mirroring_watcher::NotifyMessage)
+#include "librbd/trash_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)
@@ -308,6 +310,9 @@ TYPE(RGWAccessControlPolicy)
 TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
+
+#include "rgw/rgw_lc.h"
+TYPE(RGWLifecycleConfiguration)
 
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
@@ -402,6 +407,8 @@ TYPE(rgw_data_sync_info)
 TYPE(rgw_data_sync_marker)
 TYPE(rgw_data_sync_status)
 
+#endif
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
@@ -411,8 +418,6 @@ TYPE(cls_rbd_snap)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
-#endif
-
 #endif
 
 #include "cls/lock/cls_lock_types.h"

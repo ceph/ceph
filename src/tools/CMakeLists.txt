@@ -26,7 +26,9 @@ add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
 target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
 install(TARGETS ceph-osdomap-tool DESTINATION bin)
 
-add_executable(ceph-monstore-tool ceph_monstore_tool.cc)
+add_executable(ceph-monstore-tool
+  ceph_monstore_tool.cc
+  ../mgr/mgr_commands.cc)
 target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
 install(PROGRAMS

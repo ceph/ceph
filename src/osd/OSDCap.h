@@ -36,6 +36,7 @@ using std::ostream;
 #include <list>
 #include <vector>
 #include <boost/optional.hpp>
+#include <boost/fusion/include/adapt_struct.hpp>
 
 static const __u8 OSD_CAP_R     = (1 << 1);      // read
 static const __u8 OSD_CAP_W     = (1 << 2);      // write
@@ -95,14 +96,38 @@ struct OSDCapPoolNamespace {
 
 ostream& operator<<(ostream& out, const OSDCapPoolNamespace& pns);
 
+struct OSDCapPoolTag {
+  typedef std::map<std::string, std::map<std::string, std::string> > app_map_t;
+  std::string application;
+  std::string key;
+  std::string value;
+
+  OSDCapPoolTag () {}
+  OSDCapPoolTag(const std::string& application, const std::string& key,
+		const std::string& value) :
+    application(application), key(key), value(value) {}
+
+  bool is_match(const app_map_t& app_map) const;
+  bool is_match_all() const;
+};
+// adapt for parsing with boost::spirit::qi in OSDCapParser
+BOOST_FUSION_ADAPT_STRUCT(OSDCapPoolTag,
+			  (std::string, application)
+			  (std::string, key)
+			  (std::string, value))
+
+ostream& operator<<(ostream& out, const OSDCapPoolTag& pt);
 
 struct OSDCapMatch {
+  typedef std::map<std::string, std::map<std::string, std::string> > app_map_t;
   // auid and pool_name/nspace are mutually exclusive
   int64_t auid = CEPH_AUTH_UID_DEFAULT;
   OSDCapPoolNamespace pool_namespace;
+  OSDCapPoolTag pool_tag;
   std::string object_prefix;
 
   OSDCapMatch() {}
+  OSDCapMatch(const OSDCapPoolTag& pt) : pool_tag(pt) {}
   OSDCapMatch(const OSDCapPoolNamespace& pns) : pool_namespace(pns) {}
   OSDCapMatch(const std::string& pl, const std::string& pre)
     : pool_namespace(pl), object_prefix(pre) {}
@@ -111,6 +136,11 @@ struct OSDCapMatch {
     : pool_namespace(pl, ns), object_prefix(pre) {}
   OSDCapMatch(uint64_t auid, const std::string& pre)
     : auid(auid), object_prefix(pre) {}
+  OSDCapMatch(const std::string& dummy, const std::string& app,
+	      const std::string& key, const std::string& val)
+    : pool_tag(app, key, val) {}
+  OSDCapMatch(const std::string& ns, const OSDCapPoolTag& pt)
+    : pool_namespace("", ns), pool_tag(pt) {}
 
   /**
    * check if given request parameters match our constraints
@@ -122,7 +152,8 @@ struct OSDCapMatch {
    * @return true if we match, false otherwise
    */
   bool is_match(const std::string& pool_name, const std::string& nspace_name,
-                int64_t pool_auid, const std::string& object) const;
+                int64_t pool_auid, const app_map_t& app_map,
+		const std::string& object) const;
   bool is_match_all() const;
 };
 
@@ -165,6 +196,7 @@ struct OSDCapGrant {
 
   bool allow_all() const;
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
+		  const OSDCapPoolTag::app_map_t& application_metadata,
                   const string& object, bool op_may_read, bool op_may_write,
                   const std::vector<OpRequest::ClassInfo>& classes,
                   std::vector<bool>* class_allowed) const;
@@ -202,6 +234,7 @@ struct OSDCap {
    * @return true if the operation is allowed, false otherwise
    */
   bool is_capable(const string& pool_name, const string& ns, int64_t pool_auid,
+		  const OSDCapPoolTag::app_map_t& application_metadata,
 		  const string& object, bool op_may_read, bool op_may_write,
 		  const std::vector<OpRequest::ClassInfo>& classes) const;
 };

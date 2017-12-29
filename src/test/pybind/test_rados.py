@@ -9,6 +9,7 @@ import time
 import threading
 import json
 import errno
+import os
 import sys
 
 # Are we running Python 2.x
@@ -891,6 +892,12 @@ class TestIoctx(object):
         self.ioctx.application_metadata_remove("app1", "key1")
         eq([("key2", "val2")], self.ioctx.application_metadata_list("app1"))
 
+    def test_service_daemon(self):
+        name = "pid-" + str(os.getpid())
+        metadata = {'version': '3.14', 'memory': '42'}
+        self.rados.service_daemon_register("laundry", name, metadata)
+        status = {'result': 'unknown', 'test': 'running'}
+        self.rados.service_daemon_update(status)
 
 class TestIoctx2(object):
 

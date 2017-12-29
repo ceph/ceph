@@ -1825,11 +1825,10 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
   pool = old_obj.get_explicit_data_pool();
 }
 
-std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
+std::string rgw_bucket::get_key(char tenant_delim, char id_delim, size_t reserve) const
 {
-  static constexpr size_t shard_len{12}; // ":4294967295\0"
   const size_t max_len = tenant.size() + sizeof(tenant_delim) +
-      name.size() + sizeof(id_delim) + bucket_id.size() + shard_len;
+      name.size() + sizeof(id_delim) + bucket_id.size() + reserve;
 
   std::string key;
   key.reserve(max_len);
@@ -1848,7 +1847,8 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
 std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
                                       char shard_delim) const
 {
-  auto key = bucket.get_key(tenant_delim, id_delim);
+  static constexpr size_t shard_len{12}; // ":4294967295\0"
+  auto key = bucket.get_key(tenant_delim, id_delim, shard_len);
   if (shard_id >= 0 && shard_delim) {
     key.append(1, shard_delim);
     key.append(std::to_string(shard_id));
@@ -1894,4 +1894,57 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
     last_pos_pattern = cur_pos_pattern + 1;
     last_pos_input = cur_pos_input + 1;
   }
+}
+
+/*
+ * make attrs look-like-this
+ * converts underscores to dashes
+ */
+string lowercase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+        buf[i] = '-';
+        break;
+      default:
+        buf[i] = tolower(*s);
+    }
+  }
+  return string(buf);
+}
+
+/*
+ * make attrs Look-Like-This
+ * converts underscores to dashes
+ */
+string camelcase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  bool last_sep = true;
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+      case '-':
+        buf[i] = '-';
+        last_sep = true;
+        break;
+      default:
+        if (last_sep) {
+          buf[i] = toupper(*s);
+        } else {
+          buf[i] = tolower(*s);
+        }
+        last_sep = false;
+    }
+  }
+  return string(buf);
 }

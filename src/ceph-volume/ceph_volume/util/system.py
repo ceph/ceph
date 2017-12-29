@@ -94,7 +94,6 @@ class tmp_mount(object):
     def __enter__(self):
         self.path = tempfile.mkdtemp()
         process.run([
-            'sudo',
             'mount',
             '-v',
             self.device,
@@ -104,7 +103,6 @@ class tmp_mount(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         process.run([
-            'sudo',
             'umount',
             '-v',
             self.path

@@ -354,13 +354,22 @@ struct TrashImageSpec {
 
   TrashImageSpec() {}
   TrashImageSpec(TrashImageSource source, const std::string &name,
-                   utime_t deletion_time, utime_t deferment_end_time) :
-    source(source), name(name), deletion_time(deletion_time),
-    deferment_end_time(deferment_end_time) {}
+                 const utime_t& deletion_time,
+                 const utime_t& deferment_end_time)
+    : source(source), name(name), deletion_time(deletion_time),
+      deferment_end_time(deferment_end_time) {
+  }
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
+
+  inline bool operator==(const TrashImageSpec& rhs) const {
+    return (source == rhs.source &&
+            name == rhs.name &&
+            deletion_time == rhs.deletion_time &&
+            deferment_end_time == rhs.deferment_end_time);
+  }
 };
 WRITE_CLASS_ENCODER(TrashImageSpec);
 
@@ -368,13 +377,15 @@ struct MirrorImageMap {
   MirrorImageMap() {
   }
 
-  MirrorImageMap(const std::string &instance_id,
+  MirrorImageMap(const std::string &instance_id, utime_t mapped_time,
                  const bufferlist &data)
     : instance_id(instance_id),
+      mapped_time(mapped_time),
       data(data) {
   }
 
   std::string instance_id;
+  utime_t mapped_time;
   bufferlist data;
 
   void encode(bufferlist &bl) const;

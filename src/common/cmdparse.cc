@@ -15,7 +15,6 @@
 #include "json_spirit/json_spirit.h"
 #include "common/debug.h"
 
-using namespace std;
 
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",

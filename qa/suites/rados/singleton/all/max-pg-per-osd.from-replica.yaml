@@ -21,6 +21,7 @@ overrides:
     log-whitelist:
       - \(TOO_FEW_PGS\)
       - \(PG_
+      - \(PENDING_CREATING_PGS\)
 tasks:
 - install:
 - ceph:

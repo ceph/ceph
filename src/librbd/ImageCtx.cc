@@ -1020,6 +1020,7 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
+        "rbd_mirroring_delete_delay", false)(
         "rbd_mirroring_replay_delay", false)(
         "rbd_skip_partial_discard", false)(
 	"rbd_qos_iops_limit", false);
@@ -1080,6 +1081,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_max_payload_bytes, uint64_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
+    ASSIGN_OPTION(mirroring_delete_delay, uint64_t);
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);

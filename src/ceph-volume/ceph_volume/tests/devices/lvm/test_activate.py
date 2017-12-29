@@ -46,3 +46,33 @@ class TestActivate(object):
         args = Args(osd_id=None, osd_fsid='1234')
         with pytest.raises(RuntimeError):
             activate.Activate([]).activate(args)
+
+
+class TestActivateFlags(object):
+
+    def test_default_objectstore(self, capture):
+        args = ['0', 'asdf-ljh-asdf']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        parsed_args = capture.calls[0]['args'][0]
+        assert parsed_args.filestore is False
+        assert parsed_args.bluestore is True
+
+    def test_uses_filestore(self, capture):
+        args = ['--filestore', '0', 'asdf-ljh-asdf']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        parsed_args = capture.calls[0]['args'][0]
+        assert parsed_args.filestore is True
+        assert parsed_args.bluestore is False
+
+    def test_uses_bluestore(self, capture):
+        args = ['--bluestore', '0', 'asdf-ljh-asdf']
+        activation = activate.Activate(args)
+        activation.activate = capture
+        activation.main()
+        parsed_args = capture.calls[0]['args'][0]
+        assert parsed_args.filestore is False
+        assert parsed_args.bluestore is True

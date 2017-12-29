@@ -20,7 +20,6 @@
 
 #define dout_subsys ceph_subsys_
 
-using namespace std;
 
 namespace ceph {
 

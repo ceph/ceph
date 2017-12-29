@@ -103,7 +103,8 @@ void get_map_arguments(po::options_description *positional,
     ("exclusive", po::bool_switch(), "forbid writes by other clients")
     ("device", po::value<std::string>(), "specify nbd device")
     ("nbds_max", po::value<std::string>(), "override module param nbds_max")
-    ("max_part", po::value<std::string>(), "override module param max_part");
+    ("max_part", po::value<std::string>(), "override module param max_part")
+    ("timeout", po::value<std::string>(), "set nbd request timeout (seconds)");
 }
 
 int execute_map(const po::variables_map &vm)
@@ -150,6 +151,10 @@ int execute_map(const po::variables_map &vm)
   if (vm.count("max_part")) {
     args.push_back("--max_part");
     args.push_back(vm["max_part"].as<std::string>().c_str());
+  }
+  if (vm.count("timeout")) {
+    args.push_back("--timeout");
+    args.push_back(vm["timeout"].as<std::string>().c_str());
   }
 
   return call_nbd_cmd(vm, args);

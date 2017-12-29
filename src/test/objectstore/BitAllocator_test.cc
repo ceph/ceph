@@ -432,7 +432,7 @@ TEST(BitAllocator, test_bmap_alloc)
         ExtentList *block_list = new ExtentList(&extents, blk_size, alloc_size);
         for (int64_t i = 0; i < total_blocks; i += alloc_size) {
           bmap_test_assert(alloc->reserve_blocks(alloc_size) == true);
-          allocated = alloc->alloc_blocks_dis_res(alloc_size, MIN(alloc_size, zone_size),
+          allocated = alloc->alloc_blocks_dis_res(alloc_size, std::min(alloc_size, zone_size),
                                                   0, block_list);
           bmap_test_assert(alloc_size == allocated);
           bmap_test_assert(block_list->get_extent_count() == 

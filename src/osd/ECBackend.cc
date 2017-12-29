@@ -1434,10 +1434,6 @@ void ECBackend::clear_recovery_state()
   recovery_ops.clear();
 }
 
-void ECBackend::on_flushed()
-{
-}
-
 void ECBackend::dump_recovery_info(Formatter *f) const
 {
   f->open_array_section("recovery_ops");
@@ -1483,7 +1479,7 @@ void ECBackend::submit_transaction(
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->roll_forward_to = MAX(roll_forward_to, committed_to);
+  op->roll_forward_to = std::max(roll_forward_to, committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_local_applied_sync = on_local_applied_sync;
@@ -1500,14 +1496,26 @@ void ECBackend::submit_transaction(
   dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 }
 
-void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
-  if (!waiting_state.empty()) {
-    waiting_state.back().on_write.emplace_back(std::move(cb));
-  } else if (!waiting_reads.empty()) {
-    waiting_reads.back().on_write.emplace_back(std::move(cb));
-  } else {
-    // Nothing earlier in the pipeline, just call it
+void ECBackend::call_write_ordered(std::function<void(void)> &&cb)
+{
+  if (waiting_state.empty() &&
+      waiting_reads.empty()) {
+    dout(10) << __func__ << " sync" << dendl;
     cb();
+  } else {
+    ceph_tid_t tid = parent->get_tid();
+    Op& op = tid_to_op_map[tid];
+    op.tid = tid;
+    op.on_write = std::move(cb);
+    if (!waiting_state.empty()) {
+      dout(10) << __func__ << " tid " << tid << " waiting_state" << dendl;
+      waiting_state.push_back(op);
+    } else if (!waiting_reads.empty()) {
+      dout(10) << __func__ << " tid " << tid << " waiting_reads" << dendl;
+      waiting_reads.push_back(op);
+    } else {
+      ceph_abort();
+    }
   }
 }
 
@@ -1888,6 +1896,12 @@ bool ECBackend::try_reads_to_commit()
   if (waiting_reads.empty())
     return false;
   Op *op = &(waiting_reads.front());
+  if (op->on_write) {
+    waiting_reads.pop_front();
+    op->on_write();
+    tid_to_op_map.erase(op->tid);
+    return true;
+  }
   if (op->read_in_progress())
     return false;
   waiting_reads.pop_front();
@@ -2025,21 +2039,14 @@ bool ECBackend::try_reads_to_commit()
     }
   }
   if (should_write_local) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	local_write_op,
-	op->trace,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+    handle_sub_write(
+      get_parent()->whoami_shard(),
+      op->client_op,
+      local_write_op,
+      op->trace,
+      op->on_local_applied_sync);
+    op->on_local_applied_sync = 0;
   }
-
-  for (auto i = op->on_write.begin();
-       i != op->on_write.end();
-       op->on_write.erase(i++)) {
-    (*i)();
-  }
-
   return true;
 }
 
@@ -2272,7 +2279,7 @@ struct CallClientContexts :
       trimmed.substr_of(
 	bl,
 	read.get<0>() - adjusted.first,
-	MIN(read.get<1>(),
+	std::min(read.get<1>(),
 	    bl.length() - (read.get<0>() - adjusted.first)));
       result.insert(
 	read.get<0>(), trimmed.length(), std::move(trimmed));

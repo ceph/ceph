@@ -98,7 +98,7 @@ Where:
 ``crush-root={root}``
 
 :Description: The name of the crush bucket used for the first step of
-              the ruleset. For intance **step take default**.
+              the CRUSH rule. For intance **step take default**.
 
 :Type: String
 :Required: No.
@@ -110,7 +110,7 @@ Where:
               defined by **l** will be stored. For instance, if it is
               set to **rack**, each group of **l** chunks will be
               placed in a different rack. It is used to create a
-              ruleset step such as **step choose rack**. If it is not
+              CRUSH rule step such as **step choose rack**. If it is not
               set, no such grouping is done.
 
 :Type: String
@@ -121,7 +121,7 @@ Where:
 :Description: Ensure that no two chunks are in a bucket with the same
               failure domain. For instance, if the failure domain is
               **host** no two chunks will be stored on the same
-              host. It is used to create a ruleset step such as **step
+              host. It is used to create a CRUSH rule step such as **step
               chooseleaf host**.
 
 :Type: String
@@ -343,10 +343,10 @@ recover the content of chunk *2, 3*::
    step 2      cDDD____
    step 3      ____cDDD
 
-Controlling crush placement
+Controlling CRUSH placement
 ===========================
 
-The default crush ruleset provides OSDs that are on different hosts. For instance::
+The default CRUSH rule provides OSDs that are on different hosts. For instance::
 
    chunk nr    01234567
 
@@ -364,8 +364,8 @@ For instance::
 
    crush-steps='[ [ "choose", "rack", 2 ], [ "chooseleaf", "host", 4 ] ]'
 
-will create a ruleset that will select two crush buckets of type
+will create a rule that will select two crush buckets of type
 *rack* and for each of them choose four OSDs, each of them located in
 different buckets of type *host*.
 
-The ruleset can also be manually crafted for finer control.
+The CRUSH rule can also be manually crafted for finer control.

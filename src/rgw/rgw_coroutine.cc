@@ -439,7 +439,6 @@ void RGWCoroutinesManager::handle_unblocked_stack(set<RGWCoroutinesStack *>& con
   if (!stack->is_done()) {
     scheduled_stacks.push_back(stack);
   } else {
-    RWLock::WLocker wl(lock);
     context_stacks.erase(stack);
     stack->put();
   }

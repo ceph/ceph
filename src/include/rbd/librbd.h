@@ -204,6 +204,12 @@ typedef struct {
   time_t deferment_end_time;
 } rbd_trash_image_info_t;
 
+typedef struct {
+  char *addr;
+  int64_t id;
+  uint64_t cookie;
+} rbd_image_watcher_t;
+
 CEPH_RBD_API void rbd_image_options_create(rbd_image_options_t* opts);
 CEPH_RBD_API void rbd_image_options_destroy(rbd_image_options_t opts);
 CEPH_RBD_API int rbd_image_options_set_string(rbd_image_options_t opts,
@@ -870,6 +876,29 @@ CEPH_RBD_API int rbd_update_watch(rbd_image_t image, uint64_t *handle,
  */
 CEPH_RBD_API int rbd_update_unwatch(rbd_image_t image, uint64_t handle);
 
+/**
+ * List any watchers of an image.
+ *
+ * Watchers will be allocated and stored in the passed watchers array. If there
+ * are more watchers than max_watchers, -ERANGE will be returned and the number
+ * of watchers will be stored in max_watchers.
+ *
+ * The caller should call rbd_watchers_list_cleanup when finished with the list
+ * of watchers.
+ *
+ * @param image the image to list watchers for.
+ * @param watchers an array to store watchers in.
+ * @param max_watchers capacity of the watchers array.
+ * @returns 0 on success, negative error code on failure.
+ * @returns -ERANGE if there are too many watchers for the passed array.
+ * @returns the number of watchers in max_watchers.
+ */
+CEPH_RBD_API int rbd_watchers_list(rbd_image_t image,
+				   rbd_image_watcher_t *watchers,
+				   size_t *max_watchers);
+
+CEPH_RBD_API void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
+					    size_t num_watchers);
 
 CEPH_RBD_API int rbd_group_image_add(
 				rados_ioctx_t group_p, const char *group_name,

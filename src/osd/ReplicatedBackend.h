@@ -67,7 +67,6 @@ public:
 
   void on_change() override;
   void clear_recovery_state() override;
-  void on_flushed() override;
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:
@@ -75,7 +74,7 @@ public:
       return !have.empty();
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return new RPCRecPred;
   }
 
@@ -87,7 +86,7 @@ public:
       return have.count(whoami);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() override {
+  IsPGReadablePredicate *get_is_readable_predicate() const override {
     return new RPCReadPred(get_parent()->whoami_shard());
   }
 

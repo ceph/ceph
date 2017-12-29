@@ -112,6 +112,9 @@ namespace librbd {
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
+    void get_snapcontext_start(librados::ObjectReadOperation *op);
+    int get_snapcontext_finish(bufferlist::iterator *it,
+                               ::SnapContext *snapc);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
 
