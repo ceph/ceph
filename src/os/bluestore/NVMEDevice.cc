@@ -748,6 +748,7 @@ int NVMEDevice::open(const string& p)
     return r;
   }
   char buf[100];
+  memset(buf, 0, sizeof(buf));
   r = ::read(fd, buf, sizeof(buf));
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   fd = -1; // defensive

@@ -172,6 +172,7 @@ inline unsigned h2i(char c)
 static int decode_escaped(const char *p, string *out)
 {
   char buff[256];
+  memset(buff, 0, sizeof(buff));
   char* ptr = &buff[0];
   char* max = &buff[252];
   const char *orig_p = p;
@@ -208,6 +209,7 @@ template<typename S>
 static string pretty_binary_string(const S& in)
 {
   char buf[10];
+  memset(buf, 0, sizeof(buf));
   string out;
   out.reserve(in.length() * 3);
   enum { NONE, HEX, STRING } mode = NONE;

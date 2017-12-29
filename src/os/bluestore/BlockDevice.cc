@@ -88,6 +88,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 {
   string type = "kernel";
   char buf[PATH_MAX + 1];
+  memset(buf, 0, sizeof(buf));
   int r = ::readlink(path.c_str(), buf, sizeof(buf) - 1);
   if (r >= 0) {
     buf[r] = '\0';
