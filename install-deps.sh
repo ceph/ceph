@@ -24,6 +24,44 @@ function munge_ceph_spec_in {
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
 }
 
+function ensure_decent_gcc_on_deb {
+    # point gcc to the one offered by distro if the used one is different
+    local old=$(gcc -dumpversion)
+    local new=$1
+    if dpkg --compare-versions $old eq $new; then
+	    return
+    fi
+
+    case $old in
+        4*)
+            old=4.8;;
+        5*)
+            old=5;;
+        7*)
+            old=7;;
+    esac
+
+    cat <<EOF
+/usr/bin/gcc now points to gcc-$old, which is not the version shipped with the
+distro: gcc-$new. Reverting...
+EOF
+
+    $SUDO update-alternatives --remove-all gcc || true
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+
+    $SUDO update-alternatives --auto gcc
+
+    # cmake uses the latter by default
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+}
+
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
@@ -80,6 +118,14 @@ else
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
         $SUDO apt-get install -y dpkg-dev gcc
+        case "$VERSION" in
+            *Trusty*)
+                ensure_decent_gcc_on_deb 4.8
+                ;;
+            *Xenial*)
+                ensure_decent_gcc_on_deb 5
+                ;;
+        esac
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
