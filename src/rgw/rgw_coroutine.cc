@@ -94,6 +94,7 @@ void RGWCompletionManager::go_down()
   Mutex::Locker l(lock);
   for (auto cn : cns) {
     cn->unregister();
+    cn->put();
   }
   going_down = true;
   cond.Signal();
