@@ -12513,8 +12513,6 @@ int RGWRados::trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
 
   return CLSRGWIssueBILogTrim(index_ctx, start_marker_mgr, end_marker_mgr, bucket_objs,
 			      cct->_conf->rgw_bucket_index_max_aio)();
-
-  return r;
 }
 
 int RGWRados::resync_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
