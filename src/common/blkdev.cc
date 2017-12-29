@@ -9,7 +9,6 @@
  * Foundation.  See file COPYING.
  * 
  */
-
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -17,21 +16,19 @@
 #include "include/uuid.h"
 #include "blkdev.h"
 
-
 #ifdef __linux__
 #include <linux/fs.h>
 #include <blkid/blkid.h>
 
+#ifndef UUID_LEN
 #define UUID_LEN 36
+#endif
 
 static const char *sandbox_dir = "";
 
 void set_block_device_sandbox_dir(const char *dir)
 {
-  if (dir)
-    sandbox_dir = dir;
-  else
-    sandbox_dir = "";
+  dir ? sandbox_dir = dir : sandbox_dir = "";
 }
 
 int get_block_device_size(int fd, int64_t *psize)
@@ -47,7 +44,7 @@ int get_block_device_size(int fd, int64_t *psize)
 # error "Linux configuration error (get_block_device_size)"
 #endif
   if (ret < 0)
-    ret = -errno;
+    return -errno;
   return ret;
 }
 
@@ -67,15 +64,12 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
   char *p;
   char realname[PATH_MAX] = {0};
 
-  if (strncmp(dev, "/dev/", 5) != 0) {
-    if (realpath(dev, realname) == NULL || (strncmp(realname, "/dev/", 5) != 0)) {
+  if ((strncmp(dev, "/dev/", 5) != 0) &&
+    (!realpath(dev, realname) || (strncmp(realname, "/dev/", 5) != 0)))
       return -EINVAL;
-    }
-  }
 
-  if (strlen(realname))
-    strncpy(devname, realname + 5, PATH_MAX - 5);
-  else
+  strlen(realname) ?
+    strncpy(devname, realname + 5, PATH_MAX - 5) :
     strncpy(devname, dev + 5, strlen(dev) - 5);
 
   devname[PATH_MAX - 1] = '\0';
@@ -95,8 +89,10 @@ int get_block_device_base(const char *dev, char *out, size_t out_len)
 
   snprintf(fn, sizeof(fn), "%s/sys/block", sandbox_dir);
   dir = opendir(fn);
-  if (!dir)
+
+  if (!dir) {
     return -errno;
+  }
 
   struct dirent *de = nullptr;
   while ((de = ::readdir(dir))) {
@@ -139,7 +135,8 @@ int64_t get_block_device_string_property(const char *devname,
 	   "%s/sys/block/%s/%s", sandbox_dir, devname, property);
 
   FILE *fp = fopen(filename, "r");
-  if (fp == NULL) {
+
+  if (!fp) {
     return -errno;
   }
 
@@ -151,7 +148,8 @@ int64_t get_block_device_string_property(const char *devname,
       ++p;
     *p = 0;
   } else {
-    r = -EINVAL;
+    fclose(fp);
+    return -EINVAL;
   }
   fclose(fp);
   return r;
@@ -165,8 +163,9 @@ int64_t get_block_device_string_property(const char *devname,
  */
 int64_t get_block_device_int_property(const char *devname, const char *property)
 {
-  char buff[256] = {0};
-  int r = get_block_device_string_property(devname, property, buff, sizeof(buff));
+  char buff[256];
+  memset(buff, 0, sizeof(buff));
+  int64_t r = get_block_device_string_property(devname, property, buff, sizeof(buff));
   if (r < 0)
     return r;
   // take only digits
@@ -176,10 +175,10 @@ int64_t get_block_device_int_property(const char *devname, const char *property)
       break;
     }
   }
-  char *endptr = 0;
+  char *endptr = nullptr;
   r = strtoll(buff, &endptr, 10);
   if (endptr != buff + strlen(buff))
-    r = -EINVAL;
+    return -EINVAL;
   return r;
 }
 
@@ -204,62 +203,22 @@ int block_device_model(const char *devname, char *model, size_t max)
   return get_block_device_string_property(devname, "device/model", model, max);
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  char uuid_str[UUID_LEN+1];
-  char basename[PATH_MAX];
-  const char* temp_partition_ptr = NULL;
-  blkid_cache cache = NULL;
-  blkid_dev dev = NULL;
-  int rc = 0;
-
-  dev_uuid.print(uuid_str);
-
-  if (blkid_get_cache(&cache, NULL) >= 0)
-    dev = blkid_find_dev_with_tag(cache, label, (const char*)uuid_str);
-  else
-    return -EINVAL;
-
-  if (dev) {
-    temp_partition_ptr = blkid_dev_devname(dev);
-    strncpy(partition, temp_partition_ptr, PATH_MAX);
-    rc = get_block_device_base(partition, basename,
-      sizeof(basename));
-    if (rc >= 0) {
-      strncpy(device, basename, sizeof(basename));
-      rc = 0;
-    } else {
-      rc = -ENODEV;
-    }
-  } else {
-    rc = -EINVAL;
-  }
-
-  /* From what I can tell, blkid_put_cache cleans up dev, which
-   * appears to be a pointer into cache, as well */
-  if (cache)
-    blkid_put_cache(cache);
-  return rc;
-}
-
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   struct stat st;
-  int r = fstat(fd, &st);
-  if (r < 0) {
+  if (fstat(fd, &st) < 0) {
     return -EINVAL;  // hrm.
   }
   dev_t devid = S_ISBLK(st.st_mode) ? st.st_rdev : st.st_dev;
   char *t = blkid_devno_to_devname(devid);
   if (!t) {
+    free(t);
     return -EINVAL;
   }
   strncpy(partition, t, max);
   free(t);
   dev_t diskdev;
-  r = blkid_devno_to_wholedisk(devid, device, max, &diskdev);
-  if (r < 0) {
+  if (blkid_devno_to_wholedisk(devid, device, max, &diskdev) < 0) {
     return -EINVAL;
   }
   return 0;
@@ -330,12 +289,6 @@ bool block_device_is_rotational(const char *devname)
   return false;
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
-}
-
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
@@ -366,11 +319,6 @@ bool block_device_is_rotational(const char *devname)
   return false;
 }
 
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
-}
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
@@ -399,12 +347,6 @@ int block_device_discard(int fd, int64_t offset, int64_t len)
 bool block_device_is_rotational(const char *devname)
 {
   return false;
-}
-
-int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
-	char* device)
-{
-  return -EOPNOTSUPP;
 }
 
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
