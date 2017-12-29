@@ -149,6 +149,7 @@ class ObjectCache {
 
   void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
+  void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
 public:
@@ -188,9 +189,6 @@ class RGWCache  : public T
   }
 
   void normalize_pool_and_obj(rgw_pool& src_pool, const string& src_obj, rgw_pool& dst_pool, string& dst_obj);
-  string normal_name(rgw_raw_obj& obj) {
-    return normal_name(obj.pool, obj.oid);
-  }
 
   int init_rados() override {
     int ret;
@@ -269,7 +267,7 @@ int RGWCache<T>::delete_system_obj(rgw_raw_obj& obj, RGWObjVersionTracker *objv_
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
 
-  string name = normal_name(obj);
+  string name = normal_name(pool, oid);
   cache.remove(name);
 
   ObjectCacheInfo info;
@@ -291,7 +289,7 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
   if (ofs != 0)
     return T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, attrs, cache_info);
 
-  string name = normal_name(obj.pool, oid);
+  string name = normal_name(pool, oid);
 
   ObjectCacheInfo info;
 

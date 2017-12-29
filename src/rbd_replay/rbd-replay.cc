@@ -21,7 +21,6 @@
 #include "ImageNameMap.hpp"
 
 
-using namespace std;
 using namespace rbd_replay;
 
 

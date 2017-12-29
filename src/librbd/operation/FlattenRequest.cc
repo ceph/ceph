@@ -22,10 +22,9 @@ template <typename I>
 class C_FlattenObject : public C_AsyncObjectThrottle<I> {
 public:
   C_FlattenObject(AsyncObjectThrottle<I> &throttle, I *image_ctx,
-                  uint64_t object_size, ::SnapContext snapc, uint64_t object_no)
-    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_size(object_size),
-      m_snapc(snapc), m_object_no(object_no)
-  {
+                  ::SnapContext snapc, uint64_t object_no)
+    : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_snapc(snapc),
+      m_object_no(object_no) {
   }
 
   int send() override {
@@ -55,7 +54,6 @@ public:
   }
 
 private:
-  uint64_t m_object_size;
   ::SnapContext m_snapc;
   uint64_t m_object_no;
 };
@@ -105,8 +103,7 @@ void FlattenRequest<I>::send_op() {
   m_state = STATE_FLATTEN_OBJECTS;
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_FlattenObject<I> >(),
-      boost::lambda::_1, &image_ctx, m_object_size, m_snapc,
-      boost::lambda::_2));
+      boost::lambda::_1, &image_ctx, m_snapc, boost::lambda::_2));
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, this->create_callback_context(), &m_prog_ctx,
     0, m_overlap_objects);

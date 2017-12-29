@@ -103,7 +103,7 @@ TrimRequest<I>::TrimRequest(I &image_ctx, Context *on_finish,
 {
   uint64_t period = image_ctx.get_stripe_period();
   uint64_t new_num_periods = ((m_new_size + period - 1) / period);
-  m_delete_off = MIN(new_num_periods * period, original_size);
+  m_delete_off = std::min(new_num_periods * period, original_size);
   // first object we can delete free and clear
   m_delete_start = new_num_periods * image_ctx.get_stripe_count();
   m_delete_start_min = m_delete_start;

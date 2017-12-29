@@ -335,18 +335,6 @@ class TestMDS(TestArgparse):
     def test_stat(self):
         self.check_no_arg('mds', 'stat')
 
-    def test_tell(self):
-        self.assert_valid_command(['mds', 'tell',
-                                   'someone',
-                                   'something'])
-        self.assert_valid_command(['mds', 'tell',
-                                   'someone',
-                                   'something',
-                                   'something else'])
-        assert_equal({}, validate_command(sigdict, ['mds', 'tell']))
-        assert_equal({}, validate_command(sigdict, ['mds', 'tell',
-                                                    'someone']))
-
     def test_compat_show(self):
         self.assert_valid_command(['mds', 'compat', 'show'])
         assert_equal({}, validate_command(sigdict, ['mds', 'compat']))

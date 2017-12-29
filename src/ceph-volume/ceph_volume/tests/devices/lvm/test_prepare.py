@@ -22,6 +22,15 @@ class TestLVM(object):
         assert 'Format an LVM device' in stdout
 
 
+class TestPrepareDevice(object):
+
+    def test_cannot_use_device(self):
+        with pytest.raises(RuntimeError) as error:
+            lvm.prepare.Prepare([]).prepare_device(
+                    '/dev/var/foo', 'data', 'asdf', '0')
+        assert 'Cannot use device (/dev/var/foo)' in str(error)
+        assert 'A vg/lv path or an existing device is needed' in str(error)
+
 class TestPrepare(object):
 
     def test_main_spits_help_with_no_arguments(self, capsys):

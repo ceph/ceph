@@ -162,7 +162,7 @@ int PyModuleRegistry::init(const MgrMap &map)
   // Load python code
   for (const auto& module_name : mgr_map.modules) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
-    auto mod = ceph::make_unique<PyModule>(module_name);
+    auto mod = std::make_unique<PyModule>(module_name);
     int r = mod->load(pMainThreadState);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
@@ -481,6 +481,6 @@ static void _list_modules(
 
 void PyModuleRegistry::list_modules(std::set<std::string> *modules)
 {
-  _list_modules(g_conf->get_val<std::string>("mgr_module_path"), modules);
+  g_conf->with_val<std::string>("mgr_module_path",
+				&_list_modules, modules);
 }
-

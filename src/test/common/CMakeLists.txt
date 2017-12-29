@@ -265,8 +265,8 @@ add_executable(unittest_iso_8601
 target_link_libraries(unittest_iso_8601 ceph-common)
 add_ceph_unittest(unittest_iso_8601)
 
-add_executable(unittest_backport14 test_backport14.cc)
-add_ceph_unittest(unittest_backport14)
+add_executable(unittest_backport_std test_backport_std.cc)
+add_ceph_unittest(unittest_backport_std)
 
 add_executable(unittest_convenience test_convenience.cc)
 target_link_libraries(unittest_convenience ceph-common)
@@ -277,3 +277,6 @@ add_executable(unittest_bounded_key_counter
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(unittest_bounded_key_counter global)
 add_ceph_unittest(unittest_bounded_key_counter)
+
+add_executable(unittest_static_ptr test_static_ptr.cc)
+add_ceph_unittest(unittest_static_ptr)

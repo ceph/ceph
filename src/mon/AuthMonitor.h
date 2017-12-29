@@ -17,7 +17,6 @@
 
 #include <map>
 #include <set>
-using namespace std;
 
 #include "include/ceph_features.h"
 #include "include/types.h"

@@ -24,6 +24,8 @@
 #include <mutex>
 #include <atomic>
 #include <typeinfo>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include <common/Formatter.h>
 #include "include/assert.h"
@@ -404,6 +406,13 @@ public:
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >			\
+    using flat_set = boost::container::flat_set<k,cmp,pool_allocator<k>>; \
+									\
+    template<typename k, typename v, typename cmp = std::less<k> >	\
+    using flat_map = boost::container::flat_map<k,v,cmp,		\
+						pool_allocator<std::pair<k,v>>>; \
                                                                         \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\

@@ -33,7 +33,6 @@ class TestFragmentation(CephFSTestCase):
         Apply kwargs as MDS configuration settings, enable dirfrags
         and restart the MDSs.
         """
-        kwargs['mds_bal_frag'] = "true"
 
         for k, v in kwargs.items():
             self.ceph_cluster.set_ceph_conf("mds", k, v.__str__())

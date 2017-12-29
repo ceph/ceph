@@ -25,7 +25,6 @@
 
 #define dout_context g_ceph_context
 
-using namespace std;
 using namespace rbd_replay;
 
 namespace {

@@ -517,26 +517,40 @@ namespace librbd {
       op->exec("rbd", "snapshot_rename", bl);
     }
 
-    int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
-			::SnapContext *snapc)
+    void get_snapcontext_start(librados::ObjectReadOperation *op)
     {
-      bufferlist inbl, outbl;
+      bufferlist bl;
+      op->exec("rbd", "get_snapcontext", bl);
+    }
 
-      int r = ioctx->exec(oid, "rbd", "get_snapcontext", inbl, outbl);
-      if (r < 0)
-	return r;
-
+    int get_snapcontext_finish(bufferlist::iterator *it,
+                               ::SnapContext *snapc)
+    {
       try {
-	bufferlist::iterator iter = outbl.begin();
-	::decode(*snapc, iter);
+	::decode(*snapc, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
-
-      if (!snapc->is_valid())
+      if (!snapc->is_valid()) {
 	return -EBADMSG;
-
+      }
       return 0;
+    }
+
+    int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
+			::SnapContext *snapc)
+    {
+      librados::ObjectReadOperation op;
+      get_snapcontext_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      auto bl_it = out_bl.begin();
+      return get_snapcontext_finish(&bl_it, snapc);
     }
 
     void snapshot_list_start(librados::ObjectReadOperation *op,

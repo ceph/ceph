@@ -220,6 +220,8 @@ static curl_slist *headers_to_slist(param_vec_t& headers)
         val[i] = '-';
       }
     }
+    
+    val = camelcase_dash_http_attr(val);
 
     val.append(": ");
     val.append(p.second);

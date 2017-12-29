@@ -303,7 +303,7 @@ class Module(MgrModule):
             self.optimize(plan)
             return (0, '', '')
         elif command['prefix'] == 'balancer rm':
-            self.plan_rm(command['name'])
+            self.plan_rm(command['plan'])
             return (0, '', '')
         elif command['prefix'] == 'balancer reset':
             self.plans = {}
@@ -606,8 +606,8 @@ class Module(MgrModule):
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = self.get_config('upmap_max_iterations', 10)
-        max_deviation = self.get_config('upmap_max_deviation', .01)
+        max_iterations = int(self.get_config('upmap_max_iterations', 10))
+        max_deviation = float(self.get_config('upmap_max_deviation', .01))
 
         ms = plan.initial
         pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
@@ -632,10 +632,10 @@ class Module(MgrModule):
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
-        max_iterations = self.get_config('crush_compat_max_iterations', 25)
+        max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
         if max_iterations < 1:
             return False
-        step = self.get_config('crush_compat_step', .5)
+        step = float(self.get_config('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
             return False
         max_misplaced = float(self.get_config('max_misplaced',
@@ -877,13 +877,13 @@ class Module(MgrModule):
         for osd, weight in plan.compat_ws.iteritems():
             self.log.info('ceph osd crush weight-set reweight-compat osd.%d %f',
                           osd, weight)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd crush weight-set reweight-compat',
                 'format': 'json',
                 'item': 'osd.%d' % osd,
                 'weight': [weight],
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # new_weight
@@ -892,12 +892,12 @@ class Module(MgrModule):
             reweightn[str(osd)] = str(int(weight * float(0x10000)))
         if len(reweightn):
             self.log.info('ceph osd reweightn %s', reweightn)
-            result = CommandResult('foo')
+            result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd reweightn',
                 'format': 'json',
                 'weights': json.dumps(reweightn),
-            }), 'foo')
+            }), '')
             commands.append(result)
 
         # upmap

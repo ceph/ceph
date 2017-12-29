@@ -174,8 +174,8 @@ protected:
   std::list<fnode_t*> projected_fnode;
 
 public:
+  elist<CDentry*> dirty_dentries;
   elist<CDir*>::item item_dirty, item_new;
-
 
 public:
   version_t get_version() const { return fnode.version; }
@@ -749,6 +749,7 @@ public:
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
   void dump(Formatter *f) const;
+  void dump_load(Formatter *f, utime_t now, const DecayRate& rate);
 };
 
 #endif

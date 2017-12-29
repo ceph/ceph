@@ -14,7 +14,6 @@ def wipefs(path):
     Removes the filesystem from an lv or partition.
     """
     process.run([
-        'sudo',
         'wipefs',
         '--all',
         path

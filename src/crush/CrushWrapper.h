@@ -52,7 +52,6 @@ inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
   ::decode(s.arg2, p);
 }
 
-using namespace std;
 class CrushWrapper {
 public:
   // magic value used by OSDMap for a "default" fallback choose_args, used if

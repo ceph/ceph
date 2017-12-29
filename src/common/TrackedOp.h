@@ -101,15 +101,40 @@ public:
   void get_age_ms_histogram(pow2_hist_t *h);
 
   /**
+   * walk through ops in flight
+   *
+   * @param oldest_sec the amount of time since the oldest op was initiated
+   * @param check a function consuming tracked ops, the function returns
+   *              false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool visit_ops_in_flight(utime_t* oldest_secs,
+			   std::function<bool(TrackedOp&)>&& visit);
+  /**
+   * walk through slow ops in flight
+   *
+   * @param[out] oldest_sec the amount of time since the oldest op was initiated
+   * @param[out] num_slow_ops total number of slow ops
+   * @param on_warn a function consuming tracked ops, the function returns
+   *                false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool with_slow_ops_in_flight(utime_t* oldest_secs,
+			       int* num_slow_ops,
+			       std::function<void(TrackedOp&)>&& on_warn);
+  /**
    * Look for Ops which are too old, and insert warning
    * strings for each Op that is too old.
    *
-   * @param warning_strings A vector<string> reference which is filled
+   * @param summary[out] a string summarizing slow Ops.
+   * @param warning_strings[out] A vector<string> reference which is filled
    * with a warning string for each old Op.
+   * @param slow[out] total number of slow ops
    * @return True if there are any Ops to warn on, false otherwise.
    */
-  bool check_ops_in_flight(std::vector<string> &warning_strings,
-			   int *slow = NULL);
+  bool check_ops_in_flight(std::string* summary,
+			   std::vector<string> &warning_strings,
+			   int* slow = nullptr);
 
   void on_shutdown() {
     history.on_shutdown();

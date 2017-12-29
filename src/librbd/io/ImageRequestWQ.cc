@@ -12,6 +12,7 @@
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequest.h"
+#include "common/EventTrace.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -228,6 +229,7 @@ void ImageRequestWQ<I>::aio_read(AioCompletion *c, uint64_t off, uint64_t len,
 				 ReadResult &&read_result, int op_flags,
 				 bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: read", &m_image_ctx.trace_endpoint);
@@ -269,6 +271,7 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 				  bufferlist &&bl, int op_flags,
 				  bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: write", &m_image_ctx.trace_endpoint);
@@ -306,6 +309,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 				    uint64_t len, bool skip_partial_discard,
 				    bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: discard", &m_image_ctx.trace_endpoint);
@@ -341,6 +345,7 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
 template <typename I>
 void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: flush", &m_image_ctx.trace_endpoint);
@@ -374,6 +379,7 @@ void ImageRequestWQ<I>::aio_writesame(AioCompletion *c, uint64_t off,
 				      uint64_t len, bufferlist &&bl,
 				      int op_flags, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: writesame", &m_image_ctx.trace_endpoint);
@@ -415,6 +421,7 @@ void ImageRequestWQ<I>::aio_compare_and_write(AioCompletion *c,
                                               uint64_t *mismatch_off,
                                               int op_flags, bool native_async) {
   CephContext *cct = m_image_ctx.cct;
+  FUNCTRACE(cct);
   ZTracer::Trace trace;
   if (m_image_ctx.blkin_trace_all) {
     trace.init("wq: compare_and_write", &m_image_ctx.trace_endpoint);

@@ -108,7 +108,8 @@
     usage trim                 trim usage (by user, date range)
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
-    gc process                 manually process garbage
+    gc process                 manually process garbage (specify
+                               --include-all to process all entries, including unexpired)
     lc list                    list all bucket lifecycle progress
     lc process                 manually process lifecycle
     metadata get               get metadata info
@@ -154,7 +155,7 @@
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
-     --email=<email>
+     --email=<email>           user's email address
      --secret/--secret-key=<key>
                                specify secret key
      --gen-access-key          generate random access key (for S3)
@@ -163,17 +164,17 @@
      --temp-url-key[-2]=<key>  temp url key
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
-     --display-name=<name>
+     --display-name=<name>     user's display name
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
-     --bucket=<bucket>
-     --pool=<pool>
-     --object=<object>
-     --date=<date>
-     --start-date=<date>
-     --end-date=<date>
-     --bucket-id=<bucket-id>
+     --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
+     --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
+     --object=<object>         object name
+     --date=<date>             date in the format yyyy-mm-dd
+     --start-date=<date>       start date in the format yyyy-mm-dd
+     --end-date=<date>         end date in the format yyyy-mm-dd
+     --bucket-id=<bucket-id>   bucket id
      --shard-id=<shard-id>     optional for mdlog list
                                required for: 
                                  mdlog trim
@@ -186,8 +187,6 @@
      --commit                  commit the period during 'period update'
      --staging                 get staging period info
      --master                  set as master
-     --master-url              master url
-     --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
      --rgw-realm=<name>        realm name
      --realm-id=<id>           realm id
@@ -202,6 +201,7 @@
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
+     --redirect-zone           specify zone id to redirect when response is 404 (not found)
      --placement-id            placement id for zonegroup placement commands
      --tags=<list>             list of tags for zonegroup placement add and modify commands
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
@@ -241,8 +241,9 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state string>    specify a state for the opstate set command
-     --replica-log-type        replica log type (metadata, data, bucket), required for
+     --state=<state>           specify a state for the opstate set command
+     --replica-log-type=<logtypestr>
+                               replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
@@ -261,13 +262,11 @@
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
-     --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
-     --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
      --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)

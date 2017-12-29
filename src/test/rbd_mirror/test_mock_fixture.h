@@ -34,6 +34,10 @@ ACTION_P2(CompleteContext, wq, r) {
   context_wq->queue(arg0, r);
 }
 
+ACTION_P(GetReference, ref_object) {
+  ref_object->get();
+}
+
 MATCHER_P(ContentsEqual, bl, "") {
   // TODO fix const-correctness of bufferlist
   return const_cast<bufferlist &>(arg).contents_equal(

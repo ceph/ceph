@@ -23,7 +23,6 @@
 #include <atomic>
 #include <fstream>
 
-using namespace std;
 
 #include <boost/scoped_ptr.hpp>
 
@@ -395,7 +394,7 @@ private:
     }
     OpSequencer *_dequeue() override {
       if (store->op_queue.empty())
-	return NULL;
+	return nullptr;
       OpSequencer *osr = store->op_queue.front();
       store->op_queue.pop_front();
       return osr;
@@ -430,7 +429,7 @@ private:
 
 public:
   int lfn_find(const ghobject_t& oid, const Index& index,
-                                  IndexedPath *path = NULL);
+                                  IndexedPath *path = nullptr);
   int lfn_truncate(const coll_t& cid, const ghobject_t& oid, off_t length);
   int lfn_stat(const coll_t& cid, const ghobject_t& oid, struct stat *buf);
   int lfn_open(
@@ -438,7 +437,7 @@ public:
     const ghobject_t& oid,
     bool create,
     FDRef *outfd,
-    Index *index = 0);
+    Index *index = nullptr);
 
   void lfn_close(FDRef fd);
   int lfn_link(const coll_t& c, const coll_t& newcid, const ghobject_t& o, const ghobject_t& newoid) ;
@@ -483,6 +482,10 @@ public:
     return false;
   }
 
+  bool is_sync_onreadable() const override {
+    return false;
+  }
+
   bool is_rotational() override;
   bool is_journal_rotational() override;
 
@@ -518,7 +521,7 @@ public:
 
   int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL) override;
+			 ThreadPool::TPHandle *handle = nullptr) override;
 
   /**
    * set replay guard xattr on given file

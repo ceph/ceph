@@ -42,7 +42,6 @@
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
 
 class Context;
 class Messenger;
@@ -1150,6 +1149,16 @@ struct ObjectOperation {
     ::encode(tgt_oloc, osd_op.indata);
   }
 
+  void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
+		 object_t tgt_oid, uint64_t tgt_offset) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
+    ::encode(src_offset, osd_op.indata);
+    ::encode(src_length, osd_op.indata);
+    ::encode(tgt_oloc, osd_op.indata);
+    ::encode(tgt_oid, osd_op.indata);
+    ::encode(tgt_offset, osd_op.indata);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1262,7 +1271,6 @@ private:
 public:
   /*** track pending operations ***/
   // read
- public:
 
   struct OSDSession;
 
@@ -1745,9 +1753,8 @@ public:
 		 ping_tid(0),
 		 map_dne_bound(0) {}
 
-    // no copy!
-    const LingerOp &operator=(const LingerOp& r);
-    LingerOp(const LingerOp& o);
+    const LingerOp &operator=(const LingerOp& r) = delete;
+    LingerOp(const LingerOp& o) = delete;
 
     uint64_t get_cookie() {
       return reinterpret_cast<uint64_t>(this);
@@ -1917,6 +1924,9 @@ public:
   };
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
+  void _prune_snapc(
+    const mempool::osdmap::map<int64_t, OSDMap::snap_interval_set_t>& new_removed_snaps,
+    Op *op);
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, Connection *con,
@@ -2034,7 +2044,7 @@ private:
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   {
     if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
+      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
     }
   }
   ~Objecter() override;
@@ -2079,14 +2089,16 @@ private:
   void set_osdmap_full_try() { osdmap_full_try = true; }
   void unset_osdmap_full_try() { osdmap_full_try = false; }
 
-  void _scan_requests(OSDSession *s,
-		      bool force_resend,
-		      bool cluster_full,
-		      map<int64_t, bool> *pool_full_map,
-		      map<ceph_tid_t, Op*>& need_resend,
-		      list<LingerOp*>& need_resend_linger,
-		      map<ceph_tid_t, CommandOp*>& need_resend_command,
-		      shunique_lock& sul);
+  void _scan_requests(
+    OSDSession *s,
+    bool skipped_map,
+    bool cluster_full,
+    map<int64_t, bool> *pool_full_map,
+    map<ceph_tid_t, Op*>& need_resend,
+    list<LingerOp*>& need_resend_linger,
+    map<ceph_tid_t, CommandOp*>& need_resend_command,
+    shunique_lock& sul,
+    const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
 
   int64_t get_object_hash_position(int64_t pool, const string& key,
 				   const string& ns);

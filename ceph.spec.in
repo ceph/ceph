@@ -44,7 +44,7 @@
 
 %if %{with selinux}
 # get selinux policy version
-%{!?_selinux_policy_version: %global _selinux_policy_version %(sed -e 's,.*selinux-policy-\\([^/]*\\)/.*,\\1,' /usr/share/selinux/devel/policyhelp 2>/dev/null || echo 0.0.0)}
+%{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
@@ -100,7 +100,6 @@ BuildRequires:	sharutils
 %if 0%{with selinux}
 BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
-BuildRequires:	/usr/share/selinux/devel/policyhelp
 %endif
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
@@ -120,7 +119,22 @@ BuildRequires:	gperf
 BuildRequires:  cmake
 BuildRequires:	cryptsetup
 BuildRequires:	fuse-devel
+%if 0%{?rhel} == 7
+# devtoolset offers newer make and valgrind-devel, but the old ones are good
+# enough.
+%ifarch x86_64
+BuildRequires:	devtoolset-7-gcc-c++
+%endif
+%ifarch aarch64
+%if 0%{?centos}
+BuildRequires:	devtoolset-6-gcc-c++
+%else
+BuildRequires:	devtoolset-7-gcc-c++
+%endif
+%endif
+%else
 BuildRequires:	gcc-c++
+%endif
 BuildRequires:	gdbm
 %if 0%{with tcmalloc}
 BuildRequires:	gperftools-devel >= 2.4
@@ -133,6 +147,7 @@ BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
+BuildRequires:	libuuid-devel
 BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
@@ -169,6 +184,7 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
+BuildRequires:  cunit-devel
 BuildRequires:	python-Cython
 BuildRequires:	python-PrettyTable
 BuildRequires:	python-Sphinx
@@ -780,6 +796,20 @@ python-rbd, python-rgw or python-cephfs instead.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
+
+%if 0%{?rhel} == 7
+%ifarch x86_64
+. /opt/rh/devtoolset-7/enable
+%endif
+%ifarch aarch64
+%if 0%{?centos}
+. /opt/rh/devtoolset-6/enable
+%else
+. /opt/rh/devtoolset-7/enable
+%endif
+%endif
+%endif
+
 %if 0%{with cephfs_java}
 # Find jni.h
 for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
@@ -887,7 +917,7 @@ mkdir -p %{buildroot}%{_sbindir}
 install -m 0644 -D src/logrotate.conf %{buildroot}%{_sysconfdir}/logrotate.d/ceph
 chmod 0644 %{buildroot}%{_docdir}/ceph/sample.ceph.conf
 install -m 0644 -D COPYING %{buildroot}%{_docdir}/ceph/COPYING
-install -m 0644 -D src/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
+install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph-osd.conf
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
@@ -1002,12 +1032,11 @@ rm -rf %{buildroot}
 %if 0%{?suse_version}
 %fillup_only
 if [ $1 -eq 1 ] ; then
-  /usr/bin/systemctl preset ceph-disk@\*.service ceph.target >/dev/null 2>&1 || :
+/usr/bin/systemctl preset ceph-disk@\*.service ceph-volume@\*.service ceph.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_post ceph-disk@\*.service ceph.target
-%systemd_post ceph-volume@\*.service ceph.target
+%systemd_post ceph-disk@\*.service ceph-volume@\*.service ceph.target
 %endif
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
@@ -1015,11 +1044,10 @@ fi
 
 %preun base
 %if 0%{?suse_version}
-%service_del_preun ceph-disk@\*.service ceph.target
+%service_del_preun ceph-disk@\*.service ceph-volume@\*.service ceph.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_preun ceph-disk@\*.service ceph.target
-%systemd_preun ceph-volume@\*.service ceph.target
+%systemd_preun ceph-disk@\*.service ceph-volume@\*.service ceph.target
 %endif
 
 %postun base
@@ -1027,10 +1055,10 @@ fi
 test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-disk@\*.service ceph.target
+%service_del_postun ceph-disk@\*.service ceph-volume@\*.service ceph.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_postun ceph-disk@\*.service ceph.target
+%systemd_postun ceph-disk@\*.service ceph-volume@\*.service ceph.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
@@ -1483,7 +1511,7 @@ fi
 %dir %{_prefix}/lib/ocf
 %dir %{_prefix}/lib/ocf/resource.d
 %dir %{_prefix}/lib/ocf/resource.d/ceph
-%{_prefix}/lib/ocf/resource.d/ceph/rbd
+%attr(0755,-,-) %{_prefix}/lib/ocf/resource.d/ceph/rbd
 
 %endif
 

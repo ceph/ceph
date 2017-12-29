@@ -5,7 +5,7 @@ setconf() {
     local key=$1
     local val=$2
     if grep -q ^$key= ${conf}; then
-        sed -i "s:^$key=.*$:$key=$val:g" ${conf}
+        sed -i -e "s:^$key=.*$:$key=$val:g" ${conf}
     else
         echo $key=$val >> ${conf}
     fi
@@ -34,6 +34,7 @@ setconf CONFIG_RTE_LIBRTE_PDUMP n
 # no vm support
 setconf CONFIG_RTE_LIBRTE_EAL_VMWARE_TSC_MAP_SUPPORT n
 setconf CONFIG_RTE_LIBRTE_VHOST n
+setconf CONFIG_RTE_LIBRTE_VHOST_NUMA n
 setconf CONFIG_RTE_LIBRTE_VMXNET3_PMD n
 setconf CONFIG_RTE_LIBRTE_PMD_VHOST n
 setconf CONFIG_RTE_APP_EVENTDEV n
@@ -44,3 +45,6 @@ setconf CONFIG_RTE_TEST_PMD n
 
 # async/dpdk does not like it
 setconf CONFIG_RTE_MBUF_REFCNT_ATOMIC n
+
+# balanced allocation of hugepages
+setconf CONFIG_RTE_EAL_NUMA_AWARE_HUGEPAGES n

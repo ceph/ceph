@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "SnapshotCopyRequest.h"
+#include "SetHeadRequest.h"
 #include "SnapshotCreateRequest.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -36,24 +37,30 @@ const std::string &get_snapshot_name(I *image_ctx, librados::snap_t snap_id) {
 
 } // anonymous namespace
 
+using librbd::util::create_context_callback;
 using librbd::util::unique_lock_name;
 
 template <typename I>
 SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
                                             I *dst_image_ctx,
+                                            librados::snap_t snap_id_end,
                                             ContextWQ *work_queue,
                                             SnapSeqs *snap_seqs,
                                             Context *on_finish)
   : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
-    m_dst_image_ctx(dst_image_ctx), m_work_queue(work_queue),
-    m_snap_seqs_result(snap_seqs), m_snap_seqs(*snap_seqs),
-    m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
+    m_dst_image_ctx(dst_image_ctx), m_snap_id_end(snap_id_end),
+    m_work_queue(work_queue), m_snap_seqs_result(snap_seqs),
+    m_snap_seqs(*snap_seqs), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(unique_lock_name("SnapshotCopyRequest::m_lock", this)) {
   // snap ids ordered from oldest to newest
   m_src_snap_ids.insert(src_image_ctx->snaps.begin(),
                         src_image_ctx->snaps.end());
   m_dst_snap_ids.insert(dst_image_ctx->snaps.begin(),
                         dst_image_ctx->snaps.end());
+  if (m_snap_id_end != CEPH_NOSNAP) {
+    m_src_snap_ids.erase(m_src_snap_ids.upper_bound(m_snap_id_end),
+                         m_src_snap_ids.end());
+  }
 }
 
 template <typename I>
@@ -189,6 +196,17 @@ void SnapshotCopyRequest<I>::handle_snap_unprotect(int r) {
     finish(r);
     return;
   }
+
+  {
+    // avoid the need to refresh to delete the newly unprotected snapshot
+    RWLock::RLocker snap_locker(m_dst_image_ctx->snap_lock);
+    auto snap_info_it = m_dst_image_ctx->snap_info.find(m_prev_snap_id);
+    if (snap_info_it != m_dst_image_ctx->snap_info.end()) {
+      snap_info_it->second.protection_status =
+        RBD_PROTECTION_STATUS_UNPROTECTED;
+    }
+  }
+
   if (handle_cancellation()) {
     return;
   }
@@ -445,7 +463,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
   if (snap_id_it == m_src_snap_ids.end()) {
     // no destination snapshots to protect
     m_prev_snap_id = CEPH_NOSNAP;
-    finish(0);
+    send_set_head();
     return;
   }
 
@@ -486,6 +504,45 @@ void SnapshotCopyRequest<I>::handle_snap_protect(int r) {
   }
 
   send_snap_protect();
+}
+
+template <typename I>
+void SnapshotCopyRequest<I>::send_set_head() {
+  if (m_snap_id_end != CEPH_NOSNAP) {
+    finish(0);
+    return;
+  }
+
+  ldout(m_cct, 20) << dendl;
+
+  uint64_t size;
+  ParentSpec parent_spec;
+  uint64_t parent_overlap;
+  {
+    RWLock::RLocker src_locker(m_src_image_ctx->snap_lock);
+    size = m_src_image_ctx->size;
+    parent_spec = m_src_image_ctx->parent_md.spec;
+    parent_overlap = m_src_image_ctx->parent_md.overlap;
+  }
+
+  auto ctx = create_context_callback<
+    SnapshotCopyRequest<I>, &SnapshotCopyRequest<I>::handle_set_head>(this);
+  auto req = SetHeadRequest<I>::create(m_dst_image_ctx, size, parent_spec,
+                                       parent_overlap, ctx);
+  req->send();
+}
+
+template <typename I>
+void SnapshotCopyRequest<I>::handle_set_head(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0) {
+    lderr(m_cct) << "failed to set head: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  finish(0);
 }
 
 template <typename I>

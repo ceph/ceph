@@ -33,6 +33,7 @@ set(unittest_librbd_srcs
   test_mock_Journal.cc
   test_mock_ManagedLock.cc
   test_mock_ObjectMap.cc
+  test_mock_TrashWatcher.cc
   deep_copy/test_mock_ImageCopyRequest.cc
   deep_copy/test_mock_MetadataCopyRequest.cc
   deep_copy/test_mock_ObjectCopyRequest.cc
@@ -50,6 +51,7 @@ set(unittest_librbd_srcs
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc
+  journal/test_mock_ResetRequest.cc
   managed_lock/test_mock_AcquireRequest.cc
   managed_lock/test_mock_BreakRequest.cc
   managed_lock/test_mock_GetLockerRequest.cc
@@ -75,6 +77,7 @@ set(unittest_librbd_srcs
   operation/test_mock_SnapshotRollbackRequest.cc
   operation/test_mock_SnapshotUnprotectRequest.cc
   operation/test_mock_TrimRequest.cc
+  trash/test_mock_MoveRequest.cc
   watcher/test_mock_RewatchRequest.cc
   )
 add_executable(unittest_librbd

@@ -30,7 +30,7 @@ void MetaSession::dump(Formatter *f) const
   f->dump_stream("cap_ttl") << cap_ttl;
   f->dump_stream("last_cap_renew_request") << last_cap_renew_request;
   f->dump_unsigned("cap_renew_seq", cap_renew_seq);
-  f->dump_int("num_caps", num_caps);
+  f->dump_int("num_caps", caps.size());
   f->dump_string("state", get_state_name());
 }
 

@@ -215,12 +215,10 @@ private:
 
 PoolReplayer::PoolReplayer(Threads<librbd::ImageCtx> *threads,
                            ServiceDaemon<librbd::ImageCtx>* service_daemon,
-			   ImageDeleter<>* image_deleter,
 			   int64_t local_pool_id, const peer_t &peer,
 			   const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
-  m_image_deleter(image_deleter),
   m_local_pool_id(local_pool_id),
   m_peer(peer),
   m_args(args),
@@ -314,8 +312,8 @@ void PoolReplayer::init()
   dout(20) << "connected to " << m_peer << dendl;
 
   m_instance_replayer.reset(InstanceReplayer<>::create(
-    m_threads, m_service_daemon, m_image_deleter, m_local_rados,
-    local_mirror_uuid, m_local_pool_id));
+    m_threads, m_service_daemon, m_local_rados, local_mirror_uuid,
+    m_local_pool_id));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
 
@@ -371,6 +369,7 @@ void PoolReplayer::shut_down() {
     m_instance_replayer.reset();
   }
 
+  assert(!m_image_deleter);
   assert(!m_local_pool_watcher);
   assert(!m_remote_pool_watcher);
   m_local_rados.reset();
@@ -554,6 +553,12 @@ void PoolReplayer::print_status(Formatter *f, stringstream *ss)
 
   m_instance_replayer->print_status(f, ss);
 
+  if (m_image_deleter) {
+    f->open_object_section("image_deleter");
+    m_image_deleter->print_status(f, ss);
+    f->close_section();
+  }
+
   f->close_section();
   f->flush(*ss);
 }
@@ -693,7 +698,7 @@ void PoolReplayer::handle_pre_release_leader(Context *on_finish) {
 
   m_service_daemon->remove_attribute(m_local_pool_id, SERVICE_DAEMON_LEADER_KEY);
   m_instance_watcher->handle_release_leader();
-  shut_down_pool_watchers(on_finish);
+  shut_down_image_deleter(on_finish);
 }
 
 void PoolReplayer::init_local_pool_watcher(Context *on_finish) {
@@ -731,10 +736,64 @@ void PoolReplayer::init_remote_pool_watcher(Context *on_finish) {
   assert(!m_remote_pool_watcher);
   m_remote_pool_watcher.reset(new PoolWatcher<>(
     m_threads, m_remote_io_ctx, m_remote_pool_watcher_listener));
-  m_remote_pool_watcher->init(create_async_context_callback(
-    m_threads->work_queue, on_finish));
 
+  auto ctx = new FunctionContext([this, on_finish](int r) {
+      handle_init_remote_pool_watcher(r, on_finish);
+    });
+  m_remote_pool_watcher->init(create_async_context_callback(
+    m_threads->work_queue, ctx));
+}
+
+void PoolReplayer::handle_init_remote_pool_watcher(int r, Context *on_finish) {
+  dout(20) << "r=" << r << dendl;
+  if (r < 0) {
+    derr << "failed to retrieve remote images: " << cpp_strerror(r) << dendl;
+    on_finish->complete(r);
+    return;
+  }
+
+  init_image_deleter(on_finish);
+}
+
+void PoolReplayer::init_image_deleter(Context *on_finish) {
+  dout(20) << dendl;
+
+  Mutex::Locker locker(m_lock);
+  assert(!m_image_deleter);
+
+  m_image_deleter.reset(new ImageDeleter<>(m_local_io_ctx, m_threads,
+                                           m_service_daemon));
+  m_image_deleter->init(on_finish);
   m_cond.Signal();
+}
+
+void PoolReplayer::shut_down_image_deleter(Context* on_finish) {
+  dout(20) << dendl;
+  {
+    Mutex::Locker locker(m_lock);
+    if (m_image_deleter) {
+      Context *ctx = new FunctionContext([this, on_finish](int r) {
+          handle_shut_down_image_deleter(r, on_finish);
+	});
+      ctx = create_async_context_callback(m_threads->work_queue, ctx);
+
+      m_image_deleter->shut_down(ctx);
+      return;
+    }
+  }
+  shut_down_pool_watchers(on_finish);
+}
+
+void PoolReplayer::handle_shut_down_image_deleter(int r, Context* on_finish) {
+  dout(20) << "r=" << r << dendl;
+
+  {
+    Mutex::Locker locker(m_lock);
+    assert(m_image_deleter);
+    m_image_deleter.reset();
+  }
+
+  shut_down_pool_watchers(on_finish);
 }
 
 void PoolReplayer::shut_down_pool_watchers(Context *on_finish) {
