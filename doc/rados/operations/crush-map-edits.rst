@@ -18,9 +18,8 @@ To edit an existing CRUSH map:
 #. `Recompile`_ the CRUSH map.
 #. `Set the CRUSH map`_.
 
-To activate CRUSH map rules for a specific pool, identify the common ruleset
-number for those rules and specify that ruleset number for the pool. See `Set
-Pool Values`_ for details.
+For details on setting the CRUSH map rule for a specific pool, see `Set
+Pool Values`_.
 
 .. _Get the CRUSH map: #getcrushmap
 .. _Decompile: #decompilecrushmap
@@ -279,7 +278,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
    `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_,
    and more specifically to **Section 3.4**. The bucket types are:
 
-	#. **Uniform:** Uniform buckets aggregate devices with **exactly** the same
+	#. **Uniform**: Uniform buckets aggregate devices with **exactly** the same
 	   weight. For example, when firms commission or decommission hardware, they
 	   typically do so with many machines that have exactly the same physical
 	   configuration (e.g., bulk purchases). When storage devices have exactly
@@ -303,7 +302,7 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   tree buckets reduce the placement time to O(log :sub:`n`), making them
 	   suitable for managing much larger sets of devices or nested buckets.
 
-	#. **Straw:** List and Tree buckets use a divide and conquer strategy
+	#. **Straw**: List and Tree buckets use a divide and conquer strategy
 	   in a way that either gives certain items precedence (e.g., those
 	   at the beginning of a list) or obviates the need to consider entire
 	   subtrees of items at all. That improves the performance of the replica
@@ -312,6 +311,12 @@ and one rack bucket. The OSDs are declared as items within the host buckets::
 	   or re-weighting of an item. The straw bucket type allows all items to
 	   fairly “compete” against each other for replica placement through a
 	   process analogous to a draw of straws.
+
+        #. **Straw2**: Straw2 buckets improve Straw to correctly avoid any data 
+           movement between items when neighbor weights change.
+
+           For example the weight of item A including adding it anew or removing
+           it completely, there will be data movement only to or from item A.
 
 .. topic:: Hash
 
@@ -346,13 +351,12 @@ CRUSH Map Rules
 ---------------
 
 CRUSH maps support the notion of 'CRUSH rules', which are the rules that
-determine data placement for a pool. For large clusters, you will likely create
-many pools where each pool may have its own CRUSH ruleset and rules. The default
-CRUSH map has a rule for each pool, and one ruleset assigned to each of the
-default pools.
+determine data placement for a pool. The default CRUSH map has a rule for each
+pool. For large clusters, you will likely create many pools where each pool may
+have its own non-default CRUSH rule.
 
-.. note:: In most cases, you will not need to modify the default rules. When
-   you create a new pool, its default ruleset is ``0``.
+.. note:: In most cases, you will not need to modify the default rule. When
+   you create a new pool, by default the rule will be set to ``0``.
 
 
 CRUSH rules define placement and replication strategies or distribution policies
@@ -380,15 +384,14 @@ A rule takes the following form::
 
 ``ruleset``
 
-:Description: A means of classifying a rule as belonging to a set of rules.
-              Activated by `setting the ruleset in a pool`_.
+:Description: A unique whole number for identifying the rule. The name ``ruleset``
+              is a carry-over from the past, when it was possible to have multiple
+              CRUSH rules per pool.
 
 :Purpose: A component of the rule mask.
 :Type: Integer
 :Required: Yes
 :Default: 0
-
-.. _setting the ruleset in a pool: ../pools#setpoolvalues
 
 
 ``type``
@@ -475,8 +478,8 @@ A rule takes the following form::
 :Prerequisite: Follows ``step choose``.
 :Example: ``step emit``
 
-.. important:: To activate one or more rules with a common ruleset number to a
-   pool, set the ruleset number of the pool.
+.. important:: A given CRUSH rule may be assigned to multiple pools, but it
+   is not possible for a single pool to have multiple CRUSH rules.
 
 
 Placing Different Pools on Different OSDS:

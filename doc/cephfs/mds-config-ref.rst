@@ -10,15 +10,6 @@
 :Type: Boolean
 :Default: ``true`` 
 
-
-``mds max file size``
-
-:Description: The maximum allowed file size to set when creating a 
-              new file system.
-
-:Type:  64-bit Integer Unsigned
-:Default:  ``1ULL << 40``
-
 ``mds cache memory limit``
 
 :Description: The memory limit the MDS should enforce for its cache.
@@ -105,24 +96,6 @@
               blacklist time.
 :Type:  Float
 :Default: ``24.0*60.0``
-
-
-``mds session timeout``
-
-:Description: The interval (in seconds) of client inactivity before Ceph 
-              times out capabilities and leases.
-              
-:Type:  Float
-:Default: ``60``
-
-
-``mds session autoclose``
-
-:Description: The interval (in seconds) before Ceph closes 
-              a laggy client's session.
-              
-:Type:  Float
-:Default: ``300``
 
 
 ``mds reconnect timeout``
@@ -252,13 +225,6 @@
               
 :Type:  Float
 :Default: ``0``
-
-
-``mds bal frag``
-
-:Description: Determines whether the MDS will fragment directories.
-:Type:  Boolean
-:Default:  ``false``
 
 
 ``mds bal split size``

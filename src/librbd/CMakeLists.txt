@@ -1,6 +1,7 @@
 add_library(rbd_types STATIC
   journal/Types.cc
   mirroring_watcher/Types.cc
+  trash_watcher/Types.cc
   watcher/Types.cc
   WatchNotifyTypes.cc)
 
@@ -20,6 +21,7 @@ set(librbd_internal_srcs
   MirroringWatcher.cc
   ObjectMap.cc
   Operations.cc
+  TrashWatcher.cc
   Utils.cc
   Watcher.cc
   api/DiffIterate.cc
@@ -63,6 +65,7 @@ set(librbd_internal_srcs
   journal/PromoteRequest.cc
   journal/RemoveRequest.cc
   journal/Replay.cc
+  journal/ResetRequest.cc
   journal/StandardPolicy.cc
   journal/Utils.cc
   managed_lock/AcquireRequest.cc
@@ -107,6 +110,7 @@ set(librbd_internal_srcs
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
   operation/TrimRequest.cc
+  trash/MoveRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
   ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
@@ -117,6 +121,9 @@ add_library(rbd_internal STATIC
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
   add_dependencies(rbd_internal librbd-tp)
+endif()
+if(WITH_LTTNG AND WITH_EVENTTRACE)
+  add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
   osdc)

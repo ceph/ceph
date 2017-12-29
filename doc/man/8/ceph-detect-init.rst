@@ -34,7 +34,7 @@ Options
 
 .. option:: --default INIT
 
-   If the init system of the host operating system is unkown, return
+   If the init system of the host operating system is unknown, return
    the value of *INIT* instead of failing with an error.
 
 .. option:: --verbose
@@ -46,7 +46,6 @@ Bugs
 
 :program:`ceph-detect-init` is used by :program:`ceph-disk` to figure out the init system to manage the mount directory of an OSD. But only following combinations are fully tested:
 
-- `upstart` on `Ubuntu 14.04`
 - `systemd` on `Ubuntu 15.04` and up
 - `systemd` on `Debian 8` and up
 - `systemd` on `RHEL/CentOS 7` and up

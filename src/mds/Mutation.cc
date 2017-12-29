@@ -313,9 +313,9 @@ void MDRequestImpl::set_filepath2(const filepath& fp)
   more()->filepath2 = fp;
 }
 
-bool MDRequestImpl::is_replay() const
+bool MDRequestImpl::is_queued_for_replay() const
 {
-  return client_request ? client_request->is_replay() : false;
+  return client_request ? client_request->is_queued_for_replay() : false;
 }
 
 void MDRequestImpl::print(ostream &out) const

@@ -587,16 +587,29 @@ public:
       assert(out_on_commit);
       assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
-      for (vector<Transaction>::iterator i = t.begin();
-	   i != t.end();
-	   ++i) {
-	on_applied.splice(on_applied.end(), (*i).on_applied);
-	on_commit.splice(on_commit.end(), (*i).on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), (*i).on_applied_sync);
+      for (auto& i : t) {
+	on_applied.splice(on_applied.end(), i.on_applied);
+	on_commit.splice(on_commit.end(), i.on_commit);
+	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
       }
       *out_on_applied = C_Contexts::list_to_context(on_applied);
       *out_on_commit = C_Contexts::list_to_context(on_commit);
       *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    }
+    static void collect_contexts(
+      vector<Transaction>& t,
+      list<Context*> *out_on_applied,
+      list<Context*> *out_on_commit,
+      list<Context*> *out_on_applied_sync) {
+      assert(out_on_applied);
+      assert(out_on_commit);
+      assert(out_on_applied_sync);
+      for (auto& i : t) {
+	out_on_applied->splice(out_on_applied->end(), i.on_applied);
+	out_on_commit->splice(out_on_commit->end(), i.on_commit);
+	out_on_applied_sync->splice(out_on_applied_sync->end(),
+				    i.on_applied_sync);
+      }
     }
 
     Context *get_on_applied() {
@@ -719,7 +732,7 @@ public:
         break;
 
       default:
-        assert(0 == "Unkown OP");
+        assert(0 == "Unknown OP");
       }
     }
     void _update_op_bl(
@@ -1565,6 +1578,11 @@ public:
   /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
   virtual int get_devices(std::set<string> *devls) {
     return -EOPNOTSUPP;
+  }
+
+  /// true if a txn is readable immediately after it is queued.
+  virtual bool is_sync_onreadable() const {
+    return true;
   }
 
   /**

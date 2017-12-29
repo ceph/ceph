@@ -18,10 +18,10 @@ pools for storing data. A pool provides you with:
   setting up multiple pools, be careful to ensure you set a reasonable number of
   placement groups for both the pool and the cluster as a whole.
 
-- **CRUSH Rules**: When you store data in a pool, a CRUSH ruleset mapped to the
-  pool enables CRUSH to identify a rule for the placement of the object
-  and its replicas (or chunks for erasure coded pools) in your cluster.
-  You can create a custom CRUSH rule for your pool.
+- **CRUSH Rules**: When you store data in a pool, placement of the object
+  and its replicas (or chunks for erasure coded pools) in your cluster is governed
+  by CRUSH rules. You can create a custom CRUSH rule for your pool if the default
+  rule is not appropriate for your use case.
 
 - **Snapshots**: When you create snapshots with ``ceph osd pool mksnap``,
   you effectively take a snapshot of a particular pool.
@@ -113,12 +113,11 @@ Where:
 
 :Type: String
 :Required: No.
-:Default: For **replicated** pools it is the ruleset specified by the ``osd
-          pool default crush replicated ruleset`` config variable.  This
-          ruleset must exist.
+:Default: For **replicated** pools it is the rule specified by the ``osd
+          pool default crush rule`` config variable.  This rule must exist.
           For **erasure** pools it is ``erasure-code`` if the ``default``
           `erasure code profile`_ is used or ``{pool-name}`` otherwise.  This
-          ruleset will be created implicitly if it doesn't exist already.
+          rule will be created implicitly if it doesn't exist already.
 
 
 ``[erasure-code-profile=profile]``
@@ -204,17 +203,17 @@ See `Monitor Configuration`_ for more information.
 
 .. _Monitor Configuration: ../../configuration/mon-config-ref
 
-If you created your own rulesets and rules for a pool you created,  you should
-consider removing them when you no longer need your pool::
+If you created your own rules for a pool you created, you should consider
+removing them when you no longer need your pool::
 
-	ceph osd pool get {pool-name} crush_ruleset
+	ceph osd pool get {pool-name} crush_rule
 
-If the ruleset was "123", for example, you can check the other pools like so::
+If the rule was "123", for example, you can check the other pools like so::
 
-	ceph osd dump | grep "^pool" | grep "crush_ruleset 123"
+	ceph osd dump | grep "^pool" | grep "crush_rule 123"
 
-If no other pools use that custom ruleset, then it's safe to delete that
-ruleset from the cluster.
+If no other pools use that custom rule, then it's safe to delete that
+rule from the cluster.
 
 If you created users with permissions strictly for a pool that no longer
 exists, you should consider deleting those users too::
@@ -347,11 +346,11 @@ You may set values for the following keys:
 :Type: Integer
 :Valid Range: Equal to or less than ``pg_num``.
 
-.. _crush_ruleset:
+.. _crush_rule:
 
-``crush_ruleset``
+``crush_rule``
 
-:Description: The ruleset to use for mapping object placement in the cluster.
+:Description: The rule to use for mapping object placement in the cluster.
 :Type: Integer
 
 .. _allow_ec_overwrites:
@@ -642,9 +641,9 @@ You may get values for the following keys:
 :Valid Range: Equal to or less than ``pg_num``.
 
 
-``crush_ruleset``
+``crush_rule``
 
-:Description: see crush_ruleset_
+:Description: see crush_rule_
 
 
 ``hit_set_type``

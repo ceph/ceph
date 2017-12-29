@@ -118,11 +118,11 @@ void StrayManager::purge(CDentry *dn)
     uint64_t to = 0;
     if (in->is_file()) {
       to = in->inode.get_max_size();
-      to = MAX(in->inode.size, to);
+      to = std::max(in->inode.size, to);
       // when truncating a file, the filer does not delete stripe objects that are
       // truncated to zero. so we need to purge stripe objects up to the max size
       // the file has ever been.
-      to = MAX(in->inode.max_size_ever, to);
+      to = std::max(in->inode.max_size_ever, to);
     }
 
     inode_t *pi = in->get_projected_inode();
@@ -719,11 +719,11 @@ void StrayManager::truncate(CDentry *dn)
   const SnapContext *snapc = &realm->get_snap_context();
 
   uint64_t to = in->inode.get_max_size();
-  to = MAX(in->inode.size, to);
+  to = std::max(in->inode.size, to);
   // when truncating a file, the filer does not delete stripe objects that are
   // truncated to zero. so we need to purge stripe objects up to the max size
   // the file has ever been.
-  to = MAX(in->inode.max_size_ever, to);
+  to = std::max(in->inode.max_size_ever, to);
 
   assert(to > 0);
 

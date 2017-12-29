@@ -64,9 +64,6 @@ private:
    * COPY_SNAPSHOTS
    *    |
    *    v
-   * SET_HEAD (skip if not needed)
-   *    |
-   *    v
    * COPY_IMAGE . . . . . . . . . . . . . .
    *    |                                 .
    *    v                                 .
@@ -107,9 +104,6 @@ private:
 
   void send_copy_snapshots();
   void handle_copy_snapshots(int r);
-
-  void send_set_head();
-  void handle_set_head(int r);
 
   void send_copy_image();
   void handle_copy_image(int r);

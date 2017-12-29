@@ -350,7 +350,6 @@ OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_reconnect_stale, OPT_BOOL)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR)
-OPTION(client_mountpoint, OPT_STR)
 OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)
 OPTION(client_notify_timeout, OPT_INT) // in seconds
@@ -374,20 +373,7 @@ OPTION(client_acl_type, OPT_STR)
 OPTION(client_permissions, OPT_BOOL)
 OPTION(client_dirsize_rbytes, OPT_BOOL)
 
-// note: the max amount of "in flight" dirty data is roughly (max - target)
-OPTION(fuse_use_invalidate_cb, OPT_BOOL) // use fuse 2.8+ invalidate callback to keep page cache consistent
-OPTION(fuse_disable_pagecache, OPT_BOOL)
-OPTION(fuse_allow_other, OPT_BOOL)
-OPTION(fuse_default_permissions, OPT_BOOL)
-OPTION(fuse_big_writes, OPT_BOOL)
-OPTION(fuse_atomic_o_trunc, OPT_BOOL)
-OPTION(fuse_debug, OPT_BOOL)
-OPTION(fuse_multithreaded, OPT_BOOL)
-OPTION(fuse_require_active_mds, OPT_BOOL) // if ceph_fuse requires active mds server
-OPTION(fuse_syncfs_on_mksnap, OPT_BOOL)
-
 OPTION(client_try_dentry_invalidate, OPT_BOOL) // the client should try to use dentry invaldation instead of remounting, on kernels it believes that will work for
-OPTION(client_die_on_failed_remount, OPT_BOOL)
 OPTION(client_check_pool_perm, OPT_BOOL)
 OPTION(client_use_faked_inos, OPT_BOOL)
 OPTION(client_mds_namespace, OPT_STR)
@@ -412,7 +398,6 @@ OPTION(filer_max_purge_ops, OPT_U32)
 OPTION(filer_max_truncate_ops, OPT_U32)
 
 OPTION(mds_data, OPT_STR)
-OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph fs set <fs_name> max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
 OPTION(mds_max_file_recover, OPT_U32)
@@ -423,17 +408,15 @@ OPTION(mds_beacon_interval, OPT_FLOAT)
 OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
 
-OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout
 OPTION(mds_session_blacklist_on_evict, OPT_BOOL)  // whether to blacklist clients whose sessions are dropped via admin commands
 
 OPTION(mds_sessionmap_keys_per_op, OPT_U32)    // how many sessions should I try to load/store in a single OMAP operation?
 OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
-OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT) // collapse N-client health metrics to a single 'many'
 OPTION(mds_reconnect_timeout, OPT_FLOAT)  // seconds to wait for clients during mds restart
-	      //  make it (mds_session_timeout - mds_beacon_grace)
+	      //  make it (mdsmap.session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT)
 OPTION(mds_dirstat_min_interval, OPT_FLOAT)    // try to avoid propagating more often than this
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT)  // how quickly dirstat changes propagate up the hierarchy
@@ -450,7 +433,6 @@ OPTION(mds_bal_export_pin, OPT_BOOL)  // allow clients to pin directory trees to
 OPTION(mds_bal_sample_interval, OPT_DOUBLE)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT)
-OPTION(mds_bal_frag, OPT_BOOL)
 OPTION(mds_bal_split_size, OPT_INT)
 OPTION(mds_bal_split_rd, OPT_FLOAT)
 OPTION(mds_bal_split_wr, OPT_FLOAT)
@@ -621,7 +603,6 @@ OPTION(osd_tier_promote_max_bytes_sec, OPT_U64)
 OPTION(osd_objecter_finishers, OPT_INT)
 
 OPTION(osd_map_dedup, OPT_BOOL)
-OPTION(osd_map_max_advance, OPT_INT) // make this < cache_size!
 OPTION(osd_map_cache_size, OPT_INT)
 OPTION(osd_map_message_max, OPT_INT)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT)  // cap on # of inc maps we send to peers, clients
@@ -631,8 +612,6 @@ OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL)
 OPTION(osd_max_markdown_period , OPT_INT)
 OPTION(osd_max_markdown_count, OPT_INT)
 
-OPTION(osd_peering_wq_threads, OPT_INT)
-OPTION(osd_peering_wq_batch_size, OPT_U64)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
 OPTION(osd_disk_threads, OPT_INT)
@@ -673,6 +652,9 @@ OPTION(osd_op_queue_mclock_recov_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
@@ -874,6 +856,7 @@ OPTION(mon_rocksdb_options, OPT_STR)
  */
 OPTION(osd_client_op_priority, OPT_U32)
 OPTION(osd_recovery_op_priority, OPT_U32)
+OPTION(osd_peering_op_priority, OPT_U32)
 
 OPTION(osd_snap_trim_priority, OPT_U32)
 OPTION(osd_snap_trim_cost, OPT_U32) // set default cost equal to 1MB io

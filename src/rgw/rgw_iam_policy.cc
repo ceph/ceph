@@ -11,7 +11,7 @@
 #include <iostream>
 #include "rapidjson/reader.h"
 
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include "rgw_auth.h"
 #include <arpa/inet.h>
 #include "rgw_iam_policy.h"
@@ -878,7 +878,7 @@ bool ParseState::obj_start() {
   if (w->objectable && !objecting) {
     objecting = true;
     if (w->id == TokenID::Statement) {
-      pp->policy.statements.push_back({});
+      pp->policy.statements.emplace_back();
     }
 
     return true;
@@ -1038,7 +1038,8 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     return none;
   }
 
-  m.v6 = s.find(':');
+  m.v6 = (s.find(':') == string::npos) ? false : true;
+
   auto slash = s.find('/');
   if (slash == string::npos) {
     m.prefix = m.v6 ? 128 : 32;
@@ -1061,7 +1062,7 @@ optional<MaskedIP> Condition::as_network(const string& s) {
 
   if (m.v6) {
     struct sockaddr_in6 a;
-    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a)) != 1) {
+    if (inet_pton(AF_INET6, p->c_str(), static_cast<void*>(&a.sin6_addr)) != 1) {
       return none;
     }
 
@@ -1083,13 +1084,13 @@ optional<MaskedIP> Condition::as_network(const string& s) {
     m.addr |= Address(a.sin6_addr.s6_addr[15]) << 120;
   } else {
     struct sockaddr_in a;
-    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a)) != 1) {
+    if (inet_pton(AF_INET, p->c_str(), static_cast<void*>(&a.sin_addr)) != 1) {
       return none;
     }
     m.addr = ntohl(a.sin_addr.s_addr);
   }
 
-  return none;
+  return m;
 }
 
 namespace {
@@ -1185,32 +1186,33 @@ const char* condop_string(const TokenID t) {
 template<typename Iterator>
 ostream& print_array(ostream& m, Iterator begin, Iterator end) {
   if (begin == end) {
-    m << "[";
+    m << "[]";
   } else {
-    auto beforelast = end - 1;
     m << "[ ";
-    for (auto i = begin; i != end; ++i) {
-      m << *i;
-      if (i != beforelast) {
-	m << ", ";
-      } else {
-	m << " ";
-      }
-    }
+    std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+    m << " ]";
   }
-  m << "]";
   return m;
 }
+
+template<typename Iterator>
+ostream& print_dict(ostream& m, Iterator begin, Iterator end) {
+  m << "{ ";
+  std::copy(begin, end, ceph::make_ostream_joiner(m, ", "));
+  m << " }";
+  return m;
+}
+
 }
 
 ostream& operator <<(ostream& m, const Condition& c) {
-  m << "{ " << condop_string(c.op);
+  m << condop_string(c.op);
   if (c.ifexists) {
     m << "IfExists";
   }
   m << ": { " << c.key;
   print_array(m, c.vals.cbegin(), c.vals.cend());
-  return m << "}";
+  return m << " }";
 }
 
 Effect Statement::eval(const Environment& e,
@@ -1441,12 +1443,12 @@ ostream& operator <<(ostream& m, const Statement& s) {
   }
   if (!s.princ.empty()) {
     m << "Principal: ";
-    print_array(m, s.princ.cbegin(), s.princ.cend());
+    print_dict(m, s.princ.cbegin(), s.princ.cend());
     m << ", ";
   }
   if (!s.noprinc.empty()) {
     m << "NotPrincipal: ";
-    print_array(m, s.noprinc.cbegin(), s.noprinc.cend());
+    print_dict(m, s.noprinc.cbegin(), s.noprinc.cend());
     m << ", ";
   }
 
@@ -1500,7 +1502,7 @@ ostream& operator <<(ostream& m, const Statement& s) {
 
   if (!s.conditions.empty()) {
     m << "Condition: ";
-    print_array(m, s.conditions.cbegin(), s.conditions.cend());
+    print_dict(m, s.conditions.cbegin(), s.conditions.cend());
   }
 
   return m << " }";

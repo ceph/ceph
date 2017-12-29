@@ -459,7 +459,7 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
       new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
       new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
     }
-    new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
+    new_snap->current_parent_since = std::max(oldparentseq, newparent->get_last_created()) + 1;
   }
 }
 
@@ -809,14 +809,32 @@ CInode *CInode::get_parent_inode()
   return NULL;
 }
 
-bool CInode::is_projected_ancestor_of(CInode *other)
+bool CInode::is_ancestor_of(const CInode *other) const
 {
   while (other) {
     if (other == this)
       return true;
-    if (!other->get_projected_parent_dn())
+    const CDentry *pdn = other->get_oldest_parent_dn();
+    if (!pdn) {
+      assert(other->is_base());
       break;
-    other = other->get_projected_parent_dn()->get_dir()->get_inode();
+    }
+    other = pdn->get_dir()->get_inode();
+  }
+  return false;
+}
+
+bool CInode::is_projected_ancestor_of(const CInode *other) const
+{
+  while (other) {
+    if (other == this)
+      return true;
+    const CDentry *pdn = other->get_projected_parent_dn();
+    if (!pdn) {
+      assert(other->is_base());
+      break;
+    }
+    other = pdn->get_dir()->get_inode();
   }
   return false;
 }
@@ -1400,6 +1418,8 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
   ::encode(first, bl);
+  if (!is_base())
+    ::encode(parent->first, bl);
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
@@ -1568,15 +1588,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   snapid_t newfirst;
   ::decode(newfirst, p);
-
   if (!is_auth() && newfirst != first) {
     dout(10) << "decode_lock_state first " << first << " -> " << newfirst << dendl;
-    assert(newfirst > first);
-    if (!is_multiversion() && parent) {
-      assert(parent->first == first);
+    first = newfirst;
+  }
+  if (!is_base()) {
+    ::decode(newfirst, p);
+    if (!parent->is_auth() && newfirst != parent->first) {
+      dout(10) << "decode_lock_state parent first " << first << " -> " << newfirst << dendl;
       parent->first = newfirst;
     }
-    first = newfirst;
   }
 
   switch (type) {
@@ -2538,7 +2559,7 @@ snapid_t CInode::get_oldest_snap()
   snapid_t t = first;
   if (!old_inodes.empty())
     t = old_inodes.begin()->second.first;
-  return MIN(t, oldest_snap);
+  return std::min(t, oldest_snap);
 }
 
 old_inode_t& CInode::cow_old_inode(snapid_t follows, bool cow_head)
@@ -2591,6 +2612,24 @@ void CInode::pre_cow_old_inode()
   snapid_t follows = find_snaprealm()->get_newest_seq();
   if (first <= follows)
     cow_old_inode(follows, true);
+}
+
+bool CInode::has_snap_data(snapid_t snapid)
+{
+  bool found = snapid >= first && snapid <= last;
+  if (!found && is_multiversion()) {
+    auto p = old_inodes.lower_bound(snapid);
+    if (p != old_inodes.end()) {
+      if (p->second.first > snapid) {
+	if  (p != old_inodes.begin())
+	  --p;
+      }
+      if (p->second.first <= snapid && snapid <= p->first) {
+	found = true;
+      }
+    }
+  }
+  return found;
 }
 
 void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
@@ -2661,12 +2700,10 @@ SnapRealm *CInode::find_snaprealm() const
 {
   const CInode *cur = this;
   while (!cur->snaprealm) {
-    if (cur->get_parent_dn())
-      cur = cur->get_parent_dn()->get_dir()->get_inode();
-    else if (get_projected_parent_dn())
-      cur = cur->get_projected_parent_dn()->get_dir()->get_inode();
-    else
+    const CDentry *pdn = cur->get_oldest_parent_dn();
+    if (!pdn)
       break;
+    cur = pdn->get_dir()->get_inode();
   }
   return cur->snaprealm;
 }
@@ -2733,10 +2770,24 @@ client_t CInode::calc_ideal_loner()
   return loner;
 }
 
-client_t CInode::choose_ideal_loner()
+bool CInode::choose_ideal_loner()
 {
   want_loner_cap = calc_ideal_loner();
-  return want_loner_cap;
+  int changed = false;
+  if (loner_cap >= 0 && loner_cap != want_loner_cap) {
+    if (!try_drop_loner())
+      return false;
+    changed = true;
+  }
+
+  if (want_loner_cap >= 0) {
+    if (loner_cap < 0) {
+      set_loner_cap(want_loner_cap);
+      changed = true;
+    } else
+      assert(loner_cap == want_loner_cap);
+  }
+  return changed;
 }
 
 bool CInode::try_set_loner()
@@ -2804,9 +2855,8 @@ void CInode::choose_lock_state(SimpleLock *lock, int allissued)
 void CInode::choose_lock_states(int dirty_caps)
 {
   int issued = get_caps_issued() | dirty_caps;
-  if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)) &&
-      choose_ideal_loner() >= 0)
-    try_set_loner();
+  if (is_auth() && (issued & (CEPH_CAP_ANY_EXCL|CEPH_CAP_ANY_WR)))
+    choose_ideal_loner();
   choose_lock_state(&filelock, issued);
   choose_lock_state(&nestlock, issued);
   choose_lock_state(&dirfragtreelock, issued);
@@ -2817,6 +2867,7 @@ void CInode::choose_lock_states(int dirty_caps)
 
 Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
+  assert(last == CEPH_NOSNAP);
   if (client_caps.empty()) {
     get(PIN_CAPS);
     if (conrealm)
@@ -3204,7 +3255,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
 
   // max_size is min of projected, actual
   uint64_t max_size =
-    MIN(oi->client_ranges.count(client) ?
+    std::min(oi->client_ranges.count(client) ?
 	oi->client_ranges[client].range.last : 0,
 	pi->client_ranges.count(client) ?
 	pi->client_ranges[client].range.last : 0);
@@ -3296,12 +3347,8 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (!no_caps && !cap) {
       // add a new cap
       cap = add_client_cap(client, session, realm);
-      if (is_auth()) {
-	if (choose_ideal_loner() >= 0)
-	  try_set_loner();
-	else if (get_wanted_loner() < 0)
-	  try_drop_loner();
-      }
+      if (is_auth())
+	choose_ideal_loner();
     }
 
     int issue = 0;
@@ -3476,7 +3523,7 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   // max_size is min of projected, actual.
   uint64_t oldms = oi->client_ranges.count(client) ? oi->client_ranges[client].range.last : 0;
   uint64_t newms = pi->client_ranges.count(client) ? pi->client_ranges[client].range.last : 0;
-  m->max_size = MIN(oldms, newms);
+  m->max_size = std::min(oldms, newms);
 
   i = pauth ? pi:oi;
   m->head.mode = i->mode;
@@ -4550,12 +4597,23 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
    * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
    * have a parent yet.
    */
-  for (const CInode *in = this; !in->is_base() && !in->is_system() && in->get_projected_parent_dn(); in = in->get_projected_parent_dn()->dir->inode) {
-    mds_rank_t pin = in->get_projected_inode()->export_pin;
-    if (pin >= 0) {
-      return pin;
-    }
-    if (!inherit) break;
+  const CInode *in = this;
+  while (true) {
+    if (in->is_system())
+      break;
+    const CDentry *pdn = in->get_projected_parent_dn();
+    if (!pdn)
+      break;
+    const inode_t *pi = in->get_projected_inode();
+    // ignore export pin for unlinked directory
+    if (pi->nlink == 0)
+      break;
+    if (pi->export_pin >= 0)
+      return pi->export_pin;
+
+    if (!inherit)
+      break;
+    in = pdn->get_dir()->inode;
   }
   return MDS_RANK_NONE;
 }

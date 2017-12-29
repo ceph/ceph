@@ -9,7 +9,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 using ceph::crypto::MD5;
 using namespace librados;
 using namespace boost;

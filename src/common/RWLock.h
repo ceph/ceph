@@ -20,6 +20,7 @@
 #include <pthread.h>
 #include <string>
 #include <include/assert.h>
+#include "acconfig.h"
 #include "lockdep.h"
 #include "common/valgrind.h"
 
@@ -42,7 +43,7 @@ public:
   RWLock(const std::string &n, bool track_lock=true, bool ld=true, bool prioritize_write=false)
     : name(n), id(-1), track(track_lock),
       lockdep(ld) {
-#if defined(PTHREAD_RWLOCK_PREFER_WRITER_NONRECURSIVE_NP)
+#if defined(HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP)
     if (prioritize_write) {
       pthread_rwlockattr_t attr;
       pthread_rwlockattr_init(&attr);

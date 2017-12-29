@@ -58,7 +58,7 @@ public:
   }
 
   void prepare_update(inodeno_t ino, snapid_t snapid, const string& name, utime_t stamp,
-		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
+		      version_t *pstid, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_UPDATE;
     ::encode(op, bl);
@@ -66,7 +66,7 @@ public:
     ::encode(snapid, bl);
     ::encode(name, bl);
     ::encode(stamp, bl);
-    _prepare(bl, pstid, pbl, onfinish);
+    _prepare(bl, pstid, NULL, onfinish);
   }
 };
 

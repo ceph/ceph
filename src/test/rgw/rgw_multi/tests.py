@@ -24,6 +24,7 @@ from nose.plugins.skip import SkipTest
 from .multisite import Zone
 
 from .conn import get_gateway_connection
+from .tools import assert_raises
 
 class Config:
     """ test configuration """
@@ -403,6 +404,22 @@ def set_master_zone(zone):
     zonegroup.period.update(zone, commit=True)
     zonegroup.master_zone = zone
     log.info('Set master zone=%s, waiting %ds for reconfiguration..', zone.name, config.reconfigure_delay)
+    time.sleep(config.reconfigure_delay)
+
+def set_sync_from_all(zone, flag):
+    s = 'true' if flag else 'false'
+    zone.modify(zone.cluster, ['--sync-from-all={}'.format(s)])
+    zonegroup = zone.zonegroup
+    zonegroup.period.update(zone, commit=True)
+    log.info('Set sync_from_all flag on zone %s to %s', zone.name, s)
+    time.sleep(config.reconfigure_delay)
+
+def set_redirect_zone(zone, redirect_zone):
+    id_str = redirect_zone.id if redirect_zone else ''
+    zone.modify(zone.cluster, ['--redirect-zone={}'.format(id_str)])
+    zonegroup = zone.zonegroup
+    zonegroup.period.update(zone, commit=True)
+    log.info('Set redirect_zone zone %s to "%s"', zone.name, id_str)
     time.sleep(config.reconfigure_delay)
 
 def enable_bucket_sync(zone, bucket_name):
@@ -811,6 +828,51 @@ def test_multi_period_incremental_sync():
         for zone in zonegroup.zones:
             mdlog = mdlog_list(zone, period)
             assert len(mdlog) == 0
+
+def test_multi_zone_redirect():
+    zonegroup = realm.master_zonegroup()
+    if len(zonegroup.zones) < 2:
+        raise SkipTest("test_multi_period_incremental_sync skipped. Requires 3 or more zones in master zonegroup.")
+
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    (zc1, zc2) = zonegroup_conns.rw_zones[0:2]
+
+    z1, z2 = (zc1.zone, zc2.zone)
+
+    set_sync_from_all(z2, False)
+
+    # create a bucket on the first zone
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', z1.name, bucket_name)
+    bucket = zc1.conn.create_bucket(bucket_name)
+    obj = 'testredirect'
+
+    key = bucket.new_key(obj)
+    data = 'A'*512
+    key.set_contents_from_string(data)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # try to read object from second zone (should fail)
+    bucket2 = get_bucket(zc2, bucket_name)
+    assert_raises(boto.exception.S3ResponseError, bucket2.get_key, obj)
+
+    set_redirect_zone(z2, z1)
+
+    key2 = bucket2.get_key(obj)
+
+    eq(data, key2.get_contents_as_string())
+
+    key = bucket.new_key(obj)
+
+    for x in ['a', 'b', 'c', 'd']:
+        data = x*512
+        key.set_contents_from_string(data)
+        eq(data, key2.get_contents_as_string())
+
+    # revert config changes
+    set_sync_from_all(z2, True)
+    set_redirect_zone(z2, None)
 
 def test_zonegroup_remove():
     zonegroup = realm.master_zonegroup()

@@ -108,6 +108,12 @@ namespace librbd {
     bool trash;
   } child_info_t;
 
+  typedef struct {
+    std::string addr;
+    int64_t id;
+    uint64_t cookie;
+  } image_watcher_t;
+
 class CEPH_RBD_API RBD
 {
 public:
@@ -475,6 +481,8 @@ public:
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
+
+  int list_watchers(std::list<image_watcher_t> &watchers);
 
 private:
   friend class RBD;

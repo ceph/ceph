@@ -116,6 +116,10 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       if (channel.empty()) // keep retrocompatibility
         channel = CLOG_CHANNEL_CLUSTER;
 
+      if (g_conf->get_val<bool>("mon_cluster_log_to_stderr")) {
+	cerr << channel << " " << le << std::endl;
+      }
+
       if (channels.do_log_to_syslog(channel)) {
         string level = channels.get_level(channel);
         string facility = channels.get_facility(channel);

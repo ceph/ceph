@@ -78,7 +78,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   if(NOT CMAKE_BUILD_TYPE STREQUAL Debug)
     if(HAS_FORTIFY_SOURCE)
       set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
-      set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
+      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2")
     endif()
   endif()
   CHECK_C_COMPILER_FLAG(-fstack-protector-strong HAS_STACK_PROTECT)
@@ -140,15 +140,15 @@ else(no_yasm)
   endif(CMAKE_SYSTEM_PROCESSOR MATCHES "amd64|x86_64")
 endif(no_yasm)
 
-# require c++11
+# require c++14
 if(CMAKE_VERSION VERSION_LESS "3.1")
   include(CheckCXXCompilerFlag)
-  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-  if(NOT COMPILER_SUPPORTS_CXX11)
+  CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
+  if(NOT COMPILER_SUPPORTS_CXX14)
     message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+      "The compiler ${CMAKE_CXX_COMPILER} has no C++14 support.")
   endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
   include(CheckCCompilerFlag)
   CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
   if(NOT COMPILER_SUPPORTS_GNU99)
@@ -157,7 +157,7 @@ if(CMAKE_VERSION VERSION_LESS "3.1")
   endif()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
 else()
-  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD 14)
   set(CMAKE_CXX_EXTENSIONS OFF)
   set(CMAKE_CXX_STANDARD_REQUIRED ON)
   set(CMAKE_C_STANDARD 99)
@@ -166,19 +166,16 @@ else()
   set(C_STANDARD_REQUIRED ON)
 endif()
 
-include(CheckCXXSourceCompiles)
-CHECK_CXX_SOURCE_COMPILES("
-int main() {
-#ifdef __GLIBCXX__
-#if __GLIBCXX__ < 20150422ul /* libstdc++ < 5.1.0 */
-#error libstdc++ < 5.1.0 does not confirm to C++11
-#endif
-#endif
-}
-" HAVE_SANE_GLIBCXX)
-if(NOT HAVE_SANE_GLIBCXX)
+
+if(CMAKE_COMPILER_IS_GNUCXX AND
+    CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
+  # this is not always correct, as one can use clang with libstdc++ or
+  # use old gcc with new libstdc++, but it covers the most cases.
+  #
   # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
-  message(WARNING "performance regression is expected due to an O(n) implementation of 'std::list::size()' in libstdc++ older than 5.1.0")
+  message(SEND_ERROR "performance regression is expected due to an O(n) "
+    "implementation of 'std::list::size()' in libstdc++ older than 5.1.0, "
+    "Please use GCC 5.1 and up.")
 endif()
 
 ## Handle diagnostics color if compiler supports them.
@@ -416,6 +413,7 @@ set(libcommon_files
   common/LogClient.cc
   common/LogEntry.cc
   common/PrebufferedStreambuf.cc
+  common/CachedPrebufferedStreambuf.cc
   common/BackTrace.cc
   common/perf_counters.cc
   common/perf_histogram.cc
@@ -692,6 +690,12 @@ target_link_libraries(ceph-common ${ceph_common_deps})
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 0
   INSTALL_RPATH "")
+if(WITH_STATIC_LIBSTDCXX)
+  set_target_properties(ceph-common PROPERTIES
+    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+  set_target_properties(common PROPERTIES
+    LINK_FLAGS "-static-libstdc++ -static-libgcc")
+endif()
 install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
 
 add_library(common_utf8 STATIC common/utf8.c)
@@ -725,6 +729,7 @@ if (WITH_MGR)
       mgr/DaemonServer.cc
       mgr/ClusterState.cc
       mgr/ActivePyModules.cc
+      mgr/OSDHealthMetricCollector.cc
       mgr/StandbyPyModules.cc
       mgr/PyModuleRegistry.cc
       mgr/PyModuleRunner.cc
@@ -827,7 +832,7 @@ set(ceph_mon_srcs
 add_executable(ceph-mon ${ceph_mon_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 add_dependencies(ceph-mon erasure_code_plugins)
-target_link_libraries(ceph-mon mon common os global-static common
+target_link_libraries(ceph-mon mon os global-static common
   ${EXTRALIBS}
   ${CMAKE_DL_LIBS})
 install(TARGETS ceph-mon DESTINATION bin)

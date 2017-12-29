@@ -143,10 +143,14 @@ int SnapMapper::get_snaps(
   map<string, bufferlist> got;
   keys.insert(to_object_key(oid));
   int r = backend.get_keys(keys, &got);
-  if (r < 0)
+  if (r < 0) {
+    dout(20) << __func__ << " " << oid << " got err " << r << dendl;
     return r;
-  if (got.empty())
+  }
+  if (got.empty()) {
+    dout(20) << __func__ << " " << oid << " got.empty()" << dendl;
     return -ENOENT;
+  }
   if (out) {
     bufferlist::iterator bp = got.begin()->second.begin();
     ::decode(*out, bp);

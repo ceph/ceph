@@ -40,6 +40,15 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 const static std::string command_descs_prefix = "mgr_command_descs";
 
 
+version_t MgrMonitor::get_trim_to() const
+{
+  int64_t max = g_conf->get_val<int64_t>("mon_max_mgrmap_epochs");
+  if (map.epoch > max) {
+    return map.epoch - max;
+  }
+  return 0;
+}
+
 void MgrMonitor::create_initial()
 {
   // Take a local copy of initial_modules for tokenizer to iterate over.
@@ -442,14 +451,15 @@ void MgrMonitor::send_digests()
 {
   cancel_timer();
 
-  if (!is_active()) {
-    return;
-  }
-  dout(10) << __func__ << dendl;
-
   const std::string type = "mgrdigest";
   if (mon->session_map.subs.count(type) == 0)
     return;
+
+  if (!is_active()) {
+    // if paxos is currently not active, don't send a digest but reenable timer
+    goto timer;
+  }
+  dout(10) << __func__ << dendl;
 
   for (auto sub : *(mon->session_map.subs[type])) {
     dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
@@ -469,6 +479,7 @@ void MgrMonitor::send_digests()
     sub->session->con->send_message(mdigest);
   }
 
+timer:
   digest_event = mon->timer.add_event_after(
     g_conf->get_val<int64_t>("mon_mgr_digest_period"),
     new C_MonContext(mon, [this](int) {

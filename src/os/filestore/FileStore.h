@@ -23,7 +23,6 @@
 #include <atomic>
 #include <fstream>
 
-using namespace std;
 
 #include <boost/scoped_ptr.hpp>
 
@@ -480,6 +479,10 @@ public:
     return true;
   }
   bool needs_journal() override {
+    return false;
+  }
+
+  bool is_sync_onreadable() const override {
     return false;
   }
 

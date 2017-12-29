@@ -49,10 +49,12 @@ ostream& operator<<(ostream &out, const Inode &in)
       << " caps=" << ccap_string(in.caps_issued());
   if (!in.caps.empty()) {
     out << "(";
-    for (auto p = in.caps.begin(); p != in.caps.end(); ++p) {
-      if (p != in.caps.begin())
+    bool first = true;
+    for (const auto &pair : in.caps) {
+      if (first)
         out << ',';
-      out << p->first << '=' << ccap_string(p->second->issued);
+      out << pair.first << '=' << ccap_string(pair.second.issued);
+      first = false;
     }
     out << ")";
   }
@@ -67,8 +69,8 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.is_file())
     out << " " << in.oset;
 
-  if (!in.dn_set.empty())
-    out << " parents=" << in.dn_set;
+  if (!in.dentries.empty())
+    out << " parents=" << in.dentries;
 
   if (in.is_dir() && in.has_dir_layout())
     out << " has_dir_layout";
@@ -83,10 +85,11 @@ ostream& operator<<(ostream &out, const Inode &in)
 
 void Inode::make_long_path(filepath& p)
 {
-  if (!dn_set.empty()) {
-    assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-    (*dn_set.begin())->dir->parent_inode->make_long_path(p);
-    p.push_dentry((*dn_set.begin())->name);
+  if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    assert(dn->dir && dn->dir->parent_inode);
+    dn->dir->parent_inode->make_long_path(p);
+    p.push_dentry(dn->name);
   } else if (snapdir_parent) {
     snapdir_parent->make_nosnap_relative_path(p);
     string empty;
@@ -108,10 +111,11 @@ void Inode::make_nosnap_relative_path(filepath& p)
     snapdir_parent->make_nosnap_relative_path(p);
     string empty;
     p.push_dentry(empty);
-  } else if (!dn_set.empty()) {
-    assert((*dn_set.begin())->dir && (*dn_set.begin())->dir->parent_inode);
-    (*dn_set.begin())->dir->parent_inode->make_nosnap_relative_path(p);
-    p.push_dentry((*dn_set.begin())->name);
+  } else if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    assert(dn->dir && dn->dir->parent_inode);
+    dn->dir->parent_inode->make_nosnap_relative_path(p);
+    p.push_dentry(dn->name);
   } else {
     p = filepath(ino);
   }
@@ -171,14 +175,14 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
-bool Inode::cap_is_valid(Cap* cap) const
+bool Inode::cap_is_valid(const Cap &cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
-  if ((cap->session->cap_gen <= cap->gen)
-      && (ceph_clock_now() < cap->session->cap_ttl)) {
+  if ((cap.session->cap_gen <= cap.gen)
+      && (ceph_clock_now() < cap.session->cap_ttl)) {
     return true;
   }
   return false;
@@ -188,28 +192,24 @@ int Inode::caps_issued(int *implemented) const
 {
   int c = snap_caps;
   int i = 0;
-  for (map<mds_rank_t,Cap*>::const_iterator it = caps.begin();
-       it != caps.end();
-       ++it)
-    if (cap_is_valid(it->second)) {
-      c |= it->second->issued;
-      i |= it->second->implemented;
+  for (const auto &pair : caps) {
+    const Cap &cap = pair.second;
+    if (cap_is_valid(cap)) {
+      c |= cap.issued;
+      i |= cap.implemented;
     }
+  }
   if (implemented)
     *implemented = i;
   return c;
 }
 
-void Inode::touch_cap(Cap *cap)
-{
-  // move to back of LRU
-  cap->session->caps.push_back(&cap->cap_item);
-}
-
 void Inode::try_touch_cap(mds_rank_t mds)
 {
-  if (caps.count(mds))
-    touch_cap(caps[mds]);
+  auto it = caps.find(mds);
+  if (it != caps.end()) {
+    it->second.touch();
+  }
 }
 
 bool Inode::caps_issued_mask(unsigned mask)
@@ -219,29 +219,27 @@ bool Inode::caps_issued_mask(unsigned mask)
     return true;
   // prefer auth cap
   if (auth_cap &&
-      cap_is_valid(auth_cap) &&
+      cap_is_valid(*auth_cap) &&
       (auth_cap->issued & mask) == mask) {
-    touch_cap(auth_cap);
+    auth_cap->touch();
     return true;
   }
   // try any cap
-  for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
-       it != caps.end();
-       ++it) {
-    if (cap_is_valid(it->second)) {
-      if ((it->second->issued & mask) == mask) {
-	touch_cap(it->second);
+  for (auto &pair : caps) {
+    Cap &cap = pair.second;
+    if (cap_is_valid(cap)) {
+      if ((cap.issued & mask) == mask) {
+        cap.touch();
 	return true;
       }
-      c |= it->second->issued;
+      c |= cap.issued;
     }
   }
   if ((c & mask) == mask) {
     // bah.. touch them all
-    for (map<mds_rank_t,Cap*>::iterator it = caps.begin();
-	 it != caps.end();
-	 ++it)
-      touch_cap(it->second);
+    for (auto &pair : caps) {
+      pair.second.touch();
+    }
     return true;
   }
   return false;
@@ -280,8 +278,9 @@ int Inode::caps_wanted()
 int Inode::caps_mds_wanted()
 {
   int want = 0;
-  for (auto it = caps.begin(); it != caps.end(); ++it)
-    want |= it->second->wanted;
+  for (const auto &pair : caps) {
+    want |= pair.second.wanted;
+  }
   return want;
 }
 
@@ -293,8 +292,8 @@ int Inode::caps_dirty()
 const UserPerm* Inode::get_best_perms()
 {
   const UserPerm *perms = NULL;
-  for (const auto ci : caps) {
-    const UserPerm& iperm = ci.second->latest_perms;
+  for (const auto &pair : caps) {
+    const UserPerm& iperm = pair.second.latest_perms;
     if (!perms) { // we don't have any, take what's present
       perms = &iperm;
     } else if (iperm.uid() == uid) {
@@ -325,9 +324,9 @@ Dir *Inode::open_dir()
   if (!dir) {
     dir = new Dir(this);
     lsubdout(client->cct, client, 15) << "open_dir " << dir << " on " << this << dendl;
-    assert(dn_set.size() < 2); // dirs can't be hard-linked
-    if (!dn_set.empty())
-      (*dn_set.begin())->get();      // pin dentry
+    assert(dentries.size() < 2); // dirs can't be hard-linked
+    if (!dentries.empty())
+      get_first_parent()->get();      // pin dentry
     get();                  // pin inode
   }
   return dir;
@@ -420,12 +419,12 @@ void Inode::dump(Formatter *f) const
   }
 
   f->open_array_section("caps");
-  for (map<mds_rank_t,Cap*>::const_iterator p = caps.begin(); p != caps.end(); ++p) {
+  for (const auto &pair : caps) {
     f->open_object_section("cap");
-    f->dump_int("mds", p->first);
-    if (p->second == auth_cap)
+    f->dump_int("mds", pair.first);
+    if (&pair.second == auth_cap)
       f->dump_int("auth", 1);
-    p->second->dump(f);
+    pair.second.dump(f);
     f->close_section();
   }
   f->close_section();
@@ -498,12 +497,12 @@ void Inode::dump(Formatter *f) const
   f->dump_int("ref", _ref);
   f->dump_int("ll_ref", ll_ref);
 
-  if (!dn_set.empty()) {
+  if (!dentries.empty()) {
     f->open_array_section("parents");
-    for (set<Dentry*>::const_iterator p = dn_set.begin(); p != dn_set.end(); ++p) {
+    for (const auto &dn : dentries) {
       f->open_object_section("dentry");
-      f->dump_stream("dir_ino") << (*p)->dir->parent_inode->ino;
-      f->dump_string("name", (*p)->name);
+      f->dump_stream("dir_ino") << dn->dir->parent_inode->ino;
+      f->dump_string("name", dn->name);
       f->close_section();
     }
     f->close_section();

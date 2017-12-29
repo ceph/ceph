@@ -97,8 +97,6 @@ public:
   void on_change() override;
   void clear_recovery_state() override;
 
-  void on_flushed() override;
-
   void dump_recovery_info(Formatter *f) const override;
 
   void call_write_ordered(std::function<void(void)> &&cb) override;
@@ -471,7 +469,7 @@ public:
     map<hobject_t, ObjectContextRef> obc_map;
 
     /// see call_write_ordered
-    std::list<std::function<void(void)> > on_write;
+    std::function<void(void)> on_write;
 
     /// Generated internally
     set<hobject_t> temp_added;
@@ -509,6 +507,10 @@ public:
     Context *on_local_applied_sync = nullptr;
     Context *on_all_applied = nullptr;
     Context *on_all_commit = nullptr;
+
+    Op() {}
+    Op(ceph_tid_t t, std::function<void(void)>&& cb)
+      : tid(t), on_write(cb) { }
     ~Op() {
       delete on_local_applied_sync;
       delete on_all_applied;

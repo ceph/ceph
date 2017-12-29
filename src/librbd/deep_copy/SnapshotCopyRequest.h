@@ -25,16 +25,17 @@ class SnapshotCopyRequest : public RefCountedObject {
 public:
   static SnapshotCopyRequest* create(ImageCtxT *src_image_ctx,
                                      ImageCtxT *dst_image_ctx,
+                                     librados::snap_t snap_id_end,
                                      ContextWQ *work_queue,
                                      SnapSeqs *snap_seqs,
                                      Context *on_finish) {
-    return new SnapshotCopyRequest(src_image_ctx, dst_image_ctx, work_queue,
-                                   snap_seqs, on_finish);
+    return new SnapshotCopyRequest(src_image_ctx, dst_image_ctx, snap_id_end,
+                                   work_queue, snap_seqs, on_finish);
   }
 
   SnapshotCopyRequest(ImageCtxT *src_image_ctx, ImageCtxT *dst_image_ctx,
-                      ContextWQ *work_queue, SnapSeqs *snap_seqs,
-                      Context *on_finish);
+                      librados::snap_t snap_id_end, ContextWQ *work_queue,
+                      SnapSeqs *snap_seqs, Context *on_finish);
 
   void send();
   void cancel();
@@ -66,6 +67,9 @@ private:
    * PROTECT_SNAP ------/
    *    |
    *    v
+   * SET_HEAD (skip if not needed)
+   *    |
+   *    v
    * <finish>
    *
    * @endverbatim
@@ -75,6 +79,7 @@ private:
 
   ImageCtxT *m_src_image_ctx;
   ImageCtxT *m_dst_image_ctx;
+  librados::snap_t m_snap_id_end;
   ContextWQ *m_work_queue;
   SnapSeqs *m_snap_seqs_result;
   SnapSeqs m_snap_seqs;
@@ -104,6 +109,9 @@ private:
 
   void send_snap_protect();
   void handle_snap_protect(int r);
+
+  void send_set_head();
+  void handle_set_head(int r);
 
   bool handle_cancellation();
 

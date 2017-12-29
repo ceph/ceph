@@ -22,7 +22,6 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
-#include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -1081,7 +1080,8 @@ struct rgw_bucket {
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
   std::string get_key(char tenant_delim = '/',
-                      char id_delim = ':') const;
+                      char id_delim = ':',
+                      size_t reserve = 0) const;
 
   const rgw_pool& get_data_extra_pool() const {
     return explicit_placement.get_data_extra_pool();
@@ -1537,6 +1537,10 @@ struct rgw_obj_key {
     instance = i;
   }
 
+  const string& get_instance() const {
+    return instance;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1800,6 +1804,7 @@ struct req_state {
   string zonegroup_endpoint;
   string bucket_instance_id;
   int bucket_instance_shard_id;
+  string redirect_zone_endpoint;
 
   string redirect;
 
@@ -2367,5 +2372,8 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
 extern bool match_policy(boost::string_view pattern, boost::string_view input,
                          uint32_t flag);
+
+extern string camelcase_dash_http_attr(const string& orig);
+extern string lowercase_dash_http_attr(const string& orig);
 
 #endif

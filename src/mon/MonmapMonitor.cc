@@ -281,7 +281,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       p->decode(bl);
     }
 
-    assert(p != NULL);
+    assert(p);
 
     if (prefix == "mon getmap") {
       p->encode(rdata, m->get_connection()->get_features());
@@ -308,8 +308,10 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
       ss << "dumped monmap epoch " << p->get_epoch();
     }
-    if (p != mon->monmap)
+    if (p != mon->monmap) {
        delete p;
+       p = nullptr;
+    }
 
   } else if (prefix == "mon feature ls") {
    

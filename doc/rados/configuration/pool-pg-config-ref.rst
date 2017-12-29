@@ -156,13 +156,12 @@ Ceph configuration file.
           See `Weighting Bucket Items`_ for details.
 
 
-``osd pool default crush replicated ruleset``
+``osd pool default crush rule``
 
-:Description: The default CRUSH ruleset to use when creating a replicated pool.
+:Description: The default CRUSH rule to use when creating a replicated pool.
 :Type: 8-bit Integer
-:Default: ``CEPH_DEFAULT_CRUSH_REPLICATED_RULESET``, which means "pick
-          a ruleset with the lowest numerical ID and use that".  This is to
-          make pool creation work in the absence of ruleset 0.
+:Default: ``-1``, which means "pick the rule with the lowest numerical ID and 
+          use that".  This is to make pool creation work in the absence of rule 0.
 
 
 ``osd pool erasure code stripe unit``

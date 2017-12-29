@@ -67,7 +67,6 @@ public:
 
   void on_change() override;
   void clear_recovery_state() override;
-  void on_flushed() override;
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:

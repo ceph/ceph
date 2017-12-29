@@ -951,7 +951,7 @@ void PGBackend::be_compare_scrubmaps(
     set<pg_shard_t> cur_missing;
     set<pg_shard_t> cur_inconsistent;
 
-    for (auto  j = maps.cbegin(); j != maps.cend(); ++j) {
+    for (auto j = maps.cbegin(); j != maps.cend(); ++j) {
       if (j == auth)
 	shard_map[auth->first].selected_oi = true;
       if (j->second->objects.count(*k)) {

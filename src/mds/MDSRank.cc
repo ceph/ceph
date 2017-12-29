@@ -1474,7 +1474,7 @@ void MDSRank::recovery_done(int oldstate)
   // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
     set<mds_rank_t> active;
-    mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
+    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
     snapserver->finish_recovery(active);
   }
 
@@ -1697,12 +1697,8 @@ void MDSRankDispatcher::handle_mds_map(
 	oldstate == MDSMap::STATE_STARTING) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
       set<mds_rank_t> olddis, dis;
-      oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
-      oldmap->get_mds_set(olddis, MDSMap::STATE_CLIENTREPLAY);
-      oldmap->get_mds_set(olddis, MDSMap::STATE_REJOIN);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_ACTIVE);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_CLIENTREPLAY);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
+      oldmap->get_mds_set_lower_bound(olddis, MDSMap::STATE_REJOIN);
+      mdsmap->get_mds_set_lower_bound(dis, MDSMap::STATE_REJOIN);
       for (set<mds_rank_t>::iterator p = dis.begin(); p != dis.end(); ++p)
 	if (*p != whoami &&            // not me
 	    olddis.count(*p) == 0) {  // newly so?
@@ -1726,10 +1722,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
       (is_clientreplay() || is_active() || is_stopping())) {
     set<mds_rank_t> oldactive, active;
-    oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
-    oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
-    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
-    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
+    oldmap->get_mds_set_lower_bound(oldactive, MDSMap::STATE_CLIENTREPLAY);
+    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
     for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
@@ -1975,6 +1969,13 @@ bool MDSRankDispatcher::handle_asok_command(
         ss << "Failed to dump tree: " << cpp_strerror(r);
         f->reset();
       }
+    }
+  } else if (command == "dump loads") {
+    Mutex::Locker l(mds_lock);
+    int r = balancer->dump_loads(f);
+    if (r != 0) {
+      ss << "Failed to dump loads: " << cpp_strerror(r);
+      f->reset();
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);
@@ -2637,13 +2638,13 @@ void MDSRank::create_logger()
 
 void MDSRank::check_ops_in_flight()
 {
+  string summary;
   vector<string> warnings;
   int slow = 0;
-  if (op_tracker.check_ops_in_flight(warnings, &slow)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
+  if (op_tracker.check_ops_in_flight(&summary, warnings, &slow)) {
+    clog->warn() << summary;
+    for (const auto& warning : warnings) {
+      clog->warn() << warning;
     }
   }
  

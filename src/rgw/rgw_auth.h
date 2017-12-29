@@ -128,7 +128,7 @@ class Completer {
 public:
   /* It's expected that Completers would tend to implement many interfaces
    * and be used not only in req_state::auth::completer. Ref counting their
-   * instances woild be helpful. */
+   * instances would be helpful. */
   typedef std::shared_ptr<Completer> cmplptr_t;
 
   virtual ~Completer() = default;
