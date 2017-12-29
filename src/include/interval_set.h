@@ -29,15 +29,6 @@
  * *include* ones that invalidate iterators when they are modified (e.g.,
  * flat_map and btree_map).
  */
-
-#ifndef MIN
-# define MIN(a,b)  ((a)<=(b) ? (a):(b))
-#endif
-#ifndef MAX
-# define MAX(a,b)  ((a)>=(b) ? (a):(b))
-#endif
-
-
 template<typename T, typename Map = std::map<T,T>>
 class interval_set {
  public:
@@ -257,7 +248,7 @@ class interval_set {
     bool first = true;
     typename decltype(m)::iterator mi = m.begin();
 
-    while (1) {
+    while (true) {
       if (first)
         first = false;
       pl = l.find_inc(offset);
@@ -321,10 +312,9 @@ class interval_set {
       }
 
       // interval begins before other
-      if (pa->first < pb->first)
-        return false;
+      if (pa->first < pb->first ||
       // interval is longer than other
-      if (pa->first + pa->second > pb->first + pb->second)
+          pa->first + pa->second > pb->first + pb->second)
         return false;
 
       ++pa;
@@ -381,9 +371,8 @@ class interval_set {
 
   bool contains(T i, T *pstart=0, T *plen=0) const {
     typename Map::const_iterator p = find_inc(i);
-    if (p == m.end()) return false;
-    if (p->first > i) return false;
-    if (p->first+p->second <= i) return false;
+    if (p == m.end() || p->first > i || p->first+p->second <= i)
+      return false;
     assert(p->first <= i && p->first+p->second > i);
     if (pstart)
       *pstart = p->first;
@@ -393,11 +382,11 @@ class interval_set {
   }
   bool contains(T start, T len) const {
     typename Map::const_iterator p = find_inc(start);
-    if (p == m.end()) return false;
-    if (p->first > start) return false;
-    if (p->first+p->second <= start) return false;
+    if (p == m.end() || p->first > start || p->first+p->second <= start)
+      return false;
     assert(p->first <= start && p->first+p->second > start);
-    if (p->first+p->second < start+len) return false;
+    if (p->first+p->second < start+len)
+      return false;
     return true;
   }
   bool intersects(T start, T len) const {
@@ -524,10 +513,7 @@ class interval_set {
     typename Map::iterator p = find_inc_m(start);
 
     _size -= len;
-    assert(_size >= 0);
-
-    assert(p != m.end());
-    assert(p->first <= start);
+    assert(_size >= 0 && p != m.end() && p->first <= start);
 
     T before = start - p->first;
     assert(p->second >= before+len);
@@ -537,6 +523,7 @@ class interval_set {
       p->second = before;        // shorten bit before
     else
       m.erase(p);
+
     if (after)
       m[start+len] = after;
   }
@@ -558,8 +545,7 @@ class interval_set {
 
 
   void intersection_of(const interval_set &a, const interval_set &b) {
-    assert(&a != this);
-    assert(&b != this);
+    assert(&a != this && &b != this);
     clear();
 
     const interval_set *s, *l;
@@ -612,10 +598,7 @@ class interval_set {
       typename decltype(m)::value_type i{start, en - start};
       mi = m.insert(mi, i);
       _size += i.second;
-      if (pa->first+pa->second > pb->first+pb->second)
-        pb++;
-      else
-        pa++; 
+      pa->first+pa->second > pb->first+pb->second ? pb++ : pa++;
     }
   }
   void intersection_of(const interval_set& b) {
@@ -625,8 +608,7 @@ class interval_set {
   }
 
   void union_of(const interval_set &a, const interval_set &b) {
-    assert(&a != this);
-    assert(&b != this);
+    assert(&a != this && &b != this);
     clear();
     
     //cout << "union_of" << endl;
@@ -658,9 +640,7 @@ class interval_set {
   bool subset_of(const interval_set &big) const {
     if (!size())
       return true;
-    if (size() > big.size())
-      return false;
-    if (range_end() > big.range_end())
+    if (size() > big.size() || range_end() > big.range_end())
       return false;
 
     /*
