@@ -10849,7 +10849,6 @@ int BlueStore::_setattr(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
-  int r = 0;
   if (val.is_partial()) {
     auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
 						       val.length());
@@ -10861,8 +10860,8 @@ int BlueStore::_setattr(TransContext *txc,
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
-	   << " = " << r << dendl;
-  return r;
+	   << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_setattrs(TransContext *txc,
@@ -10873,7 +10872,6 @@ int BlueStore::_setattrs(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
 	   << dendl;
-  int r = 0;
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p) {
     if (p->second.is_partial()) {
@@ -10888,8 +10886,8 @@ int BlueStore::_setattrs(TransContext *txc,
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << aset.size() << " keys"
-	   << " = " << r << dendl;
-  return r;
+	   << " = " << 0 << dendl;
+  return 0;
 }
 
 
@@ -10900,7 +10898,6 @@ int BlueStore::_rmattr(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << dendl;
-  int r = 0;
   auto it = o->onode.attrs.find(name.c_str());
   if (it == o->onode.attrs.end())
     goto out;
@@ -10910,8 +10907,8 @@ int BlueStore::_rmattr(TransContext *txc,
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << o->oid
-	   << " " << name << " = " << r << dendl;
-  return r;
+	   << " " << name << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_rmattrs(TransContext *txc,
@@ -10919,7 +10916,6 @@ int BlueStore::_rmattrs(TransContext *txc,
 			OnodeRef& o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r = 0;
 
   if (o->onode.attrs.empty())
     goto out;
@@ -10928,8 +10924,8 @@ int BlueStore::_rmattrs(TransContext *txc,
   txc->write_onode(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
@@ -10949,7 +10945,6 @@ int BlueStore::_omap_clear(TransContext *txc,
 			   OnodeRef& o)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r = 0;
   if (o->onode.has_omap()) {
     o->flush();
     _do_omap_clear(txc,
@@ -10958,8 +10953,8 @@ int BlueStore::_omap_clear(TransContext *txc,
     o->onode.clear_omap_flag();
     txc->write_onode(o);
   }
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_omap_setkeys(TransContext *txc,
@@ -10968,7 +10963,6 @@ int BlueStore::_omap_setkeys(TransContext *txc,
 			     bufferlist &bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r;
   bufferlist::iterator p = bl.begin();
   __u32 num;
   if (!o->onode.has_omap()) {
@@ -10997,9 +10991,8 @@ int BlueStore::_omap_setkeys(TransContext *txc,
 	     << " <- " << key << dendl;
     txc->t->set(prefix, final_key, value);
   }
-  r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_omap_setheader(TransContext *txc,
@@ -11008,7 +11001,6 @@ int BlueStore::_omap_setheader(TransContext *txc,
 			       bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r;
   string key;
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
@@ -11023,9 +11015,8 @@ int BlueStore::_omap_setheader(TransContext *txc,
     o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
   get_omap_header(o->onode.nid, &key);
   txc->t->set(prefix, key, bl);
-  r = 0;
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_omap_rmkeys(TransContext *txc,
@@ -11034,7 +11025,6 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 			    bufferlist& bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  int r = 0;
   bufferlist::iterator p = bl.begin();
   __u32 num;
   string final_key;
@@ -11061,8 +11051,8 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   txc->note_modified_object(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_omap_rmkey_range(TransContext *txc,
@@ -11073,7 +11063,6 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   KeyValueDB::Iterator it;
   string key_first, key_last;
-  int r = 0;
   if (!o->onode.has_omap()) {
     goto out;
   }
@@ -11091,8 +11080,8 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   txc->note_modified_object(o);
 
  out:
-  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
-  return r;
+  dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_set_alloc_hint(
@@ -11108,7 +11097,6 @@ int BlueStore::_set_alloc_hint(
 	   << " write_size " << expected_write_size
 	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
 	   << dendl;
-  int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
   o->onode.alloc_hint_flags = flags;
@@ -11117,8 +11105,8 @@ int BlueStore::_set_alloc_hint(
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
 	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
-	   << " = " << r << dendl;
-  return r;
+	   << " = " << 0 << dendl;
+  return 0;
 }
 
 int BlueStore::_clone(TransContext *txc,
@@ -11533,7 +11521,6 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << dendl;
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
-  int r;
 
   // flush all previous deferred writes on this sequencer.  this is a bit
   // heavyweight, but we need to make sure all deferred writes complete
@@ -11565,15 +11552,14 @@ int BlueStore::_split_collection(TransContext *txc,
   // split call for this parent (first child).
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
-  r = 0;
 
   bufferlist bl;
   ::encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
-	   << " bits " << bits << " = " << r << dendl;
-  return r;
+	   << " bits " << bits << " = " << 0 << dendl;
+  return 0;
 }
 
 // DB key value Histogram
