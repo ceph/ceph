@@ -63,6 +63,7 @@
 struct Config {
   int nbds_max = 0;
   int max_part = 255;
+  int timeout = -1;
 
   bool exclusive = false;
   bool readonly = false;
@@ -85,6 +86,7 @@ static void usage()
             << "  --nbds_max <limit>      Override for module param nbds_max\n"
             << "  --max_part <limit>      Override for module param max_part\n"
             << "  --exclusive             Forbid writes by other clients\n"
+            << "  --timeout <seconds>     Set nbd request timeout\n"
             << std::endl;
   generic_server_usage();
 }
@@ -469,12 +471,18 @@ public:
       unsigned long new_size = info.size;
 
       if (new_size != size) {
+        dout(5) << "resize detected" << dendl;
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-            derr << "invalidate page cache failed: " << cpp_strerror(errno) << dendl;
+            derr << "invalidate page cache failed: " << cpp_strerror(errno)
+                 << dendl;
         if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
         } else {
           size = new_size;
+        }
+        if (ioctl(fd, BLKRRPART, NULL) < 0) {
+          derr << "rescan of partition table failed: " << cpp_strerror(errno)
+               << dendl;
         }
         if (image.invalidate_cache() < 0)
             derr << "invalidate rbd cache failed" << dendl;
@@ -605,12 +613,27 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   if (cfg->devpath.empty()) {
     char dev[64];
     bool try_load_module = true;
+    const char *path = "/sys/module/nbd/parameters/nbds_max";
+    int nbds_max = -1;
+    if (access(path, F_OK) == 0) {
+      std::ifstream ifs;
+      ifs.open(path, std::ifstream::in);
+      if (ifs.is_open()) {
+        ifs >> nbds_max;
+        ifs.close();
+      }
+    }
+
     while (true) {
       snprintf(dev, sizeof(dev), "/dev/nbd%d", index);
 
       nbd = open_device(dev, cfg, try_load_module);
       try_load_module = false;
       if (nbd < 0) {
+        if (nbd == -EPERM && nbds_max != -1 && index < (nbds_max-1)) {
+          ++index;
+          continue;
+        }
         r = nbd;
         cerr << "rbd-nbd: failed to find unused device" << std::endl;
         goto close_fd;
@@ -724,6 +747,16 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     goto close_nbd;
   }
 
+  if (cfg->timeout >= 0) {
+    r = ioctl(nbd, NBD_SET_TIMEOUT, (unsigned long)cfg->timeout);
+    if (r < 0) {
+      r = -errno;
+      cerr << "rbd-nbd: failed to set timeout: " << cpp_strerror(r)
+           << std::endl;
+      goto close_nbd;
+    }
+  }
+
   {
     uint64_t handle;
 
@@ -831,7 +864,8 @@ static int get_mapped_info(int pid, Config *cfg)
   std::vector<const char*> args;
 
   ifs.open(path.c_str(), std::ifstream::in);
-  assert (ifs.is_open());
+  if (!ifs.is_open())
+    return -1;
   ifs >> cmdline;
 
   for (unsigned i = 0; i < cmdline.size(); i++) {
@@ -967,6 +1001,16 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg, Config *
       cfg->readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       cfg->exclusive = true;
+    } else if (ceph_argparse_witharg(args, i, &cfg->timeout, err, "--timeout",
+                                     (char *)NULL)) {
+      if (!err.str().empty()) {
+        *err_msg << "rbd-nbd: " << err.str();
+        return -EINVAL;
+      }
+      if (cfg->timeout < 0) {
+        *err_msg << "rbd-nbd: Invalid argument for timeout!";
+        return -EINVAL;
+      }
     } else {
       ++i;
     }
@@ -1033,7 +1077,7 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cfg);
   if (r == HELP_INFO) {
     usage();
-    assert(false);
+    ceph_abort();
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
@@ -1066,7 +1110,7 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      assert(false);
+      ceph_abort();
       break;
   }
 

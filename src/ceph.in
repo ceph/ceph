@@ -48,7 +48,7 @@ PRIO_USEFUL = 5
 PRIO_UNINTERESTING = 2
 PRIO_DEBUGONLY = 0
 
-PRIO_DEFAULT = PRIO_USEFUL
+PRIO_DEFAULT = PRIO_INTERESTING
 
 # Make life easier on developers:
 # If our parent dir contains CMakeCache.txt and bin/init-ceph,
@@ -539,7 +539,11 @@ def new_style_command(parsed_args, cmdargs, target, sigdict, inbuf, verbose):
                 import readline  # noqa
 
             while True:
-                interactive_input = read_input()
+                try:
+                    interactive_input = read_input()
+                except EOFError:
+                    # leave user an uncluttered prompt
+                    return 0, '\n', ''
                 if interactive_input is None:
                     return 0, '', ''
                 cmdargs = parse_cmdargs(shlex.split(interactive_input))[2]

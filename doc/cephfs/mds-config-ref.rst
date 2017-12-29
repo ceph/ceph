@@ -10,15 +10,6 @@
 :Type: Boolean
 :Default: ``true`` 
 
-
-``mds max file size``
-
-:Description: The maximum allowed file size to set when creating a 
-              new file system.
-
-:Type:  64-bit Integer Unsigned
-:Default:  ``1ULL << 40``
-
 ``mds cache memory limit``
 
 :Description: The memory limit the MDS should enforce for its cache.
@@ -97,27 +88,14 @@
 
 ``mds blacklist interval``
 
-:Description: The blacklist duration for failed MDSs in the OSD map.
+:Description: The blacklist duration for failed MDSs in the OSD map. Note,
+              this controls how long failed MDS daemons will stay in the
+              OSDMap blacklist. It has no effect on how long something is
+              blacklisted when the administrator blacklists it manually. For
+              example, ``ceph osd blacklist add`` will still use the default
+              blacklist time.
 :Type:  Float
 :Default: ``24.0*60.0``
-
-
-``mds session timeout``
-
-:Description: The interval (in seconds) of client inactivity before Ceph 
-              times out capabilities and leases.
-              
-:Type:  Float
-:Default: ``60``
-
-
-``mds session autoclose``
-
-:Description: The interval (in seconds) before Ceph closes 
-              a laggy client's session.
-              
-:Type:  Float
-:Default: ``300``
 
 
 ``mds reconnect timeout``
@@ -247,13 +225,6 @@
               
 :Type:  Float
 :Default: ``0``
-
-
-``mds bal frag``
-
-:Description: Determines whether the MDS will fragment directories.
-:Type:  Boolean
-:Default:  ``false``
 
 
 ``mds bal split size``
@@ -613,3 +584,17 @@
               
 :Type:  Boolean
 :Default:  ``false``
+
+
+``mds min caps per client``
+
+:Description: Set the minimum number of capabilities a client may hold.
+:Type: Integer
+:Default: ``100``
+
+
+``mds max ratio caps per client``
+
+:Description: Set the maximum ratio of current caps that may be recalled during MDS cache pressure.
+:Type: Float
+:Default: ``0.8``

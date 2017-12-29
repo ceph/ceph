@@ -17,6 +17,7 @@
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "mon/AuthMonitor.h"
+#include "common/Formatter.h"
 
 using std::deque;
 using std::string;
@@ -42,10 +43,14 @@ ACTIONS\n\
   -r|--resolve-search             search for the first file that exists and\n\
                                   can be opened in the resulted comma\n\
                                   delimited search list.\n\
+  -D|--dump-all                   dump all variables.\n\
 \n\
 FLAGS\n\
   --name name                     Set type.id\n\
   [-s <section>]                  Add to list of sections to search\n\
+  [--format plain|json|json-pretty]\n\
+                                  dump variables in plain text, json or pretty\n\
+                                  json\n\
 \n\
 If there is no action given, the action will default to --lookup.\n\
 \n\
@@ -136,6 +141,26 @@ static int lookup(const std::deque<std::string> &sections,
   }
 }
 
+static int dump_all(const string& format)
+{
+  if (format == "" || format == "plain") {
+    g_conf->show_config(std::cout);
+    return 0;
+  } else {
+    unique_ptr<Formatter> f(Formatter::create(format));
+    if (f) {
+      f->open_object_section("ceph-conf");
+      g_conf->show_config(f.get());
+      f->close_section();
+      f->flush(std::cout);
+      return 0;
+    }
+    cerr << "format '" << format << "' not recognized." << std::endl;
+    usage();
+    return 1;
+  }
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -146,6 +171,7 @@ int main(int argc, const char **argv)
   std::string section_list_prefix;
   std::list<string> filter_key;
   std::map<string,string> filter_key_value;
+  std::string dump_format;
 
   argv_to_vec(argc, argv, args);
   env_to_vec(args);
@@ -198,6 +224,10 @@ int main(int argc, const char **argv)
       string key(val, 0, pos);
       string value(val, pos+1);
       filter_key_value[key] = value;
+    } else if (ceph_argparse_flag(args, i, "-D", "--dump_all", (char*)NULL)) {
+      action = "dumpall";
+    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+      dump_format = val;
     } else {
       if (((action == "lookup") || (action == "")) && (lookup_key.empty())) {
 	action = "lookup";
@@ -223,6 +253,8 @@ int main(int argc, const char **argv)
     return list_sections(section_list_prefix, filter_key, filter_key_value);
   } else if (action == "lookup") {
     return lookup(sections, lookup_key, resolve_search);
+  } else if (action == "dumpall") {
+    return dump_all(dump_format);
   } else {
     cerr << "You must give an action, such as --lookup or --list-all-sections." << std::endl;
     cerr << "Pass --help for more help." << std::endl;

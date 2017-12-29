@@ -614,7 +614,6 @@ function test_auth_profiles()
   ceph -n client.xx-profile-ro -k client.xx.keyring osd dump
   ceph -n client.xx-profile-ro -k client.xx.keyring pg dump
   ceph -n client.xx-profile-ro -k client.xx.keyring mon dump
-  ceph -n client.xx-profile-ro -k client.xx.keyring mds dump
   # read-only gets access denied for rw commands or auth commands
   ceph -n client.xx-profile-ro -k client.xx.keyring log foo >& $TMPFILE || true
   check_response "EACCES: access denied"
@@ -628,7 +627,7 @@ function test_auth_profiles()
   ceph -n client.xx-profile-rw -k client.xx.keyring osd dump
   ceph -n client.xx-profile-rw -k client.xx.keyring pg dump
   ceph -n client.xx-profile-rw -k client.xx.keyring mon dump
-  ceph -n client.xx-profile-rw -k client.xx.keyring mds dump
+  ceph -n client.xx-profile-rw -k client.xx.keyring fs dump
   ceph -n client.xx-profile-rw -k client.xx.keyring log foo
   ceph -n client.xx-profile-rw -k client.xx.keyring osd set noout
   ceph -n client.xx-profile-rw -k client.xx.keyring osd unset noout
@@ -650,7 +649,7 @@ function test_auth_profiles()
   # but read-write 'mon' commands are not
   ceph -n client.xx-profile-rd -k client.xx.keyring mon add foo 1.1.1.1 >& $TMPFILE || true
   check_response "EACCES: access denied"
-  ceph -n client.xx-profile-rd -k client.xx.keyring mds dump >& $TMPFILE || true
+  ceph -n client.xx-profile-rd -k client.xx.keyring fs dump >& $TMPFILE || true
   check_response "EACCES: access denied"
   ceph -n client.xx-profile-rd -k client.xx.keyring log foo >& $TMPFILE || true
   check_response "EACCES: access denied"
@@ -892,10 +891,6 @@ function test_mon_mds()
   ceph fs set $FS_NAME cluster_down true
   ceph fs set $FS_NAME cluster_down false
 
-  # Legacy commands, act on default fs
-  ceph mds cluster_down
-  ceph mds cluster_up
-
   ceph mds compat rm_incompat 4
   ceph mds compat rm_incompat 4
 
@@ -905,7 +900,6 @@ function test_mon_mds()
 
   ceph mds compat show
   expect_false ceph mds deactivate 2
-  ceph mds dump
   ceph fs dump
   ceph fs get $FS_NAME
   for mds_gid in $(get_mds_gids $FS_NAME) ; do
@@ -917,7 +911,7 @@ function test_mon_mds()
 
   # XXX mds fail, but how do you undo it?
   mdsmapfile=$TEMP_DIR/mdsmap.$$
-  current_epoch=$(ceph mds getmap -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
+  current_epoch=$(ceph fs dump -o $mdsmapfile --no-log-to-stderr 2>&1 | grep epoch | sed 's/.*epoch //')
   [ -s $mdsmapfile ]
   rm $mdsmapfile
 
@@ -925,52 +919,52 @@ function test_mon_mds()
   ceph osd pool create data3 10
   data2_pool=$(ceph osd dump | grep "pool.*'data2'" | awk '{print $2;}')
   data3_pool=$(ceph osd dump | grep "pool.*'data3'" | awk '{print $2;}')
-  ceph mds add_data_pool $data2_pool
-  ceph mds add_data_pool $data3_pool
-  ceph mds add_data_pool 100 >& $TMPFILE || true
+  ceph fs add_data_pool cephfs $data2_pool
+  ceph fs add_data_pool cephfs $data3_pool
+  ceph fs add_data_pool cephfs 100 >& $TMPFILE || true
   check_response "Error ENOENT"
-  ceph mds add_data_pool foobarbaz >& $TMPFILE || true
+  ceph fs add_data_pool cephfs foobarbaz >& $TMPFILE || true
   check_response "Error ENOENT"
-  ceph mds remove_data_pool $data2_pool
-  ceph mds remove_data_pool $data3_pool
+  ceph fs rm_data_pool cephfs $data2_pool
+  ceph fs rm_data_pool cephfs $data3_pool
   ceph osd pool delete data2 data2 --yes-i-really-really-mean-it
   ceph osd pool delete data3 data3 --yes-i-really-really-mean-it
-  ceph mds set allow_multimds false
-  expect_false ceph mds set_max_mds 4
-  ceph mds set allow_multimds true
-  ceph mds set_max_mds 4
-  ceph mds set_max_mds 3
-  ceph mds set_max_mds 256
-  expect_false ceph mds set_max_mds 257
-  ceph mds set max_mds 4
-  ceph mds set max_mds 256
-  expect_false ceph mds set max_mds 257
-  expect_false ceph mds set max_mds asdf
-  expect_false ceph mds set inline_data true
-  ceph mds set inline_data true --yes-i-really-mean-it
-  ceph mds set inline_data yes --yes-i-really-mean-it
-  ceph mds set inline_data 1 --yes-i-really-mean-it
-  expect_false ceph mds set inline_data --yes-i-really-mean-it
-  ceph mds set inline_data false
-  ceph mds set inline_data no
-  ceph mds set inline_data 0
-  expect_false ceph mds set inline_data asdf
-  ceph mds set max_file_size 1048576
-  expect_false ceph mds set max_file_size 123asdf
+  ceph fs set cephfs allow_multimds false
+  expect_false ceph fs set cephfs max_mds 4
+  ceph fs set cephfs allow_multimds true
+  ceph fs set cephfs max_mds 4
+  ceph fs set cephfs max_mds 3
+  ceph fs set cephfs max_mds 256
+  expect_false ceph fs set cephfs max_mds 257
+  ceph fs set cephfs max_mds 4
+  ceph fs set cephfs max_mds 256
+  expect_false ceph fs set cephfs max_mds 257
+  expect_false ceph fs set cephfs max_mds asdf
+  expect_false ceph fs set cephfs inline_data true
+  ceph fs set cephfs inline_data true --yes-i-really-mean-it
+  ceph fs set cephfs inline_data yes --yes-i-really-mean-it
+  ceph fs set cephfs inline_data 1 --yes-i-really-mean-it
+  expect_false ceph fs set cephfs inline_data --yes-i-really-mean-it
+  ceph fs set cephfs inline_data false
+  ceph fs set cephfs inline_data no
+  ceph fs set cephfs inline_data 0
+  expect_false ceph fs set cephfs inline_data asdf
+  ceph fs set cephfs max_file_size 1048576
+  expect_false ceph fs set cephfs max_file_size 123asdf
 
-  expect_false ceph mds set allow_new_snaps
-  expect_false ceph mds set allow_new_snaps true
-  ceph mds set allow_new_snaps true --yes-i-really-mean-it
-  ceph mds set allow_new_snaps 0
-  ceph mds set allow_new_snaps false
-  ceph mds set allow_new_snaps no
-  expect_false ceph mds set allow_new_snaps taco
+  expect_false ceph fs set cephfs allow_new_snaps
+  expect_false ceph fs set cephfs allow_new_snaps true
+  ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
+  ceph fs set cephfs allow_new_snaps 0
+  ceph fs set cephfs allow_new_snaps false
+  ceph fs set cephfs allow_new_snaps no
+  expect_false ceph fs set cephfs allow_new_snaps taco
 
   # we should never be able to add EC pools as data or metadata pools
   # create an ec-pool...
   ceph osd pool create mds-ec-pool 10 10 erasure
   set +e
-  ceph mds add_data_pool mds-ec-pool 2>$TMPFILE
+  ceph fs add_data_pool cephfs mds-ec-pool 2>$TMPFILE
   check_response 'erasure-code' $? 22
   set -e
   ec_poolnum=$(ceph osd dump | grep "pool.* 'mds-ec-pool" | awk '{print $2;}')
@@ -985,8 +979,8 @@ function test_mon_mds()
   ceph mds rmfailed 0 --yes-i-really-mean-it
   set -e
 
-  # Check that `newfs` is no longer permitted
-  expect_false ceph mds newfs $metadata_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
+  # Check that `fs new` is no longer permitted
+  expect_false ceph fs new cephfs $metadata_poolnum $data_poolnum --yes-i-really-mean-it 2>$TMPFILE
 
   # Check that 'fs reset' runs
   ceph fs reset $FS_NAME --yes-i-really-mean-it
@@ -1119,7 +1113,6 @@ function test_mon_mds()
   # ceph mds rm
   # ceph mds rmfailed
   # ceph mds set_state
-  # ceph mds stop
 
   ceph osd pool delete fs_data fs_data --yes-i-really-really-mean-it
   ceph osd pool delete fs_metadata fs_metadata --yes-i-really-really-mean-it
@@ -1130,7 +1123,7 @@ function test_mon_mds_metadata()
   local nmons=$(ceph tell 'mon.*' version | grep -c 'version')
   test "$nmons" -gt 0
 
-  ceph mds dump |
+  ceph fs dump |
   sed -nEe "s/^([0-9]+):.*'([a-z])' mds\\.([0-9]+)\\..*/\\1 \\2 \\3/p" |
   while read gid id rank; do
     ceph mds metadata ${gid} | grep '"hostname":'
@@ -1594,16 +1587,7 @@ function test_mon_osd()
   # When CEPH_CLI_TEST_DUP_COMMAND is set, osd create
   # is repeated and consumes two osd id, not just one.
   #
-  local next_osd
-  if test "$CEPH_CLI_TEST_DUP_COMMAND" ; then
-      next_osd=$((gap_start + 1))
-  else
-      next_osd=$gap_start
-  fi
-  id=`ceph osd create`
-  [ "$id" = "$next_osd" ]
-
-  next_osd=$((id + 1))
+  local next_osd=$gap_start
   id=`ceph osd create $(uuidgen)`
   [ "$id" = "$next_osd" ]
 
@@ -2163,9 +2147,12 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f --force
   ceph osd erasure-code-profile set fooprofile a=b c=d e=f
   expect_false ceph osd erasure-code-profile set fooprofile a=b c=d e=f g=h
-  #
-  # cleanup by removing profile 'fooprofile'
+  # make sure ruleset-foo doesn't work anymore
+  expect_false ceph osd erasure-code-profile set barprofile ruleset-failure-domain=host
+  ceph osd erasure-code-profile set barprofile crush-failure-domain=host
+  # clean up
   ceph osd erasure-code-profile rm fooprofile
+  ceph osd erasure-code-profile rm barprofile
 }
 
 function test_mon_osd_misc()

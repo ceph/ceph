@@ -134,6 +134,7 @@ void SnapshotRollbackRequest<I>::send_resize_image() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
+  RWLock::RLocker owner_locker(image_ctx.owner_lock);
   Context *ctx = create_context_callback<
     SnapshotRollbackRequest<I>,
     &SnapshotRollbackRequest<I>::handle_resize_image>(this);

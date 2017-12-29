@@ -92,6 +92,8 @@ def _run_one_client(ctx, config, role):
         args.append('-U') # -U disables randomized striping
     if not config.get('punch_holes', True):
         args.append('-H') # -H disables discard ops
+    if config.get('deep_copy', False):
+        args.append('-g') # -g deep copy instead of clone
     if config.get('journal_replay', False):
         args.append('-j') # -j replay all IO events from journal
     args.extend([

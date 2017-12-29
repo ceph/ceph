@@ -886,7 +886,7 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
                                           uint64_t expected_write_size) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::set_alloc_hint, _1, _2,
-			       expected_object_size, expected_write_size));
+			       expected_object_size, expected_write_size, _4));
 }
 
 
@@ -1052,9 +1052,9 @@ int Rados::service_daemon_register(const std::string& service,
   return impl->service_daemon_register(service, name, metadata);
 }
 
-int Rados::service_daemon_update_status(const std::map<std::string,std::string>& status) {
+int Rados::service_daemon_update_status(std::map<std::string,std::string>&& status) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
-  return impl->service_daemon_update_status(status);
+  return impl->service_daemon_update_status(std::move(status));
 }
 
 int Rados::pool_create(const char *name) {

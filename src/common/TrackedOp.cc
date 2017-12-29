@@ -158,10 +158,10 @@ OpTracker::~OpTracker() {
 
 bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   if (by_duration) {
     history.dump_ops_by_duration(now, f, filters);
@@ -197,10 +197,10 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
 
 bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   history.dump_slow_ops(now, f, filters);
   return true;
@@ -208,10 +208,10 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
 
 bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<string> filters)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -243,10 +243,10 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
 
 bool OpTracker::register_inflight_op(TrackedOp *i)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
+  RWLock::RLocker l(lock);
   uint64_t current_seq = ++seq;
   uint32_t shard_index = current_seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -274,31 +274,29 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   }
   i->_unregistered();
 
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     delete i;
   else {
+    RWLock::RLocker l(lock);
     i->state = TrackedOp::STATE_HISTORY;
     utime_t now = ceph_clock_now();
     history.insert(now, TrackedOpRef(i));
   }
 }
 
-bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *slow)
+bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
+				    std::function<bool(TrackedOp&)>&& visit)
 {
-  RWLock::RLocker l(lock);
   if (!tracking_enabled)
     return false;
 
-  utime_t now = ceph_clock_now();
-  utime_t too_old = now;
-  too_old -= complaint_time;
+  const utime_t now = ceph_clock_now();
   utime_t oldest_op = now;
   uint64_t total_ops_in_flight = 0;
 
-  for (uint32_t i = 0; i < num_optracker_shards; i++) {
-    ShardedTrackingData* sdata = sharded_in_flight_list[i];
-    assert(NULL != sdata);
+  RWLock::RLocker l(lock);
+  for (const auto sdata : sharded_in_flight_list) {
+    assert(sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
     if (!sdata->ops_in_flight_sharded.empty()) {
       utime_t oldest_op_tmp =
@@ -309,72 +307,102 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
     }
     total_ops_in_flight += sdata->ops_in_flight_sharded.size();
   }
-
-  if (0 == total_ops_in_flight)
+  if (!total_ops_in_flight)
     return false;
-
-  utime_t oldest_secs = now - oldest_op;
-
+  *oldest_secs = now - oldest_op;
   dout(10) << "ops_in_flight.size: " << total_ops_in_flight
-           << "; oldest is " << oldest_secs
+           << "; oldest is " << *oldest_secs
            << " seconds old" << dendl;
 
-  if (oldest_secs < complaint_time)
+  if (*oldest_secs < complaint_time)
     return false;
 
-  warning_vector.reserve(log_threshold + 1);
-  //store summary message
-  warning_vector.push_back("");
-
-  int _slow = 0;    // total slow
-  if (!slow)
-    slow = &_slow; 
-  else
-    *slow = _slow;  // start from 0 anyway
-  int warned = 0;   // total logged
   for (uint32_t iter = 0; iter < num_optracker_shards; iter++) {
     ShardedTrackingData* sdata = sharded_in_flight_list[iter];
     assert(NULL != sdata);
     Mutex::Locker locker(sdata->ops_in_flight_lock_sharded);
-    if (sdata->ops_in_flight_sharded.empty())
-      continue;
-    auto i = sdata->ops_in_flight_sharded.begin();
-    while (i != sdata->ops_in_flight_sharded.end() &&
-	   i->get_initiated() < too_old) {
-      (*slow)++;
-
-      // exponential backoff of warning intervals
-      if (warned < log_threshold &&
-	  (i->get_initiated() + (complaint_time *
-				 i->warn_interval_multiplier)) < now) {
-        // will warn, increase counter
-        warned++;
-
-        utime_t age = now - i->get_initiated();
-        stringstream ss;
-        ss << "slow request " << age << " seconds old, received at "
-           << i->get_initiated() << ": " << i->get_desc()
-	   << " currently "
-	   << (i->current ? i->current : i->state_string());
-        warning_vector.push_back(ss.str());
-
-        // only those that have been shown will backoff
-        i->warn_interval_multiplier *= 2;
-      }
-      ++i;
+    for (auto& op : sdata->ops_in_flight_sharded) {
+      if (!visit(op))
+	break;
     }
   }
+  return true;
+}
 
-  // only summarize if we warn about any.  if everything has backed
-  // off, we will stay silent.
-  if (warned > 0) {
-    stringstream ss;
-    ss << *slow << " slow requests, " << warned << " included below; oldest blocked for > "
-       << oldest_secs << " secs";
-    warning_vector[0] = ss.str();
+bool OpTracker::with_slow_ops_in_flight(utime_t* oldest_secs,
+					int* num_slow_ops,
+					std::function<void(TrackedOp&)>&& on_warn)
+{
+  const utime_t now = ceph_clock_now();
+  auto too_old = now;
+  too_old -= complaint_time;
+  int slow = 0;
+  int warned = 0;
+  auto check = [&](TrackedOp& op) {
+    if (op.get_initiated() >= too_old) {
+      // no more slow ops in flight
+      return false;
+    }
+    slow++;
+    if (warned >= log_threshold) {
+      // enough samples of slow ops
+      return true;
+    }
+    auto time_to_complain = (op.get_initiated() +
+			     complaint_time * op.warn_interval_multiplier);
+    if (time_to_complain >= now) {
+      // complain later if the op is still in flight
+      return true;
+    }
+    // will warn, increase counter
+    warned++;
+    on_warn(op);
+    return true;
+  };
+  if (visit_ops_in_flight(oldest_secs, check)) {
+    if (num_slow_ops) {
+      *num_slow_ops = slow;
+    }
+    return true;
+  } else {
+    return false;
   }
+}
 
-  return warned > 0;
+bool OpTracker::check_ops_in_flight(std::string* summary,
+				    std::vector<string> &warnings,
+				    int *num_slow_ops)
+{
+  const utime_t now = ceph_clock_now();
+  auto too_old = now;
+  too_old -= complaint_time;
+  int warned = 0;
+  utime_t oldest_secs;
+  auto warn_on_slow_op = [&](TrackedOp& op) {
+    stringstream ss;
+    utime_t age = now - op.get_initiated();
+    ss << "slow request " << age << " seconds old, received at "
+       << op.get_initiated() << ": " << op.get_desc()
+       << " currently "
+        << (op.current ? op.current : op.state_string());
+    warnings.push_back(ss.str());
+    // only those that have been shown will backoff
+    op.warn_interval_multiplier *= 2;
+  };
+  int slow = 0;
+  if (with_slow_ops_in_flight(&oldest_secs, &slow, warn_on_slow_op)) {
+    stringstream ss;
+    ss << slow << " slow requests, "
+       << warned << " included below; oldest blocked for > "
+       << oldest_secs << " secs";
+    *summary = ss.str();
+    if (num_slow_ops) {
+      *num_slow_ops = slow;
+    }
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void OpTracker::get_age_ms_histogram(pow2_hist_t *h)

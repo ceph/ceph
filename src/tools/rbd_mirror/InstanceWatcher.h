@@ -31,6 +31,7 @@ template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceWatcher : protected librbd::Watcher {
+  using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
   static void get_instances(librados::IoCtx &io_ctx,
                             std::vector<std::string> *instance_ids,

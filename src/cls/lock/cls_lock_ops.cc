@@ -21,7 +21,7 @@ using namespace rados::cls::lock;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
-  i.locker = entity_name_t(entity_name_t::CLIENT(n));
+  i.locker = entity_name_t::CLIENT(n);
   i.cookie = cookie;
 }
 
@@ -77,7 +77,7 @@ void cls_lock_break_op::generate_test_instances(list<cls_lock_break_op*>& o)
   cls_lock_break_op *i = new cls_lock_break_op;
   i->name = "name";
   i->cookie = "cookie";
-  i->locker =  entity_name_t(entity_name_t::CLIENT(1));
+  i->locker =  entity_name_t::CLIENT(1);
   o.push_back(i);
   o.push_back(new cls_lock_break_op);
 }

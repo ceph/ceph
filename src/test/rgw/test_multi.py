@@ -52,15 +52,20 @@ class Cluster(multisite.Cluster):
         cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', self.cluster_id]
         if args:
             cmd += args
+        cmd += ['--debug-rgw', str(kwargs.pop('debug_rgw', 0))]
+        cmd += ['--debug-ms', str(kwargs.pop('debug_ms', 0))]
         if kwargs.pop('read_only', False):
             cmd += ['--rgw-cache-enabled', 'false']
         return bash(cmd, **kwargs)
 
     def start(self):
         cmd = [mstart_path + 'mstart.sh', self.cluster_id]
+        env = None
         if self.needs_reset:
-            cmd += ['-n', '--mds_num', '0']
-        bash(cmd)
+            env = os.environ.copy()
+            env['CEPH_NUM_MDS'] = '0'
+            cmd += ['-n']
+        bash(cmd, env=env)
         self.needs_reset = False
 
     def stop(self):

@@ -8,6 +8,7 @@
 #include "librbd/internal.h"
 #include "librbd/Operations.h"
 #include "librbd/TaskFinisher.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/exclusive_lock/Policy.h"
 #include "librbd/image_watcher/NotifyLockOwner.h"

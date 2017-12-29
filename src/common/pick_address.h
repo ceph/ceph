@@ -47,4 +47,11 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
  */
 bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match);
 
+
+const struct sockaddr *find_ip_in_subnet_list(
+  CephContext *cct,
+  const struct ifaddrs *ifa,
+  const std::string &networks,
+  const std::string &interfaces);
+
 #endif

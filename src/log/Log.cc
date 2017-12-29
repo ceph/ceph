@@ -17,6 +17,7 @@
 #include "include/on_exit.h"
 
 #include "Entry.h"
+#include "LogClock.h"
 #include "SubsystemMap.h"
 
 #define DEFAULT_MAX_NEW    100
@@ -94,6 +95,12 @@ Log::~Log()
 
 
 ///
+void Log::set_coarse_timestamps(bool coarse) {
+  if (coarse)
+    clock.coarsen();
+  else
+    clock.refine();
+}
 
 void Log::set_flush_on_exit()
 {
@@ -124,6 +131,11 @@ void Log::set_max_recent(int n)
 void Log::set_log_file(string fn)
 {
   m_log_file = fn;
+}
+
+void Log::set_log_stderr_prefix(const std::string& p)
+{
+  m_log_stderr_prefix = p;
 }
 
 void Log::reopen_log_file()
@@ -205,6 +217,8 @@ void Log::stop_graylog()
 
 void Log::submit_entry(Entry *e)
 {
+  e->finish();
+
   pthread_mutex_lock(&m_queue_mutex);
   m_queue_mutex_holder = pthread_self();
 
@@ -222,16 +236,16 @@ void Log::submit_entry(Entry *e)
 }
 
 
-Entry *Log::create_entry(int level, int subsys)
+Entry *Log::create_entry(int level, int subsys, const char* msg)
 {
   if (true) {
-    return new Entry(ceph_clock_now(),
+    return new Entry(clock.now(),
 		     pthread_self(),
-		     level, subsys);
+		     level, subsys, msg);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now();
+    e->m_stamp = clock.now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -246,13 +260,13 @@ Entry *Log::create_entry(int level, int subsys, size_t* expected_size)
                                "Log hint");
     size_t size = __atomic_load_n(expected_size, __ATOMIC_RELAXED);
     void *ptr = ::operator new(sizeof(Entry) + size);
-    return new(ptr) Entry(ceph_clock_now(),
+    return new(ptr) Entry(clock.now(),
        pthread_self(), level, subsys,
        reinterpret_cast<char*>(ptr) + sizeof(Entry), size, expected_size);
   } else {
     // kludge for perf testing
     Entry *e = m_recent.dequeue();
-    e->m_stamp = ceph_clock_now();
+    e->m_stamp = clock.now();
     e->m_thread = pthread_self();
     e->m_prio = level;
     e->m_subsys = subsys;
@@ -311,7 +325,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
 
       if (crash)
 	buflen += snprintf(buf, buf_size, "%6d> ", -t->m_len);
-      buflen += e->m_stamp.sprintf(buf + buflen, buf_size-buflen);
+      buflen += append_time(e->m_stamp, buf + buflen, buf_size - buflen);
       buflen += snprintf(buf + buflen, buf_size-buflen, " %lx %2d ",
 			(unsigned long)e->m_thread, e->m_prio);
 
@@ -327,7 +341,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       }
 
       if (do_stderr) {
-        cerr << buf << std::endl;
+        cerr << m_log_stderr_prefix << buf << std::endl;
       }
       if (do_fd) {
         buf[buflen] = '\n';

@@ -1,0 +1,9 @@
+meta:
+- desc: "Setup cluster using ceph-deploy, Run the rbd import/export tests"
+tasks:
+- ssh-keys:
+- ceph-deploy:
+- workunit:
+    clients:
+      client.0:
+        - rbd/import_export.sh

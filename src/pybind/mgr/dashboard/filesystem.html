@@ -11,6 +11,10 @@
                 $.get("{{ url_prefix }}/filesystem_data/" + content_data.fs_status.filesystem.id  + "/", function(data) {
                     _.extend(content_data.fs_status, data);
                     setTimeout(refresh, 5000);
+                }).fail(function() {
+                    // Perhaps the filesystem we're viewing no longer exists.
+                    // Go back to home.
+                    window.location.href = "{{ url_prefix }}/";
                 });
             };
 
@@ -270,13 +274,16 @@
         <div class="box-body">
             <table>
                 <thead>
-                <tr>
+                <tr rv-show="standbys | length">
                     <th>Daemon</th>
                 </tr>
                 </thead>
                 <tbody>
                 <tr rv-each-standby="standbys">
                     <td>{standby.name}</td>
+                </tr>
+                <tr class="ceph-none-found" rv-hide="standbys | length">
+                    <td>None found</td>
                 </tr>
                 </tbody>
             </table>

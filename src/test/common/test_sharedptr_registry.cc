@@ -300,7 +300,7 @@ public:
     TellDie() { died = NO; }
     ~TellDie() { died = YES; }
     
-    int value;
+    int value = 0;
   };
 
   void SetUp() override {

@@ -3,7 +3,6 @@
 
 #include "Readahead.h"
 
-using namespace std;
 
 Readahead::Readahead()
   : m_trigger_requests(10),
@@ -82,8 +81,8 @@ Readahead::extent_t Readahead::_compute_readahead(uint64_t limit) {
 	  m_readahead_pos = m_last_pos;
 	}
       }
-      m_readahead_size = MAX(m_readahead_size, m_readahead_min_bytes);
-      m_readahead_size = MIN(m_readahead_size, m_readahead_max_bytes);
+      m_readahead_size = std::max(m_readahead_size, m_readahead_min_bytes);
+      m_readahead_size = std::min(m_readahead_size, m_readahead_max_bytes);
       readahead_offset = m_readahead_pos;
       readahead_length = m_readahead_size;
 

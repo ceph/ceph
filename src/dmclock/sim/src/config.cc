@@ -130,6 +130,8 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
     g_conf.server_random_selection = stobool(val);
   if (!cf.read("global", "server_soft_limit", val))
     g_conf.server_soft_limit = stobool(val);
+  if (!cf.read("global", "anticipation_timeout", val))
+    g_conf.anticipation_timeout = stod(val);
 
   for (uint i = 0; i < g_conf.server_groups; i++) {
     srv_group_t st;

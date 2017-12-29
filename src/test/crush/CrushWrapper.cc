@@ -174,6 +174,9 @@ TEST(CrushWrapper, swap_bucket) {
   ASSERT_EQ(1, c->get_bucket_item(a, 1));
   ASSERT_EQ(2, c->get_bucket_item(a, 2));
   ASSERT_EQ(3, c->get_bucket_item(b, 0));
+	
+  // check if it can swap parent with child
+  ASSERT_EQ(-EINVAL, c->swap_bucket(g_ceph_context, root, a));
 
   c->swap_bucket(g_ceph_context, a, b);
   ASSERT_EQ(0x30000, c->get_item_weight(b));

@@ -113,7 +113,7 @@ protected:
   bool draining;
 
   // recover the journal write_pos (drop any partial written entry)
-  void _recover(Context *completion);
+  void _recover();
 
   /**
    * @return true if we were in a position to try and consume something:
@@ -130,6 +130,8 @@ protected:
   void _execute_item_complete(
       uint64_t expire_to);
 
+  bool recovered;
+  std::list<Context*> waiting_for_recovery;
 
 public:
   void init();
@@ -143,6 +145,8 @@ public:
 
   // Read the Journaler header for an existing queue and start consuming
   void open(Context *completion);
+
+  void wait_for_recovery(Context *c);
 
   // Submit one entry to the work queue.  Call back when it is persisted
   // to the queue (there is no callback for when it is executed)

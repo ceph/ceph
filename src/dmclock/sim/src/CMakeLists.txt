@@ -1,7 +1,7 @@
 include_directories(ssched) # ssched code
 include_directories(../../src) # dmclock code
 include_directories(../../support/src)
-include_directories(${BOOST_INCLUDE_DIR})
+include_directories(SYSTEM ${BOOST_INCLUDE_DIR})
 
 set(local_flags "-Wall -pthread ${CMAKE_CXX_SIM_FLAGS}")
 

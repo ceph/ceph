@@ -90,9 +90,7 @@ void Journaler::_set_layout(file_layout_t const *l)
 
   // prefetch intelligently.
   // (watch out, this is big if you use big objects or weird striping)
-  uint64_t periods = cct->_conf->journaler_prefetch_periods;
-  if (periods < 2)
-    periods = 2;  // we need at least 2 periods to make progress.
+  uint64_t periods = cct->_conf->get_val<uint64_t>("journaler_prefetch_periods");
   fetch_len = layout.get_period() * periods;
 }
 
@@ -155,7 +153,7 @@ public:
 void Journaler::recover(Context *onread) 
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onread->complete(-EAGAIN);
     return;
   }
@@ -215,6 +213,10 @@ void Journaler::_reread_head(Context *onfinish)
 void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   lock_guard l(lock);
+  if (is_stopping()) {
+    finish->complete(-EAGAIN);
+    return;
+  }
 
   //read on-disk header into
   assert(bl.length() || r < 0 );
@@ -243,6 +245,8 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 void Journaler::_finish_read_head(int r, bufferlist& bl)
 {
   lock_guard l(lock);
+  if (is_stopping())
+    return;
 
   assert(state == STATE_READHEAD);
 
@@ -333,6 +337,10 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
 				C_OnFinisher *onfinish)
 {
   lock_guard l(lock);
+  if (is_stopping()) {
+    onfinish->complete(-EAGAIN);
+    return;
+  }
 
   assert(new_end >= write_pos || r < 0);
   ldout(cct, 1) << "_finish_reprobe new_end = " << new_end
@@ -346,6 +354,8 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
 void Journaler::_finish_probe_end(int r, uint64_t end)
 {
   lock_guard l(lock);
+  if (is_stopping())
+    return;
 
   assert(state == STATE_PROBING);
   if (r < 0) { // error in probing
@@ -398,6 +408,10 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
 {
   // Expect to be called back from finish_reread_head, which already takes lock
   // lock is locked
+  if (is_stopping()) {
+    onfinish->complete(-EAGAIN);
+    return;
+  }
 
   assert(!r); //if we get an error, we're boned
   _reprobe(onfinish);
@@ -589,6 +603,8 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 
 void Journaler::_do_flush(unsigned amount)
 {
+  if (is_stopping())
+    return;
   if (write_pos == flush_pos)
     return;
   assert(write_pos > flush_pos);
@@ -678,7 +694,7 @@ void Journaler::_do_flush(unsigned amount)
 void Journaler::wait_for_flush(Context *onsafe)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     onsafe->complete(-EAGAIN);
     return;
   }
@@ -711,6 +727,10 @@ void Journaler::_wait_for_flush(Context *onsafe)
 void Journaler::flush(Context *onsafe)
 {
   lock_guard l(lock);
+  if (is_stopping()) {
+    onsafe->complete(-EAGAIN);
+    return;
+  }
   _flush(wrap_finisher(onsafe));
 }
 
@@ -740,7 +760,7 @@ void Journaler::_flush(C_OnFinisher *onsafe)
 
 bool Journaler::_write_head_needed()
 {
-  return last_wrote_head + seconds(cct->_conf->journaler_write_head_interval)
+  return last_wrote_head + seconds(cct->_conf->get_val<int64_t>("journaler_write_head_interval"))
       < ceph::real_clock::now();
 }
 
@@ -761,10 +781,7 @@ void Journaler::_issue_prezero()
 {
   assert(prezeroing_pos >= flush_pos);
 
-  // we need to zero at least two periods, minimum, to ensure that we
-  // have a full empty object/period in front of us.
-  uint64_t num_periods = MAX(2, cct->_conf->journaler_prezero_periods);
-
+  uint64_t num_periods = cct->_conf->get_val<uint64_t>("journaler_prezero_periods");
   /*
    * issue zero requests based on write_pos, even though the invariant
    * is that we zero ahead of flush_pos.
@@ -938,8 +955,8 @@ void Journaler::_assimilate_prefetch()
 
   if (got_any) {
     ldout(cct, 10) << "_assimilate_prefetch read_buf now " << read_pos << "~"
-		   << read_buf.length() << ", read pointers " << read_pos
-		   << "/" << received_pos << "/" << requested_pos
+		   << read_buf.length() << ", read pointers read_pos=" << read_pos 
+                   << " received_pos=" << received_pos << " requested_pos=" << requested_pos
 		   << dendl;
 
     // Update readability (this will also hit any decode errors resulting
@@ -994,8 +1011,8 @@ void Journaler::_issue_read(uint64_t len)
 
   // go.
   ldout(cct, 10) << "_issue_read reading " << requested_pos << "~" << len
-		 << ", read pointers " << read_pos << "/" << received_pos
-		 << "/" << (requested_pos+len) << dendl;
+		 << ", read pointers read_pos=" << read_pos << " received_pos=" << received_pos
+		 << " requested_pos+len=" << (requested_pos+len) << dendl;
 
   // step by period (object).  _don't_ do a single big filer.read()
   // here because it will wait for all object reads to complete before
@@ -1018,6 +1035,9 @@ void Journaler::_issue_read(uint64_t len)
 
 void Journaler::_prefetch()
 {
+  if (is_stopping())
+    return;
+
   ldout(cct, 10) << "_prefetch" << dendl;
   // prefetch
   uint64_t pf;
@@ -1163,6 +1183,10 @@ void Journaler::erase(Context *completion)
 void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
 {
   lock_guard l(lock);
+  if (is_stopping()) {
+    completion->complete(-EAGAIN);
+    return;
+  }
 
   if (data_result == 0) {
     // Async delete the journal header
@@ -1225,7 +1249,7 @@ bool Journaler::try_read_entry(bufferlist& bl)
 void Journaler::wait_for_readable(Context *onreadable)
 {
   lock_guard l(lock);
-  if (stopping) {
+  if (is_stopping()) {
     finisher->queue(onreadable, -EAGAIN);
     return;
   }
@@ -1270,6 +1294,9 @@ void Journaler::trim()
 
 void Journaler::_trim()
 {
+  if (is_stopping())
+    return;
+
   assert(!readonly);
   uint64_t period = get_layout_period();
   uint64_t trim_to = last_committed.expire_pos;
@@ -1520,8 +1547,8 @@ void Journaler::shutdown()
 
   ldout(cct, 1) << __func__ << dendl;
 
+  state = STATE_STOPPING;
   readable = false;
-  stopping = true;
 
   // Kick out anyone reading from journal
   error = -EAGAIN;
@@ -1531,7 +1558,9 @@ void Journaler::shutdown()
     f->complete(-EAGAIN);
   }
 
-  finish_contexts(cct, waitfor_recover, -ESHUTDOWN);
+  list<Context*> ls;
+  ls.swap(waitfor_recover);
+  finish_contexts(cct, ls, -ESHUTDOWN);
 
   std::map<uint64_t, std::list<Context*> >::iterator i;
   for (i = waitfor_safe.begin(); i != waitfor_safe.end(); ++i) {

@@ -24,16 +24,17 @@
 #include "auth/cephx/CephxKeyServer.h"
 #include "global/global_init.h"
 #include "include/stringify.h"
+#include "mgr/mgr_commands.h"
 #include "mon/AuthMonitor.h"
 #include "mon/MonitorDBStore.h"
 #include "mon/Paxos.h"
 #include "mon/MonMap.h"
-#include "mds/MDSMap.h"
+#include "mds/FSMap.h"
+#include "mon/MgrMap.h"
 #include "osd/OSDMap.h"
 #include "crush/CrushCompiler.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 class TraceIter {
   int fd;
@@ -201,6 +202,8 @@ void usage(const char *n, po::options_description &d)
   << "  get osdmap [-- options]         get osdmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get mdsmap [-- options]         get mdsmap (version VER if specified)\n"
+  << "                                  (default: last committed)\n"
+  << "  get mgr [-- options]            get mgr map (version VER if specified)\n"
   << "                                  (default: last committed)\n"
   << "  get crushmap [-- options]       get crushmap (version VER if specified)\n"
   << "                                  (default: last committed)\n"
@@ -588,6 +591,36 @@ static int update_monitor(MonitorDBStore& st)
   return 0;
 }
 
+static int update_mgrmap(MonitorDBStore& st)
+{
+  auto t = make_shared<MonitorDBStore::Transaction>();
+
+  {
+    MgrMap map;
+    // mgr expects epoch > 1
+    map.epoch++;
+    auto initial_modules =
+      get_str_vec(g_ceph_context->_conf->get_val<string>("mgr_initial_modules"));
+    copy(begin(initial_modules),
+	 end(initial_modules),
+	 inserter(map.modules, end(map.modules)));
+    bufferlist bl;
+    map.encode(bl, CEPH_FEATURES_ALL);
+    t->put("mgr", map.epoch, bl);
+    t->put("mgr", "last_committed", map.epoch);
+  }
+  {
+    auto mgr_command_descs = mgr_commands;
+    for (auto& c : mgr_command_descs) {
+      c.set_flag(MonCommand::FLAG_MGR);
+    }
+    bufferlist bl;
+    ::encode(mgr_command_descs, bl);
+    t->put("mgr_command_desc", "", bl);
+  }
+  return st.apply_transaction(t);
+}
+
 static int update_paxos(MonitorDBStore& st)
 {
   // build a pending paxos proposal from all non-permanent k/v pairs. once the
@@ -598,6 +631,7 @@ static int update_paxos(MonitorDBStore& st)
   {
     MonitorDBStore::Transaction t;
     vector<string> prefixes = {"auth", "osdmap",
+			       "mgr", "mgr_command_desc",
 			       "pgmap", "pgmap_pg", "pgmap_meta"};
     for (const auto& prefix : prefixes) {
       for (auto i = st.get_iterator(prefix); i->valid(); i->next()) {
@@ -704,6 +738,9 @@ int rebuild_monstore(const char* progname,
     return r;
   }
   if ((r = update_monitor(st))) {
+    return r;
+  }
+  if ((r = update_mgrmap(st))) {
     return r;
   }
   return 0;
@@ -914,28 +951,42 @@ int main(int argc, char **argv) {
     if (readable) {
       stringstream ss;
       bufferlist out;
-      if (map_type == "monmap") {
-        MonMap monmap;
-        monmap.decode(bl);
-        monmap.print(ss);
-      } else if (map_type == "osdmap") {
-        OSDMap osdmap;
-        osdmap.decode(bl);
-        osdmap.print(ss);
-      } else if (map_type == "mdsmap") {
-        MDSMap mdsmap;
-        mdsmap.decode(bl);
-        mdsmap.print(ss);
-      } else if (map_type == "crushmap") {
-        CrushWrapper cw;
-        bufferlist::iterator it = bl.begin();
-        cw.decode(it);
-        CrushCompiler cc(cw, std::cerr, 0);
-        cc.decompile(ss);
-      } else {
-        std::cerr << "This type of readable map does not exist: " << map_type << std::endl
-                  << "You can only specify[osdmap|monmap|mdsmap|crushmap]" << std::endl;
+      try {
+        if (map_type == "monmap") {
+          MonMap monmap;
+          monmap.decode(bl);
+          monmap.print(ss);
+        } else if (map_type == "osdmap") {
+          OSDMap osdmap;
+          osdmap.decode(bl);
+          osdmap.print(ss);
+        } else if (map_type == "mdsmap") {
+          FSMap fs_map;
+          fs_map.decode(bl);
+          fs_map.print(ss);
+        } else if (map_type == "mgr") {
+          MgrMap mgr_map;
+          auto p = bl.begin();
+          mgr_map.decode(p);
+          JSONFormatter f;
+          f.dump_object("mgrmap", mgr_map);
+          f.flush(ss);
+        } else if (map_type == "crushmap") {
+          CrushWrapper cw;
+          bufferlist::iterator it = bl.begin();
+          cw.decode(it);
+          CrushCompiler cc(cw, std::cerr, 0);
+          cc.decompile(ss);
+        } else {
+          std::cerr << "This type of readable map does not exist: " << map_type
+                    << std::endl << "You can only specify[osdmap|monmap|mdsmap"
+                    "|crushmap|mgr]" << std::endl;
+        }
+      } catch (const buffer::error &err) {
+        std::cerr << "Could not decode for human readable output (you may still"
+                     " use non-readable mode).  Detail: " << err << std::endl;
       }
+
       out.append(ss);
       out.write_fd(fd);
     } else {

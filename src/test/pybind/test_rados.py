@@ -9,6 +9,7 @@ import time
 import threading
 import json
 import errno
+import os
 import sys
 
 # Are we running Python 2.x
@@ -890,6 +891,55 @@ class TestIoctx(object):
 
         self.ioctx.application_metadata_remove("app1", "key1")
         eq([("key2", "val2")], self.ioctx.application_metadata_list("app1"))
+
+    def test_service_daemon(self):
+        name = "pid-" + str(os.getpid())
+        metadata = {'version': '3.14', 'memory': '42'}
+        self.rados.service_daemon_register("laundry", name, metadata)
+        status = {'result': 'unknown', 'test': 'running'}
+        self.rados.service_daemon_update(status)
+
+class TestIoctx2(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.rados.create_pool('test_pool')
+        assert self.rados.pool_exists('test_pool')
+        pool_id = self.rados.pool_lookup('test_pool')
+        assert pool_id > 0
+        self.ioctx2 = self.rados.open_ioctx2(pool_id)
+
+    def tearDown(self):
+        cmd = {"prefix": "osd unset", "key": "noup"}
+        self.rados.mon_command(json.dumps(cmd), b'')
+        self.ioctx2.close()
+        self.rados.delete_pool('test_pool')
+        self.rados.shutdown()
+
+    def test_get_last_version(self):
+        version = self.ioctx2.get_last_version()
+        assert version >= 0
+
+    def test_get_stats(self):
+        stats = self.ioctx2.get_stats()
+        eq(stats, {'num_objects_unfound': 0,
+                   'num_objects_missing_on_primary': 0,
+                   'num_object_clones': 0,
+                   'num_objects': 0,
+                   'num_object_copies': 0,
+                   'num_bytes': 0,
+                   'num_rd_kb': 0,
+                   'num_wr_kb': 0,
+                   'num_kb': 0,
+                   'num_wr': 0,
+                   'num_objects_degraded': 0,
+                   'num_rd': 0})
+
+    def test_change_auid(self):
+        self.ioctx2.change_auid(ANONYMOUS_AUID)
+        self.ioctx2.change_auid(ADMIN_AUID)
+
 
 class TestObject(object):
 

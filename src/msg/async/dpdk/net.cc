@@ -112,7 +112,7 @@ class C_handle_l2forward : public EventCallback {
  public:
   C_handle_l2forward(std::shared_ptr<DPDKDevice> &p, unsigned &qd, Packet pkt, unsigned target)
       : sdev(p), queue_depth(qd), p(std::move(pkt)), dst(target) {}
-  void do_request(int fd) {
+  void do_request(uint64_t fd) {
     sdev->l2receive(dst, std::move(p));
     queue_depth--;
     delete this;
@@ -184,7 +184,7 @@ class C_arp_learn : public EventCallback {
  public:
   C_arp_learn(DPDKWorker *w, ethernet_address l2, ipv4_address l3)
       : worker(w), l2_addr(l2), l3_addr(l3) {}
-  void do_request(int id) {
+  void do_request(uint64_t id) {
     worker->arp_learn(l2_addr, l3_addr);
     delete this;
   }

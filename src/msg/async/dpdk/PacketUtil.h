@@ -159,7 +159,6 @@ class packet_merger {
         // If we reach here, we have a bug with merge.
         std::cout << "packet_merger: merge error\n";
         abort();
-        break;
       }
     }
   }

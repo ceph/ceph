@@ -230,7 +230,8 @@ TEST(ParameterTest, combination_all)
   }
   EXPECT_FALSE(out1 == in);
 
-  set<int> want_to_read, available_chunks, minimum_chunks, want_to_read_without_avails;
+  set<int> want_to_read, available_chunks, want_to_read_without_avails;
+  map<int, vector<pair<int,int>>> minimum_chunks;
   set<int>::iterator itr;
   int array_want_to_read[shec->get_chunk_count()];
   int array_available_chunks[shec->get_chunk_count()];
@@ -273,7 +274,8 @@ TEST(ParameterTest, combination_all)
 
           result = shec->minimum_to_decode(want_to_read, available_chunks,
 				           &minimum_chunks);
-          dresult = shec->decode(want_to_read, inchunks, &decoded);
+          dresult = shec->decode(want_to_read, inchunks, &decoded,
+				 shec->get_chunk_size(kObjectSize));
           ++count_num;
           minimum_count = 0;
 

@@ -76,10 +76,10 @@ Licensing
 Ceph is free software.
 
 Unless stated otherwise, the Ceph source code is distributed under the terms of
-the LGPL2.1. For full details, see `the file COPYING in the top-level
-directory of the source-code tree`_.
+the LGPL2.1. For full details, see the file `COPYING`_ in the top-level
+directory of the source-code tree.
 
-.. _`the file COPYING in the top-level directory of the source-code tree`:
+.. _`COPYING`:
   https://github.com/ceph/ceph/blob/master/COPYING
 
 Source code repositories
@@ -152,10 +152,10 @@ Submitting patches
 ------------------
 
 The canonical instructions for submitting patches are contained in the
-`the file CONTRIBUTING.rst in the top-level directory of the source-code
-tree`_. There may be some overlap between this guide and that file.
+file `CONTRIBUTING.rst`_ in the top-level directory of the source-code
+tree. There may be some overlap between this guide and that file.
 
-.. _`the file CONTRIBUTING.rst in the top-level directory of the source-code tree`:
+.. _`CONTRIBUTING.rst`:
   https://github.com/ceph/ceph/blob/master/CONTRIBUTING.rst
 
 All newcomers are encouraged to read that file carefully.
@@ -760,7 +760,7 @@ installed on any machine running those platforms.
 
 Teuthology has a `list of platforms that it supports
 <https://github.com/ceph/ceph/tree/master/qa/distros/supported>`_ (as
-of March 2016 the list consisted of "CentOS 7.2" and "Ubuntu 14.04").  It
+of December 2017 the list consisted of "CentOS 7.2" and "Ubuntu 16.04").  It
 expects to be provided pre-built Ceph packages for these platforms.
 Teuthology deploys these platforms on machines (bare-metal or
 cloud-provisioned), installs the packages on them, and deploys Ceph
@@ -1028,31 +1028,31 @@ subdirectories in the following structure::
       file: %
       directory: distros
          file: centos_7.0.yaml
-         file: ubuntu_14.04.yaml
+         file: ubuntu_16.04.yaml
       directory: tasks
          file: ceph-disk.yaml
 
 This is interpreted as a 2x1 matrix consisting of two tests: 
 
 1. ceph-disk/basic/{distros/centos_7.0.yaml tasks/ceph-disk.yaml}
-2. ceph-disk/basic/{distros/ubuntu_14.04.yaml tasks/ceph-disk.yaml}
+2. ceph-disk/basic/{distros/ubuntu_16.04.yaml tasks/ceph-disk.yaml}
 
 i.e. the concatenation of centos_7.0.yaml and ceph-disk.yaml and
-the concatenation of ubuntu_14.04.yaml and ceph-disk.yaml, respectively.
+the concatenation of ubuntu_16.04.yaml and ceph-disk.yaml, respectively.
 In human terms, this means that the task found in ``ceph-disk.yaml`` is
-intended to run on both CentOS 7.0 and Ubuntu 14.04.
+intended to run on both CentOS 7.0 and Ubuntu 16.04.
 
 Without the file percent, the ``ceph-disk`` tree would be interpreted as
 three standalone tests:
 
 * ceph-disk/basic/distros/centos_7.0.yaml
-* ceph-disk/basic/distros/ubuntu_14.04.yaml
+* ceph-disk/basic/distros/ubuntu_16.04.yaml
 * ceph-disk/basic/tasks/ceph-disk.yaml
 
 (which would of course be wrong in this case).
 
 Referring to the `ceph/qa sub-directory`_, you will notice that the
-``centos_7.0.yaml`` and ``ubuntu_14.04.yaml`` files in the
+``centos_7.0.yaml`` and ``ubuntu_16.04.yaml`` files in the
 ``suites/ceph-disk/basic/distros/`` directory are implemented as symlinks.
 By using symlinks instead of copying, a single file can appear in multiple
 suites. This eases the maintenance of the test framework as a whole.
@@ -1067,7 +1067,7 @@ An individual test from the `ceph-disk suite`_ can be run by adding the
 
   $ teuthology-suite \
       --suite ceph-disk/basic \
-      --filter 'ceph-disk/basic/{distros/ubuntu_14.04.yaml tasks/ceph-disk.yaml}'
+      --filter 'ceph-disk/basic/{distros/ubuntu_16.04.yaml tasks/ceph-disk.yaml}'
 
 .. note: To run a standalone test like the one in `Reading a standalone
    test`_, ``--suite`` alone is sufficient. If you want to run a single
@@ -1237,7 +1237,7 @@ you have not installed yet.
 
 Once Docker is up and running, install ``ceph-workbench`` by following the
 `Installation instructions in the ceph-workbench documentation
-<http://ceph-workbench.readthedocs.org/en/latest/#installation>`_.
+<http://ceph-workbench.readthedocs.io/en/latest/#installation>`_.
 
 Linking ceph-workbench with your OpenStack tenant
 -------------------------------------------------

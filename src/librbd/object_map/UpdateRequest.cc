@@ -7,28 +7,44 @@
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
+#include "librbd/Utils.h"
 #include "cls/lock/cls_lock_client.h"
 #include <string>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::object_map::UpdateRequest: "
+#define dout_prefix *_dout << "librbd::object_map::UpdateRequest: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace object_map {
 
+namespace {
+
+// keep aligned to bit_vector 4K block sizes
+const uint64_t MAX_OBJECTS_PER_UPDATE = 256 * (1 << 10);
+
+}
+
 template <typename I>
 void UpdateRequest<I>::send() {
+  update_object_map();
+}
+
+template <typename I>
+void UpdateRequest<I>::update_object_map() {
   assert(m_image_ctx.snap_lock.is_locked());
   assert(m_image_ctx.object_map_lock.is_locked());
   CephContext *cct = m_image_ctx.cct;
 
-  // safe to update in-memory state first without handling rollback since any
-  // failures will invalidate the object map
+  // break very large requests into manageable batches
+  m_update_end_object_no = MIN(
+    m_end_object_no, m_update_start_object_no + MAX_OBJECTS_PER_UPDATE);
+
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
-  ldout(cct, 20) << this << " updating object map"
-                 << ": ictx=" << &m_image_ctx << ", oid=" << oid << ", ["
-		 << m_start_object_no << "," << m_end_object_no << ") = "
+  ldout(cct, 20) << "ictx=" << &m_image_ctx << ", oid=" << oid << ", "
+                 << "[" << m_update_start_object_no << ","
+                        << m_update_end_object_no << ") = "
 		 << (m_current_state ?
 		       stringify(static_cast<uint32_t>(*m_current_state)) : "")
 		 << "->" << static_cast<uint32_t>(m_new_state)
@@ -38,10 +54,12 @@ void UpdateRequest<I>::send() {
   if (m_snap_id == CEPH_NOSNAP) {
     rados::cls::lock::assert_locked(&op, RBD_LOCK_NAME, LOCK_EXCLUSIVE, "", "");
   }
-  cls_client::object_map_update(&op, m_start_object_no, m_end_object_no,
-				m_new_state, m_current_state);
+  cls_client::object_map_update(&op, m_update_start_object_no,
+                                m_update_end_object_no, m_new_state,
+                                m_current_state);
 
-  librados::AioCompletion *rados_completion = create_callback_completion();
+  auto rados_completion = librbd::util::create_rados_callback<
+    UpdateRequest<I>, &UpdateRequest<I>::handle_update_object_map>(this);
   std::vector<librados::snap_t> snaps;
   int r = m_image_ctx.md_ctx.aio_operate(
     oid, rados_completion, &op, 0, snaps,
@@ -51,24 +69,51 @@ void UpdateRequest<I>::send() {
 }
 
 template <typename I>
-void UpdateRequest<I>::finish_request() {
-  RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-  RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
-  ldout(m_image_ctx.cct, 20) << this << " on-disk object map updated"
-                             << dendl;
+void UpdateRequest<I>::handle_update_object_map(int r) {
+  ldout(m_image_ctx.cct, 20) << "r=" << r << dendl;
+
+  {
+    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::WLocker object_map_locker(m_image_ctx.object_map_lock);
+    update_in_memory_object_map();
+
+    if (m_update_end_object_no < m_end_object_no) {
+      m_update_start_object_no = m_update_end_object_no;
+      update_object_map();
+      return;
+    }
+  }
+
+  // no more batch updates to send
+  complete(r);
+}
+
+template <typename I>
+void UpdateRequest<I>::update_in_memory_object_map() {
+  assert(m_image_ctx.snap_lock.is_locked());
+  assert(m_image_ctx.object_map_lock.is_locked());
 
   // rebuilding the object map might update on-disk only
   if (m_snap_id == m_image_ctx.snap_id) {
-    for (uint64_t object_no = m_start_object_no;
-         object_no < MIN(m_end_object_no, m_object_map.size());
-         ++object_no) {
-      uint8_t state = m_object_map[object_no];
+    ldout(m_image_ctx.cct, 20) << dendl;
+
+    auto it = m_object_map.begin() +
+                    MIN(m_update_start_object_no, m_object_map.size());
+    auto end_it = m_object_map.begin() +
+                    MIN(m_update_end_object_no, m_object_map.size());
+    for (; it != end_it; ++it) {
+      auto state_ref = *it;
+      uint8_t state = state_ref;
       if (!m_current_state || state == *m_current_state ||
           (*m_current_state == OBJECT_EXISTS && state == OBJECT_EXISTS_CLEAN)) {
-        m_object_map[object_no] = m_new_state;
+        state_ref = m_new_state;
       }
     }
   }
+}
+
+template <typename I>
+void UpdateRequest<I>::finish_request() {
 }
 
 } // namespace object_map

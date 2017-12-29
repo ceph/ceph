@@ -10,7 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
@@ -245,10 +245,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
 
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
-  
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
 
   if (! op_ret) {
     if (! lo_etag.empty()) {
@@ -893,21 +890,22 @@ public:
   RGWSetBucketVersioningParser() {}
   ~RGWSetBucketVersioningParser() override {}
 
-  int get_versioning_status(bool *status) {
+  int get_versioning_status(int *status) {
     XMLObj *config = find_first("VersioningConfiguration");
     if (!config)
       return -EINVAL;
 
-    *status = false;
+    *status = VersioningNotChanged;
 
     XMLObj *field = config->find_first("Status");
     if (!field)
       return 0;
 
+    *status = VersioningSuspended;
     string& s = field->get_data();
 
     if (stringcasecmp(s, "Enabled") == 0) {
-      *status = true;
+      *status = VersioningEnabled;
     } else if (stringcasecmp(s, "Suspended") != 0) {
       return -EINVAL;
     }
@@ -952,7 +950,7 @@ int RGWSetBucketVersioning_ObjStore_S3::get_params()
     in_data.append(data, len);
   }
 
-  r = parser.get_versioning_status(&enable_versioning);
+  r = parser.get_versioning_status(&versioning_status);
   
   return r;
 }
@@ -1329,7 +1327,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
   if (tag_str){
-    obj_tags = ceph::make_unique<RGWObjTags>();
+    obj_tags = std::make_unique<RGWObjTags>();
     ret = obj_tags->set_from_string(tag_str);
     if (ret < 0){
       ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
@@ -1383,10 +1381,12 @@ void RGWPutObj_ObjStore_S3::send_response()
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
+      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
+      dump_header_if_nonempty(s, "x-amz-version-id", version_id);
       end_header(s, this, "application/xml");
       dump_start(s);
       struct tm tmp;
@@ -1608,7 +1608,11 @@ int RGWPostObj_ObjStore_S3::get_params()
   env.add_var("key", s->object.name);
 
   part_str(parts, "Content-Type", &content_type);
-  env.add_var("Content-Type", content_type);
+
+  /* AWS permits POST without Content-Type: http://tracker.ceph.com/issues/20201 */
+  if (! content_type.empty()) {
+    env.add_var("Content-Type", content_type);
+  }
 
   map<string, struct post_form_part, ltstr_nocase>::iterator piter =
     parts.upper_bound(RGW_AMZ_META_PREFIX);
@@ -2037,9 +2041,7 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
   set_req_state_err(s, r);
   dump_errno(s);
-  if (!version_id.empty()) {
-    dump_header(s, "x-amz-version-id", version_id);
-  }
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   if (delete_marker) {
     dump_header(s, "x-amz-delete-marker", "true");
   }
@@ -2101,7 +2103,8 @@ int RGWCopyObj_ObjStore_S3::get_params()
     } else if (!source_zone.empty()) {
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
     } else {
-      ldout(s->cct, 0) << "invalid metadata directive" << dendl;
+      s->err.message = "Unknown metadata directive.";
+      ldout(s->cct, 0) << s->err.message << dendl;
       return -EINVAL;
     }
   }
@@ -2113,8 +2116,10 @@ int RGWCopyObj_ObjStore_S3::get_params()
       src_object.instance.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
     /* can only copy object into itself if replacing attrs */
-    ldout(s->cct, 0) << "can't copy object into itself if not replacing attrs"
-		     << dendl;
+    s->err.message = "This copy request is illegal because it is trying to copy "
+                     "an object to itself without changing the object's metadata, "
+                     "storage class, website redirect location or encryption attributes.";
+    ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
   return 0;
@@ -2531,6 +2536,7 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   if (op_ret)
     set_req_state_err(s, op_ret);
   dump_errno(s);
+  dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   end_header(s, this, "application/xml");
   if (op_ret == 0) { 
     dump_start(s);
@@ -3283,13 +3289,13 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 }
 
 enum class AwsVersion {
-  UNKOWN,
+  UNKNOWN,
   V2,
   V4
 };
 
 enum class AwsRoute {
-  UNKOWN,
+  UNKNOWN,
   QUERY_STRING,
   HEADERS
 };
@@ -3299,8 +3305,8 @@ discover_aws_flavour(const req_info& info)
 {
   using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
 
-  AwsVersion version = AwsVersion::UNKOWN;
-  AwsRoute route = AwsRoute::UNKOWN;
+  AwsVersion version = AwsVersion::UNKNOWN;
+  AwsRoute route = AwsRoute::UNKNOWN;
 
   const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
   if (http_auth && http_auth[0]) {
@@ -3654,16 +3660,15 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
-                                           const bool qsr) const
+bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time) const
 {
   /* Check for time skew first. */
   const time_t req_sec = header_time.sec();
   time_t now;
   time(&now);
 
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
     ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
                    << "; now - RGW_AUTH_GRACE_MINS="
                    << now - RGW_AUTH_GRACE_MINS * 60
@@ -3676,9 +3681,9 @@ bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
                    << " req_time=" << header_time
                    << dendl;
     return false;
-  } else {
-    return true;
   }
+
+  return true;
 }
 
 
@@ -3718,8 +3723,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
 
 AWSEngine::VersionAbstractor::auth_data_t
 AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
-                                       /* FIXME: const. */
-                                       bool using_qs) const
+                                       const bool using_qs) const
 {
   boost::string_view access_key_id;
   boost::string_view signed_hdrs;
@@ -3818,6 +3822,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ:
         case RGW_OP_PUT_ACLS:
         case RGW_OP_PUT_CORS:
+        case RGW_OP_INIT_MULTIPART: // in case that Init Multipart uses CHUNK encoding
         case RGW_OP_COMPLETE_MULTIPART:
         case RGW_OP_SET_BUCKET_VERSIONING:
         case RGW_OP_DELETE_MULTI_OBJ:
@@ -3916,16 +3921,18 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     qsr = true;
 
     boost::string_view expires = s->info.args.get("Expires");
-    if (! expires.empty()) {
-      /* It looks we have the guarantee that expires is a null-terminated,
-       * and thus string_view::data() can be safely used. */
-      const time_t exp = atoll(expires.data());
-      time_t now;
-      time(&now);
+    if (expires.empty()) {
+      throw -EPERM;
+    }
 
-      if (now >= exp) {
-        throw -EPERM;
-      }
+    /* It looks we have the guarantee that expires is a null-terminated,
+     * and thus string_view::data() can be safely used. */
+    const time_t exp = atoll(expires.data());
+    time_t now;
+    time(&now);
+
+    if (now >= exp) {
+      throw -EPERM;
     }
   } else {
     /* The "Authorization" HTTP header is being used. */
@@ -3950,7 +3957,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   ldout(cct, 10) << "string_to_sign:\n"
                  << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
-  if (! is_time_skew_ok(header_time, qsr)) {
+  if (!qsr && !is_time_skew_ok(header_time)) {
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
@@ -4197,5 +4204,5 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
-  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN;
+  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }

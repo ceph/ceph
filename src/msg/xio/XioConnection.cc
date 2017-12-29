@@ -344,7 +344,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
        * split due to coalescing of a segment (front, middle,
        * data) boundary */
 
-      take_len = MIN(blen, msg_iov->iov_len);
+      take_len = std::min(blen, msg_iov->iov_len);
       payload.append(
 	buffer::create_msg(
 	  take_len, (char*) msg_iov->iov_base, m_hook));
@@ -386,7 +386,7 @@ int XioConnection::handle_data_msg(struct xio_session *session,
     iovs = vmsg_sglist(&tmsg->in);
     for (; blen && (ix < iov_len); ++ix) {
       msg_iov = &iovs[ix];
-      take_len = MIN(blen, msg_iov->iov_len);
+      take_len = std::min(blen, msg_iov->iov_len);
       middle.append(
 	buffer::create_msg(
 	  take_len, (char*) msg_iov->iov_base, m_hook));

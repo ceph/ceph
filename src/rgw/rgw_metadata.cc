@@ -844,12 +844,13 @@ struct list_keys_handle {
   RGWMetadataHandler *handler;
 };
 
-int RGWMetadataManager::list_keys_init(string& section, void **handle)
+int RGWMetadataManager::list_keys_init(const string& section, void **handle)
 {
   return list_keys_init(section, string(), handle);
 }
 
-int RGWMetadataManager::list_keys_init(string& section, const string& marker, void **handle)
+int RGWMetadataManager::list_keys_init(const string& section,
+                                       const string& marker, void **handle)
 {
   string entry;
   RGWMetadataHandler *handler;

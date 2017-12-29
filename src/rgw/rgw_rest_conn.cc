@@ -98,14 +98,8 @@ int RGWRESTConn::forward(const rgw_user& uid, req_info& info, obj_version *objv,
   return req.forward_request(key, info, max_response, inbl, outbl);
 }
 
-class StreamObjData : public RGWGetDataCB {
-  rgw_obj obj;
-public:
-    explicit StreamObjData(rgw_obj& _obj) : obj(_obj) {}
-};
-
 int RGWRESTConn::put_obj_init(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                                      map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req)
+			      map<string, bufferlist>& attrs, RGWRESTStreamWriteRequest **req)
 {
   string url;
   int ret = get_url(url);

@@ -1067,6 +1067,8 @@ struct cls_rgw_lc_obj_head
     DECODE_FINISH(bl);
   }
 
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_lc_obj_head*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 

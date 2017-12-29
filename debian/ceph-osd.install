@@ -3,6 +3,7 @@ lib/udev/rules.d/95-ceph-osd.rules
 usr/bin/ceph-bluestore-tool
 usr/bin/ceph-clsinfo
 usr/bin/ceph-objectstore-tool
+usr/bin/ceph-osdomap-tool
 usr/bin/ceph-osd
 usr/bin/ceph_objectstore_bench
 usr/lib/ceph/ceph-osd-prestart.sh
@@ -19,3 +20,5 @@ usr/share/man/man8/ceph-disk.8
 usr/share/man/man8/ceph-volume.8
 usr/share/man/man8/ceph-volume-systemd.8
 usr/share/man/man8/ceph-osd.8
+usr/share/man/man8/ceph-bluestore-tool.8
+etc/sysctl.d/30-ceph-osd.conf

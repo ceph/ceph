@@ -189,20 +189,18 @@ class FsNewHandler : public FileSystemCommandHandler
       return r;
     }
     
-    // if we're running as luminous, we have to set the pool application metadata
-    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
-	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      if (!mon->osdmon()->is_writeable()) {
-	// not allowed to write yet, so retry when we can
-	mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
-	return -EAGAIN;
-      }
-      mon->osdmon()->do_application_enable(data,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->do_application_enable(metadata,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->propose_pending();
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
     }
+    mon->osdmon()->do_application_enable(data,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", fs_name);
+    mon->osdmon()->do_application_enable(metadata,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "metadata", fs_name);
+    mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
     fsmap.create_filesystem(fs_name, metadata, data,
@@ -455,6 +453,36 @@ public:
       {
         fs->mds_map.set_standby_count_wanted(n);
       });
+    } else if (var == "session_timeout") {
+      if (interr.length()) {
+       ss << var << " requires an integer value";
+       return -EINVAL;
+      }
+      if (n < 30) {
+       ss << var << " must be at least 30s";
+       return -ERANGE;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_session_timeout((uint32_t)n);
+      });
+    } else if (var == "session_autoclose") {
+      if (interr.length()) {
+       ss << var << " requires an integer value";
+       return -EINVAL;
+      }
+      if (n < 30) {
+       ss << var << " must be at least 30s";
+       return -ERANGE;
+      }
+      fsmap.modify_filesystem(
+          fs->fscid,
+          [n](std::shared_ptr<Filesystem> fs)
+      {
+        fs->mds_map.set_session_autoclose((uint32_t)n);
+      });
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
@@ -521,17 +549,15 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       return 0;
     }
 
-    // if we're running as luminous, we have to set the pool application metadata
-    if (mon->osdmon()->osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS ||
-	mon->osdmon()->pending_inc.new_require_osd_release >= CEPH_RELEASE_LUMINOUS) {
-      if (!mon->osdmon()->is_writeable()) {
-	// not allowed to write yet, so retry when we can
-	mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
-	return -EAGAIN;
-      }
-      mon->osdmon()->do_application_enable(poolid, pg_pool_t::APPLICATION_NAME_CEPHFS);
-      mon->osdmon()->propose_pending();
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
     }
+    mon->osdmon()->do_application_enable(poolid,
+					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+					 "data", poolname);
+    mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
         fs->fscid,
@@ -756,48 +782,6 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
   }
 };
 
-
-/**
- * For commands that refer to a particular filesystem,
- * enable wrapping to implement the legacy version of
- * the command (like "mds add_data_pool" vs "fs add_data_pool")
- *
- * The wrapped handler must expect a fs_name argument in
- * its command map.
- */
-template<typename T>
-class LegacyHandler : public T
-{
-  std::string legacy_prefix;
-
-  public:
-  template <typename... Args>
-  LegacyHandler(const std::string &new_prefix, Args&&... args)
-    : T(std::forward<Args>(args)...)
-  {
-    legacy_prefix = new_prefix;
-  }
-
-  std::string const &get_prefix() override {return legacy_prefix;}
-
-  int handle(
-      Monitor *mon,
-      FSMap &fsmap,
-      MonOpRequestRef op,
-      map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss) override
-  {
-    auto fs = fsmap.get_legacy_filesystem();
-    if (fs == nullptr) {
-      ss << "No filesystem configured";
-      return -ENOENT;
-    }
-    std::map<string, cmd_vartype> modified = cmdmap;
-    modified["fs_name"] = fs->mds_map.get_fs_name();
-    return T::handle(mon, fsmap, op, modified, ss);
-  }
-};
-
 /**
  * For commands with an alternative prefix
  */
@@ -833,16 +817,9 @@ FileSystemCommandHandler::load(Paxos *paxos)
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
   handlers.push_back(std::make_shared<SetHandler>());
-  handlers.push_back(std::make_shared<LegacyHandler<SetHandler> >("mds set"));
   handlers.push_back(std::make_shared<FlagSetHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
-  handlers.push_back(std::make_shared<LegacyHandler<AddDataPoolHandler> >(
-        "mds add_data_pool", paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());
-  handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
-        "mds remove_data_pool"));
-  handlers.push_back(std::make_shared<LegacyHandler<RemoveDataPoolHandler> >(
-        "mds rm_data_pool"));
   handlers.push_back(std::make_shared<FsNewHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveFilesystemHandler>());
   handlers.push_back(std::make_shared<ResetFilesystemHandler>());

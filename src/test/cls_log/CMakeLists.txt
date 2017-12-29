@@ -14,4 +14,6 @@ target_link_libraries(ceph_test_cls_log
   ${CRYPTO_LIBS}
   ${EXTRALIBS}
   )
-
+install(TARGETS
+  ceph_test_cls_log
+  DESTINATION ${CMAKE_INSTALL_BINDIR})

@@ -19,10 +19,10 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "include/ceph_features.h"
 #include "include/compat.h"
+#include "include/random.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -144,8 +144,7 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
-  uint64_t nonce = 0;
-  get_random_bytes((char*)&nonce, sizeof(nonce));
+  auto nonce = ceph::util::generate_random_number<uint64_t>();
 
   std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,

@@ -51,7 +51,7 @@ int validate_features(CephContext *cct, uint64_t features,
       return -EINVAL;
     }
   } else if (force_non_primary) {
-    assert(false);
+    ceph_abort();
   }
 
   return 0;

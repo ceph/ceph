@@ -587,16 +587,29 @@ public:
       assert(out_on_commit);
       assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
-      for (vector<Transaction>::iterator i = t.begin();
-	   i != t.end();
-	   ++i) {
-	on_applied.splice(on_applied.end(), (*i).on_applied);
-	on_commit.splice(on_commit.end(), (*i).on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), (*i).on_applied_sync);
+      for (auto& i : t) {
+	on_applied.splice(on_applied.end(), i.on_applied);
+	on_commit.splice(on_commit.end(), i.on_commit);
+	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
       }
       *out_on_applied = C_Contexts::list_to_context(on_applied);
       *out_on_commit = C_Contexts::list_to_context(on_commit);
       *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    }
+    static void collect_contexts(
+      vector<Transaction>& t,
+      list<Context*> *out_on_applied,
+      list<Context*> *out_on_commit,
+      list<Context*> *out_on_applied_sync) {
+      assert(out_on_applied);
+      assert(out_on_commit);
+      assert(out_on_applied_sync);
+      for (auto& i : t) {
+	out_on_applied->splice(out_on_applied->end(), i.on_applied);
+	out_on_commit->splice(out_on_commit->end(), i.on_commit);
+	out_on_applied_sync->splice(out_on_applied_sync->end(),
+				    i.on_applied_sync);
+      }
     }
 
     Context *get_on_applied() {
@@ -719,7 +732,7 @@ public:
         break;
 
       default:
-        assert(0 == "Unkown OP");
+        assert(0 == "Unknown OP");
       }
     }
     void _update_op_bl(
@@ -853,7 +866,7 @@ public:
     /// offset of buffer as aligned to destination within object.
     int get_data_alignment() {
       if (!data.largest_data_len)
-	return -1;
+	return 0;
       return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
@@ -1051,6 +1064,8 @@ public:
      * newly provided data. More sophisticated implementations of
      * ObjectStore will omit the untouched data and store it as a
      * "hole" in the file.
+     *
+     * Note that a 0-length write does not affect the size of the object.
      */
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const bufferlist& write_data, uint32_t flags = 0) {
@@ -1076,6 +1091,11 @@ public:
      * zero out the indicated byte range within an object. Some
      * ObjectStore instances may optimize this to release the
      * underlying storage space.
+     *
+     * If the zero range extends beyond the end of the object, the object
+     * size is extended, just as if we were writing a buffer full of zeros.
+     * EXCEPT if the length is 0, in which case (just like a 0-length write)
+     * we do not adjust the object size.
      */
     void zero(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len) {
       Op* _op = _get_next_op();
@@ -1554,6 +1574,16 @@ public:
   virtual bool needs_journal() = 0;  //< requires a journal
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
+
+  /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
+  virtual int get_devices(std::set<string> *devls) {
+    return -EOPNOTSUPP;
+  }
+
+  /// true if a txn is readable immediately after it is queued.
+  virtual bool is_sync_onreadable() const {
+    return true;
+  }
 
   /**
    * is_rotational

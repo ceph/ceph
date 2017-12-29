@@ -521,7 +521,7 @@ from eventually being marked ``out`` (regardless of what the current value for
 
 
 
-.. _iostat: http://en.wikipedia.org/wiki/Iostat
+.. _iostat: https://en.wikipedia.org/wiki/Iostat
 .. _Ceph Logging and Debugging: ../../configuration/ceph-conf#ceph-logging-and-debugging
 .. _Logging and Debugging: ../log-and-debug
 .. _Debugging and Logging: ../debug

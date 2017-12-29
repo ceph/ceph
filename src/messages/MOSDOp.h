@@ -20,6 +20,7 @@
 #include "include/ceph_features.h"
 #include "common/hobject.h"
 #include <atomic>
+#include "common/mClockCommon.h"
 
 /*
  * OSD op
@@ -33,7 +34,7 @@ class OSD;
 
 class MOSDOp : public MOSDFastDispatchOp {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 3;
 
 private:
@@ -61,6 +62,7 @@ private:
   uint64_t features;
   bool bdata_encode;
   osd_reqid_t reqid; // reqid explicitly set by sender
+  dmc::ReqParams qos_params;
 
 public:
   friend class MOSDOpReply;
@@ -79,6 +81,7 @@ public:
   void set_spg(spg_t p) {
     pgid = p;
   }
+  void set_qos_params(const dmc::ReqParams& p) { qos_params = p; }
 
   // Fields decoded in partial decoding
   pg_t get_pg() const {
@@ -112,6 +115,10 @@ public:
                          reqid.inc,
 			 header.tid);
     }
+  }
+  const dmc::ReqParams& get_qos_params() const {
+    assert(!partial_decode_needed);
+    return qos_params;
   }
 
   // Fields decoded in final decoding
@@ -357,14 +364,23 @@ struct ceph_osd_request_head {
       ::encode(retry_attempt, payload);
       ::encode(features, payload);
     } else {
-      // latest v8 encoding with hobject_t hash separate from pgid, no
-      // reassert version
-      header.version = HEAD_VERSION;
+      // v9 encoding for dmclock use, otherwise v8.
+      // v8 encoding with hobject_t hash separate from pgid, no
+      // reassert version.
+      if (HAVE_FEATURE(features, QOS_DMC)) {
+	header.version = HEAD_VERSION;
+      } else {
+	header.version = 8;
+      }
+
       ::encode(pgid, payload);
       ::encode(hobj.get_hash(), payload);
       ::encode(osdmap_epoch, payload);
       ::encode(flags, payload);
       ::encode(reqid, payload);
+      if (header.version >= 9) {
+	::encode(qos_params, payload);
+      }
       encode_trace(payload, features);
 
       // -- above decoded up front; below decoded post-dispatch thread --
@@ -393,7 +409,7 @@ struct ceph_osd_request_head {
     p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
-    if (header.version == HEAD_VERSION) {
+    if (header.version >= 8) {
       ::decode(pgid, p);      // actual pgid
       uint32_t hash;
       ::decode(hash, p); // raw hash value
@@ -401,6 +417,8 @@ struct ceph_osd_request_head {
       ::decode(osdmap_epoch, p);
       ::decode(flags, p);
       ::decode(reqid, p);
+      if (header.version >= 9)
+	::decode(qos_params, p);
       decode_trace(p);
     } else if (header.version == 7) {
       ::decode(pgid.pgid, p);      // raw pgid

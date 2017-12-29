@@ -18,7 +18,6 @@
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 
-using namespace std;
 
 extern "C" {
 #include "jerasure.h"

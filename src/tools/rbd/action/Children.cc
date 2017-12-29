@@ -16,26 +16,44 @@ namespace children {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_list_children(librbd::Image &image, Formatter *f)
+int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
+                     bool all_flag, Formatter *f)
 {
-  std::set<std::pair<std::string, std::string> > children;
-  int r;
-
-  r = image.list_children(&children);
+  std::vector<librbd::child_info_t> children;
+  librbd::RBD rbd;
+  int r = image.list_children2(&children);
   if (r < 0)
     return r;
 
   if (f)
     f->open_array_section("children");
 
-  for (auto &child_it : children) {
+  for (std::vector<librbd::child_info_t>::iterator it = children.begin();
+       it != children.end(); ++it) {
+    bool trash = it->trash;
     if (f) {
-      f->open_object_section("child");
-      f->dump_string("pool", child_it.first);
-      f->dump_string("image", child_it.second);
-      f->close_section();
+      if (all_flag) {
+        f->open_object_section("child");
+        f->dump_string("pool", it->pool_name);
+        f->dump_string("image", it->image_name);
+        f->dump_string("id", it->image_id);
+        f->dump_bool("trash", it->trash);
+        f->close_section();
+      } else if (!trash) {
+        f->open_object_section("child");
+        f->dump_string("pool", it->pool_name);
+        f->dump_string("image", it->image_name);
+        f->close_section();
+      }
     } else {
-      std::cout << child_it.first << "/" << child_it.second << std::endl;
+      if (all_flag) {
+        std::cout << it->pool_name << "/" << it->image_name;
+        if (trash)
+          std::cout << " (trash " << it->image_id << ")";
+        std::cout << std::endl;
+      } else if (!trash) {
+        std::cout << it->pool_name << "/" << it->image_name << std::endl;
+      }
     }
   }
 
@@ -50,6 +68,8 @@ int do_list_children(librbd::Image &image, Formatter *f)
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  options->add_options()
+    ("all,a", po::bool_switch(), "list all children of snapshot (include trash)");
   at::add_format_options(options);
 }
 
@@ -80,7 +100,7 @@ int execute(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_list_children(image, formatter.get());
+  r = do_list_children(io_ctx, image, vm["all"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing children failed: " << cpp_strerror(r)
               << std::endl;

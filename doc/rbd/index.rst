@@ -45,7 +45,7 @@ devices simultaneously.
 	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
 	Mirroring <rbd-mirroring>
-	iSCSI Gateway <iscsi-overview>
+	LIO iSCSI Gateway <iscsi-overview>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>
 	Cache Settings <rbd-config-ref/>

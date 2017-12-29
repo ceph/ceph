@@ -202,6 +202,8 @@ public:
 
   DecayRate decayrate;
 
+  int num_shadow_inodes;
+
   int num_inodes_with_caps;
 
   unsigned max_dir_commit_size;
@@ -614,8 +616,9 @@ public:
     inodeno_t realm_ino;
     snapid_t snap_follows;
     int dirty_caps;
+    bool snapflush;
     reconnected_cap_info_t() :
-      realm_ino(0), snap_follows(0), dirty_caps(0) {}
+      realm_ino(0), snap_follows(0), dirty_caps(0), snapflush(false) {}
   };
   map<inodeno_t,map<client_t, reconnected_cap_info_t> >  reconnected_caps;   // inode -> client -> snap_follows,realmino
   map<inodeno_t,map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
@@ -625,9 +628,11 @@ public:
     info.realm_ino = inodeno_t(icr.capinfo.snaprealm);
     info.snap_follows = icr.snap_follows;
   }
-  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty) {
+  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty, bool snapflush) {
     reconnected_cap_info_t &info = reconnected_caps[ino][client];
     info.dirty_caps |= dirty;
+    if (snapflush)
+      info.snapflush = snapflush;
   }
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
@@ -785,6 +790,13 @@ public:
   }
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
     return get_inode(vinodeno_t(ino, s));
+  }
+  CInode* lookup_snap_inode(vinodeno_t vino) {
+    auto p = snap_inode_map.lower_bound(vino);
+    if (p != snap_inode_map.end() &&
+	p->second->ino() == vino.ino && p->second->first <= vino.snapid)
+      return p->second;
+    return NULL;
   }
 
   CDir* get_dirfrag(dirfrag_t df) {
@@ -1046,22 +1058,10 @@ protected:
   friend class C_MDC_Join;
 
 public:
-  void replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl) {
-    dirfrag_t df = dir->dirfrag();
-    ::encode(df, bl);
-    dir->encode_replica(to, bl);
-  }
-  void replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl) {
-    ::encode(dn->name, bl);
-    ::encode(dn->last, bl);
-    dn->encode_replica(to, bl);
-  }
+  void replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl);
+  void replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl);
   void replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl,
-		       uint64_t features) {
-    ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
-    ::encode(in->last, bl);
-    in->encode_replica(to, bl, features);
-  }
+		       uint64_t features);
   
   CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);

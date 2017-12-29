@@ -127,6 +127,7 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 	     << " size 0x" << std::hex << file.size << std::dec
 	     << " mtime " << file.mtime
 	     << " bdev " << (int)file.prefer_bdev
+	     << " allocated " << std::hex << file.allocated << std::dec
 	     << " extents " << file.extents
 	     << ")";
 }

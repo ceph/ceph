@@ -6,14 +6,13 @@
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 #include <list>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 using namespace librados;
 
 static string gc_oid_prefix = "gc";
@@ -43,7 +42,7 @@ void RGWGC::finalize()
 
 int RGWGC::tag_index(const string& tag)
 {
-  return rgw_shards_hash(tag, max_objs);
+  return rgw_shard_id(tag, max_objs);
 }
 
 void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag)
@@ -128,7 +127,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
   return 0;
 }
 
-int RGWGC::process(int index, int max_secs)
+int RGWGC::process(int index, int max_secs, bool expired_only)
 {
   rados::cls::lock::Lock l(gc_index_lock_name);
   utime_t end = ceph_clock_now();
@@ -160,7 +159,7 @@ int RGWGC::process(int index, int max_secs)
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
-    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated, next_marker);
+    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
     if (ret == -ENOENT) {
       ret = 0;
       goto done;
@@ -236,18 +235,15 @@ done:
   return 0;
 }
 
-int RGWGC::process()
+int RGWGC::process(bool expired_only)
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
-  unsigned start;
-  int ret = get_random_bytes((char *)&start, sizeof(start));
-  if (ret < 0)
-    return ret;
+  const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    ret = process(index, max_secs);
+    int ret = process(index, max_secs, expired_only);
     if (ret < 0)
       return ret;
   }
@@ -281,7 +277,7 @@ void *RGWGC::GCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     dout(2) << "garbage collection: start" << dendl;
-    int r = gc->process();
+    int r = gc->process(true);
     if (r < 0) {
       dout(0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
     }

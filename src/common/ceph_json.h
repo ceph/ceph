@@ -122,7 +122,7 @@ public:
   static bool decode_json(const char *name, C& container, void (*cb)(C&, JSONObj *obj), JSONObj *obj, bool mandatory = false);
 
   template<class T>
-  static void decode_json(const char *name, T& val, T& default_val, JSONObj *obj);
+  static void decode_json(const char *name, T& val, const T& default_val, JSONObj *obj);
 };
 
 template<class T>
@@ -304,7 +304,7 @@ bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSO
 }
 
 template<class T>
-void JSONDecoder::decode_json(const char *name, T& val, T& default_val, JSONObj *obj)
+void JSONDecoder::decode_json(const char *name, T& val, const T& default_val, JSONObj *obj)
 {
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {

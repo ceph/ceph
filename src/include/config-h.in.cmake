@@ -136,6 +136,9 @@
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 
+/* define if bluestore enabled */
+#cmakedefine WITH_BLUESTORE
+
 /* define if embedded enabled */
 #cmakedefine WITH_EMBEDDED
 
@@ -298,6 +301,9 @@
 /* Defined if pthread_setname_np() is available */
 #cmakedefine HAVE_PTHREAD_SETNAME_NP 1
 
+/* Defined if pthread_rwlockattr_setkind_np() is available */
+#cmakedefine HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
+
 /* Defined if blkin enabled */
 #cmakedefine WITH_BLKIN
 
@@ -320,5 +326,8 @@
 
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
+
+/* Defined if getentropy() is available */
+#cmakedefine HAVE_GETENTROPY
 
 #endif /* CONFIG_H */

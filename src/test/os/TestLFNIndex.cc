@@ -281,7 +281,9 @@ TEST_F(TestLFNIndex, remove_object) {
     EXPECT_NE(std::string::npos, mangled_name_1.find("1_long"));
     EXPECT_EQ(0, exists);
     std::string pathname_1("PATH_1/" + mangled_name_1);
-    EXPECT_EQ(0, ::close(::creat(pathname_1.c_str(), 0600)));
+    auto retvalue = ::creat(pathname_1.c_str(), 0600);
+    assert(retvalue > 2);
+    EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname_1.c_str()));
 
     //
@@ -419,7 +421,9 @@ TEST_F(TestLFNIndex, get_mangled_name) {
     //
     mangled_name.clear();
     exists = 666;
-    EXPECT_EQ(0, ::close(::creat(pathname.c_str(), 0600)));
+    auto retvalue = ::creat(pathname.c_str(), 0600);
+    assert(retvalue > 2);
+    EXPECT_EQ(0, ::close(retvalue));
     EXPECT_EQ(0, created(hoid, pathname.c_str()));
     EXPECT_EQ(0, get_mangled_name(path, hoid, &mangled_name, &exists));
     EXPECT_NE(std::string::npos, mangled_name.find("0_long"));

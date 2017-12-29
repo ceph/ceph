@@ -23,6 +23,8 @@
 #include <dirent.h>
 #include <sys/xattr.h>
 #include <sys/uio.h>
+#include <sys/time.h>
+#include <sys/resource.h>
 
 #ifdef __linux__
 #include <limits.h>
@@ -30,6 +32,7 @@
 
 #include <map>
 #include <vector>
+#include <thread>
 
 TEST(LibCephFS, OpenEmptyComponent) {
 
@@ -362,12 +365,13 @@ TEST(LibCephFS, DirLs) {
 
   // test getdents
   struct dirent *getdents_entries;
-  getdents_entries = (struct dirent *)malloc((r + 2) * sizeof(*getdents_entries));
+  size_t getdents_entries_len = (r + 2) * sizeof(*getdents_entries);
+  getdents_entries = (struct dirent *)malloc(getdents_entries_len);
 
   int count = 0;
   std::vector<std::string> found;
   while (true) {
-    int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, r * sizeof(*getdents_entries));
+    int len = ceph_getdents(cmount, ls_dir, (char *)getdents_entries, getdents_entries_len);
     if (len == 0)
       break;
     ASSERT_GT(len, 0);
@@ -1857,4 +1861,40 @@ TEST(LibCephFS, OperationsOnRoot)
   ASSERT_EQ(ceph_symlink(cmount, "nonExistingDir", "/"), -EEXIST);
 
   ceph_shutdown(cmount);
+}
+
+static void shutdown_racer_func()
+{
+  const int niter = 32;
+  struct ceph_mount_info *cmount;
+  int i;
+
+  for (i = 0; i < niter; ++i) {
+    ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+    ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+    ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+    ASSERT_EQ(ceph_mount(cmount, "/"), 0);
+    ceph_shutdown(cmount);
+  }
+}
+
+// See tracker #20988
+TEST(LibCephFS, ShutdownRace)
+{
+  const int nthreads = 128;
+  std::thread threads[nthreads];
+
+  // Need a bunch of fd's for this test
+  struct rlimit rold, rnew;
+  ASSERT_EQ(getrlimit(RLIMIT_NOFILE, &rold), 0);
+  rnew = rold;
+  rnew.rlim_cur = rnew.rlim_max;
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rnew), 0);
+
+  for (int i = 0; i < nthreads; ++i)
+    threads[i] = std::thread(shutdown_racer_func);
+
+  for (int i = 0; i < nthreads; ++i)
+    threads[i].join();
+  ASSERT_EQ(setrlimit(RLIMIT_NOFILE, &rold), 0);
 }

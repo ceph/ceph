@@ -200,7 +200,7 @@ function TEST_utf8_cli() {
     # the fix for http://tracker.ceph.com/issues/7387.  If it turns out
     # to not be OK (when is the default encoding *not* UTF-8?), maybe
     # the character '黄' can be replaced with the escape $'\xe9\xbb\x84'
-    ceph osd pool create 黄 1024 || return 1
+    ceph osd pool create 黄 16 || return 1
     ceph osd lspools 2>&1 | \
         grep "黄" || return 1
     ceph -f json-pretty osd dump | \

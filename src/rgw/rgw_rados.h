@@ -23,6 +23,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_period_puller.h"
 #include "rgw_sync_module.h"
+#include "rgw_sync_log_trim.h"
 
 class RGWWatcher;
 class SafeTimer;
@@ -57,6 +58,7 @@ class RGWReshardWait;
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
+// only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
   if (max_shards <= RGW_SHARDS_PRIME_0) {
@@ -65,9 +67,19 @@ static inline int rgw_shards_mod(unsigned hval, int max_shards)
   return hval % RGW_SHARDS_PRIME_1 % max_shards;
 }
 
-static inline int rgw_shards_hash(const string& key, int max_shards)
+// used for logging and tagging
+static inline int rgw_shard_id(const string& key, int max_shards)
 {
-  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()), max_shards);
+  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
+			max_shards);
+}
+
+// used for bucket indices
+static inline uint32_t rgw_bucket_shard_index(const std::string& key,
+					      int num_shards) {
+  uint32_t sid = ceph_str_hash_linux(key.c_str(), key.size());
+  uint32_t sid2 = sid ^ ((sid & 0xFF) << 24);
+  return rgw_shards_mod(sid2, num_shards);
 }
 
 static inline int rgw_shards_max()
@@ -947,7 +959,7 @@ struct RGWRawObjState {
   bool exists{false};
   uint64_t size{0};
   ceph::real_time mtime;
-  uint64_t epoch;
+  uint64_t epoch{0};
   bufferlist obj_tag;
   bool has_data{false};
   bufferlist data;
@@ -1328,6 +1340,8 @@ struct RGWZone {
   bool read_only;
   string tier_type;
 
+  string redirect_zone;
+
 /**
  * Represents the number of shards for the bucket index object, a value of zero
  * indicates there is no sharding. By default (no sharding, the name of the object
@@ -1344,7 +1358,7 @@ struct RGWZone {
               sync_from_all(true) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     ::encode(name, bl);
     ::encode(endpoints, bl);
     ::encode(log_meta, bl);
@@ -1355,11 +1369,12 @@ struct RGWZone {
     ::encode(tier_type, bl);
     ::encode(sync_from_all, bl);
     ::encode(sync_from, bl);
+    ::encode(redirect_zone, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     ::decode(name, bl);
     if (struct_v < 4) {
       id = name;
@@ -1382,6 +1397,9 @@ struct RGWZone {
     if (struct_v >= 6) {
       ::decode(sync_from_all, bl);
       ::decode(sync_from, bl);
+    }
+    if (struct_v >= 7) {
+      ::decode(redirect_zone, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -1547,7 +1565,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   int equals(const string& other_zonegroup) const;
   int add_zone(const RGWZoneParams& zone_params, bool *is_master, bool *read_only,
                const list<string>& endpoints, const string *ptier_type,
-               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm);
+               bool *psync_from_all, list<string>& sync_from, list<string>& sync_from_rm,
+               string *predirect_zone);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
   rgw_pool get_pool(CephContext *cct);
@@ -1861,7 +1880,7 @@ public:
   int get_zonegroup(RGWZoneGroup& zonegroup,
 		    const string& zonegroup_id);
 
-  bool is_single_zonegroup()
+  bool is_single_zonegroup() const
   {
       return (period_map.zonegroups.size() == 1);
   }
@@ -2266,9 +2285,10 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
-  RGWSyncTraceManager *sync_tracer;
+  RGWSyncTraceManager *sync_tracer = nullptr;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
+  boost::optional<rgw::BucketTrimManager> bucket_trim;
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
 
   Mutex meta_sync_thread_lock;
@@ -2467,6 +2487,8 @@ public:
 
   bool zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone);
 
+  bool get_redirect_zone_endpoint(string *endpoint);
+
   const RGWQuotaInfo& get_bucket_quota() {
     return current_period.get_config().bucket_quota;
   }
@@ -2569,7 +2591,7 @@ public:
   void finalize();
 
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
-  int update_service_map(const std::map<std::string, std::string>& status);
+  int update_service_map(std::map<std::string, std::string>&& status);
 
   void schedule_context(Context *c);
 
@@ -2637,13 +2659,11 @@ public:
     RGWObjectCtx& ctx;
     rgw_raw_obj obj;
 
-    RGWObjState *state;
-
-  protected:
-    int get_state(RGWRawObjState **pstate, RGWObjVersionTracker *objv_tracker);
-
   public:
-    SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) : store(_store), ctx(_ctx), obj(_obj), state(NULL) {}
+
+    SystemObject(RGWRados *_store, RGWObjectCtx& _ctx, rgw_raw_obj& _obj) :
+      store(_store), ctx(_ctx), obj(_obj)
+    {}
 
     void invalidate_state();
 
@@ -2697,6 +2717,7 @@ public:
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj);
     int init(const rgw_bucket& _bucket, int sid);
+    int init(const RGWBucketInfo& bucket_info, int sid);
   };
 
   class Object {
@@ -2815,11 +2836,12 @@ public:
         const string *user_data;
         rgw_zone_set *zones_trace;
         bool modify_tail;
+        bool completeMultipart;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
                  if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false) {}
+                 modify_tail(false),  completeMultipart(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
@@ -3169,16 +3191,12 @@ public:
                RGWBucketInfo& dest_bucket_info,
 	       RGWRados::Object::Read& read_op, off_t end,
                rgw_obj& dest_obj,
-               rgw_obj& src_obj,
-               uint64_t max_chunk_size,
 	       ceph::real_time *mtime,
 	       ceph::real_time set_mtime,
                map<string, bufferlist>& attrs,
-               RGWObjCategory category,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
                string *version_id,
-               string *ptag,
                ceph::buffer::list *petag);
   
   int check_bucket_empty(RGWBucketInfo& bucket_info);
@@ -3398,12 +3416,32 @@ public:
 
   int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
+
+
+private:
+  int _get_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant,
+		       const string& bucket_name, RGWBucketInfo& info,
+		       real_time *pmtime,
+		       map<string, bufferlist> *pattrs,
+		       boost::optional<obj_version> refresh_version);
+public:
+
+
   int get_bucket_info(RGWObjectCtx& obj_ctx,
-                              const string& tenant_name, const string& bucket_name,
-                              RGWBucketInfo& info,
-                              ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+		      const string& tenant_name, const string& bucket_name,
+		      RGWBucketInfo& info,
+		      ceph::real_time *pmtime, map<string, bufferlist> *pattrs = NULL);
+
+  // Returns true on successful refresh. Returns false if there was an
+  // error or the version stored on the OSD is the same as that
+  // presented in the BucketInfo structure.
+  //
+  int try_refresh_bucket_info(RGWBucketInfo& info,
+			      ceph::real_time *pmtime,
+			      map<string, bufferlist> *pattrs = nullptr);
+
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
-                                     map<string, bufferlist> *pattrs, bool create_entry_point);
+			     map<string, bufferlist> *pattrs, bool create_entry_point);
 
   int cls_rgw_init_index(librados::IoCtx& io_ctx, librados::ObjectWriteOperation& op, string& oid);
   int cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
@@ -3419,7 +3457,7 @@ public:
                       uint32_t num_entries, bool list_versions, map<string, rgw_bucket_dir_entry>& m,
                       bool *is_truncated, rgw_obj_index_key *last_entry,
                       bool (*force_check_filter)(const string&  name) = NULL);
-  int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, map<string, struct rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
+  int cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, vector<rgw_bucket_dir_header>& headers, map<int, string> *bucket_instance_ids = NULL);
   int cls_bucket_head_async(const RGWBucketInfo& bucket_info, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
   int list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, uint32_t max, std::list<rgw_bi_log_entry>& result, bool *truncated);
   int trim_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, string& marker, string& end_marker);
@@ -3497,7 +3535,7 @@ public:
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
-  int process_gc();
+  int process_gc(bool expired_only);
   int process_expire_objects();
   int defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
 
@@ -3527,7 +3565,7 @@ public:
                             list<cls_user_bucket_entry>& entries,
                             string *out_marker,
                             bool *truncated);
-  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry);
+  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry, bool update_stats);
   int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_raw_obj& obj);
   int complete_sync_user_stats(const rgw_user& user_id);
@@ -3597,6 +3635,11 @@ public:
   bool need_to_log_metadata() {
     return is_meta_master() &&
       (get_zonegroup().zones.size() > 1 || current_period.is_multi_zonegroups_with_zones());
+  }
+
+  bool can_reshard() const {
+    return current_period.get_id().empty() ||
+      (zonegroup.zones.size() == 1 && current_period.is_single_zonegroup());
   }
 
   librados::Rados* get_rados_handle();
@@ -3713,25 +3756,32 @@ public:
 
 template <class T>
 class RGWChainedCacheImpl : public RGWChainedCache {
+  ceph::timespan expiry;
   RWLock lock;
 
-  map<string, T> entries;
+  map<string, std::pair<T, ceph::coarse_mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
 
   void init(RGWRados *store) {
     store->register_chained_cache(this);
+    expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
+				    "rgw_bucket_info_cache_expiry_interval"));
   }
 
   bool find(const string& key, T *entry) {
     RWLock::RLocker rl(lock);
-    typename map<string, T>::iterator iter = entries.find(key);
+    auto iter = entries.find(key);
     if (iter == entries.end()) {
       return false;
     }
+    if (expiry.count() &&
+	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
+      return false;
+    }
 
-    *entry = iter->second;
+    *entry = iter->second.first;
     return true;
   }
 
@@ -3745,7 +3795,10 @@ public:
   void chain_cb(const string& key, void *data) override {
     T *entry = static_cast<T *>(data);
     RWLock::WLocker wl(lock);
-    entries[key] = *entry;
+    entries[key].first = *entry;
+    if (expiry.count() > 0) {
+      entries[key].second = ceph::coarse_mono_clock::now();
+    }
   }
 
   void invalidate(const string& key) override {
@@ -3916,6 +3969,10 @@ public:
 
   void set_version_id(const string& vid) {
     version_id = vid;
+  }
+
+  const string& get_version_id() const {
+    return version_id;
   }
 }; /* RGWPutObjProcessor_Atomic */
 

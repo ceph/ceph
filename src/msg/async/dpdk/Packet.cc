@@ -79,7 +79,7 @@ class C_free_on_cpu : public EventCallback {
  public:
   C_free_on_cpu(deleter &&d, std::function<void()> &&c):
       del(std::move(d)), cb(std::move(c)) {}
-  void do_request(int fd) {
+  void do_request(uint64_t fd) {
     // deleter needs to be moved from lambda capture to be destroyed here
     // otherwise deleter destructor will be called on a cpu that called
     // create_external_event when work_item is destroyed.

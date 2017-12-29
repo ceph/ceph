@@ -335,7 +335,7 @@ bool BitMapZone::is_allocated(int64_t start_block, int64_t num_blocks)
   while (num_blocks) {
     bit = start_block % BmapEntry::size();
     bmap = &m_bmap_vec[start_block / BmapEntry::size()];
-    falling_in_bmap = MIN(num_blocks, BmapEntry::size() - bit);
+    falling_in_bmap = std::min(num_blocks, BmapEntry::size() - bit);
 
     if (!bmap->is_allocated(bit, falling_in_bmap)) {
       return false;
@@ -358,7 +358,7 @@ void BitMapZone::set_blocks_used(int64_t start_block, int64_t num_blocks)
   while (blks) {
     bit = start_block % BmapEntry::size();
     bmap = &m_bmap_vec[start_block / BmapEntry::size()];
-    falling_in_bmap = MIN(blks, BmapEntry::size() - bit);
+    falling_in_bmap = std::min(blks, BmapEntry::size() - bit);
 
     bmap->set_bits(bit, falling_in_bmap);
 
@@ -384,7 +384,7 @@ void BitMapZone::free_blocks_int(int64_t start_block, int64_t num_blocks)
   while (count) {
     bit = first_blk % BmapEntry::size();
     bmap = &m_bmap_vec[first_blk / BmapEntry::size()];
-    falling_in_bmap = MIN(count, BmapEntry::size() - bit);
+    falling_in_bmap = std::min(count, BmapEntry::size() - bit);
 
     bmap->clear_bits(bit, falling_in_bmap);
 
@@ -774,7 +774,7 @@ bool BitMapAreaIN::is_allocated(int64_t start_block, int64_t num_blocks)
                     start_block / m_child_size_blocks));
 
     area_block_offset = start_block % m_child_size_blocks;
-    falling_in_area = MIN(m_child_size_blocks - area_block_offset,
+    falling_in_area = std::min(m_child_size_blocks - area_block_offset,
               num_blocks);
     if (!area->is_allocated(area_block_offset, falling_in_area)) {
       return false;
@@ -850,7 +850,7 @@ void BitMapAreaIN::set_blocks_used_int(int64_t start_block, int64_t num_blocks)
                   start_blk / m_child_size_blocks));
 
     child_block_offset = start_blk % child->size();
-    falling_in_child = MIN(m_child_size_blocks - child_block_offset,
+    falling_in_child = std::min(m_child_size_blocks - child_block_offset,
               blks);
     child->set_blocks_used(child_block_offset, falling_in_child);
     start_blk += falling_in_child;
@@ -891,7 +891,7 @@ void BitMapAreaIN::free_blocks_int(int64_t start_block, int64_t num_blocks)
 
     child_block_offset = start_block % m_child_size_blocks;
 
-    falling_in_child = MIN(m_child_size_blocks - child_block_offset,
+    falling_in_child = std::min(m_child_size_blocks - child_block_offset,
               num_blocks);
     child->free_blocks(child_block_offset, falling_in_child);
     start_block += falling_in_child;
@@ -1059,7 +1059,7 @@ void BitMapAreaLeaf::free_blocks_int(int64_t start_block, int64_t num_blocks)
 
     child_block_offset = start_block % m_child_size_blocks;
 
-    falling_in_child = MIN(m_child_size_blocks - child_block_offset,
+    falling_in_child = std::min(m_child_size_blocks - child_block_offset,
               num_blocks);
 
     child->lock_excl();

@@ -187,7 +187,8 @@ class Cluster(multisite.Cluster):
         """ radosgw-admin command """
         args = args or []
         args += ['--cluster', self.name]
-        args += ['--debug-rgw', '0']
+        args += ['--debug-rgw', str(kwargs.pop('debug_rgw', 0))]
+        args += ['--debug-ms', str(kwargs.pop('debug_ms', 0))]
         if kwargs.pop('read_only', False):
             args += ['--rgw-cache-enabled', 'false']
         kwargs['decode'] = False

@@ -20,7 +20,7 @@ set_source_files_properties(${core_srcs} ${test_srcs}
   )
 
 add_executable(dmclock-tests ${test_srcs} ${support_srcs})
-target_include_directories(dmclock-tests PRIVATE "${GTEST_INCLUDE_DIRS}")
+target_include_directories(dmclock-tests PRIVATE SYSTEM "${GTEST_INCLUDE_DIRS}")
 
 if (TARGET gtest AND TARGET gtest_main)
   add_dependencies(dmclock-tests gtest gtest_main)

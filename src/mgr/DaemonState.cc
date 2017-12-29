@@ -13,6 +13,8 @@
 
 #include "DaemonState.h"
 
+#include "MgrSession.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
@@ -20,7 +22,7 @@
 
 void DaemonStateIndex::insert(DaemonStatePtr dm)
 {
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
 
   if (all.count(dm->key)) {
     _erase(dm->key);
@@ -32,7 +34,7 @@ void DaemonStateIndex::insert(DaemonStatePtr dm)
 
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
-  assert(lock.is_locked_by_me());
+  assert(lock.is_wlocked());
 
   const auto to_erase = all.find(dmk);
   assert(to_erase != all.end());
@@ -49,7 +51,7 @@ void DaemonStateIndex::_erase(const DaemonKey& dmk)
 DaemonStateCollection DaemonStateIndex::get_by_service(
   const std::string& svc) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   DaemonStateCollection result;
 
@@ -65,7 +67,7 @@ DaemonStateCollection DaemonStateIndex::get_by_service(
 DaemonStateCollection DaemonStateIndex::get_by_server(
   const std::string &hostname) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   if (by_server.count(hostname)) {
     return by_server.at(hostname);
@@ -76,14 +78,14 @@ DaemonStateCollection DaemonStateIndex::get_by_server(
 
 bool DaemonStateIndex::exists(const DaemonKey &key) const
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   return all.count(key) > 0;
 }
 
 DaemonStatePtr DaemonStateIndex::get(const DaemonKey &key)
 {
-  Mutex::Locker l(lock);
+  RWLock::RLocker l(lock);
 
   auto iter = all.find(key);
   if (iter != all.end()) {
@@ -98,7 +100,7 @@ void DaemonStateIndex::cull(const std::string& svc_name,
 {
   std::vector<string> victims;
 
-  Mutex::Locker l(lock);
+  RWLock::WLocker l(lock);
   auto begin = all.lower_bound({svc_name, ""});
   auto end = all.end();
   for (auto &i = begin; i != end; ++i) {
@@ -123,14 +125,18 @@ void DaemonPerfCounters::update(MMgrReport *report)
 	   << types.size() << " types, got "
            << report->packed.length() << " bytes of data" << dendl;
 
+  // Retrieve session state
+  MgrSessionRef session(static_cast<MgrSession*>(
+        report->get_connection()->get_priv()));
+
   // Load any newly declared types
   for (const auto &t : report->declare_types) {
     types.insert(std::make_pair(t.path, t));
-    declared_types.insert(t.path);
+    session->declared_types.insert(t.path);
   }
   // Remove any old types
   for (const auto &t : report->undeclare_types) {
-    declared_types.erase(t);
+    session->declared_types.erase(t);
   }
 
   const auto now = ceph_clock_now();
@@ -138,7 +144,7 @@ void DaemonPerfCounters::update(MMgrReport *report)
   // Parse packed data according to declared set of types
   bufferlist::iterator p = report->packed.begin();
   DECODE_START(1, p);
-  for (const auto &t_path : declared_types) {
+  for (const auto &t_path : session->declared_types) {
     const auto &t = types.at(t_path);
     uint64_t val = 0;
     uint64_t avgcount = 0;

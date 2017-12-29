@@ -24,6 +24,7 @@ class ObjectStoreTool : public RadosDump
       : RadosDump(file_fd, dry_run)
     {}
 
+    int dump_import(Formatter *formatter);
     int do_import(ObjectStore *store, OSDSuperblock& sb, bool force,
 		  std::string pgidstr,
 		  ObjectStore::Sequencer &osr);
@@ -31,6 +32,8 @@ class ObjectStoreTool : public RadosDump
           pg_info_t &info, epoch_t map_epoch, __u8 struct_ver,
           const OSDSuperblock& superblock,
           PastIntervals &past_intervals);
+    int dump_object(Formatter *formatter,
+				bufferlist &bl);
     int get_object(
       ObjectStore *store, coll_t coll,
       bufferlist &bl, OSDMap &curmap, bool *skipped_objects,

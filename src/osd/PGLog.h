@@ -21,16 +21,15 @@
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
-using namespace std;
 
-#define PGLOG_INDEXED_OBJECTS          (1 << 0)
-#define PGLOG_INDEXED_CALLER_OPS       (1 << 1)
-#define PGLOG_INDEXED_EXTRA_CALLER_OPS (1 << 2)
-#define PGLOG_INDEXED_DUPS             (1 << 3)
-#define PGLOG_INDEXED_ALL              (PGLOG_INDEXED_OBJECTS | \
-					PGLOG_INDEXED_CALLER_OPS | \
-					PGLOG_INDEXED_EXTRA_CALLER_OPS | \
-					PGLOG_INDEXED_DUPS)
+constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
+constexpr auto PGLOG_INDEXED_CALLER_OPS       = 1 << 1;
+constexpr auto PGLOG_INDEXED_EXTRA_CALLER_OPS = 1 << 2;
+constexpr auto PGLOG_INDEXED_DUPS             = 1 << 3;
+constexpr auto PGLOG_INDEXED_ALL              = PGLOG_INDEXED_OBJECTS 
+                                              | PGLOG_INDEXED_CALLER_OPS 
+                                              | PGLOG_INDEXED_EXTRA_CALLER_OPS 
+                                              | PGLOG_INDEXED_DUPS;
 
 class CephContext;
 
@@ -664,9 +663,6 @@ public:
   //////////////////// get or set missing ////////////////////
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
-  void revise_have(hobject_t oid, eversion_t have) {
-    missing.revise_have(oid, have);
-  }
 
   void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
     missing.add(oid, need, have, false);
@@ -758,10 +754,9 @@ public:
 	log.complete_to = log.log.end();
 	info.last_complete = info.last_update;
       }
+      auto oldest_need = missing.get_oldest_need();
       while (log.complete_to != log.log.end()) {
-	if (missing.get_items().at(
-	      missing.get_rmissing().begin()->second
-	      ).need <= log.complete_to->version)
+	if (oldest_need <= log.complete_to->version)
 	  break;
 	if (info.last_complete < log.complete_to->version)
 	  info.last_complete = log.complete_to->version;
@@ -774,12 +769,12 @@ public:
 
   void reset_complete_to(pg_info_t *info) {
     log.complete_to = log.log.begin();
-    while (!missing.get_items().empty() && log.complete_to->version <
-	   missing.get_items().at(
-	     missing.get_rmissing().begin()->second
-	     ).need) {
-      assert(log.complete_to != log.log.end());
-      ++log.complete_to;
+    auto oldest_need = missing.get_oldest_need();
+    if (oldest_need != eversion_t()) {
+      while (log.complete_to->version < oldest_need) {
+        assert(log.complete_to != log.log.end());
+        ++log.complete_to;
+      }
     }
     assert(log.complete_to != log.log.end());
     if (log.complete_to == log.log.begin()) {
@@ -1257,15 +1252,14 @@ public:
   void read_log_and_missing(
     ObjectStore *store,
     coll_t pg_coll,
-    coll_t log_coll,
-    ghobject_t log_oid,
+    ghobject_t pgmeta_oid,
     const pg_info_t &info,
     ostringstream &oss,
     bool tolerate_divergent_missing_log,
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, pg_coll, log_coll, log_oid, info,
+      store, pg_coll, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1278,8 +1272,7 @@ public:
   static void read_log_and_missing(
     ObjectStore *store,
     coll_t pg_coll,
-    coll_t log_coll,
-    ghobject_t log_oid,
+    ghobject_t pgmeta_oid,
     const pg_info_t &info,
     IndexedLog &log,
     missing_type &missing,
@@ -1291,18 +1284,19 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
-		       << " log_oid " << log_oid << dendl;
+		       << " " << pgmeta_oid << dendl;
 
     // legacy?
     struct stat st;
-    int r = store->stat(log_coll, log_oid, &st);
+    int r = store->stat(pg_coll, pgmeta_oid, &st);
     assert(r == 0);
     assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(log_coll, log_oid);
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(pg_coll,
+							      pgmeta_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
     missing.may_include_deletes = false;

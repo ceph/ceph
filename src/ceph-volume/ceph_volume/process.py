@@ -48,6 +48,47 @@ def log_descriptors(reads, process, terminal_logging):
             pass
 
 
+def obfuscate(command_, on=None):
+    """
+    Certain commands that are useful to log might contain information that
+    should be replaced by '*' like when creating OSDs and the keyryings are
+    being passed, which should not be logged.
+
+    :param on: A string (will match a flag) or an integer (will match an index)
+
+    If matching on a flag (when ``on`` is a string) it will obfuscate on the
+    value for that flag. That is a command like ['ls', '-l', '/'] that calls
+    `obfuscate(command, on='-l')` will obfustace '/' which is the value for
+    `-l`.
+
+    The reason for `on` to allow either a string or an integer, altering
+    behavior for both is because it is easier for ``run`` and ``call`` to just
+    pop a value to obfuscate (vs. allowing an index or a flag)
+    """
+    command = command_[:]
+    msg = "Running command: %s" % ' '.join(command)
+    if on in [None, False]:
+        return msg
+
+    if isinstance(on, int):
+        index = on
+
+    else:
+        try:
+            index = command.index(on) + 1
+        except ValueError:
+            # if the flag just doesn't exist then it doesn't matter just return
+            # the base msg
+            return msg
+
+    try:
+        command[index] = '*' * len(command[index])
+    except IndexError: # the index was completely out of range
+        return msg
+
+    return "Running command: %s" % ' '.join(command)
+
+
 def run(command, **kw):
     """
     A real-time-logging implementation of a remote subprocess.Popen call where
@@ -57,23 +98,19 @@ def run(command, **kw):
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
     """
     stop_on_error = kw.pop('stop_on_error', True)
-    command_msg = "Running command: %s" % ' '.join(command)
-    stdin = kw.pop('stdin', None)
+    command_msg = obfuscate(command, kw.pop('obfuscate', None))
     logger.info(command_msg)
     terminal.write(command_msg)
     terminal_logging = kw.pop('terminal_logging', True)
 
     process = subprocess.Popen(
         command,
-        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         close_fds=True,
         **kw
     )
 
-    if stdin:
-        process.communicate(stdin)
     while True:
         reads, _, _ = select(
             [process.stdout.fileno(), process.stderr.fileno()],
@@ -115,10 +152,12 @@ def call(command, **kw):
                              it is forcefully set to True if a return code is non-zero
     """
     terminal_verbose = kw.pop('terminal_verbose', False)
+    show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
     logger.info(command_msg)
-    terminal.write(command_msg)
+    if show_command:
+        terminal.write(command_msg)
 
     process = subprocess.Popen(
         command,

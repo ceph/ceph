@@ -159,8 +159,9 @@ void CDentry::_mark_dirty(LogSegment *ls)
   // state+pin
   if (!state_test(STATE_DIRTY)) {
     state_set(STATE_DIRTY);
-    dir->inc_num_dirty();
     get(PIN_DIRTY);
+    dir->inc_num_dirty();
+    dir->dirty_dentries.push_back(&item_dir_dirty);
     assert(ls);
   }
   if (ls) 
@@ -189,15 +190,14 @@ void CDentry::mark_clean()
   // not always true for recalc_auth_bits during resolve finish
   //assert(dir->get_version() == 0 || version <= dir->get_version());  // hmm?
 
-  // state+pin
-  state_clear(STATE_DIRTY);
+  state_clear(STATE_DIRTY|STATE_NEW);
   dir->dec_num_dirty();
-  put(PIN_DIRTY);
-  
+
+  item_dir_dirty.remove_myself();
   item_dirty.remove_myself();
 
-  clear_new();
-}    
+  put(PIN_DIRTY);
+}
 
 void CDentry::mark_new() 
 {
@@ -402,15 +402,18 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 
   inodeno_t rino;
   unsigned char rdtype;
-  __s32 ls;
   ::decode(rino, p);
   ::decode(rdtype, p);
-  ::decode(ls, p);
+  lock.decode_state(p, is_new);
+
+  bool need_recover;
+  ::decode(need_recover, p);
 
   if (is_new) {
     if (rino)
       dir->link_remote_inode(this, rino, rdtype);
-    lock.set_state(ls);
+    if (need_recover)
+      lock.mark_need_recover();
   }
 }
 
@@ -496,12 +499,13 @@ ClientLease *CDentry::add_client_lease(client_t c, Session *session)
     l = client_lease_map[c];
   else {
     dout(20) << "add_client_lease client." << c << " on " << lock << dendl;
-    if (client_lease_map.empty())
+    if (client_lease_map.empty()) {
       get(PIN_CLIENTLEASE);
+      lock.get_client_lease();
+    }
     l = client_lease_map[c] = new ClientLease(c, this);
     l->seq = ++session->lease_seq;
   
-    lock.get_client_lease();
   }
   
   return l;
@@ -514,17 +518,17 @@ void CDentry::remove_client_lease(ClientLease *l, Locker *locker)
   bool gather = false;
 
   dout(20) << "remove_client_lease client." << l->client << " on " << lock << dendl;
-  lock.put_client_lease();
-  if (lock.get_num_client_lease() == 0 && !lock.is_stable())
-    gather = true;
 
   client_lease_map.erase(l->client);
   l->item_lease.remove_myself();
   l->item_session_lease.remove_myself();
   delete l;
 
-  if (client_lease_map.empty())
+  if (client_lease_map.empty()) {
+    gather = !lock.is_stable();
+    lock.put_client_lease();
     put(PIN_CLIENTLEASE);
+  }
 
   if (gather)
     locker->eval_gather(&lock);

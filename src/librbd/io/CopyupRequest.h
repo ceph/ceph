@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "common/Mutex.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
@@ -24,15 +25,23 @@ struct ImageCtx;
 namespace io {
 
 struct AioCompletion;
-template <typename I> class ObjectRequest;
+template <typename I> class AbstractObjectWriteRequest;
 
+template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
 public:
-  CopyupRequest(ImageCtx *ictx, const std::string &oid, uint64_t objectno,
+  static CopyupRequest* create(ImageCtxT *ictx, const std::string &oid,
+                               uint64_t objectno, Extents &&image_extents,
+                               const ZTracer::Trace &parent_trace) {
+    return new CopyupRequest(ictx, oid, objectno, std::move(image_extents),
+                             parent_trace);
+  }
+
+  CopyupRequest(ImageCtxT *ictx, const std::string &oid, uint64_t objectno,
                 Extents &&image_extents, const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
-  void append_request(ObjectRequest<ImageCtx> *req);
+  void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
 
   void send();
 
@@ -84,13 +93,15 @@ private:
 
   State m_state;
   ceph::bufferlist m_copyup_data;
-  std::vector<ObjectRequest<ImageCtx> *> m_pending_requests;
+  std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
   std::atomic<unsigned> m_pending_copyups { 0 };
 
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
   librados::IoCtx m_data_ctx; // for empty SnapContext
+
+  Mutex m_lock;
 
   void complete_requests(int r);
 
@@ -106,5 +117,7 @@ private:
 
 } // namespace io
 } // namespace librbd
+
+extern template class librbd::io::CopyupRequest<librbd::ImageCtx>;
 
 #endif // CEPH_LIBRBD_IO_COPYUP_REQUEST_H

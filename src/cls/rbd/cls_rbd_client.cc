@@ -13,24 +13,33 @@
 namespace librbd {
   namespace cls_client {
 
-    void get_immutable_metadata_start(librados::ObjectReadOperation *op) {
-      bufferlist bl, empty_bl;
+    void get_initial_metadata_start(librados::ObjectReadOperation *op) {
+      bufferlist bl, empty_bl, features_bl;
       snapid_t snap = CEPH_NOSNAP;
       ::encode(snap, bl);
       op->exec("rbd", "get_size", bl);
       op->exec("rbd", "get_object_prefix", empty_bl);
+
+      ::encode(snap, features_bl);
+      ::encode(true, features_bl);
+      op->exec("rbd", "get_features", features_bl);
     }
 
-    int get_immutable_metadata_finish(bufferlist::iterator *it,
-                                      std::string *object_prefix,
-                                      uint8_t *order) {
+    int get_initial_metadata_finish(bufferlist::iterator *it,
+                                    std::string *object_prefix,
+                                    uint8_t *order,
+                                    uint64_t *features) {
       try {
 	uint64_t size;
+	uint64_t incompatible_features;
 	// get_size
 	::decode(*order, *it);
 	::decode(size, *it);
 	// get_object_prefix
 	::decode(*object_prefix, *it);
+	// get_features
+	::decode(*features, *it);
+	::decode(incompatible_features, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
@@ -38,11 +47,11 @@ namespace librbd {
 
     }
 
-    int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-			       std::string *object_prefix, uint8_t *order)
+    int get_initial_metadata(librados::IoCtx *ioctx, const std::string &oid,
+                             std::string *object_prefix, uint8_t *order, uint64_t *features)
     {
       librados::ObjectReadOperation op;
-      get_immutable_metadata_start(&op);
+      get_initial_metadata_start(&op);
 
       bufferlist out_bl;
       int r = ioctx->operate(oid, &op, &out_bl);
@@ -51,7 +60,7 @@ namespace librbd {
       }
 
       bufferlist::iterator it = out_bl.begin();
-      return get_immutable_metadata_finish(&it, object_prefix, order);
+      return get_initial_metadata_finish(&it, object_prefix, order, features);
     }
 
     void get_mutable_metadata_start(librados::ObjectReadOperation *op,
@@ -508,26 +517,40 @@ namespace librbd {
       op->exec("rbd", "snapshot_rename", bl);
     }
 
-    int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
-			::SnapContext *snapc)
+    void get_snapcontext_start(librados::ObjectReadOperation *op)
     {
-      bufferlist inbl, outbl;
+      bufferlist bl;
+      op->exec("rbd", "get_snapcontext", bl);
+    }
 
-      int r = ioctx->exec(oid, "rbd", "get_snapcontext", inbl, outbl);
-      if (r < 0)
-	return r;
-
+    int get_snapcontext_finish(bufferlist::iterator *it,
+                               ::SnapContext *snapc)
+    {
       try {
-	bufferlist::iterator iter = outbl.begin();
-	::decode(*snapc, iter);
+	::decode(*snapc, *it);
       } catch (const buffer::error &err) {
 	return -EBADMSG;
       }
-
-      if (!snapc->is_valid())
+      if (!snapc->is_valid()) {
 	return -EBADMSG;
-
+      }
       return 0;
+    }
+
+    int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
+			::SnapContext *snapc)
+    {
+      librados::ObjectReadOperation op;
+      get_snapcontext_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+	return r;
+      }
+
+      auto bl_it = out_bl.begin();
+      return get_snapcontext_finish(&bl_it, snapc);
     }
 
     void snapshot_list_start(librados::ObjectReadOperation *op,

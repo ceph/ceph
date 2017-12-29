@@ -1285,9 +1285,7 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
             except ImportError:
                 raise RuntimeError("CephFS unavailable, have you installed libcephfs?")
 
-            filesystem = LibCephFS(cluster.conf_defaults, cluster.conffile)
-            filesystem.conf_parse_argv(cluster.parsed_args)
-
+            filesystem = LibCephFS(rados_inst=cluster)
             filesystem.init()
             ret, outbuf, outs = \
                 filesystem.mds_command(mds_spec, cmd, inbuf)

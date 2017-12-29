@@ -28,12 +28,12 @@ cluster::
 
    ::
 
-       ceph tell <daemon_type>.<id> injectargs '--<parameter_name> <new_value>'
+       ceph tell <daemon_type>.<id> config set <parameter_name> <new_value>
 
    ::
 
-       ceph tell osd.0 injectargs '--osd_heartbeat_grace 20'
-       ceph tell osd.0 injectargs '--osd_heartbeat_interval 5'
+       ceph tell osd.0 config set osd_heartbeat_grace 20
+       ceph tell osd.0 config set osd_heartbeat_interval 5
 
 -  Online Updating on the OSD Node
 

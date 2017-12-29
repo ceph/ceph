@@ -244,7 +244,7 @@ public:
   void clear_new() { state_clear(STATE_NEW); }
   
   // -- replication
-  void encode_replica(mds_rank_t mds, bufferlist& bl) {
+  void encode_replica(mds_rank_t mds, bufferlist& bl, bool need_recover) {
     if (!is_replicated())
       lock.replicate_relax();
 
@@ -253,8 +253,8 @@ public:
     ::encode(first, bl);
     ::encode(linkage.remote_ino, bl);
     ::encode(linkage.remote_d_type, bl);
-    __s32 ls = lock.get_replica_state();
-    ::encode(ls, bl);
+    lock.encode_state_for_replica(bl);
+    ::encode(need_recover, bl);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new);
 
@@ -347,7 +347,7 @@ public:
   __u32 hash;
   snapid_t first, last;
 
-  elist<CDentry*>::item item_dirty;
+  elist<CDentry*>::item item_dirty, item_dir_dirty;
   elist<CDentry*>::item item_stray;
 
   // lock

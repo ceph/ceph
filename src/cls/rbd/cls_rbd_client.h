@@ -21,12 +21,13 @@ namespace librados {
 namespace librbd {
   namespace cls_client {
     // high-level interface to the header
-    void get_immutable_metadata_start(librados::ObjectReadOperation *op);
-    int get_immutable_metadata_finish(bufferlist::iterator *it,
-                                      std::string *object_prefix,
-                                      uint8_t *order);
-    int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-			       std::string *object_prefix, uint8_t *order);
+    void get_initial_metadata_start(librados::ObjectReadOperation *op);
+    int get_initial_metadata_finish(bufferlist::iterator *it,
+                                    std::string *object_prefix,
+                                    uint8_t *order,
+                                    uint64_t *features);
+    int get_initial_metadata(librados::IoCtx *ioctx, const std::string &oid,
+                             std::string *object_prefix, uint8_t *order, uint64_t *features);
 
     void get_mutable_metadata_start(librados::ObjectReadOperation *op,
                                     bool read_only);
@@ -111,6 +112,9 @@ namespace librbd {
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
+    void get_snapcontext_start(librados::ObjectReadOperation *op);
+    int get_snapcontext_finish(bufferlist::iterator *it,
+                               ::SnapContext *snapc);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
 

@@ -22,11 +22,12 @@ import json
 import sys
 import time
 import threading
+import socket
 
 import cherrypy
 import jinja2
 
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
@@ -45,7 +46,7 @@ log = logging.getLogger("dashboard")
 LOG_BUFFER_SIZE = 30
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
-def os_exit_noop():
+def os_exit_noop(*args, **kwargs):
     pass
 
 os._exit = os_exit_noop
@@ -64,6 +65,50 @@ def recurse_refs(root, path):
 def get_prefixed_url(url):
     return global_instance().url_prefix + url
 
+
+
+class StandbyModule(MgrStandbyModule):
+    def serve(self):
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '7000')
+        if server_addr is None:
+            raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/dashboard/server_addr <ip>"')
+        log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'engine.autoreload.on': False
+        })
+
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        jinja_loader = jinja2.FileSystemLoader(current_dir)
+        env = jinja2.Environment(loader=jinja_loader)
+
+        module = self
+
+        class Root(object):
+            @cherrypy.expose
+            def index(self):
+                active_uri = module.get_active_uri()
+                if active_uri:
+                    log.info("Redirecting to active '{0}'".format(active_uri))
+                    raise cherrypy.HTTPRedirect(active_uri)
+                else:
+                    template = env.get_template("standby.html")
+                    return template.render(delay=5)
+
+        cherrypy.tree.mount(Root(), "/", {})
+        log.info("Starting engine...")
+        cherrypy.engine.start()
+        log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        log.info("Engine done.")
+
+    def shutdown(self):
+        log.info("Stopping server...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        log.info("Stopped server")
 
 
 class Module(MgrModule):
@@ -114,8 +159,7 @@ class Module(MgrModule):
         if self._rados:
             return self._rados
 
-        from mgr_module import ceph_state
-        ctx_capsule = ceph_state.get_context()
+        ctx_capsule = self.get_context()
         self._rados = rados.Rados(context=ctx_capsule)
         self._rados.connect()
 
@@ -255,6 +299,10 @@ class Module(MgrModule):
                 filesystem = fs
                 break
 
+        if filesystem is None:
+            raise cherrypy.HTTPError(404,
+                "Filesystem id {0} not found".format(fs_id))
+
         rank_table = []
 
         mdsmap = filesystem['mdsmap']
@@ -389,35 +437,40 @@ class Module(MgrModule):
             "versions": mds_versions
         }
 
+    def _prime_log(self):
+        def load_buffer(buf, channel_name):
+            result = CommandResult("")
+            self.send_command(result, "mon", "", json.dumps({
+                "prefix": "log last",
+                "format": "json",
+                "channel": channel_name,
+                "num": LOG_BUFFER_SIZE
+                }), "")
+            r, outb, outs = result.wait()
+            if r != 0:
+                # Oh well.  We won't let this stop us though.
+                self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
+                    r, outs))
+            else:
+                try:
+                    lines = json.loads(outb)
+                except ValueError:
+                    self.log.error("Error decoding log history")
+                else:
+                    for l in lines:
+                        buf.appendleft(l)
+
+        load_buffer(self.log_buffer, "cluster")
+        load_buffer(self.audit_buffer, "audit")
+        self.log_primed = True
+
     def serve(self):
         current_dir = os.path.dirname(os.path.abspath(__file__))
 
         jinja_loader = jinja2.FileSystemLoader(current_dir)
         env = jinja2.Environment(loader=jinja_loader)
 
-        result = CommandResult("")
-        self.send_command(result, "mon", "", json.dumps({
-            "prefix":"log last",
-            "format": "json"
-            }), "")
-        r, outb, outs = result.wait()
-        if r != 0:
-            # Oh well.  We won't let this stop us though.
-            self.log.error("Error fetching log history (r={0}, \"{1}\")".format(
-                r, outs))
-        else:
-            try:
-                lines = json.loads(outb)
-            except ValueError:
-                self.log.error("Error decoding log history")
-            else:
-                for l in lines:
-                    if l['channel'] == 'audit':
-                        self.audit_buffer.appendleft(l)
-                    else:
-                        self.log_buffer.appendleft(l)
-
-        self.log_primed = True
+        self._prime_log()
 
         class EndPoint(object):
             def _health_data(self):
@@ -471,18 +524,26 @@ class Module(MgrModule):
                     'rbd_pools': rbd_pools,
                     'rbd_mirroring': rbd_mirroring,
                     'health_status': self._health_data()['status'],
-                    'filesystems': filesystems
+                    'filesystems': filesystems,
+                    'mgr_id': global_instance().get_mgr_id(),
+                    'have_mon_connection': global_instance().have_mon_connection()
                 }
 
         class Root(EndPoint):
             @cherrypy.expose
             def filesystem(self, fs_id):
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
                 template = env.get_template("filesystem.html")
 
                 toplevel_data = self._toplevel_data()
 
                 content_data = {
-                    "fs_status": global_instance().fs_status(int(fs_id))
+                    "fs_status": global_instance().fs_status(fs_id)
                 }
 
                 return template.render(
@@ -496,7 +557,13 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def filesystem_data(self, fs_id):
-                return global_instance().fs_status(int(fs_id))
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
+                return global_instance().fs_status(fs_id)
 
             def _clients(self, fs_id):
                 cephfs_clients = global_instance().cephfs_clients.get(fs_id, None)
@@ -504,7 +571,14 @@ class Module(MgrModule):
                     cephfs_clients = CephFSClients(global_instance(), fs_id)
                     global_instance().cephfs_clients[fs_id] = cephfs_clients
 
-                status, clients = cephfs_clients.get()
+                try:
+                    status, clients = cephfs_clients.get()
+                except AttributeError:
+                    raise cherrypy.HTTPError(404,
+                        "No filesystem with id {0}".format(fs_id))
+                if clients is None:
+                    raise cherrypy.HTTPError(404,
+                        "No filesystem with id {0}".format(fs_id))
                 #TODO do something sensible with status
 
                 # Decorate the metadata with some fields that will be
@@ -565,7 +639,13 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def clients_data(self, fs_id):
-                return self._clients(int(fs_id))
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
+                return self._clients(fs_id)
 
             def _rbd_pool(self, pool_name):
                 rbd_ls = global_instance().rbd_ls.get(pool_name, None)
@@ -800,8 +880,14 @@ class Module(MgrModule):
                     "mds.subtrees"
                 ]
 
+                try:
+                    fs_id = int(fs_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid filesystem id {0}".format(fs_id))
+
                 result = {}
-                mds_names = self._get_mds_names(int(fs_id))
+                mds_names = self._get_mds_names(fs_id)
 
                 for mds_name in mds_names:
                     result[mds_name] = {}
@@ -860,6 +946,13 @@ class Module(MgrModule):
         osdmap = self.get_osdmap()
         log.info("latest osdmap is %d" % osdmap.get_epoch())
 
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri("http://{0}:{1}/".format(
+            socket.getfqdn() if server_addr == "::" else server_addr,
+            server_port
+        ))
+
         static_dir = os.path.join(current_dir, 'static')
         conf = {
             "/static": {
@@ -871,8 +964,6 @@ class Module(MgrModule):
 
         class OSDEndpoint(EndPoint):
             def _osd(self, osd_id):
-                osd_id = int(osd_id)
-
                 osd_map = global_instance().get("osd_map")
 
                 osd = None
@@ -880,8 +971,10 @@ class Module(MgrModule):
                     if o['osd'] == osd_id:
                         osd = o
                         break
+                if osd is None:
+                    raise cherrypy.HTTPError(404,
+                        "No OSD with id {0}".format(osd_id))
 
-                assert osd is not None  # TODO 400
 
                 osd_spec = "{0}".format(osd_id)
 
@@ -895,8 +988,11 @@ class Module(MgrModule):
                            }),
                        "")
                 r, outb, outs = result.wait()
-                assert r == 0
-                histogram = json.loads(outb)
+                if r != 0:
+                    histogram = None
+                    global_instance().log.error("Failed to load histogram for OSD {}".format(osd_id))
+                else:
+                    histogram = json.loads(outb)
 
                 return {
                     "osd": osd,
@@ -914,12 +1010,18 @@ class Module(MgrModule):
                     ceph_version=global_instance().version,
                     path_info='/osd' + cherrypy.request.path_info,
                     toplevel_data=json.dumps(toplevel_data, indent=2),
-                    content_data=json.dumps(self._osd(osd_id), indent=2)
+                    content_data=json.dumps(self.perf_data(osd_id), indent=2)
                 )
 
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def perf_data(self, osd_id):
+                try:
+                    osd_id = int(osd_id)
+                except ValueError:
+                    raise cherrypy.HTTPError(400,
+                        "Invalid OSD id {0}".format(osd_id))
+
                 return self._osd(osd_id)
 
             @cherrypy.expose
@@ -965,7 +1067,6 @@ class Module(MgrModule):
                 for server in servers:
                     hostname = server['hostname']
                     services = server['services']
-                    first = True
                     for s in services:
                         if s["type"] == "osd":
                             osd_id = int(s["id"])
@@ -977,18 +1078,18 @@ class Module(MgrModule):
                             summary = self._osd_summary(osd_id,
                                                         osd_map.osds_by_id[osd_id])
 
-                            if first:
-                                # A little helper for rendering
-                                summary['first'] = True
-                                first = False
                             result[hostname].append(summary)
+
+                    result[hostname].sort(key=lambda a: a['id'])
+                    if len(result[hostname]):
+                        result[hostname][0]['first'] = True
 
                 global_instance().log.warn("result.size {0} servers.size {1}".format(
                     len(result), len(servers)
                 ))
 
                 # Return list form for convenience of rendering
-                return result.items()
+                return sorted(result.items(), key=lambda a: a[0])
 
             @cherrypy.expose
             def index(self):
@@ -1015,7 +1116,8 @@ class Module(MgrModule):
         cherrypy.tree.mount(Root(), get_prefixed_url("/"), conf)
         cherrypy.tree.mount(OSDEndpoint(), get_prefixed_url("/osd"), conf)
 
-        log.info("Starting engine...")
+        log.info("Starting engine on {0}:{1}...".format(
+            server_addr, server_port))
         cherrypy.engine.start()
         log.info("Waiting for engine...")
         cherrypy.engine.block()

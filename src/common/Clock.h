@@ -19,7 +19,6 @@
 
 #include <time.h>
 
-extern utime_t ceph_clock_now();
-extern time_t ceph_clock_gettime();
+utime_t ceph_clock_now();
 
 #endif

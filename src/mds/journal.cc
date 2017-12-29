@@ -1016,11 +1016,8 @@ void EMetaBlob::get_paths(
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       std::string const &dentry = (*iter)->dn;
-      children[dir_ino].push_back(dentry);
-      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
       if (children.find((*iter)->inode.ino) == children.end()) {
         leaf_locations.push_back(Location(dir_ino, dentry));
-
       }
     }
 
@@ -1044,14 +1041,15 @@ void EMetaBlob::get_paths(
     Location const &loc = *i;
     std::string path = loc.second;
     inodeno_t ino = loc.first;
-    while(ino_locations.find(ino) != ino_locations.end()) {
-      Location const &loc = ino_locations[ino];
+    std::map<inodeno_t, Location>::iterator iter = ino_locations.find(ino);
+    while(iter != ino_locations.end()) {
+      Location const &loc = iter->second;
       if (!path.empty()) {
         path = loc.second + "/" + path;
       } else {
         path = loc.second + path;
       }
-      ino = loc.first;
+      iter = ino_locations.find(loc.first);
     }
 
     paths.push_back(path);
@@ -1502,10 +1500,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
     for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
-      if (slaveup) // preserve unlinked inodes until slave commit
-	slaveup->unlinked.insert(p->first);
-      else
-	mds->mdcache->remove_inode_recursive(p->first);
+      CInode *in = p->first;
+      if (slaveup) { // preserve unlinked inodes until slave commit
+	slaveup->unlinked.insert(in);
+	if (in->snaprealm)
+	  in->snaprealm->adjust_parent();
+      } else
+	mds->mdcache->remove_inode_recursive(in);
     }
   }
 
@@ -1937,19 +1938,20 @@ void ETableServer::replay(MDSRank *mds)
 
   switch (op) {
   case TABLESERVER_OP_PREPARE:
+    server->_note_prepare(bymds, reqid, true);
     server->_prepare(mutation, reqid, bymds);
-    server->_note_prepare(bymds, reqid);
     break;
   case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
-    server->_note_commit(tid);
+    server->_note_commit(tid, true);
     break;
   case TABLESERVER_OP_ROLLBACK:
     server->_rollback(tid);
-    server->_note_rollback(tid);
+    server->_note_rollback(tid, true);
     break;
   case TABLESERVER_OP_SERVER_UPDATE:
     server->_server_update(mutation);
+    server->_note_server_update(mutation, true);
     break;
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
@@ -2959,7 +2961,14 @@ void EImportStart::replay(MDSRank *mds)
     bufferlist::iterator blp = client_map.begin();
     ::decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
-    assert(mds->sessionmap.get_version() == cmapv);
+    if (mds->sessionmap.get_version() != cmapv)
+    {
+      derr << "sessionmap version " << mds->sessionmap.get_version()
+           << " != cmapv " << cmapv << dendl;
+      mds->clog->error() << "failure replaying journal (EImportStart)";
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
     mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();

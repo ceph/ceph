@@ -52,13 +52,9 @@ public:
   int init();
 
   /// Opens underlying db
-  int open(ostream &out) {
-    return do_open(out, false);
-  }
+  int open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) {
-    return do_open(out, true);
-  }
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
 
   void close();
 
@@ -149,8 +145,7 @@ public:
   }
 
 
-protected:
-  WholeSpaceIterator _get_iterator() {
+  WholeSpaceIterator get_wholespace_iterator() {
     return std::make_shared<KineticWholeSpaceIteratorImpl>(kinetic_conn.get());
   }
 };

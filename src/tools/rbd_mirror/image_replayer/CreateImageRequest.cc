@@ -74,8 +74,29 @@ void CreateImageRequest<I>::create_image() {
                     m_remote_image_ctx->stripe_unit);
   image_options.set(RBD_IMAGE_OPTION_STRIPE_COUNT,
                     m_remote_image_ctx->stripe_count);
-  image_options.set(RBD_IMAGE_OPTION_DATA_POOL,
-		    m_remote_image_ctx->data_ctx.get_pool_name());
+
+  // Determine the data pool for the local image as follows:
+  // 1. If the local pool has a default data pool, use it.
+  // 2. If the remote image has a data pool different from its metadata pool and
+  //    a pool with the same name exists locally, use it.
+  // 3. Don't set the data pool explicitly.
+  std::string data_pool;
+  librados::Rados local_rados(m_local_io_ctx);
+  auto default_data_pool = g_ceph_context->_conf->get_val<std::string>("rbd_default_data_pool");
+  auto remote_md_pool = m_remote_image_ctx->md_ctx.get_pool_name();
+  auto remote_data_pool = m_remote_image_ctx->data_ctx.get_pool_name();
+
+  if (default_data_pool != "") {
+    data_pool = default_data_pool;
+  } else if (remote_data_pool != remote_md_pool) {
+    if (local_rados.pool_lookup(remote_data_pool.c_str()) >= 0) {
+      data_pool = remote_data_pool;
+    }
+  }
+
+  if (data_pool != "") {
+    image_options.set(RBD_IMAGE_OPTION_DATA_POOL, data_pool);
+  }
 
   librbd::image::CreateRequest<I> *req = librbd::image::CreateRequest<I>::create(
     m_local_io_ctx, m_local_image_name, m_local_image_id,

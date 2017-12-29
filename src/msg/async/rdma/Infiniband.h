@@ -23,6 +23,7 @@
 
 #include <infiniband/verbs.h>
 
+#include <atomic>
 #include <string>
 #include <vector>
 
@@ -57,7 +58,7 @@ class Port {
   int port_num;
   struct ibv_port_attr* port_attr;
   uint16_t lid;
-  int gid_idx;
+  int gid_idx = 0;
   union ibv_gid gid;
 
  public:
@@ -73,7 +74,7 @@ class Port {
 class Device {
   ibv_device *device;
   const char* name;
-  uint8_t  port_cnt;
+  uint8_t  port_cnt = 0;
  public:
   explicit Device(CephContext *c, ibv_device* d);
   ~Device() {
@@ -206,9 +207,9 @@ class Infiniband {
 
      public:
       ibv_mr* mr;
-      uint32_t lkey;
+      uint32_t lkey = 0;
       uint32_t bytes;
-      uint32_t bound;
+      uint32_t bound = 0;
       uint32_t offset;
       char* buffer; // TODO: remove buffer/refactor TX
       char  data[0];
@@ -233,7 +234,7 @@ class Infiniband {
 
       MemoryManager& manager;
       uint32_t buffer_size;
-      uint32_t num_chunk;
+      uint32_t num_chunk = 0;
       Mutex lock;
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
@@ -464,6 +465,9 @@ class Infiniband {
      * Return true if the queue pair is in an error state, false otherwise.
      */
     bool is_error() const;
+    void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
+    void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
+    uint32_t get_tx_wr() const { return tx_wr_inflight; }
     ibv_qp* get_qp() const { return qp; }
     Infiniband::CompletionQueue* get_tx_cq() const { return txcq; }
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
@@ -486,6 +490,7 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
+    std::atomic<uint32_t> tx_wr_inflight = {0}; // counter for inflight Tx WQEs
   };
 
  public:

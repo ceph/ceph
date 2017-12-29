@@ -16,7 +16,6 @@
 
 #include <iostream>
 #include <sstream>
-using namespace std;
 
 
 #include "common/config.h"

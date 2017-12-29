@@ -407,7 +407,7 @@ void ManagedLock<I>::execute_next_action() {
     send_shutdown();
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 }

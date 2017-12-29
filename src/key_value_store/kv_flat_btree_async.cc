@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <iterator>
 
-using namespace std;
 using ceph::bufferlist;
 
 bool index_data::is_timed_out(utime_t now, utime_t timeout) const {
@@ -895,7 +894,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 	  if (verbose) cout << client_name << " is suiciding!" << std::endl;
 	  return -ESUICIDE;
 	} else {
-	  assert(false);
+	  ceph_abort();
 	}
 	return err;
       }
@@ -924,7 +923,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 		cerr << client_name << " is suiciding!" << std::endl;
 		return -ESUICIDE;
 	      } else {
-		assert(false);
+		ceph_abort();
 	      }
 	      return err;
 	    }

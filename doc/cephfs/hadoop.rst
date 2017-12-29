@@ -30,7 +30,7 @@ and configure Hadoop to use the Ceph file system.
 CephFS Java Packages
 --------------------
 
-* CephFS Hadoop plugin (`hadoop-cephfs.jar <http://ceph.com/download/hadoop-cephfs.jar>`_)
+* CephFS Hadoop plugin (`hadoop-cephfs.jar <https://download.ceph.com/tarballs/hadoop-cephfs.jar>`_)
 
 Adding these dependencies to a Hadoop installation will depend on your
 particular deployment. In general the dependencies must be present on each
@@ -157,7 +157,7 @@ Next, determine the pool id. This can be done by examining the output of the
 
 The output should resemble::
 
-    pool 3 'hadoop1' rep size 1 min_size 1 crush_ruleset 0...
+    pool 3 'hadoop1' rep size 1 min_size 1 crush_rule 0...
 
 where ``3`` is the pool id. Next we will use the pool id reference to register
 the pool as a data pool for storing file system data. ::

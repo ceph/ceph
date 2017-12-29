@@ -19,7 +19,7 @@
 #
 TIMEOUT=300
 PG_NUM=4
-: ${CEPH_BUILD_VIRTUALENV:=/tmp}
+CEPH_BUILD_VIRTUALENV=${TMPDIR:-/tmp}
 
 if type xmlstarlet > /dev/null 2>&1; then
     XMLSTARLET=xmlstarlet
@@ -32,15 +32,9 @@ fi
 
 if [ `uname` = FreeBSD ]; then
     SED=gsed
-    DIFFCOLOPTS=""
     KERNCORE="kern.corefile"
 else
     SED=sed
-    termwidth=$(stty -a | head -1 | sed -e 's/.*columns \([0-9]*\).*/\1/')
-    if [ -n "$termwidth" -a "$termwidth" != "0" ]; then
-        termwidth="-W ${termwidth}"
-    fi
-    DIFFCOLOPTS="-y $termwidth"
     KERNCORE="kernel.core_pattern"
 fi
 
@@ -196,7 +190,7 @@ function teardown() {
 function __teardown_btrfs() {
     local btrfs_base_dir=$1
     local btrfs_root=$(df -P . | tail -1 | awk '{print $NF}')
-    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list . -t | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
+    local btrfs_dirs=$(cd $btrfs_base_dir; sudo btrfs subvolume list -t . | awk '/^[0-9]/ {print $4}' | grep "$btrfs_base_dir/$btrfs_dir")
     for subvolume in $btrfs_dirs; do
        sudo btrfs subvolume delete $btrfs_root/$subvolume
     done
@@ -436,6 +430,7 @@ function run_mon() {
 
     ceph-mon \
         --id $id \
+	--osd-failsafe-full-ratio=.99 \
         --mon-osd-full-ratio=.99 \
         --mon-data-avail-crit=1 \
         --mon-data-avail-warn=5 \
@@ -526,6 +521,7 @@ function run_mgr() {
     ceph-mgr \
         --id $id \
         $EXTRA_OPTS \
+	--osd-failsafe-full-ratio=.99 \
         --debug-mgr 20 \
 	--debug-objecter 20 \
         --debug-ms 20 \
@@ -580,6 +576,7 @@ function run_osd() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
@@ -599,6 +596,7 @@ function run_osd_bluestore() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
@@ -718,6 +716,7 @@ function activate_osd() {
     local osd_data=$dir/$id
 
     local ceph_disk_args
+    ceph_disk_args+=" --verbose"
     ceph_disk_args+=" --statedir=$dir"
     ceph_disk_args+=" --sysconfdir=$dir"
     ceph_disk_args+=" --prepend-to-path="
@@ -734,9 +733,9 @@ function activate_osd() {
     ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/\$name.log"
     ceph_args+=" --pid-file=$dir/\$name.pid"
-    ceph_args+=" --osd-max-object-name-len 460"
-    ceph_args+=" --osd-max-object-namespace-len 64"
-    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features *"
+    ceph_args+=" --osd-max-object-name-len=460"
+    ceph_args+=" --osd-max-object-namespace-len=64"
+    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
@@ -1871,7 +1870,7 @@ function main() {
 
     export PATH=${CEPH_BUILD_VIRTUALENV}/ceph-disk-virtualenv/bin:${CEPH_BUILD_VIRTUALENV}/ceph-detect-init-virtualenv/bin:.:$PATH # make sure program from sources are preferred
     #export PATH=$CEPH_ROOT/src/ceph-disk/virtualenv/bin:$CEPH_ROOT/src/ceph-detect-init/virtualenv/bin:.:$PATH # make sure program from sources are preferred
-
+    export PYTHONWARNINGS=ignore
     export CEPH_CONF=/dev/null
     unset CEPH_ARGS
 

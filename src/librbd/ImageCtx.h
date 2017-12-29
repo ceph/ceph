@@ -52,8 +52,8 @@ namespace librbd {
   namespace io {
   class AioCompletion;
   class AsyncOperation;
+  template <typename> class CopyupRequest;
   template <typename> class ImageRequestWQ;
-  class CopyupRequest;
   }
   namespace journal { struct Policy; }
 
@@ -125,6 +125,7 @@ namespace librbd {
     std::string id; // only used for new-format images
     ParentInfo parent_md;
     ImageCtx *parent;
+    ImageCtx *child = nullptr;
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
@@ -140,7 +141,7 @@ namespace librbd {
     Readahead readahead;
     uint64_t total_bytes_read;
 
-    std::map<uint64_t, io::CopyupRequest*> copyup_list;
+    std::map<uint64_t, io::CopyupRequest<ImageCtx>*> copyup_list;
 
     xlist<io::AsyncOperation*> async_ops;
     xlist<AsyncRequest<>*> async_requests;
@@ -176,6 +177,7 @@ namespace librbd {
     bool localize_snap_reads;
     bool balance_parent_reads;
     bool localize_parent_reads;
+    uint64_t sparse_read_threshold_bytes;
     uint32_t readahead_trigger_requests;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
@@ -194,9 +196,11 @@ namespace librbd {
     uint32_t journal_max_payload_bytes;
     int journal_max_concurrent_object_sets;
     bool mirroring_resync_after_disconnect;
+    uint64_t mirroring_delete_delay;
     int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t qos_iops_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -227,6 +231,7 @@ namespace librbd {
 	     const char *snap, IoCtx& p, bool read_only);
     ~ImageCtx();
     void init();
+    void init_cache();
     void shutdown();
     void init_layout();
     void perf_start(std::string name);
@@ -309,7 +314,8 @@ namespace librbd {
     void cancel_async_requests();
     void cancel_async_requests(Context *on_finish);
 
-    void apply_metadata(const std::map<std::string, bufferlist> &meta);
+    void apply_metadata(const std::map<std::string, bufferlist> &meta,
+                        bool thread_safe);
 
     ExclusiveLock<ImageCtx> *create_exclusive_lock();
     ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);

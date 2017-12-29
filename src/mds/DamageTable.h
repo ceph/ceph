@@ -17,7 +17,7 @@
 #define DAMAGE_TABLE_H_
 
 #include "mdstypes.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 
 class CDir;
 
@@ -43,7 +43,7 @@ class DamageEntry
 
   DamageEntry()
   {
-    id = get_random(0, 0xffffffff);
+    id = ceph::util::generate_random_number<damage_entry_id_t>(0, 0xffffffff);
     reported_at = ceph_clock_now();
   }
 

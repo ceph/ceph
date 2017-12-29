@@ -231,16 +231,12 @@ void FSMap::create_filesystem(const std::string &name,
 {
   auto fs = std::make_shared<Filesystem>();
   fs->mds_map.fs_name = name;
-  fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.push_back(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;
   fs->mds_map.cas_pool = -1;
-  fs->mds_map.max_file_size = g_conf->mds_max_file_size;
   fs->mds_map.compat = compat;
   fs->mds_map.created = ceph_clock_now();
   fs->mds_map.modified = ceph_clock_now();
-  fs->mds_map.session_timeout = g_conf->mds_session_timeout;
-  fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   fs->mds_map.enabled = true;
   if (features & CEPH_FEATURE_SERVER_JEWEL) {
     fs->fscid = next_filesystem_id++;
@@ -275,17 +271,13 @@ void FSMap::reset_filesystem(fs_cluster_id_t fscid)
   // Carry forward what makes sense
   new_fs->fscid = fs->fscid;
   new_fs->mds_map.inline_data_enabled = fs->mds_map.inline_data_enabled;
-  new_fs->mds_map.max_mds = 1;
   new_fs->mds_map.data_pools = fs->mds_map.data_pools;
   new_fs->mds_map.metadata_pool = fs->mds_map.metadata_pool;
   new_fs->mds_map.cas_pool = fs->mds_map.cas_pool;
   new_fs->mds_map.fs_name = fs->mds_map.fs_name;
-  new_fs->mds_map.max_file_size = g_conf->mds_max_file_size;
   new_fs->mds_map.compat = compat;
   new_fs->mds_map.created = ceph_clock_now();
   new_fs->mds_map.modified = ceph_clock_now();
-  new_fs->mds_map.session_timeout = g_conf->mds_session_timeout;
-  new_fs->mds_map.session_autoclose = g_conf->mds_session_autoclose;
   new_fs->mds_map.standby_count_wanted = fs->mds_map.standby_count_wanted;
   new_fs->mds_map.enabled = true;
 
@@ -431,17 +423,17 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 
 void FSMap::decode(bufferlist::iterator& p)
 {
-  // Because the mon used to store an MDSMap where we now
-  // store an FSMap, FSMap knows how to decode the legacy
-  // MDSMap format (it never needs to encode it though).
-  MDSMap legacy_mds_map;
-  
   // The highest MDSMap encoding version before we changed the
   // MDSMonitor to store an FSMap instead of an MDSMap was
   // 5, so anything older than 6 is decoded as an MDSMap,
   // and anything newer is decoded as an FSMap.
   DECODE_START_LEGACY_COMPAT_LEN_16(7, 4, 4, p);
   if (struct_v < 6) {
+    // Because the mon used to store an MDSMap where we now
+    // store an FSMap, FSMap knows how to decode the legacy
+    // MDSMap format (it never needs to encode it though).
+    MDSMap legacy_mds_map;
+
     // Decoding an MDSMap (upgrade)
     ::decode(epoch, p);
     ::decode(legacy_mds_map.flags, p);
@@ -621,6 +613,12 @@ void FSMap::decode(bufferlist::iterator& p)
   DECODE_FINISH(p);
 }
 
+void FSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
+{
+  for (auto &fs : filesystems) {
+    fs.second->mds_map.sanitize(pool_exists);
+  }
+}
 
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {

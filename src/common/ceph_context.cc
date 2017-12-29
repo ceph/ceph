@@ -202,12 +202,14 @@ public:
       "log_max_recent",
       "log_to_syslog",
       "err_to_syslog",
+      "log_stderr_prefix",
       "log_to_stderr",
       "err_to_stderr",
       "log_to_graylog",
       "err_to_graylog",
       "log_graylog_host",
       "log_graylog_port",
+      "log_coarse_timestamps",
       "fsid",
       "host",
       NULL
@@ -235,6 +237,10 @@ public:
       log->reopen_log_file();
     }
 
+    if (changed.count("log_stderr_prefix")) {
+      log->set_log_stderr_prefix(conf->get_val<string>("log_stderr_prefix"));
+    }
+
     if (changed.count("log_max_new")) {
 
       log->set_max_new(conf->log_max_new);
@@ -258,6 +264,10 @@ public:
 
     if (log->graylog() && (changed.count("log_graylog_host") || changed.count("log_graylog_port"))) {
       log->graylog()->set_destination(conf->log_graylog_host, conf->log_graylog_port);
+    }
+
+    if (changed.find("log_coarse_timestamps") != changed.end()) {
+      log->set_coarse_timestamps(conf->get_val<bool>("log_coarse_timestamps"));
     }
 
     // metadata
@@ -627,6 +637,7 @@ CephContext::CephContext(uint32_t module_type_,
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+  _crypto_random.reset(new CryptoRandom());
 
   MempoolObs *mempool_obs = 0;
   lookup_or_create_singleton_object(mempool_obs, "mempool_obs");
@@ -737,7 +748,7 @@ void CephContext::start_service_thread()
 
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.
-  _conf->set_val("internal_safe_to_start_threads", "true");
+  _conf->set_safe_to_start_threads();
   _conf->call_all_observers();
 
   // start admin socket

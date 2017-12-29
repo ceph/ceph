@@ -1,4 +1,5 @@
 usr/bin/ceph-mon
+usr/bin/ceph-monstore-tool
 usr/bin/ceph-rest-api
 usr/lib/python*/dist-packages/ceph_rest_api.py*
 usr/share/man/man8/ceph-mon.8

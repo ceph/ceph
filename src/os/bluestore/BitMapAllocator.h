@@ -8,7 +8,6 @@
 
 #include "Allocator.h"
 #include "BitAllocator.h"
-#include "include/btree_interval_set.h"
 
 class BitMapAllocator : public Allocator {
   CephContext* cct;
@@ -36,7 +35,7 @@ public:
     int64_t hint, mempool::bluestore_alloc::vector<AllocExtent> *extents) override;
 
   void release(
-    uint64_t offset, uint64_t length) override;
+    const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
 

@@ -74,6 +74,7 @@ int main(int argc, char* argv[]) {
     const uint client_groups = g_conf.client_groups;
     const bool server_random_selection = g_conf.server_random_selection;
     const bool server_soft_limit = g_conf.server_soft_limit;
+    const double anticipation_timeout = g_conf.anticipation_timeout;
     uint server_total_count = 0;
     uint client_total_count = 0;
 
@@ -117,8 +118,8 @@ int main(int argc, char* argv[]) {
       return i;
     };
 
-    auto client_info_f = [=](const ClientId& c) -> test::dmc::ClientInfo {
-      return client_info[ret_client_group_f(c)];
+    auto client_info_f = [=](const ClientId& c) -> const test::dmc::ClientInfo* {
+      return &client_info[ret_client_group_f(c)];
     };
 
     auto client_disp_filter = [=] (const ClientId& i) -> bool {
@@ -176,7 +177,11 @@ int main(int argc, char* argv[]) {
     test::CreateQueueF create_queue_f =
         [&](test::DmcQueue::CanHandleRequestFunc can_f,
             test::DmcQueue::HandleRequestFunc handle_f) -> test::DmcQueue* {
-        return new test::DmcQueue(client_info_f, can_f, handle_f, server_soft_limit);
+        return new test::DmcQueue(client_info_f,
+                                  can_f,
+                                  handle_f,
+                                  server_soft_limit,
+                                  anticipation_timeout);
     };
 
  
@@ -232,9 +237,9 @@ int main(int argc, char* argv[]) {
 
 
 void test::client_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ClientFilter client_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+		       test::MySim* sim,
+		       test::MySim::ClientFilter client_disp_filter,
+		       int head_w, int data_w, int data_prec) {
     // report how many ops were done by reservation and proportion for
     // each client
 
@@ -265,9 +270,9 @@ void test::client_data(std::ostream& out,
 
 
 void test::server_data(std::ostream& out,
-		 test::MySim* sim,
-		 test::MySim::ServerFilter server_disp_filter,
-		 int head_w, int data_w, int data_prec) {
+		       test::MySim* sim,
+		       test::MySim::ServerFilter server_disp_filter,
+		       int head_w, int data_w, int data_prec) {
     out << std::setw(head_w) << "res_ops:";
     int total_r = 0;
     for (uint i = 0; i < sim->get_server_count(); ++i) {

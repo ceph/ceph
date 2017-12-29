@@ -873,6 +873,55 @@ void RGWOp_MDLog_Status::send_response()
 }
 
 // not in header to avoid pulling in rgw_data_sync.h
+class RGWOp_BILog_Status : public RGWRESTOp {
+  std::vector<rgw_bucket_shard_sync_info> status;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("bilog", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const string name() override { return "get_bucket_index_log_status"; }
+};
+
+void RGWOp_BILog_Status::execute()
+{
+  const auto source_zone = s->info.args.get("source-zone");
+  const auto key = s->info.args.get("bucket");
+  if (key.empty()) {
+    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  rgw_bucket bucket;
+  int shard_id{-1}; // unused
+  http_ret = rgw_bucket_parse_bucket_key(s->cct, key, &bucket, &shard_id);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "no 'bucket' provided" << dendl;
+    http_ret = -EINVAL;
+    return;
+  }
+
+  http_ret = rgw_bucket_sync_status(store, source_zone, bucket, &status);
+}
+
+void RGWOp_BILog_Status::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+  end_header(s);
+
+  if (http_ret >= 0) {
+    encode_json("status", status, s->formatter);
+  }
+  flusher.flush();
+}
+
+// not in header to avoid pulling in rgw_data_sync.h
 class RGWOp_DATALog_Status : public RGWRESTOp {
   rgw_data_sync_status status;
 public:
@@ -935,6 +984,8 @@ RGWOp *RGWHandler_Log::op_get() {
   } else if (type.compare("bucket-index") == 0) {
     if (s->info.args.exists("info")) {
       return new RGWOp_BILog_Info;
+    } else if (s->info.args.exists("status")) {
+      return new RGWOp_BILog_Status;
     } else {
       return new RGWOp_BILog_List;
     }

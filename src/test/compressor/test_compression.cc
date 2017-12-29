@@ -386,7 +386,7 @@ TEST(CompressionPlugin, all)
   CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "invalid"));
   EXPECT_FALSE(factory);
   factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "example"));
-  EXPECT_TRUE(factory);
+  ASSERT_TRUE(factory);
   stringstream ss;
   EXPECT_EQ(0, factory->factory(&compressor, &ss));
   EXPECT_TRUE(compressor.get());

@@ -41,7 +41,7 @@ class C_handle_notify : public EventCallback {
 
  public:
   C_handle_notify(EventCenter *c, CephContext *cc): center(c), cct(cc) {}
-  void do_request(int fd_or_id) override {
+  void do_request(uint64_t fd_or_id) override {
     char c[256];
     int r = 0;
     do {
@@ -430,12 +430,12 @@ int EventCenter::process_events(int timeout_microseconds,  ceph::timespan *worki
     cur_process.swap(external_events);
     external_num_events.store(0);
     external_lock.unlock();
+    numevents += cur_process.size();
     while (!cur_process.empty()) {
       EventCallbackRef e = cur_process.front();
       ldout(cct, 30) << __func__ << " do " << e << dendl;
       e->do_request(0);
       cur_process.pop_front();
-      numevents++;
     }
   }
 

@@ -28,7 +28,6 @@ namespace ceph {
 HeartbeatMap::HeartbeatMap(CephContext *cct)
   : m_cct(cct),
     m_rwlock("HeartbeatMap::m_rwlock"),
-    m_inject_unhealthy_until(0),
     m_unhealthy_workers(0),
     m_total_workers(0)
 {
@@ -64,12 +63,11 @@ void HeartbeatMap::remove_worker(const heartbeat_handle_d *h)
   delete h;
 }
 
-bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t now)
+bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who,
+			  ceph::coarse_mono_clock::rep now)
 {
   bool healthy = true;
-  time_t was;
-
-  was = h->timeout;
+  auto was = h->timeout.load();
   if (was && was < now) {
     ldout(m_cct, 1) << who << " '" << h->name << "'"
 		    << " had timed out after " << h->grace << dendl;
@@ -86,11 +84,14 @@ bool HeartbeatMap::_check(const heartbeat_handle_d *h, const char *who, time_t n
   return healthy;
 }
 
-void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace, time_t suicide_grace)
+void HeartbeatMap::reset_timeout(heartbeat_handle_d *h,
+				 ceph::coarse_mono_clock::rep grace,
+				 ceph::coarse_mono_clock::rep suicide_grace)
 {
   ldout(m_cct, 20) << "reset_timeout '" << h->name << "' grace " << grace
 		   << " suicide " << suicide_grace << dendl;
-  time_t now = time(NULL);
+  auto now = chrono::duration_cast<chrono::seconds>(
+	       ceph::coarse_mono_clock::now().time_since_epoch()).count();
   _check(h, "reset_timeout", now);
 
   h->timeout = now + grace;
@@ -106,7 +107,8 @@ void HeartbeatMap::reset_timeout(heartbeat_handle_d *h, time_t grace, time_t sui
 void HeartbeatMap::clear_timeout(heartbeat_handle_d *h)
 {
   ldout(m_cct, 20) << "clear_timeout '" << h->name << "'" << dendl;
-  time_t now = time(NULL);
+  auto now = chrono::duration_cast<std::chrono::seconds>(
+	       ceph::coarse_mono_clock::now().time_since_epoch()).count();
   _check(h, "clear_timeout", now);
   h->timeout = 0;
   h->suicide_timeout = 0;
@@ -117,16 +119,18 @@ bool HeartbeatMap::is_healthy()
   int unhealthy = 0;
   int total = 0;
   m_rwlock.get_read();
-  time_t now = time(NULL);
+  auto now = ceph::coarse_mono_clock::now();
   if (m_cct->_conf->heartbeat_inject_failure) {
     ldout(m_cct, 0) << "is_healthy injecting failure for next " << m_cct->_conf->heartbeat_inject_failure << " seconds" << dendl;
-    m_inject_unhealthy_until = now + m_cct->_conf->heartbeat_inject_failure;
+    m_inject_unhealthy_until = now + std::chrono::seconds(m_cct->_conf->heartbeat_inject_failure);
     m_cct->_conf->set_val("heartbeat_inject_failure", "0");
   }
 
   bool healthy = true;
   if (now < m_inject_unhealthy_until) {
-    ldout(m_cct, 0) << "is_healthy = false, injected failure for next " << (m_inject_unhealthy_until - now) << " seconds" << dendl;
+    auto sec = std::chrono::duration_cast<std::chrono::seconds>(m_inject_unhealthy_until - now).count();
+    ldout(m_cct, 0) << "is_healthy = false, injected failure for next "
+                    << sec << " seconds" << dendl;
     healthy = false;
   }
 
@@ -134,7 +138,8 @@ bool HeartbeatMap::is_healthy()
        p != m_workers.end();
        ++p) {
     heartbeat_handle_d *h = *p;
-    if (!_check(h, "is_healthy", now)) {
+    auto epoch = chrono::duration_cast<chrono::seconds>(now.time_since_epoch()).count();
+    if (!_check(h, "is_healthy", epoch)) {
       healthy = false;
       unhealthy++;
     }

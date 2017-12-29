@@ -723,18 +723,6 @@ TEST(pg_missing_t, is_missing)
   }
 }
 
-TEST(pg_missing_t, have_old)
-{
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
-  pg_missing_t missing;
-  EXPECT_EQ(eversion_t(), missing.have_old(oid));
-  missing.add(oid, eversion_t(), eversion_t(), false);
-  EXPECT_EQ(eversion_t(), missing.have_old(oid));
-  eversion_t have(1,1);
-  missing.revise_have(oid, have);
-  EXPECT_EQ(have, missing.have_old(oid));
-}
-
 TEST(pg_missing_t, add_next_event)
 {
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");

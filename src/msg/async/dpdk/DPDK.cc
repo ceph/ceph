@@ -88,16 +88,6 @@ static constexpr uint16_t rx_gc_thresh           = 64;
 static constexpr uint16_t mbufs_per_queue_tx     = 2 * default_ring_size;
 
 static constexpr uint16_t mbuf_cache_size        = 512;
-static constexpr uint16_t mbuf_overhead          =
-sizeof(struct rte_mbuf) + RTE_PKTMBUF_HEADROOM;
-//
-// We'll allocate 2K data buffers for an inline case because this would require
-// a single page per mbuf. If we used 4K data buffers here it would require 2
-// pages for a single buffer (due to "mbuf_overhead") and this is a much more
-// demanding memory constraint.
-//
-static constexpr size_t inline_mbuf_data_size = 2048;
-
 //
 // Size of the data buffer in the non-inline case.
 //
@@ -106,6 +96,17 @@ static constexpr size_t inline_mbuf_data_size = 2048;
 // above.
 //
 static constexpr size_t mbuf_data_size = 4096;
+
+static constexpr uint16_t mbuf_overhead          =
+sizeof(struct rte_mbuf) + mbuf_data_size + RTE_PKTMBUF_HEADROOM;
+//
+// We'll allocate 2K data buffers for an inline case because this would require
+// a single page per mbuf. If we used 4K data buffers here it would require 2
+// pages for a single buffer (due to "mbuf_overhead") and this is a much more
+// demanding memory constraint.
+//
+static constexpr size_t inline_mbuf_data_size = 2048;
+
 
 // (INLINE_MBUF_DATA_SIZE(2K)*32 = 64K = Max TSO/LRO size) + 1 mbuf for headers
 static constexpr uint8_t max_frags = 32 + 1;
@@ -531,6 +532,7 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     for (int i = 0; i < mbufs_per_queue_rx; i++) {
       rte_mbuf* m = rte_pktmbuf_alloc(_pktmbuf_pool_rx);
       assert(m);
+      rte_mbuf_refcnt_set(m, 1);
       _rx_free_bufs.push_back(m);
     }
 
@@ -560,7 +562,6 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     }
   }
 
-  ldout(cct, 20) << __func__ << " count " << rte_mempool_count(_pktmbuf_pool_rx) << " free count " << rte_mempool_free_count(_pktmbuf_pool_rx) << dendl;
   return _pktmbuf_pool_rx != nullptr;
 }
 
@@ -601,7 +602,7 @@ class C_handle_dev_stats : public EventCallback {
   DPDKQueuePair *_qp;
  public:
   C_handle_dev_stats(DPDKQueuePair *qp): _qp(qp) { }
-  void do_request(int id) {
+  void do_request(uint64_t id) {
     _qp->handle_stats();
   }
 };
@@ -783,8 +784,6 @@ bool DPDKQueuePair::rx_gc(bool force)
     ldout(cct, 10) << __func__ << " free segs " << _num_rx_free_segs
                    << " thresh " << rx_gc_thresh
                    << " free pkts " << _rx_free_pkts.size()
-                   << " pool count " << rte_mempool_count(_pktmbuf_pool_rx)
-                   << " free pool count " << rte_mempool_free_count(_pktmbuf_pool_rx)
                    << dendl;
 
     while (!_rx_free_pkts.empty()) {
@@ -846,7 +845,7 @@ void DPDKQueuePair::process_packets(
 
     // Set stipped VLAN value if available
     if ((_dev->_dev_info.rx_offload_capa & DEV_RX_OFFLOAD_VLAN_STRIP) &&
-        (m->ol_flags & PKT_RX_VLAN_PKT)) {
+        (m->ol_flags & PKT_RX_VLAN_STRIPPED)) {
       oi.vlan_tci = m->vlan_tci;
     }
 

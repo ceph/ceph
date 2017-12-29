@@ -57,29 +57,33 @@ void MDSTableServer::handle_prepare(MMDSTableRequest *req)
 {
   dout(7) << "handle_prepare " << *req << dendl;
   mds_rank_t from = mds_rank_t(req->get_source().num());
-  bufferlist bl = req->bl;
-
-  _prepare(req->bl, req->reqid, from);
-  _note_prepare(from, req->reqid);
 
   assert(g_conf->mds_kill_mdstable_at != 1);
 
-  ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from, version, version);
+  projected_version++;
+
+  ETableServer *le = new ETableServer(table, TABLESERVER_OP_PREPARE, req->reqid, from,
+				      projected_version, projected_version);
   mds->mdlog->start_entry(le);
-  le->mutation = bl;  // original request, NOT modified return value coming out of _prepare!
-  mds->mdlog->submit_entry(le, new C_Prepare(this, req, version));
+  le->mutation = req->bl;
+  mds->mdlog->submit_entry(le, new C_Prepare(this, req, projected_version));
   mds->mdlog->flush();
 }
 
 void MDSTableServer::_prepare_logged(MMDSTableRequest *req, version_t tid)
 {
   dout(7) << "_create_logged " << *req << " tid " << tid << dendl;
+  mds_rank_t from = mds_rank_t(req->get_source().num());
 
   assert(g_conf->mds_kill_mdstable_at != 2);
 
+  _note_prepare(from, req->reqid);
+  _prepare(req->bl, req->reqid, from);
+  assert(version == tid);
+
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, req->reqid, tid);
   reply->bl = req->bl;
-  mds->send_message_mds(reply, mds_rank_t(req->get_source().num()));
+  mds->send_message_mds(reply, from);
   req->put();
 }
 
@@ -104,21 +108,27 @@ void MDSTableServer::handle_commit(MMDSTableRequest *req)
 
   if (pending_for_mds.count(tid)) {
 
+    if (committing_tids.count(tid)) {
+      dout(0) << "got commit for tid " << tid << ", already committing, waiting." << dendl;
+      req->put();
+      return;
+    }
+
     assert(g_conf->mds_kill_mdstable_at != 5);
 
-    if (!_commit(tid, req))
-      return;
+    projected_version++;
+    committing_tids.insert(tid);
 
-    _note_commit(tid);
     mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_COMMIT, 0, MDS_RANK_NONE, 
-						    tid, version),
+						    tid, projected_version),
 				   new C_Commit(this, req));
   }
   else if (tid <= version) {
-    dout(0) << "got commit for tid " << tid << " <= " << version 
-	    << ", already committed, sending ack." 
-	    << dendl;
-    _commit_logged(req);
+    dout(0) << "got commit for tid " << tid << " <= " << version
+	    << ", already committed, sending ack." << dendl;
+    MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, tid);
+    mds->send_message(reply, req->get_connection());
+    req->put();
   } 
   else {
     // wtf.
@@ -133,39 +143,95 @@ void MDSTableServer::_commit_logged(MMDSTableRequest *req)
   dout(7) << "_commit_logged, sending ACK" << dendl;
 
   assert(g_conf->mds_kill_mdstable_at != 6);
+  version_t tid = req->get_tid();
+
+  pending_for_mds.erase(tid);
+  committing_tids.erase(tid);
+
+  _commit(tid, req);
+  _note_commit(tid);
 
   MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_ACK, req->reqid, req->get_tid());
   mds->send_message_mds(reply, mds_rank_t(req->get_source().num()));
   req->put();
 }
 
+class C_Rollback : public MDSLogContextBase {
+  MDSTableServer *server;
+  MMDSTableRequest *req;
+  MDSRank *get_mds() override { return server->mds; }
+public:
+  C_Rollback(MDSTableServer *s, MMDSTableRequest *r) : server(s), req(r) {}
+  void finish(int r) override {
+    server->_rollback_logged(req);
+  }
+};
+
 // ROLLBACK
-/* This function DOES put the passed message before returning */
 void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
 
   version_t tid = req->get_tid();
   assert(pending_for_mds.count(tid));
+  assert(!committing_tids.count(tid));
+
+  projected_version++;
+  committing_tids.insert(tid);
+
+  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, MDS_RANK_NONE,
+						  tid, projected_version),
+				 new C_Rollback(this, req));
+}
+
+/* This function DOES put the passed message before returning */
+void MDSTableServer::_rollback_logged(MMDSTableRequest *req)
+{
+  dout(7) << "_rollback_logged " << *req << dendl;
+
+  assert(g_conf->mds_kill_mdstable_at != 7);
+  version_t tid = req->get_tid();
+
+  pending_for_mds.erase(tid);
+  committing_tids.erase(tid);
+
   _rollback(tid);
   _note_rollback(tid);
-  mds->mdlog->start_submit_entry(new ETableServer(table, TABLESERVER_OP_ROLLBACK, 0, MDS_RANK_NONE, 
-						  tid, version));
+
   req->put();
 }
 
 
 
 // SERVER UPDATE
+class C_ServerUpdate : public MDSLogContextBase {
+  MDSTableServer *server;
+  bufferlist bl;
+  MDSRank *get_mds() override { return server->mds; }
+public:
+  C_ServerUpdate(MDSTableServer *s, bufferlist &b)  : server(s), bl(b) {}
+  void finish(int r) override {
+    server->_server_update_logged(bl);
+  }
+};
 
 void MDSTableServer::do_server_update(bufferlist& bl)
 {
   dout(10) << "do_server_update len " << bl.length() << dendl;
-  _server_update(bl);
-  ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, MDS_RANK_NONE, 0, version);
+
+  projected_version++;
+
+  ETableServer *le = new ETableServer(table, TABLESERVER_OP_SERVER_UPDATE, 0, MDS_RANK_NONE, 0, projected_version);
   mds->mdlog->start_entry(le);
   le->mutation = bl;
-  mds->mdlog->submit_entry(le);
+  mds->mdlog->submit_entry(le, new C_ServerUpdate(this, bl));
+}
+
+void MDSTableServer::_server_update_logged(bufferlist& bl)
+{
+  dout(10) << "_server_update_logged len " << bl.length() << dendl;
+  _server_update(bl);
+  _note_server_update(bl);
 }
 
 
@@ -192,6 +258,7 @@ void MDSTableServer::handle_mds_recovery(mds_rank_t who)
     if (p->second.reqid >= next_reqid)
       next_reqid = p->second.reqid + 1;
     MMDSTableRequest *reply = new MMDSTableRequest(table, TABLESERVER_OP_AGREE, p->second.reqid, p->second.tid);
+    _get_reply_buffer(p->second.tid, &reply->bl);
     mds->send_message_mds(reply, who);
   }
 

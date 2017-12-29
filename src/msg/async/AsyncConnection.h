@@ -19,12 +19,10 @@
 
 #include <atomic>
 #include <pthread.h>
-#include <signal.h>
 #include <climits>
 #include <list>
 #include <mutex>
 #include <map>
-using namespace std;
 
 #include "auth/AuthSessionHandler.h"
 #include "common/ceph_time.h"
@@ -71,7 +69,7 @@ class AsyncConnection : public Connection {
   void discard_out_queue();
   void discard_requeued_up_to(uint64_t seq);
   void requeue_sent();
-  int randomize_out_seq();
+  void randomize_out_seq();
   void handle_ack(uint64_t seq);
   void _append_keepalive_or_ack(bool ack=false, utime_t *t=NULL);
   ssize_t write_message(Message *m, bufferlist& bl, bool more);
@@ -114,17 +112,16 @@ class AsyncConnection : public Connection {
   }
   Message *_get_next_outgoing(bufferlist *bl) {
     Message *m = 0;
-    while (!m && !out_q.empty()) {
+    if (!out_q.empty()) {
       map<int, list<pair<bufferlist, Message*> > >::reverse_iterator it = out_q.rbegin();
-      if (!it->second.empty()) {
-        list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
-        m = p->second;
-        if (bl)
-          bl->swap(p->first);
-        it->second.erase(p);
-      }
+      assert(!it->second.empty());
+      list<pair<bufferlist, Message*> >::iterator p = it->second.begin();
+      m = p->second;
+      if (bl)
+	bl->swap(p->first);
+      it->second.erase(p);
       if (it->second.empty())
-        out_q.erase(it->first);
+	out_q.erase(it->first);
     }
     return m;
   }
@@ -141,7 +138,7 @@ class AsyncConnection : public Connection {
    */
   class DelayedDelivery : public EventCallback {
     std::set<uint64_t> register_time_events; // need to delete it if stop
-    std::deque<std::pair<utime_t, Message*> > delay_queue;
+    std::deque<Message*> delay_queue;
     std::mutex delay_lock;
     AsyncMessenger *msgr;
     EventCenter *center;
@@ -159,10 +156,10 @@ class AsyncConnection : public Connection {
       assert(delay_queue.empty());
     }
     void set_center(EventCenter *c) { center = c; }
-    void do_request(int id) override;
-    void queue(double delay_period, utime_t release, Message *m) {
+    void do_request(uint64_t id) override;
+    void queue(double delay_period, Message *m) {
       std::lock_guard<std::mutex> l(delay_lock);
-      delay_queue.push_back(std::make_pair(release, m));
+      delay_queue.push_back(m);
       register_time_events.insert(center->create_time_event(delay_period*1000000, this));
     }
     void discard() {
@@ -170,7 +167,7 @@ class AsyncConnection : public Connection {
       center->submit_to(center->get_id(), [this] () mutable {
         std::lock_guard<std::mutex> l(delay_lock);
         while (!delay_queue.empty()) {
-          Message *m = delay_queue.front().second;
+          Message *m = delay_queue.front();
           dispatch_queue->dispatch_throttle_release(m->get_dispatch_throttle_size());
           m->put();
           delay_queue.pop_front();
@@ -326,7 +323,6 @@ class AsyncConnection : public Connection {
   EventCallbackRef write_handler;
   EventCallbackRef wakeup_handler;
   EventCallbackRef tick_handler;
-  struct iovec msgvec[ASYNC_IOV_MAX];
   char *recv_buf;
   uint32_t recv_max_prefetch;
   uint32_t recv_start;

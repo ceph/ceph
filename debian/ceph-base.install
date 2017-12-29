@@ -5,6 +5,7 @@ usr/bin/ceph-run
 usr/bin/crushtool
 usr/bin/monmaptool
 usr/bin/osdmaptool
+usr/bin/ceph-kvstore-tool
 usr/lib/ceph/ceph_common.sh
 usr/lib/ceph/erasure-code/*
 usr/lib/python*/dist-packages/ceph_detect_init*
@@ -19,3 +20,4 @@ usr/share/man/man8/ceph-run.8
 usr/share/man/man8/crushtool.8
 usr/share/man/man8/monmaptool.8
 usr/share/man/man8/osdmaptool.8
+usr/share/man/man8/ceph-kvstore-tool.8

@@ -265,6 +265,8 @@ namespace rgw {
       : fs(_fs), bucket(nullptr), parent(nullptr), variant_type{directory()},
 	depth(0), flags(FLAG_NONE)
       {
+        fh.fh_hk.bucket = 0;
+        fh.fh_hk.object = 0;
 	/* root */
 	fh.fh_type = RGW_FS_TYPE_DIRECTORY;
 	variant_type = directory();
@@ -555,8 +557,11 @@ namespace rgw {
       return -EPERM;
     }
 
-    int readdir(rgw_readdir_cb rcb, void *cb_arg, uint64_t *offset, bool *eof,
-		uint32_t flags);
+    typedef boost::variant<uint64_t*, const char*> readdir_offset;
+
+    int readdir(rgw_readdir_cb rcb, void *cb_arg, readdir_offset offset,
+		bool *eof, uint32_t flags);
+
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
@@ -1215,20 +1220,32 @@ class RGWListBucketsRequest : public RGWLibRequest,
 {
 public:
   RGWFileHandle* rgw_fh;
-  uint64_t* offset;
+  RGWFileHandle::readdir_offset offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
+  uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
-			void* _cb_arg, uint64_t* _offset)
+			void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
-    const auto& mk = rgw_fh->find_marker(*offset);
-    if (mk) {
-      marker = mk->name;
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+
+    using boost::get;
+
+    if (unlikely(!! get<uint64_t*>(&offset))) {
+      ioff = get<uint64_t*>(offset);
+      const auto& mk = rgw_fh->find_marker(*ioff);
+      if (mk) {
+	marker = mk->name;
+      }
+    } else {
+      const char* mk = get<const char*>(offset);
+      if (mk) {
+	marker = mk;
+      }
     }
     op = this;
   }
@@ -1299,7 +1316,9 @@ public:
   int operator()(const boost::string_ref& name,
 		 const boost::string_ref& marker) {
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
-    *offset = off;
+    if (!! ioff) {
+      *ioff = off;
+    }
     /* update traversal cache */
     rgw_fh->add_marker(off, rgw_obj_key{marker.data(), ""},
 		       RGW_FS_TYPE_DIRECTORY);
@@ -1308,7 +1327,7 @@ public:
   }
 
   bool eof() {
-    lsubdout(cct, rgw, 15) << "READDIR offset: " << *offset
+    lsubdout(cct, rgw, 15) << "READDIR offset: " << offset
 			   << " is_truncated: " << is_truncated
 			   << dendl;
     return !is_truncated;
@@ -1325,21 +1344,37 @@ class RGWReaddirRequest : public RGWLibRequest,
 {
 public:
   RGWFileHandle* rgw_fh;
-  uint64_t* offset;
+  RGWFileHandle::readdir_offset offset;
   void* cb_arg;
   rgw_readdir_cb rcb;
+  uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
 
   RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
-		    void* _cb_arg, uint64_t* _offset)
+		    void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ix(0), d_count(0) {
-    const auto& mk = rgw_fh->find_marker(*offset);
-    if (mk) {
-      marker = *mk;
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+
+    using boost::get;
+
+    if (unlikely(!! get<uint64_t*>(&offset))) {
+      ioff = get<uint64_t*>(offset);
+      const auto& mk = rgw_fh->find_marker(*ioff);
+      if (mk) {
+	marker = *mk;
+      }
+    } else {
+      const char* mk = get<const char*>(offset);
+      if (mk) {
+	std::string tmark{rgw_fh->relative_object_name()};
+	tmark += "/";
+	tmark += mk;	
+	marker = rgw_obj_key{std::move(tmark), "", ""};
+      }
     }
+
     default_max = 1000; // XXX was being omitted
     op = this;
   }
@@ -1388,7 +1423,9 @@ public:
 
     /* hash offset of name in parent (short name) for NFS readdir cookie */
     uint64_t off = XXH64(name.data(), name.length(), fh_key::seed);
-    *offset = off;
+    if (unlikely(!! ioff)) {
+      *ioff = off;
+    }
     /* update traversal cache */
     rgw_fh->add_marker(off, marker, type);
     ++d_count;
@@ -1478,7 +1515,7 @@ public:
   }
 
   bool eof() {
-    lsubdout(cct, rgw, 15) << "READDIR offset: " << *offset
+    lsubdout(cct, rgw, 15) << "READDIR offset: " << offset
 			   << " next marker: " << next_marker
 			   << " is_truncated: " << is_truncated
 			   << dendl;

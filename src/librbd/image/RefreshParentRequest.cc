@@ -69,12 +69,13 @@ void RefreshParentRequest<I>::send() {
 
 template <typename I>
 void RefreshParentRequest<I>::apply() {
+  assert(m_child_image_ctx.cache_lock.is_locked());
+  assert(m_child_image_ctx.snap_lock.is_wlocked());
+  assert(m_child_image_ctx.parent_lock.is_wlocked());
   if (m_child_image_ctx.parent != nullptr) {
     // closing parent image
     m_child_image_ctx.clear_nonexistence_cache();
   }
-  assert(m_child_image_ctx.snap_lock.is_wlocked());
-  assert(m_child_image_ctx.parent_lock.is_wlocked());
   std::swap(m_child_image_ctx.parent, m_parent_image_ctx);
 }
 
@@ -108,6 +109,7 @@ void RefreshParentRequest<I>::send_open_parent() {
   // reset the snap_name and snap_exists fields after we read the header
   m_parent_image_ctx = new I("", m_parent_md.spec.image_id, NULL, parent_io_ctx,
                              true);
+  m_parent_image_ctx->child = &m_child_image_ctx;
 
   // set rados flags for reading the parent image
   if (m_child_image_ctx.balance_parent_reads) {
@@ -211,6 +213,8 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
   delete m_parent_image_ctx;
+  m_parent_image_ctx = nullptr;
+
   if (*result < 0) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)
                << dendl;

@@ -8,6 +8,7 @@ import time
 import datetime
 import re
 import errno
+import random
 
 from teuthology.exceptions import CommandFailedError
 from teuthology import misc
@@ -63,7 +64,7 @@ class FSStatus(object):
         for info in self.get_standbys():
             yield info
         for fs in self.map['filesystems']:
-            for info in fs['mdsmap']['info'].values():
+            for info in fs['mdsmap']['info']:
                 yield info
 
     def get_standbys(self):
@@ -96,7 +97,7 @@ class FSStatus(object):
         Get the standby:replay MDS for the given FSCID.
         """
         fs = self.get_fsmap(fscid)
-        for info in fs['mdsmap']['info'].values():
+        for info in fs['mdsmap']['info']:
             if info['state'] == 'up:standby-replay':
                 yield info
 
@@ -105,7 +106,7 @@ class FSStatus(object):
         Get the ranks for the given FSCID.
         """
         fs = self.get_fsmap(fscid)
-        for info in fs['mdsmap']['info'].values():
+        for info in fs['mdsmap']['info']:
             if info['rank'] >= 0:
                 yield info
 
@@ -117,6 +118,14 @@ class FSStatus(object):
             if info['rank'] == rank:
                 return info
         raise RuntimeError("FSCID {0} has no rank {1}".format(fscid, rank))
+
+    def get_cluster(self, fscid):
+        """
+        Get the MDS cluster for the given FSCID.
+        """
+        fs = self.get_fsmap(fscid)
+        for info in fs['mdsmap']['info']:
+            yield info
 
     def get_mds(self, name):
         """
@@ -225,6 +234,17 @@ class MDSCluster(CephCluster):
         else:
             cb(mds_id)
 
+    def get_config(self, key, service_type=None):
+        """
+        get_config specialization of service_type="mds"
+        """
+        if service_type != "mds":
+            return super(MDSCluster, self).get_config(key, service_type)
+
+        # Some tests stop MDS daemons, don't send commands to a dead one:
+        service_id = random.sample(filter(lambda i: self.mds_daemons[i].running(), self.mds_daemons), 1)[0]
+        return self.json_asok(['config', 'get', key], service_type, service_id)[key]
+
     def mds_stop(self, mds_id=None):
         """
         Stop the MDS daemon process(se).  If it held a rank, that rank
@@ -282,8 +302,8 @@ class MDSCluster(CephCluster):
             mdsmap = fs['mdsmap']
             metadata_pool = pool_id_name[mdsmap['metadata_pool']]
 
-            for gid in mdsmap['up'].values():
-                self.mon_manager.raw_cluster_cmd('mds', 'fail', gid.__str__())
+            for info in status.get_ranks(fs['id']):
+                self.mon_manager.raw_cluster_cmd('mds', 'fail', str(info['gid']))
 
             self.mon_manager.raw_cluster_cmd('fs', 'rm', mdsmap['fs_name'], '--yes-i-really-mean-it')
             self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
@@ -362,10 +382,12 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, name=None, create=False):
+    def __init__(self, ctx, fscid=None, name=None, create=False,
+                 ec_profile=None):
         super(Filesystem, self).__init__(ctx)
 
         self.name = name
+        self.ec_profile = ec_profile
         self.id = None
         self.metadata_pool_name = None
         self.metadata_overlay = False
@@ -423,11 +445,18 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot deactivate rank 0")
         self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
 
+    def set_var(self, var, *args):
+        a = map(str, args)
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
+
     def set_max_mds(self, max_mds):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+        self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_dirfrags(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+
+    def set_allow_new_snaps(self, yes):
+        self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
@@ -461,8 +490,22 @@ class Filesystem(MDSCluster):
                                              self.name, self.metadata_pool_name, data_pool_name,
                                              '--allow-dangerous-metadata-overlay')
         else:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                             data_pool_name, pgs_per_fs_pool.__str__())
+            if self.ec_profile and 'disabled' not in self.ec_profile:
+                log.info("EC profile is %s", self.ec_profile)
+                cmd = ['osd', 'erasure-code-profile', 'set', data_pool_name]
+                cmd.extend(self.ec_profile)
+                self.mon_manager.raw_cluster_cmd(*cmd)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__(), 'erasure',
+                    data_pool_name)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'set',
+                    data_pool_name, 'allow_ec_overwrites', 'true')
+            else:
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name, self.metadata_pool_name, data_pool_name)
         self.check_pool_application(self.metadata_pool_name)
@@ -527,6 +570,9 @@ class Filesystem(MDSCluster):
 
     def get_mds_map(self):
         return self.status().get_fsmap(self.id)['mdsmap']
+
+    def get_var(self, var):
+        return self.status().get_fsmap(self.id)['mdsmap'][var]
 
     def add_data_pool(self, name):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())
@@ -611,6 +657,9 @@ class Filesystem(MDSCluster):
 
         :return:
         """
+        # First, check to see that processes haven't exited with an error code
+        for mds in self._ctx.daemons.iter_daemons_of_role('mds'):
+            mds.check_status()
 
         active_count = 0
         try:
@@ -625,11 +674,11 @@ class Filesystem(MDSCluster):
 
         log.info("are_daemons_healthy: mds map: {0}".format(mds_map))
 
-        for mds_id, mds_status in mds_map['info'].items():
-            if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
-                log.warning("Unhealthy mds state {0}:{1}".format(mds_id, mds_status['state']))
+        for info in mds_map['info']:
+            if info['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
+                log.warning("Unhealthy mds state {0}:{1}".format(info['gid'], info['state']))
                 return False
-            elif mds_status['state'] == 'up:active':
+            elif info['state'] == 'up:active':
                 active_count += 1
 
         log.info("are_daemons_healthy: {0}/{1}".format(
@@ -638,10 +687,10 @@ class Filesystem(MDSCluster):
 
         if active_count >= mds_map['max_mds']:
             # The MDSMap says these guys are active, but let's check they really are
-            for mds_id, mds_status in mds_map['info'].items():
-                if mds_status['state'] == 'up:active':
+            for info in mds_map['info']:
+                if info['state'] == 'up:active':
                     try:
-                        daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
+                        daemon_status = self.mds_asok(["status"], mds_id=info['name'])
                     except CommandFailedError as cfe:
                         if cfe.exitstatus == errno.EINVAL:
                             # Old version, can't do this check
@@ -666,7 +715,7 @@ class Filesystem(MDSCluster):
         """
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['state'] == state or state is None:
                 result.append(mds_status['name'])
 
@@ -684,7 +733,7 @@ class Filesystem(MDSCluster):
     def get_all_mds_rank(self):
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['rank'])
 
@@ -699,7 +748,7 @@ class Filesystem(MDSCluster):
         """
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['name'])
 

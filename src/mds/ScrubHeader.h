@@ -43,6 +43,9 @@ public:
   const std::string &get_tag() const { return tag; }
   Formatter &get_formatter() const { return *formatter; }
 
+  bool get_repaired() const { return repaired; }
+  void set_repaired() { repaired = true; }
+
 protected:
   const std::string tag;
   const bool force;
@@ -50,6 +53,8 @@ protected:
   const bool repair;
   Formatter * const formatter;
   CInode *origin;
+
+  bool repaired = false;  // May be set during scrub if repairs happened
 };
 
 typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;

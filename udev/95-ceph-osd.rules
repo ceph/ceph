@@ -55,7 +55,7 @@ ACTION=="add", SUBSYSTEM=="block", \
   OWNER:="ceph", GROUP:="ceph", MODE:="660", \
   RUN+="/usr/sbin/ceph-disk --log-stdout -v trigger /dev/$name"
 ACTION=="change", SUBSYSTEM=="block", \
-  ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496", \
+  ENV{ID_PART_ENTRY_TYPE}=="fb3aabf9-d25f-47cc-bf5e-721d1816496b", \
   OWNER="ceph", GROUP="ceph", MODE="660"
 
 # MPATH_OSD_UUID
@@ -192,7 +192,7 @@ ACTION=="change", SUBSYSTEM=="block", \
   ENV{ID_PART_ENTRY_TYPE}=="86a32090-3647-40b9-bbbd-38d8c573aa86", \
   OWNER="ceph", GROUP="ceph", MODE="660"
 
-# DMCRYPT_OID_UUID
+# DMCRYPT_OSD_UUID
 ACTION=="add" SUBSYSTEM=="block", \
   ENV{DEVTYPE}=="partition", \
   ENV{ID_PART_ENTRY_TYPE}=="4fbd7e29-9d25-41b8-afd0-5ec00ceff05d", \

@@ -15,6 +15,8 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include "include/uuid.h"
+#include "blkdev.h"
+
 
 #ifdef __linux__
 #include <linux/fs.h>
@@ -263,6 +265,38 @@ int get_device_by_fd(int fd, char *partition, char *device, size_t max)
   return 0;
 }
 
+static int easy_readdir(const std::string& dir, std::set<std::string> *out)
+{
+  DIR *h = ::opendir(dir.c_str());
+  if (!h) {
+    return -errno;
+  }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(h))) {
+    if (strcmp(de->d_name, ".") == 0 ||
+	strcmp(de->d_name, "..") == 0) {
+      continue;
+    }
+    out->insert(de->d_name);
+  }
+  closedir(h);
+  return 0;
+}
+
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
+{
+  std::string p = std::string("/sys/block/") + dev + "/slaves";
+  std::set<std::string> parents;
+  easy_readdir(p, &parents);
+  for (auto& d : parents) {
+    ls->insert(d);
+    // recurse in case it is dm-on-dm
+    if (d.find("dm-") == 0) {
+      get_dm_parents(d, ls);
+    }
+  }
+}
+
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -301,6 +335,11 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 {
   return -EOPNOTSUPP;
 }
+
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
+{
+}
+
 #elif defined(__FreeBSD__)
 #include <sys/disk.h>
 
@@ -336,6 +375,11 @@ int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
 }
+
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
+{
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -366,5 +410,8 @@ int get_device_by_uuid(uuid_d dev_uuid, const char* label, char* partition,
 int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 {
   return -EOPNOTSUPP;
+}
+void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
+{
 }
 #endif

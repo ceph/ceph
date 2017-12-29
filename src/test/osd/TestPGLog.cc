@@ -2446,13 +2446,13 @@ public:
 
   void add_dups(uint a, uint b) {
     log.dups.push_back(create_dup_entry(a, b));
-    write_from_dups = MIN(write_from_dups, log.dups.back().version);
+    write_from_dups = std::min(write_from_dups, log.dups.back().version);
   }
 
   void add_dups(const std::vector<pg_log_dup_t>& l) {
     for (auto& i : l) {
       log.dups.push_back(i);
-      write_from_dups = MIN(write_from_dups, log.dups.back().version);
+      write_from_dups = std::min(write_from_dups, log.dups.back().version);
     }
   }
 
@@ -2495,7 +2495,7 @@ public:
     auto orig_dups = log.dups;
     clear();
     ostringstream err;
-    read_log_and_missing(store.get(), test_coll, test_coll, log_oid,
+    read_log_and_missing(store.get(), test_coll, log_oid,
 			 pg_info_t(), err, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);

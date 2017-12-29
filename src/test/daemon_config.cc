@@ -44,8 +44,7 @@ TEST(DaemonConfig, SimpleSet) {
 
 TEST(DaemonConfig, Substitution) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
-  ASSERT_EQ(0, ret);
+  g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf->set_val("public_network", "bar$host.baz", false);
@@ -61,8 +60,7 @@ TEST(DaemonConfig, Substitution) {
 
 TEST(DaemonConfig, SubstitutionTrailing) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
-  ASSERT_EQ(0, ret);
+  g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf->set_val("public_network", "bar$host", false);
@@ -78,8 +76,7 @@ TEST(DaemonConfig, SubstitutionTrailing) {
 
 TEST(DaemonConfig, SubstitutionBraces) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
-  ASSERT_EQ(0, ret);
+  g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf->set_val("public_network", "bar${host}baz", false);
@@ -94,8 +91,7 @@ TEST(DaemonConfig, SubstitutionBraces) {
 }
 TEST(DaemonConfig, SubstitutionBracesTrailing) {
   int ret;
-  ret = g_ceph_context->_conf->set_val("internal_safe_to_start_threads", "false");
-  ASSERT_EQ(0, ret);
+  g_conf->_clear_safe_to_start_threads();
   ret = g_ceph_context->_conf->set_val("host", "foo");
   ASSERT_EQ(0, ret);
   ret = g_ceph_context->_conf->set_val("public_network", "bar${host}", false);
@@ -127,8 +123,7 @@ TEST(DaemonConfig, SubstitutionMultiple) {
 }
 
 TEST(DaemonConfig, ArgV) {
-  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
-				       "false"));
+  g_conf->_clear_safe_to_start_threads();
 
   int ret;
   const char *argv[] = { "foo", "--log-graylog-port", "22",
@@ -151,8 +146,7 @@ TEST(DaemonConfig, ArgV) {
   ASSERT_EQ(0, ret);
   ASSERT_EQ(string("22"), string(buf));
 
-  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
-				       "true"));
+  g_conf->set_safe_to_start_threads();
 }
 
 TEST(DaemonConfig, InjectArgs) {
@@ -317,13 +311,12 @@ TEST(DaemonConfig, InjectArgsLogfile) {
 
 TEST(DaemonConfig, ThreadSafety1) {
   int ret;
-  // Verify that we can't change this, since internal_safe_to_start_threads has
+  // Verify that we can't change this, since safe_to_start_threads has
   // been set.
   ret = g_ceph_context->_conf->set_val("osd_data", "");
   ASSERT_EQ(-ENOSYS, ret);
 
-  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
-				       "false"));
+  g_conf->_clear_safe_to_start_threads();
 
   // Ok, now we can change this. Since this is just a test, and there are no
   // OSD threads running, we know changing osd_data won't actually blow up the
@@ -338,8 +331,7 @@ TEST(DaemonConfig, ThreadSafety1) {
   ASSERT_EQ(0, ret);
   ASSERT_EQ(string("/tmp/crazydata"), string(buf));
 
-  ASSERT_EQ(0, g_ceph_context->_conf->set_val("internal_safe_to_start_threads",
-				       "false"));
+  g_conf->_clear_safe_to_start_threads();
   ASSERT_EQ(0, ret);
 }
 

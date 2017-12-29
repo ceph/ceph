@@ -19,12 +19,10 @@ class FlattenRequest : public Request<ImageCtxT>
 {
 public:
   FlattenRequest(ImageCtxT &image_ctx, Context *on_finish,
-		 uint64_t object_size, uint64_t overlap_objects,
-		 const ::SnapContext &snapc, ProgressContext &prog_ctx)
-    : Request<ImageCtxT>(image_ctx, on_finish), m_object_size(object_size),
-      m_overlap_objects(overlap_objects), m_snapc(snapc), m_prog_ctx(prog_ctx),
-      m_ignore_enoent(false)
-  {
+                 uint64_t overlap_objects, const ::SnapContext &snapc,
+                 ProgressContext &prog_ctx)
+    : Request<ImageCtxT>(image_ctx, on_finish), m_overlap_objects(overlap_objects),
+      m_snapc(snapc), m_prog_ctx(prog_ctx) {
   }
 
 protected:
@@ -69,14 +67,13 @@ private:
     STATE_UPDATE_CHILDREN
   };
 
-  uint64_t m_object_size;
   uint64_t m_overlap_objects;
   ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
   State m_state = STATE_FLATTEN_OBJECTS;
 
   ParentSpec m_parent_spec;
-  bool m_ignore_enoent;
+  bool m_ignore_enoent = false;
 
   bool send_update_header();
   bool send_update_children();

@@ -1,21 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <signal.h>
-
+extern "C" {
 #include <curl/curl.h>
-
-#include <boost/intrusive_ptr.hpp>
-
-#include "acconfig.h"
+}
 
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
@@ -29,7 +17,6 @@
 #include "include/stringify.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
-#include "rgw_user.h"
 #include "rgw_period_pusher.h"
 #include "rgw_realm_reloader.h"
 #include "rgw_rest.h"
@@ -50,7 +37,6 @@
 #include "rgw_log.h"
 #include "rgw_tools.h"
 #include "rgw_resolve.h"
-
 #include "rgw_request.h"
 #include "rgw_process.h"
 #include "rgw_frontend.h"
@@ -58,38 +44,26 @@
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
-#include <map>
-#include <string>
-#include <vector>
-#include <atomic>
-
-#include "include/types.h"
-#include "common/BackTrace.h"
-
 #ifdef HAVE_SYS_PRCTL_H
 #include <sys/prctl.h>
 #endif
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 static sig_t sighandler_alrm;
 
 class RGWProcess;
 
 static int signal_fd[2] = {0, 0};
-static std::atomic<int64_t> disable_signal_fd = { 0 };
 
 void signal_shutdown()
 {
-  if (!disable_signal_fd) {
-    int val = 0;
-    int ret = write(signal_fd[0], (char *)&val, sizeof(val));
-    if (ret < 0) {
-      derr << "ERROR: " << __func__ << ": write() returned "
-           << cpp_strerror(errno) << dendl;
-    }
+  int val = 0;
+  int ret = write(signal_fd[0], (char *)&val, sizeof(val));
+  if (ret < 0) {
+    derr << "ERROR: " << __func__ << ": write() returned "
+         << cpp_strerror(errno) << dendl;
   }
 }
 
@@ -223,6 +197,7 @@ int main(int argc, const char **argv)
           flags);
 
   list<string> frontends;
+  g_conf->early_expand_meta(g_conf->rgw_frontends, &cerr);
   get_str_list(g_conf->rgw_frontends, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;

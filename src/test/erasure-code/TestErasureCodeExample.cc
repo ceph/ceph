@@ -35,7 +35,7 @@ TEST(ErasureCodeExample, minimum_to_decode)
   want_to_read.insert(1);
   {
     set<int> minimum;
-    EXPECT_EQ(-EIO, example.minimum_to_decode(want_to_read,
+    EXPECT_EQ(-EIO, example._minimum_to_decode(want_to_read,
                                               available_chunks,
                                               &minimum));
   }
@@ -43,9 +43,9 @@ TEST(ErasureCodeExample, minimum_to_decode)
   available_chunks.insert(2);
   {
     set<int> minimum;
-    EXPECT_EQ(0, example.minimum_to_decode(want_to_read,
-                                           available_chunks,
-                                           &minimum));
+    EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
     EXPECT_EQ(available_chunks, minimum);
     EXPECT_EQ(2u, minimum.size());
     EXPECT_EQ(1u, minimum.count(0));
@@ -54,9 +54,9 @@ TEST(ErasureCodeExample, minimum_to_decode)
   {
     set<int> minimum;
     available_chunks.insert(1);
-    EXPECT_EQ(0, example.minimum_to_decode(want_to_read,
-                                           available_chunks,
-                                           &minimum));
+    EXPECT_EQ(0, example._minimum_to_decode(want_to_read,
+					    available_chunks,
+					    &minimum));
     EXPECT_EQ(1u, minimum.size());
     EXPECT_EQ(1u, minimum.count(1));
   }
@@ -132,9 +132,9 @@ TEST(ErasureCodeExample, encode_decode)
   {
     int want_to_decode[] = { 0, 1 };
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example.decode(set<int>(want_to_decode, want_to_decode+2),
-                                encoded,
-                                &decoded));
+    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+				 encoded,
+				 &decoded));
     EXPECT_EQ(2u, decoded.size());
     EXPECT_EQ(3u, decoded[0].length());
     EXPECT_EQ('A', decoded[0][0]);
@@ -151,9 +151,9 @@ TEST(ErasureCodeExample, encode_decode)
     EXPECT_EQ(2u, degraded.size());
     int want_to_decode[] = { 0, 1 };
     map<int, bufferlist> decoded;
-    EXPECT_EQ(0, example.decode(set<int>(want_to_decode, want_to_decode+2),
-                                degraded,
-                                &decoded));
+    EXPECT_EQ(0, example._decode(set<int>(want_to_decode, want_to_decode+2),
+				 degraded,
+				 &decoded));
     EXPECT_EQ(2u, decoded.size());
     EXPECT_EQ(3u, decoded[0].length());
     EXPECT_EQ('A', decoded[0][0]);

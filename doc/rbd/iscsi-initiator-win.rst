@@ -1,17 +1,18 @@
------------------------------------------
-The iSCSI Initiator for Microsoft Windows
------------------------------------------
+-------------------------------------
+iSCSI Initiator for Microsoft Windows
+-------------------------------------
 
 **Prerequisite:**
 
--  Microsoft Windows 2016
+-  Microsoft Windows Server 2016
 
 **iSCSI Initiator, Discovery and Setup:**
 
 #. Install the iSCSI initiator driver and MPIO tools.
 
-#. Launch the MPIO program, click on the “Discover Multi-Paths” tab select “Add
-   support for iSCSI devices”.
+#. Launch the MPIO program, click on the "Discover Multi-Paths" tab, check the
+   "Add support for iSCSI devices” box, and click "Add". This will require a
+   reboot.
 
 #. On the iSCSI Initiator Properties window, on the "Discovery" tab, add a target
    portal. Enter the IP address or DNS name and Port of the Ceph iSCSI gateway.
@@ -32,7 +33,7 @@ The iSCSI Initiator for Microsoft Windows
 
 Configuring the MPIO load balancing policy, setting the timeout and
 retry options are using PowerShell with the ``mpclaim`` command. The
-reset is done in the MPIO tool.
+rest is done in the iSCSI Initiator tool.
 
 .. note::
   It is recommended to increase the ``PDORemovePeriod`` option to 120
@@ -53,8 +54,8 @@ reset is done in the MPIO tool.
     mpclaim -s -m
     MSDSM-wide Load Balance Policy: Fail Over Only
 
-#. Using the MPIO tool, from the “Targets” tab, click on the
-   “Devices...” button.
+#. Using the iSCSI Initiator tool, from the “Targets” tab, click on
+   the “Devices...” button.
 
 #. From the Devices window, select a disk and click the
    “MPIO...” button.

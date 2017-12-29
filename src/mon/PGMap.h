@@ -52,7 +52,7 @@ public:
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
-  mempool::pgmap::unordered_map<int32_t,int32_t> num_pg_by_state;
+  mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
     int32_t up = 0;
@@ -69,6 +69,8 @@ public:
     }
   };
   mempool::pgmap::unordered_map<int32_t,pg_count> num_pg_by_osd;
+
+  mempool::pgmap::map<int64_t,interval_set<snapid_t>> purged_snaps;
 
   // recent deltas, and summation
   /**
@@ -280,9 +282,6 @@ public:
 
   utime_t stamp;
 
-  void update_global_delta(
-    CephContext *cct,
-    const utime_t ts, const pool_stat_t& pg_sum_old);
   void update_pool_deltas(
     CephContext *cct,
     const utime_t ts,
@@ -381,6 +380,7 @@ public:
 		   bool sameosds=false);
   void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
+  void calc_purged_snaps();
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);
   
@@ -389,7 +389,7 @@ public:
 
   /// encode subset of our data to a PGMapDigest
   void encode_digest(const OSDMap& osdmap,
-		     bufferlist& bl, uint64_t features) const;
+		     bufferlist& bl, uint64_t features);
 
   int64_t get_rule_avail(const OSDMap& osdmap, int ruleno) const;
   void get_rules_avail(const OSDMap& osdmap,
@@ -436,7 +436,7 @@ public:
   void dump_osd_blocked_by_stats(Formatter *f) const;
   void print_osd_blocked_by_stats(std::ostream *ss) const;
 
-  void get_filtered_pg_stats(uint32_t state, int64_t poolid, int64_t osdid,
+  void get_filtered_pg_stats(uint64_t state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs) const;
 
   void get_health_checks(

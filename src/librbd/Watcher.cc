@@ -128,7 +128,7 @@ void Watcher::handle_register_watch(int r, Context *on_finish) {
                    << dendl;
       m_watch_handle = 0;
       m_watch_state = WATCH_STATE_UNREGISTERED;
-    } else if (r >= 0) {
+    } else {
       m_watch_state = WATCH_STATE_REGISTERED;
     }
   }

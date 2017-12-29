@@ -17,7 +17,7 @@
 
 class CephContext;
 
-extern int g_lockdep;
+extern bool g_lockdep;
 
 extern void lockdep_register_ceph_context(CephContext *cct);
 extern void lockdep_unregister_ceph_context(CephContext *cct);

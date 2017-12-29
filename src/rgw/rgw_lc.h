@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include <include/types.h>
 
 #include "common/debug.h"
 
@@ -18,6 +17,7 @@
 #include "rgw_rados.h"
 #include "rgw_multi.h"
 #include "cls/rgw/cls_rgw_types.h"
+#include "rgw_tag.h"
 
 #include <atomic>
 
@@ -95,38 +95,55 @@ class LCFilter
 {
  protected:
   std::string prefix;
-  // TODO add support for tagging
+  RGWObjTags obj_tags;
+
  public:
-  const std::string& get_prefix() const{
+
+  const std::string& get_prefix() const {
     return prefix;
   }
 
-  void set_prefix(const string& _prefix){
-    prefix = _prefix;
-  }
-
-  void set_prefix(std::string&& _prefix){
-    prefix = std::move(_prefix);
+  const RGWObjTags& get_tags() const {
+    return obj_tags;
   }
 
   bool empty() const {
-    return prefix.empty();
+    return !(has_prefix() || has_tags());
+  }
+
+  // Determine if we need AND tag when creating xml
+  bool has_multi_condition() const {
+    if (obj_tags.count() > 1)
+      return true;
+    else if (has_prefix() && has_tags())
+      return true;
+
+    return false;
   }
 
   bool has_prefix() const {
     return !prefix.empty();
   }
 
+  bool has_tags() const {
+    return !obj_tags.empty();
+  }
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     ::encode(prefix, bl);
+    ::encode(obj_tags, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     ::decode(prefix, bl);
+    if (struct_v >= 2) {
+      ::decode(obj_tags, bl);
+    }
     DECODE_FINISH(bl);
   }
+  void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
@@ -244,6 +261,7 @@ public:
      }
      DECODE_FINISH(bl);
    }
+  void dump(Formatter *f) const;
 
 };
 WRITE_CLASS_ENCODER(LCRule)
@@ -256,9 +274,10 @@ struct lc_op
   int noncur_expiration;
   int mp_expiration;
   boost::optional<ceph::real_time> expiration_date;
-
+  boost::optional<RGWObjTags> obj_tags;
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
+  void dump(Formatter *f) const;
 };
 
 class RGWLifecycleConfiguration
@@ -297,7 +316,7 @@ public:
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<RGWAccessControlList*>& o);
+  static void generate_test_instances(list<RGWLifecycleConfiguration*>& o);
 
   void add_rule(LCRule* rule);
 
@@ -363,7 +382,7 @@ class RGWLC {
 
   private:
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, bool remove_indeed = true);
-  bool obj_has_expired(double timediff, int days);
+  bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };
 

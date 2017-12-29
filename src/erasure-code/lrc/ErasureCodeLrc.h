@@ -44,7 +44,7 @@
 #define ERROR_LRC_K_MODULO		-(MAX_ERRNO + 20)
 #define ERROR_LRC_M_MODULO		-(MAX_ERRNO + 21)
 
-class ErasureCodeLrc : public ErasureCode {
+class ErasureCodeLrc final : public ErasureCode {
 public:
   static const std::string DEFAULT_KML;
 
@@ -87,9 +87,9 @@ public:
   std::set<int> get_erasures(const std::set<int> &need,
 			const std::set<int> &available) const;
 
-  int minimum_to_decode(const std::set<int> &want_to_read,
-				const std::set<int> &available,
-				std::set<int> *minimum) override;
+  int _minimum_to_decode(const std::set<int> &want_to_read,
+			 const std::set<int> &available,
+			 std::set<int> *minimum) override;
 
   int create_rule(const std::string &name,
 			     CrushWrapper &crush,

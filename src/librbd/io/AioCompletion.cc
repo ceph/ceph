@@ -12,8 +12,8 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
-
 #include "librbd/Journal.h"
+#include "librbd/Types.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -71,7 +71,7 @@ void AioCompletion::complete() {
   case AIO_TYPE_DISCARD:
     ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
   case AIO_TYPE_FLUSH:
-    ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+    ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
   case AIO_TYPE_WRITESAME:
     ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
   case AIO_TYPE_COMPARE_AND_WRITE:
@@ -94,7 +94,7 @@ void AioCompletion::complete() {
     lock.Lock();
   }
 
-  if (ictx && event_notify && ictx->event_socket.is_valid()) {
+  if (event_notify && ictx->event_socket.is_valid()) {
     ictx->completed_reqs_lock.Lock();
     ictx->completed_reqs.push_back(&m_xlist_item);
     ictx->completed_reqs_lock.Unlock();

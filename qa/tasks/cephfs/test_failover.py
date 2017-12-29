@@ -69,7 +69,7 @@ class TestFailover(CephFSTestCase):
 
         # Check it's not laggy to begin with
         (original_active, ) = self.fs.get_active_names()
-        self.assertNotIn("laggy_since", self.fs.mon_manager.get_mds_status(original_active))
+        self.assertNotIn("laggy_since", self.fs.status().get_mds(original_active))
 
         self.mounts[0].umount_wait()
 
@@ -83,8 +83,7 @@ class TestFailover(CephFSTestCase):
 
         # Wait for everyone to go laggy
         def laggy():
-            mdsmap = self.fs.get_mds_map()
-            for info in mdsmap['info'].values():
+            for info in self.fs.status().get_cluster(self.fs.id):
                 if "laggy_since" not in info:
                     return False
 
@@ -277,7 +276,7 @@ class TestStandbyReplay(CephFSTestCase):
 
         # Shrink the cluster
         fs_a.set_max_mds(1)
-        fs_a.mon_manager.raw_cluster_cmd("mds", "stop", "{0}:1".format(fs_a.name))
+        fs_a.mon_manager.raw_cluster_cmd("mds", "deactivate", "{0}:1".format(fs_a.name))
         self.wait_until_equal(
             lambda: fs_a.get_active_names(), [mds_a],
             60
@@ -469,7 +468,7 @@ class TestMultiFilesystems(CephFSTestCase):
 
         def get_info_by_name(fs, mds_name):
             mds_map = fs.get_mds_map()
-            for gid_str, info in mds_map['info'].items():
+            for info in mds_map['info']:
                 if info['name'] == mds_name:
                     return info
 

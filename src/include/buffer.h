@@ -151,11 +151,13 @@ namespace buffer CEPH_BUFFER_API {
    */
   raw* copy(const char *c, unsigned len);
   raw* create(unsigned len);
+  raw* create_in_mempool(unsigned len, int mempool);
   raw* claim_char(unsigned len, char *buf);
   raw* create_malloc(unsigned len);
   raw* claim_malloc(unsigned len, char *buf);
   raw* create_static(unsigned len, char *buf);
   raw* create_aligned(unsigned len, unsigned align);
+  raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
   raw* create_page_aligned(unsigned len);
   raw* create_zero_copy(unsigned len, int fd, int64_t *offset);
   raw* create_unshareable(unsigned len);
@@ -288,6 +290,10 @@ namespace buffer CEPH_BUFFER_API {
       return have_raw() && (start() > 0 || end() < raw_length());
     }
 
+    int get_mempool() const;
+    void reassign_to_mempool(int pool);
+    void try_assign_to_mempool(int pool);
+
     // accessors
     raw *get_raw() const { return _raw; }
     const char *c_str() const;
@@ -348,7 +354,6 @@ namespace buffer CEPH_BUFFER_API {
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
-    int _mempool = -1;
 
   public:
     class iterator;
@@ -443,6 +448,7 @@ namespace buffer CEPH_BUFFER_API {
 
       void advance(int o);
       void seek(unsigned o);
+      using iterator_impl<false>::operator*;
       char operator*();
       iterator& operator++();
       ptr get_current_ptr();
@@ -593,7 +599,6 @@ namespace buffer CEPH_BUFFER_API {
 
     class page_aligned_appender {
       bufferlist *pbl;
-      size_t offset;
       unsigned min_alloc;
       ptr buffer;
       char *pos, *end;
@@ -682,7 +687,6 @@ namespace buffer CEPH_BUFFER_API {
       _memcopy_count = other._memcopy_count;
       last_p = begin();
       append_buffer.swap(other.append_buffer);
-      _mempool = other._mempool;
       other.clear();
       return *this;
     }
@@ -691,6 +695,7 @@ namespace buffer CEPH_BUFFER_API {
     const ptr& front() const { return _buffers.front(); }
     const ptr& back() const { return _buffers.back(); }
 
+    int get_mempool() const;
     void reassign_to_mempool(int pool);
     void try_assign_to_mempool(int pool);
 
@@ -775,8 +780,11 @@ namespace buffer CEPH_BUFFER_API {
     void rebuild();
     void rebuild(ptr& nb);
     bool rebuild_aligned(unsigned align);
+    // max_buffers = 0 mean don't care _buffers.size(), other
+    // must make _buffers.size() <= max_buffers after rebuilding.
     bool rebuild_aligned_size_and_memory(unsigned align_size,
-					 unsigned align_memory);
+					 unsigned align_memory,
+					 unsigned max_buffers = 0);
     bool rebuild_page_aligned();
 
     void reserve(size_t prealloc);

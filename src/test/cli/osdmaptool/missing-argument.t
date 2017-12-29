@@ -8,6 +8,7 @@
      --test-map-pgs-dump-all [--pool <poolid>] map all pgs to osds
      --health                dump health checks
      --mark-up-in            mark osds up and in (but do not persist)
+     --mark-out <osdid>      mark an osd as out (but do not persist)
      --with-default-pool     include default pool when creating map
      --clear-temp            clear pg_temp and primary_temp
      --test-random           do random placements

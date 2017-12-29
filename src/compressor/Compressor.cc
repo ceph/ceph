@@ -17,6 +17,7 @@
 
 #include "CompressionPlugin.h"
 #include "Compressor.h"
+#include "include/random.h"
 #include "common/ceph_context.h"
 #include "common/debug.h"
 #include "common/dout.h"
@@ -76,16 +77,7 @@ CompressorRef Compressor::create(CephContext *cct, const std::string &type)
 {
   // support "random" for teuthology testing
   if (type == "random") {
-    static std::random_device seed;
-    static std::default_random_engine engine(seed());
-    static ceph::spinlock mutex;
-
-    int alg = COMP_ALG_NONE;
-    std::uniform_int_distribution<> dist(0, COMP_ALG_LAST - 1);
-    {
-      std::lock_guard<decltype(mutex)> lock(mutex);
-      alg = dist(engine);
-    }
+    int alg = ceph::util::generate_random_number(0, COMP_ALG_LAST - 1);
     if (alg == COMP_ALG_NONE) {
       return nullptr;
     }

@@ -377,11 +377,11 @@ Commands
   Release a lock on an image. The lock id and locker are
   as output by lock ls.
 
-:command:`bench` --io-type <read | write> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] *image-spec*
+:command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
   Generate a series of IOs to the image and measure the IO throughput and
   latency.  If no suffix is given, unit B is assumed for both --io-size and
   --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
-  --io-pattern seq.
+  --io-pattern seq, --rw-mix-read 50.
 
 :command:`trash ls` [*pool-name*]
   List all entries from trash.
@@ -398,11 +398,30 @@ Commands
 :command:`trash restore` *image-id*  
   Restore an image from trash.
 
-Image and snap specs
-====================
+:command:`group create` *group-spec*
+  Create a consistency group.
+
+:command:`group list` [-p | --pool *pool-name*]
+  List rbd consistency groups.
+
+:command:`group remove` *group-spec*
+  Delete a consistency group.
+
+:command:`group image add` *group-spec* *image-spec*
+  Add an image to a consistency group.
+
+:command:`group image list` *group-spec*
+  List images in a consistency group.
+
+:command:`group image remove` *group-spec* *image-spec*
+  Remove an image from a consistency group.
+
+Image, snap and group specs
+===========================
 
 | *image-spec* is [*pool-name*]/*image-name*
 | *snap-spec*  is [*pool-name*]/*image-name*\ @\ *snap-name*
+| *group-spec* is [*pool-name*]/*group-name*
 
 The default for *pool-name* is "rbd".  If an image name contains a slash
 character ('/'), *pool-name* is required.

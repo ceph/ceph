@@ -416,6 +416,7 @@ void ShardedThreadPool::unpause()
   ldout(cct,10) << "unpause" << dendl;
   shardedpool_lock.Lock();
   pause_threads = false;
+  wq->stop_return_waiting_threads();
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "unpaused" << dendl;
@@ -432,6 +433,7 @@ void ShardedThreadPool::drain()
     wait_cond.Wait(shardedpool_lock);
   }
   drain_threads = false;
+  wq->stop_return_waiting_threads();
   shardedpool_cond.Signal();
   shardedpool_lock.Unlock();
   ldout(cct,10) << "drained" << dendl;

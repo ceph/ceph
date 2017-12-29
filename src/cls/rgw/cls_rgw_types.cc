@@ -68,8 +68,9 @@ void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("category", val, obj);
   category = (uint8_t)val;
   JSONDecoder::decode_json("size", size, obj);
-  utime_t ut(mtime);
+  utime_t ut;
   JSONDecoder::decode_json("mtime", ut, obj);
+  mtime = ut.to_real_time();
   JSONDecoder::decode_json("etag", etag, obj);
   JSONDecoder::decode_json("owner", owner, obj);
   JSONDecoder::decode_json("owner_display_name", owner_display_name, obj);
@@ -625,4 +626,14 @@ void cls_rgw_bucket_instance_entry::generate_test_instances(list<cls_rgw_bucket_
   ls.push_back(new cls_rgw_bucket_instance_entry);
   ls.back()->reshard_status = CLS_RGW_RESHARD_IN_PROGRESS;
   ls.back()->new_bucket_instance_id = "new_instance_id";
+}
+  
+void cls_rgw_lc_obj_head::dump(Formatter *f) const 
+{
+  encode_json("start_date", start_date, f);
+  encode_json("marker", marker, f);
+}
+
+void cls_rgw_lc_obj_head::generate_test_instances(list<cls_rgw_lc_obj_head*>& ls)
+{
 }

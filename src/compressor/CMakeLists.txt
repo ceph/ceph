@@ -1,7 +1,6 @@
 
 set(compressor_srcs 
-  Compressor.cc
-  AsyncCompressor.cc)
+  Compressor.cc)
 add_library(compressor_objs OBJECT ${compressor_srcs})
 
 ## compressor plugins

@@ -31,11 +31,11 @@
 
 // Below included to get encode_encrypt(); That probably should be in Crypto.h, instead
 
-#include "auth/Crypto.h"
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
 #include "include/sock_compat.h"
+#include "include/random.h"
 
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff 
@@ -160,10 +160,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     connection_state->pipe = get();
   }
 
-  if (randomize_out_seq()) {
-    lsubdout(msgr->cct,ms,15) << "Pipe(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
-  }
-    
+  randomize_out_seq();
 
   msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
@@ -911,7 +908,7 @@ void Pipe::set_socket_options()
   }
 
   // block ESIGPIPE
-#if defined(SO_NOSIGPIPE)
+#ifdef CEPH_USE_SO_NOSIGPIPE
   int val = 1;
   int r = ::setsockopt(sd, SOL_SOCKET, SO_NOSIGPIPE, (void*)&val, sizeof(val));
   if (r) {
@@ -1546,19 +1543,15 @@ void Pipe::fault(bool onread)
   }
 }
 
-int Pipe::randomize_out_seq()
+void Pipe::randomize_out_seq()
 {
   if (connection_state->get_features() & CEPH_FEATURE_MSG_AUTH) {
-    // Set out_seq to a random value, so CRC won't be predictable.   Don't bother checking seq_error
-    // here.  We'll check it on the call.  PLR
-    int seq_error = get_random_bytes((char *)&out_seq, sizeof(out_seq));
-    out_seq &= SEQ_MASK;
+    // Set out_seq to a random value, so CRC won't be predictable.
+    out_seq = ceph::util::generate_random_number<uint64_t>(0, SEQ_MASK);
     lsubdout(msgr->cct, ms, 10) << "randomize_out_seq " << out_seq << dendl;
-    return seq_error;
   } else {
     // previously, seq #'s always started at 0.
     out_seq = 0;
-    return 0;
   }
 }
 
@@ -1574,9 +1567,7 @@ void Pipe::was_session_reset()
 
   msgr->dispatch_queue.queue_remote_reset(connection_state.get());
 
-  if (randomize_out_seq()) {
-    lsubdout(msgr->cct,ms,15) << "was_session_reset(): Could not get random bytes to set seq number for session reset; set seq number to " << out_seq << dendl;
-  }
+  randomize_out_seq();
 
   in_seq = 0;
   connect_seq = 0;
@@ -2032,24 +2023,10 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   ceph_msg_footer footer;
   __u32 header_crc = 0;
 
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    if (tcp_read((char*)&header, sizeof(header)) < 0)
-      return -1;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      header_crc = ceph_crc32c(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
-    }
-  } else {
-    ceph_msg_header_old oldheader;
-    if (tcp_read((char*)&oldheader, sizeof(oldheader)) < 0)
-      return -1;
-    // this is fugly
-    memcpy(&header, &oldheader, sizeof(header));
-    header.src = oldheader.src.name;
-    header.reserved = oldheader.reserved;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-      header.crc = oldheader.crc;
-      header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
-    }
+  if (tcp_read((char*)&header, sizeof(header)) < 0)
+    return -1;
+  if (msgr->crcflags & MSG_CRC_HEADER) {
+    header_crc = ceph_crc32c(0, (unsigned char *)&header, sizeof(header) - sizeof(header.crc));
   }
 
   ldout(msgr->cct,20) << "reader got envelope type=" << header.type
@@ -2261,91 +2238,21 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
   return ret;
 }
 
-/* 
- SIGPIPE suppression - for platforms without SO_NOSIGPIPE or MSG_NOSIGNAL
-  http://krokisplace.blogspot.in/2010/02/suppressing-sigpipe-in-library.html 
-  http://www.microhowto.info/howto/ignore_sigpipe_without_affecting_other_threads_in_a_process.html 
-*/
-void Pipe::suppress_sigpipe()
-{
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  /*
-    We want to ignore possible SIGPIPE that we can generate on write.
-    SIGPIPE is delivered *synchronously* and *only* to the thread
-    doing the write.  So if it is reported as already pending (which
-    means the thread blocks it), then we do nothing: if we generate
-    SIGPIPE, it will be merged with the pending one (there's no
-    queuing), and that suits us well.  If it is not pending, we block
-    it in this thread (and we avoid changing signal action, because it
-    is per-process).
-  */
-  sigset_t pending;
-  sigemptyset(&pending);
-  sigpending(&pending);
-  sigpipe_pending = sigismember(&pending, SIGPIPE);
-  if (!sigpipe_pending) {
-    sigset_t blocked;
-    sigemptyset(&blocked);
-    pthread_sigmask(SIG_BLOCK, &sigpipe_mask, &blocked);
-
-    /* Maybe is was blocked already?  */
-    sigpipe_unblock = ! sigismember(&blocked, SIGPIPE);
-  }
-#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
-}
-
-
-void Pipe::restore_sigpipe()
-{
-#if !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE)
-  /*
-    If SIGPIPE was pending already we do nothing.  Otherwise, if it
-    become pending (i.e., we generated it), then we sigwait() it (thus
-    clearing pending status).  Then we unblock SIGPIPE, but only if it
-    were us who blocked it.
-  */
-  if (!sigpipe_pending) {
-    sigset_t pending;
-    sigemptyset(&pending);
-    sigpending(&pending);
-    if (sigismember(&pending, SIGPIPE)) {
-      /*
-        Protect ourselves from a situation when SIGPIPE was sent
-        by the user to the whole process, and was delivered to
-        other thread before we had a chance to wait for it.
-      */
-      static const struct timespec nowait = { 0, 0 };
-      TEMP_FAILURE_RETRY(sigtimedwait(&sigpipe_mask, NULL, &nowait));
-    }
-
-    if (sigpipe_unblock)
-      pthread_sigmask(SIG_UNBLOCK, &sigpipe_mask, NULL);
-  }
-#endif  /* !defined(MSG_NOSIGNAL) && !defined(SO_NOSIGPIPE) */
-}
-
-
 int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
 {
-  suppress_sigpipe();
+  MSGR_SIGPIPE_STOPPER;
   while (len > 0) {
     int r;
-#if defined(MSG_NOSIGNAL)
     r = ::sendmsg(sd, msg, MSG_NOSIGNAL | (more ? MSG_MORE : 0));
-#else
-    r = ::sendmsg(sd, msg, (more ? MSG_MORE : 0));
-#endif
     if (r == 0) 
       ldout(msgr->cct,10) << "do_sendmsg hmm do_sendmsg got r==0!" << dendl;
     if (r < 0) {
       r = -errno; 
       ldout(msgr->cct,1) << "do_sendmsg error " << cpp_strerror(r) << dendl;
-      restore_sigpipe();
       return r;
     }
     if (state == STATE_CLOSED) {
       ldout(msgr->cct,10) << "do_sendmsg oh look, state == CLOSED, giving up" << dendl;
-      restore_sigpipe();
       return -EINTR; // close enough
     }
 
@@ -2370,7 +2277,6 @@ int Pipe::do_sendmsg(struct msghdr *msg, unsigned len, bool more)
       }
     }
   }
-  restore_sigpipe();
   return 0;
 }
 
@@ -2456,29 +2362,10 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   msg.msg_iovlen++;
 
   // send envelope
-  ceph_msg_header_old oldheader;
-  if (connection_state->has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    msgvec[msg.msg_iovlen].iov_base = (char*)&header;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(header);
-    msglen += sizeof(header);
-    msg.msg_iovlen++;
-  } else {
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = connection_state->get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    if (msgr->crcflags & MSG_CRC_HEADER) {
-	oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-				    sizeof(oldheader) - sizeof(oldheader.crc));
-    } else {
-	oldheader.crc = 0;
-    }
-    msgvec[msg.msg_iovlen].iov_base = (char*)&oldheader;
-    msgvec[msg.msg_iovlen].iov_len = sizeof(oldheader);
-    msglen += sizeof(oldheader);
-    msg.msg_iovlen++;
-  }
+  msgvec[msg.msg_iovlen].iov_base = (char*)&header;
+  msgvec[msg.msg_iovlen].iov_len = sizeof(header);
+  msglen += sizeof(header);
+  msg.msg_iovlen++;
 
   // payload (front+data)
   list<bufferptr>::const_iterator pb = blist.buffers().begin();
@@ -2543,7 +2430,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
 	old_footer.front_crc = old_footer.middle_crc = 0;
     }
     old_footer.data_crc = msgr->crcflags & MSG_CRC_DATA ? footer.data_crc : 0;
-    old_footer.flags = footer.flags;   
+    old_footer.flags = footer.flags;
     msgvec[msg.msg_iovlen].iov_base = (char*)&old_footer;
     msgvec[msg.msg_iovlen].iov_len = sizeof(old_footer);
     msglen += sizeof(old_footer);
@@ -2737,15 +2624,9 @@ int Pipe::tcp_write(const char *buf, unsigned len)
 
   //lgeneric_dout(cct, DBL) << "tcp_write writing " << len << dendl;
   assert(len > 0);
-  suppress_sigpipe();
-
   while (len > 0) {
-    int did;
-#if defined(MSG_NOSIGNAL)
-    did = ::send( sd, buf, len, MSG_NOSIGNAL );
-#else
-    did = ::send( sd, buf, len, 0);
-#endif
+    MSGR_SIGPIPE_STOPPER;
+    int did = ::send( sd, buf, len, MSG_NOSIGNAL );
     if (did < 0) {
       //lgeneric_dout(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
       //lgeneric_derr(cct, 1) << "tcp_write error did = " << did << " " << cpp_strerror(errno) << dendl;
@@ -2755,7 +2636,5 @@ int Pipe::tcp_write(const char *buf, unsigned len)
     buf += did;
     //lgeneric_dout(cct, DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
   }
-  restore_sigpipe();
-
   return 0;
 }

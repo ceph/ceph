@@ -572,15 +572,6 @@ private:
    *	      not on the active state, or if the lease has expired.
    */
   list<Context*> waiting_for_writeable;
-  /**
-   * List of callbacks waiting for a commit to finish.
-   *
-   * @remarks This may be used to a) wait for an on-going commit to finish
-   *	      before we proceed with, say, a new proposal; or b) wait for the
-   *	      next commit to be finished so we are sure that our value was
-   *	      fully committed.
-   */
-  list<Context*> waiting_for_commit;
 
   /**
    * Pending proposal transaction
@@ -1359,25 +1350,6 @@ public:
    * something) that will be deferred (e.g., until the current round finishes).
    */
   bool trigger_propose();
-
-  /**
-   * Add oncommit to the back of the list of callbacks waiting for us to
-   * finish committing.
-   *
-   * @param oncommit A callback
-   */
-  void wait_for_commit(Context *oncommit) {
-    waiting_for_commit.push_back(oncommit);
-  }
-  /**
-   * Add oncommit to the front of the list of callbacks waiting for us to
-   * finish committing.
-   *
-   * @param oncommit A callback
-   */
-  void wait_for_commit_front(Context *oncommit) {
-    waiting_for_commit.push_front(oncommit);
-  }
   /**
    * @}
    */

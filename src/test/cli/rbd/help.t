@@ -123,7 +123,8 @@ Skip test on FreeBSD as it generates different output there.
   rbd help bench
   usage: rbd bench [--pool <pool>] [--image <image>] [--io-size <io-size>] 
                    [--io-threads <io-threads>] [--io-total <io-total>] 
-                   [--io-pattern <io-pattern>] --io-type <io-type> 
+                   [--io-pattern <io-pattern>] 
+                   [--rw-mix-read <rw-mix-read>] --io-type <io-type> 
                    <image-spec> 
   
   Simple benchmark.
@@ -139,10 +140,11 @@ Skip test on FreeBSD as it generates different output there.
     --io-threads arg     ios in flight [default: 16]
     --io-total arg       total size for IO (in B/K/M/G/T) [default: 1G]
     --io-pattern arg     IO pattern (rand or seq) [default: seq]
-    --io-type arg        IO type (read or write)
+    --rw-mix-read arg    read proportion in readwrite (<= 100) [default: 50]
+    --io-type arg        IO type (read , write, or readwrite(rw))
   
   rbd help children
-  usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] 
+  usage: rbd children [--pool <pool>] [--image <image>] [--snap <snap>] [--all] 
                       [--format <format>] [--pretty-format] 
                       <snap-spec> 
   
@@ -156,6 +158,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg    pool name
     --image arg          image name
     --snap arg           snapshot name
+    -a [ --all ]         list all children of snapshot (include trash)
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
   
@@ -1145,6 +1148,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd nbd map [--pool <pool>] [--image <image>] [--snap <snap>] 
                      [--read-only] [--exclusive] [--device <device>] 
                      [--nbds_max <nbds_max>] [--max_part <max_part>] 
+                     [--timeout <timeout>] 
                      <image-or-snap-spec> 
   
   Map image to a nbd device.
@@ -1162,6 +1166,7 @@ Skip test on FreeBSD as it generates different output there.
     --device arg          specify nbd device
     --nbds_max arg        override module param nbds_max
     --max_part arg        override module param max_part
+    --timeout arg         set nbd request timeout (seconds)
   
   rbd help nbd unmap
   usage: rbd nbd unmap 

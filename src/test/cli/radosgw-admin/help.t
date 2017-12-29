@@ -25,14 +25,17 @@
     bucket rm                  remove bucket
     bucket check               check bucket index
     bucket reshard             reshard bucket
+    bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
     bucket sync enable         enable bucket sync
     bi get                     retrieve bucket index object entries
     bi put                     store bucket index object entries
     bi list                    list raw bucket index entries
+    bi purge                   purge bucket index entries
     object rm                  remove object
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
+    object rewrite             rewrite the specified object
     objects expire             run expired objects cleanup
     period delete              delete a period
     period get                 get period info
@@ -55,7 +58,6 @@
     realm get-default          get default realm name
     realm list                 list realms
     realm list-periods         list all realm periods
-    realm remove               remove a zonegroup from the realm
     realm rename               rename a realm
     realm set                  set realm info (requires infile)
     realm default              set realm as default
@@ -86,6 +88,12 @@
     zone placement add         add a zone placement target
     zone placement modify      modify a zone placement target
     zone placement rm          remove a zone placement target
+    metadata sync status       get metadata sync status
+    metadata sync init         init metadata sync
+    metadata sync run          run metadata sync
+    data sync status           get data sync status of the specified source zone
+    data sync init             init data sync for the specified source zone
+    data sync run              run data sync for the specified source zone
     pool add                   add an existing pool for data placement
     pool rm                    remove an existing pool from data placement set
     pools list                 list placement active set
@@ -100,7 +108,8 @@
     usage trim                 trim usage (by user, date range)
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
-    gc process                 manually process garbage
+    gc process                 manually process garbage (specify
+                               --include-all to process all entries, including unexpired)
     lc list                    list all bucket lifecycle progress
     lc process                 manually process lifecycle
     metadata get               get metadata info
@@ -137,7 +146,8 @@
     role-policy get            get the specified inline policy document embedded with the given role
     role-policy delete         delete policy attached to a role
     reshard add                schedule a resharding of a bucket
-    reshard list               list all bucket resharding or scheduled to be reshared
+    reshard list               list all bucket resharding or scheduled to be resharded
+    reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
   options:
@@ -145,7 +155,7 @@
      --uid=<id>                user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
-     --email=<email>
+     --email=<email>           user's email address
      --secret/--secret-key=<key>
                                specify secret key
      --gen-access-key          generate random access key (for S3)
@@ -154,17 +164,17 @@
      --temp-url-key[-2]=<key>  temp url key
      --access=<access>         Set access permissions for sub-user, should be one
                                of read, write, readwrite, full
-     --display-name=<name>
+     --display-name=<name>     user's display name
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
-     --bucket=<bucket>
-     --pool=<pool>
-     --object=<object>
-     --date=<date>
-     --start-date=<date>
-     --end-date=<date>
-     --bucket-id=<bucket-id>
+     --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
+     --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
+     --object=<object>         object name
+     --date=<date>             date in the format yyyy-mm-dd
+     --start-date=<date>       start date in the format yyyy-mm-dd
+     --end-date=<date>         end date in the format yyyy-mm-dd
+     --bucket-id=<bucket-id>   bucket id
      --shard-id=<shard-id>     optional for mdlog list
                                required for: 
                                  mdlog trim
@@ -177,8 +187,6 @@
      --commit                  commit the period during 'period update'
      --staging                 get staging period info
      --master                  set as master
-     --master-url              master url
-     --master-zonegroup=<id>   master zonegroup id
      --master-zone=<id>        master zone id
      --rgw-realm=<name>        realm name
      --realm-id=<id>           realm id
@@ -193,6 +201,7 @@
      --source-zone             specify the source zone (for data sync)
      --default                 set entity (realm, zonegroup, zone) as default
      --read-only               set zone as read-only (when adding to zonegroup)
+     --redirect-zone           specify zone id to redirect when response is 404 (not found)
      --placement-id            placement id for zonegroup placement commands
      --tags=<list>             list of tags for zonegroup placement add and modify commands
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
@@ -232,8 +241,9 @@
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state string>    specify a state for the opstate set command
-     --replica-log-type        replica log type (metadata, data, bucket), required for
+     --state=<state>           specify a state for the opstate set command
+     --replica-log-type=<logtypestr>
+                               replica log type (metadata, data, bucket), required for
                                replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
@@ -245,17 +255,18 @@
                                object deletions by not involving GC
      --inconsistent-index      when specified with bucket deletion and bypass-gc set to true,
                                ignores bucket index consistency
+     --min-rewrite-size        min object size for bucket rewrite (default 4M)
+     --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)
+     --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
   Quota options:
-     --bucket                  specified bucket for quota command
      --max-objects             specify max objects (negative value to disable)
      --max-size                specify max size (in B/K/M/G/T, negative value to disable)
      --quota-scope             scope of quota (bucket, user)
   
   Orphans search options:
-     --pool                    data pool to scan for leaked rados objects in
      --num-shards              num of shards to use for keeping the temporary scan info
      --orphan-stale-secs       num of seconds to wait before declaring an object to be an orphan (default: 86400)
      --job-id                  set the job id (for orphans find)

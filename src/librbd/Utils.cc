@@ -9,6 +9,7 @@
 #include "include/stringify.h"
 #include "include/rbd/features.h"
 #include "common/dout.h"
+#include "librbd/ImageCtx.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -98,6 +99,19 @@ bool calc_sparse_extent(const bufferptr &bp,
   }
   return false;
 }
-} // namespace util
 
+bool is_metadata_config_override(const std::string& metadata_key,
+                                 std::string* config_key) {
+  size_t prefix_len = librbd::ImageCtx::METADATA_CONF_PREFIX.size();
+  if (metadata_key.size() > prefix_len &&
+      metadata_key.compare(0, prefix_len,
+                           librbd::ImageCtx::METADATA_CONF_PREFIX) == 0) {
+    *config_key = metadata_key.substr(prefix_len,
+                                      metadata_key.size() - prefix_len);
+    return true;
+  }
+  return false;
+}
+
+} // namespace util
 } // namespace librbd

@@ -47,7 +47,7 @@ void SessionMap::register_perfcounters()
   PerfCountersBuilder plb(g_ceph_context, "mds_sessions",
       l_mdssm_first, l_mdssm_last);
   plb.add_u64(l_mdssm_session_count, "session_count",
-      "Session count");
+      "Session count", "sess", PerfCountersBuilder::PRIO_USEFUL);
   plb.add_u64_counter(l_mdssm_session_add, "session_add",
       "Sessions added");
   plb.add_u64_counter(l_mdssm_session_remove, "session_remove",
@@ -739,11 +739,6 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
   const uint32_t kpo = g_conf->mds_sessionmap_keys_per_op;
   map<string, bufferlist> to_set;
   for (uint32_t i = 0; i < write_sessions.size(); ++i) {
-    // Start a new write transaction?
-    if (i % g_conf->mds_sessionmap_keys_per_op == 0) {
-      to_set.clear();
-    }
-
     const entity_name_t &session_id = write_sessions[i];
     Session *session = session_map[session_id];
     session->clear_dirty_completed_requests();
@@ -764,6 +759,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
         || i % kpo == kpo - 1) {
       ObjectOperation op;
       op.omap_set(to_set);
+      to_set.clear(); // clear to start a new transaction      
 
       SnapContext snapc;
       object_t oid = get_object_name();

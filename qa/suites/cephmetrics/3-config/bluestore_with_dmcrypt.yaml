@@ -1,0 +1,8 @@
+meta:
+- desc: "use bluestore + dmcrypt"
+
+overrides:
+   ceph_ansible:
+     vars:
+        osd_objectstore: bluestore
+        dmcrypt: True

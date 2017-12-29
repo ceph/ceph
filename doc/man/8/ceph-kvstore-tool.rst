@@ -72,6 +72,9 @@ which are as follows:
 :command:`compact-range <prefix> <start> <end>`
     Compact some entries specified by the URL encoded prefix and range.
 
+:command:`repair`
+    Try to repair the kvstore.
+
 Availability
 ============
 

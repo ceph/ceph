@@ -809,7 +809,7 @@ class OSDStub : public TestStub
       }
     }
 
-    epoch_t start_full = MAX(osdmap.get_epoch() + 1, first);
+    epoch_t start_full = std::max(osdmap.get_epoch() + 1, first);
 
     if (m->maps.size() > 0) {
       map<epoch_t,bufferlist>::reverse_iterator rit;

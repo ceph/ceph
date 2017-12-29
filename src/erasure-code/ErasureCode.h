@@ -56,9 +56,17 @@ namespace ceph {
       return get_chunk_count() - get_data_chunk_count();
     }
 
+    virtual int get_sub_chunk_count() {
+      return 1;
+    }
+
+    virtual int _minimum_to_decode(const std::set<int> &want_to_read,
+				   const std::set<int> &available_chunks,
+				   std::set<int> *minimum);
+
     int minimum_to_decode(const std::set<int> &want_to_read,
-                                  const std::set<int> &available_chunks,
-                                  std::set<int> *minimum) override;
+			  const std::set<int> &available,
+			  std::map<int, std::vector<std::pair<int, int>>> *minimum) final override;
 
     int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
                                             const std::map<int, int> &available,
@@ -75,8 +83,12 @@ namespace ceph {
                               std::map<int, bufferlist> *encoded) override;
 
     int decode(const std::set<int> &want_to_read,
-                       const std::map<int, bufferlist> &chunks,
-                       std::map<int, bufferlist> *decoded) override;
+                const std::map<int, bufferlist> &chunks,
+                std::map<int, bufferlist> *decoded, int chunk_size) override final;
+
+    virtual int _decode(const std::set<int> &want_to_read,
+			const std::map<int, bufferlist> &chunks,
+			std::map<int, bufferlist> *decoded);
 
     int decode_chunks(const std::set<int> &want_to_read,
                               const std::map<int, bufferlist> &chunks,

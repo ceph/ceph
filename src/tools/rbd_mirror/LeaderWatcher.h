@@ -26,6 +26,7 @@ template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class LeaderWatcher : protected librbd::Watcher {
+  using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
   struct Listener {
     virtual ~Listener() {

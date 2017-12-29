@@ -256,6 +256,49 @@ TEST(mempool, list)
     v.push_back(obj());
     v.push_back(obj(1));
   }
+ 
+}
+
+TEST(mempool, dump)
+{
+  ostringstream ostr;
+
+  Formatter* f = Formatter::create("xml-pretty", "xml-pretty", "xml-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+
+  f = Formatter::create("html-pretty", "html-pretty", "html-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+  f = Formatter::create("table", "table", "table");
+  mempool::dump(f);
+  f->flush(ostr);
+
+  delete f;
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
+
+  ostr.str("");
+
+  f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  mempool::dump(f);
+  f->flush(ostr);
+  delete f;
+
+  ASSERT_NE(ostr.str().find(mempool::get_pool_name((mempool::pool_index_t)0)),
+    std::string::npos);
 }
 
 TEST(mempool, unordered_map)

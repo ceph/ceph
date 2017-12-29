@@ -224,6 +224,8 @@ public:
   int authenticate(double timeout=0.0);
   bool is_authenticated() const {return authenticated;}
 
+  bool is_connected() const { return active_con != nullptr; }
+
   /**
    * Try to flush as many log messages as we can in a single
    * message.  Use this before shutting down to transmit your
