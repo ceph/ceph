@@ -8,7 +8,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
-#define dout_prefix *_dout << "stupidalloc "
+#define dout_prefix *_dout << "stupidalloc 0x" << this << " "
 
 StupidAllocator::StupidAllocator(CephContext* cct)
   : cct(cct), num_free(0),
