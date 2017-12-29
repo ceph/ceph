@@ -3367,6 +3367,7 @@ std::string PG::get_corrupt_pg_log_name() const
 {
   const int MAX_BUF = 512;
   char buf[MAX_BUF];
+  memset(buf, 0, sizeof(buf));
   struct tm tm_buf;
   time_t my_time(time(NULL));
   const struct tm *t = localtime_r(&my_time, &tm_buf);

@@ -75,6 +75,7 @@ WRITE_CLASS_ENCODER(Mapping)
 string SnapMapper::get_prefix(snapid_t snap)
 {
   char buf[100];
+  memset(buf, 0, sizeof(buf));
   int len = snprintf(
     buf, sizeof(buf),
     "%.*X_", (int)(sizeof(snap)*2),

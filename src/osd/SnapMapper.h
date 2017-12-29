@@ -155,6 +155,7 @@ public:
     if (shard == shard_id_t::NO_SHARD)
       return string();
     char buf[20];
+    memset(buf, 0, sizeof(buf));
     int r = snprintf(buf, sizeof(buf), ".%x", (int)shard);
     assert(r < (int)sizeof(buf));
     return string(buf, r) + '_';
