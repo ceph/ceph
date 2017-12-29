@@ -255,7 +255,7 @@ RGWRadosGetOmapKeysCR::RGWRadosGetOmapKeysCR(RGWRados *_store,
                                                 entries(_entries), max_entries(_max_entries), rval(0),
                                                 obj(_obj), cn(NULL)
 {
-  set_description() << "set omap keys dest=" << obj << " marker=" << marker;
+  set_description() << "get omap keys dest=" << obj << " marker=" << marker;
 }
 
 int RGWRadosGetOmapKeysCR::send_request() {
