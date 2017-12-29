@@ -1850,7 +1850,7 @@ public:
   librados::ObjectWriteOperation op;
   librados::ObjectReadOperation rd_op;
   librados::AioCompletion *comp;
-  librados::AioCompletion *comp_racing_read;
+  librados::AioCompletion *comp_racing_read = nullptr;
   ceph::shared_ptr<int> in_use;
   int snap;
   int done;
