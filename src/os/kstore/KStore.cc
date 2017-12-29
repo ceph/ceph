@@ -247,59 +247,7 @@ static void get_coll_key_range(const coll_t& cid, int bits,
   }
 }
 
-static int get_key_object(const string& key, ghobject_t *oid);
-
-static void get_object_key(CephContext* cct, const ghobject_t& oid,
-			   string *key)
-{
-  key->clear();
-
-  _key_encode_shard(oid.shard_id, key);
-  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
-  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
-  key->append(".");
-
-  append_escaped(oid.hobj.nspace, key);
-
-  if (oid.hobj.get_key().length()) {
-    // is a key... could be < = or >.
-    // (ASCII chars < = and > sort in that order, yay)
-    if (oid.hobj.get_key() < oid.hobj.oid.name) {
-      key->append("<");
-      append_escaped(oid.hobj.get_key(), key);
-      append_escaped(oid.hobj.oid.name, key);
-    } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
-      key->append(">");
-      append_escaped(oid.hobj.get_key(), key);
-      append_escaped(oid.hobj.oid.name, key);
-    } else {
-      // same as no key
-      key->append("=");
-      append_escaped(oid.hobj.oid.name, key);
-    }
-  } else {
-    // no key
-    key->append("=");
-    append_escaped(oid.hobj.oid.name, key);
-  }
-
-  _key_encode_u64(oid.hobj.snap, key);
-  _key_encode_u64(oid.generation, key);
-
-  // sanity check
-  if (true) {
-    ghobject_t t;
-    int r = get_key_object(*key, &t);
-    if (r || t != oid) {
-      derr << "  r " << r << dendl;
-      derr << "key " << pretty_binary_string(*key) << dendl;
-      derr << "oid " << oid << dendl;
-      derr << "  t " << t << dendl;
-      assert(t == oid);
-    }
-  }
-}
-
+// *** static int get_key_object(const string& key, ghobject_t *oid);
 static int get_key_object(const string& key, ghobject_t *oid)
 {
   int r;
@@ -348,6 +296,8 @@ static int get_key_object(const string& key, ghobject_t *oid)
     return -10;
   }
 
+  r = 0;
+
   p = _key_decode_u64(p, &oid->hobj.snap.val);
   p = _key_decode_u64(p, &oid->generation);
   if (*p) {
@@ -356,9 +306,59 @@ static int get_key_object(const string& key, ghobject_t *oid)
     return -12;
   }
 
-  return 0;
+  return r;
 }
 
+static void get_object_key(CephContext* cct, const ghobject_t& oid,
+			   string *key)
+{
+  key->clear();
+
+  _key_encode_shard(oid.shard_id, key);
+  _key_encode_u64(oid.hobj.pool + 0x8000000000000000ull, key);
+  _key_encode_u32(oid.hobj.get_bitwise_key_u32(), key);
+  key->append(".");
+
+  append_escaped(oid.hobj.nspace, key);
+
+  if (oid.hobj.get_key().length()) {
+    // is a key... could be < = or >.
+    // (ASCII chars < = and > sort in that order, yay)
+    if (oid.hobj.get_key() < oid.hobj.oid.name) {
+      key->append("<");
+      append_escaped(oid.hobj.get_key(), key);
+      append_escaped(oid.hobj.oid.name, key);
+    } else if (oid.hobj.get_key() > oid.hobj.oid.name) {
+      key->append(">");
+      append_escaped(oid.hobj.get_key(), key);
+      append_escaped(oid.hobj.oid.name, key);
+    } else {
+      // same as no key
+      key->append("=");
+      append_escaped(oid.hobj.oid.name, key);
+    }
+  } else {
+    // no key
+    key->append("=");
+    append_escaped(oid.hobj.oid.name, key);
+  }
+
+  _key_encode_u64(oid.hobj.snap, key);
+  _key_encode_u64(oid.generation, key);
+
+  // sanity check
+  {
+    ghobject_t t;
+    int r = get_key_object(*key, &t);
+    if (r || t != oid) {
+      derr << "  r " << r << dendl;
+      derr << "key " << pretty_binary_string(*key) << dendl;
+      derr << "oid " << oid << dendl;
+      derr << "  t " << t << dendl;
+      assert(t == oid);
+    }
+  }
+}
 
 static void get_data_key(uint64_t nid, uint64_t offset, string *out)
 {
@@ -676,14 +676,17 @@ void KStore::_shutdown_logger()
 int KStore::_open_path()
 {
   assert(path_fd < 0);
+
+  int r = 0;
+
   path_fd = ::open(path.c_str(), O_DIRECTORY);
   if (path_fd < 0) {
-    int r = -errno;
+    r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)
 	 << dendl;
     return r;
   }
-  return 0;
+  return r;
 }
 
 void KStore::_close_path()
@@ -699,12 +702,15 @@ int KStore::_open_fsid(bool create)
   if (create)
     flags |= O_CREAT;
   fsid_fd = ::openat(path_fd, "fsid", flags, 0644);
+
+  int r = 0;
+
   if (fsid_fd < 0) {
-    int err = -errno;
-    derr << __func__ << " " << cpp_strerror(err) << dendl;
-    return err;
+    r = -errno;
+    derr << __func__ << " " << cpp_strerror(r) << dendl;
+    return r;
   }
-  return 0;
+  return r;
 }
 
 int KStore::_read_fsid(uuid_d *uuid)
@@ -720,11 +726,14 @@ int KStore::_read_fsid(uuid_d *uuid)
     fsid_str[36] = 0;
   else
     fsid_str[ret] = 0;
+
+  ret = 0;
+
   if (!uuid->parse(fsid_str)) {
     derr << __func__ << " unparsable uuid " << fsid_str << dendl;
     return -EINVAL;
   }
-  return 0;
+  return ret;
 }
 
 int KStore::_write_fsid()
@@ -746,8 +755,10 @@ int KStore::_write_fsid()
     r = -errno;
     derr << __func__ << " fsid fsync failed: " << cpp_strerror(r) << dendl;
     return r;
-  }
-  return 0;
+  } else
+    r = 0;
+
+  return r;
 }
 
 void KStore::_close_fsid()
@@ -771,8 +782,10 @@ int KStore::_lock_fsid()
 	 << " (is another ceph-osd still running?)"
 	 << cpp_strerror(err) << dendl;
     return -err;
-  }
-  return 0;
+  } else
+    r = 0;
+
+  return r;
 }
 
 bool KStore::test_mount_in_use()
@@ -859,9 +872,12 @@ int KStore::_open_db(bool create)
     db = NULL;
     return -EIO;
   }
+
+  r = 0;
+
   dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << fn << " options " << options << dendl;
-  return 0;
+  return r;
 }
 
 void KStore::_close_db()
@@ -1005,11 +1021,13 @@ int KStore::mount()
   if (r < 0)
     goto out_db;
 
+  r = 0;
+
   finisher.start();
   kv_sync_thread.create("kstore_kv_sync");
 
   mounted = true;
-  return 0;
+  return r;
 
  out_db:
   _close_db();
@@ -1044,7 +1062,7 @@ int KStore::umount()
   return 0;
 }
 
-int KStore::fsck(bool deep)
+int KStore::fsck(bool deep) 
 {
   dout(1) << __func__ << dendl;
   int errors = 0;
@@ -1407,10 +1425,12 @@ int KStore::collection_empty(const coll_t& cid, bool *empty)
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
          << dendl;
     return r;
-  }
+  } else
+    r = 0;
+
   *empty = ls.empty();
   dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
-  return 0;
+  return r;
 }
 
 int KStore::collection_bits(const coll_t& cid)
@@ -1610,11 +1630,12 @@ int KStore::OmapIteratorImpl::lower_bound(const string& to)
 bool KStore::OmapIteratorImpl::valid()
 {
   RWLock::RLocker l(c->lock);
-  if (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) {
-    return true;
-  } else {
-    return false;
-  }
+
+  bool r;
+
+  (o->onode.omap_head && it->valid() && it->raw_key().second <= tail) ? r = true : r = false;
+
+  return r;
 }
 
 int KStore::OmapIteratorImpl::next(bool validate)
@@ -2504,13 +2525,12 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     if (r < 0) {
       bool ok = false;
 
-      if (r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
+      if ((r == -ENOENT && !(op->op == Transaction::OP_CLONERANGE ||
 			    op->op == Transaction::OP_CLONE ||
 			    op->op == Transaction::OP_CLONERANGE2 ||
-			    op->op == Transaction::OP_COLL_ADD))
+			    op->op == Transaction::OP_COLL_ADD)) ||
+          (r == -ENODATA))
 	// -ENOENT is usually okay
-	ok = true;
-      if (r == -ENODATA)
 	ok = true;
 
       if (!ok) {
@@ -2618,16 +2638,15 @@ int KStore::_do_write(TransContext *txc,
 {
   int r = 0;
 
+  if (length == 0)
+    return 0;
+
   dout(20) << __func__
 	   << " " << o->oid << " " << offset << "~" << length
 	   << " - have " << o->onode.size
 	   << " bytes, nid " << o->onode.nid << dendl;
   _dump_onode(o);
   o->exists = true;
-
-  if (length == 0) {
-    return 0;
-  }
 
   uint64_t stripe_size = o->onode.stripe_size;
   if (!stripe_size) {
