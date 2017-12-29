@@ -17,6 +17,7 @@
 #ifndef CEPH_COMPRESSION_ZLIB_H
 #define CEPH_COMPRESSION_ZLIB_H
 
+#include "common/config.h"
 #include "compressor/Compressor.h"
 
 class ZlibCompressor : public Compressor {
@@ -24,7 +25,14 @@ class ZlibCompressor : public Compressor {
   CephContext *const cct;
 public:
   ZlibCompressor(CephContext *cct, bool isal)
-    : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct) {}
+    : Compressor(COMP_ALG_ZLIB, "zlib"), isal_enabled(isal), cct(cct) {
+#ifdef HAVE_QATZIP
+    if (cct->_conf->qat_compressor_enabled && qat_accel.init("zlib"))
+      qat_enabled = true;
+    else
+      qat_enabled = false;
+#endif
+  }
 
   int compress(const bufferlist &in, bufferlist &out) override;
   int decompress(const bufferlist &in, bufferlist &out) override;

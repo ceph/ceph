@@ -1,6 +1,9 @@
 
-set(compressor_srcs 
+set(compressor_srcs
   Compressor.cc)
+if (HAVE_QATZIP)
+  list(APPEND compressor_srcs QatAccel.cc)
+endif()
 add_library(compressor_objs OBJECT ${compressor_srcs})
 
 ## compressor plugins
@@ -38,6 +41,9 @@ add_custom_target(compressor_plugins DEPENDS
 if(WITH_EMBEDDED)
   include(MergeStaticLibraries)
   add_library(cephd_compressor_base STATIC ${compressor_srcs})
+  if(HAVE_QATZIP)
+    target_link_libraries(cephd_compressor_base ${QATZIP_LIBRARIES})
+  endif()
   set_target_properties(cephd_compressor_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
   set(cephd_compressor_libs
       cephd_compressor_base

@@ -342,4 +342,7 @@
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 
+/* Defined if Intel QAT compress/decompress is supported */
+#cmakedefine HAVE_QATZIP
+
 #endif /* CONFIG_H */

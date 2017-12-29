@@ -776,6 +776,10 @@ std::vector<Option> get_global_options() {
     .set_default(5)
     .set_description(""),
 
+    Option("qat_compressor_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("enable qat acceleration support for compression"),
+
     Option("plugin_crypto_accelerator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crypto_isal")
     .set_description(""),
