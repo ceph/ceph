@@ -20,14 +20,26 @@
 #include "compressor/Compressor.h"
 #include "include/buffer.h"
 #include "include/encoding.h"
+#include "common/config.h"
 #include "common/Tub.h"
 
 
 class LZ4Compressor : public Compressor {
  public:
-  LZ4Compressor() : Compressor(COMP_ALG_LZ4, "lz4") {}
+  LZ4Compressor(CephContext* cct) : Compressor(COMP_ALG_LZ4, "lz4") {
+#ifdef HAVE_QATZIP
+    if (cct->_conf->qat_compressor_enabled && qat_accel.init("lz4"))
+      qat_enabled = true;
+    else
+      qat_enabled = false;
+#endif
+  }
 
   int compress(const bufferlist &src, bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.compress(src, dst);
+#endif
     bufferptr outptr = buffer::create_page_aligned(
       LZ4_compressBound(src.length()));
     LZ4_stream_t lz4_stream;
@@ -60,6 +72,10 @@ class LZ4Compressor : public Compressor {
   }
 
   int decompress(const bufferlist &src, bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(src, dst);
+#endif
     bufferlist::iterator i = const_cast<bufferlist&>(src).begin();
     return decompress(i, src.length(), dst);
   }
@@ -67,6 +83,10 @@ class LZ4Compressor : public Compressor {
   int decompress(bufferlist::iterator &p,
 		 size_t compressed_len,
 		 bufferlist &dst) override {
+#ifdef HAVE_QATZIP
+    if (qat_enabled)
+      return qat_accel.decompress(p, compressed_len, dst);
+#endif
     uint32_t count;
     std::vector<std::pair<uint32_t, uint32_t> > compressed_pairs;
     decode(count, p);
