@@ -74,7 +74,7 @@ int execute_list(const po::variables_map &vm) {
     return r;
 
   if (f)
-    f->open_array_section("consistency_groups");
+    f->open_array_section("groups");
   for (auto i : names) {
     if (f)
       f->dump_string("name", i);
@@ -256,7 +256,7 @@ int execute_list_images(const po::variables_map &vm) {
 
   if (group_name.empty()) {
     std::cerr << "rbd: "
-              << "consistency group name was not specified" << std::endl;
+              << "group name was not specified" << std::endl;
     return -EINVAL;
   }
 
@@ -409,7 +409,7 @@ int execute_group_snap_list(const po::variables_map &vm) {
 
   if (group_name.empty()) {
     std::cerr << "rbd: "
-              << "consistency group name was not specified" << std::endl;
+              << "group name was not specified" << std::endl;
     return -EINVAL;
   }
 
@@ -441,7 +441,7 @@ int execute_group_snap_list(const po::variables_map &vm) {
 
   TextTable t;
   if (f) {
-    f->open_array_section("consistency_group_snaps");
+    f->open_array_section("group_snaps");
   } else {
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("STATUS", TextTable::RIGHT, TextTable::RIGHT);
@@ -571,22 +571,22 @@ void get_group_snap_list_arguments(po::options_description *positional,
 }
 
 Shell::Action action_create(
-  {"group", "create"}, {}, "Create a consistency group.",
+  {"group", "create"}, {}, "Create a group.",
   "", &get_create_arguments, &execute_create);
 Shell::Action action_remove(
-  {"group", "remove"}, {"group", "rm"}, "Delete a consistency group.",
+  {"group", "remove"}, {"group", "rm"}, "Delete a group.",
   "", &get_remove_arguments, &execute_remove);
 Shell::Action action_list(
-  {"group", "list"}, {"group", "ls"}, "List rbd consistency groups.",
+  {"group", "list"}, {"group", "ls"}, "List rbd groups.",
   "", &get_list_arguments, &execute_list);
 Shell::Action action_add(
-  {"group", "image", "add"}, {}, "Add an image to a consistency group.",
+  {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
-  {"group", "image", "remove"}, {}, "Remove an image from a consistency group.",
+  {"group", "image", "remove"}, {}, "Remove an image from a group.",
   "", &get_remove_image_arguments, &execute_remove_image);
 Shell::Action action_list_images(
-  {"group", "image", "list"}, {}, "List images in a consistency group.",
+  {"group", "image", "list"}, {}, "List images in a group.",
   "", &get_list_images_arguments, &execute_list_images);
 Shell::Action action_group_snap_create(
   {"group", "snap", "create"}, {}, "Make a snapshot of a group.",
@@ -595,7 +595,7 @@ Shell::Action action_group_snap_remove(
   {"group", "snap", "remove"}, {}, "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
 Shell::Action action_group_snap_list(
-  {"group", "snap", "list"}, {}, "List snapshots of a consistency group.",
+  {"group", "snap", "list"}, {}, "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
 } // namespace group
 } // namespace action
