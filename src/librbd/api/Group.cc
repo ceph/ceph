@@ -672,7 +672,7 @@ int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
   if (r < 0)
     return r;
 
-  if (-1 != ictx->group_spec.pool_id) {
+  if (RBD_GROUP_INVALID_POOL != ictx->group_spec.pool_id) {
     librados::Rados rados(ictx->md_ctx);
     IoCtx ioctx;
     r = rados.ioctx_create2(ictx->group_spec.pool_id, ioctx);
