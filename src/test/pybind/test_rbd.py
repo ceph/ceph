@@ -1698,7 +1698,7 @@ def test_list_groups_after_removed():
     remove_group()
     eq([], RBD().group_list(ioctx))
 
-class TestConsistencyGroups(object):
+class TestGroups(object):
 
     def setUp(self):
         global snap_name
