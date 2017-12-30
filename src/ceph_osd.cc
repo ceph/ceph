@@ -305,9 +305,7 @@ int main(int argc, const char **argv)
   if (mkfs) {
     common_init_finish(g_ceph_context);
     MonClient mc(g_ceph_context);
-    if (mc.build_initial_monmap() < 0)
-      return -1;
-    if (mc.get_monmap_privately() < 0)
+    if ((mc.build_initial_monmap() < 0) || (mc.get_monmap_privately() < 0))
       return -1;
 
     if (mc.monmap.fsid.is_zero()) {
@@ -397,7 +395,6 @@ flushjournal_out:
 	 << " for object store " << data_path
 	 << dendl;
     exit(0);
-
   }
 
 
@@ -559,14 +556,10 @@ flushjournal_out:
 
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
-  if (ms_public->bind(paddr) < 0)
+  if ((ms_public->bind(paddr) < 0) || (ms_cluster->bind(caddr) < 0))
     exit(1);
 
-  if (ms_cluster->bind(caddr) < 0)
-    exit(1);
-
-  bool is_delay = g_conf->get_val<bool>("osd_heartbeat_use_min_delay_socket");
-  if (is_delay) {
+  if (g_conf->get_val<bool>("osd_heartbeat_use_min_delay_socket")) {
     ms_hb_front_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_client->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
     ms_hb_back_server->set_socket_priority(SOCKET_PRIORITY_MIN_DELAY);
@@ -581,18 +574,17 @@ flushjournal_out:
       haddr.set_port(0);
   }
 
-  if (ms_hb_back_server->bind(haddr) < 0)
-    exit(1);
-  if (ms_hb_back_client->client_bind(haddr) < 0)
+  if ((ms_hb_back_server->bind(haddr) < 0) ||
+      (ms_hb_back_client->client_bind(haddr) < 0))
     exit(1);
 
   // hb front should bind to same ip as public_addr
   entity_addr_t hb_front_addr = paddr;
   if (hb_front_addr.is_ip())
     hb_front_addr.set_port(0);
-  if (ms_hb_front_server->bind(hb_front_addr) < 0)
-    exit(1);
-  if (ms_hb_front_client->client_bind(hb_front_addr) < 0)
+
+  if ((ms_hb_front_server->bind(hb_front_addr) < 0) ||
+      (ms_hb_front_client->client_bind(hb_front_addr) < 0))
     exit(1);
 
   // Set up crypto, daemonize, etc.
