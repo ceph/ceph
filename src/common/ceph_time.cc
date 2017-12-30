@@ -36,14 +36,15 @@ int clock_gettime(int clk_id, struct timespec *tp)
     tp->tv_sec = now.tv_sec;
     tp->tv_nsec = now.tv_usec * 1000L;
   } else {
-    uint64_t t = mach_absolute_time();
-    static mach_timebase_info_data_t timebase_info;
-    if (timebase_info.denom == 0) {
-      (void)mach_timebase_info(&timebase_info);
-    }
-    auto nanos = t * timebase_info.numer / timebase_info.denom;
-    tp->tv_sec = nanos / NSEC_PER_SEC;
-    tp->tv_nsec = nanos - (tp->tv_sec * NSEC_PER_SEC);
+    std::chrono::nanoseconds n(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()));
+    std::chrono::seconds s(
+      std::chrono::duration_cast<std::chrono::seconds>(m));
+
+    tp->tv_sec = static_cast<long>(s.count());
+    tp->tv_usec = static_cast<long>(n.count() -
+      std::chrono::duration_cast<std::chrono::nanoseconds>(s).count());
   }
   return 0;
 }
