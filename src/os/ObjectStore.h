@@ -1600,6 +1600,16 @@ public:
   }
 
   /**
+   * Check whether store is backed by a nvme or ssd.
+   * This must be usable *before* the store is mounted.
+   *
+   * @return true for nvme, false for ssd
+   */
+  virtual bool is_express() {
+    return false; // not yet implemented!!
+  }
+
+  /**
    * is_journal_rotational
    *
    * Check whether journal is backed by a rotational (HDD) or non-rotational
@@ -1613,7 +1623,7 @@ public:
   }
 
   virtual string get_default_device_class() {
-    return is_rotational() ? "hdd" : "ssd";
+    return is_rotational() ? "hdd" : is_express() ? "nvme" : "ssd";
   }
 
   virtual bool can_sort_nibblewise() {
