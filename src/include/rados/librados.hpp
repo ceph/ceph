@@ -342,10 +342,11 @@ namespace librados
       const std::map<std::string, std::pair<bufferlist, int> > &assertions,
       int *prval);
 
+    ObjectOperation(const ObjectOperation& rhs) = delete;
+    ObjectOperation& operator=(const ObjectOperation& rhs) = delete;
+
   protected:
     ObjectOperationImpl *impl;
-    ObjectOperation(const ObjectOperation& rhs);
-    ObjectOperation& operator=(const ObjectOperation& rhs);
     friend class IoCtx;
     friend class Rados;
   };
@@ -1435,10 +1436,11 @@ namespace librados
 						callback_t cb_safe);
     
     friend std::ostream& operator<<(std::ostream &oss, const Rados& r);
+
+    Rados(const Rados& rhs) = delete;
+    const Rados& operator=(const Rados& rhs) = delete;
+
   private:
-    // We don't allow assignment or copying
-    Rados(const Rados& rhs);
-    const Rados& operator=(const Rados& rhs);
     RadosClient *client;
   };
 }
