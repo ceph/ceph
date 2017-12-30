@@ -830,9 +830,9 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   ind_snap_name = calc_ind_image_snap_name(group_ioctx.get_id(), group_id,
-      group_snap.id);
+					    group_snap.id);
   ne = cls::rbd::GroupSnapshotNamespace(group_ioctx.get_id(), group_id,
-      group_snap.id);
+					group_snap.id);
 
   for (int i = 0; i < image_count; ++i) {
     ImageCtx *ictx = ictxs[i];
