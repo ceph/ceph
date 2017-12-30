@@ -17,6 +17,7 @@
  */
 #include "include/compat.h"
 #include <pthread.h>
+#include "common/ceph_clock.h"
 #include "common/Cond.h"
 #include "obj_bencher.h"
 
@@ -83,17 +84,19 @@ void *ObjBencher::status_printer(void *_bencher) {
   int cycleSinceChange = 0;
   double bandwidth;
   int iops = 0;
-  mono_clock::duration ONE_SECOND = std::chrono::seconds(1);
+  ceph_clock cc;
+  ceph::mono_clock::duration ONE_SECOND;
+  cc.set_duration<seconds>(ONE_SECOND, 1_s);
   bencher->lock.Lock();
   if (formatter)
     formatter->open_array_section("datas");
   while(!data.done) {
-    mono_time cur_time = mono_clock::now();
-    utime_t t = ceph_clock_now();
+    cc.reset<mono_time>();
+    utime_t t = cc.now<utime_t>();
 
     if (i % 20 == 0 && !formatter) {
       if (i > 0)
-        t.localtime(cout)
+        cc.set_localtime(cout, t)
           << " min lat: " << data.min_latency
           << " max lat: " << data.max_latency
           << " avg lat: " << data.avg_latency << std::endl;
@@ -144,7 +147,7 @@ void *ObjBencher::status_printer(void *_bencher) {
       formatter->open_object_section("data");
 
     // elapsed will be in seconds, by default
-    std::chrono::duration<double> elapsed = cur_time - data.start_time;
+    auto elapsed = cc.elapsed_from_now<mono_time>();
     double avg_bandwidth = (double) (data.op_size) * (data.finished)
       / elapsed.count() / (1024*1024);
     if (previous_writes != data.finished) {

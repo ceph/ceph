@@ -25,6 +25,7 @@
 #include "include/intarith.h"
 #include "include/stringify.h"
 #include "include/str_map.h"
+#include "common/ceph_clock.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "Allocator.h"
@@ -6482,7 +6483,7 @@ int BlueStore::read(
   bufferlist& bl,
   uint32_t op_flags)
 {
-  utime_t start = ceph_clock_now();
+  ceph_clock cc1;
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -6495,9 +6496,9 @@ int BlueStore::read(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    utime_t start1 = ceph_clock_now();
+    ceph_clock cc2;
     OnodeRef o = c->get_onode(oid, false);
-    logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start1);
+    logger->tinc(l_bluestore_read_onode_meta_lat, cc2.elapsed_from_start<coarse_mono_time>());
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -6524,7 +6525,7 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  logger->tinc(l_bluestore_read_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_lat, cc1.elapsed_from_start<coarse_mono_time>());
   return r;
 }
 
