@@ -1295,11 +1295,11 @@ class RBD(object):
 
     def group_create(self, ioctx, name):
         """
-        Create a consistency group.
+        Create a group.
 
         :param ioctx: determines which RADOS pool is used
         :type ioctx: :class:`rados.Ioctx`
-        :param name: the name of the consistency group
+        :param name: the name of the group
         :type name: str
         :raises: :class:`ObjectExists`
         :raises: :class:`InvalidArgument`
@@ -1317,7 +1317,7 @@ class RBD(object):
     def group_remove(self, ioctx, name):
         """
         Delete an RBD group. This may take a long time, since it does
-        not return until every image in the consistency group has been removed
+        not return until every image in the group has been removed
         from the group.
 
         :param ioctx: determines which RADOS pool the group is in
@@ -1514,7 +1514,7 @@ cdef int diff_iterate_cb(uint64_t offset, size_t length, int write, void *cb) \
 
 cdef class Group(object):
     """
-    This class represents an RBD consistency group. It is used to interact with
+    This class represents an RBD group. It is used to interact with
     snapshots and images members.
     """
 
