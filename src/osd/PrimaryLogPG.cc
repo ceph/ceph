@@ -4580,8 +4580,8 @@ static int check_offset_and_length(uint64_t offset, uint64_t length,
       length > max ||
       offset + length > max) {
     ldpp_dout(dpp, 10) << __func__ << " "
-      << "osd_max_object_size >= 4GB; Hard limit of object size is 4GB.\n"
-      << dendl;
+      << "osd_max_object_size: " << max
+      << "; Hard limit of object size is 4GB." << dendl;
     return -EFBIG;
   }
 
