@@ -6,6 +6,10 @@
 #include "msg/Messenger.h"
 #include "ObjectCacher.h"
 #include "WritebackHandler.h"
+
+#include "common/ceph_clock.h"
+#include "common/Clock.h"
+
 #include "common/errno.h"
 #include "common/perf_counters.h"
 
@@ -1783,7 +1787,7 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
                                             ZTracer::Trace *trace)
 {
   assert(lock.is_locked());
-  ceph::mono_time start = ceph::mono_clock::now();
+  ceph_clock cc;
   int blocked = 0;
   // wait for writeback?
   //  - wait for dirty and tx bytes (relative to the max_dirty threshold)
@@ -1820,8 +1824,8 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
   if (blocked && perfcounter) {
     perfcounter->inc(l_objectcacher_write_ops_blocked);
     perfcounter->inc(l_objectcacher_write_bytes_blocked, len);
-    ceph::timespan blocked = ceph::mono_clock::now() - start;
-    perfcounter->tinc(l_objectcacher_write_time_blocked, blocked);
+    perfcounter->tinc(l_objectcacher_write_time_blocked,
+      cc.elapsed_from_start<ceph::timespan>());
   }
 }
 
