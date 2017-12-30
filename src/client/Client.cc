@@ -214,7 +214,7 @@ vinodeno_t Client::_map_faked_ino(ino_t ino)
     vino = faked_ino_map[ino];
   else
     vino = vinodeno_t(0, CEPH_NOSNAP);
-  ldout(cct, 10) << "map_faked_ino " << ino << " -> " << vino << dendl;
+  ldout(cct, 10) << __func__ << " " << ino << " -> " << vino << dendl;
   return vino;
 }
 
@@ -316,14 +316,14 @@ void Client::tear_down_cache()
        it != fd_map.end();
        ++it) {
     Fh *fh = it->second;
-    ldout(cct, 1) << "tear_down_cache forcing close of fh " << it->first << " ino " << fh->inode->ino << dendl;
+    ldout(cct, 1) << __func__ << " forcing close of fh " << it->first << " ino " << fh->inode->ino << dendl;
     _release_fh(fh);
   }
   fd_map.clear();
 
   while (!opened_dirs.empty()) {
     dir_result_t *dirp = *opened_dirs.begin();
-    ldout(cct, 1) << "tear_down_cache forcing close of dir " << dirp << " ino " << dirp->inode->ino << dendl;
+    ldout(cct, 1) << __func__ << " forcing close of dir " << dirp << " ino " << dirp->inode->ino << dendl;
     _closedir(dirp);
   }
 
@@ -410,7 +410,7 @@ void Client::dump_cache(Formatter *f)
 {
   set<Inode*> did;
 
-  ldout(cct, 1) << "dump_cache" << dendl;
+  ldout(cct, 1) << __func__ << dendl;
 
   if (f)
     f->open_array_section("cache");
@@ -535,7 +535,7 @@ void Client::_finish_init()
 
 void Client::shutdown() 
 {
-  ldout(cct, 1) << "shutdown" << dendl;
+  ldout(cct, 1) << __func__ << dendl;
 
   // If we were not mounted, but were being used for sending
   // MDS commands, we may have sessions that need closing.
@@ -634,7 +634,7 @@ void Client::trim_cache(bool trim_kernel_dcache)
 void Client::trim_cache_for_reconnect(MetaSession *s)
 {
   mds_rank_t mds = s->mds_num;
-  ldout(cct, 20) << "trim_cache_for_reconnect mds." << mds << dendl;
+  ldout(cct, 20) << __func__ << " mds." << mds << dendl;
 
   int trimmed = 0;
   list<Dentry*> skipped;
@@ -654,7 +654,7 @@ void Client::trim_cache_for_reconnect(MetaSession *s)
   for(list<Dentry*>::iterator p = skipped.begin(); p != skipped.end(); ++p)
     lru.lru_insert_mid(*p);
 
-  ldout(cct, 20) << "trim_cache_for_reconnect mds." << mds
+  ldout(cct, 20) << __func__ << " mds." << mds
 		 << " trimmed " << trimmed << " dentries" << dendl;
 
   if (s->caps.size() > 0)
@@ -686,7 +686,7 @@ void Client::update_inode_file_bits(Inode *in,
 				    int issued)
 {
   bool warn = false;
-  ldout(cct, 10) << "update_inode_file_bits " << *in << " " << ccap_string(issued)
+  ldout(cct, 10) << __func__ << " " << *in << " " << ccap_string(issued)
 	   << " mtime " << mtime << dendl;
   ldout(cct, 25) << "truncate_seq: mds " << truncate_seq <<  " local "
 	   << in->truncate_seq << " time_warp_seq: mds " << time_warp_seq
@@ -807,7 +807,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
   bool was_new = false;
   if (inode_map.count(st->vino)) {
     in = inode_map[st->vino];
-    ldout(cct, 12) << "add_update_inode had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+    ldout(cct, 12) << __func__ << " had " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
   } else {
     in = new Inode(this, st->vino, &st->layout);
     inode_map[st->vino] = in;
@@ -836,7 +836,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     in->symlink = st->symlink;
 
   if (was_new)
-    ldout(cct, 12) << "add_update_inode adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
+    ldout(cct, 12) << __func__ << " adding " << *in << " caps " << ccap_string(st->cap.caps) << dendl;
 
   if (!st->cap.caps)
     return in;   // as with readdir returning indoes in different snaprealms (no caps!)
@@ -945,7 +945,7 @@ Dentry *Client::insert_dentry_inode(Dir *dir, const string& dname, LeaseStat *dl
   if (dir->dentries.count(dname))
     dn = dir->dentries[dname];
 
-  ldout(cct, 12) << "insert_dentry_inode '" << dname << "' vino " << in->vino()
+  ldout(cct, 12) << __func__ << " '" << dname << "' vino " << in->vino()
 		 << " in dir " << dir->parent_inode->vino() << " dn " << dn
 		 << dendl;
 
@@ -1396,7 +1396,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   if (req->resend_mds >= 0) {
     mds = req->resend_mds;
     req->resend_mds = -1;
-    ldout(cct, 10) << "choose_target_mds resend_mds specified as mds." << mds << dendl;
+    ldout(cct, 10) << __func__ << " resend_mds specified as mds." << mds << dendl;
     goto out;
   }
 
@@ -1406,10 +1406,10 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   in = req->inode();
   de = req->dentry();
   if (in) {
-    ldout(cct, 20) << "choose_target_mds starting with req->inode " << *in << dendl;
+    ldout(cct, 20) << __func__ << " starting with req->inode " << *in << dendl;
     if (req->path.depth()) {
       hash = in->hash_dentry_name(req->path[0]);
-      ldout(cct, 20) << "choose_target_mds inode dir hash is " << (int)in->dir_layout.dl_dir_hash
+      ldout(cct, 20) << __func__ << " inode dir hash is " << (int)in->dir_layout.dl_dir_hash
 	       << " on " << req->path[0]
 	       << " => " << hash << dendl;
       is_hash = true;
@@ -1417,11 +1417,11 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   } else if (de) {
     if (de->inode) {
       in = de->inode.get();
-      ldout(cct, 20) << "choose_target_mds starting with req->dentry inode " << *in << dendl;
+      ldout(cct, 20) << __func__ << " starting with req->dentry inode " << *in << dendl;
     } else {
       in = de->dir->parent_inode;
       hash = in->hash_dentry_name(de->name);
-      ldout(cct, 20) << "choose_target_mds dentry dir hash is " << (int)in->dir_layout.dl_dir_hash
+      ldout(cct, 20) << __func__ << " dentry dir hash is " << (int)in->dir_layout.dl_dir_hash
 	       << " on " << de->name
 	       << " => " << hash << dendl;
       is_hash = true;
@@ -1429,7 +1429,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
   }
   if (in) {
     if (in->snapid != CEPH_NOSNAP) {
-      ldout(cct, 10) << "choose_target_mds " << *in << " is snapped, using nonsnap parent" << dendl;
+      ldout(cct, 10) << __func__ << " " << *in << " is snapped, using nonsnap parent" << dendl;
       while (in->snapid != CEPH_NOSNAP) {
         if (in->snapid == CEPH_SNAPDIR)
 	  in = in->snapdir_parent.get();
@@ -1446,7 +1446,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
       is_hash = false;
     }
   
-    ldout(cct, 20) << "choose_target_mds " << *in << " is_hash=" << is_hash
+    ldout(cct, 20) << __func__ << " " << *in << " is_hash=" << is_hash
              << " hash=" << hash << dendl;
   
     if (is_hash && S_ISDIR(in->mode) && !in->fragmap.empty()) {
@@ -1455,7 +1455,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
 	mds = in->fragmap[fg];
 	if (phash_diri)
 	  *phash_diri = in;
-	ldout(cct, 10) << "choose_target_mds from dirfragtree hash" << dendl;
+	ldout(cct, 10) << __func__ << " from dirfragtree hash" << dendl;
 	goto out;
       }
     }
@@ -1467,7 +1467,7 @@ mds_rank_t Client::choose_target_mds(MetaRequest *req, Inode** phash_diri)
     } else {
       goto random_mds;
     }
-    ldout(cct, 10) << "choose_target_mds from caps on inode " << *in << dendl;
+    ldout(cct, 10) << __func__ << " from caps on inode " << *in << dendl;
   
     goto out;
   }
@@ -1486,7 +1486,7 @@ out:
 
 void Client::connect_mds_targets(mds_rank_t mds)
 {
-  ldout(cct, 10) << "connect_mds_targets for mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " for mds." << mds << dendl;
   assert(mds_sessions.count(mds));
   const MDSMap::mds_info_t& info = mdsmap->get_mds_info(mds);
   for (set<mds_rank_t>::const_iterator q = info.export_targets.begin();
@@ -1808,7 +1808,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 			 mds_rank_t mds, int drop,
 			 int unless, int force)
 {
-  ldout(cct, 20) << "encode_inode_release enter(in:" << *in << ", req:" << req
+  ldout(cct, 20) << __func__ << " enter(in:" << *in << ", req:" << req
 	   << " mds:" << mds << ", drop:" << drop << ", unless:" << unless
 	   << ", have:" << ", force:" << force << ")" << dendl;
   int released = 0;
@@ -1840,7 +1840,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
       req->cap_releases.push_back(MClientRequest::Release(rel,""));
     }
   }
-  ldout(cct, 25) << "encode_inode_release exit(in:" << *in << ") released:"
+  ldout(cct, 25) << __func__ << " exit(in:" << *in << ") released:"
 	   << released << dendl;
   return released;
 }
@@ -1848,7 +1848,7 @@ int Client::encode_inode_release(Inode *in, MetaRequest *req,
 void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
 			   mds_rank_t mds, int drop, int unless)
 {
-  ldout(cct, 20) << "encode_dentry_release enter(dn:"
+  ldout(cct, 20) << __func__ << " enter(dn:"
 	   << dn << ")" << dendl;
   int released = 0;
   if (dn->dir)
@@ -1861,7 +1861,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
   }
-  ldout(cct, 25) << "encode_dentry_release exit(dn:"
+  ldout(cct, 25) << __func__ << " exit(dn:"
 	   << dn << ")" << dendl;
 }
 
@@ -1874,7 +1874,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
  */
 void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
 {
-  ldout(cct, 20) << "encode_cap_releases enter (req: "
+  ldout(cct, 20) << __func__ << " enter (req: "
 		 << req << ", mds: " << mds << ")" << dendl;
   if (req->inode_drop && req->inode())
     encode_inode_release(req->inode(), req,
@@ -1899,7 +1899,7 @@ void Client::encode_cap_releases(MetaRequest *req, mds_rank_t mds)
     encode_dentry_release(req->old_dentry(), req,
 			  mds, req->old_dentry_drop,
 			  req->old_dentry_unless);
-  ldout(cct, 25) << "encode_cap_releases exit (req: "
+  ldout(cct, 25) << __func__ << " exit (req: "
 	   << req << ", mds " << mds <<dendl;
 }
 
@@ -1989,7 +1989,7 @@ void Client::update_metadata(std::string const &k, std::string const &v)
 
 MetaSession *Client::_open_mds_session(mds_rank_t mds)
 {
-  ldout(cct, 10) << "_open_mds_session mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " mds." << mds << dendl;
   entity_inst_t inst = mdsmap->get_inst(mds);
   auto em = mds_sessions.emplace(std::piecewise_construct,
       std::forward_as_tuple(mds),
@@ -2001,11 +2001,11 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   // has previously sent us a REJECT.
   if (rejected_by_mds.count(mds)) {
     if (rejected_by_mds[mds] == session->inst) {
-      ldout(cct, 4) << "_open_mds_session mds." << mds << " skipping "
+      ldout(cct, 4) << __func__ << " mds." << mds << " skipping "
                        "because we were rejected" << dendl;
       return session;
     } else {
-      ldout(cct, 4) << "_open_mds_session mds." << mds << " old inst "
+      ldout(cct, 4) << __func__ << " mds." << mds << " old inst "
                        "rejected us, trying with new inst" << dendl;
       rejected_by_mds.erase(mds);
     }
@@ -2019,7 +2019,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
 
 void Client::_close_mds_session(MetaSession *s)
 {
-  ldout(cct, 2) << "_close_mds_session mds." << s->mds_num << " seq " << s->seq << dendl;
+  ldout(cct, 2) << __func__ << " mds." << s->mds_num << " seq " << s->seq << dendl;
   s->state = MetaSession::STATE_CLOSING;
   s->con->send_message(new MClientSession(CEPH_SESSION_REQUEST_CLOSE, s->seq));
 }
@@ -2039,7 +2039,7 @@ void Client::_closed_mds_session(MetaSession *s)
 void Client::handle_client_session(MClientSession *m) 
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
-  ldout(cct, 10) << "handle_client_session " << *m << " from mds." << from << dendl;
+  ldout(cct, 10) << __func__ << " " << *m << " from mds." << from << dendl;
 
   MetaSession *session = _get_mds_session(from, m->get_connection().get());
   if (!session) {
@@ -2115,7 +2115,7 @@ bool Client::_any_stale_sessions() const
 
 void Client::_kick_stale_sessions()
 {
-  ldout(cct, 1) << "kick_stale_sessions" << dendl;
+  ldout(cct, 1) << __func__ << dendl;
 
   for (auto it = mds_sessions.begin(); it != mds_sessions.end(); ) {
     MetaSession &s = it->second;
@@ -2130,7 +2130,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 {
   // make the request
   mds_rank_t mds = session->mds_num;
-  ldout(cct, 10) << "send_request rebuilding request " << request->get_tid()
+  ldout(cct, 10) << __func__ << " rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
   MClientRequest *r = build_client_request(request);
   if (request->dentry()) {
@@ -2156,7 +2156,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
   if (request->mds == -1) {
     request->sent_stamp = ceph_clock_now();
-    ldout(cct, 20) << "send_request set sent_stamp to " << request->sent_stamp << dendl;
+    ldout(cct, 20) << __func__ << " set sent_stamp to " << request->sent_stamp << dendl;
   }
   request->mds = mds;
 
@@ -2170,7 +2170,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
 
   session->requests.push_back(&request->item);
 
-  ldout(cct, 10) << "send_request " << *r << " to mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " " << *r << " to mds." << mds << dendl;
   session->con->send_message(r);
 }
 
@@ -2225,7 +2225,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   ceph_tid_t tid = fwd->get_tid();
 
   if (mds_requests.count(tid) == 0) {
-    ldout(cct, 10) << "handle_client_request_forward no pending request on tid " << tid << dendl;
+    ldout(cct, 10) << __func__ << " no pending request on tid " << tid << dendl;
     fwd->put();
     return;
   }
@@ -2238,7 +2238,7 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
 
   // request not forwarded, or dest mds has no session.
   // resend.
-  ldout(cct, 10) << "handle_client_request tid " << tid
+  ldout(cct, 10) << __func__ << " tid " << tid
 	   << " fwd " << fwd->get_num_fwd() 
 	   << " to mds." << fwd->get_dest_mds() 
 	   << ", resending to " << fwd->get_dest_mds()
@@ -2277,14 +2277,14 @@ void Client::handle_client_reply(MClientReply *reply)
   bool is_safe = reply->is_safe();
 
   if (mds_requests.count(tid) == 0) {
-    lderr(cct) << "handle_client_reply no pending request on tid " << tid
+    lderr(cct) << __func__ << " no pending request on tid " << tid
 	       << " safe is:" << is_safe << dendl;
     reply->put();
     return;
   }
   MetaRequest *request = mds_requests.at(tid);
 
-  ldout(cct, 20) << "handle_client_reply got a reply. Safe:" << is_safe
+  ldout(cct, 20) << __func__ << " got a reply. Safe:" << is_safe
 		 << " tid " << tid << dendl;
 
   if (request->got_unsafe && !is_safe) {
@@ -2341,12 +2341,12 @@ void Client::handle_client_reply(MClientReply *reply)
     request->dispatch_cond = &cond;
 
     // wake up waiter
-    ldout(cct, 20) << "handle_client_reply signalling caller " << (void*)request->caller_cond << dendl;
+    ldout(cct, 20) << __func__ << " signalling caller " << (void*)request->caller_cond << dendl;
     request->caller_cond->Signal();
 
     // wake for kick back
     while (request->dispatch_cond) {
-      ldout(cct, 20) << "handle_client_reply awaiting kickback on tid " << tid << " " << &cond << dendl;
+      ldout(cct, 20) << __func__ << " awaiting kickback on tid " << tid << " " << &cond << dendl;
       cond.Wait(client_lock);
     }
   }
@@ -2590,14 +2590,14 @@ void Client::handle_fs_map_user(MFSMapUser *m)
 void Client::handle_mds_map(MMDSMap* m)
 {
   if (m->get_epoch() <= mdsmap->get_epoch()) {
-    ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch()
+    ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
                   << " is identical to or older than our "
                   << mdsmap->get_epoch() << dendl;
     m->put();
     return;
   }  
 
-  ldout(cct, 1) << "handle_mds_map epoch " << m->get_epoch() << dendl;
+  ldout(cct, 1) << __func__ << " epoch " << m->get_epoch() << dendl;
 
   std::unique_ptr<MDSMap> oldmap(new MDSMap);
   oldmap.swap(mdsmap);
@@ -2681,7 +2681,7 @@ void Client::handle_mds_map(MMDSMap* m)
 void Client::send_reconnect(MetaSession *session)
 {
   mds_rank_t mds = session->mds_num;
-  ldout(cct, 10) << "send_reconnect to mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " to mds." << mds << dendl;
 
   // trim unused caps to reduce MDS's cache rejoin time
   trim_cache_for_reconnect(session);
@@ -2755,7 +2755,7 @@ void Client::send_reconnect(MetaSession *session)
 
 void Client::kick_requests(MetaSession *session)
 {
-  ldout(cct, 10) << "kick_requests for mds." << session->mds_num << dendl;
+  ldout(cct, 10) << __func__ << " for mds." << session->mds_num << dendl;
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end();
        ++p) {
@@ -2825,7 +2825,7 @@ void Client::wait_unsafe_requests()
 
 void Client::kick_requests_closed(MetaSession *session)
 {
-  ldout(cct, 10) << "kick_requests_closed for mds." << session->mds_num << dendl;
+  ldout(cct, 10) << __func__ << " for mds." << session->mds_num << dendl;
   for (map<ceph_tid_t, MetaRequest*>::iterator p = mds_requests.begin();
        p != mds_requests.end(); ) {
     MetaRequest *req = p->second;
@@ -2837,7 +2837,7 @@ void Client::kick_requests_closed(MetaSession *session)
       }
       req->item.remove_myself();
       if (req->got_unsafe) {
-	lderr(cct) << "kick_requests_closed removing unsafe request " << req->get_tid() << dendl;
+	lderr(cct) << __func__ << " removing unsafe request " << req->get_tid() << dendl;
 	req->unsafe_item.remove_myself();
 	req->unsafe_dir_item.remove_myself();
 	req->unsafe_target_item.remove_myself();
@@ -2868,7 +2868,7 @@ void Client::got_mds_push(MetaSession *s)
 
 void Client::handle_lease(MClientLease *m)
 {
-  ldout(cct, 10) << "handle_lease " << *m << dendl;
+  ldout(cct, 10) << __func__ << " " << *m << dendl;
 
   assert(m->get_action() == CEPH_MDS_LEASE_REVOKE);
 
@@ -2911,13 +2911,13 @@ void Client::handle_lease(MClientLease *m)
 
 void Client::put_inode(Inode *in, int n)
 {
-  ldout(cct, 10) << "put_inode on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " on " << *in << dendl;
   int left = in->_put(n);
   if (left == 0) {
     // release any caps
     remove_all_caps(in);
 
-    ldout(cct, 10) << "put_inode deleting " << *in << dendl;
+    ldout(cct, 10) << __func__ << " deleting " << *in << dendl;
     bool unclean = objectcacher->release_set(&in->oset);
     assert(!unclean);
     inode_map.erase(in->vino());
@@ -2938,7 +2938,7 @@ void Client::put_inode(Inode *in, int n)
 void Client::close_dir(Dir *dir)
 {
   Inode *in = dir->parent_inode;
-  ldout(cct, 15) << "close_dir dir " << dir << " on " << in << dendl;
+  ldout(cct, 15) << __func__ << " dir " << dir << " on " << in << dendl;
   assert(dir->is_empty());
   assert(in->dir == dir);
   assert(in->dentries.size() < 2);     // dirs can't be hard-linked
@@ -3050,12 +3050,12 @@ void Client::get_cap_ref(Inode *in, int cap)
 {
   if ((cap & CEPH_CAP_FILE_BUFFER) &&
       in->cap_refs[CEPH_CAP_FILE_BUFFER] == 0) {
-    ldout(cct, 5) << "get_cap_ref got first FILE_BUFFER ref on " << *in << dendl;
+    ldout(cct, 5) << __func__ << " got first FILE_BUFFER ref on " << *in << dendl;
     in->get();
   }
   if ((cap & CEPH_CAP_FILE_CACHE) &&
       in->cap_refs[CEPH_CAP_FILE_CACHE] == 0) {
-    ldout(cct, 5) << "get_cap_ref got first FILE_CACHE ref on " << *in << dendl;
+    ldout(cct, 5) << __func__ << " got first FILE_CACHE ref on " << *in << dendl;
     in->get();
   }
   in->get_cap_ref(cap);
@@ -3071,7 +3071,7 @@ void Client::put_cap_ref(Inode *in, int cap)
       if ((last & CEPH_CAP_FILE_WR) &&
 	  !in->cap_snaps.empty() &&
 	  in->cap_snaps.rbegin()->second.writing) {
-	ldout(cct, 10) << "put_cap_ref finishing pending cap_snap on " << *in << dendl;
+	ldout(cct, 10) << __func__ << " finishing pending cap_snap on " << *in << dendl;
 	in->cap_snaps.rbegin()->second.writing = 0;
 	finish_cap_snap(in, in->cap_snaps.rbegin()->second, get_caps_used(in));
 	signal_cond_list(in->waitfor_caps);  // wake up blocked sync writers
@@ -3080,12 +3080,12 @@ void Client::put_cap_ref(Inode *in, int cap)
 	for (auto &p : in->cap_snaps)
 	  p.second.dirty_data = 0;
 	signal_cond_list(in->waitfor_commit);
-	ldout(cct, 5) << "put_cap_ref dropped last FILE_BUFFER ref on " << *in << dendl;
+	ldout(cct, 5) << __func__ << " dropped last FILE_BUFFER ref on " << *in << dendl;
 	++put_nref;
       }
     }
     if (last & CEPH_CAP_FILE_CACHE) {
-      ldout(cct, 5) << "put_cap_ref dropped last FILE_CACHE ref on " << *in << dendl;
+      ldout(cct, 5) << __func__ << " dropped last FILE_CACHE ref on " << *in << dendl;
       ++put_nref;
     }
     if (drop)
@@ -3217,7 +3217,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   int dropping = cap->issued & ~retain;
   int op = CEPH_CAP_OP_UPDATE;
 
-  ldout(cct, 10) << "send_cap " << *in
+  ldout(cct, 10) << __func__ << " " << *in
 	   << " mds." << session->mds_num << " seq " << cap->seq
 	   << (sync ? " sync " : " async ")
 	   << " used " << ccap_string(used)
@@ -3369,7 +3369,7 @@ void Client::check_caps(Inode *in, unsigned flags)
       retain |= CEPH_CAP_ANY_SHARED;
   }
 
-  ldout(cct, 10) << "check_caps on " << *in
+  ldout(cct, 10) << __func__ << " on " << *in
 	   << " wanted " << ccap_string(wanted)
 	   << " used " << ccap_string(used)
 	   << " issued " << ccap_string(issued)
@@ -3480,11 +3480,11 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
 {
   int used = get_caps_used(in);
   int dirty = in->caps_dirty();
-  ldout(cct, 10) << "queue_cap_snap " << *in << " snapc " << old_snapc << " used " << ccap_string(used) << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << " snapc " << old_snapc << " used " << ccap_string(used) << dendl;
 
   if (in->cap_snaps.size() &&
       in->cap_snaps.rbegin()->second.writing) {
-    ldout(cct, 10) << "queue_cap_snap already have pending cap_snap on " << *in << dendl;
+    ldout(cct, 10) << __func__ << " already have pending cap_snap on " << *in << dendl;
     return;
   } else if (in->caps_dirty() ||
             (used & CEPH_CAP_FILE_WR) ||
@@ -3506,19 +3506,19 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
     capsnap.xattr_version = in->xattr_version;
  
     if (used & CEPH_CAP_FILE_WR) {
-      ldout(cct, 10) << "queue_cap_snap WR used on " << *in << dendl;
+      ldout(cct, 10) << __func__ << " WR used on " << *in << dendl;
       capsnap.writing = 1;
     } else {
       finish_cap_snap(in, capsnap, used);
     }
   } else {
-    ldout(cct, 10) << "queue_cap_snap not dirty|writing on " << *in << dendl;
+    ldout(cct, 10) << __func__ << " not dirty|writing on " << *in << dendl;
   }
 }
 
 void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
 {
-  ldout(cct, 10) << "finish_cap_snap " << *in << " capsnap " << (void *)&capsnap << " used " << ccap_string(used) << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << " capsnap " << (void *)&capsnap << " used " << ccap_string(used) << dendl;
   capsnap.size = in->size;
   capsnap.mtime = in->mtime;
   capsnap.atime = in->atime;
@@ -3534,7 +3534,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   }
 
   if (used & CEPH_CAP_FILE_BUFFER) {
-    ldout(cct, 10) << "finish_cap_snap " << *in << " cap_snap " << &capsnap << " used " << used
+    ldout(cct, 10) << __func__ << " " << *in << " cap_snap " << &capsnap << " used " << used
 	     << " WRBUFFER, delaying" << dendl;
   } else {
     capsnap.dirty_data = 0;
@@ -3544,7 +3544,7 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
 
 void Client::_flushed_cap_snap(Inode *in, snapid_t seq)
 {
-  ldout(cct, 10) << "_flushed_cap_snap seq " << seq << " on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " seq " << seq << " on " << *in << dendl;
   in->cap_snaps.at(seq).dirty_data = 0;
   flush_snaps(in);
 }
@@ -3696,7 +3696,7 @@ void Client::_async_invalidate(vinodeno_t ino, int64_t off, int64_t len)
 {
   if (unmounting)
     return;
-  ldout(cct, 10) << "_async_invalidate " << ino << " " << off << "~" << len << dendl;
+  ldout(cct, 10) << __func__ << " " << ino << " " << off << "~" << len << dendl;
   ino_invalidate_cb(callback_handle, ino, off, len);
 }
 
@@ -3709,7 +3709,7 @@ void Client::_schedule_invalidate_callback(Inode *in, int64_t off, int64_t len) 
 
 void Client::_invalidate_inode_cache(Inode *in)
 {
-  ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << dendl;
 
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
@@ -3723,7 +3723,7 @@ void Client::_invalidate_inode_cache(Inode *in)
 
 void Client::_invalidate_inode_cache(Inode *in, int64_t off, int64_t len)
 {
-  ldout(cct, 10) << "_invalidate_inode_cache " << *in << " " << off << "~" << len << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
@@ -3836,7 +3836,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     assert(in->snaprealm == 0);
     in->snaprealm = get_snap_realm(realm);
     in->snaprealm->inodes_with_caps.push_back(&in->snaprealm_item);
-    ldout(cct, 15) << "add_update_cap first one, opened snaprealm " << in->snaprealm << dendl;
+    ldout(cct, 15) << __func__ << " first one, opened snaprealm " << in->snaprealm << dendl;
   }
 
   mds_rank_t mds = mds_session->mds_num;
@@ -3868,7 +3868,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     if (in->auth_cap != &cap &&
         (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
-	ldout(cct, 10) << "add_update_cap changing auth cap: "
+	ldout(cct, 10) << __func__ << " changing auth cap: "
 		       << "add myself to new auth MDS' flushing caps list" << dendl;
 	adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
       }
@@ -3884,7 +3884,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   cap.issue_seq = seq;
   cap.mseq = mseq;
   cap.latest_perms = cap_perms;
-  ldout(cct, 10) << "add_update_cap issued " << ccap_string(old_caps) << " -> " << ccap_string(cap.issued)
+  ldout(cct, 10) << __func__ << " issued " << ccap_string(old_caps) << " -> " << ccap_string(cap.issued)
 	   << " from mds." << mds
 	   << " on " << *in
 	   << dendl;
@@ -3911,7 +3911,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   MetaSession *session = cap->session;
   mds_rank_t mds = cap->session->mds_num;
 
-  ldout(cct, 10) << "remove_cap mds." << mds << " on " << *in << dendl;
+  ldout(cct, 10) << __func__ << " mds." << mds << " on " << *in << dendl;
   
   if (queue_release) {
     session->enqueue_cap_release(
@@ -3934,7 +3934,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   cap = nullptr;
 
   if (!in->is_any_caps()) {
-    ldout(cct, 15) << "remove_cap last one, closing snaprealm " << in->snaprealm << dendl;
+    ldout(cct, 15) << __func__ << " last one, closing snaprealm " << in->snaprealm << dendl;
     in->snaprealm_item.remove_myself();
     put_snap_realm(in->snaprealm);
     in->snaprealm = 0;
@@ -3949,7 +3949,7 @@ void Client::remove_all_caps(Inode *in)
 
 void Client::remove_session_caps(MetaSession *s)
 {
-  ldout(cct, 10) << "remove_session_caps mds." << s->mds_num << dendl;
+  ldout(cct, 10) << __func__ << " mds." << s->mds_num << dendl;
 
   while (s->caps.size()) {
     Cap *cap = *s->caps.begin();
@@ -3969,7 +3969,7 @@ void Client::remove_session_caps(MetaSession *s)
       in->cap_snaps.clear();
     }
     if (dirty_caps) {
-      lderr(cct) << "remove_session_caps still has dirty|flushing caps on " << *in << dendl;
+      lderr(cct) << __func__ << " still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
 	num_flushing_caps--;
 	in->flushing_cap_tids.clear();
@@ -4067,7 +4067,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
 {
   mds_rank_t mds = s->mds_num;
   size_t caps_size = s->caps.size();
-  ldout(cct, 10) << "trim_caps mds." << mds << " max " << max 
+  ldout(cct, 10) << __func__ << " mds." << mds << " max " << max 
     << " caps " << caps_size << dendl;
 
   uint64_t trimmed = 0;
@@ -4150,10 +4150,10 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
   in->flushing_cap_tids[flush_tid] = flushing;
 
   if (!in->flushing_caps) {
-    ldout(cct, 10) << "mark_caps_flushing " << ccap_string(flushing) << " " << *in << dendl;
+    ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
     num_flushing_caps++;
   } else {
-    ldout(cct, 10) << "mark_caps_flushing (more) " << ccap_string(flushing) << " " << *in << dendl;
+    ldout(cct, 10) << __func__ << " (more) " << ccap_string(flushing) << " " << *in << dendl;
   }
 
   in->flushing_caps |= flushing;
@@ -4220,7 +4220,7 @@ void Client::flush_caps_sync()
 
 void Client::flush_caps(Inode *in, MetaSession *session, bool sync)
 {
-  ldout(cct, 10) << "flush_caps " << in << " mds." << session->mds_num << dendl;
+  ldout(cct, 10) << __func__ << " " << in << " mds." << session->mds_num << dendl;
   Cap *cap = in->auth_cap;
   assert(cap->session == session);
 
@@ -4247,7 +4247,7 @@ void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
     assert(it != in->flushing_cap_tids.end());
     if (it->first > want)
       break;
-    ldout(cct, 10) << "wait_sync_caps on " << *in << " flushing "
+    ldout(cct, 10) << __func__ << " on " << *in << " flushing "
 		   << ccap_string(it->second) << " want " << want
 		   << " last " << it->first << dendl;
     wait_on_list(in->waitfor_caps);
@@ -4257,7 +4257,7 @@ void Client::wait_sync_caps(Inode *in, ceph_tid_t want)
 void Client::wait_sync_caps(ceph_tid_t want)
 {
  retry:
-  ldout(cct, 10) << "wait_sync_caps want " << want  << " (last is " << last_flush_tid << ", "
+  ldout(cct, 10) << __func__ << " want " << want  << " (last is " << last_flush_tid << ", "
 	   << num_flushing_caps << " total flushing)" << dendl;
   for (auto &p : mds_sessions) {
     MetaSession *s = &p.second;
@@ -4276,7 +4276,7 @@ void Client::wait_sync_caps(ceph_tid_t want)
 void Client::kick_flushing_caps(MetaSession *session)
 {
   mds_rank_t mds = session->mds_num;
-  ldout(cct, 10) << "kick_flushing_caps mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " mds." << mds << dendl;
 
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
@@ -4370,7 +4370,7 @@ void Client::invalidate_snaprealm_and_children(SnapRealm *realm)
     realm = q.front();
     q.pop_front();
 
-    ldout(cct, 10) << "invalidate_snaprealm_and_children " << *realm << dendl;
+    ldout(cct, 10) << __func__ << " " << *realm << dendl;
     realm->invalidate_cache();
 
     for (set<SnapRealm*>::iterator p = realm->pchildren.begin();
@@ -4385,7 +4385,7 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
   SnapRealm *realm = snap_realms[r];
   if (!realm)
     snap_realms[r] = realm = new SnapRealm(r);
-  ldout(cct, 20) << "get_snap_realm " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
@@ -4393,18 +4393,18 @@ SnapRealm *Client::get_snap_realm(inodeno_t r)
 SnapRealm *Client::get_snap_realm_maybe(inodeno_t r)
 {
   if (snap_realms.count(r) == 0) {
-    ldout(cct, 20) << "get_snap_realm_maybe " << r << " fail" << dendl;
+    ldout(cct, 20) << __func__ << " " << r << " fail" << dendl;
     return NULL;
   }
   SnapRealm *realm = snap_realms[r];
-  ldout(cct, 20) << "get_snap_realm_maybe " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
+  ldout(cct, 20) << __func__ << " " << r << " " << realm << " " << realm->nref << " -> " << (realm->nref + 1) << dendl;
   realm->nref++;
   return realm;
 }
 
 void Client::put_snap_realm(SnapRealm *realm)
 {
-  ldout(cct, 20) << "put_snap_realm " << realm->ino << " " << realm
+  ldout(cct, 20) << __func__ << " " << realm->ino << " " << realm
 		 << " " << realm->nref << " -> " << (realm->nref - 1) << dendl;
   if (--realm->nref == 0) {
     snap_realms.erase(realm->ino);
@@ -4419,7 +4419,7 @@ void Client::put_snap_realm(SnapRealm *realm)
 bool Client::adjust_realm_parent(SnapRealm *realm, inodeno_t parent)
 {
   if (realm->parent != parent) {
-    ldout(cct, 10) << "adjust_realm_parent " << *realm
+    ldout(cct, 10) << __func__ << " " << *realm
 	     << " " << realm->parent << " -> " << parent << dendl;
     realm->parent = parent;
     if (realm->pparent) {
@@ -4443,7 +4443,7 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush)
 {
   SnapRealm *first_realm = NULL;
-  ldout(cct, 10) << "update_snap_trace len " << bl.length() << dendl;
+  ldout(cct, 10) << __func__ << " len " << bl.length() << dendl;
 
   map<SnapRealm*, SnapContext> dirty_realms;
 
@@ -4456,7 +4456,7 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
     bool invalidate = false;
 
     if (info.seq() > realm->seq) {
-      ldout(cct, 10) << "update_snap_trace " << *realm << " seq " << info.seq() << " > " << realm->seq
+      ldout(cct, 10) << __func__ << " " << *realm << " seq " << info.seq() << " > " << realm->seq
 	       << dendl;
 
       if (flush) {
@@ -4495,10 +4495,10 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
 
     if (invalidate) {
       invalidate_snaprealm_and_children(realm);
-      ldout(cct, 15) << "update_snap_trace " << *realm << " self|parent updated" << dendl;
+      ldout(cct, 15) << __func__ << " " << *realm << " self|parent updated" << dendl;
       ldout(cct, 15) << "  snapc " << realm->get_snap_context() << dendl;
     } else {
-      ldout(cct, 10) << "update_snap_trace " << *realm << " seq " << info.seq()
+      ldout(cct, 10) << __func__ << " " << *realm << " seq " << info.seq()
 	       << " <= " << realm->seq << " and same parent, SKIPPING" << dendl;
     }
         
@@ -4535,7 +4535,7 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
 
 void Client::handle_snap(MClientSnap *m)
 {
-  ldout(cct, 10) << "handle_snap " << *m << dendl;
+  ldout(cct, 10) << __func__ << " " << *m << dendl;
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
@@ -4622,7 +4622,7 @@ void Client::handle_quota(MClientQuota *m)
 
   got_mds_push(session);
 
-  ldout(cct, 10) << "handle_quota " << *m << " from mds." << mds << dendl;
+  ldout(cct, 10) << __func__ << " " << *m << " from mds." << mds << dendl;
 
   vinodeno_t vino(m->ino, CEPH_NOSNAP);
   if (inode_map.count(vino)) {
@@ -4667,7 +4667,7 @@ void Client::handle_caps(MClientCaps *m)
     in = inode_map[vino];
   if (!in) {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
-      ldout(cct, 5) << "handle_caps don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
+      ldout(cct, 5) << __func__ << " don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
       session->enqueue_cap_release(
         m->get_ino(),
         m->get_cap_id(),
@@ -4675,7 +4675,7 @@ void Client::handle_caps(MClientCaps *m)
         m->get_mseq(),
         cap_epoch_barrier);
     } else {
-      ldout(cct, 5) << "handle_caps don't have vino " << vino << ", dropping" << dendl;
+      ldout(cct, 5) << __func__ << " don't have vino " << vino << ", dropping" << dendl;
     }
     m->put();
 
@@ -4694,7 +4694,7 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   if (in->caps.count(mds) == 0) {
-    ldout(cct, 5) << "handle_caps don't have " << *in << " cap on mds." << mds << dendl;
+    ldout(cct, 5) << __func__ << " don't have " << *in << " cap on mds." << mds << dendl;
     m->put();
     return;
   }
@@ -4716,7 +4716,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
 {
   mds_rank_t mds = session->mds_num;
 
-  ldout(cct, 5) << "handle_cap_import ino " << m->get_ino() << " mseq " << m->get_mseq()
+  ldout(cct, 5) << __func__ << " ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " IMPORT from mds." << mds << dendl;
 
   const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
@@ -4756,7 +4756,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 {
   mds_rank_t mds = session->mds_num;
 
-  ldout(cct, 5) << "handle_cap_export ino " << m->get_ino() << " mseq " << m->get_mseq()
+  ldout(cct, 5) << __func__ << " ino " << m->get_ino() << " mseq " << m->get_mseq()
 		<< " EXPORT from mds." << mds << dendl;
 
   auto it = in->caps.find(mds);
@@ -4806,7 +4806,7 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
   mds_rank_t mds = session->mds_num;
   assert(in->caps.count(mds));
 
-  ldout(cct, 10) << "handle_cap_trunc on ino " << *in
+  ldout(cct, 10) << __func__ << " on ino " << *in
 	   << " size " << in->size << " -> " << m->get_size()
 	   << dendl;
   
@@ -4848,7 +4848,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
     ++it;
   }
 
-  ldout(cct, 5) << "handle_cap_flush_ack mds." << session->mds_num
+  ldout(cct, 5) << __func__ << " mds." << session->mds_num
 	  << " cleaned " << ccap_string(cleaned) << " on " << *in
 	  << " with " << ccap_string(dirty) << dendl;
 
@@ -4897,7 +4897,7 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
     if (m->get_client_tid() != capsnap.flush_tid) {
       ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
     } else {
-      ldout(cct, 5) << "handle_cap_flushedsnap mds." << mds << " flushed snap follows " << follows
+      ldout(cct, 5) << __func__ << " mds." << mds << " flushed snap follows " << follows
 	      << " on " << *in << dendl;
       InodeRef tmp_ref;
       if (in->get_num_ref() == 1)
@@ -4908,7 +4908,7 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
       in->cap_snaps.erase(follows);
     }
   } else {
-    ldout(cct, 5) << "handle_cap_flushedsnap DUP(?) mds." << mds << " flushed snap follows " << follows
+    ldout(cct, 5) << __func__ << " DUP(?) mds." << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;
     // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
@@ -4948,7 +4948,7 @@ void Client::_async_dentry_invalidate(vinodeno_t dirino, vinodeno_t ino, string&
 {
   if (unmounting)
     return;
-  ldout(cct, 10) << "_async_dentry_invalidate '" << name << "' ino " << ino
+  ldout(cct, 10) << __func__ << " '" << name << "' ino " << ino
 		 << " in dir " << dirino << dendl;
   dentry_invalidate_cb(callback_handle, dirino, ino, name);
 }
@@ -5011,7 +5011,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
   const int old_caps = cap->issued;
   const int new_caps = m->get_caps();
-  ldout(cct, 5) << "handle_cap_grant on in " << m->get_ino() 
+  ldout(cct, 5) << __func__ << " on in " << m->get_ino() 
 		<< " mds." << mds << " seq " << m->get_seq()
 		<< " caps now " << ccap_string(new_caps)
 		<< " was " << ccap_string(old_caps) << dendl;
@@ -6072,10 +6072,10 @@ int Client::_do_lookup(Inode *dir, const string& name, int mask,
       mask |= DEBUG_GETATTR_CAPS;
   req->head.args.getattr.mask = mask;
 
-  ldout(cct, 10) << "_do_lookup on " << path << dendl;
+  ldout(cct, 10) << __func__ << " on " << path << dendl;
 
   int r = make_request(req, perms, target);
-  ldout(cct, 10) << "_do_lookup res is " << r << dendl;
+  ldout(cct, 10) << __func__ << " res is " << r << dendl;
   return r;
 }
 
@@ -6118,7 +6118,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
       dir->dir->dentries.count(dname)) {
     dn = dir->dir->dentries[dname];
 
-    ldout(cct, 20) << "_lookup have dn " << dname << " mds." << dn->lease_mds << " ttl " << dn->lease_ttl
+    ldout(cct, 20) << __func__ << " have dn " << dname << " mds." << dn->lease_mds << " ttl " << dn->lease_ttl
 	     << " seq " << dn->lease_seq
 	     << dendl;
 
@@ -6145,7 +6145,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 	    (!dn->inode || dn->inode->caps_issued_mask(mask)))
 	      goto hit_dn;
 	if (!dn->inode && (dir->flags & I_COMPLETE)) {
-	  ldout(cct, 10) << "_lookup concluded ENOENT locally for "
+	  ldout(cct, 10) << __func__ << " concluded ENOENT locally for "
 			 << *dir << " dn '" << dname << "'" << dendl;
 	  return -ENOENT;
 	}
@@ -6157,7 +6157,7 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
     // can we conclude ENOENT locally?
     if (dir->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
 	(dir->flags & I_COMPLETE)) {
-      ldout(cct, 10) << "_lookup concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
+      ldout(cct, 10) << __func__ << " concluded ENOENT locally for " << *dir << " dn '" << dname << "'" << dendl;
       return -ENOENT;
     }
   }
@@ -6175,9 +6175,9 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
 
  done:
   if (r < 0)
-    ldout(cct, 10) << "_lookup " << *dir << " " << dname << " = " << r << dendl;
+    ldout(cct, 10) << __func__ << " " << *dir << " " << dname << " = " << r << dendl;
   else
-    ldout(cct, 10) << "_lookup " << *dir << " " << dname << " = " << **target << dendl;
+    ldout(cct, 10) << __func__ << " " << *dir << " " << dname << " = " << **target << dendl;
   return r;
 }
 
@@ -6185,7 +6185,7 @@ int Client::get_or_create(Inode *dir, const char* name,
 			  Dentry **pdn, bool expect_null)
 {
   // lookup
-  ldout(cct, 20) << "get_or_create " << *dir << " name " << name << dendl;
+  ldout(cct, 20) << __func__ << " " << *dir << " name " << name << dendl;
   dir->open_dir();
   if (dir->dir->dentries.count(name)) {
     Dentry *dn = dir->dir->dentries[name];
@@ -6224,7 +6224,7 @@ int Client::path_walk(const filepath& origpath, InodeRef *end,
     cur = cwd;
   assert(cur);
 
-  ldout(cct, 10) << "path_walk " << path << dendl;
+  ldout(cct, 10) << __func__ << " " << path << dendl;
 
   int symlinks = 0;
 
@@ -6344,7 +6344,7 @@ int Client::link(const char *relexisting, const char *relpath, const UserPerm& p
 int Client::unlink(const char *relpath, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "unlink" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
   if (unmounting)
@@ -6371,7 +6371,7 @@ int Client::unlink(const char *relpath, const UserPerm& perm)
 int Client::rename(const char *relfrom, const char *relto, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "rename" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relfrom << std::endl;
   tout(cct) << relto << std::endl;
 
@@ -6414,10 +6414,10 @@ out:
 int Client::mkdir(const char *relpath, mode_t mode, const UserPerm& perm)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "mkdir" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
-  ldout(cct, 10) << "mkdir: " << relpath << dendl;
+  ldout(cct, 10) << __func__ << ": " << relpath << dendl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -6444,7 +6444,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
   ldout(cct, 10) << "Client::mkdirs " << relpath << dendl;
-  tout(cct) << "mkdirs" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
@@ -6472,7 +6472,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
   //check that we have work left to do
   if (i==path.depth()) return -EEXIST;
   if (r!=-ENOENT) return r;
-  ldout(cct, 20) << "mkdirs got through " << i << " directories on path " << relpath << dendl;
+  ldout(cct, 20) << __func__ << " got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
   for (; i<path.depth(); ++i) {
     if (cct->_conf->client_permissions) {
@@ -6491,7 +6491,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
       return r;
     //move to new dir and continue
     cur.swap(next);
-    ldout(cct, 20) << "mkdirs: successfully created directory "
+    ldout(cct, 20) << __func__ << ": successfully created directory "
 		   << filepath(cur->ino).get_path() << dendl;
   }
   return 0;
@@ -6500,7 +6500,7 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
 int Client::rmdir(const char *relpath, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "rmdir" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
   if (unmounting)
@@ -6527,7 +6527,7 @@ int Client::rmdir(const char *relpath, const UserPerm& perms)
 int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t rdev) 
 { 
   Mutex::Locker lock(client_lock);
-  tout(cct) << "mknod" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
   tout(cct) << rdev << std::endl;
@@ -6558,7 +6558,7 @@ int Client::mknod(const char *relpath, mode_t mode, const UserPerm& perms, dev_t
 int Client::symlink(const char *target, const char *relpath, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "symlink" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << target << std::endl;
   tout(cct) << relpath << std::endl;
 
@@ -6586,7 +6586,7 @@ int Client::symlink(const char *target, const char *relpath, const UserPerm& per
 int Client::readlink(const char *relpath, char *buf, loff_t size, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "readlink" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
   if (unmounting)
@@ -6621,7 +6621,7 @@ int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
 {
   bool yes = in->caps_issued_mask(mask);
 
-  ldout(cct, 10) << "_getattr mask " << ccap_string(mask) << " issued=" << yes << dendl;
+  ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
   if (yes && !force)
     return 0;
 
@@ -6633,7 +6633,7 @@ int Client::_getattr(Inode *in, int mask, const UserPerm& perms, bool force)
   req->head.args.getattr.mask = mask;
   
   int res = make_request(req, perms);
-  ldout(cct, 10) << "_getattr result=" << res << dendl;
+  ldout(cct, 10) << __func__ << " result=" << res << dendl;
   return res;
 }
 
@@ -6642,7 +6642,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 {
   int issued = in->caps_issued();
 
-  ldout(cct, 10) << "_setattr mask " << mask << " issued " <<
+  ldout(cct, 10) << __func__ << " mask " << mask << " issued " <<
     ccap_string(issued) << dendl;
 
   if (in->snapid != CEPH_NOSNAP) {
@@ -6892,7 +6892,7 @@ int Client::setattr(const char *relpath, struct stat *attr, int mask,
 		    const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "setattr" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
@@ -6911,7 +6911,7 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 		     const UserPerm& perms, int flags)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "setattrx" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mask  << std::endl;
 
@@ -6929,7 +6929,7 @@ int Client::setattrx(const char *relpath, struct ceph_statx *stx, int mask,
 int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fsetattr" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
 
@@ -6949,7 +6949,7 @@ int Client::fsetattr(int fd, struct stat *attr, int mask, const UserPerm& perms)
 int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fsetattr" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mask  << std::endl;
 
@@ -6969,7 +6969,7 @@ int Client::fsetattrx(int fd, struct ceph_statx *stx, int mask, const UserPerm& 
 int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
 		 frag_info_t *dirstat, int mask)
 {
-  ldout(cct, 3) << "stat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "stat" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -6984,11 +6984,11 @@ int Client::stat(const char *relpath, struct stat *stbuf, const UserPerm& perms,
     return r;
   r = _getattr(in, mask, perms);
   if (r < 0) {
-    ldout(cct, 3) << "stat exit on error!" << dendl;
+    ldout(cct, 3) << __func__ << " exit on error!" << dendl;
     return r;
   }
   fill_stat(in, stbuf, dirstat);
-  ldout(cct, 3) << "stat exit (relpath " << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
@@ -7018,7 +7018,7 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 		  const UserPerm& perms,
 		  unsigned int want, unsigned int flags)
 {
-  ldout(cct, 3) << "statx enter (relpath " << relpath << " want " << want << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " want " << want << ")" << dendl;
   Mutex::Locker lock(client_lock);
   tout(cct) << "statx" << std::endl;
   tout(cct) << relpath << std::endl;
@@ -7037,21 +7037,21 @@ int Client::statx(const char *relpath, struct ceph_statx *stx,
 
   r = _getattr(in, mask, perms);
   if (r < 0) {
-    ldout(cct, 3) << "statx exit on error!" << dendl;
+    ldout(cct, 3) << __func__ << " exit on error!" << dendl;
     return r;
   }
 
   fill_statx(in, mask, stx);
-  ldout(cct, 3) << "statx exit (relpath " << relpath << " mask " << stx->stx_mask << ")" << dendl;
+  ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << stx->stx_mask << ")" << dendl;
   return r;
 }
 
 int Client::lstat(const char *relpath, struct stat *stbuf,
 		  const UserPerm& perms, frag_info_t *dirstat, int mask)
 {
-  ldout(cct, 3) << "lstat enter (relpath " << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter (relpath " << relpath << " mask " << mask << ")" << dendl;
   Mutex::Locker lock(client_lock);
-  tout(cct) << "lstat" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
   if (unmounting)
@@ -7065,17 +7065,17 @@ int Client::lstat(const char *relpath, struct stat *stbuf,
     return r;
   r = _getattr(in, mask, perms);
   if (r < 0) {
-    ldout(cct, 3) << "lstat exit on error!" << dendl;
+    ldout(cct, 3) << __func__ << " exit on error!" << dendl;
     return r;
   }
   fill_stat(in, stbuf, dirstat);
-  ldout(cct, 3) << "lstat exit (relpath " << relpath << " mask " << mask << ")" << dendl;
+  ldout(cct, 3) << __func__ << " exit (relpath " << relpath << " mask " << mask << ")" << dendl;
   return r;
 }
 
 int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_info_t *rstat)
 {
-  ldout(cct, 10) << "fill_stat on " << in->ino << " snap/dev" << in->snapid
+  ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
 	   << " mode 0" << oct << in->mode << dec
 	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
   memset(st, 0, sizeof(struct stat));
@@ -7122,7 +7122,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
 
 void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 {
-  ldout(cct, 10) << "fill_statx on " << in->ino << " snap/dev" << in->snapid
+  ldout(cct, 10) << __func__ << " on " << in->ino << " snap/dev" << in->snapid
 	   << " mode 0" << oct << in->mode << dec
 	   << " mtime " << in->mtime << " ctime " << in->ctime << dendl;
   memset(stx, 0, sizeof(struct ceph_statx));
@@ -7196,7 +7196,7 @@ void Client::touch_dn(Dentry *dn)
 int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "chmod" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
@@ -7216,7 +7216,7 @@ int Client::chmod(const char *relpath, mode_t mode, const UserPerm& perms)
 int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fchmod" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << mode << std::endl;
 
@@ -7238,7 +7238,7 @@ int Client::fchmod(int fd, mode_t mode, const UserPerm& perms)
 int Client::lchmod(const char *relpath, mode_t mode, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "lchmod" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << mode << std::endl;
 
@@ -7260,7 +7260,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		  const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "chown" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
@@ -7282,7 +7282,7 @@ int Client::chown(const char *relpath, uid_t new_uid, gid_t new_gid,
 int Client::fchown(int fd, uid_t new_uid, gid_t new_gid, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fchown" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
@@ -7310,7 +7310,7 @@ int Client::lchown(const char *relpath, uid_t new_uid, gid_t new_gid,
 		   const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "lchown" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << new_uid << std::endl;
   tout(cct) << new_gid << std::endl;
@@ -7337,7 +7337,7 @@ int Client::utime(const char *relpath, struct utimbuf *buf,
 		  const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "utime" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << buf->modtime << std::endl;
   tout(cct) << buf->actime << std::endl;
@@ -7362,7 +7362,7 @@ int Client::lutime(const char *relpath, struct utimbuf *buf,
 		   const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "lutime" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
   tout(cct) << buf->modtime << std::endl;
   tout(cct) << buf->actime << std::endl;
@@ -7387,7 +7387,7 @@ int Client::lutime(const char *relpath, struct utimbuf *buf,
 int Client::flock(int fd, int operation, uint64_t owner)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "flock" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << operation << std::endl;
   tout(cct) << owner << std::endl;
@@ -7405,7 +7405,7 @@ int Client::flock(int fd, int operation, uint64_t owner)
 int Client::opendir(const char *relpath, dir_result_t **dirpp, const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "opendir" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << relpath << std::endl;
 
   if (unmounting)
@@ -7434,7 +7434,7 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
     return -ENOTDIR;
   *dirpp = new dir_result_t(in, perms);
   opened_dirs.insert(*dirpp);
-  ldout(cct, 3) << "_opendir(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
+  ldout(cct, 3) << __func__ << "(" << in->ino << ") = " << 0 << " (" << *dirpp << ")" << dendl;
   return 0;
 }
 
@@ -7442,19 +7442,19 @@ int Client::_opendir(Inode *in, dir_result_t **dirpp, const UserPerm& perms)
 int Client::closedir(dir_result_t *dir) 
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "closedir" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << (unsigned long)dir << std::endl;
 
-  ldout(cct, 3) << "closedir(" << dir << ") = 0" << dendl;
+  ldout(cct, 3) << __func__ << "(" << dir << ") = 0" << dendl;
   _closedir(dir);
   return 0;
 }
 
 void Client::_closedir(dir_result_t *dirp)
 {
-  ldout(cct, 10) << "_closedir(" << dirp << ")" << dendl;
+  ldout(cct, 10) << __func__ << "(" << dirp << ")" << dendl;
   if (dirp->inode) {
-    ldout(cct, 10) << "_closedir detaching inode " << dirp->inode << dendl;
+    ldout(cct, 10) << __func__ << " detaching inode " << dirp->inode << dendl;
     dirp->inode.reset();
   }
   _readdir_drop_dirp_buffer(dirp);
@@ -7465,7 +7465,7 @@ void Client::_closedir(dir_result_t *dirp)
 void Client::rewinddir(dir_result_t *dirp)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "rewinddir(" << dirp << ")" << dendl;
+  ldout(cct, 3) << __func__ << "(" << dirp << ")" << dendl;
 
   if (unmounting)
     return;
@@ -7478,7 +7478,7 @@ void Client::rewinddir(dir_result_t *dirp)
 loff_t Client::telldir(dir_result_t *dirp)
 {
   dir_result_t *d = static_cast<dir_result_t*>(dirp);
-  ldout(cct, 3) << "telldir(" << dirp << ") = " << d->offset << dendl;
+  ldout(cct, 3) << __func__ << "(" << dirp << ") = " << d->offset << dendl;
   return d->offset;
 }
 
@@ -7486,7 +7486,7 @@ void Client::seekdir(dir_result_t *dirp, loff_t offset)
 {
   Mutex::Locker lock(client_lock);
 
-  ldout(cct, 3) << "seekdir(" << dirp << ", " << offset << ")" << dendl;
+  ldout(cct, 3) << __func__ << "(" << dirp << ", " << offset << ")" << dendl;
 
   if (unmounting)
     return;
@@ -7535,7 +7535,7 @@ void Client::fill_dirent(struct dirent *de, const char *name, int type, uint64_t
 #endif
   de->d_reclen = 1;
   de->d_type = IFTODT(type);
-  ldout(cct, 10) << "fill_dirent '" << de->d_name << "' -> " << inodeno_t(de->d_ino)
+  ldout(cct, 10) << __func__ << " '" << de->d_name << "' -> " << inodeno_t(de->d_ino)
 	   << " type " << (int)de->d_type << " w/ next_off " << hex << next_off << dec << dendl;
 #endif
 }
@@ -7545,14 +7545,14 @@ void Client::_readdir_next_frag(dir_result_t *dirp)
   frag_t fg = dirp->buffer_frag;
 
   if (fg.is_rightmost()) {
-    ldout(cct, 10) << "_readdir_next_frag advance from " << fg << " to END" << dendl;
+    ldout(cct, 10) << __func__ << " advance from " << fg << " to END" << dendl;
     dirp->set_end();
     return;
   }
 
   // advance
   fg = fg.next();
-  ldout(cct, 10) << "_readdir_next_frag advance from " << dirp->buffer_frag << " to " << fg << dendl;
+  ldout(cct, 10) << __func__ << " advance from " << dirp->buffer_frag << " to " << fg << dendl;
 
   if (dirp->hash_order()) {
     // keep last_name
@@ -7576,7 +7576,7 @@ void Client::_readdir_rechoose_frag(dir_result_t *dirp)
   frag_t cur = frag_t(dirp->offset_high());
   frag_t fg = dirp->inode->dirfragtree[cur.value()];
   if (fg != cur) {
-    ldout(cct, 10) << "_readdir_rechoose_frag frag " << cur << " maps to " << fg << dendl;
+    ldout(cct, 10) << __func__ << " frag " << cur << " maps to " << fg << dendl;
     dirp->offset = dir_result_t::make_fpos(fg, 2, false);
     dirp->last_name.clear();
     dirp->next_offset = 2;
@@ -7585,7 +7585,7 @@ void Client::_readdir_rechoose_frag(dir_result_t *dirp)
 
 void Client::_readdir_drop_dirp_buffer(dir_result_t *dirp)
 {
-  ldout(cct, 10) << "_readdir_drop_dirp_buffer " << dirp << dendl;
+  ldout(cct, 10) << __func__ << " " << dirp << dendl;
   dirp->buffer.clear();
 }
 
@@ -7601,7 +7601,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   else
     fg = frag_t(dirp->offset_high());
   
-  ldout(cct, 10) << "_readdir_get_frag " << dirp << " on " << dirp->inode->ino << " fg " << fg
+  ldout(cct, 10) << __func__ << " " << dirp << " on " << dirp->inode->ino << " fg " << fg
 		 << " offset " << hex << dirp->offset << dec << dendl;
 
   int op = CEPH_MDS_OP_READDIR;
@@ -7628,16 +7628,16 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   int res = make_request(req, dirp->perms, NULL, NULL, -1, &dirbl);
   
   if (res == -EAGAIN) {
-    ldout(cct, 10) << "_readdir_get_frag got EAGAIN, retrying" << dendl;
+    ldout(cct, 10) << __func__ << " got EAGAIN, retrying" << dendl;
     _readdir_rechoose_frag(dirp);
     return _readdir_get_frag(dirp);
   }
 
   if (res == 0) {
-    ldout(cct, 10) << "_readdir_get_frag " << dirp << " got frag " << dirp->buffer_frag
+    ldout(cct, 10) << __func__ << " " << dirp << " got frag " << dirp->buffer_frag
 		   << " size " << dirp->buffer.size() << dendl;
   } else {
-    ldout(cct, 10) << "_readdir_get_frag got error " << res << ", setting end flag" << dendl;
+    ldout(cct, 10) << __func__ << " got error " << res << ", setting end flag" << dendl;
     dirp->set_end();
   }
 
@@ -7654,7 +7654,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
 			      int caps, bool getref)
 {
   assert(client_lock.is_locked());
-  ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino
+  ldout(cct, 10) << __func__ << " " << dirp << " on " << dirp->inode->ino
 	   << " last_name " << dirp->last_name << " offset " << hex << dirp->offset << dec
 	   << dendl;
   Dir *dir = dirp->inode->dir;
@@ -7728,7 +7728,7 @@ int Client::_readdir_cache_cb(dir_result_t *dirp, add_dirent_cb_t cb, void *p,
       return r;
   }
 
-  ldout(cct, 10) << "_readdir_cache_cb " << dirp << " on " << dirp->inode->ino << " at end" << dendl;
+  ldout(cct, 10) << __func__ << " " << dirp << " on " << dirp->inode->ino << " at end" << dendl;
   dirp->set_end();
   return 0;
 }
@@ -7745,7 +7745,7 @@ int Client::readdir_r_cb(dir_result_t *d, add_dirent_cb_t cb, void *p,
 
   dir_result_t *dirp = static_cast<dir_result_t*>(d);
 
-  ldout(cct, 10) << "readdir_r_cb " << *dirp->inode << " offset " << hex << dirp->offset
+  ldout(cct, 10) << __func__ << " " << *dirp->inode << " offset " << hex << dirp->offset
 		 << dec << " at_end=" << dirp->at_end()
 		 << " hash_order=" << dirp->hash_order() << dendl;
 
@@ -8205,7 +8205,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 			const UserPerm& perms)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_hash enter(" << ino << ", #" << dirino << "/" << name << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter(" << ino << ", #" << dirino << "/" << name << ")" << dendl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -8223,7 +8223,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 
   int r = make_request(req, perms, NULL, NULL,
 		       rand() % mdsmap->get_num_in_mds());
-  ldout(cct, 3) << "lookup_hash exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
+  ldout(cct, 3) << __func__ << " exit(" << ino << ", #" << dirino << "/" << name << ") = " << r << dendl;
   return r;
 }
 
@@ -8238,7 +8238,7 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_ino enter(" << ino << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter(" << ino << ")" << dendl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -8255,7 +8255,7 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
     *inode = p->second;
     _ll_get(*inode);
   }
-  ldout(cct, 3) << "lookup_ino exit(" << ino << ") = " << r << dendl;
+  ldout(cct, 3) << __func__ << " exit(" << ino << ") = " << r << dendl;
   return r;
 }
 
@@ -8269,7 +8269,7 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_parent enter(" << ino->ino << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -8277,7 +8277,7 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   if (!ino->dentries.empty()) {
     // if we exposed the parent here, we'd need to check permissions,
     // but right now we just rely on the MDS doing so in make_request
-    ldout(cct, 3) << "lookup_parent dentry already present" << dendl;
+    ldout(cct, 3) << __func__ << " dentry already present" << dendl;
     return 0;
   }
   
@@ -8298,12 +8298,12 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
     if (r == 0) {
       *parent = target.get();
       _ll_get(*parent);
-      ldout(cct, 3) << "lookup_parent found parent " << (*parent)->ino << dendl;
+      ldout(cct, 3) << __func__ << " found parent " << (*parent)->ino << dendl;
     } else {
       *parent = NULL;
     }
   }
-  ldout(cct, 3) << "lookup_parent exit(" << ino->ino << ") = " << r << dendl;
+  ldout(cct, 3) << __func__ << " exit(" << ino->ino << ") = " << r << dendl;
   return r;
 }
 
@@ -8317,7 +8317,7 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   assert(parent->is_dir());
 
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "lookup_name enter(" << ino->ino << ")" << dendl;
+  ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -8328,7 +8328,7 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   req->set_inode(ino);
 
   int r = make_request(req, perms, NULL, NULL, rand() % mdsmap->get_num_in_mds());
-  ldout(cct, 3) << "lookup_name exit(" << ino->ino << ") = " << r << dendl;
+  ldout(cct, 3) << __func__ << " exit(" << ino->ino << ") = " << r << dendl;
   return r;
 }
 
@@ -8338,7 +8338,7 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
   assert(in);
   Fh *f = new Fh(in, flags, cmode, perms);
 
-  ldout(cct, 10) << "_create_fh " << in->ino << " mode " << cmode << dendl;
+  ldout(cct, 10) << __func__ << " " << in->ino << " mode " << cmode << dendl;
 
   if (in->snapid != CEPH_NOSNAP) {
     in->snap_cap_refs++;
@@ -8370,7 +8370,7 @@ int Client::_release_fh(Fh *f)
   //ldout(cct, 3) << "op: client->close(open_files[ " << fh << " ]);" << dendl;
   //ldout(cct, 3) << "op: open_files.erase( " << fh << " );" << dendl;
   Inode *in = f->inode.get();
-  ldout(cct, 5) << "_release_fh " << f << " mode " << f->mode << " on " << *in << dendl;
+  ldout(cct, 5) << __func__ << " " << f << " mode " << f->mode << " on " << *in << dendl;
 
   in->unset_deleg(f);
 
@@ -8389,10 +8389,10 @@ int Client::_release_fh(Fh *f)
   // Finally, read any async err (i.e. from flushes)
   int err = f->take_async_err();
   if (err != 0) {
-    ldout(cct, 1) << "_release_fh " << f << " on inode " << *in << " caught async_err = "
+    ldout(cct, 1) << __func__ << " " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
   } else {
-    ldout(cct, 10) << "_release_fh " << f << " on inode " << *in << " no async_err state" << dendl;
+    ldout(cct, 10) << __func__ << " " << f << " on inode " << *in << " no async_err state" << dendl;
   }
 
   _put_fh(f);
@@ -8609,15 +8609,15 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
 
 void Client::lock_fh_pos(Fh *f)
 {
-  ldout(cct, 10) << "lock_fh_pos " << f << dendl;
+  ldout(cct, 10) << __func__ << " " << f << dendl;
 
   if (f->pos_locked || !f->pos_waiters.empty()) {
     Cond cond;
     f->pos_waiters.push_back(&cond);
-    ldout(cct, 10) << "lock_fh_pos BLOCKING on " << f << dendl;
+    ldout(cct, 10) << __func__ << " BLOCKING on " << f << dendl;
     while (f->pos_locked || f->pos_waiters.front() != &cond)
       cond.Wait(client_lock);
-    ldout(cct, 10) << "lock_fh_pos UNBLOCKING on " << f << dendl;
+    ldout(cct, 10) << __func__ << " UNBLOCKING on " << f << dendl;
     assert(f->pos_waiters.front() == &cond);
     f->pos_waiters.pop_front();
   }
@@ -8627,7 +8627,7 @@ void Client::lock_fh_pos(Fh *f)
 
 void Client::unlock_fh_pos(Fh *f)
 {
-  ldout(cct, 10) << "unlock_fh_pos " << f << dendl;
+  ldout(cct, 10) << __func__ << " " << f << dendl;
   f->pos_locked = false;
 }
 
@@ -8880,7 +8880,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
 
-  ldout(cct, 10) << "_read_async " << *in << " " << off << "~" << len << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
   // trim read based on file size?
   if (off >= in->size)
@@ -8948,7 +8948,7 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   int left = len;
   int read = 0;
 
-  ldout(cct, 10) << "_read_sync " << *in << " " << off << "~" << len << dendl;
+  ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
 
   Mutex flock("Client::_read_sync flock");
   Cond cond;
@@ -9019,9 +9019,9 @@ void Client::_sync_write_commit(Inode *in)
 
   put_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
-  ldout(cct, 15) << "sync_write_commit unsafe_sync_write = " << unsafe_sync_write << dendl;
+  ldout(cct, 15) << __func__ << " unsafe_sync_write = " << unsafe_sync_write << dendl;
   if (unsafe_sync_write == 0 && unmounting) {
-    ldout(cct, 10) << "sync_write_commit -- no more unsafe writes, unmount can proceed" << dendl;
+    ldout(cct, 10) << __func__ << " -- no more unsafe writes, unmount can proceed" << dendl;
     mount_cond.Signal();
   }
 }
@@ -9368,7 +9368,7 @@ int Client::truncate(const char *relpath, loff_t length, const UserPerm& perms)
 int Client::ftruncate(int fd, loff_t length, const UserPerm& perms) 
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "ftruncate" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << fd << std::endl;
   tout(cct) << length << std::endl;
 
@@ -9572,7 +9572,7 @@ int Client::chdir(const char *relpath, std::string &new_cwd,
 void Client::_getcwd(string& dir, const UserPerm& perms)
 {
   filepath path;
-  ldout(cct, 10) << "getcwd " << *cwd << dendl;
+  ldout(cct, 10) << __func__ << " " << *cwd << dendl;
 
   Inode *in = cwd.get();
   while (in != root) {
@@ -9588,7 +9588,7 @@ void Client::_getcwd(string& dir, const UserPerm& perms)
 
     if (!dn) {
       // look it up
-      ldout(cct, 10) << "getcwd looking up parent for " << *in << dendl;
+      ldout(cct, 10) << __func__ << " looking up parent for " << *in << dendl;
       MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
       filepath path(in->ino);
       req->set_filepath(path);
@@ -9620,7 +9620,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 		   const UserPerm& perms)
 {
   Mutex::Locker l(client_lock);
-  tout(cct) << "statfs" << std::endl;
+  tout(cct) << __func__ << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -9718,7 +9718,7 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
 int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
 			 struct flock *fl, uint64_t owner, bool removing)
 {
-  ldout(cct, 10) << "_do_filelock ino " << in->ino
+  ldout(cct, 10) << __func__ << " ino " << in->ino
 		 << (lock_type == CEPH_LOCK_FCNTL ? " fcntl" : " flock")
 		 << " type " << fl->l_type << " owner " << owner
 		 << " " << fl->l_start << "~" << fl->l_len << dendl;
@@ -9884,7 +9884,7 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
       encode(p->second, bl);
   }
 
-  ldout(cct, 10) << "_encode_filelocks ino " << in->ino << ", " << nr_fcntl_locks
+  ldout(cct, 10) << __func__ << " ino " << in->ino << ", " << nr_fcntl_locks
 		 << " fcntl locks, " << nr_flock_locks << " flock locks" <<  dendl;
 }
 
@@ -9894,7 +9894,7 @@ void Client::_release_filelocks(Fh *fh)
     return;
 
   Inode *in = fh->inode.get();
-  ldout(cct, 10) << "_release_filelocks " << fh << " ino " << in->ino << dendl;
+  ldout(cct, 10) << __func__ << " " << fh << " ino " << in->ino << dendl;
 
   list<pair<int, ceph_filelock> > to_release;
 
@@ -10026,7 +10026,7 @@ void Client::ll_register_callbacks(struct client_callback_args *args)
   if (!args)
     return;
   Mutex::Locker l(client_lock);
-  ldout(cct, 10) << "ll_register_callbacks cb " << args->handle
+  ldout(cct, 10) << __func__ << " cb " << args->handle
 		 << " invalidate_ino_cb " << args->ino_cb
 		 << " invalidate_dentry_cb " << args->dentry_cb
 		 << " getgroups_cb" << args->getgroups_cb
@@ -10082,7 +10082,7 @@ int Client::test_dentry_handling(bool can_invalidate)
 
 int Client::_sync_fs()
 {
-  ldout(cct, 10) << "_sync_fs" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
 
   // flush file data
   Mutex lock("Client::_fsync::lock");
@@ -10283,8 +10283,8 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
 {
   Mutex::Locker lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
-  ldout(cct, 3) << "ll_lookup " << vparent << " " << name << dendl;
-  tout(cct) << "ll_lookup" << std::endl;
+  ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
 
   if (unmounting)
@@ -10313,7 +10313,7 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   _ll_get(in.get());
 
  out:
-  ldout(cct, 3) << "ll_lookup " << vparent << " " << name
+  ldout(cct, 3) << __func__ << " " << vparent << " " << name
 	  << " -> " << r << " (" << hex << attr->st_ino << dec << ")" << dendl;
   tout(cct) << attr->st_ino << std::endl;
   *out = in.get();
@@ -10326,7 +10326,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 {
   Mutex::Locker lock(client_lock);
   vinodeno_t vparent = _get_vino(parent);
-  ldout(cct, 3) << "ll_lookupx " << vparent << " " << name << dendl;
+  ldout(cct, 3) << __func__ << " " << vparent << " " << name << dendl;
   tout(cct) << "ll_lookupx" << std::endl;
   tout(cct) << name << std::endl;
 
@@ -10356,7 +10356,7 @@ int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
     _ll_get(in.get());
   }
 
-  ldout(cct, 3) << "ll_lookupx " << vparent << " " << name
+  ldout(cct, 3) << __func__ << " " << vparent << " " << name
 	  << " -> " << r << " (" << hex << stx->stx_ino << dec << ")" << dendl;
   tout(cct) << stx->stx_ino << std::endl;
   *out = in.get();
@@ -10376,8 +10376,8 @@ int Client::ll_walk(const char* name, Inode **out, struct ceph_statx *stx,
   int rc;
   unsigned mask = statx_to_mask(flags, want);
 
-  ldout(cct, 3) << "ll_walk" << name << dendl;
-  tout(cct) << "ll_walk" << std::endl;
+  ldout(cct, 3) << __func__ << name << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << name << std::endl;
 
   rc = path_walk(fp, &in, perms, !(flags & AT_SYMLINK_NOFOLLOW), mask);
@@ -10406,13 +10406,13 @@ void Client::_ll_get(Inode *in)
     }
   }
   in->ll_get();
-  ldout(cct, 20) << "_ll_get " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
+  ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
 
 int Client::_ll_put(Inode *in, int num)
 {
   in->ll_put(num);
-  ldout(cct, 20) << "_ll_put " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
+  ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
   if (in->ll_ref == 0) {
     if (in->is_dir() && !in->dentries.empty()) {
       assert(in->dentries.size() == 1); // dirs can't be hard-linked
@@ -10427,7 +10427,7 @@ int Client::_ll_put(Inode *in, int num)
 
 void Client::_ll_drop_pins()
 {
-  ldout(cct, 10) << "_ll_drop_pins" << dendl;
+  ldout(cct, 10) << __func__ << dendl;
   ceph::unordered_map<vinodeno_t, Inode*>::iterator next;
   for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
        it != inode_map.end();
@@ -10445,8 +10445,8 @@ bool Client::ll_forget(Inode *in, int count)
   Mutex::Locker lock(client_lock);
   inodeno_t ino = _get_inodeno(in);
 
-  ldout(cct, 3) << "ll_forget " << ino << " " << count << dendl;
-  tout(cct) << "ll_forget" << std::endl;
+  ldout(cct, 3) << __func__ << " " << ino << " " << count << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << ino.val << std::endl;
   tout(cct) << count << std::endl;
 
@@ -10517,8 +10517,8 @@ int Client::_ll_getattr(Inode *in, int caps, const UserPerm& perms)
 {
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_getattr " << vino << dendl;
-  tout(cct) << "ll_getattr" << std::endl;
+  ldout(cct, 3) << __func__ << " " << vino << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
 
   if (vino.snapid < CEPH_NOSNAP)
@@ -10538,7 +10538,7 @@ int Client::ll_getattr(Inode *in, struct stat *attr, const UserPerm& perms)
 
   if (res == 0)
     fill_stat(in, attr);
-  ldout(cct, 3) << "ll_getattr " << _get_vino(in) << " = " << res << dendl;
+  ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
 
@@ -10558,7 +10558,7 @@ int Client::ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 
   if (res == 0)
     fill_statx(in, mask, stx);
-  ldout(cct, 3) << "ll_getattrx " << _get_vino(in) << " = " << res << dendl;
+  ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
 
@@ -10567,9 +10567,9 @@ int Client::_ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
 {
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_setattrx " << vino << " mask " << hex << mask << dec
+  ldout(cct, 3) << __func__ << " " << vino << " mask " << hex << mask << dec
 		<< dendl;
-  tout(cct) << "ll_setattrx" << std::endl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << stx->stx_mode << std::endl;
   tout(cct) << stx->stx_uid << std::endl;
@@ -10608,7 +10608,7 @@ int Client::ll_setattrx(Inode *in, struct ceph_statx *stx, int mask,
     fill_statx(in, in->caps_issued(), stx);
   }
 
-  ldout(cct, 3) << "ll_setattrx " << _get_vino(in) << " = " << res << dendl;
+  ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
 
@@ -10630,7 +10630,7 @@ int Client::ll_setattr(Inode *in, struct stat *attr, int mask,
     fill_stat(in, attr);
   }
 
-  ldout(cct, 3) << "ll_setattr " << _get_vino(in) << " = " << res << dendl;
+  ldout(cct, 3) << __func__ << " " << _get_vino(in) << " = " << res << dendl;
   return res;
 }
 
@@ -10898,8 +10898,8 @@ int Client::ll_getxattr(Inode *in, const char *name, void *value,
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_getxattr " << vino << " " << name << " size " << size << dendl;
-  tout(cct) << "ll_getxattr" << std::endl;
+  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
@@ -10955,7 +10955,7 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
 	r = -ERANGE;
     }
   }
-  ldout(cct, 3) << "_listxattr(" << in->ino << ", " << size << ") = " << r << dendl;
+  ldout(cct, 3) << __func__ << "(" << in->ino << ", " << size << ") = " << r << dendl;
   return r;
 }
 
@@ -10969,8 +10969,8 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size,
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_listxattr " << vino << " size " << size << dendl;
-  tout(cct) << "ll_listxattr" << std::endl;
+  ldout(cct, 3) << __func__ << " " << vino << " size " << size << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << size << std::endl;
 
@@ -11005,7 +11005,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   int res = make_request(req, perms);
 
   trim_cache();
-  ldout(cct, 3) << "_setxattr(" << in->ino << ", \"" << name << "\") = " <<
+  ldout(cct, 3) << __func__ << "(" << in->ino << ", \"" << name << "\") = " <<
     res << dendl;
   return res;
 }
@@ -11155,8 +11155,8 @@ int Client::ll_setxattr(Inode *in, const char *name, const void *value,
 
   vinodeno_t vino = _get_vino(in);
 
-  ldout(cct, 3) << "ll_setxattr " << vino << " " << name << " size " << size << dendl;
-  tout(cct) << "ll_setxattr" << std::endl;
+  ldout(cct, 3) << __func__ << " " << vino << " " << name << " size " << size << dendl;
+  tout(cct) << __func__ << std::endl;
   tout(cct) << vino.ino.val << std::endl;
   tout(cct) << name << std::endl;
 
@@ -13041,8 +13041,8 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_fallocate " << fh << " " << fh->inode->ino << " " << dendl;
-  tout(cct) << "ll_fallocate " << mode << " " << offset << " " << length << std::endl;
+  ldout(cct, 3) << __func__ << " " << fh << " " << fh->inode->ino << " " << dendl;
+  tout(cct) << __func__ << " " << mode << " " << offset << " " << length << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
   if (unmounting)
@@ -13054,7 +13054,7 @@ int Client::ll_fallocate(Fh *fh, int mode, loff_t offset, loff_t length)
 int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 {
   Mutex::Locker lock(client_lock);
-  tout(cct) << "fallocate " << " " << fd << mode << " " << offset << " " << length << std::endl;
+  tout(cct) << __func__ << " " << " " << fd << mode << " " << offset << " " << length << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -13072,9 +13072,9 @@ int Client::fallocate(int fd, int mode, loff_t offset, loff_t length)
 int Client::ll_release(Fh *fh)
 {
   Mutex::Locker lock(client_lock);
-  ldout(cct, 3) << "ll_release (fh)" << fh << " " << fh->inode->ino << " " <<
+  ldout(cct, 3) << __func__ << " (fh)" << fh << " " << fh->inode->ino << " " <<
     dendl;
-  tout(cct) << "ll_release (fh)" << std::endl;
+  tout(cct) << __func__ << " (fh)" << std::endl;
   tout(cct) << (unsigned long)fh << std::endl;
 
   if (unmounting)
@@ -13102,8 +13102,8 @@ int Client::ll_setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep)
 {
   Mutex::Locker lock(client_lock);
 
-  ldout(cct, 3) << "ll_setlk  (fh) " << fh << " " << fh->inode->ino << dendl;
-  tout(cct) << "ll_setk (fh)" << (unsigned long)fh << std::endl;
+  ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -13115,8 +13115,8 @@ int Client::ll_flock(Fh *fh, int cmd, uint64_t owner)
 {
   Mutex::Locker lock(client_lock);
 
-  ldout(cct, 3) << "ll_flock  (fh) " << fh << " " << fh->inode->ino << dendl;
-  tout(cct) << "ll_flock (fh)" << (unsigned long)fh << std::endl;
+  ldout(cct, 3) << __func__ << "  (fh) " << fh << " " << fh->inode->ino << dendl;
+  tout(cct) << __func__ << " (fh)" << (unsigned long)fh << std::endl;
 
   if (unmounting)
     return -ENOTCONN;
@@ -13185,8 +13185,8 @@ public:
 void Client::ll_interrupt(void *d)
 {
   MetaRequest *req = static_cast<MetaRequest*>(d);
-  ldout(cct, 3) << "ll_interrupt tid " << req->get_tid() << dendl;
-  tout(cct) << "ll_interrupt tid " << req->get_tid() << std::endl;
+  ldout(cct, 3) << __func__ << " tid " << req->get_tid() << dendl;
+  tout(cct) << __func__ << " tid " << req->get_tid() << std::endl;
   interrupt_finisher.queue(new C_Client_RequestInterrupt(this, req));
 }
 
@@ -13211,7 +13211,7 @@ int Client::describe_layout(const char *relpath, file_layout_t *lp,
 
   *lp = in->layout;
 
-  ldout(cct, 3) << "describe_layout(" << relpath << ") = 0" << dendl;
+  ldout(cct, 3) << __func__ << "(" << relpath << ") = 0" << dendl;
   return 0;
 }
 
@@ -13229,7 +13229,7 @@ int Client::fdescribe_layout(int fd, file_layout_t *lp)
 
   *lp = in->layout;
 
-  ldout(cct, 3) << "fdescribe_layout(" << fd << ") = 0" << dendl;
+  ldout(cct, 3) << __func__ << "(" << fd << ") = 0" << dendl;
   return 0;
 }
 
@@ -13407,7 +13407,7 @@ int Client::enumerate_layout(int fd, vector<ObjectExtent>& result,
   // map to a list of extents
   Striper::file_to_extents(cct, in->ino, &in->layout, offset, length, in->truncate_size, result);
 
-  ldout(cct, 3) << "enumerate_layout(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
+  ldout(cct, 3) << __func__ << "(" << fd << ", " << length << ", " << offset << ") = 0" << dendl;
   return 0;
 }
 
@@ -13438,18 +13438,18 @@ int Client::get_local_osd()
 
 void Client::ms_handle_connect(Connection *con)
 {
-  ldout(cct, 10) << "ms_handle_connect on " << con->get_peer_addr() << dendl;
+  ldout(cct, 10) << __func__ << " on " << con->get_peer_addr() << dendl;
 }
 
 bool Client::ms_handle_reset(Connection *con)
 {
-  ldout(cct, 0) << "ms_handle_reset on " << con->get_peer_addr() << dendl;
+  ldout(cct, 0) << __func__ << " on " << con->get_peer_addr() << dendl;
   return false;
 }
 
 void Client::ms_handle_remote_reset(Connection *con)
 {
-  ldout(cct, 0) << "ms_handle_remote_reset on " << con->get_peer_addr() << dendl;
+  ldout(cct, 0) << __func__ << " on " << con->get_peer_addr() << dendl;
   Mutex::Locker l(client_lock);
   switch (con->get_peer_type()) {
   case CEPH_ENTITY_TYPE_MDS:
@@ -13508,7 +13508,7 @@ void Client::ms_handle_remote_reset(Connection *con)
 
 bool Client::ms_handle_refused(Connection *con)
 {
-  ldout(cct, 1) << "ms_handle_refused on " << con->get_peer_addr() << dendl;
+  ldout(cct, 1) << __func__ << " on " << con->get_peer_addr() << dendl;
   return false;
 }
 
@@ -13674,7 +13674,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (rd_ret == 0 || rd_ret == -ENOENT)
       have |= POOL_READ;
     else if (rd_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
+      ldout(cct, 10) << __func__ << " on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -13682,7 +13682,7 @@ int Client::check_pool_perm(Inode *in, int need)
     if (wr_ret == 0 || wr_ret == -EEXIST)
       have |= POOL_WRITE;
     else if (wr_ret != -EPERM) {
-      ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
+      ldout(cct, 10) << __func__ << " on pool " << pool_id << " ns " << pool_ns
 		     << " rd_err = " << rd_ret << " wr_err = " << wr_ret << dendl;
       errored = true;
     }
@@ -13701,12 +13701,12 @@ int Client::check_pool_perm(Inode *in, int need)
   }
 
   if ((need & CEPH_CAP_FILE_RD) && !(have & POOL_READ)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
+    ldout(cct, 10) << __func__ << " on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no read perm" << dendl;
     return -EPERM;
   }
   if ((need & CEPH_CAP_FILE_WR) && !(have & POOL_WRITE)) {
-    ldout(cct, 10) << "check_pool_perm on pool " << pool_id << " ns " << pool_ns
+    ldout(cct, 10) << __func__ << " on pool " << pool_id << " ns " << pool_ns
 		   << " need " << ccap_string(need) << ", but no write perm" << dendl;
     return -EPERM;
   }
