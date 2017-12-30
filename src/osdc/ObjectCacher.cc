@@ -422,7 +422,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
 
     // at end ?
     if (p == data.end()) {
-      if (final == NULL) {
+      if (!final) {
         final = new BufferHead(this);
         replace_journal_tid(final, tid);
         final->set_start( cur );
@@ -464,9 +464,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
         }
       } else {
         assert(p->first == cur);
-        if (bh->length() <= max) {
-          // whole bufferhead, piece of cake.
-        } else {
+        if (bh->length() > max) {
           // we want left bit (one splice)
           split(bh, cur + max);        // just split
         }
@@ -829,7 +827,7 @@ void ObjectCacher::bh_read_finish(int64_t poolid, sobject_t oid,
 	 * the waiters will be retried and get -ENOENT immediately, so
 	 * it's safe to clean up the unneeded bh's now. Since we know
 	 * it's safe to remove them now, do so, so they aren't hanging
-	 *around waiting for more -ENOENTs from rados while the cache
+	 * around waiting for more -ENOENTs from rados while the cache
 	 * is being shut down.
 	 *
 	 * Only do this when all the bhs are rx or clean, to match the
@@ -1221,7 +1219,7 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 
 void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount)
 {
-  assert(trace != nullptr);
+  assert(trace);
   assert(lock.is_locked());
   ceph::real_time cutoff = ceph::real_clock::now();
 
@@ -1237,8 +1235,8 @@ void ObjectCacher::flush(ZTracer::Trace *trace, loff_t amount)
   while (amount == 0 || left > 0) {
     BufferHead *bh = static_cast<BufferHead*>(
       bh_lru_dirty.lru_get_next_expire());
-    if (!bh) break;
-    if (bh->last_write > cutoff) break;
+    if (!bh || bh->last_write > cutoff)
+      break;
 
     if (scattered_write) {
       bh_write_adjacencies(bh, cutoff, amount > 0 ? &left : NULL, NULL);
@@ -1329,7 +1327,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			ZTracer::Trace *parent_trace)
 {
   ZTracer::Trace trace;
-  if (parent_trace != nullptr) {
+  if (parent_trace) {
     trace.init("read", &trace_endpoint, parent_trace);
     trace.event("start");
   }
@@ -1344,7 +1342,7 @@ int ObjectCacher::readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 			 bool external_call, ZTracer::Trace *trace)
 {
-  assert(trace != nullptr);
+  assert(trace);
   assert(lock.is_locked());
   bool success = true;
   int error = 0;
@@ -1548,7 +1546,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	vector<pair<uint64_t,uint64_t> >::iterator f_it
 	  = ex_it->buffer_extents.begin();
 	uint64_t foff = 0;
-	while (1) {
+	while (true) {
 	  BufferHead *bh = bh_it->second;
 	  assert(opos == (loff_t)(bh->start() + bhoff));
 
@@ -1581,8 +1579,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	    ++f_it;
 	    foff = 0;
 	  }
-	  if (bh_it == hits.end()) break;
-	  if (f_it == ex_it->buffer_extents.end())
+	  if ((bh_it == hits.end()) || (f_it == ex_it->buffer_extents.end()))
 	    break;
 	}
 	assert(f_it == ex_it->buffer_extents.end());
@@ -1675,7 +1672,7 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
   bool nocache = wr->fadvise_flags & LIBRADOS_OP_FLAG_FADVISE_NOCACHE;
 
   ZTracer::Trace trace;
-  if (parent_trace != nullptr) {
+  if (parent_trace) {
     trace.init("write", &trace_endpoint, parent_trace);
     trace.event("start");
   }
@@ -1830,7 +1827,7 @@ int ObjectCacher::_wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
 				  ZTracer::Trace *trace, Context *onfreespace)
 {
   assert(lock.is_locked());
-  assert(trace != nullptr);
+  assert(trace);
   int ret = 0;
 
   if (max_dirty > 0) {
@@ -2028,7 +2025,7 @@ void ObjectCacher::purge(Object *ob)
 bool ObjectCacher::flush(Object *ob, loff_t offset, loff_t length,
                          ZTracer::Trace *trace)
 {
-  assert(trace != nullptr);
+  assert(trace);
   assert(lock.is_locked());
   list<BufferHead*> blist;
   bool clean = true;
@@ -2081,7 +2078,7 @@ bool ObjectCacher::_flush_set_finish(C_GatherBuilder *gather,
 bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
 {
   assert(lock.is_locked());
-  assert(onfinish != NULL);
+  assert(onfinish);
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
     onfinish->complete(0);
@@ -2095,7 +2092,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, Context *onfinish)
   set<Object*> waitfor_commit;
 
   list<BufferHead*> blist;
-  Object *last_ob = NULL;
+  Object *last_ob = nullptr;
   set<BufferHead*, BufferHead::ptr_lt>::const_iterator it, p, q;
 
   // Buffer heads in dirty_or_tx_bh are sorted in ObjectSet/Object/offset
@@ -2184,8 +2181,8 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
 			     ZTracer::Trace *trace, Context *onfinish)
 {
   assert(lock.is_locked());
-  assert(trace != nullptr);
-  assert(onfinish != NULL);
+  assert(trace);
+  assert(onfinish);
   if (oset->objects.empty()) {
     ldout(cct, 10) << "flush_set on " << oset << " dne" << dendl;
     onfinish->complete(0);
@@ -2226,7 +2223,7 @@ bool ObjectCacher::flush_set(ObjectSet *oset, vector<ObjectExtent>& exv,
 bool ObjectCacher::flush_all(Context *onfinish)
 {
   assert(lock.is_locked());
-  assert(onfinish != NULL);
+  assert(onfinish);
 
   ldout(cct, 10) << "flush_all " << dendl;
 
@@ -2235,7 +2232,7 @@ bool ObjectCacher::flush_all(Context *onfinish)
   set<Object*> waitfor_commit;
 
   list<BufferHead*> blist;
-  Object *last_ob = NULL;
+  Object *last_ob = nullptr;
   set<BufferHead*, BufferHead::ptr_lt>::iterator next, it;
   next = it = dirty_or_tx_bh.begin();
   while (it != dirty_or_tx_bh.end()) {
