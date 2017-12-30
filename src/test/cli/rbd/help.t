@@ -24,14 +24,14 @@ Skip test on FreeBSD as it generates different output there.
       feature enable                    Enable the specified image feature.
       flatten                           Fill clone with parent data (make it
                                         independent).
-      group create                      Create a consistency group.
-      group image add                   Add an image to a consistency group.
-      group image list                  List images in a consistency group.
-      group image remove                Remove an image from a consistency group.
-      group list (group ls)             List rbd consistency groups.
-      group remove (group rm)           Delete a consistency group.
+      group create                      Create a group.
+      group image add                   Add an image to a group.
+      group image list                  List images in a group.
+      group image remove                Remove an image from a group.
+      group list (group ls)             List rbd groups.
+      group remove (group rm)           Delete a group.
       group snap create                 Make a snapshot of a group.
-      group snap list                   List snapshots of a consistency group.
+      group snap list                   List snapshots of a group.
       group snap remove                 Remove a snapshot from a group.
       image-meta get                    Image metadata get the value associated
                                         with the key.
@@ -449,7 +449,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd group create [--pool <pool>] [--group <group>] 
                           <group-spec> 
   
-  Create a consistency group.
+  Create a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -465,7 +465,7 @@ Skip test on FreeBSD as it generates different output there.
                              [--pool <pool>] 
                              <group-spec> <image-spec> 
   
-  Add an image to a consistency group.
+  Add an image to a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -485,7 +485,7 @@ Skip test on FreeBSD as it generates different output there.
                               [--pool <pool>] [--group <group>] 
                               <group-spec> 
   
-  List images in a consistency group.
+  List images in a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -503,7 +503,7 @@ Skip test on FreeBSD as it generates different output there.
                                 [--pool <pool>] [--image-id <image-id>] 
                                 <group-spec> <image-spec> 
   
-  Remove an image from a consistency group.
+  Remove an image from a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -522,7 +522,7 @@ Skip test on FreeBSD as it generates different output there.
   rbd help group list
   usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 
   
-  List rbd consistency groups.
+  List rbd groups.
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -533,7 +533,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd group remove [--pool <pool>] [--group <group>] 
                           <group-spec> 
   
-  Delete a consistency group.
+  Delete a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -565,7 +565,7 @@ Skip test on FreeBSD as it generates different output there.
                              [--pool <pool>] [--group <group>] 
                              <group-spec> 
   
-  List snapshots of a consistency group.
+  List snapshots of a group.
   
   Positional arguments
     <group-spec>         group specification
