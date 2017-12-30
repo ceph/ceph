@@ -3824,6 +3824,7 @@ void PrimaryLogPG::do_scan(
       } else {
 	// we canceled backfill for a while due to a too full, and this
 	// is an extra response from a non-too-full peer
+	dout(20) << __func__ << " canceled backfill (too full?)" << dendl;
       }
     }
     break;
