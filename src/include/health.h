@@ -55,13 +55,13 @@ struct denc_traits<health_status_t> {
 inline std::ostream& operator<<(std::ostream &oss, const health_status_t status) {
   switch (status) {
     case HEALTH_ERR:
-      oss << "HEALTH_ERR";
+      oss << "ERR";
       break;
     case HEALTH_WARN:
-      oss << "HEALTH_WARN";
+      oss << "WARN";
       break;
     case HEALTH_OK:
-      oss << "HEALTH_OK";
+      oss << "OK";
       break;
   }
   return oss;
