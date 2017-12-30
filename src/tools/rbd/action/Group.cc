@@ -286,7 +286,7 @@ int execute_list_images(const po::variables_map &vm) {
     return r;
 
   if (f)
-    f->open_array_section("consistency_groups");
+    f->open_array_section("images");
 
   for (auto image : images) {
     std::string image_name = image.name;
