@@ -1590,6 +1590,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
   send_notify = false;
 
+  dout(10) << __func__ << dendl;
+
   if (is_primary()) {
     // only update primary last_epoch_started if we will go active
     if (acting.size() >= pool.info.min_size) {
