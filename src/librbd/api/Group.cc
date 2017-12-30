@@ -56,7 +56,7 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
@@ -73,7 +73,7 @@ int group_snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 				    snap_last, max_read, &snaps_page);
 
     if (r < 0) {
-      lderr(cct) << "error reading snap list from consistency group: "
+      lderr(cct) << "error reading snap list from group: "
 	<< cpp_strerror(-r) << dendl;
       return r;
     }
@@ -109,7 +109,7 @@ int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
@@ -129,7 +129,7 @@ int group_image_list(librados::IoCtx& group_ioctx, const char *group_name,
 				     start_last, max_read, &image_ids_page);
 
     if (r < 0) {
-      lderr(cct) << "error reading image list from consistency group: "
+      lderr(cct) << "error reading image list from group: "
 	<< cpp_strerror(-r) << dendl;
       return r;
     }
@@ -365,7 +365,7 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
       &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
       << cpp_strerror(r)
       << dendl;
     return r;
@@ -384,12 +384,12 @@ int Group<I>::create(librados::IoCtx& io_ctx, const char *group_name)
 
   string id = generate_uuid(io_ctx);
 
-  ldout(cct, 2) << "adding consistency group to directory..." << dendl;
+  ldout(cct, 2) << "adding group to directory..." << dendl;
 
   int r = cls_client::group_dir_add(&io_ctx, RBD_GROUP_DIRECTORY, group_name,
                                     id);
   if (r < 0) {
-    lderr(cct) << "error adding consistency group to directory: "
+    lderr(cct) << "error adding group to directory: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
@@ -408,7 +408,7 @@ err_remove_from_dir:
   int remove_r = cls_client::group_dir_remove(&io_ctx, RBD_GROUP_DIRECTORY,
 					      group_name, id);
   if (remove_r < 0) {
-    lderr(cct) << "error cleaning up consistency group from rbd_directory "
+    lderr(cct) << "error cleaning up group from rbd_directory "
 	       << "object after creation failed: " << cpp_strerror(remove_r)
 	       << dendl;
   }
@@ -532,7 +532,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
                                  &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
@@ -570,7 +570,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
   if (r < 0) {
-    lderr(cct) << "error adding image reference to consistency group: "
+    lderr(cct) << "error adding image reference to group: "
 	       << cpp_strerror(-r) << dendl;
     return r;
   }
@@ -597,15 +597,15 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
-    << " group name " << group_name << " image "
-    << &image_ioctx << " name " << image_name << dendl;
+		<< " group name " << group_name << " image "
+		<< &image_ioctx << " name " << image_name << dendl;
 
   string group_id;
 
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY, group_name,
       &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
       << cpp_strerror(r)
       << dendl;
     return r;
@@ -715,7 +715,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
@@ -941,7 +941,7 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
-    lderr(cct) << "error reading consistency group id object: "
+    lderr(cct) << "error reading group id object: "
 	       << cpp_strerror(r)
 	       << dendl;
     return r;
