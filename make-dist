@@ -20,6 +20,47 @@ if ! git submodule sync || ! git submodule update $force --init --recursive; the
     exit 1
 fi
 
+download_boost() {
+    boost_version=$1
+    shift
+    boost_md5=$1
+    shift
+    boost_version_underscore=$(echo $boost_version | sed 's/\./_/g')
+    boost_fname=boost_${boost_version_underscore}.tar.bz2
+    set +e
+    while true; do
+        url_base=$1
+        shift
+        if [ -z $url_base ]; then
+            echo "Error: failed to download boost."
+            exit
+        fi
+        url=$url_base/$boost_fname
+        wget -c --no-verbose -O $boost_fname $url
+        if [ $? != 0 -o ! -e $boost_fname ]; then
+            echo "Download of $url failed"
+        elif [ $(md5sum $boost_fname | awk '{print $1}') != $boost_md5 ]; then
+            echo "Error: failed to download boost: MD5 mismatch."
+        else
+            break
+        fi
+    done
+    set -e
+    tar xjf $boost_fname -C src \
+        --exclude="$boost_version_underscore/libs/*/doc" \
+        --exclude="$boost_version_underscore/libs/*/example" \
+        --exclude="$boost_version_underscore/libs/*/examples" \
+        --exclude="$boost_version_underscore/libs/*/meta" \
+        --exclude="$boost_version_underscore/libs/*/test" \
+        --exclude="$boost_version_underscore/tools/boostbook" \
+        --exclude="$boost_version_underscore/tools/quickbook" \
+        --exclude="$boost_version_underscore/tools/auto_index" \
+        --exclude='doc' --exclude='more' --exclude='status'
+    mv src/boost_${boost_version_underscore} src/boost
+    tar cf ${outfile}.boost.tar ${outfile}/src/boost
+    rm -rf src/boost
+}
+
 # clean out old cruft...
 echo "cleanup..."
 rm -f $outfile*
@@ -49,7 +90,6 @@ else
 	rpm_release=0
 fi
 
-
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |
         sed "s/@VERSION@/$rpm_version/g" |
@@ -58,11 +98,20 @@ for spec in ceph.spec.in alpine/APKBUILD.in; do
 done
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
-tar --concatenate -f $outfile.both.tar $outfile.version.tar
-tar --concatenate -f $outfile.both.tar $outfile.tar
-mv $outfile.both.tar $outfile.tar
+# NOTE: If you change this version number make sure the package is available
+# at the three URLs referenced below (may involve uploading to download.ceph.com)
+boost_version=1.63.0
+download_boost $boost_version 1c837ecd990bb022d07e7aab32b09847 \
+               https://dl.bintray.com/boostorg/release/$boost_version/source \
+               https://downloads.sourceforge.net/project/boost/boost/$boost_version \
+               https://download.ceph.com/qa
+tar --concatenate -f $outfile.all.tar $outfile.version.tar
+tar --concatenate -f $outfile.all.tar $outfile.boost.tar
+tar --concatenate -f $outfile.all.tar $outfile.tar
+mv $outfile.all.tar $outfile.tar
 rm $outfile
 rm -f $outfile.version.tar
+rm -f $outfile.boost.tar
 
 echo "compressing..."
 bzip2 -9 $outfile.tar
