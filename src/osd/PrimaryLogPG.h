@@ -56,6 +56,13 @@ class PrimaryLogPG : public PG, public PGBackend::Listener {
   friend class OSD;
   friend class Watch;
 
+  void init_config();
+  bool osd_debug_misdirected_ops_;
+  uint64_t osd_max_object_name_len_;
+  uint64_t osd_max_object_namespace_len_;
+  int64_t osd_max_write_size_;
+  bool osd_backoff_on_degraded_;
+  bool osd_backoff_on_unfound_;
 public:
   MEMPOOL_CLASS_HELPERS();
 
