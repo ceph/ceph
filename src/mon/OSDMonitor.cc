@@ -687,7 +687,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   }
 
   // process queue
-  unsigned max = MAX(1, g_conf->mon_osd_max_creating_pgs);
+  unsigned max = std::max<int64_t>(1, g_conf->mon_osd_max_creating_pgs);
   const auto total = pending_creatings.pgs.size();
   while (pending_creatings.pgs.size() < max &&
 	 !pending_creatings.queue.empty()) {
@@ -698,7 +698,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 	     << " modified " << p->second.modified
 	     << " [" << p->second.start << "-" << p->second.end << ")"
 	     << dendl;
-    int n = MIN(max - pending_creatings.pgs.size(),
+    int n = std::min(max - pending_creatings.pgs.size(),
 		p->second.end - p->second.start);
     ps_t first = p->second.start;
     ps_t end = first + n;
@@ -1413,7 +1413,7 @@ bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
   // just check a few pgs for efficiency - this can't give a guarantee anyway,
   // since filestore osds could always join the pool later
   set<int> checked_osds;
-  for (unsigned ps = 0; ps < MIN(8, pool.get_pg_num()); ++ps) {
+  for (unsigned ps = 0; ps < std::min<unsigned>(8, pool.get_pg_num()); ++ps) {
     vector<int> up, acting;
     pg_t pgid(ps, pool_id, -1);
     osdmap.pg_to_up_acting_osds(pgid, up, acting);
@@ -1679,14 +1679,14 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   epoch_t first = get_first_committed();
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
-  for (epoch_t e = MAX(first, m->get_full_first());
-       e <= MIN(last, m->get_full_last()) && max > 0;
+  for (epoch_t e = std::max(first, m->get_full_first());
+       e <= std::min(last, m->get_full_last()) && max > 0;
        ++e, --max) {
     int r = get_version_full(e, reply->maps[e]);
     assert(r >= 0);
   }
-  for (epoch_t e = MAX(first, m->get_inc_first());
-       e <= MIN(last, m->get_inc_last()) && max > 0;
+  for (epoch_t e = std::max(first, m->get_inc_first());
+       e <= std::min(last, m->get_inc_last()) && max > 0;
        ++e, --max) {
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
@@ -3069,7 +3069,7 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   while (first <= osdmap.get_epoch()) {
-    epoch_t last = MIN(first + g_conf->osd_map_message_max - 1,
+    epoch_t last = std::min<long>(first + g_conf->osd_map_message_max - 1,
 		       osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
 
@@ -5511,7 +5511,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = MIN(erasure_code->get_data_chunk_count() + 1, *size);
+	*min_size = std::min(erasure_code->get_data_chunk_count() + 1, *size);
       }
     }
     break;
