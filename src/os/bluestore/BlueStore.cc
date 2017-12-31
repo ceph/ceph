@@ -5054,6 +5054,8 @@ int BlueStore::_open_collections(int *errors)
       bufferlist::iterator p = bl.begin();
       try {
         ::decode(c->cnode, p);
+	::decode(c->uncommitted_stats, p); //FIXME: handle non-existent(old versions), integrate stats into cnode?
+	c->uncommitted_stats_new = c->uncommitted_stats;
       } catch (buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
@@ -7178,6 +7180,19 @@ int BlueStore::collection_bits(const coll_t& cid)
   return c->cnode.bits;
 }
 
+int BlueStore::collection_uncommitted_stats(const coll_t& cid,
+					    collection_stats_delta_t& res)
+{
+  dout(15) << __func__ << " " << cid << dendl;
+  CollectionRef c = _get_collection(cid);
+  if (!c)
+    return -ENOENT;
+  RWLock::RLocker l(c->lock);
+  dout(10) << __func__ << " " << cid << " = " << c->cnode.bits << dendl;
+  res = c->uncommitted_stats;
+  return 0;
+}
+
 int BlueStore::collection_list(
   const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
   vector<ghobject_t> *ls, ghobject_t *pnext)
@@ -8147,6 +8162,19 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
                << std::hex << sbid << std::dec
 	       << " is " << bl.length() << " " << *sb << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
+    }
+  }
+  // finalize collections
+  bufferlist bl;
+  for (auto& c : txc->collections) {
+    if (c->exists && c->uncommitted_stats_new != c->uncommitted_stats) {
+      c->uncommitted_stats = c->uncommitted_stats_new;
+      bl.clear();
+      ::encode(c->cnode, bl);
+      ::encode(c->uncommitted_stats, bl);
+      /*dout(0) << __func__ << " committing coll " << c->cid 
+	      << " stats (" << c->uncommitted_stats << ")" << dendl;*/
+      t->set(PREFIX_COLL, stringify(c->cid), bl);
     }
   }
 }
@@ -9364,7 +9392,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       {
 	bufferlist aset_bl;
         i.decode_attrset_bl(&aset_bl);
-	r = _omap_setkeys(txc, c, o, aset_bl);
+	r = _omap_setkeys(txc, c, o, op->omap_setkeys_flags, aset_bl);
       }
       break;
     case Transaction::OP_OMAP_RMKEYS:
@@ -9451,6 +9479,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
     }
   }
+  txc->collections.insert(txc->collections.end(), cvec.begin(), cvec.end());
 }
 
 
@@ -9724,6 +9753,7 @@ void BlueStore::_do_write_small(
 						 &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 	  txc->statfs_delta.stored() += le->length;
+	  c->uncommitted_stats_new.logical_size += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
 	  logger->inc(l_bluestore_write_small_unused);
 	  return;
@@ -9802,6 +9832,7 @@ void BlueStore::_do_write_small(
 						 b, &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 	  txc->statfs_delta.stored() += le->length;
+	  c->uncommitted_stats_new.logical_size += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
 	  logger->inc(l_bluestore_write_small_deferred);
 	  return;
@@ -10186,6 +10217,8 @@ int BlueStore::_do_alloc_write(
 	prealloc_left -= prealloc_pos->length;
 	left -= prealloc_pos->length;
 	txc->statfs_delta.allocated() += prealloc_pos->length;
+	coll->uncommitted_stats_new.allocated_size += prealloc_pos->length;
+
 	extents.push_back(*prealloc_pos);
 	++prealloc_pos;
       } else {
@@ -10194,6 +10227,7 @@ int BlueStore::_do_alloc_write(
 	prealloc_pos->length -= left;
 	prealloc_left -= left;
 	txc->statfs_delta.allocated() += left;
+	coll->uncommitted_stats_new.allocated_size += left;
 	left = 0;
 	break;
       }
@@ -10225,6 +10259,7 @@ int BlueStore::_do_alloc_write(
                                            nullptr);
     wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
     txc->statfs_delta.stored() += le->length;
+    coll->uncommitted_stats_new.logical_size += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     _buffer_cache_write(txc, wi.b, b_off, wi.bl,
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
@@ -10280,6 +10315,8 @@ void BlueStore::_wctx_finish(
     }
     auto& r = lo.r;
     txc->statfs_delta.stored() -= lo.e.length;
+    c->uncommitted_stats_new.logical_size -= lo.e.length;
+
     if (!r.empty()) {
       dout(20) << __func__ << "  blob release " << r << dendl;
       if (blob.is_shared()) {
@@ -10308,6 +10345,8 @@ void BlueStore::_wctx_finish(
       dout(20) << __func__ << "  release " << e << dendl;
       txc->released.insert(e.offset, e.length);
       txc->statfs_delta.allocated() -= e.length;
+      c->uncommitted_stats_new.allocated_size -= e.length;
+
       if (blob.is_compressed()) {
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
@@ -10965,6 +11004,7 @@ int BlueStore::_omap_clear(TransContext *txc,
 int BlueStore::_omap_setkeys(TransContext *txc,
 			     CollectionRef& c,
 			     OnodeRef& o,
+			     uint32_t flags,
 			     bufferlist &bl)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
@@ -10980,6 +11020,16 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   } else {
     txc->note_modified_object(o);
   }
+  // mark 
+  if (ObjectStore::Transaction::OMAP_SETKEYS_FLAG_COLL_STATS_COMMITTED
+      & flags) {
+    // this will trigger collection uncommitted stats update in 
+    // _txc_write_onodes
+    //dout(0) << __func__ << " reset uncommitted stats" << dendl;
+    c->uncommitted_stats_new -= c->uncommitted_stats;
+    c->uncommitted_stats = collection_stats_delta_t(); 
+  }
+
   const string& prefix =
     o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
   string final_key;
@@ -11296,6 +11346,8 @@ int BlueStore::_do_clone_range(
     // fixme: we may leave parts of new blob unreferenced that could
     // be freed (relative to the shared_blob).
     txc->statfs_delta.stored() += ne->length;
+    c->uncommitted_stats_new.logical_size += ne->length;
+
     if (e.blob->get_blob().is_compressed()) {
       txc->statfs_delta.compressed_original() += ne->length;
       if (blob_duped){
@@ -11449,6 +11501,7 @@ int BlueStore::_create_collection(
     coll_map[cid] = *c;
   }
   ::encode((*c)->cnode, bl);
+  ::encode((*c)->uncommitted_stats, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);
   r = 0;
 
@@ -11568,7 +11621,9 @@ int BlueStore::_split_collection(TransContext *txc,
   r = 0;
 
   bufferlist bl;
+  //FIXME: how to split cnode sizes?
   ::encode(c->cnode, bl);
+  ::encode(c->uncommitted_stats, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "

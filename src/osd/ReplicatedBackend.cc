@@ -455,9 +455,13 @@ void ReplicatedBackend::submit_transaction(
   osd_reqid_t reqid,
   OpRequestRef orig_op)
 {
+  collection_stats_delta_t coll_delta_stats;
+  int r = store->collection_uncommitted_stats(coll, coll_delta_stats);
+  assert(r == 0);
   parent->apply_stats(
     soid,
-    delta_stats);
+    delta_stats,
+    coll_delta_stats);
 
   vector<pg_log_entry_t> log_entries(_log_entries);
   ObjectStore::Transaction op_t;

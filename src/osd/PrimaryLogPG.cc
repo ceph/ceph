@@ -3997,6 +3997,7 @@ int PrimaryLogPG::trim_object(
     assert(p != snapset.clones.end());
   
     snapid_t last = coid.snap;
+    //FIXME: figure out what to do with num_bytes here and below
     ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(last);
 
     if (p != snapset.clones.begin()) {
@@ -6144,7 +6145,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->modified_ranges.union_of(ch);
 	  ctx->delta_stats.num_wr++;
 	  oi.clear_data_digest();
-          if (oi.has_extents()) {
+          /*if (oi.has_extents()) {
             int64_t old_bytes = oi.extents.size();
             interval_set<uint64_t> to_remove;
             to_remove.subset_of(oi.extents, op.extent.offset,
@@ -6152,7 +6153,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
             oi.extents.subtract(to_remove);
             int64_t new_bytes = oi.extents.size();
             ctx->delta_stats.num_bytes += new_bytes - old_bytes;
-          }
+          }*/
 	} else {
 	  // no-op
 	}
@@ -6428,12 +6429,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  obs.oi.clear_omap_digest();
 	  obs.oi.clear_flag(object_info_t::FLAG_OMAP);
 	}
-        if (oi.has_extents()) {
+        /*if (oi.has_extents()) {
           ctx->delta_stats.num_bytes -= oi.extents.size();
           oi.extents.clear();
         } else {
           ctx->delta_stats.num_bytes -= oi.size;
-        }
+        }*/
 	oi.size = 0;
 	oi.new_object();
 	oi.user_version = target_version;
@@ -7211,14 +7212,15 @@ inline int PrimaryLogPG::_delete_oid(
   ctx->delta_stats.num_wr++;
   if (soid.is_snap()) {
     assert(ctx->obc->ssc->snapset.clone_overlap.count(soid.snap));
+    //FIXME: to figure out what to do with num_bytes here
     ctx->delta_stats.num_bytes -= ctx->obc->ssc->snapset.get_clone_bytes(soid.snap);
   } else {
-    if (oi.has_extents()) {
+    /*if (oi.has_extents()) {
       ctx->delta_stats.num_bytes -= oi.extents.size();
       oi.extents.clear();
     } else {
       ctx->delta_stats.num_bytes -= oi.size;
-    }
+    }*/
   }
   oi.size = 0;
   oi.new_object();
@@ -7381,13 +7383,13 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
 
       // Adjust the cached objectcontext
       maybe_create_new_object(ctx, true);
-      if (obs.oi.has_extents()) {
+      /*if (obs.oi.has_extents()) {
         ctx->delta_stats.num_bytes -= obs.oi.extents.size();
         obs.oi.extents.clear();
       } else {
         ctx->delta_stats.num_bytes -= obs.oi.size;
-      }
-      if (rollback_to->obs.oi.has_extents()) {
+      }*/
+      /*if (rollback_to->obs.oi.has_extents()) {
         ctx->delta_stats.num_bytes += rollback_to->obs.oi.extents.size();
         // transfer extents map too
         assert(obs.oi.has_extents());
@@ -7397,7 +7399,7 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
         if (obs.oi.has_extents() && rollback_to->obs.oi.size) {
           obs.oi.extents.insert(0, rollback_to->obs.oi.size);
         }
-      }
+      }*/
       obs.oi.size = rollback_to->obs.oi.size;
       if (rollback_to->obs.oi.is_data_digest())
 	obs.oi.set_data_digest(rollback_to->obs.oi.data_digest);
@@ -7577,6 +7579,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 	ctx->new_snapset.clone_overlap.rbegin()->second;
       ctx->modified_ranges.intersection_of(newest_overlap);
       // modified_ranges is still in use by the clone
+      //FIXME: figure out what to do with num_bytes here
       ctx->delta_stats.num_bytes += ctx->modified_ranges.size();
       newest_overlap.subtract(ctx->modified_ranges);
     }
@@ -7605,13 +7608,13 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   modified.union_of(ch);
   if (write_full || offset + length > oi.size) {
     uint64_t new_size = offset + length;
-    if (!oi.has_extents()) {
+    /*if (!oi.has_extents()) {
       delta_stats.num_bytes -= oi.size;
       delta_stats.num_bytes += new_size;
-    }
+    }*/
     oi.size = new_size;
   }
-  if (oi.has_extents()) {
+  /*if (oi.has_extents()) {
     delta_stats.num_bytes -= oi.extents.size();
     if (write_full) {
       // oi.size may shrink
@@ -7626,7 +7629,7 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
       }
     }
     delta_stats.num_bytes += oi.extents.size();
-  }
+  }*/
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
 }
@@ -7640,7 +7643,7 @@ void PrimaryLogPG::truncate_update_size_and_usage(
     // no change
     return;
   }
-  if (oi.has_extents()) {
+  /*if (oi.has_extents()) {
     int64_t old_bytes = oi.extents.size();
     if (truncate_size > oi.size) {
       // trunc up
@@ -7657,7 +7660,7 @@ void PrimaryLogPG::truncate_update_size_and_usage(
     // fall back to old fashion
     delta_stats.num_bytes -= oi.size;
     delta_stats.num_bytes += truncate_size;
-  }
+  }*/
   oi.size = truncate_size;
 }
 
@@ -7827,7 +7830,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
   }
 
   // check for full
-  if ((ctx->delta_stats.num_bytes > 0 ||
+  if ((ctx->delta_stats.num_bytes > 0 || //FIXME: handle delayed delta???
        ctx->delta_stats.num_objects > 0) &&  // FIXME: keys?
       (pool.info.has_flag(pg_pool_t::FLAG_FULL) ||
        get_osdmap()->test_flag(CEPH_OSDMAP_FULL))) {
@@ -7954,9 +7957,11 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type)
 
 void PrimaryLogPG::apply_stats(
   const hobject_t &soid,
-  const object_stat_sum_t &delta_stats) {
+  const object_stat_sum_t &delta_stats,
+  const collection_stats_delta_t &coll_delta_stats) {
 
   info.stats.stats.add(delta_stats);
+  info.stats.stats.sum.num_bytes += coll_delta_stats.allocated_size; //FIXME!!! need more elegant aproach
 
   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
        i != backfill_targets.end();
@@ -8919,12 +8924,12 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ch.insert(0, obs.oi.size);
   ctx->modified_ranges.union_of(ch);
 
-  ctx->delta_stats.num_bytes -= obs.oi.has_extents() ?
+  /*ctx->delta_stats.num_bytes -= obs.oi.has_extents() ?
                                 obs.oi.extents.size() : obs.oi.size;
   obs.oi.clear_flag(object_info_t::FLAG_EXTENTS);
-  obs.oi.extents.clear();
+  obs.oi.extents.clear();*/
   obs.oi.size = cb->get_data_size();
-  ctx->delta_stats.num_bytes += obs.oi.size;
+  //ctx->delta_stats.num_bytes += obs.oi.size;
   ctx->delta_stats.num_wr++;
   ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
 
@@ -9105,10 +9110,12 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
 	     results->object_size);
       assert(obc->ssc->snapset.clone_overlap.count(soid.snap));
 
-      tctx->delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(soid.snap);
+      //FIXME: num_bytes handling?
+      //tctx->delta_stats.num_bytes += obc->ssc->snapset.get_clone_bytes(soid.snap);
     } else {
-      tctx->delta_stats.num_bytes += results->has_extents() ?
-                                     results->extents.size() : results->object_size;
+      //FIXME: num_bytes handling?
+      /*tctx->delta_stats.num_bytes += results->has_extents() ?
+                                     results->extents.size() : results->object_size;*/
     }
   }
 
@@ -10647,10 +10654,12 @@ void PrimaryLogPG::add_object_context_to_pg_stat(ObjectContextRef obc, pg_stat_t
     if (!obc->ssc)
       obc->ssc = get_snapset_context(oi.soid, false);
     assert(obc->ssc);
-    stat.num_bytes += obc->ssc->snapset.get_clone_bytes(oi.soid.snap);
+    //FIXME: num_bytes handling?
+    //stat.num_bytes += obc->ssc->snapset.get_clone_bytes(oi.soid.snap);
   } else {
-    stat.num_bytes += oi.has_extents() ?
-                      oi.extents.size() : oi.size;
+    //FIXME: num_bytes handling?
+    /*stat.num_bytes += oi.has_extents() ?
+                      oi.extents.size() : oi.size;*/
   }
 
   // add it in
@@ -13151,8 +13160,10 @@ void PrimaryLogPG::hit_set_persist()
   ctx->delta_stats.num_objects_hit_set_archive++;
   // we do not use extents for usage tracking
   // of hit_set_archive objects, for now!
+  /*FIXME: how to handle?
   assert(!obc->obs.oi.has_extents());
   ctx->delta_stats.num_bytes += bl.length();
+  */
   ctx->delta_stats.num_bytes_hit_set_archive += bl.length();
 
   bufferlist bss;
@@ -13217,8 +13228,9 @@ void PrimaryLogPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
     assert(obc);
     --ctx->delta_stats.num_objects;
     --ctx->delta_stats.num_objects_hit_set_archive;
+    /*FIXME: how to handle?
     assert(!obc->obs.oi.has_extents());
-    ctx->delta_stats.num_bytes -= obc->obs.oi.size;
+    ctx->delta_stats.num_bytes -= obc->obs.oi.size;*/
     ctx->delta_stats.num_bytes_hit_set_archive -= obc->obs.oi.size;
   }
 }
@@ -14177,8 +14189,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 
       // A clone num_bytes will be added later when we have snapset
       if (!soid.is_snap()) {
-        stat.num_bytes += oi->has_extents() ?
-                          oi->extents.size() : oi->size;
+        /*stat.num_bytes += oi->has_extents() ?
+                          oi->extents.size() : oi->size;*/
       }
       if (soid.nspace == cct->_conf->osd_hit_set_namespace)
 	stat.num_bytes_hit_set_archive += oi->size;
@@ -14349,7 +14361,8 @@ void PrimaryLogPG::scrub_snapshot_metadata(
 	    ++scrubber.shallow_errors;
 	    soid_error.set_size_mismatch();
 	  } else {
-            stat.num_bytes += snapset->get_clone_bytes(soid.snap);
+	    //FIXME: how to handle?
+            //stat.num_bytes += snapset->get_clone_bytes(soid.snap);
 	  }
         }
       }

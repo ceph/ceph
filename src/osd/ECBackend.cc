@@ -1910,9 +1910,11 @@ bool ECBackend::try_reads_to_commit()
   dout(10) << __func__ << ": starting commit on " << *op << dendl;
   dout(20) << __func__ << ": " << cache << dendl;
 
+  collection_stats_delta_t coll_delta_stats; //FIXME: to fill!!
   get_parent()->apply_stats(
     op->hoid,
-    op->delta_stats);
+    op->delta_stats,
+    coll_delta_stats);
 
   if (op->using_cache) {
     for (auto &&hpair: op->pending_read) {

@@ -1076,5 +1076,4 @@ struct bluestore_compression_header_t {
 };
 WRITE_CLASS_DENC(bluestore_compression_header_t)
 
-
 #endif

@@ -290,7 +290,8 @@ public:
   void cancel_pull(const hobject_t &soid) override;
   void apply_stats(
     const hobject_t &soid,
-    const object_stat_sum_t &delta_stats) override;
+    const object_stat_sum_t &delta_stats,
+    const collection_stats_delta_t &coll_delta_stats) override;
   void on_primary_error(const hobject_t &oid, eversion_t v) override;
   void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
   void remove_missing_object(const hobject_t &oid,

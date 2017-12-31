@@ -409,6 +409,12 @@ public:
     enum {
       COLL_HINT_EXPECTED_NUM_OBJECTS = 1,
     };
+    // Transaction omap_setkeys flags
+    enum {
+      OMAP_SETKEYS_FLAG_COLL_STATS_COMMITTED = 1, // if set - OS to reset 
+                                                  // uncommitted collection 
+						  // statistics
+    };
 
     struct Op {
       __le32 op;
@@ -425,6 +431,9 @@ public:
 	};
 	struct {
 	  __le32 alloc_hint_flags;      //OP_SETALLOCHINT
+	};
+	struct {
+	  __le32 omap_setkeys_flags;   //OP_OMAP_SETKEYS
 	};
       };
       __le64 expected_object_size;      //OP_SETALLOCHINT
@@ -1307,14 +1316,16 @@ public:
     }
     /// Set keys on oid omap.  Replaces duplicate keys.
     void omap_setkeys(
-      const coll_t& cid,                           ///< [in] Collection containing oid
-      const ghobject_t &oid,                ///< [in] Object to update
-      const map<string, bufferlist> &attrset ///< [in] Replacement keys and values
+      const coll_t& cid,                       ///< [in] Collection containing oid
+      const ghobject_t &oid,                   ///< [in] Object to update
+      const map<string, bufferlist> &attrset,  ///< [in] Replacement keys and values
+      uint32_t flags = 0                       ///< [in] Flags
       ) {
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_SETKEYS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
+      _op->omap_setkeys_flags = flags;
       ::encode(attrset, data_bl);
       data.ops++;
     }
@@ -1323,12 +1334,14 @@ public:
     void omap_setkeys(
       coll_t cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
-      const bufferlist &attrset_bl          ///< [in] Replacement keys and values
+      const bufferlist &attrset_bl,         ///< [in] Replacement keys and values
+      uint32_t flags = 0                    ///< [in] Flags
       ) {
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_SETKEYS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
+      _op->omap_setkeys_flags = flags;
       data_bl.append(attrset_bl);
       data.ops++;
     }
@@ -1913,7 +1926,20 @@ public:
    * (because we upgraded from an older version, e.g., FileStore).
    */
   virtual int collection_bits(const coll_t& c) = 0;
-
+ 
+  /**
+   * Fetch uncommitted collection statistics.
+   *
+   * @param c collection
+   * @param res statistics container to fill in
+   * @return zero on success, or negative error
+   *
+   */
+  virtual int collection_uncommitted_stats(const coll_t& c,
+					   collection_stats_delta_t& res ) {
+    res = collection_stats_delta_t();
+    return 0;
+  }
 
   /**
    * list contents of a collection that fall in the range [start, end) and no more than a specified many result
@@ -1937,7 +1963,6 @@ public:
 			      vector<ghobject_t> *ls, ghobject_t *next) {
     return collection_list(c->get_cid(), start, end, max, ls, next);
   }
-
 
   /// OMAP
   /// Get omap contents
