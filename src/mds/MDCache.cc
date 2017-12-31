@@ -5465,7 +5465,7 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
       break;
 
     bool need_snapflush = false;
-    for (auto p = snaps.lower_bound(MAX(in->first, (snapid_t)(follows + 1)));
+    for (auto p = snaps.lower_bound(std::max<snapid_t>(in->first, (follows + 1)));
 	 p != snaps.end() && *p <= in->last;
 	 ++p) {
       head_in->add_need_snapflush(in, *p, client);
