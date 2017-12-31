@@ -39,7 +39,7 @@
 
 using namespace ceph;
 
-#define CEPH_BUFFER_ALLOC_UNIT  (MIN(CEPH_PAGE_SIZE, 4096))
+#define CEPH_BUFFER_ALLOC_UNIT  std::min<int>(CEPH_PAGE_SIZE, 4096)
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
@@ -1355,7 +1355,7 @@ public:
       }
     }
     *data = p->c_str() + p_off;
-    size_t l = MIN(p->length() - p_off, want);
+    size_t l = std::min<size_t>((p->length() - p_off), want);
     p_off += l;
     if (p_off == p->length()) {
       ++p;
@@ -1369,7 +1369,7 @@ public:
   uint32_t buffer::list::iterator_impl<is_const>::crc32c(
     size_t length, uint32_t crc)
   {
-    length = MIN( length, get_remaining());
+    length = std::min<size_t>(length, get_remaining());
     while (length > 0) {
       const char *p;
       size_t l = get_ptr_and_advance(length, &p);
@@ -2457,7 +2457,7 @@ int buffer::list::write_fd(int fd, uint64_t offset) const
   while (left_pbrs) {
     ssize_t bytes = 0;
     unsigned iovlen = 0;
-    uint64_t size = MIN(left_pbrs, IOV_MAX);
+    uint64_t size = std::min((int)left_pbrs, IOV_MAX);
     left_pbrs -= size;
     while (size > 0) {
       iov[iovlen].iov_base = (void *)p->c_str();
