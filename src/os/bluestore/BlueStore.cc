@@ -2110,7 +2110,7 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
   bid = rand() % (numeric_limits<bid_t>::max() + 1);
   const auto begin_bid = bid;
   do {
-    if (!spanning_blob_map.count(bid))
+    if (spanning_blob_map.find(bid) == spanning_blob_map.end())
       return bid;
     else {
       bid++;
@@ -5829,7 +5829,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	       << " > nid_max " << nid_max << dendl;
 	  ++errors;
 	}
-	if (used_nids.count(o->onode.nid)) {
+	if (used_nids.find(o->onode.nid) != used_nids.end()) {
 	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
@@ -6009,7 +6009,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       if (o->onode.has_omap()) {
 	auto& m =
 	  o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
-	if (m.count(o->onode.nid)) {
+	if (m.find(o->onode.nid) != m.end()) {
 	  derr << "fsck error: " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
@@ -6079,7 +6079,8 @@ int BlueStore::_fsck(bool deep, bool repair)
     for (it->lower_bound(string()); it->valid(); it->next()) {
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
-      if (used_omap_head.count(omap_head) == 0) {
+      if (used_omap_head.find(omap_head) ==
+          used_omap_head.end()) {
 	derr << "fsck error: found stray omap data on omap_head "
 	     << omap_head << dendl;
 	++errors;
@@ -6091,7 +6092,8 @@ int BlueStore::_fsck(bool deep, bool repair)
     for (it->lower_bound(string()); it->valid(); it->next()) {
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
-      if (used_pgmeta_omap_head.count(omap_head) == 0) {
+      if (used_pgmeta_omap_head.find(omap_head) ==
+          used_pgmeta_omap_head.end()) {
 	derr << "fsck error: found stray omap data on omap_head "
 	     << omap_head << dendl;
 	++errors;
@@ -7070,7 +7072,7 @@ int BlueStore::getattr(
       goto out;
     }
 
-    if (!o->onode.attrs.count(k)) {
+    if (o->onode.attrs.find(k) == o->onode.attrs.end()) {
       r = -ENODATA;
       goto out;
     }
@@ -7147,7 +7149,7 @@ int BlueStore::list_collections(vector<coll_t>& ls)
 bool BlueStore::collection_exists(const coll_t& c)
 {
   RWLock::RLocker l(coll_lock);
-  return coll_map.count(c);
+  return coll_map.find(c) != coll_map.end();
 }
 
 int BlueStore::collection_empty(const coll_t& cid, bool *empty)
@@ -10781,7 +10783,7 @@ int BlueStore::_do_remove(
     SharedBlob *sb = e.blob->shared_blob.get();
     if (b.is_shared() &&
 	sb->loaded &&
-	maybe_unshared_blobs.count(sb)) {
+	maybe_unshared_blobs.find(sb) != maybe_unshared_blobs.end()) {
       if (b.is_compressed()) {
 	expect[sb].get(0, b.get_ondisk_length());
       } else {
@@ -11388,7 +11390,7 @@ int BlueStore::_rename(TransContext *txc,
       r = -EEXIST;
       goto out;
     }
-    assert(txc->onodes.count(newo) == 0);
+    assert(txc->onodes.find(newo) == txc->onodes.end());
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key.c_str(), oldo->key.size());

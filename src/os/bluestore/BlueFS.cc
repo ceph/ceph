@@ -971,7 +971,7 @@ void BlueFS::_drop_link(FileRef file)
 
     if (file->dirty_seq) {
       assert(file->dirty_seq > log_seq_stable);
-      assert(dirty_files.count(file->dirty_seq));
+      assert(dirty_files.find(file->dirty_seq) != dirty_files.end());
       auto it = dirty_files[file->dirty_seq].iterator_to(*file);
       dirty_files[file->dirty_seq].erase(it);
       file->dirty_seq = 0;
@@ -1421,7 +1421,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   // delete the new log, remove from the dirty files list
   _close_writer(new_log_writer);
   if (new_log->dirty_seq) {
-    assert(dirty_files.count(new_log->dirty_seq));
+    assert(dirty_files.find(new_log->dirty_seq) != dirty_files.end());
     auto it = dirty_files[new_log->dirty_seq].iterator_to(*new_log);
     dirty_files[new_log->dirty_seq].erase(it);
   }
@@ -1660,7 +1660,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
     } else {
       if (h->file->dirty_seq != log_seq + 1) {
         // need re-dirty, erase from list first
-        assert(dirty_files.count(h->file->dirty_seq));
+        assert(dirty_files.find(h->file->dirty_seq) != dirty_files.end());
         auto it = dirty_files[h->file->dirty_seq].iterator_to(*h->file);
         dirty_files[h->file->dirty_seq].erase(it);
         h->file->dirty_seq = log_seq + 1;
