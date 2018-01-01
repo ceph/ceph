@@ -755,8 +755,9 @@ void PrimaryLogPG::maybe_force_recovery()
        ++it) {
     if (*it == get_primary()) continue;
     pg_shard_t peer = *it;
-    if (peer_missing.count(peer) &&
-	!peer_missing[peer].get_rmissing().empty()) {
+    auto it_missing = peer_missing.find(peer);
+    if (it_missing != peer_missing.end() &&
+	!it_missing->second.get_rmissing().empty()) {
       const auto& min_obj = peer_missing[peer].get_rmissing().begin();
       dout(20) << __func__ << " peer " << peer << " min_version " << min_obj->first
                << " oid " << min_obj->second << dendl;
@@ -10182,12 +10183,13 @@ void PrimaryLogPG::check_blacklisted_obc_watchers(ObjectContextRef obc)
 void PrimaryLogPG::populate_obc_watchers(ObjectContextRef obc)
 {
   assert(is_active());
+  auto it_objects = pg_log.get_log().objects.find(obc->obs.oi.soid);
   assert((recovering.count(obc->obs.oi.soid) ||
 	  !is_missing_object(obc->obs.oi.soid)) ||
-	 (pg_log.get_log().objects.count(obc->obs.oi.soid) && // or this is a revert... see recover_primary()
-	  pg_log.get_log().objects.find(obc->obs.oi.soid)->second->op ==
+	 (it_objects != pg_log.get_log().objects.end() && // or this is a revert... see recover_primary()
+	  it_objects->second->op ==
 	    pg_log_entry_t::LOST_REVERT &&
-	  pg_log.get_log().objects.find(obc->obs.oi.soid)->second->reverting_to ==
+	  it_objects->second->reverting_to ==
 	    obc->obs.oi.version));
 
   dout(10) << "populate_obc_watchers " << obc->obs.oi.soid << dendl;
@@ -10301,11 +10303,12 @@ ObjectContextRef PrimaryLogPG::get_object_context(
   bool can_create,
   const map<string, bufferlist> *attrs)
 {
+  auto it_objects = pg_log.get_log().objects.find(soid);
   assert(
     attrs || !pg_log.get_missing().is_missing(soid) ||
     // or this is a revert... see recover_primary()
-    (pg_log.get_log().objects.count(soid) &&
-      pg_log.get_log().objects.find(soid)->second->op ==
+    (it_objects != pg_log.get_log().objects.end() &&
+      it_objects->second->op ==
       pg_log_entry_t::LOST_REVERT));
   ObjectContextRef obc = object_contexts.lookup(soid);
   osd->logger->inc(l_osd_object_ctx_cache_total);
@@ -10318,8 +10321,9 @@ ObjectContextRef PrimaryLogPG::get_object_context(
     // check disk
     bufferlist bv;
     if (attrs) {
-      assert(attrs->count(OI_ATTR));
-      bv = attrs->find(OI_ATTR)->second;
+      auto it_oi = attrs->find(OI_ATTR);
+      assert(it_oi != attrs->end());
+      bv = it_oi->second;
     } else {
       int r = pgbackend->objects_get_attr(soid, OI_ATTR, &bv);
       if (r < 0) {
@@ -10712,8 +10716,9 @@ SnapSetContext *PrimaryLogPG::get_snapset_context(
       if (r < 0 && !can_create)
 	return NULL;
     } else {
-      assert(attrs->count(SS_ATTR));
-      bv = attrs->find(SS_ATTR)->second;
+      auto it_ss = attrs->find(SS_ATTR);
+      assert(it_ss != attrs->end());
+      bv = it_ss->second;
     }
     ssc = new SnapSetContext(oid.get_snapdir());
     _register_snapset_context(ssc);
@@ -11939,8 +11944,9 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
     hobject_t soid;
     version_t v = p->first;
 
-    if (pg_log.get_log().objects.count(p->second)) {
-      latest = pg_log.get_log().objects.find(p->second)->second;
+    auto it_objects = pg_log.get_log().objects.find(p->second);
+    if (it_objects != pg_log.get_log().objects.end()) {
+      latest = it_objects->second;
       assert(latest->is_update() || latest->is_delete());
       soid = latest->soid;
     } else {
