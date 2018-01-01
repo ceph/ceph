@@ -13,15 +13,7 @@
 
 #ifndef OPREQUEST_H_
 #define OPREQUEST_H_
-#include <sstream>
-#include <stdint.h>
-#include <vector>
 
-#include <include/utime.h>
-#include "common/Mutex.h"
-#include "include/xlist.h"
-#include "msg/Message.h"
-#include "include/memory.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/mClockCommon.h"
