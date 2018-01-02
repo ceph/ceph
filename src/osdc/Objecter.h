@@ -1271,7 +1271,6 @@ private:
 public:
   /*** track pending operations ***/
   // read
- public:
 
   struct OSDSession;
 
@@ -1754,9 +1753,8 @@ public:
 		 ping_tid(0),
 		 map_dne_bound(0) {}
 
-    // no copy!
-    const LingerOp &operator=(const LingerOp& r);
-    LingerOp(const LingerOp& o);
+    const LingerOp &operator=(const LingerOp& r) = delete;
+    LingerOp(const LingerOp& o) = delete;
 
     uint64_t get_cookie() {
       return reinterpret_cast<uint64_t>(this);
@@ -2046,7 +2044,7 @@ private:
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
   {
     if (cct->_conf->objecter_mclock_service_tracker) {
-      qos_trk = ceph::make_unique<dmc::ServiceTracker<int>>();
+      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
     }
   }
   ~Objecter() override;

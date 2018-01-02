@@ -10,7 +10,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/safe_io.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <boost/utility/string_view.hpp>
@@ -1327,7 +1327,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   /* handle object tagging */
   auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
   if (tag_str){
-    obj_tags = ceph::make_unique<RGWObjTags>();
+    obj_tags = std::make_unique<RGWObjTags>();
     ret = obj_tags->set_from_string(tag_str);
     if (ret < 0){
       ldout(s->cct,0) << "setting obj tags failed with " << ret << dendl;
@@ -3289,13 +3289,13 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 }
 
 enum class AwsVersion {
-  UNKOWN,
+  UNKNOWN,
   V2,
   V4
 };
 
 enum class AwsRoute {
-  UNKOWN,
+  UNKNOWN,
   QUERY_STRING,
   HEADERS
 };
@@ -3305,8 +3305,8 @@ discover_aws_flavour(const req_info& info)
 {
   using rgw::auth::s3::AWS4_HMAC_SHA256_STR;
 
-  AwsVersion version = AwsVersion::UNKOWN;
-  AwsRoute route = AwsRoute::UNKOWN;
+  AwsVersion version = AwsVersion::UNKNOWN;
+  AwsRoute route = AwsRoute::UNKNOWN;
 
   const char* http_auth = info.env->get("HTTP_AUTHORIZATION");
   if (http_auth && http_auth[0]) {
@@ -3660,16 +3660,15 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
-                                           const bool qsr) const
+bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time) const
 {
   /* Check for time skew first. */
   const time_t req_sec = header_time.sec();
   time_t now;
   time(&now);
 
-  if ((req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-       req_sec > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
+  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
+      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
     ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
                    << "; now - RGW_AUTH_GRACE_MINS="
                    << now - RGW_AUTH_GRACE_MINS * 60
@@ -3682,9 +3681,9 @@ bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time,
                    << " req_time=" << header_time
                    << dendl;
     return false;
-  } else {
-    return true;
   }
+
+  return true;
 }
 
 
@@ -3922,16 +3921,18 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
     qsr = true;
 
     boost::string_view expires = s->info.args.get("Expires");
-    if (! expires.empty()) {
-      /* It looks we have the guarantee that expires is a null-terminated,
-       * and thus string_view::data() can be safely used. */
-      const time_t exp = atoll(expires.data());
-      time_t now;
-      time(&now);
+    if (expires.empty()) {
+      throw -EPERM;
+    }
 
-      if (now >= exp) {
-        throw -EPERM;
-      }
+    /* It looks we have the guarantee that expires is a null-terminated,
+     * and thus string_view::data() can be safely used. */
+    const time_t exp = atoll(expires.data());
+    time_t now;
+    time(&now);
+
+    if (now >= exp) {
+      throw -EPERM;
     }
   } else {
     /* The "Authorization" HTTP header is being used. */
@@ -3956,7 +3957,7 @@ AWSGeneralAbstractor::get_auth_data_v2(const req_state* const s) const
   ldout(cct, 10) << "string_to_sign:\n"
                  << rgw::crypt_sanitize::auth{s,string_to_sign} << dendl;
 
-  if (! is_time_skew_ok(header_time, qsr)) {
+  if (!qsr && !is_time_skew_ok(header_time)) {
     throw -ERR_REQUEST_TIME_SKEWED;
   }
 
@@ -4203,5 +4204,5 @@ bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
-  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKOWN;
+  return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }

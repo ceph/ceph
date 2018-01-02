@@ -21,7 +21,7 @@
 #include "common/Clock.h"
 #include "common/HeartbeatMap.h"
 #include "common/Timer.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/entity_name.h"
@@ -254,6 +254,11 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "dump metadata cache for subtree");
   assert(r == 0);
+  r = admin_socket->register_command("dump loads",
+                                     "dump loads",
+                                     asok_hook,
+                                     "dump metadata loads");
+  assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
 				     asok_hook,
@@ -323,6 +328,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("dump cache");
   admin_socket->unregister_command("cache status");
   admin_socket->unregister_command("dump tree");
+  admin_socket->unregister_command("dump loads");
   admin_socket->unregister_command("session evict");
   admin_socket->unregister_command("osdmap barrier");
   admin_socket->unregister_command("session ls");
@@ -732,7 +738,7 @@ int MDSDaemon::_handle_command(
 
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    std::unique_ptr<JSONFormatter> f(ceph::make_unique<JSONFormatter>());
+    std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
     for (MDSCommand *cp = mds_commands;
 	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {

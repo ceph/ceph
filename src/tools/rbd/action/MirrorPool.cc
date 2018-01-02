@@ -231,7 +231,7 @@ private:
   const std::string m_image_name;
 
   librbd::Image m_image;
-  Context *m_finalize_ctx;
+  Context *m_finalize_ctx = nullptr;
 
   librbd::mirror_image_info_t m_mirror_image_info;
 
@@ -521,7 +521,7 @@ void get_peer_add_arguments(po::options_description *positional,
   at::add_pool_options(positional, options);
   positional->add_options()
     ("remote-cluster-spec", "remote cluster spec\n"
-     "(example: [<client name>@]<cluster name>");
+     "(example: [<client name>@]<cluster name>)");
   options->add_options()
     ("remote-client-name", po::value<std::string>(), "remote client name")
     ("remote-cluster", po::value<std::string>(), "remote cluster name");

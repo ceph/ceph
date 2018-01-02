@@ -235,8 +235,8 @@ For example::
 
 	ceph osd pool set hot-storage hit_set_type bloom
 
-The ``hit_set_count`` and ``hit_set_period`` define how much time each HitSet
-should cover, and how many such HitSets to store. ::
+The ``hit_set_count`` and ``hit_set_period`` define how many such HitSets to
+store, and how much time each HitSet should cover. ::
 
 	ceph osd pool set {cachepool} hit_set_count 12
 	ceph osd pool set {cachepool} hit_set_period 14400

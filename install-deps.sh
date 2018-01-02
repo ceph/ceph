@@ -35,14 +35,26 @@ function ensure_decent_gcc_on_deb {
 	return
     fi
 
-    if [ ! -f /usr/bin/gcc-${old} ]; then
-       case $(lsb_release --short --codename) in
-           trusty)
-               old=4.8;;
-           xenial)
-               old=5;;
-       esac
+    local dist=$(lsb_release --short --codename)
+
+    if [ ! -f /usr/bin/g++-${new} ]; then
+	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
+deb http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
+deb http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
+EOF
+	# import PPA's signing key into APT's keyring
+	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
+	$SUDO apt-get update
+	$SUDO apt-get install -y g++-7
     fi
+
+    case $dist in
+        trusty)
+            old=4.8;;
+        xenial)
+            old=5;;
+    esac
     $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
 	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
@@ -149,10 +161,6 @@ else
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*|*Xenial*)
-                $SUDO apt-get install -y software-properties-common
-                $SUDO add-apt-repository ppa:ubuntu-toolchain-r/test
-                $SUDO apt-get update
-                $SUDO apt-get install -y g++-7
                 ensure_decent_gcc_on_deb 7
                 ;;
             *)

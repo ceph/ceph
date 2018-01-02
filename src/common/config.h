@@ -15,7 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -24,17 +24,7 @@
 #include "common/config_obs.h"
 #include "common/options.h"
 
-#define OSD_REP_PRIMARY 0
-#define OSD_REP_SPLAY   1
-#define OSD_REP_CHAIN   2
-
 class CephContext;
-
-extern const char *CEPH_CONF_FILE_DEFAULT;
-
-#define LOG_TO_STDERR_NONE 0
-#define LOG_TO_STDERR_SOME 1
-#define LOG_TO_STDERR_ALL 2
 
 /** This class represents the current Ceph configuration.
  *
@@ -168,7 +158,7 @@ public:
   template<typename T> const T get_val(const std::string &key) const;
   template<typename T, typename Callback, typename...Args>
   auto with_val(const string& key, Callback&& cb, Args&&... args) const ->
-    ceph::result_of_t<Callback(const T&, Args...)> {
+    std::result_of_t<Callback(const T&, Args...)> {
     return std::forward<Callback>(cb)(
       boost::get<T>(this->get_val_generic(key)),
       std::forward<Args>(args)...);

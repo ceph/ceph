@@ -838,6 +838,10 @@ protected:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
+    bool sync_finish(int r) override {
+      pg->last_rollback_info_trimmed_to_applied = v;
+      return true;
+    }
     void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
@@ -1469,7 +1473,7 @@ public:
     bool must_scrub, must_deep_scrub, must_repair;
 
     // Priority to use for scrub scheduling
-    unsigned priority;
+    unsigned priority = 0;
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
@@ -1982,13 +1986,14 @@ protected:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Reset >,
+	boost::statechart::custom_reaction< Initialize >,
 	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const Load&);
+      boost::statechart::result react(const Initialize&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);

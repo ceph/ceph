@@ -34,7 +34,7 @@ Options
 
 .. option:: --default INIT
 
-   If the init system of the host operating system is unkown, return
+   If the init system of the host operating system is unknown, return
    the value of *INIT* instead of failing with an error.
 
 .. option:: --verbose

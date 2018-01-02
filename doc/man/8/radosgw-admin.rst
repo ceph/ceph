@@ -507,6 +507,11 @@ Options
 
 	Temporary url key.
 
+.. option:: --max-buckets
+
+	max number of buckets for a user (0 for no limit, negative value to disable bucket creation).
+	Default is 1000.
+
 .. option:: --access=<access>
 
    Set the access permissions for the sub-user.
@@ -515,10 +520,6 @@ Options
 .. option:: --display-name=<name>
 
    The display name of the user.
-
-.. option:: --max-buckets
-
-   Maximum number of buckets for a user.
 
 .. option:: --admin
 

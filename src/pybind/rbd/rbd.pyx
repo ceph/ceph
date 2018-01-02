@@ -227,8 +227,12 @@ cdef extern from "rbd/librbd.h" nogil:
 
     int rbd_open(rados_ioctx_t io, const char *name,
                  rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id(rados_ioctx_t io, const char *image_id,
+                       rbd_image_t *image, const char *snap_name)
     int rbd_open_read_only(rados_ioctx_t io, const char *name,
                            rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
+                                 rbd_image_t *image, const char *snap_name)
     int rbd_close(rbd_image_t image)
     int rbd_resize(rbd_image_t image, uint64_t size)
     int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
@@ -257,6 +261,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
     int rbd_copy3(rbd_image_t src, rados_ioctx_t dest_io_ctx,
                   const char *destname, rbd_image_options_t dest_opts)
+    int rbd_deep_copy(rbd_image_t src, rados_ioctx_t dest_io_ctx,
+                      const char *destname, rbd_image_options_t dest_opts)
     int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
                       int *max_snaps)
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
@@ -1370,9 +1376,12 @@ cdef class Image(object):
     cdef object ioctx
     cdef rados_ioctx_t _ioctx
 
-    def __init__(self, ioctx, name, snapshot=None, read_only=False):
+    def __init__(self, ioctx, name=None, snapshot=None,
+                 read_only=False, image_id=None):
         """
         Open the image at the given snapshot.
+        Specify either name or id, otherwise :class:`InvalidArgument` is raised.
+
         If a snapshot is specified, the image will be read-only, unless
         :func:`Image.set_snap` is called later.
 
@@ -1392,25 +1401,42 @@ cdef class Image(object):
         :type snaphshot: str
         :param read_only: whether to open the image in read-only mode
         :type read_only: bool
+        :param image_id: the id of the image
+        :type image_id: str
         """
-        name = cstr(name, 'name')
+        name = cstr(name, 'name', opt=True)
+        image_id = cstr(image_id, 'image_id', opt=True)
         snapshot = cstr(snapshot, 'snapshot', opt=True)
         self.closed = True
-        self.name = name
+        if name is not None and image_id is not None:
+            raise InvalidArgument("only need to specify image name or image id")
+        elif name is None and image_id is None:
+            raise InvalidArgument("image name or image id was not specified")
+        elif name is not None:
+            self.name = name
+        else:
+            self.name = image_id
         # Keep around a reference to the ioctx, so it won't get deleted
         self.ioctx = ioctx
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
-            char *_name = name
+            char *_name = opt_str(name)
+            char *_image_id = opt_str(image_id)
             char *_snapshot = opt_str(snapshot)
         if read_only:
             with nogil:
-                ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id_read_only(_ioctx, _image_id, &self.image, _snapshot)
         else:
             with nogil:
-                ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id(_ioctx, _image_id, &self.image, _snapshot)
         if ret != 0:
-            raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
+            raise make_ex(ret, 'error opening image %s at snapshot %s' % (self.name, snapshot))
         self.closed = False
 
     def __enter__(self):
@@ -1782,6 +1808,61 @@ cdef class Image(object):
                                              data_pool)
             with nogil:
                 ret = rbd_copy3(self.image, _dest_ioctx, _dest_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
+
+    def deep_copy(self, dest_ioctx, dest_name, features=None, order=None,
+                  stripe_unit=None, stripe_count=None, data_pool=None):
+        """
+        Deep copy the image to another location.
+
+        :param dest_ioctx: determines which pool to copy into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_name: the name of the copy
+        :type dest_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        dest_name = cstr(dest_name, 'dest_name')
+        cdef:
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_name = dest_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_deep_copy(self.image, _dest_ioctx, _dest_name, opts)
         finally:
             rbd_image_options_destroy(opts)
         if ret < 0:

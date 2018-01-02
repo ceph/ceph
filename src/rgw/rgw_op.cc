@@ -16,7 +16,7 @@
 
 #include "common/Clock.h"
 #include "common/armor.h"
-#include "common/backport14.h"
+#include "common/backport_std.h"
 #include "common/errno.h"
 #include "common/mime.h"
 #include "common/utf8.h"
@@ -172,8 +172,7 @@ static int get_bucket_instance_policy_from_attr(CephContext *cct,
 						RGWRados *store,
 						RGWBucketInfo& bucket_info,
 						map<string, bufferlist>& bucket_attrs,
-						RGWAccessControlPolicy *policy,
-						rgw_raw_obj& obj)
+						RGWAccessControlPolicy *policy)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
 
@@ -240,10 +239,7 @@ static int get_bucket_policy_from_attr(CephContext *cct,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy *policy)
 {
-  rgw_raw_obj instance_obj;
-  store->get_bucket_instance_obj(bucket_info.bucket, instance_obj);
-  return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs,
-					      policy, instance_obj);
+  return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs, policy);
 }
 
 static optional<Policy> get_iam_policy_from_attr(CephContext* cct,
@@ -399,17 +395,17 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_S3>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>(s->cct);
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->user_id.empty()) {
-      s->user_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
+      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
     }
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
   } else {
-    s->bucket_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
   }
 
   /* check if copy source is within the current domain */
@@ -565,8 +561,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
-    s->object_acl = ceph::make_unique<RGWAccessControlPolicy>(s->cct);
-
+    s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
     rgw_obj obj(s->bucket, s->object);
       
     store->set_atomic(s->obj_ctx, obj);
@@ -3301,7 +3296,6 @@ void RGWPutObj::execute()
   MD5 hash;
   bufferlist bl, aclbl, bs;
   int len;
-  map<string, string>::iterator iter;
   bool multipart;
   
   off_t fst;
@@ -3647,23 +3641,7 @@ int RGWPostObj::verify_permission()
 {
   return 0;
 }
-/*
-RGWPutObjProcessor *RGWPostObj::select_processor(RGWObjectCtx& obj_ctx)
-{
-  RGWPutObjProcessor *processor;
 
-  uint64_t part_size = s->cct->_conf->rgw_obj_stripe_size;
-
-  processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
-
-  return processor;
-}
-
-void RGWPostObj::dispose_processor(RGWPutObjDataProcessor *processor)
-{
-  delete processor;
-}
-*/
 void RGWPostObj::pre_exec()
 {
   rgw_bucket_object_pre_exec(s);
@@ -4921,17 +4899,17 @@ void RGWPutLC::execute()
   do {
     op_ret = l.lock_exclusive(ctx, oid);
     if (op_ret == -EBUSY) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on " << oid << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWPutLC() failed to acquire lock on " << oid << ", ret=" << op_ret << dendl;
       break;
     }
     op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWPutLC() failed to set entry " << oid << op_ret << dendl;     
+      dout(0) << "RGWLC::RGWPutLC() failed to set entry on " << oid << ", ret=" << op_ret << dendl;     
     }
     break;
   }while(1);
@@ -4971,17 +4949,17 @@ void RGWDeleteLC::execute()
   do {
     op_ret = l.lock_exclusive(ctx, oid);
     if (op_ret == -EBUSY) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on, sleep 5, try again" << oid << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on " << oid << ", sleep 5, try again" << dendl;
       sleep(5);
       continue;
     }
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to acquire lock on " << oid << ", ret=" << op_ret << dendl;
       break;
     }
     op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
     if (op_ret < 0) {
-      dout(0) << "RGWLC::RGWDeleteLC() failed to set entry " << oid << op_ret << dendl;
+      dout(0) << "RGWLC::RGWDeleteLC() failed to rm entry on " << oid << ", ret=" << op_ret << dendl;
     }
     break;
   }while(1);
@@ -5028,9 +5006,11 @@ void RGWPutCORS::execute()
     }
   }
 
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs[RGW_ATTR_CORS] = cors_bl;
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_CORS] = cors_bl;
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    });
 }
 
 int RGWDeleteCORS::verify_permission()
@@ -5041,34 +5021,35 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
-  op_ret = read_bucket_cors();
-  if (op_ret < 0)
-    return;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      op_ret = read_bucket_cors();
+      if (op_ret < 0)
+	return op_ret;
 
-  bufferlist bl;
-  rgw_raw_obj obj;
-  if (!cors_exist) {
-    dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    op_ret = -ENOENT;
-    return;
-  }
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_prefetch_data(s->obj_ctx, obj);
-  map<string, bufferlist> attrs;
-  map<string, bufferlist>::iterator iter;
+      rgw_raw_obj obj;
+      if (!cors_exist) {
+	dout(2) << "No CORS configuration set yet for this bucket" << dendl;
+	op_ret = -ENOENT;
+	return op_ret;
+      }
+      store->get_bucket_instance_obj(s->bucket, obj);
+      store->set_prefetch_data(s->obj_ctx, obj);
+      map<string, bufferlist> attrs;
+      map<string, bufferlist>::iterator iter;
 
-  op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
-  if (op_ret < 0)
-    return;
+      op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
+      if (op_ret < 0)
+	return op_ret;
 
-  attrs.erase(RGW_ATTR_CORS);
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+      attrs.erase(RGW_ATTR_CORS);
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				&s->bucket_info.objv_tracker);
-  if (op_ret < 0) {
-    ldout(s->cct, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket.name
-            << " returned err=" << op_ret << dendl;
-    return;
-  }
+      if (op_ret < 0) {
+	ldout(s->cct, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket.name
+			 << " returned err=" << op_ret << dendl;
+      }
+      return op_ret;
+    });
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {

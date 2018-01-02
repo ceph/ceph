@@ -16,7 +16,6 @@
 #ifndef CEPH_DISPATCHER_H
 #define CEPH_DISPATCHER_H
 
-#include "include/assert.h"
 #include "include/buffer_fwd.h"
 #include "include/assert.h"
 

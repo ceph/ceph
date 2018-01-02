@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *tell* ] ...
+| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -61,7 +61,7 @@ Synopsis
 
 | **ceph** **sync** **force** {--yes-i-really-mean-it} {--i-know-what-i-am-doing}
 
-| **ceph** **tell** *<name (type.id)> <args> [<args>...]*
+| **ceph** **tell** *<name (type.id)> <command> [options...]*
 
 | **ceph** **version**
 
@@ -375,13 +375,13 @@ Subcommand ``deactivate`` stops mds.
 
 Usage::
 
-	ceph mds deactivate <who>
+	ceph mds deactivate <role>
 
 Subcommand ``fail`` forces mds to status fail.
 
 Usage::
 
-	ceph mds fail <who>
+	ceph mds fail <role|gid>
 
 Subcommand ``rm`` removes inactive mds.
 
@@ -407,11 +407,11 @@ Usage::
 
 	ceph mds stat
 
-Subcommand ``tell`` sends command to particular mds.
+Subcommand ``repaired`` mark a damaged MDS rank as no longer damaged.
 
 Usage::
 
-	ceph mds tell <who> <args> [<args>...]
+	ceph mds repaired <role>
 
 mon
 ---
@@ -1402,7 +1402,7 @@ Sends a command to a specific daemon.
 
 Usage::
 
-	ceph tell <name (type.id)> <args> [<args>...]
+	ceph tell <name (type.id)> <command> [options...]
 
 
 List all available commands.

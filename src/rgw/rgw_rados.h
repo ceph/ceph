@@ -2285,7 +2285,7 @@ class RGWRados
   RGWMetaNotifier *meta_notifier;
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
-  RGWSyncTraceManager *sync_tracer;
+  RGWSyncTraceManager *sync_tracer = nullptr;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
 
   boost::optional<rgw::BucketTrimManager> bucket_trim;
@@ -2702,7 +2702,8 @@ public:
       explicit Read(RGWRados::SystemObject *_source) : source(_source) {}
 
       int stat(RGWObjVersionTracker *objv_tracker);
-      int read(int64_t ofs, int64_t end, bufferlist& bl, RGWObjVersionTracker *objv_tracker);
+      int read(int64_t ofs, int64_t end, bufferlist& bl, RGWObjVersionTracker *objv_tracker,
+	       boost::optional<obj_version> refresh_version = boost::none);
       int get_attr(const char *name, bufferlist& dest);
     };
   };
@@ -3291,10 +3292,13 @@ public:
                              RGWObjVersionTracker *objv_tracker, rgw_raw_obj& obj,
                              bufferlist& bl, off_t ofs, off_t end,
                              map<string, bufferlist> *attrs,
-                             rgw_cache_entry_info *cache_info);
+                             rgw_cache_entry_info *cache_info,
+			     boost::optional<obj_version> refresh_version =
+			       boost::none);
 
   virtual void register_chained_cache(RGWChainedCache *cache) {}
-  virtual bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry) { return false; }
+  virtual bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+				 RGWChainedCache::Entry *chained_entry) { return false; }
 
   int iterate_obj(RGWObjectCtx& ctx,
                   const RGWBucketInfo& bucket_info, const rgw_obj& obj,
@@ -3408,11 +3412,13 @@ public:
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
   int get_bucket_entrypoint_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name,
                                  RGWBucketEntryPoint& entry_point, RGWObjVersionTracker *objv_tracker,
-                                 ceph::real_time *pmtime, map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL);
+                                 ceph::real_time *pmtime, map<string, bufferlist> *pattrs, rgw_cache_entry_info *cache_info = NULL,
+				 boost::optional<obj_version> refresh_version = boost::none);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_info(RGWObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs);
   int get_bucket_instance_from_oid(RGWObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs,
-                                   rgw_cache_entry_info *cache_info = NULL);
+                                   rgw_cache_entry_info *cache_info = NULL,
+				   boost::optional<obj_version> refresh_version = boost::none);
 
   int convert_old_bucket_info(RGWObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
@@ -3535,7 +3541,7 @@ public:
   int gc_operate(string& oid, librados::ObjectReadOperation *op, bufferlist *pbl);
 
   int list_gc_objs(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
-  int process_gc();
+  int process_gc(bool expired_only);
   int process_expire_objects();
   int defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_obj& obj);
 
@@ -3759,7 +3765,7 @@ class RGWChainedCacheImpl : public RGWChainedCache {
   ceph::timespan expiry;
   RWLock lock;
 
-  map<string, std::pair<T, ceph::coarse_mono_time>> entries;
+  std::unordered_map<std::string, std::pair<T, ceph::coarse_mono_time>> entries;
 
 public:
   RGWChainedCacheImpl() : lock("RGWChainedCacheImpl::lock") {}
@@ -3767,25 +3773,25 @@ public:
   void init(RGWRados *store) {
     store->register_chained_cache(this);
     expiry = std::chrono::seconds(store->ctx()->_conf->get_val<uint64_t>(
-				    "rgw_bucket_info_cache_expiry_interval"));
+				    "rgw_cache_expiry_interval"));
   }
 
-  bool find(const string& key, T *entry) {
+  boost::optional<T> find(const string& key) {
     RWLock::RLocker rl(lock);
     auto iter = entries.find(key);
     if (iter == entries.end()) {
-      return false;
+      return boost::none;
     }
     if (expiry.count() &&
 	(ceph::coarse_mono_clock::now() - iter->second.second) > expiry) {
-      return false;
+      return boost::none;
     }
 
-    *entry = iter->second.first;
-    return true;
+    return iter->second.first;
   }
 
-  bool put(RGWRados *store, const string& key, T *entry, list<rgw_cache_entry_info *>& cache_info_entries) {
+  bool put(RGWRados *store, const string& key, T *entry,
+	   std::initializer_list<rgw_cache_entry_info *> cache_info_entries) {
     Entry chain_entry(this, key, entry);
 
     /* we need the store cache to call us under its lock to maintain lock ordering */

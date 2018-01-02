@@ -20,7 +20,13 @@
       - mds remove_data_pool -> fs rm_data_pool
       - mds rm_data_pool -> fs rm_data_pool
 
+  * New CephFS file system attributes session_timeout and session_autoclose
+    are configurable via `ceph fs set`. The MDS config options
+    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
+    obsolete.
 
+  * The JSON format of `ceph fs status` and `ceph mds stat` has changed
+    for the "up" and "info" sections of the mds_map.
 
 >= 12.2.2
 ---------

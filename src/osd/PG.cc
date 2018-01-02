@@ -1237,19 +1237,19 @@ void PG::calc_replicated_acting(
   set<pg_shard_t> *acting_backfill,
   ostream &ss)
 {
-  ss << "calc_acting newest update on osd." << auth_log_shard->first
+  pg_shard_t auth_log_shard_id = auth_log_shard->first;
+
+  ss << __func__ << " newest update on osd." << auth_log_shard_id
      << " with " << auth_log_shard->second
      << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
-  pg_shard_t auth_log_shard_id = auth_log_shard->first;
   
   // select primary
-  map<pg_shard_t,pg_info_t>::const_iterator primary;
+  map<pg_shard_t,pg_info_t>::const_iterator primary = all_info.find(up_primary);
   if (up.size() &&
-      !all_info.find(up_primary)->second.is_incomplete() &&
-      all_info.find(up_primary)->second.last_update >=
+      !primary->second.is_incomplete() &&
+      primary->second.last_update >=
         auth_log_shard->second.log_tail) {
     ss << "up_primary: " << up_primary << ") selected as primary" << std::endl;
-    primary = all_info.find(up_primary); // prefer up[0], all thing being equal
   } else {
     assert(!auth_log_shard->second.is_incomplete());
     ss << "up[0] needs backfill, osd." << auth_log_shard_id
@@ -1257,7 +1257,7 @@ void PG::calc_replicated_acting(
     primary = auth_log_shard;
   }
 
-  ss << "calc_acting primary is osd." << primary->first
+  ss << __func__ << " primary is osd." << primary->first
      << " with " << primary->second << std::endl;
   want->push_back(primary->first.osd);
   acting_backfill->insert(primary->first);
@@ -1419,10 +1419,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
 
-  for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
-       p != all_info.end();
-       ++p) {
-    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
+  if (cct->_conf->subsys.should_gather(dout_subsys, 10)) {
+    for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
+         p != all_info.end();
+         ++p) {
+      dout(10) << __func__ << "all_info osd." << p->first << " " << p->second << dendl;
+    }
   }
 
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =
@@ -1430,13 +1432,13 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
 
   if (auth_log_shard == all_info.end()) {
     if (up != acting) {
-      dout(10) << "choose_acting no suitable info found (incomplete backfills?),"
+      dout(10) << __func__ << " no suitable info found (incomplete backfills?),"
 	       << " reverting to up" << dendl;
       want_acting = up;
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid.pgid, empty);
     } else {
-      dout(10) << "choose_acting failed" << dendl;
+      dout(10) << __func__ << " failed" << dendl;
       assert(want_acting.empty());
     }
     return false;
@@ -1494,7 +1496,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       (pool.info.is_erasure() ||
        !cct->_conf->osd_allow_recovery_below_min_size)) {
     want_acting.clear();
-    dout(10) << "choose_acting failed, below min size" << dendl;
+    dout(10) << __func__ << " failed, below min size" << dendl;
     return false;
   }
 
@@ -1503,12 +1505,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     get_pgbackend()->get_is_recoverable_predicate());
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
-    dout(10) << "choose_acting failed, not recoverable" << dendl;
+    dout(10) << __func__ << " failed, not recoverable" << dendl;
     return false;
   }
 
   if (want != acting) {
-    dout(10) << "choose_acting want " << want << " != acting " << acting
+    dout(10) << __func__ << " want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
@@ -1537,7 +1539,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       ++i) {
     assert(stray_set.find(*i) == stray_set.end());
   }
-  dout(10) << "choose_acting want " << want << " (== acting) backfill_targets " 
+  dout(10) << __func__ << " want " << want << " (== acting) backfill_targets "
 	   << want_backfill << dendl;
   return true;
 }
@@ -4202,6 +4204,7 @@ int PG::build_scrub_map_chunk(
   // objects
   vector<hobject_t> ls;
   vector<ghobject_t> rollback_obs;
+  osr->flush();
   int ret = get_pgbackend()->objects_list_range(
     start,
     end,
@@ -4575,6 +4578,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
+	  osr->flush();
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
@@ -6051,6 +6055,13 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Initial")
 {
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result PG::RecoveryState::Initial::react(const Initialize& l)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->update_store_with_options();
+  return transit< Reset >();
 }
 
 boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
