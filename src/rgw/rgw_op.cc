@@ -3265,6 +3265,8 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 static CompressorRef get_compressor_plugin(const req_state *s,
                                            const std::string& compression_type)
 {
+  CompressorRef compressor;
+
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -3273,13 +3275,20 @@ static CompressorRef get_compressor_plugin(const req_state *s,
   const auto& upload_id = s->info.args.get("uploadId", &is_multipart);
 
   if (!is_multipart) {
-    return Compressor::create(s->cct, compression_type);
-  }
+    int count = 0;
+recreate:
+    compressor = Compressor::create(s->cct, compression_type);
+    if ((compressor == nullptr) && (++count <= 3))
+      goto recreate;
+    return compressor;
+ }
 
   // use a hash of the multipart upload id so all parts use the same plugin
-  const auto alg = std::hash<std::string>{}(upload_id) % Compressor::COMP_ALG_LAST;
+  int alg = std::hash<std::string>{}(upload_id) % Compressor::COMP_ALG_LAST;
   if (alg == Compressor::COMP_ALG_NONE) {
-    return nullptr;
+    alg = (std::hash<std::string>{}(upload_id) / Compressor::COMP_ALG_LAST) % Compressor::COMP_ALG_LAST;
+    if (alg == Compressor::COMP_ALG_NONE)
+      alg = Compressor::COMP_ALG_LAST - 1;
   }
   return Compressor::create(s->cct, alg);
 }
