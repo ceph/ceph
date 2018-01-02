@@ -22,7 +22,9 @@ from ceph_argparse import validate_command, parse_json_funcsigs
 
 import os
 import re
+import sys
 import json
+from StringIO import StringIO
 
 def get_command_descriptions(what):
     CEPH_BIN = os.environ['CEPH_BIN']
@@ -45,8 +47,7 @@ class TestArgparse:
 
     def assert_valid_command(self, args):
         result = validate_command(sigdict, args)
-        assert_not_equal(result,None)
-        assert_not_equal(result,{})
+        assert_not_in(result, [{}, None])
 
     def check_1_natural_arg(self, prefix, command):
         self.assert_valid_command([prefix, command, '1'])
@@ -88,6 +89,20 @@ class TestArgparse:
                                                     command,
                                                     'toomany']))
 
+	def capture_output(self, args, stdout=None, stderr=None):
+        if stdout:
+            stdout = StringIO()
+            sys.stdout = stdout
+        if stderr:
+            stderr = StringIO()
+            sys.stderr = stderr
+        ret = validate_command(sigdict, args)
+        if stdout:
+            stdout = stdout.getvalue().strip()
+        if stderr:
+            stderr = stderr.getvalue().strip()
+        return ret, stdout, stderr
+
 
 class TestBasic:
 
@@ -95,13 +110,13 @@ class TestBasic:
         # ArgumentPrefix("no match for {0}".format(s)) is not able to convert
         # unicode str parameter into str. and validate_command() should not
         # choke on it.
-        assert_is_none(validate_command(sigdict, [u'章鱼和鱿鱼']))
-        assert_is_none(validate_command(sigdict, [u'–w']))
+        assert_equal({}, validate_command(sigdict, [u'章鱼和鱿鱼']))
+        assert_equal({}, validate_command(sigdict, [u'–w']))
         # actually we always pass unicode strings to validate_command() in "ceph"
         # CLI, but we also use bytestrings in our tests, so make sure it does not
         # break.
-        assert_is_none(validate_command(sigdict, ['章鱼和鱿鱼']))
-        assert_is_none(validate_command(sigdict, ['–w']))
+        assert_equal({}, validate_command(sigdict, ['章鱼和鱿鱼']))
+        assert_equal({}, validate_command(sigdict, ['–w']))
 
 
 class TestPG(TestArgparse):
@@ -179,6 +194,17 @@ class TestPG(TestArgparse):
         assert_equal({}, validate_command(sigdict, ['pg', 'debug']))
         assert_equal({}, validate_command(sigdict, ['pg', 'debug',
                                                     'invalid']))
+
+    def test_pg_missing_args_output(self):
+        ret, _, stderr = self.capture_output(['pg'], stderr=True)
+        assert_equal({}, ret)
+        assert_regexp_matches(stderr, re.compile('no valid command found.* closest matches'))
+
+    def test_pg_wrong_arg_output(self):
+        ret, _, stderr = self.capture_output(['pg', 'map', 'bad-pgid'],
+                                             stderr=True)
+        assert_equal({}, ret)
+        assert_in("Invalid command", stderr)
 
 
 class TestAuth(TestArgparse):
@@ -872,7 +898,7 @@ class TestOSD(TestArgparse):
                                                         'pause', 'toomany']))
 
     def test_cluster_snap(self):
-        assert_equal(None, validate_command(sigdict, ['osd', 'cluster_snap']))
+        assert_equal({}, validate_command(sigdict, ['osd', 'cluster_snap']))
 
     def test_down(self):
         self.check_1_or_more_string_args('osd', 'down')
