@@ -1858,7 +1858,6 @@ protected:
   std::set<create_from_osd_t> pending_creates_from_osd;
   unsigned pending_creates_from_mon = 0;
 
-  map<spg_t, list<PGPeeringEventRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
 
   PGRef _lookup_pg(spg_t pgid);
@@ -1898,12 +1897,6 @@ protected:
 
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
 
-  int handle_pg_peering_evt(
-    spg_t pgid,
-    const pg_history_t& orig_history,
-    const PastIntervals& pi,
-    epoch_t epoch,
-    PGPeeringEventRef evt);
   bool maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create);
   void resume_creating_pg();
 
