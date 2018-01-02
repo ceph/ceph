@@ -230,19 +230,16 @@ int do_clear_limit(librbd::Image& image)
   return image.snap_set_limit(UINT64_MAX);
 }
 
-void add_all_option(po::options_description *opt, std::string description) {
-  std::string name = ALL_NAME + ",a";
-
-  opt->add_options()
-    (name.c_str(), po::bool_switch(), description.c_str());
-}
-
 void get_list_arguments(po::options_description *positional,
                         po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
   at::add_format_options(options);
-  add_all_option(options, "list snapshots from all namespaces");
+
+  std::string name = ALL_NAME + ",a";
+
+  options->add_options()
+    (name.c_str(), po::bool_switch(), "list snapshots from all namespaces");
 }
 
 int execute_list(const po::variables_map &vm) {
