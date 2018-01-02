@@ -521,10 +521,6 @@ Options
 
    The display name of the user.
 
-.. option:: --max-buckets
-
-   Maximum number of buckets for a user.
-
 .. option:: --admin
 
    Set the admin flag on the user.
