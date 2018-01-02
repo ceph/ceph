@@ -8615,7 +8615,8 @@ void OSD::handle_fast_pg_notify(MOSDPGNotify* m)
 	    pgid,
 	    p.first.query_epoch,
 	    p.first.info.history,
-	    p.second)
+	    p.second,
+	    false)
 	  )));
   }
 }

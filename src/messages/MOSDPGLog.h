@@ -62,7 +62,8 @@ public:
 	get_spg(),
 	epoch,
 	info.history,
-	past_intervals));
+	past_intervals,
+	false));
   }
 
   MOSDPGLog() : MOSDPeeringOp(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {

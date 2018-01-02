@@ -15,10 +15,12 @@ struct PGCreateInfo {
   epoch_t epoch = 0;
   pg_history_t history;
   PastIntervals past_intervals;
+  bool by_mon;
   PGCreateInfo(spg_t p, epoch_t e,
 	       const pg_history_t& h,
-	       const PastIntervals& pi)
-    : pgid(p), epoch(e), history(h), past_intervals(pi) {}
+	       const PastIntervals& pi,
+	       bool mon)
+    : pgid(p), epoch(e), history(h), past_intervals(pi), by_mon(mon) {}
 };
 
 class PGPeeringEvent {
