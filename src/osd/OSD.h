@@ -248,6 +248,11 @@ class LogChannel;
 class CephContext;
 class MOSDOp;
 
+class MOSDPGQuery;
+class MOSDPGNotify;
+class MOSDPGInfo;
+class MOSDPGRemove;
+
 class OSD;
 
 class OSDService {
@@ -2029,15 +2034,16 @@ protected:
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
 				 bool is_fast_dispatch);
 
-  void handle_pg_query(OpRequestRef op);
-  void handle_pg_notify(OpRequestRef op);
-  void handle_pg_log(OpRequestRef op);
-  void handle_pg_info(OpRequestRef op);
+  void handle_fast_pg_query(MOSDPGQuery *m);
+  void handle_pg_query_nopg(const MQuery& q);
+  void handle_fast_pg_notify(MOSDPGNotify *m);
+  void handle_pg_notify_nopg(const MNotifyRec& q);
+  void handle_fast_pg_info(MOSDPGInfo *m);
+  void handle_fast_pg_remove(MOSDPGRemove *m);
 
   PGRef handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info);
-  void handle_force_recovery(Message *m);
 
-  void handle_pg_remove(OpRequestRef op);
+  void handle_force_recovery(Message *m);
 
   // -- commands --
   struct Command {
@@ -2117,7 +2123,12 @@ private:
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
     case CEPH_MSG_OSD_BACKOFF:
+    case MSG_OSD_PG_QUERY:
+    case MSG_OSD_PG_INFO:
+    case MSG_OSD_PG_NOTIFY:
+    case MSG_OSD_PG_LOG:
     case MSG_OSD_PG_TRIM:
+    case MSG_OSD_PG_REMOVE:
     case MSG_OSD_BACKFILL_RESERVE:
     case MSG_OSD_RECOVERY_RESERVE:
     case MSG_OSD_REPOP:

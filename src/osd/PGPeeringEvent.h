@@ -88,25 +88,30 @@ struct MLogRec : boost::statechart::event< MLogRec > {
 };
 
 struct MNotifyRec : boost::statechart::event< MNotifyRec > {
+  spg_t pgid;
   pg_shard_t from;
   pg_notify_t notify;
   uint64_t features;
-  MNotifyRec(pg_shard_t from, const pg_notify_t &notify, uint64_t f) :
-    from(from), notify(notify), features(f) {}
+  PastIntervals past_intervals;
+  MNotifyRec(spg_t p, pg_shard_t from, const pg_notify_t &notify, uint64_t f,
+	     const PastIntervals& pi)
+    : pgid(p), from(from), notify(notify), features(f), past_intervals(pi) {}
   void print(std::ostream *out) const {
-    *out << "MNotifyRec from " << from << " notify: " << notify
-	 << " features: 0x" << hex << features << dec;
+    *out << "MNotifyRec " << pgid << " from " << from << " notify: " << notify
+	 << " features: 0x" << hex << features << dec
+	 << " " << past_intervals;
   }
 };
 
 struct MQuery : boost::statechart::event< MQuery > {
+  spg_t pgid;
   pg_shard_t from;
   pg_query_t query;
   epoch_t query_epoch;
-  MQuery(pg_shard_t from, const pg_query_t &query, epoch_t query_epoch):
-    from(from), query(query), query_epoch(query_epoch) {}
+  MQuery(spg_t p, pg_shard_t from, const pg_query_t &query, epoch_t query_epoch)
+    : pgid(p), from(from), query(query), query_epoch(query_epoch) {}
   void print(std::ostream *out) const {
-    *out << "MQuery from " << from
+    *out << "MQuery " << pgid << " from " << from
 	 << " query_epoch " << query_epoch
 	 << " query: " << query;
   }
