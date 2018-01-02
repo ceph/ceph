@@ -196,6 +196,9 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, const string& hostname,
   if (r < 0) {
     return r;
   }
+  auto put_state = make_scope_guard([res, this] {
+      this->put_state(res);
+    });
   return this->resolve_ip_addr(cct, &res, hostname, addr);
 #else
   return this->resolve_ip_addr(cct, NULL, hostname, addr);
