@@ -105,7 +105,9 @@ public:
       lderr(cct) << "leaked refs:\n";
       dump_weak_refs(*_dout);
       *_dout << dendl;
-      assert(weak_refs.empty());
+      if (cct->_conf->get_val<bool>("debug_asserts_on_shutdown")) {
+	assert(weak_refs.empty());
+      }
     }
   }
 

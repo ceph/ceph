@@ -131,19 +131,19 @@
 
 ``client_readahead_max_bytes``
 
-:Description: Set the maximum number of bytes that the kernel reads ahead for future read operations. Overridden by the ``client_readahead_max_periods`` setting.
+:Description: Set the maximum number of bytes that the client reads ahead for future read operations. Overridden by the ``client_readahead_max_periods`` setting.
 :Type: Integer
 :Default: ``0`` (unlimited)
 
 ``client_readahead_max_periods``
 
-:Description: Set the number of file layout periods (object size * number of stripes) that the kernel reads ahead. Overrides the ``client_readahead_max_bytes`` setting.
+:Description: Set the number of file layout periods (object size * number of stripes) that the client reads ahead. Overrides the ``client_readahead_max_bytes`` setting.
 :Type: Integer
 :Default: ``4``
 
 ``client_readahead_min``
 
-:Description: Set the minimum number bytes that the kernel reads ahead.
+:Description: Set the minimum number bytes that the client reads ahead.
 :Type: Integer
 :Default: ``131072`` (128KB)
 

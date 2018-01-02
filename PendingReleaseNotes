@@ -1,31 +1,39 @@
->= 12.2.0
----------
-
-
-12.2.1
+13.0.0
 ------
 
-- *RGW*
+* The RBD C API's rbd_discard method now enforces a maximum length of
+  2GB to match the C++ API's Image::discard method. This restriction
+  prevents overflow of the result code.
 
-  * dynamic resharding is now enabled by default, RGW will now automatically
-  reshard the bucket index once the index grows beyond `rgw_max_objs_per_shard`
+* *CephFS*:
+
+  * Several "ceph mds" commands have been obsoleted and replaced
+    by equivalent "ceph fs" commands:
+      - mds dump -> fs dump
+      - mds getmap -> fs dump
+      - mds stop -> mds deactivate
+      - mds set_max_mds -> fs set max_mds
+      - mds set -> fs set
+      - mds cluster_down -> fs set cluster_down true
+      - mds cluster_up -> fs set cluster_down false
+      - mds add_data_pool -> fs add_data_pool
+      - mds remove_data_pool -> fs rm_data_pool
+      - mds rm_data_pool -> fs rm_data_pool
+
+  * New CephFS file system attributes session_timeout and session_autoclose
+    are configurable via `ceph fs set`. The MDS config options
+    mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
+    obsolete.
+
+  * The JSON format of `ceph fs status` and `ceph mds stat` has changed
+    for the "up" and "info" sections of the mds_map.
+
+>= 12.2.2
+---------
 
 - *CephFS*:
 
-  * Limiting MDS cache via a memory limit is now supported using the new
-    mds_cache_memory_limit config option (1GB by default).  A cache reservation
-    can also be specified using mds_cache_reservation as a percentage of the
-    limit (5% by default). Limits by inode count are still supported using
-    mds_cache_size. Setting mds_cache_size to 0 (the default) disables the
-    inode limit.
-
-* The maximum number of PGs per OSD before the monitor issues a
-  warning has been reduced from 300 to 200 PGs.  200 is still twice
-  the generally recommended target of 100 PGs per OSD.  This limit can
-  be adjusted via the ``mon_max_pg_per_osd`` option on the
-  monitors.  The older ``mon_pg_warn_max_per_osd`` option has been removed.
-
-* Creating pools or adjusting pg_num will now fail if the change would
-  make the number of PGs per OSD exceed the configured
-  ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
-  is really necessary to create a pool with more PGs.
+  * The CephFS client now catches failures to clear dentries during startup
+    and refuses to start as consistency and untrimmable cache issues may
+    develop. The new option client_die_on_failed_dentry_invalidate (default:
+    true) may be turned off to allow the client to proceed (dangerous!).

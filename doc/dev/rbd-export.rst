@@ -65,6 +65,14 @@ Image Stripe count
 - le64: length of appending data (8)
 - le64: image striping count
 
+ImageMeta Key and Value
+-----------------------
+
+- u8: 'M'
+- le64: length of appending data (length of key + length of value + 4 * 2)
+- string: image-meta key
+- string: image-meta value
+
 Final Record
 ~~~~~~~~~~~~
 

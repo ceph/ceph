@@ -18,7 +18,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 const string RGWRole::role_name_oid_prefix = "role_names.";
 const string RGWRole::role_oid_prefix = "roles.";

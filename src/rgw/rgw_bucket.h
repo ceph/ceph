@@ -20,7 +20,7 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-// define as static when RGWBucket implementation compete
+// define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
@@ -180,8 +180,8 @@ extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           std::string placement_rule,
-                           bool update_entrypoint = true);
+                           bool update_entrypoint = true,
+                           bool update_stats = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
@@ -209,6 +209,7 @@ struct RGWBucketAdminOpState {
   bool delete_child_objects;
   bool bucket_stored;
   int max_aio = 0;
+  bool update_stats;
 
   rgw_bucket bucket;
 
@@ -218,6 +219,7 @@ struct RGWBucketAdminOpState {
   void set_delete_children(bool value) { delete_child_objects = value; }
 
   void set_max_aio(int value) { max_aio = value; }
+  void set_update_stats(bool value) { update_stats = value; }
 
   void set_user_id(const rgw_user& user_id) {
     if (!user_id.empty())
@@ -254,10 +256,11 @@ struct RGWBucketAdminOpState {
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }
+  bool will_update_stats() { return update_stats;}
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
-                            bucket_stored(false)  {}
+                            bucket_stored(false), update_stats(true)  {}
 };
 
 /*

@@ -50,10 +50,8 @@
 #include "rgw_lib_frontend.h"
 
 #include <errno.h>
-#include <chrono>
 #include <thread>
 #include <string>
-#include <string.h>
 #include <mutex>
 
 
@@ -239,6 +237,11 @@ namespace rgw {
       abort_req(s, op, ret);
       goto done;
     }
+
+    /* now expected by rgw_log_op() */
+    rgw_env.set("REQUEST_METHOD", s->info.method);
+    rgw_env.set("REQUEST_URI", s->info.request_uri);
+    rgw_env.set("QUERY_STRING", "");
 
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */

@@ -58,6 +58,9 @@ def catches(catch=None, handler=None, exit=True):
             try:
                 return f(*a, **kw)
             except catch as e:
+                import logging
+                logger = logging.getLogger('ceph_volume')
+                logger.exception('exception caught by decorator')
                 if os.environ.get('CEPH_VOLUME_DEBUG'):
                     raise
                 if handler:

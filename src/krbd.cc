@@ -40,7 +40,6 @@
 #include <blkid/blkid.h>
 #include <libudev.h>
 
-using namespace std;
 
 const static int POLL_TIMEOUT=120000;
 
@@ -133,10 +132,13 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
   oss << " name=" << cct->_conf->name.get_id();
 
   KeyRing keyring;
-  if (cct->_conf->auth_client_required != "none") {
+  auto auth_client_required =
+    cct->_conf->get_val<std::string>("auth_client_required");
+  if (auth_client_required != "none") {
     r = keyring.from_ceph_context(cct);
-    if (r == -ENOENT && !(cct->_conf->keyfile.length() ||
-                          cct->_conf->key.length()))
+    auto keyfile = cct->_conf->get_val<std::string>("keyfile");
+    auto key = cct->_conf->get_val<std::string>("key");
+    if (r == -ENOENT && keyfile.empty() && key.empty())
       r = 0;
     if (r < 0) {
       cerr << "rbd: failed to get secret" << std::endl;
@@ -180,7 +182,7 @@ static int wait_for_udev_add(struct udev_monitor *mon, const char *pool,
                              const char *image, const char *snap,
                              string *pname)
 {
-  struct udev_device *bus_dev = NULL;
+  struct udev_device *bus_dev = nullptr;
 
   /*
    * Catch /sys/devices/rbd/<id>/ and wait for the corresponding
@@ -257,7 +259,7 @@ static int do_map(struct udev *udev, const char *pool, const char *image,
   if (!mon)
     return -ENOMEM;
 
-  r = udev_monitor_filter_add_match_subsystem_devtype(mon, "rbd", NULL);
+  r = udev_monitor_filter_add_match_subsystem_devtype(mon, "rbd", nullptr);
   if (r < 0)
     goto out_mon;
 

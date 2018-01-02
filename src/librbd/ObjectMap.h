@@ -69,15 +69,15 @@ public:
                   const ZTracer::Trace &parent_trace, T *callback_object) {
     assert(start_object_no < end_object_no);
     if (snap_id == CEPH_NOSNAP) {
-      uint64_t object_no;
-      for (object_no = start_object_no; object_no < end_object_no;
-           ++object_no) {
-        if (update_required(object_no, new_state)) {
+      auto it = m_object_map.begin() + start_object_no;
+      auto end_it = m_object_map.begin() + end_object_no;
+      for (; it != end_it; ++it) {
+        if (update_required(it, new_state)) {
           break;
         }
       }
 
-      if (object_no == end_object_no) {
+      if (it == end_it) {
         return false;
       }
 
@@ -133,7 +133,8 @@ private:
                   uint64_t end_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
                   const ZTracer::Trace &parent_trace, Context *on_finish);
-  bool update_required(uint64_t object_no, uint8_t new_state);
+  bool update_required(const ceph::BitVector<2>::Iterator &it,
+                       uint8_t new_state);
 
 };
 

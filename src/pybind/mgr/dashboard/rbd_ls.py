@@ -6,24 +6,12 @@ from remote_view_cache import RemoteViewCache
 
 class RbdPoolLs(RemoteViewCache):
     def _get(self):
-        from mgr_module import ceph_state
-        ctx_capsule = ceph_state.get_context()
+        ctx_capsule = self._module.get_context()
+
 
         osd_map = self._module.get_sync_object(OsdMap).data
-        osd_pools = [pool['pool_name'] for pool in osd_map['pools']]
-
-        rbd_pools = []
-        for pool in osd_pools:
-            self.log.debug("Constructing IOCtx " + pool)
-            try:
-                ioctx = self._module.rados.open_ioctx(pool)
-                ioctx.stat("rbd_directory")
-                rbd_pools.append(pool)
-            except (rados.PermissionError, rados.ObjectNotFound):
-                self.log.debug("No RBD directory in " + pool)
-            except:
-                self.log.exception("Failed to open pool " + pool)
-
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools'] if \
+                        'rbd' in pool.get('application_metadata', {})]
         return rbd_pools
 
 class RbdLs(RemoteViewCache):

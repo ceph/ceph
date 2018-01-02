@@ -1023,6 +1023,18 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
   return bucket_weight;
 }
 
+bool CrushWrapper::is_parent_of(int child, int p) const
+{
+  int parent = 0;
+  while (!get_immediate_parent_id(child, &parent)) {
+    if (parent == p) {
+      return true;
+    }
+    child = parent;
+  }
+  return false;
+}
+
 int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
 {
   if (src >= 0 || dst >= 0)
@@ -1031,6 +1043,9 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     return -EINVAL;
   crush_bucket *a = get_bucket(src);
   crush_bucket *b = get_bucket(dst);
+  if (is_parent_of(a->id, b->id) || is_parent_of(b->id, a->id)) {
+    return -EINVAL;
+  }
   unsigned aw = a->weight;
   unsigned bw = b->weight;
 
@@ -1824,6 +1839,16 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       arg->ids_size = new_size;
     }
   }
+  return 0;
+}
+
+int CrushWrapper::bucket_set_alg(int bid, int alg)
+{
+  crush_bucket *b = get_bucket(bid);
+  if (!b) {
+    return -ENOENT;
+  }
+  b->alg = alg;
   return 0;
 }
 
@@ -2979,7 +3004,7 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = cct->_conf->osd_pool_default_crush_rule;
+  int crush_ruleset = cct->_conf->get_val<int64_t>("osd_pool_default_crush_rule");
   if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {

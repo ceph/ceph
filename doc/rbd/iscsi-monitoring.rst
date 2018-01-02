@@ -66,24 +66,6 @@ selects the LIO collector automatically.
 
 **Example ``gwtop`` Outputs**
 
-For kernel RBD-based devices:
-
-::
-
-    gwtop  2/2 Gateways   CPU% MIN:  4 MAX:  5    Network Total In:    2M  Out:    3M   10:20:09
-    Capacity:   8G    Disks:   8   IOPS:  500   Clients:  1   Ceph: HEALTH_OK          OSDs:   3
-    Pool.Image     Src  Device   Size     r/s     w/s    rMB/s     wMB/s    await  r_await  w_await  Client
-    iscsi.t1703          rbd0    500M       0       0     0.00      0.00     0.00     0.00     0.00
-    iscsi.testme1        rbd5    500M       0       0     0.00      0.00     0.00     0.00     0.00
-    iscsi.testme2        rbd2    500M       0       0     0.00      0.00     0.00     0.00     0.00
-    iscsi.testme3        rbd3    500M       0       0     0.00      0.00     0.00     0.00     0.00
-    iscsi.testme5        rbd1    500M       0       0     0.00      0.00     0.00     0.00     0.00
-    rbd.myhost_1    T    rbd4      4G     500       0     1.95      0.00     2.37     2.37     0.00  rh460p(CON)
-    rbd.test_2           rbd6      1G       0       0     0.00      0.00     0.00     0.00     0.00
-    rbd.testme           rbd7    500M       0       0     0.00      0.00     0.00     0.00     0.00
-
-For user backed storage (TCMU) devices:
-
 ::
 
     gwtop  2/2 Gateways   CPU% MIN:  4 MAX:  5    Network Total In:    2M  Out:    3M   10:20:00

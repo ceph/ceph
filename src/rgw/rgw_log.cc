@@ -251,7 +251,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
   formatter->dump_int("bytes_sent", entry.bytes_sent);
   formatter->dump_int("bytes_received", entry.bytes_received);
   formatter->dump_int("object_size", entry.obj_size);
-  uint64_t total_time =  entry.total_time.sec() * 1000000LL + entry.total_time.usec();
+  uint64_t total_time =  entry.total_time.to_msec();
 
   formatter->dump_int("total_time", total_time);
   formatter->dump_string("user_agent",  entry.user_agent);
@@ -356,7 +356,33 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     set_param_str(s, "HTTP_REFERRER", entry.referrer);
   else
     set_param_str(s, "HTTP_REFERER", entry.referrer);
-  set_param_str(s, "REQUEST_URI", entry.uri);
+
+  std::string uri;
+  if (s->info.env->exists("REQUEST_METHOD")) {
+    uri.append(s->info.env->get("REQUEST_METHOD"));
+    uri.append(" ");
+  }
+
+  if (s->info.env->exists("REQUEST_URI")) {
+    uri.append(s->info.env->get("REQUEST_URI"));
+  }
+
+  if (s->info.env->exists("QUERY_STRING")) {
+    const char* qs = s->info.env->get("QUERY_STRING");
+    if(qs && (*qs != '\0')) {
+      uri.append("?");
+      uri.append(qs);
+    }
+  }
+
+  if (s->info.env->exists("HTTP_VERSION")) {
+    uri.append(" ");
+    uri.append("HTTP/");
+    uri.append(s->info.env->get("HTTP_VERSION"));
+  }
+
+  entry.uri = std::move(uri);
+
   set_param_str(s, "REQUEST_METHOD", entry.op);
 
   /* custom header logging */

@@ -463,8 +463,8 @@ If the latest copy of the object is not available, the cluster can be
 told to roll back to a previous version of the object. See
 :ref:`failures-osd-unfound` for more information.
 
-REQUEST_SLOW
-____________
+SLOW_OPS
+________
 
 One or more OSD requests is taking a long time to process.  This can
 be an indication of extreme load, a slow storage device, or a software
@@ -482,15 +482,6 @@ A summary of the slowest recent requests can be seen with::
 The location of an OSD can be found with::
 
   ceph osd find osd.<id>
-
-REQUEST_STUCK
-_____________
-
-One or more OSD requests has been blocked for an extremely long time.
-This is an indication that either the cluster has been unhealthy for
-an extended period of time (e.g., not enough running OSDs) or there is
-some internal problem with the OSD.  See the dicussion of
-*REQUEST_SLOW* above.
 
 PG_NOT_SCRUBBED
 _______________

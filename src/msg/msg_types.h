@@ -22,6 +22,8 @@
 #include "include/blobhash.h"
 #include "include/encoding.h"
 
+#define MAX_PORT_NUMBER 65535
+
 namespace ceph {
   class Formatter;
 }

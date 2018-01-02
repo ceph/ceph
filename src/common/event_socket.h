@@ -18,7 +18,7 @@
 #define CEPH_COMMON_EVENT_SOCKET_H
 
 #include <unistd.h>
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__APPLE__)
 #include <errno.h>
 #endif
 #include "include/event_type.h"

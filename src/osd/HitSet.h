@@ -353,7 +353,7 @@ public:
       return (double)fpp_micro / 1000000.0;
     }
     void set_fpp(double f) {
-      fpp_micro = (unsigned)(llrintl(f * (double)1000000.0));
+      fpp_micro = (unsigned)(llrintl(f * 1000000.0));
     }
 
     void encode(bufferlist& bl) const override {
@@ -424,7 +424,7 @@ public:
   }
   void seal() override {
     // aim for a density of .5 (50% of bit set)
-    double pc = (double)bloom.density() * 2.0;
+    double pc = bloom.density() * 2.0;
     if (pc < 1.0)
       bloom.compress(pc);
   }

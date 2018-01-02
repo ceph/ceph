@@ -436,7 +436,8 @@ If successful, the response contains the user information.
 :Type: Container
 
 ``tenant``
-:Description: The tenant which user is a part of
+
+:Description: The tenant which user is a part of.
 :Type: String
 :Parent: ``user``
 
@@ -1944,6 +1945,30 @@ Standard Error Responses
 
 
 
+
+Binding libraries
+========================
+
+``Golang``
+
+ - `QuentinPerez/go-radosgw`_
+
+``Java``
+ 
+ - `twonote/radosgw-admin4j`_
+
+``Python``
+
+ - `UMIACS/rgwadmin`_
+ - `valerytschopp/python-radosgw-admin`_
+
+
+
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
 .. _Multitenancy: ./multitenancy
+.. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
+.. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
+.. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin
+.. _valerytschopp/python-radosgw-admin: https://github.com/valerytschopp/python-radosgw-admin
+

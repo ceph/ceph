@@ -23,9 +23,15 @@ class MOSDPGTemp : public PaxosServiceMessage {
  public:
   epoch_t map_epoch = 0;
   map<pg_t, vector<int32_t> > pg_temp;
+  bool forced = false;
 
-  MOSDPGTemp(epoch_t e) : PaxosServiceMessage(MSG_OSD_PGTEMP, e), map_epoch(e) { }
-  MOSDPGTemp() : PaxosServiceMessage(MSG_OSD_PGTEMP, 0) {}
+  MOSDPGTemp(epoch_t e)
+    : PaxosServiceMessage(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
+      map_epoch(e)
+  {}
+  MOSDPGTemp()
+    : MOSDPGTemp(0)
+  {}
 private:
   ~MOSDPGTemp() override {}
 
@@ -34,19 +40,25 @@ public:
     paxos_encode();
     ::encode(map_epoch, payload);
     ::encode(pg_temp, payload);
+    ::encode(forced, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(map_epoch, p);
     ::decode(pg_temp, p);
+    if (header.version >= 2) {
+      ::decode(forced, p);
+    }
   }
 
   const char *get_type_name() const override { return "osd_pgtemp"; }
   void print(ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }
-  
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 };
 
 #endif

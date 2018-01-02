@@ -15,6 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
+#include "common/backport_std.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -55,7 +56,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
  *
  * To prevent serious problems resulting from thread-safety issues, we disallow
  * changing std::string configuration values after
- * md_config_t::internal_safe_to_start_threads becomes true. You can still
+ * md_config_t::safe_to_start_threads becomes true. You can still
  * change integer or floating point values, and the option declared with
  * SAFE_OPTION macro. Notice the latter options can not be read directly
  * (conf->foo), one should use either observers or get_val() method
@@ -139,6 +140,9 @@ public:
   bool _internal_field(const string& k);
   void call_all_observers();
 
+  void set_safe_to_start_threads();
+  void _clear_safe_to_start_threads();  // this is only used by the unit test
+
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
@@ -161,7 +165,14 @@ public:
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
   Option::value_t get_val_generic(const std::string &key) const;
-  template<typename T> T get_val(const std::string &key) const;
+  template<typename T> const T get_val(const std::string &key) const;
+  template<typename T, typename Callback, typename...Args>
+  auto with_val(const string& key, Callback&& cb, Args&&... args) const ->
+    std::result_of_t<Callback(const T&, Args...)> {
+    return std::forward<Callback>(cb)(
+      boost::get<T>(this->get_val_generic(key)),
+      std::forward<Args>(args)...);
+  }
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -199,7 +210,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  Option::value_t _get_val(const std::string &key) const;
+  Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -255,6 +266,10 @@ public:
   std::deque<std::string> parse_errors;
 private:
 
+  // This will be set to true when it is safe to start threads.
+  // Once it is true, it will never change.
+  bool safe_to_start_threads = false;
+
   obs_map_t observers;
   changed_set_t changed;
 
@@ -304,9 +319,9 @@ public:
 
 public:
   unsigned get_osd_pool_default_min_size() const {
-    return osd_pool_default_min_size ?
-      MIN(osd_pool_default_min_size, osd_pool_default_size) :
-      osd_pool_default_size - osd_pool_default_size / 2;
+    auto min_size = get_val<uint64_t>("osd_pool_default_min_size");
+    auto size = get_val<uint64_t>("osd_pool_default_size");
+    return min_size ? std::min(min_size, size) : (size - size / 2);
   }
 
   /** A lock that protects the md_config_t internals. It is
@@ -319,23 +334,8 @@ public:
 };
 
 template<typename T>
-struct get_typed_value_visitor : public boost::static_visitor<T> {
-  template<typename U,
-    typename boost::enable_if<boost::is_same<T, U>, int>::type = 0>
-      T operator()(U & val) {
-	return std::move(val);
-      }
-  template<typename U,
-    typename boost::enable_if_c<!boost::is_same<T, U>::value, int>::type = 0>
-      T operator()(U &val) {
-	assert("wrong type or option does not exist" == nullptr);
-      }
-};
-
-template<typename T> T md_config_t::get_val(const std::string &key) const {
-  Option::value_t generic_val = this->get_val_generic(key);
-  get_typed_value_visitor<T> gtv;
-  return boost::apply_visitor(gtv, generic_val);
+const T md_config_t::get_val(const std::string &key) const {
+  return boost::get<T>(this->get_val_generic(key));
 }
 
 inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {

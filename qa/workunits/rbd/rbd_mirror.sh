@@ -13,6 +13,8 @@ testlog "TEST: add image and test replay"
 start_mirror ${CLUSTER1}
 image=test
 create_image ${CLUSTER2} ${POOL} ${image}
+set_image_meta ${CLUSTER2} ${POOL} ${image} "key1" "value1"
+set_image_meta ${CLUSTER2} ${POOL} ${image} "key2" "value2"
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 write_image ${CLUSTER2} ${POOL} ${image} 100
 wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${image}
@@ -21,6 +23,8 @@ if [ -z "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
   wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'down+unknown'
 fi
 compare_images ${POOL} ${image}
+compare_image_meta ${CLUSTER1} ${POOL} ${image} "key1" "value1"
+compare_image_meta ${CLUSTER1} ${POOL} ${image} "key2" "value2"
 
 testlog "TEST: stop mirror, add image, start mirror and test replay"
 stop_mirror ${CLUSTER1}
@@ -416,12 +420,11 @@ testlog "TEST: split-brain"
 image=split-brain
 create_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
-demote_image ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
-promote_image ${CLUSTER1} ${POOL} ${image}
+promote_image ${CLUSTER1} ${POOL} ${image} --force
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
 write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}
-promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'

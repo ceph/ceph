@@ -12,7 +12,10 @@ from mgr_module import MgrModule
 
 
 def avg(data):
-    return sum(data) / float(len(data))
+    if len(data):
+        return sum(data) / float(len(data))
+    else:
+        return 0
 
 
 class ZabbixSender(object):
@@ -171,6 +174,8 @@ class Module(MgrModule):
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
+            if osd['kb'] == 0:
+                continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
             osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
             osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
@@ -257,11 +262,12 @@ class Module(MgrModule):
         while self.run:
             self.log.debug('Waking up for new iteration')
 
-            # Sometimes fetching data fails, should be fixed by PR #16020
             try:
                 self.send()
             except Exception as exc:
-                self.log.error(exc)
+                # Shouldn't happen, but let's log it and retry next interval,
+                # rather than dying completely.
+                self.log.exception("Unexpected error during send():")
 
             interval = self.config['interval']
             self.log.debug('Sleeping for %d seconds', interval)

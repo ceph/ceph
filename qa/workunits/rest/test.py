@@ -151,25 +151,6 @@ if __name__ == '__main__':
 
     # XXX no ceph -w equivalent yet
 
-    expect('mds/cluster_down', 'PUT', 200, '')
-    expect('mds/cluster_down', 'PUT', 200, '')
-    expect('mds/cluster_up', 'PUT', 200, '')
-    expect('mds/cluster_up', 'PUT', 200, '')
-
-    expect('mds/compat/rm_incompat?feature=4', 'PUT', 200, '')
-    expect('mds/compat/rm_incompat?feature=4', 'PUT', 200, '')
-
-    r = expect('mds/compat/show', 'GET', 200, 'json', JSONHDR)
-    assert('incompat' in r.myjson['output'])
-    r = expect('mds/compat/show', 'GET', 200, 'xml', XMLHDR)
-    assert(r.tree.find('output/mds_compat/incompat') is not None)
-
-    # EEXIST from CLI
-    expect('mds/deactivate?who=2', 'PUT', 400, '')
-
-    r = expect('mds/dump.xml', 'GET', 200, 'xml')
-    assert(r.tree.find('output/mdsmap/created') is not None)
-
     expect('fs/flag/set?flag_name=enable_multiple&val=true', 'PUT', 200, '')
     expect('osd/pool/create?pg_num=1&pool=my_cephfs_metadata', 'PUT', 200, '')
     expect('osd/pool/create?pg_num=1&pool=my_cephfs_data', 'PUT', 200, '')
@@ -184,27 +165,17 @@ if __name__ == '__main__':
             assert(p['pg_num'] == 10)
             break
     assert(poolnum is not None)
-    expect('mds/add_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
-    expect('mds/remove_data_pool?pool={0}'.format(poolnum), 'PUT', 200, '')
+    expect('fs/add_data_pool?fs_name={1}&pool={0}'.format(poolnum,'mycephfs'), 'PUT', 200, '')
+    expect('fs/rm_data_pool?pool={0}&fs_name={1}'.format(poolnum,'mycephfs'), 'PUT', 200, '')
     expect('osd/pool/delete?pool=data2&pool2=data2'
            '&sure=--yes-i-really-really-mean-it', 'PUT', 200, '')
-    expect('mds/set?var=allow_multimds&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
-    expect('mds/set_max_mds?maxmds=4', 'PUT', 200, '')
-    expect('mds/set?var=max_mds&val=4', 'PUT', 200, '')
-    expect('mds/set?var=max_file_size&val=1048576', 'PUT', 200, '')
-    expect('mds/set?var=allow_new_snaps&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
-    expect('mds/set?var=allow_new_snaps&val=0', 'PUT', 200, '')
-    expect('mds/set?var=inline_data&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
-    expect('mds/set?var=inline_data&val=0', 'PUT', 200, '')
-    r = expect('mds/dump.json', 'GET', 200, 'json')
-    assert(r.myjson['output']['max_mds'] == 4)
-    expect('mds/set_max_mds?maxmds=3', 'PUT', 200, '')
-    r = expect('mds/stat.json', 'GET', 200, 'json')
-    expect('mds/set?var=max_mds&val=2', 'PUT', 200, '')
-    r = expect('mds/stat.json', 'GET', 200, 'json')
-    assert('epoch' in r.myjson['output']['fsmap'])
-    r = expect('mds/stat.xml', 'GET', 200, 'xml')
-    assert(r.tree.find('output/mds_stat/fsmap/epoch') is not None)
+    expect('fs/set?fs_name=mycephfs&var=allow_multimds&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=max_mds&val=4', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=max_file_size&val=1048576', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=allow_new_snaps&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=allow_new_snaps&val=0', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=inline_data&val=true&confirm=--yes-i-really-mean-it', 'PUT', 200, '')
+    expect('fs/set?fs_name=mycephfs&var=inline_data&val=0', 'PUT', 200, '')
 
     # more content tests below, just check format here
     expect('mon/dump.json', 'GET', 200, 'json')

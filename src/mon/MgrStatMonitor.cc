@@ -188,6 +188,11 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   }
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks" << dendl;
+  dout(20) << "pending_digest:\n";
+  JSONFormatter jf(true);
+  pending_digest.dump(&jf);
+  jf.flush(*_dout);
+  *_dout << dendl;
   return true;
 }
 

@@ -1062,12 +1062,12 @@ int librados::RadosClient::service_daemon_register(
 }
 
 int librados::RadosClient::service_daemon_update_status(
-  const std::map<std::string,std::string>& status)
+  std::map<std::string,std::string>&& status)
 {
   if (state != CONNECTED) {
     return -ENOTCONN;
   }
-  return mgrclient.service_daemon_update_status(status);
+  return mgrclient.service_daemon_update_status(std::move(status));
 }
 
 mon_feature_t librados::RadosClient::get_required_monitor_features() const

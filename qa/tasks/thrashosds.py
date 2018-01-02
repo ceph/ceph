@@ -24,7 +24,7 @@ def task(ctx, config):
 
     cluster: (default 'ceph') the name of the cluster to thrash
 
-    min_in: (default 3) the minimum number of OSDs to keep in the
+    min_in: (default 4) the minimum number of OSDs to keep in the
        cluster
 
     min_out: (default 0) the minimum number of OSDs to keep out of the

@@ -443,7 +443,7 @@ public:
       sb->coll = coll;
     }
 
-    bool remove(SharedBlob *sb) {
+    bool try_remove(SharedBlob *sb) {
       std::lock_guard<std::mutex> l(lock);
       if (sb->nref == 0) {
 	assert(sb->get_parent() == this);
@@ -451,6 +451,12 @@ public:
 	return true;
       }
       return false;
+    }
+
+    void remove(SharedBlob *sb) {
+      std::lock_guard<std::mutex> l(lock);
+      assert(sb->get_parent() == this);
+      sb_map.erase(sb->get_sbid());
     }
 
     bool empty() {
@@ -980,8 +986,8 @@ public:
     int64_t expected_for_release = 0;      ///< alloc units currently used by
                                            ///< compressed blobs that might
                                            ///< gone after GC
-    uint64_t gc_start_offset;              ///starting offset for GC
-    uint64_t gc_end_offset;                ///ending offset for GC
+    uint64_t gc_start_offset = 0;              ///starting offset for GC
+    uint64_t gc_end_offset = 0;                ///ending offset for GC
 
   protected:
     void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
@@ -1546,9 +1552,6 @@ public:
     set<SharedBlobRef> shared_blobs_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
-    Context *oncommit = nullptr;         ///< signal on commit
-    Context *onreadable = nullptr;       ///< signal on readable
-    Context *onreadable_sync = nullptr;  ///< signal on readable
     list<Context*> oncommits;  ///< more commit completions
     list<CollectionRef> removed_collections; ///< colls we removed
 
@@ -1593,9 +1596,9 @@ public:
       // onode itself isn't written, though
       modified_objects.insert(o);
     }
-    void removed(OnodeRef& o) {
+    void note_removed_object(OnodeRef& o) {
       onodes.erase(o);
-      modified_objects.erase(o);
+      modified_objects.insert(o);
     }
 
     void aio_finish(BlueStore *store) override {
@@ -1657,6 +1660,8 @@ public:
 
     Sequencer *parent;
     BlueStore *store;
+
+    size_t shard;
 
     uint64_t last_seq = 0;
 
@@ -1722,10 +1727,8 @@ public:
     }
 
     bool _is_all_kv_submitted() {
-      // caller must hold qlock
-      if (q.empty()) {
-	return true;
-      }
+      // caller must hold qlock & q.empty() must not empty
+      assert(!q.empty());
       TransContext *txc = &q.back();
       if (txc->state >= TransContext::STATE_KV_SUBMITTED) {
 	return true;
@@ -1740,7 +1743,8 @@ public:
 	// may become true outside qlock, and we need to make
 	// sure those threads see waiters and signal qcond.
 	++kv_submitted_waiters;
-	if (_is_all_kv_submitted()) {
+	if (q.empty() || _is_all_kv_submitted()) {
+	  --kv_submitted_waiters;
 	  return;
 	}
 	qcond.wait(l);
@@ -1859,6 +1863,7 @@ private:
   KVSyncThread kv_sync_thread;
   std::mutex kv_lock;
   std::condition_variable kv_cond;
+  bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
@@ -1877,7 +1882,6 @@ private:
 
   PerfCounters *logger = nullptr;
 
-  std::mutex reap_lock;
   list<CollectionRef> removed_collections;
 
   RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};
@@ -1971,7 +1975,11 @@ private:
 
   int _open_bdev(bool create);
   void _close_bdev();
-  int _open_db(bool create);
+  /*
+   * @warning to_repair_db means that we open this db to repair it, will not
+   * hold the rocksdb's file lock.
+   */
+  int _open_db(bool create, bool to_repair_db=false);
   void _close_db();
   int _open_fm(bool create);
   void _close_fm();
@@ -1983,8 +1991,9 @@ private:
   int _setup_block_symlink_or_file(string name, string path, uint64_t size,
 				   bool create);
 
-  int _write_bdev_label(string path, bluestore_bdev_label_t label);
 public:
+  static int _write_bdev_label(CephContext* cct,
+			       string path, bluestore_bdev_label_t label);
   static int _read_bdev_label(CephContext* cct, string path,
 			      bluestore_bdev_label_t *label);
 private:
@@ -2041,7 +2050,9 @@ private:
 
   bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
   void _deferred_queue(TransContext *txc);
+public:
   void deferred_try_submit();
+private:
   void _deferred_submit_unlock(OpSequencer *osr);
   void _deferred_aio_finish(OpSequencer *osr);
   int _deferred_replay();
@@ -2114,6 +2125,8 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  int get_devices(set<string> *ls) override;
+
   bool is_rotational() override;
   bool is_journal_rotational() override;
 
@@ -2134,20 +2147,24 @@ public:
   bool test_mount_in_use() override;
 
 private:
-  int _mount(bool kv_only);
+  int _mount(bool kv_only, bool open_db=true);
 public:
   int mount() override {
     return _mount(false);
   }
   int umount() override;
 
-  int start_kv_only(KeyValueDB **pdb) {
-    int r = _mount(true);
+  int start_kv_only(KeyValueDB **pdb, bool open_db=true) {
+    int r = _mount(true, open_db);
     if (r < 0)
       return r;
     *pdb = db;
     return 0;
   }
+
+  int write_meta(const std::string& key, const std::string& value) override;
+  int read_meta(const std::string& key, std::string *value) override;
+
 
   int fsck(bool deep) override {
     return _fsck(deep, false);
@@ -2554,10 +2571,6 @@ private:
     WriteContext *wctx,
     set<SharedBlob*> *maybe_unshared_blobs=0);
 
-  int _do_transaction(Transaction *t,
-		      TransContext *txc,
-		      ThreadPool::TPHandle *handle);
-
   int _write(TransContext *txc,
 	     CollectionRef& c,
 	     OnodeRef& o,
@@ -2636,7 +2649,7 @@ private:
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
-  void _do_omap_clear(TransContext *txc, uint64_t id);
+  void _do_omap_clear(TransContext *txc, const string& prefix, uint64_t id);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  OnodeRef& o);

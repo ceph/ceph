@@ -265,7 +265,7 @@ void UpdateFeaturesPayload::dump(Formatter *f) const {
 }
 
 void UnknownPayload::encode(bufferlist &bl) const {
-  assert(false);
+  ceph_abort();
 }
 
 void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {

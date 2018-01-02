@@ -1045,7 +1045,7 @@ WRITE_CLASS_ENCODER(cls_rgw_gc_obj_info)
 
 struct cls_rgw_lc_obj_head
 {
-  time_t start_date;
+  time_t start_date = 0;
   string marker;
 
   cls_rgw_lc_obj_head() {}
@@ -1067,6 +1067,8 @@ struct cls_rgw_lc_obj_head
     DECODE_FINISH(bl);
   }
 
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_rgw_lc_obj_head*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_obj_head)
 

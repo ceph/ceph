@@ -194,7 +194,11 @@ cdef extern from "rados/librados.h" nogil:
 
     int rados_wait_for_latest_osdmap(rados_t cluster)
 
+    int rados_service_register(rados_t cluster, const char *service, const char *daemon, const char *metadata_dict)
+    int rados_service_update_status(rados_t cluster, const char *status_dict)
+
     int rados_ioctx_create(rados_t cluster, const char *pool_name, rados_ioctx_t *ioctx)
+    int rados_ioctx_create2(rados_t cluster, int64_t pool_id, rados_ioctx_t *ioctx)
     void rados_ioctx_destroy(rados_ioctx_t io)
     int rados_ioctx_pool_set_auid(rados_ioctx_t io, uint64_t auid)
     void rados_ioctx_locator_set_key(rados_ioctx_t io, const char *key)
@@ -1197,6 +1201,32 @@ Rados object in state %s." % self.state)
         io.io = ioctx
         return io
 
+    @requires(('pool_id', int))
+    def open_ioctx2(self, pool_id):
+        """
+        Create an io context
+
+        The io context allows you to perform operations within a particular
+        pool.
+
+        :param pool_id: ID of the pool
+        :type pool_id: int
+
+        :raises: :class:`TypeError`, :class:`Error`
+        :returns: Ioctx - Rados Ioctx object
+        """
+        self.require_state("connected")
+        cdef:
+            rados_ioctx_t ioctx
+            int64_t _pool_id = pool_id
+        with nogil:
+            ret = rados_ioctx_create2(self.cluster, _pool_id, &ioctx)
+        if ret < 0:
+            raise make_ex(ret, "error opening pool id '%s'" % pool_id)
+        io = Ioctx(str(pool_id))
+        io.io = ioctx
+        return io
+
     def mon_command(self, cmd, inbuf, timeout=0, target=None):
         """
         mon_command[_target](cmd, inbuf, outbuf, outbuflen, outs, outslen)
@@ -1465,6 +1495,40 @@ Rados object in state %s." % self.state)
         # NOTE(sileht): Prevents the callback method from being garbage collected
         self.monitor_callback = None
         self.monitor_callback2 = cb
+
+    @requires(('service', str_type), ('daemon', str_type), ('metadata', dict))
+    def service_daemon_register(self, service, daemon, metadata):
+        """
+        :param str service: service name (e.g. "rgw")
+        :param str daemon: daemon name (e.g. "gwfoo")
+        :param dict metadata: static metadata about the register daemon
+               (e.g., the version of Ceph, the kernel version.)
+        """
+        service = cstr(service, 'service')
+        daemon = cstr(daemon, 'daemon')
+        metadata_dict = '\0'.join(chain.from_iterable(metadata.items()))
+        metadata_dict += '\0'
+        cdef:
+            char *_service = service
+            char *_daemon = daemon
+            char *_metadata = metadata_dict
+
+        with nogil:
+            ret = rados_service_register(self.cluster, _service, _daemon, _metadata)
+        if ret != 0:
+            raise make_ex(ret, "error calling service_register()")
+
+    @requires(('metadata', dict))
+    def service_daemon_update(self, status):
+        status_dict = '\0'.join(chain.from_iterable(status.items()))
+        status_dict += '\0'
+        cdef:
+            char *_status = status_dict
+
+        with nogil:
+            ret = rados_service_update_status(self.cluster, _status)
+        if ret != 0:
+            raise make_ex(ret, "error calling service_daemon_update()")
 
 
 cdef class OmapIterator(object):

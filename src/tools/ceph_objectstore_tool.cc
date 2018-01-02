@@ -45,7 +45,6 @@
 #include "include/util.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 #ifdef INTERNAL_TEST
 CompatSet get_test_compat_set() {
@@ -289,14 +288,10 @@ struct lookup_ghobject : public action_on_object_t {
   }
 };
 
-ghobject_t infos_oid = OSD::make_infos_oid();
-ghobject_t log_oid;
-ghobject_t biginfo_oid;
-
 int file_fd = fd_none;
 bool debug;
+bool force = false;
 super_header sh;
-uint64_t testalign;
 
 static int get_fd_data(int fd, bufferlist &bl)
 {
@@ -325,12 +320,12 @@ int get_log(ObjectStore *fs, __u8 struct_ver,
   try {
     ostringstream oss;
     assert(struct_ver > 0);
-    PGLog::read_log_and_missing(fs, coll,
-		    struct_ver >= 8 ? coll : coll_t::meta(),
-		    struct_ver >= 8 ? pgid.make_pgmeta_oid() : log_oid,
-		    info, log, missing,
-		    oss,
-		    g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
+    PGLog::read_log_and_missing(
+      fs, coll,
+      pgid.make_pgmeta_oid(),
+      info, log, missing,
+      oss,
+      g_ceph_context->_conf->osd_ignore_stale_divergent_priors);
     if (debug && oss.str().size())
       cerr << oss.str() << std::endl;
   }
@@ -351,9 +346,6 @@ void dump_log(Formatter *formatter, ostream &out, pg_log_t &log,
   formatter->flush(out);
   formatter->open_object_section("pg_missing_t");
   missing.dump(formatter);
-  formatter->close_section();
-  formatter->flush(out);
-  formatter->open_object_section("map");
   formatter->close_section();
   formatter->close_section();
   formatter->flush(out);
@@ -397,14 +389,13 @@ int mark_pg_for_removal(ObjectStore *fs, spg_t pgid, ObjectStore::Transaction *t
   coll_t coll(pgid);
   ghobject_t pgmeta_oid(info.pgid.make_pgmeta_oid());
 
-  bufferlist bl;
   epoch_t map_epoch = 0;
-  int r = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+  int r = PG::peek_map_epoch(fs, pgid, &map_epoch);
   if (r < 0)
     cerr << __func__ << " warning: peek_map_epoch reported error" << std::endl;
   PastIntervals past_intervals;
   __u8 struct_v;
-  r = PG::read_info(fs, pgid, coll, bl, info, past_intervals, struct_v);
+  r = PG::read_info(fs, pgid, coll, info, past_intervals, struct_v);
   if (r < 0) {
     cerr << __func__ << " error on read_info " << cpp_strerror(r) << std::endl;
     return r;
@@ -469,6 +460,7 @@ int write_pg(ObjectStore::Transaction &t, epoch_t epoch, pg_info_t &info,
 	     divergent_priors_t &divergent,
 	     pg_missing_t &missing)
 {
+  cout << __func__ << " epoch " << epoch << " info " << info << std::endl;
   int ret = write_info(t, epoch, info, past_intervals);
   if (ret)
     return ret;
@@ -632,7 +624,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
 	 i != objects.end();
 	 ++i) {
       assert(!i->hobj.is_meta());
-      if (i->is_pgmeta() || i->hobj.is_temp()) {
+      if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
 	continue;
       }
       r = export_file(store, coll, *i);
@@ -755,7 +747,7 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
   PGLog::IndexedLog log;
   pg_missing_t missing;
 
-  cerr << "Exporting " << pgid << std::endl;
+  cerr << "Exporting " << pgid << " info " << info << std::endl;
 
   int ret = get_log(fs, struct_ver, coll, pgid, info, log, missing);
   if (ret > 0)
@@ -807,6 +799,21 @@ int ObjectStoreTool::do_export(ObjectStore *fs, coll_t coll, spg_t pgid,
   return 0;
 }
 
+int dump_data(Formatter *formatter, bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  data_section ds;
+  ds.decode(ebliter);
+
+  formatter->open_object_section("data_block");
+  formatter->dump_unsigned("offset", ds.offset);
+  formatter->dump_unsigned("len", ds.len);
+  // XXX: Add option to dump data like od -cx ?
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
 int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
@@ -817,6 +824,63 @@ int get_data(ObjectStore *store, coll_t coll, ghobject_t hoid,
   if (debug)
     cerr << "\tdata: offset " << ds.offset << " len " << ds.len << std::endl;
   t->write(coll, hoid, ds.offset, ds.len,  ds.databl);
+  return 0;
+}
+
+int dump_attrs(
+  Formatter *formatter, ghobject_t hoid,
+  bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  attr_section as;
+  as.decode(ebliter);
+
+  // This could have been handled in the caller if we didn't need to
+  // support exports that didn't include object_info_t in object_begin.
+  if (hoid.generation == ghobject_t::NO_GEN &&
+      hoid.hobj.is_head()) {
+    map<string,bufferlist>::iterator mi = as.data.find(SS_ATTR);
+    if (mi != as.data.end()) {
+      SnapSet snapset;
+      auto p = mi->second.begin();
+      snapset.decode(p);
+      formatter->open_object_section("snapset");
+      snapset.dump(formatter);
+      formatter->close_section();
+    } else {
+      formatter->open_object_section("snapset");
+      formatter->dump_string("error", "missing SS_ATTR");
+      formatter->close_section();
+    }
+  }
+
+  formatter->open_object_section("attrs");
+  formatter->open_array_section("user");
+  for (auto kv : as.data) {
+      // Skip system attributes
+      if (('_' != kv.first.at(0)) || kv.first.size() == 1)
+	continue;
+      formatter->open_object_section("user_attr");
+      formatter->dump_string("name", kv.first.substr(1));
+      bool b64;
+      formatter->dump_string("value", cleanbin(kv.second, b64));
+      formatter->dump_bool("Base64", b64);
+      formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->open_array_section("system");
+  for (auto kv : as.data) {
+      // Skip user attributes
+      if (('_' == kv.first.at(0)) && kv.first.size() != 1)
+	continue;
+      formatter->open_object_section("sys_attr");
+      formatter->dump_string("name", kv.first);
+      formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->close_section();
+  formatter->flush(cout);
+
   return 0;
 }
 
@@ -870,6 +934,19 @@ int get_attrs(
   return 0;
 }
 
+int dump_omap_hdr(Formatter *formatter, bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  omap_hdr_section oh;
+  oh.decode(ebliter);
+
+  formatter->open_object_section("omap_header");
+  formatter->dump_string("value", string(oh.hdr.c_str(), oh.hdr.length()));
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
 int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
@@ -884,6 +961,29 @@ int get_omap_hdr(ObjectStore *store, coll_t coll, ghobject_t hoid,
   return 0;
 }
 
+int dump_omap(Formatter *formatter, bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  omap_section os;
+  os.decode(ebliter);
+
+  formatter->open_object_section("omaps");
+  formatter->dump_unsigned("count", os.omap.size());
+  formatter->open_array_section("data");
+  for (auto o : os.omap) {
+      formatter->open_object_section("omap");
+      formatter->dump_string("name", o.first);
+      bool b64;
+      formatter->dump_string("value", cleanbin(o.second, b64));
+      formatter->dump_bool("Base64", b64);
+      formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
 int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
     ObjectStore::Transaction *t, bufferlist &bl)
 {
@@ -894,6 +994,73 @@ int get_omap(ObjectStore *store, coll_t coll, ghobject_t hoid,
   if (debug)
     cerr << "\tomap: size " << os.omap.size() << std::endl;
   t->omap_setkeys(coll, hoid, os.omap);
+  return 0;
+}
+
+int ObjectStoreTool::dump_object(Formatter *formatter,
+				bufferlist &bl)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  object_begin ob;
+  ob.decode(ebliter);
+
+  if (ob.hoid.hobj.is_temp()) {
+    cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
+    return -EFAULT;
+  }
+
+  formatter->open_object_section("object");
+  formatter->open_object_section("oid");
+  ob.hoid.dump(formatter);
+  formatter->close_section();
+  formatter->open_object_section("object_info");
+  ob.oi.dump(formatter);
+  formatter->close_section();
+
+  bufferlist ebl;
+  bool done = false;
+  while(!done) {
+    sectiontype_t type;
+    int ret = read_section(&type, &ebl);
+    if (ret)
+      return ret;
+
+    //cout << "\tdo_object: Section type " << hex << type << dec << std::endl;
+    //cout << "\t\tsection size " << ebl.length() << std::endl;
+    if (type >= END_OF_TYPES) {
+      cout << "Skipping unknown object section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_DATA:
+      if (dry_run) break;
+      ret = dump_data(formatter, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_ATTRS:
+      if (dry_run) break;
+      ret = dump_attrs(formatter, ob.hoid, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_OMAP_HDR:
+      if (dry_run) break;
+      ret = dump_omap_hdr(formatter, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_OMAP:
+      if (dry_run) break;
+      ret = dump_omap(formatter, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_OBJECT_END:
+      done = true;
+      break;
+    default:
+      cerr << "Unknown section type " << type << std::endl;
+      return -EFAULT;
+    }
+  }
+  formatter->close_section();
   return 0;
 }
 
@@ -998,29 +1165,18 @@ int ObjectStoreTool::get_object(ObjectStore *store, coll_t coll,
   return 0;
 }
 
-int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
-    const OSDSuperblock& sb, OSDMap& curmap, spg_t pgid)
+int dump_pg_metadata(Formatter *formatter, bufferlist &bl, metadata_section &ms)
 {
   bufferlist::iterator ebliter = bl.begin();
   ms.decode(ebliter);
-  spg_t old_pgid = ms.info.pgid;
-  ms.info.pgid = pgid;
 
-#if DIAGNOSTIC
-  Formatter *formatter = new JSONFormatter(true);
-  cout << "export pgid " << old_pgid << std::endl;
-  cout << "struct_v " << (int)ms.struct_ver << std::endl;
-  cout << "map epoch " << ms.map_epoch << std::endl;
+  formatter->open_object_section("metadata_section");
 
-  formatter->open_object_section("importing OSDMap");
+  formatter->dump_unsigned("pg_disk_version", (int)ms.struct_ver);
+  formatter->dump_unsigned("map_epoch", ms.map_epoch);
+
+  formatter->open_object_section("OSDMap");
   ms.osdmap.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
-
-  cout << "osd current epoch " << sb.current_epoch << std::endl;
-  formatter->open_object_section("current OSDMap");
-  curmap.dump(formatter);
   formatter->close_section();
   formatter->flush(cout);
   cout << std::endl;
@@ -1029,17 +1185,76 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
   ms.info.dump(formatter);
   formatter->close_section();
   formatter->flush(cout);
-  cout << std::endl;
 
   formatter->open_object_section("log");
   ms.log.dump(formatter);
   formatter->close_section();
   formatter->flush(cout);
-  cout << std::endl;
 
+  formatter->open_object_section("pg_missing_t");
+  ms.missing.dump(formatter);
+  formatter->close_section();
+
+  // XXX: ms.past_intervals?
+
+  formatter->close_section();
   formatter->flush(cout);
-  cout << std::endl;
+
+  if (ms.osdmap.get_epoch() != 0 && ms.map_epoch != ms.osdmap.get_epoch()) {
+    cerr << "FATAL: Invalid OSDMap epoch in export data" << std::endl;
+    return -EFAULT;
+  }
+
+  return 0;
+}
+
+int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
+    const OSDSuperblock& sb, OSDMap& curmap, spg_t pgid)
+{
+  bufferlist::iterator ebliter = bl.begin();
+  ms.decode(ebliter);
+  spg_t old_pgid = ms.info.pgid;
+  ms.info.pgid = pgid;
+
+  if (debug) {
+    cout << "export pgid " << old_pgid << std::endl;
+    cout << "struct_v " << (int)ms.struct_ver << std::endl;
+    cout << "map epoch " << ms.map_epoch << std::endl;
+
+#ifdef DIAGNOSTIC
+    Formatter *formatter = new JSONFormatter(true);
+    formatter->open_object_section("stuff");
+
+    formatter->open_object_section("importing OSDMap");
+    ms.osdmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    cout << "osd current epoch " << sb.current_epoch << std::endl;
+    formatter->open_object_section("current OSDMap");
+    curmap.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    formatter->open_object_section("info");
+    ms.info.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    formatter->open_object_section("log");
+    ms.log.dump(formatter);
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
+
+    formatter->close_section();
+    formatter->flush(cout);
+    cout << std::endl;
 #endif
+  }
 
   if (ms.osdmap.get_epoch() != 0 && ms.map_epoch != ms.osdmap.get_epoch()) {
     cerr << "FATAL: Invalid OSDMap epoch in export data" << std::endl;
@@ -1071,6 +1286,15 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     } else {
       cerr << "WARNING: No OSDMap in old export,"
            " some objects may be ignored due to a split" << std::endl;
+    }
+  }
+  if (ms.osdmap.get_epoch() < sb.oldest_map) {
+    cerr << "PG export's map " << ms.osdmap.get_epoch()
+	 << " is older than OSD's oldest_map " << sb.oldest_map << std::endl;
+    if (!force) {
+      cerr << " pass --force to proceed anyway (with incomplete PastIntervals)"
+	   << std::endl;
+      return -EINVAL;
     }
   }
 
@@ -1105,18 +1329,108 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
 
   if (debug) {
     cerr << "Import pgid " << ms.info.pgid << std::endl;
-    cerr << "Clearing past_intervals " << ms.past_intervals << std::endl;
-    cerr << "Zero same_interval_since " << ms.info.history.same_interval_since << std::endl;
+    cerr << "Previous past_intervals " << ms.past_intervals << std::endl;
+    cerr << "history.same_interval_since " << ms.info.history.same_interval_since << std::endl;
   }
-
-  // Let osd recompute past_intervals and same_interval_since
-  ms.past_intervals.clear();
-  ms.info.history.same_interval_since =  0;
 
   if (debug)
     cerr << "Changing pg epoch " << ms.map_epoch << " to " << sb.current_epoch << std::endl;
 
-  ms.map_epoch = sb.current_epoch;
+  // advance map and fill in PastIntervals
+  if (ms.map_epoch < sb.current_epoch) {
+    if (debug)
+      cerr << "Advancing PG from " << ms.map_epoch << " to " << sb.current_epoch
+	   << std::endl;
+
+    OSDMap *startmap = new OSDMap;
+    startmap->deepish_copy_from(ms.osdmap);
+    OSDMapRef lastmap(startmap);
+
+    int up_primary, acting_primary;
+    vector<int> up, acting;
+    lastmap->pg_to_up_acting_osds(
+      ms.info.pgid.pgid, &up, &up_primary, &acting, &acting_primary);
+
+    while (ms.map_epoch < sb.current_epoch) {
+      ++ms.map_epoch;
+      if (ms.map_epoch < sb.oldest_map) {
+	// cheat!
+	ms.map_epoch = sb.oldest_map;
+      }
+
+      OSDMap *t = new OSDMap;
+      bufferlist nextmap_bl;
+      int ret = get_osdmap(store, ms.map_epoch, *t, nextmap_bl);
+      OSDMapRef nextmap(t);
+      if (ret < 0) {
+	cerr << "cannot load osdmap " << ms.map_epoch << std::endl;
+	return -EINVAL;
+      }
+      
+      int new_up_primary, new_acting_primary;
+      vector<int> new_up, new_acting;
+      nextmap->pg_to_up_acting_osds(
+	ms.info.pgid.pgid, &new_up, &new_up_primary, &new_acting,
+	&new_acting_primary);
+
+      // this is a bit imprecise, but sufficient?
+      struct min_size_predicate_t : public IsPGRecoverablePredicate {
+	const pg_pool_t *pi;
+	bool operator()(const set<pg_shard_t> &have) const {
+	  return have.size() >= pi->min_size;
+	}
+	min_size_predicate_t(const pg_pool_t *i) : pi(i) {}
+      } min_size_predicate(nextmap->get_pg_pool(ms.info.pgid.pgid.pool()));
+
+
+      bool new_interval = PastIntervals::check_new_interval(
+	acting_primary,
+	new_acting_primary,
+	acting, new_acting,
+	up_primary,
+	new_up_primary,
+	up, new_up,
+	ms.info.history.same_interval_since,
+	ms.info.history.last_epoch_clean,
+	nextmap,
+	lastmap,
+	ms.info.pgid.pgid.get_ancestor(
+	  lastmap->get_pg_num(ms.info.pgid.pgid.pool())),
+	&min_size_predicate,
+	&ms.past_intervals,
+	&cerr);
+      if (new_interval) {
+	ms.info.history.same_interval_since = nextmap->get_epoch();
+	if (up != new_up) {
+	  ms.info.history.same_up_since = nextmap->get_epoch();
+	}
+	if (acting_primary != new_acting_primary) {
+	  ms.info.history.same_primary_since = nextmap->get_epoch();
+	}
+	unsigned old_pg_num = lastmap->get_pg_num(ms.info.pgid.pgid.pool());
+	unsigned new_pg_num = nextmap->get_pg_num(ms.info.pgid.pgid.pool());
+	if (pgid.pgid.m_seed >= old_pg_num) {
+	  if (pgid.pgid.m_seed < new_pg_num) {
+	    ms.info.history.epoch_created = nextmap->get_epoch();
+	    ms.info.history.last_epoch_split = nextmap->get_epoch();
+	  }
+	  // we don't actually care about the ancestor splits because only
+	  // the latest split is recorded.
+	} else {
+	  if (pgid.pgid.is_split(old_pg_num, new_pg_num, nullptr)) {
+	    ms.info.history.last_epoch_split = nextmap->get_epoch();
+	  }
+	}
+	up = new_up;
+	acting = new_acting;
+	up_primary = new_up_primary;
+	acting_primary = new_acting_primary;
+      }
+      lastmap = nextmap;
+    }
+    if (debug)
+      cerr << "new PastIntervals " << ms.past_intervals << std::endl;
+  }
 
   return 0;
 }
@@ -1156,6 +1470,106 @@ void filter_divergent_priors(spg_t import_pgid, const OSDMap &curmap,
   }
 }
 
+int ObjectStoreTool::dump_import(Formatter *formatter)
+{
+  bufferlist ebl;
+  pg_info_t info;
+  PGLog::IndexedLog log;
+  //bool skipped_objects = false;
+
+  int ret = read_super();
+  if (ret)
+    return ret;
+
+  if (sh.magic != super_header::super_magic) {
+    cerr << "Invalid magic number" << std::endl;
+    return -EFAULT;
+  }
+
+  if (sh.version > super_header::super_ver) {
+    cerr << "Can't handle export format version=" << sh.version << std::endl;
+    return -EINVAL;
+  }
+
+  formatter->open_object_section("Export");
+
+  //First section must be TYPE_PG_BEGIN
+  sectiontype_t type;
+  ret = read_section(&type, &ebl);
+  if (ret)
+    return ret;
+  if (type == TYPE_POOL_BEGIN) {
+    cerr << "Dump of pool exports not supported" << std::endl;
+    return -EINVAL;
+  } else if (type != TYPE_PG_BEGIN) {
+    cerr << "Invalid first section type " << std::to_string(type) << std::endl;
+    return -EFAULT;
+  }
+
+  bufferlist::iterator ebliter = ebl.begin();
+  pg_begin pgb;
+  pgb.decode(ebliter);
+  spg_t pgid = pgb.pgid;
+
+  formatter->dump_string("pgid", stringify(pgid));
+  formatter->dump_string("cluster_fsid", stringify(pgb.superblock.cluster_fsid));
+  formatter->dump_string("features", stringify(pgb.superblock.compat_features));
+
+  bool done = false;
+  bool found_metadata = false;
+  metadata_section ms;
+  bool objects_started = false;
+  while(!done) {
+    ret = read_section(&type, &ebl);
+    if (ret)
+      return ret;
+
+    if (debug) {
+      cerr << "dump_import: Section type " << std::to_string(type) << std::endl;
+    }
+    if (type >= END_OF_TYPES) {
+      cerr << "Skipping unknown section type" << std::endl;
+      continue;
+    }
+    switch(type) {
+    case TYPE_OBJECT_BEGIN:
+      if (!objects_started) {
+	formatter->open_array_section("objects");
+	objects_started = true;
+      }
+      ret = dump_object(formatter, ebl);
+      if (ret) return ret;
+      break;
+    case TYPE_PG_METADATA:
+      if (objects_started)
+	cerr << "WARNING: metadata_section out of order" << std::endl;
+      ret = dump_pg_metadata(formatter, ebl, ms);
+      if (ret) return ret;
+      found_metadata = true;
+      break;
+    case TYPE_PG_END:
+      if (objects_started) {
+	formatter->close_section();
+      }
+      done = true;
+      break;
+    default:
+      cerr << "Unknown section type " << std::to_string(type) << std::endl;
+      return -EFAULT;
+    }
+  }
+
+  if (!found_metadata) {
+    cerr << "Missing metadata section" << std::endl;
+    return -EFAULT;
+  }
+
+  formatter->close_section();
+  formatter->flush(cout);
+
+  return 0;
+}
+
 int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 			       bool force, std::string pgidstr,
 			       ObjectStore::Sequencer &osr)
@@ -1191,7 +1605,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     cerr << "Pool exports cannot be imported into a PG" << std::endl;
     return -EINVAL;
   } else if (type != TYPE_PG_BEGIN) {
-    cerr << "Invalid first section type " << type << std::endl;
+    cerr << "Invalid first section type " << std::to_string(type) << std::endl;
     return -EFAULT;
   }
 
@@ -1268,8 +1682,6 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
   }
 
   ghobject_t pgmeta_oid = pgid.make_pgmeta_oid();
-  log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
 
   //Check for PG already present.
   coll_t coll(pgid);
@@ -1306,7 +1718,9 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     if (ret)
       return ret;
 
-    //cout << "do_import: Section type " << hex << type << dec << std::endl;
+    if (debug) {
+      cout << __func__ << ": Section type " << std::to_string(type) << std::endl;
+    }
     if (type >= END_OF_TYPES) {
       cout << "Skipping unknown section type" << std::endl;
       continue;
@@ -1325,7 +1739,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
       done = true;
       break;
     default:
-      cerr << "Unknown section type " << type << std::endl;
+      cerr << "Unknown section type " << std::to_string(type) << std::endl;
       return -EFAULT;
     }
   }
@@ -2034,12 +2448,15 @@ int set_size(ObjectStore *store, coll_t coll, ghobject_t &ghobj, uint64_t setsiz
   if (!dry_run) {
     attr.clear();
     oi.size = setsize;
-    ::encode(oi, attr, -1);  /* fixme: using full features */
     ObjectStore::Transaction t;
-    t.setattr(coll, ghobj, OI_ATTR, attr);
     // Only modify object info if we want to corrupt it
-    if (!corrupt)
+    if (!corrupt && (uint64_t)st.st_size != setsize) {
       t.truncate(coll, ghobj, setsize);
+      // Changing objectstore size will invalidate data_digest, so clear it.
+      oi.clear_data_digest();
+    }
+    ::encode(oi, attr, -1);  /* fixme: using full features */
+    t.setattr(coll, ghobj, OI_ATTR, attr);
     if (is_snap) {
       bufferlist snapattr;
       snapattr.clear();
@@ -2490,7 +2907,6 @@ int main(int argc, char **argv)
   unsigned epoch = 0;
   ghobject_t ghobj;
   bool human_readable;
-  bool force;
   Formatter *formatter;
   bool head;
 
@@ -2498,18 +2914,18 @@ int main(int argc, char **argv)
   desc.add_options()
     ("help", "produce help message")
     ("type", po::value<string>(&type),
-     "Arg is one of [bluestore, filestore (default), memstore]")
+     "Arg is one of [bluestore (default), filestore, memstore]")
     ("data-path", po::value<string>(&dpath),
      "path to object store, mandatory")
     ("journal-path", po::value<string>(&jpath),
      "path to journal, use if tool can't find it")
     ("pgid", po::value<string>(&pgidstr),
-     "PG id, mandatory for info, log, remove, export, export-remove, rm-past-intervals, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
+     "PG id, mandatory for info, log, remove, export, export-remove, mark-complete, and mandatory for apply-layout-settings if --pool is not specified")
     ("pool", po::value<string>(&pool),
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
-     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db]")
+     "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -2540,10 +2956,9 @@ int main(int argc, char **argv)
     ("arg1", po::value<string>(&arg1), "arg1 based on cmd, "
      "for apply-layout-settings: target hash level split to")
     ("arg2", po::value<string>(&arg2), "arg2 based on cmd")
-    ("test-align", po::value<uint64_t>(&testalign)->default_value(0), "hidden align option for testing")
     ;
 
-  po::options_description all("All options");
+  po::options_description all;
   all.add(desc).add(positional);
 
   po::positional_options_description pd;
@@ -2564,7 +2979,7 @@ int main(int argc, char **argv)
   }
 
   if (vm.count("help")) {
-    usage(all);
+    usage(desc);
     return 1;
   }
 
@@ -2613,9 +3028,10 @@ int main(int argc, char **argv)
     ::close(fd);
   }
   if (!vm.count("type") && type == "") {
-    type = "filestore";
+    type = "bluestore";
   }
   if (!vm.count("data-path") &&
+     op != "dump-import" &&
      !(op == "dump-journal" && type == "filestore")) {
     cerr << "Must provide --data-path" << std::endl;
     usage(desc);
@@ -2664,7 +3080,7 @@ int main(int argc, char **argv)
     } else {
       file_fd = open(file.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     }
-  } else if (op == "import" || op == "set-osdmap" || op == "set-inc-osdmap") {
+  } else if (op == "import" || op == "dump-import" || op == "set-osdmap" || op == "set-inc-osdmap") {
     if (!vm.count("file") || file == "-") {
       if (isatty(STDIN_FILENO)) {
         cerr << "stdin is a tty and no --file filename specified" << std::endl;
@@ -2679,7 +3095,7 @@ int main(int argc, char **argv)
   ObjectStoreTool tool = ObjectStoreTool(file_fd, dry_run);
 
   if (vm.count("file") && file_fd == fd_none && !dry_run) {
-    cerr << "--file option only applies to import, export, export-remove, "
+    cerr << "--file option only applies to import, dump-import, export, export-remove, "
 	 << "get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap" << std::endl;
     return 1;
   }
@@ -2725,6 +3141,16 @@ int main(int argc, char **argv)
       return 1;
     }
     formatter->flush(cout);
+    return 0;
+  }
+
+  if (op == "dump-import") {
+    int ret = tool.dump_import(formatter);
+    if (ret < 0) {
+      cerr << "dump-import: "
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
     return 0;
   }
 
@@ -2921,7 +3347,11 @@ int main(int argc, char **argv)
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
 	lookup_ghobject lookup(object, nspace, head);
-	if (action_on_all_objects(fs, lookup, debug)) {
+	if (pgidstr.length())
+	  ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), lookup, debug);
+	else
+	  ret = action_on_all_objects(fs, lookup, debug);
+	if (ret) {
 	  throw std::runtime_error("Internal error");
 	} else {
 	  if (lookup.size() != 1) {
@@ -3003,7 +3433,7 @@ int main(int argc, char **argv)
   // The ops which require --pgid option are checked here and
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
-      || op == "export-remove" || op == "rm-past-intervals" || op == "mark-complete") &&
+      || op == "export-remove" || op == "mark-complete") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
     usage(desc);
@@ -3105,9 +3535,6 @@ int main(int argc, char **argv)
     goto out;
   }
 
-  log_oid = OSD::make_pg_log_oid(pgid);
-  biginfo_oid = OSD::make_pg_biginfo_oid(pgid);
-
   if (op == "remove") {
     if (!force && !dry_run) {
       cerr << "Please use export-remove or you must use --force option" << std::endl;
@@ -3206,9 +3633,9 @@ int main(int argc, char **argv)
 
   // If not an object command nor any of the ops handled below, then output this usage
   // before complaining about a bad pgid
-  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "rm-past-intervals" && op != "mark-complete") {
-    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, rm-past-intervals, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete)"
+  if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete") {
+    cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -3456,9 +3883,8 @@ int main(int argc, char **argv)
       goto out;
     }
 
-    bufferlist bl;
     map_epoch = 0;
-    ret = PG::peek_map_epoch(fs, pgid, &map_epoch, &bl);
+    ret = PG::peek_map_epoch(fs, pgid, &map_epoch);
     if (ret < 0)
       cerr << "peek_map_epoch reports error" << std::endl;
     if (debug)
@@ -3467,13 +3893,12 @@ int main(int argc, char **argv)
     pg_info_t info(pgid);
     PastIntervals past_intervals;
     __u8 struct_ver;
-    ret = PG::read_info(fs, pgid, coll, bl, info, past_intervals,
-		      struct_ver);
+    ret = PG::read_info(fs, pgid, coll, info, past_intervals, struct_ver);
     if (ret < 0) {
       cerr << "read_info error " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-    if (struct_ver < PG::compat_struct_v) {
+    if (struct_ver < PG::get_compat_struct_v()) {
       cerr << "PG is too old to upgrade, use older Ceph version" << std::endl;
       ret = -EFAULT;
       goto out;
@@ -3506,38 +3931,13 @@ int main(int argc, char **argv)
           goto out;
 
       dump_log(formatter, cout, log, missing);
-    } else if (op == "rm-past-intervals") {
-      ObjectStore::Transaction tran;
-      ObjectStore::Transaction *t = &tran;
-
-      if (struct_ver < PG::compat_struct_v) {
-        cerr << "Can't remove past-intervals, version mismatch " << (int)struct_ver
-          << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
-          << std::endl;
-        ret = -EFAULT;
-        goto out;
-      }
-
-      cout << "Remove past-intervals " << past_intervals << std::endl;
-
-      past_intervals.clear();
-      if (dry_run) {
-        ret = 0;
-        goto out;
-      }
-      ret = write_info(*t, map_epoch, info, past_intervals);
-
-      if (ret == 0) {
-        fs->apply_transaction(osr, std::move(*t));
-        cout << "Removal succeeded" << std::endl;
-      }
     } else if (op == "mark-complete") {
       ObjectStore::Transaction tran;
       ObjectStore::Transaction *t = &tran;
 
-      if (struct_ver < PG::compat_struct_v) {
+      if (struct_ver < PG::get_compat_struct_v()) {
         cerr << "Can't mark-complete, version mismatch " << (int)struct_ver
-	     << " (pg)  < compat " << (int)PG::compat_struct_v << " (tool)"
+	     << " (pg)  < compat " << (int)PG::get_compat_struct_v() << " (tool)"
 	     << std::endl;
 	ret = 1;
 	goto out;

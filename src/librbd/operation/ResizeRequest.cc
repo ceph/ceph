@@ -422,7 +422,7 @@ void ResizeRequest<I>::compute_parent_overlap() {
   if (image_ctx.parent == NULL) {
     m_new_parent_overlap = 0;
   } else {
-    m_new_parent_overlap = MIN(m_new_size, image_ctx.parent_md.overlap);
+    m_new_parent_overlap = std::min(m_new_size, image_ctx.parent_md.overlap);
   }
 }
 

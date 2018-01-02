@@ -81,7 +81,7 @@ public:
   virtual int service_daemon_register(const std::string& service,
                                       const std::string& name,
                                       const std::map<std::string,std::string>& metadata) = 0;
-  virtual int service_daemon_update_status(const std::map<std::string,std::string>& status) = 0;
+  virtual int service_daemon_update_status(std::map<std::string,std::string>&& status) = 0;
 
   virtual int pool_create(const std::string &pool_name) = 0;
   virtual int pool_delete(const std::string &pool_name) = 0;
