@@ -40,12 +40,12 @@ function ensure_decent_gcc_on_deb {
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
-deb http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
-deb http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
+deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
+deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
 EOF
 	# import PPA's signing key into APT's keyring
 	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
-	$SUDO apt-get update
+	$SUDO apt-get -y update -o Acquire::Languages=none -o Acquire::Translation=none || true
 	$SUDO apt-get install -y g++-7
     fi
 
@@ -80,10 +80,9 @@ function ensure_decent_gcc_on_rh {
     local expected=5.1
     local dts_ver=$1
     if version_lt $old $expected; then
-	case $- in
-	    *i*)
-		# interactive shell
-		cat <<EOF
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
 scl enable devtoolset-7 bash
@@ -94,12 +93,10 @@ source scl_source enable devtoolset-7
 
 see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
 EOF
-	    ;;
-	    *)
-		# non-interactive shell
-		source /opt/rh/devtoolset-$dts_ver/enable
-		;;
-	esac
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
     fi
 }
 
@@ -232,7 +229,7 @@ else
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=6
+			    dts_ver=7
 			    ;;
 		    esac
                 elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
