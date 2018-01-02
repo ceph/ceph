@@ -884,8 +884,8 @@ void Infiniband::init()
   initialized = true;
 
   device = device_list->get_device(device_name.c_str());
-  device->binding_port(cct, port_num);
   assert(device);
+  device->binding_port(cct, port_num);
   ib_physical_port = device->active_port->get_port_num();
   pd = new ProtectionDomain(cct, device);
   assert(NetHandler(cct).set_nonblock(device->ctxt->async_fd) == 0);
