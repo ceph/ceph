@@ -133,7 +133,7 @@ Note that if blacklisting is disabled, then evicting a client will
 only have an effect on the MDS you send the command to.  On a system
 with multiple active MDS daemons, you would need to send an
 eviction command to each active daemon.  When blacklisting is enabled 
-(the default), sending an eviction to command to just a single
+(the default), sending an eviction command to just a single
 MDS is sufficient, because the blacklist propagates it to the others.
 
 Advanced options
