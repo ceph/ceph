@@ -301,6 +301,14 @@ void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
 }
 
+ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy() 
+{
+  if (bitmatrix)
+    free(bitmatrix);
+  if (schedule)
+    jerasure_free_schedule(schedule);
+}
+
 // 
 // ErasureCodeJerasureCauchyOrig
 //
