@@ -4101,94 +4101,6 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
   return pg;
 }
 
-/*
- * look up a pg.  if we have it, great.  if not, consider creating it IF the pg mapping
- * hasn't changed since the given epoch and we are the primary.
- */
-int OSD::handle_pg_peering_evt(
-  spg_t pgid,
-  const pg_history_t& orig_history,
-  const PastIntervals& pi,
-  epoch_t epoch,
-  PGPeeringEventRef evt)
-{
-  if (service.splitting(pgid)) {
-    peering_wait_for_split[pgid].push_back(evt);
-    return -EEXIST;
-  }
-
-  PG *pg = _lookup_lock_pg(pgid);
-  if (!pg) {
-    // same primary?
-    if (!osdmap->have_pg_pool(pgid.pool()))
-      return -EINVAL;
-    int up_primary, acting_primary;
-    vector<int> up, acting;
-    osdmap->pg_to_up_acting_osds(
-      pgid.pgid, &up, &up_primary, &acting, &acting_primary);
-
-    pg_history_t history = orig_history;
-    bool valid_history = project_pg_history(
-      pgid, history, epoch, up, up_primary, acting, acting_primary);
-
-    if (!valid_history || epoch < history.same_interval_since) {
-      dout(10) << __func__ << pgid << " acting changed in "
-	       << history.same_interval_since << " (msg from " << epoch << ")"
-	       << dendl;
-      return -EINVAL;
-    }
-
-    if (service.splitting(pgid)) {
-      ceph_abort();
-    }
-
-    const bool is_mon_create =
-      evt->get_event().dynamic_type() == NullEvt::static_type();
-    if (maybe_wait_for_max_pg(osdmap, pgid, is_mon_create)) {
-      return -EAGAIN;
-    }
-
-    PG::RecoveryCtx rctx = create_context();
-
-    const pg_pool_t* pp = osdmap->get_pg_pool(pgid.pool());
-    if (pp->has_flag(pg_pool_t::FLAG_EC_OVERWRITES) &&
-	store->get_type() != "bluestore") {
-      clog->warn() << "pg " << pgid
-		   << " is at risk of silent data corruption: "
-		   << "the pool allows ec overwrites but is not stored in "
-		   << "bluestore, so deep scrubbing will not detect bitrot";
-    }
-    PG::_create(*rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-    PG::_init(*rctx.transaction, pgid, pp);
-
-    int role = osdmap->calc_pg_role(whoami, acting, acting.size());
-    if (!pp->is_replicated() && role != pgid.shard)
-      role = -1;
-
-    pg = _create_lock_pg(
-      get_map(epoch),
-      pgid, false, false,
-      role,
-      up, up_primary,
-      acting, acting_primary,
-      history, pi,
-      *rctx.transaction);
-    pg->handle_create(&rctx);
-    dispatch_context(rctx, pg, osdmap);
-
-    dout(10) << *pg << " is new" << dendl;
-    enqueue_peering_evt(pg->get_pgid(), evt);
-    wake_pg_waiters(pg);
-    pg->unlock();
-    return 0;
-  } else {
-    // already had it
-    enqueue_peering_evt(pg->get_pgid(), evt);
-    pg->unlock();
-    return -EEXIST;
-  }
-}
-
 bool OSD::maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create)
 {
   const auto max_pgs_per_osd =
@@ -8347,11 +8259,9 @@ void OSD::handle_pg_create(OpRequestRef op)
     pg_history_t history;
     build_initial_pg_history(pgid, created, ci->second, &history, &pi);
 
-    // The mon won't resend unless the primary changed, so
-    // we ignore same_interval_since.  We'll pass this history
-    // to handle_pg_peering_evt with the current epoch as the
-    // event -- the project_pg_history check in
-    // handle_pg_peering_evt will be a noop.
+    // The mon won't resend unless the primary changed, so we ignore
+    // same_interval_since.  We'll pass this history with the current
+    // epoch as the event.
     if (history.same_primary_since > m->epoch) {
       dout(10) << __func__ << ": got obsolete pg create on pgid "
 	       << pgid << " from epoch " << m->epoch
@@ -8359,19 +8269,21 @@ void OSD::handle_pg_create(OpRequestRef op)
 	       << dendl;
       continue;
     }
-    if (handle_pg_peering_evt(
-          pgid,
-          history,
-          pi,
-          osdmap->get_epoch(),
-          PGPeeringEventRef(
-	    std::make_shared<PGPeeringEvent>(
-	      osdmap->get_epoch(),
-	      osdmap->get_epoch(),
-	      NullEvt()))
-          ) == -EEXIST) {
-      service.send_pg_created(pgid.pgid);
-    }
+    enqueue_peering_evt(
+      pgid,
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  osdmap->get_epoch(),
+	  osdmap->get_epoch(),
+	  NullEvt(),
+	  true,
+	  new PGCreateInfo(
+	    pgid,
+	    created,
+	    history,
+	    pi,
+	    true)
+	  )));
   }
 
   with_unique_lock(pending_creates_lock, [=]() {
