@@ -56,20 +56,23 @@ struct bufferlist_consumer {
     : bl(bl), remaining(remaining) {}
 
   using tmp_buf = seastar::temporary_buffer<char>;
-  using unconsumed_remainder = std::experimental::optional<tmp_buf>;
+  using consumption_result_type = typename seastar::input_stream<char>::consumption_result_type;
 
   // consume some or all of a buffer segment
-  seastar::future<unconsumed_remainder> operator()(tmp_buf&& data) {
+  seastar::future<consumption_result_type> operator()(tmp_buf&& data) {
     if (remaining >= data.size()) {
       // consume the whole buffer
       remaining -= data.size();
       bl.append(buffer::create_foreign(std::move(data)));
       if (remaining > 0) {
         // return none to request more segments
-        return seastar::make_ready_future<unconsumed_remainder>();
+        return seastar::make_ready_future<consumption_result_type>(
+            seastar::continue_consuming{});
+      } else {
+        // return an empty buffer to singal that we're done
+        return seastar::make_ready_future<consumption_result_type>(
+            consumption_result_type::stop_consuming_type({}));
       }
-      // return an empty buffer to singal that we're done
-      return seastar::make_ready_future<unconsumed_remainder>(tmp_buf{});
     }
     if (remaining > 0) {
       // consume the front
@@ -78,7 +81,8 @@ struct bufferlist_consumer {
       remaining = 0;
     }
     // give the rest back to signal that we're done
-    return seastar::make_ready_future<unconsumed_remainder>(std::move(data));
+    return seastar::make_ready_future<consumption_result_type>(
+        consumption_result_type::stop_consuming_type{std::move(data)});
   };
 };
 
