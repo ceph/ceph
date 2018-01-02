@@ -909,6 +909,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
   // setting I_COMPLETE needs to happen after adding the cap
   if (updating_inode &&
+      in->snapid == CEPH_NOSNAP &&
       in->is_dir() &&
       (st->cap.caps & CEPH_CAP_FILE_SHARED) &&
       (issued & CEPH_CAP_FILE_EXCL) == 0 &&
