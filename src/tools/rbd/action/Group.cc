@@ -592,7 +592,7 @@ Shell::Action action_group_snap_create(
   {"group", "snap", "create"}, {}, "Make a snapshot of a group.",
   "", &get_group_snap_create_arguments, &execute_group_snap_create);
 Shell::Action action_group_snap_remove(
-  {"group", "snap", "remove"}, {}, "Remove a snapshot from a group.",
+  {"group", "snap", "remove"}, {"group", "snap", "rm"}, "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
 Shell::Action action_group_snap_list(
   {"group", "snap", "list"}, {}, "List snapshots of a group.",
