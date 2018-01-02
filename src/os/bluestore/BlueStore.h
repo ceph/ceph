@@ -2430,14 +2430,16 @@ private:
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
-    return debug_data_error_objects.count(o);
+    return debug_data_error_objects.find(o) !=
+           debug_data_error_objects.end();
   }
   bool _debug_mdata_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
     RWLock::RLocker l(debug_read_error_lock);
-    return debug_mdata_error_objects.count(o);
+    return debug_mdata_error_objects.find(o) !=
+           debug_mdata_error_objects.end();
   }
   void _debug_obj_on_delete(const ghobject_t& o) {
     if (cct->_conf->bluestore_debug_inject_read_err) {
