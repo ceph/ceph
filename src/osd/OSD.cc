@@ -4050,13 +4050,10 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
   osdmap->pg_to_up_acting_osds(
     pgid.pgid, &up, &up_primary, &acting, &acting_primary);
 
-  /*
-  const bool is_mon_create =
-    evt->get_event().dynamic_type() == PG::NullEvt::static_type();
-  if (maybe_wait_for_max_pg(pgid, is_mon_create)) {
+  if (maybe_wait_for_max_pg(osdmap, pgid, info->by_mon)) {
+    dout(10) << __func__ << " hit max pg, dropping" << dendl;
     return nullptr;
   }
-  */
 
   PG::RecoveryCtx rctx = create_context();
 
@@ -4147,7 +4144,7 @@ int OSD::handle_pg_peering_evt(
 
     const bool is_mon_create =
       evt->get_event().dynamic_type() == NullEvt::static_type();
-    if (maybe_wait_for_max_pg(pgid, is_mon_create)) {
+    if (maybe_wait_for_max_pg(osdmap, pgid, is_mon_create)) {
       return -EAGAIN;
     }
 
@@ -4192,7 +4189,7 @@ int OSD::handle_pg_peering_evt(
   }
 }
 
-bool OSD::maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create)
+bool OSD::maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create)
 {
   const auto max_pgs_per_osd =
     (cct->_conf->get_val<uint64_t>("mon_max_pg_per_osd") *
