@@ -177,7 +177,7 @@ or
 .. code-block:: python
    :linenos:
 
-        ioctx = cluster.open_ioctx(pool_id)
+        ioctx = cluster.open_ioctx2(pool_id)
 
 
 Once you have an I/O context, you can read/write objects, extended attributes,

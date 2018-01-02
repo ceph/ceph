@@ -313,7 +313,7 @@ Shell::Action action_resync(
   &get_arguments, &execute_resync);
 Shell::Action action_status(
   {"mirror", "image", "status"}, {},
-  "Show RDB mirroring status for an image.", "",
+  "Show RBD mirroring status for an image.", "",
   &get_status_arguments, &execute_status);
 
 } // namespace mirror_image
