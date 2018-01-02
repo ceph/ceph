@@ -1904,7 +1904,7 @@ protected:
     const PastIntervals& pi,
     epoch_t epoch,
     PGPeeringEventRef evt);
-  bool maybe_wait_for_max_pg(spg_t pgid, bool is_mon_create);
+  bool maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create);
   void resume_creating_pg();
 
   void load_pgs();
