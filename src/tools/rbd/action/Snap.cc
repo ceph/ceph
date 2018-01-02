@@ -101,9 +101,9 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       if (all_snaps && (get_group_res == 0)) {
 	ostringstream oss;
 	std::string pool_name = pool_map[group_snap.group_pool];
-	oss << "group snapshot - " << pool_name << "/" <<
+	oss << "group snapshot (" << pool_name << "/" <<
 					     group_snap.group_name << "@" <<
-					     group_snap.group_snap_name;
+					     group_snap.group_snap_name << ")";
 
 	namespace_string = oss.str();
       }
