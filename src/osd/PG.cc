@@ -5872,6 +5872,7 @@ void PG::take_waiters()
        ++i) {
     osd->osd->enqueue_peering_evt_front(info.pgid, *i);
   }
+  peering_waiters.clear();
 }
 
 void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
