@@ -1670,12 +1670,13 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (op.log_op && !header.syncstopped) {
+    rgw_bucket_dir_entry& entry = obj.get_dir_entry();
+
     rgw_bucket_entry_ver ver;
     ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
-    real_time mtime = real_clock::now(); /* mtime has no real meaning in instance removal context */
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
-                              mtime, ver,
+                              entry.meta.mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
                               op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
     if (ret < 0)
