@@ -5617,14 +5617,14 @@ std::vector<Option> get_rgw_options() {
     .set_default(10_min)
     .set_description(""),
 
-    Option("rgw_bucket_info_cache_expiry_interval", Option::TYPE_UINT,
+    Option("rgw_cache_expiry_interval", Option::TYPE_UINT,
 	   Option::LEVEL_ADVANCED)
     .set_default(15_min)
-    .set_description("Number of seconds before entries in the bucket info "
-		     "cache are assumed stale and re-fetched. Zero is never.")
+    .set_description("Number of seconds before entries in the cache are "
+		     "assumed stale and re-fetched. Zero is never.")
     .add_tag("performance")
     .add_service("rgw")
-    .set_long_description("The Rados Gateway stores metadata about buckets in "
+    .set_long_description("The Rados Gateway stores metadata and objects in "
 			  "an internal cache. This should be kept consistent "
 			  "by the OSD's relaying notify events between "
 			  "multiple watching RGW processes. In the event "
