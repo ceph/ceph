@@ -3772,7 +3772,9 @@ void PG::read_state(ObjectStore *store)
   }
 
   PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
-  handle_loaded(&rctx);
+  handle_initialize(&rctx);
+  // note: we don't activate here because we know the OSD will advance maps
+  // during boot.
   write_if_dirty(*rctx.transaction);
   store->queue_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
@@ -6325,11 +6327,11 @@ void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
   if (!have_same_or_newer_map(evt->get_epoch_sent())) {
     dout(10) << "deferring event " << evt->get_desc() << dendl;
     peering_waiters.push_back(evt);
-    return;
+  } else if (old_peering_evt(evt)) {
+    dout(10) << "discard old " << evt->get_desc() << dendl;
+  } else {
+    recovery_state.handle_event(evt, rctx);
   }
-  if (old_peering_evt(evt))
-    return;
-  recovery_state.handle_event(evt, rctx);
   write_if_dirty(*rctx->transaction);
 }
 
@@ -6445,27 +6447,11 @@ void PG::handle_activate_map(RecoveryCtx *rctx)
   write_if_dirty(*rctx->transaction);
 }
 
-void PG::handle_loaded(RecoveryCtx *rctx)
+void PG::handle_initialize(RecoveryCtx *rctx)
 {
-  dout(10) << "handle_loaded" << dendl;
-  Load evt;
-  recovery_state.handle_event(evt, rctx);
-  write_if_dirty(*rctx->transaction);
-}
-
-void PG::handle_create(RecoveryCtx *rctx)
-{
-  dout(10) << "handle_create" << dendl;
-  rctx->created_pgs.insert(this);
+  dout(10) << __func__ << dendl;
   Initialize evt;
   recovery_state.handle_event(evt, rctx);
-  ActMap evt2;
-  recovery_state.handle_event(evt2, rctx);
-  write_if_dirty(*rctx->transaction);
-
-  rctx->on_applied->add(make_lambda_context([this]() {
-    update_store_with_options();
-  }));
 }
 
 void PG::handle_query_state(Formatter *f)
@@ -6601,18 +6587,6 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Initial")
 {
   context< RecoveryMachine >().log_enter(state_name);
-}
-
-boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-
-  // do we tell someone we're here?
-  pg->send_notify = (!pg->is_primary());
-
-  pg->update_store_with_options();
-
-  return transit< Reset >();
 }
 
 boost::statechart::result PG::RecoveryState::Initial::react(const MNotifyRec& notify)

@@ -65,6 +65,13 @@ public:
       return 0;
     }
 
+    virtual bool requires_pg() const {
+      return true;
+    }
+    virtual const PGCreateInfo *creates_pg() const {
+      return nullptr;
+    }
+
     virtual ostream &print(ostream &rhs) const = 0;
 
     virtual void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
@@ -141,6 +148,12 @@ public:
   epoch_t get_map_epoch() const { return map_epoch; }
   dmc::ReqParams get_qos_params() const { return qos_params; }
   void set_qos_params(dmc::ReqParams qparams) { qos_params =  qparams; }
+  bool requires_pg() const {
+    return qitem->requires_pg();
+  }
+  const PGCreateInfo *creates_pg() const {
+    return qitem->creates_pg();
+  }
 
   friend ostream& operator<<(ostream& out, const OpQueueItem& item) {
     return out << "OpQueueItem("
@@ -212,6 +225,12 @@ public:
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+  bool requires_pg() const override {
+    return evt->requires_pg;
+  }
+  const PGCreateInfo *creates_pg() const override {
+    return evt->create_info.get();
+  }
 };
 
 class PGSnapTrim : public PGOpQueueable {
