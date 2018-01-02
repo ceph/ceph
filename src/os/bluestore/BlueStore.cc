@@ -1378,7 +1378,7 @@ void BlueStore::BufferSpace::read(
       if (b->is_writing() || b->is_clean()) {
         if (b->offset < offset) {
 	  uint32_t skip = offset - b->offset;
-	  uint32_t l = MIN(length, b->length - skip);
+	  uint32_t l = std::min(length, b->length - skip);
 	  res[offset].substr_of(b->data, skip, l);
 	  res_intervals.insert(offset, l);
 	  offset += l;
@@ -1854,14 +1854,14 @@ bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
   uint32_t new_blen = blen;
 
   // make sure target_blob_size isn't less than current blob len
-  target_blob_size = MAX(blen, target_blob_size);
+  target_blob_size = std::max(blen, target_blob_size);
 
   if (b_offset >= blen) {
     // new data totally stands out of the existing blob
     new_blen = end;
   } else {
     // new data overlaps with the existing blob
-    new_blen = MAX(blen, end);
+    new_blen = std::max(blen, end);
 
     uint32_t overlap = 0;
     if (new_blen > blen) {
@@ -2190,7 +2190,7 @@ void BlueStore::ExtentMap::reshard(
   unsigned target = cct->_conf->bluestore_extent_map_shard_target_size;
   unsigned slop = target *
     cct->_conf->bluestore_extent_map_shard_target_size_slop;
-  unsigned extent_avg = bytes / MAX(1, extents);
+  unsigned extent_avg = bytes / std::max((unsigned)1, extents);
   dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
 	   << ", slop " << slop << dendl;
 
@@ -4246,7 +4246,7 @@ int BlueStore::_open_fm(bool create)
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    uint64_t reserved = ROUND_UP_TO(MAX(SUPER_RESERVED, min_alloc_size),
+    uint64_t reserved = ROUND_UP_TO(std::max((uint64_t)SUPER_RESERVED, min_alloc_size),
 				    min_alloc_size);
     fm->allocate(0, reserved, t);
 
@@ -4631,7 +4631,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       uint64_t initial =
 	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
 			    cct->_conf->bluestore_bluefs_gift_ratio);
-      initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
+      initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
       if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
 	derr << __func__ << " bluefs_alloc_size 0x" << std::hex
 	     << cct->_conf->bluefs_alloc_size << " is not a multiple of "
@@ -4967,7 +4967,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = P2ROUNDUP(gift, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    gift = MIN(gift, 1ull<<31);
+    gift = std::min(gift, (uint64_t)1ull<<31);
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << pretty_si_t(gift) << ")" << dendl;
 
@@ -5000,7 +5000,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     reclaim = P2ROUNDUP(reclaim, cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = MIN(reclaim, 1ull<<31);
+    reclaim = std::min(reclaim, (uint64_t)1ull<<31);
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
 
@@ -5696,7 +5696,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 
   used_blocks.resize(bdev->get_size() / min_alloc_size);
   apply(
-    0, MAX(min_alloc_size, SUPER_RESERVED), min_alloc_size, used_blocks,
+    0, std::max(min_alloc_size, (uint64_t)(SUPER_RESERVED)), min_alloc_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -6954,7 +6954,7 @@ int BlueStore::_fiemap(
       uint64_t x_len = length;
       if (ep != eend && ep->logical_offset <= offset) {
         uint64_t x_off = offset - ep->logical_offset;
-        x_len = MIN(x_len, ep->length - x_off);
+        x_len = std::min(x_len, ep->length - x_off);
         dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
 	         << x_len << std::dec << " blob " << ep->blob << dendl;
         destset.insert(offset, x_len);
@@ -9550,7 +9550,7 @@ void BlueStore::_pad_zeros(
   size_t back_pad = 0;
   size_t pad_count = 0;
   if (front_pad) {
-    size_t front_copy = MIN(chunk_size - front_pad, length);
+    size_t front_copy = std::min((unsigned)(chunk_size - front_pad), length);
     bufferptr z = buffer::create_page_aligned(chunk_size);
     z.zero(0, front_pad, false);
     pad_count += front_pad;
@@ -9633,7 +9633,7 @@ void BlueStore::_do_write_small(
     prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
   uint32_t alloc_len = min_alloc_size;
   auto offset0 = P2ALIGN(offset, alloc_len);
@@ -9924,10 +9924,10 @@ void BlueStore::_do_write_big(
   logger->inc(l_bluestore_write_big);
   logger->inc(l_bluestore_write_big_bytes, length);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   while (length > 0) {
     bool new_blob = false;
-    uint32_t l = MIN(max_bsize, length);
+    uint32_t l = std::min(max_bsize, length);
     BlobRef b;
     uint32_t b_off = 0;
 
@@ -10059,7 +10059,7 @@ int BlueStore::_do_alloc_write(
 
   // compress (as needed) and calc needed space
   uint64_t need = 0;
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
     if (c && wi.blob_length > min_alloc_size) {
       utime_t start = ceph_clock_now();
@@ -11616,10 +11616,10 @@ void BlueStore::DBHistogram::update_hist_entry(map<string, map<int, struct key_d
     uint32_t key_slab = get_key_slab(key_size);
     uint32_t value_slab = get_value_slab(value_size);
     key_hist[prefix][key_slab].count++;
-    key_hist[prefix][key_slab].max_len = MAX(key_size, key_hist[prefix][key_slab].max_len);
+    key_hist[prefix][key_slab].max_len = std::max((uint32_t)key_size, key_hist[prefix][key_slab].max_len);
     key_hist[prefix][key_slab].val_map[value_slab].count++;
     key_hist[prefix][key_slab].val_map[value_slab].max_len =
-                  MAX(value_size, key_hist[prefix][key_slab].val_map[value_slab].max_len);
+                  std::max((uint32_t)value_size, key_hist[prefix][key_slab].val_map[value_slab].max_len);
 }
 
 void BlueStore::DBHistogram::dump(Formatter *f)
@@ -11677,8 +11677,8 @@ void BlueStore::generate_db_histogram(Formatter *f)
     key_size = iter->key_size();
     value_size = iter->value_size();
     hist.value_hist[hist.get_value_slab(value_size)]++;
-    max_key_size = MAX(max_key_size, key_size);
-    max_value_size = MAX(max_value_size, value_size);
+    max_key_size = std::max(max_key_size, key_size);
+    max_value_size = std::max(max_value_size, value_size);
     total_key_size += key_size;
     total_value_size += value_size;
 
