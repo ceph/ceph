@@ -234,6 +234,7 @@ Description: debugging symbols for ceph-mon
 Package: ceph-osd
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
+         ceph-trace (= ${binary:Version}),
          parted,
          ${misc:Depends},
          ${python:Depends},
@@ -476,6 +477,14 @@ Description: debugging symbols for librados
  store using a simple file-like interface.
  .
  This package contains debugging symbols for librados.
+
+Package: ceph-trace
+Architecture: linux-any
+Section: libs
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Description: ceph lttng trace library
+ All lttng trace event library are contained in this package including
+ user added.
 
 Package: librados-dev
 Architecture: linux-any

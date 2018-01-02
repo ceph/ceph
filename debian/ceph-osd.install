@@ -7,8 +7,6 @@ usr/bin/ceph-osdomap-tool
 usr/bin/ceph-osd
 usr/bin/ceph_objectstore_bench
 usr/lib/ceph/ceph-osd-prestart.sh
-usr/lib/libos_tp.so*
-usr/lib/libosd_tp.so*
 usr/lib/python*/dist-packages/ceph_disk*
 usr/sbin/ceph-disk
 usr/sbin/ceph-volume
