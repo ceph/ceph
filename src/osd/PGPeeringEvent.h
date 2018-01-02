@@ -9,25 +9,46 @@
 
 class MOSDPGLog;
 
+/// what we need to instantiate a pg
+struct PGCreateInfo {
+  spg_t pgid;
+  epoch_t epoch = 0;
+  pg_history_t history;
+  PastIntervals past_intervals;
+  PGCreateInfo(spg_t p, epoch_t e,
+	       const pg_history_t& h,
+	       const PastIntervals& pi)
+    : pgid(p), epoch(e), history(h), past_intervals(pi) {}
+};
+
 class PGPeeringEvent {
   epoch_t epoch_sent;
   epoch_t epoch_requested;
-  boost::intrusive_ptr< const boost::statechart::event_base > evt;
   string desc;
 public:
+  boost::intrusive_ptr< const boost::statechart::event_base > evt;
+  bool requires_pg;
+  std::unique_ptr<PGCreateInfo> create_info;
   MEMPOOL_CLASS_HELPERS();
   template <class T>
   PGPeeringEvent(
     epoch_t epoch_sent,
     epoch_t epoch_requested,
-    const T &evt_)
+    const T &evt_,
+    bool req = true,
+    PGCreateInfo *ci = 0)
     : epoch_sent(epoch_sent),
       epoch_requested(epoch_requested),
-      evt(evt_.intrusive_from_this()) {
+      evt(evt_.intrusive_from_this()),
+      requires_pg(req),
+      create_info(ci) {
     stringstream out;
     out << "epoch_sent: " << epoch_sent
 	<< " epoch_requested: " << epoch_requested << " ";
     evt_.print(&out);
+    if (create_info) {
+      out << " +create_info";
+    }
     desc = out.str();
   }
   epoch_t get_epoch_sent() {

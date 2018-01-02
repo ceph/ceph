@@ -418,8 +418,7 @@ public:
     vector<int>& newacting, int acting_primary,
     RecoveryCtx *rctx);
   void handle_activate_map(RecoveryCtx *rctx);
-  void handle_create(RecoveryCtx *rctx);
-  void handle_loaded(RecoveryCtx *rctx);
+  void handle_initialize(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
 
   /**
@@ -565,7 +564,7 @@ protected:
 
 
   bool deleting;  // true while in removing or OSD is shutting down
-  bool deleted = false;
+  atomic<bool> deleted = {false};
 
   ZTracer::Endpoint trace_endpoint;
 
@@ -1851,7 +1850,6 @@ public:
   };
 protected:
   TrivialEvent(Initialize)
-  TrivialEvent(Load)
   TrivialEvent(GotInfo)
   TrivialEvent(NeedUpThru)
   TrivialEvent(Backfilled)
@@ -2018,12 +2016,10 @@ protected:
 
       typedef boost::mpl::list <
 	boost::statechart::transition< Initialize, Reset >,
-	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
-      boost::statechart::result react(const Load&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
