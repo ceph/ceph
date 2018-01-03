@@ -1269,11 +1269,9 @@ int MDBalancer::dump_loads(Formatter *f)
     CDir *dir = dfs.front();
     dfs.pop_front();
 
-    if (f) {
-      f->open_object_section("dir");
-      dir->dump_load(f, now, decayrate);
-      f->close_section();
-    }
+    f->open_object_section("dir");
+    dir->dump_load(f, now, decayrate);
+    f->close_section();
 
     for (CDir::map_t::iterator it = dir->begin(); it != dir->end(); ++it) {
       CInode *in = it->second->get_linkage()->get_inode();
