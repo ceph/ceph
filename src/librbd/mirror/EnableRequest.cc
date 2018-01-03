@@ -33,42 +33,7 @@ EnableRequest<I>::EnableRequest(librados::IoCtx &io_ctx,
 
 template <typename I>
 void EnableRequest<I>::send() {
-  send_get_tag_owner();
-}
-
-template <typename I>
-void EnableRequest<I>::send_get_tag_owner() {
-  if (!m_non_primary_global_image_id.empty()) {
-    return
-    send_get_mirror_image();
-  }
-  ldout(m_cct, 10) << this << " " << __func__ << dendl;
-
-  using klass = EnableRequest<I>;
-  Context *ctx = create_context_callback<
-      klass, &klass::handle_get_tag_owner>(this);
-  librbd::Journal<>::is_tag_owner(m_io_ctx, m_image_id, &m_is_primary,
-                                  m_op_work_queue, ctx);
-}
-
-template <typename I>
-Context *EnableRequest<I>::handle_get_tag_owner(int *result) {
-  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
-
-  if (*result < 0) {
-    lderr(m_cct) << "failed to check tag ownership: " << cpp_strerror(*result)
-                 << dendl;
-    return m_on_finish;
-  }
-
-  if (!m_is_primary) {
-    lderr(m_cct) << "last journal tag not owned by local cluster" << dendl;
-    *result = -EINVAL;
-    return m_on_finish;
-  }
-
   send_get_mirror_image();
-  return nullptr;
 }
 
 template <typename I>
@@ -121,6 +86,41 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
     m_mirror_image.global_image_id = uuid_gen.to_string();
   } else {
     m_mirror_image.global_image_id = m_non_primary_global_image_id;
+  }
+
+  send_get_tag_owner();
+  return nullptr;
+}
+
+template <typename I>
+void EnableRequest<I>::send_get_tag_owner() {
+  if (!m_non_primary_global_image_id.empty()) {
+    send_set_mirror_image();
+    return;
+  }
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
+
+  using klass = EnableRequest<I>;
+  Context *ctx = create_context_callback<
+      klass, &klass::handle_get_tag_owner>(this);
+  librbd::Journal<>::is_tag_owner(m_io_ctx, m_image_id, &m_is_primary,
+                                  m_op_work_queue, ctx);
+}
+
+template <typename I>
+Context *EnableRequest<I>::handle_get_tag_owner(int *result) {
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result < 0) {
+    lderr(m_cct) << "failed to check tag ownership: " << cpp_strerror(*result)
+                 << dendl;
+    return m_on_finish;
+  }
+
+  if (!m_is_primary) {
+    lderr(m_cct) << "last journal tag not owned by local cluster" << dendl;
+    *result = -EINVAL;
+    return m_on_finish;
   }
 
   send_set_mirror_image();

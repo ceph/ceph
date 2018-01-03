@@ -18,15 +18,22 @@ namespace image {
 template <typename ImageCtxT = ImageCtx>
 class CloneRequest {
 public:
-  static CloneRequest *create(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
-			      const std::string &c_id, ImageOptions c_options,
+  static CloneRequest *create(ImageCtxT *p_imctx, IoCtx &c_ioctx,
+                              const std::string &c_name,
+                              const std::string &c_id, ImageOptions c_options,
 			      const std::string &non_primary_global_image_id,
 			      const std::string &primary_mirror_uuid,
 			      ContextWQ *op_work_queue, Context *on_finish) {
     return new CloneRequest(p_imctx, c_ioctx, c_name, c_id, c_options,
-                             non_primary_global_image_id, primary_mirror_uuid,
-                             op_work_queue, on_finish);
+                            non_primary_global_image_id, primary_mirror_uuid,
+                            op_work_queue, on_finish);
   }
+
+  CloneRequest(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
+               const std::string &c_id, ImageOptions c_options,
+               const std::string &non_primary_global_image_id,
+               const std::string &primary_mirror_uuid,
+               ContextWQ *op_work_queue, Context *on_finish);
 
   void send();
 private:
@@ -77,13 +84,6 @@ private:
    * @endverbatim
    */
 
-  CloneRequest(ImageCtxT *p_imctx, IoCtx &c_ioctx, const std::string &c_name,
-			      const std::string &c_id,
-			      ImageOptions c_options,
-			      const std::string &non_primary_global_image_id,
-			      const std::string &primary_mirror_uuid,
-			      ContextWQ *op_work_queue, Context *on_finish);
-
   ImageCtxT *m_p_imctx;
   IoCtx &m_ioctx;
   std::string m_name;
@@ -107,13 +107,10 @@ private:
   bufferlist m_out_bl;
   uint64_t m_size;
   int m_r_saved = 0;
-  bool m_is_primary;
-  bool m_force_non_primary;
 
   void validate_options();
 
   void send_validate_parent();
-  void handle_validate_parent(int r);
 
   void send_validate_child();
   void handle_validate_child(int r);
