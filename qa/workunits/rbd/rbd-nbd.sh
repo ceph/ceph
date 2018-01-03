@@ -65,6 +65,7 @@ function cleanup()
 	    sleep $s
 	    rbd -p ${POOL} status ${IMAGE} | grep 'Watchers: none' && break
 	done
+	rbd -p ${POOL} snap purge ${IMAGE}
 	rbd -p ${POOL} remove ${IMAGE}
     fi
 }
@@ -170,6 +171,31 @@ _sudo dd if=${DATA} of=${DEV} bs=1M oflag=direct
 expect_false timeout 10 \
 	rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 _sudo rbd-nbd unmap ${DEV}
+DEV=
+rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
+
+# unmap by image name test
+DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
+PID=$(rbd-nbd list-mapped | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
+    '$2 == pool && $3 == img && $5 == dev {print $1}')
+test -n "${PID}"
+ps -p ${PID} -o cmd | grep rbd-nbd
+_sudo rbd-nbd unmap "${IMAGE}"
+rbd-nbd list-mapped | expect_false grep "${DEV} $"
+DEV=
+ps -p ${PID} -o cmd | expect_false grep rbd-nbd
+
+# map/unmap snap test
+rbd snap create ${POOL}/${IMAGE}@snap
+DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}@snap`
+PID=$(rbd-nbd list-mapped |
+      awk -v pool=${POOL} -v img=${IMAGE} -v snap=snap -v dev=${DEV} \
+          '$2 == pool && $3 == img && $4 == snap && $5 == dev {print $1}')
+test -n "${PID}"
+_sudo rbd-nbd unmap "${IMAGE}@snap"
+rbd-nbd list-mapped | expect_false grep "${DEV} $"
+DEV=
+ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
 # auto unmap test
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}`
@@ -183,8 +209,5 @@ for i in `seq 10`; do
   sleep 1
 done
 rbd-nbd list-mapped | expect_false grep "^${PID} *${POOL} *${IMAGE}"
-
-DEV=
-rbd bench ${IMAGE} --io-type write --io-size=1024 --io-total=1024
 
 echo OK
