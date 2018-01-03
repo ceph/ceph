@@ -92,6 +92,7 @@
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGScan.h"
 #include "messages/MBackfillReserve.h"
@@ -6531,6 +6532,8 @@ void OSD::ms_fast_dispatch(Message *m)
 
   // peering event?
   switch (m->get_type()) {
+  case MSG_OSD_PG_CREATE2:
+    return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
   case MSG_OSD_PG_QUERY:
     return handle_fast_pg_query(static_cast<MOSDPGQuery*>(m));
   case MSG_OSD_PG_NOTIFY:
@@ -8481,6 +8484,46 @@ void OSD::do_infos(map<int,
   info_map.clear();
 }
 
+void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
+{
+  dout(7) << __func__ << " " << *m << " from " << m->get_source() << dendl;
+  if (!require_mon_peer(m)) {
+    return;
+  }
+  for (auto& p : m->pgs) {
+    spg_t pgid = p.first;
+    epoch_t created = p.second.first;
+    utime_t created_stamp = p.second.second;
+    dout(20) << __func__ << " " << pgid << " e" << created
+	     << "@" << created_stamp << dendl;
+
+    pg_history_t h;
+    h.epoch_created = created;
+    h.epoch_pool_created = created;
+    h.same_up_since = created;
+    h.same_interval_since = created;
+    h.same_primary_since = created;
+    h.last_scrub_stamp = created_stamp;
+    h.last_deep_scrub_stamp = created_stamp;
+    h.last_clean_scrub_stamp = created_stamp;
+
+    enqueue_peering_evt(
+      pgid,
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  m->epoch,
+	  m->epoch,
+	  NullEvt(),
+	  true,
+	  new PGCreateInfo(
+	    pgid,
+	    created,
+	    h,
+	    PastIntervals(),
+	    true)
+	  )));
+  }
+}
 
 void OSD::handle_fast_pg_query(MOSDPGQuery *m)
 {
@@ -9698,15 +9741,22 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	slot.to_process.push_front(std::move(qi));
 	slot.waiting_for_pg = true;
       } else if (create_info) {
-	dout(20) << __func__ << " " << token
-		 << " no pg, should create on " << qi << dendl;
-	pg = osd->handle_pg_create_info(osdmap, create_info);
-	if (pg) {
-	  // we created the pg! drop out and continue "normally"!
-	  _wake_pg_slot(token, sdata, slot, &pushes_to_free);
-	  break;
+	if (create_info->by_mon &&
+	    osdmap->get_pg_acting_primary(token.pgid) != osd->whoami) {
+	  dout(20) << __func__ << " " << token
+		   << " no pg, no longer primary, ignoring mon create on "
+		   << qi << dendl;
+	} else {
+	  dout(20) << __func__ << " " << token
+		   << " no pg, should create on " << qi << dendl;
+	  pg = osd->handle_pg_create_info(osdmap, create_info);
+	  if (pg) {
+	    // we created the pg! drop out and continue "normally"!
+	    _wake_pg_slot(token, sdata, slot, &pushes_to_free);
+	    break;
+	  }
+	  dout(20) << __func__ << " ignored create on " << qi << dendl;
 	}
-	dout(20) << __func__ << " ignored create on " << qi << dendl;
       } else if (!qi.requires_pg()) {
 	// for pg-less events, we run them under the ordering lock, since
 	// we don't have the pg lock to keep them ordered.
