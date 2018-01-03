@@ -45,6 +45,7 @@
 #include "messages/MMonPaxos.h"
 #include "messages/MRoute.h"
 #include "messages/MForward.h"
+#include "messages/MStatfs.h"
 
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
@@ -4274,8 +4275,16 @@ void Monitor::dispatch_op(MonOpRequestRef op)
       break;
 
     // MgrStat
-    case MSG_MON_MGR_REPORT:
     case CEPH_MSG_STATFS:
+      // this is an ugly hack, sorry!  force the version to 1 so that we do
+      // not run afoul of the is_readable() paxos check.  the client is going
+      // by the pgmonitor version and the MgrStatMonitor version will lag behind
+      // that until we complete the upgrade.  The paxos ordering crap really
+      // doesn't matter for statfs results, so just kludge around it here.
+      if (osdmon()->osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	((MStatfs*)op->get_req())->version = 1;
+      }
+    case MSG_MON_MGR_REPORT:
     case MSG_GETPOOLSTATS:
       paxos_service[PAXOS_MGRSTAT]->dispatch(op);
       break;
