@@ -4359,7 +4359,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
-      assert(!in || in->is_auth());
+      assert(in && in->is_auth());
       // note
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << dendl;
@@ -5621,7 +5621,7 @@ void MDCache::clean_open_file_lists()
 	  dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
 	  in->item_open_file.remove_myself();
 	}
-      } else {
+      } else if (in->last != CEPH_NOSNAP) {
 	if (in->client_snap_caps.empty()) {
 	  dout(10) << " unlisting flushed snap inode " << *in << dendl;
 	  in->item_open_file.remove_myself();
@@ -5646,8 +5646,13 @@ void MDCache::dump_openfiles(Formatter *f)
       if ((in->last == CEPH_NOSNAP && !in->is_any_caps_wanted())
           || (in->last != CEPH_NOSNAP && in->client_snap_caps.empty())) 
         continue;
+      std::string path;
+      in->make_path_string(path, true);
+      if (path.empty())
+        path = "/"   
       f->open_object_section("file");
-      in->dump(f, CInode::DUMP_PATH | CInode::DUMP_INODE_STORE_BASE | CInode::DUMP_CAPS);
+      f->dump_string("path", path);
+      in->dump(f);
       f->close_section();
     }
   }
@@ -9069,7 +9074,7 @@ MDRequestRef MDCache::request_start(MClientRequest *req)
   params.dispatched = req->get_dispatch_stamp();
 
   MDRequestRef mdr =
-      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   active_requests[params.reqid] = mdr;
   mdr->set_op_stamp(req->get_stamp());
   dout(7) << "request_start " << *mdr << dendl;
@@ -9089,7 +9094,7 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, Message
   params.all_read = m->get_recv_complete_stamp();
   params.dispatched = m->get_dispatch_stamp();
   MDRequestRef mdr =
-      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
   dout(7) << "request_start_slave " << *mdr << " by mds." << by << dendl;
@@ -9104,7 +9109,7 @@ MDRequestRef MDCache::request_start_internal(int op)
   params.initiated = ceph_clock_now();
   params.internal_op = op;
   MDRequestRef mdr =
-      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
+      mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params>(params);
 
   assert(active_requests.count(mdr->reqid) == 0);
   active_requests[mdr->reqid] = mdr;
