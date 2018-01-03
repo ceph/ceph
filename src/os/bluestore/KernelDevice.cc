@@ -510,7 +510,7 @@ void KernelDevice::aio_submit(IOContext *ioc)
   // move these aside, and get our end iterator position now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
-  list<aio_t>::iterator e = ioc->running_aios.begin();
+  list<aio_t>::iterator e = ioc->running_aios.end();
   ioc->running_aios.splice(e, ioc->pending_aios);
 
   int pending = ioc->num_pending.load();
