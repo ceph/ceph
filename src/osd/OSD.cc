@@ -6782,14 +6782,6 @@ void OSD::_dispatch(Message *m)
     // -- need OSDMap --
 
   case MSG_OSD_PG_CREATE:
-  case MSG_OSD_PG_NOTIFY:
-  case MSG_OSD_PG_QUERY:
-  case MSG_OSD_PG_LOG:
-  case MSG_OSD_PG_REMOVE:
-  case MSG_OSD_PG_INFO:
-  case MSG_OSD_PG_TRIM:
-  case MSG_OSD_BACKFILL_RESERVE:
-  case MSG_OSD_RECOVERY_RESERVE:
     {
       OpRequestRef op = op_tracker.create_request<OpRequest, Message*>(m);
       if (m->trace)
