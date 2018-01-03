@@ -1680,6 +1680,9 @@ private:
     void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot,
 		       unsigned *pushes_to_free);
 
+    /// prime slots for splitting pgs
+    void prime_splits(const set<spg_t>& pgs);
+
     /// prune ops (and possibly pg_slots) for pgs that shouldn't be here
     void prune_pg_waiters(OSDMapRef osdmap, int whoami);
 

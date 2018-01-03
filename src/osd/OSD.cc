@@ -8149,6 +8149,9 @@ void OSD::split_pgs(
   OSDMapRef nextmap,
   PG::RecoveryCtx *rctx)
 {
+  // make sure to-be-split children are blocked in wq
+  op_shardedwq.prime_splits(childpgids);
+
   unsigned pg_num = nextmap->get_pg_num(
     parent->pg_id.pool());
   parent->update_snap_mapper_bits(
@@ -9474,6 +9477,18 @@ void OSD::ShardedOpWQ::wake_pg_waiters(spg_t pgid)
     sdata->sdata_lock.Lock();
     sdata->sdata_cond.SignalOne();
     sdata->sdata_lock.Unlock();
+  }
+}
+
+void OSD::ShardedOpWQ::prime_splits(const set<spg_t>& pgs)
+{
+  dout(20) << __func__ << " " << pgs << dendl;
+  for (auto pgid : pgs) {
+    unsigned shard_index = pgid.hash_to_shard(shard_list.size());
+    ShardData* sdata = shard_list[shard_index];
+    Mutex::Locker l(sdata->sdata_op_ordering_lock);
+    ShardData::pg_slot& slot = sdata->pg_slots[pgid];
+    slot.waiting_for_pg = true;
   }
 }
 
