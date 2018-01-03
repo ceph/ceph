@@ -1780,10 +1780,16 @@ public:
       read_ctx_t(async_read_params_t params)
         : params(std::move(params)) {
       }
+
+      read_ctx_t(async_read_params_t&& params,
+                 cache_response_t&& cache_response)
+        : params(std::move(params)),
+          cache_response(std::move(cache_response)) {
+      }
     };
 
     std::vector<read_ctx_t> read_ctx_batch;
-    Context* const on_all_complete;
+    Context* on_all_complete;
     IOContext ioc;
 
     AioReadBatch(CephContext* const cct,
@@ -1792,8 +1798,20 @@ public:
         ioc(cct, this, true) { // allow EIO
     }
 
+    AioReadBatch(CephContext* const cct)
+      : on_all_complete(nullptr),
+        ioc(cct, this, true) { // allow EIO
+    }
+
     read_ctx_t& create_read_ctx(async_read_params_t params) {
       read_ctx_batch.push_back(std::move(params));
+      return read_ctx_batch.back();
+    }
+
+    read_ctx_t& queue_read_ctx(cache_response_t&& cache_response,
+                               async_read_params_t&& params) {
+      read_ctx_batch.emplace_back(std::move(params),
+                                  std::move(cache_response));
       return read_ctx_batch.back();
     }
 
@@ -2405,6 +2423,47 @@ public:
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0);
+
+  class BlueReadTrans : public ObjectStore::ReadTransaction {
+    BlueStore* const store;
+    CollectionHandle c;
+    OnodeRef o;
+    std::unique_ptr<AioReadBatch> aio;
+
+    int _do_read(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete);
+
+  public:
+    BlueReadTrans(BlueStore* const store,
+                  CollectionHandle&& c,
+                  OnodeRef&& o)
+    : store(store),
+      c(std::move(c)),
+      o(std::move(o)) {
+    }
+
+    int read(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete) override;
+
+    bool empty() const override {
+      return !aio || aio->read_ctx_batch.empty();
+    }
+
+    int apply(Context* on_complete) override;
+  };
+
+  std::unique_ptr<ReadTransaction> create_read_transaction(
+    const CollectionHandle& c,
+    const ghobject_t& oid
+  ) override;
 
   bool has_async_read() const override {
     return true;

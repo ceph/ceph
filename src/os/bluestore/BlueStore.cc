@@ -3732,6 +3732,156 @@ int BlueStore::CompressedRegionReader::postprocess(
 
 // =======================================================
 
+// BlueReadTrans
+
+#undef dout_context
+#define dout_context store->cct
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.BlueReadTrans()"
+// << this << ") "
+
+int BlueStore::BlueReadTrans::read(
+  uint64_t offset,
+  uint64_t length,
+  uint32_t flags,
+  ceph::bufferlist& destbl,
+  Context* on_complete)
+{
+  Collection *c = static_cast<Collection *>(this->c.get());
+
+  dout(15) << __func__ << " " << c->get_cid() << " " << o->oid
+           << " 0x" << std::hex << offset << "~" << length
+           << std::dec << dendl;
+
+  if (!c || !c->exists) {
+    return -ENOENT;
+  } else {
+    destbl.clear();
+  }
+
+  int r = -ENOENT;
+  if (o && o->exists) {
+    RWLock::RLocker l(c->lock);
+
+    if (offset == length && offset == 0) {
+      length = o->onode.size;
+    }
+
+    r = _do_read(offset, length, flags, destbl, on_complete);
+    if (r == -EIO) {
+      store->logger->inc(l_bluestore_read_eio);
+    }
+  }
+
+  if (r == 0 && store->_debug_data_eio(o->oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << o->oid
+         << " INJECT EIO" << dendl;
+  } else if (store->cct->_conf->bluestore_debug_random_read_err &&
+    (rand() % (int)(store->cct->_conf->bluestore_debug_random_read_err * 100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    r = -EIO;
+  }
+
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
+           << " 0x" << std::hex << offset << "~" << length
+           << std::dec << " = " << r << dendl;
+  return r;
+}
+
+int BlueStore::BlueReadTrans::_do_read(
+  uint64_t offset,
+  uint64_t length,
+  uint32_t flags,
+  ceph::bufferlist& destbl,
+  Context* on_complete)
+{
+  FUNCTRACE(store->cct);
+  dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
+            << " size 0x" << o->onode.size << " (" << std::dec
+            << o->onode.size << ")" << dendl;
+
+  if (offset >= o->onode.size) {
+    return 0;
+  }
+
+  if (offset + length > o->onode.size) {
+    length = o->onode.size - offset;
+  }
+
+  // build blob-wise list to of stuff read (that isn't cached)
+  BlueStore::cache_response_t cr = store->_consult_cache(o, offset, length);
+
+  // load shards of extent map if needed
+  {
+    PerfGuard(store->logger, l_bluestore_read_onode_meta_lat);
+    o->extent_map.fault_range(store->db, offset, length);
+  }
+
+  store->_dump_onode(o);
+
+  // check whether we have anything to read from a block device
+  if (!cr.blobs2read.empty()) {
+    // yes, at least one region isn't in cache
+    if (!aio) {
+      aio = std::make_unique<AioReadBatch>(store->cct);
+    }
+
+    aio->queue_read_ctx(std::move(cr),
+                        { offset, length, &destbl, on_complete, flags });
+    return -EINPROGRESS;
+  } else {
+    // no, everything already cached
+    destbl = store->_do_read_compose_result(cr.ready_regions,
+                                            offset, length);
+    dout(20) << __func__
+             << " got resbl.length() = " << destbl.length()
+             << ", requested length = " << length << dendl;
+
+    assert(destbl.length() == length);
+    on_complete->complete(length);
+    return length;
+  }
+}
+
+int BlueStore::BlueReadTrans::apply(Context* const on_all_complete)
+{
+  if (!aio) {
+    on_all_complete->complete(0);
+    return 0;
+  }
+
+  aio->on_all_complete = on_all_complete;
+  // read raw blob data.  use aio if we have >1 blobs to read.
+  for (auto& ctx : aio->read_ctx_batch) {
+    for (auto& b : ctx.cache_response.blobs2read) {
+      b.second->issue_io([&](const uint64_t offset,
+                             const uint64_t length,
+                             ceph::bufferlist* blobbl,
+                             const size_t regions_num) {
+        int r = store->bdev->aio_read(offset, length, blobbl, &aio->ioc);
+        return r < 0 ? r : 0;
+      });
+    }
+  }
+
+  if (aio->ioc.has_pending_aios()) {
+    dout(20) << __func__ << " submitting aios" << dendl;
+    store->bdev->aio_submit(&aio.release()->ioc);
+  } else {
+    // nothing, maybe offset >= o->onode.size in for all items of the batch.
+    // we need to call the main on_complete now and directly as the will be
+    // no callback from BlockDevice.
+    aio.release()->aio_finish(store);
+  }
+
+  return 0;
+}
+
+// =====================================
+
+#undef dout_context
+#define dout_context cct
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << path << ") "
 
