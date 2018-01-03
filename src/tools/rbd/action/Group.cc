@@ -461,7 +461,7 @@ int execute_group_snap_list(const po::variables_map &vm) {
     }
     if (f) {
       f->dump_string("snap name", snap_name);
-      f->dump_int("state", state);
+      f->dump_string("state", state_string);
     } else {
       t << snap_name << state_string << TextTable::endrow;
     }
