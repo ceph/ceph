@@ -134,6 +134,8 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
   ObjectCacheEntry& entry = iter->second;
   ObjectCacheInfo& target = entry.info;
 
+  invalidate_lru(entry);
+
   entry.chained_entries.clear();
   entry.gen++;
 
@@ -209,7 +211,7 @@ void ObjectCache::remove(string& name)
 }
 
 void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry,
-			    std::deque<string>::iterator& lru_iter)
+			    std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
     auto iter = lru.begin();
@@ -249,7 +251,7 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry,
 }
 
 void ObjectCache::remove_lru(string& name,
-			     std::deque<string>::iterator& lru_iter)
+			     std::list<string>::iterator& lru_iter)
 {
   if (lru_iter == lru.end())
     return;
