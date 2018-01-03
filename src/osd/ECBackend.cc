@@ -2482,7 +2482,10 @@ int ECBackend::be_deep_scrub(
     if (!get_parent()->get_pool().allows_ecoverwrites()) {
       assert(hinfo->has_chunk_hash());
       if (hinfo->get_total_chunk_size() != (unsigned)pos.data_pos) {
-	dout(0) << "_scan_list  " << poid << " got incorrect size on read" << dendl;
+	dout(0) << "_scan_list  " << poid << " got incorrect size on read 0x"
+		<< std::hex << pos
+		<< " expected 0x" << hinfo->get_total_chunk_size() << std::dec
+		<< dendl;
 	o.ec_size_mismatch = true;
 	return 0;
       }
@@ -2490,7 +2493,10 @@ int ECBackend::be_deep_scrub(
       if (!skip_data_digest &&
           hinfo->get_chunk_hash(get_parent()->whoami_shard().shard) !=
 	  pos.data_hash.digest()) {
-	dout(0) << "_scan_list  " << poid << " got incorrect hash on read" << dendl;
+	dout(0) << "_scan_list  " << poid << " got incorrect hash on read 0x"
+		<< std::hex << pos.data_hash.digest() << " !=  expected 0x"
+		<< hinfo->get_chunk_hash(get_parent()->whoami_shard().shard)
+		<< std::dec << dendl;
 	o.ec_hash_mismatch = true;
 	return 0;
       }
