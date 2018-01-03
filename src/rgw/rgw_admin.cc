@@ -44,7 +44,7 @@
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
 
-static RGWRados *store = NULL;
+static RGWRados *store = nullptr;
 
 enum ReplicaLogType {
   ReplicaLog_Invalid = 0,
@@ -164,7 +164,7 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
       r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, pattrs);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
-      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs);
+      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, nullptr, pattrs);
     }
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -348,7 +348,7 @@ int set_bucket_quota(RGWRados *store, int opt_cmd,
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -616,7 +616,7 @@ int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_n
   map<string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
 
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -733,7 +733,7 @@ static int send_to_url(const string& url, const string& access,
   key.key = secret;
 
   param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, url, NULL, &params);
+  RGWRESTSimpleRequest req(g_ceph_context, url, nullptr, &params);
 
   bufferlist response;
   int ret = req.forward_request(key, info, MAX_REST_RESPONSE, &in_data, &response);
@@ -1448,7 +1448,7 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
@@ -1502,7 +1502,7 @@ int main(int argc, const char **argv)
   bool set_temp_url_key = false;
   map<int, string> temp_url_keys;
   string bucket_id;
-  Formatter *formatter = NULL;
+  Formatter *formatter = nullptr;
   int purge_data = false;
   int pretty_format = false;
   int show_log_entries = true;
@@ -1602,42 +1602,42 @@ int main(int argc, const char **argv)
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
-    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*) nullptr)) {
       usage();
       ceph_abort();
-    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*) nullptr)) {
       user_id.from_str(val);
-    } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*) nullptr)) {
       tenant = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*) nullptr)) {
       access_key = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr)) {
       subuser = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*) nullptr)) {
       secret_key = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr)) {
       user_email = val;
       user_op.user_email_specified=true;
-    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr)) {
       display_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*) nullptr)) {
       bucket_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr)) {
       pool_name = val;
       pool = rgw_pool(pool_name);
-    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*) nullptr)) {
       object = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr)) {
       object_version = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr)) {
       client_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr)) {
       op_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr)) {
       state_str = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr)) {
       op_mask_str = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr)) {
       key_type_str = val;
       if (key_type_str.compare("swift") == 0) {
         key_type = KEY_TYPE_SWIFT;
@@ -1648,124 +1648,124 @@ int main(int argc, const char **argv)
         usage();
 	ceph_abort();
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr)) {
       job_id = val;
-    } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, nullptr, "--gen-access-key", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, NULL, "--gen-secret", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, nullptr, "--gen-secret", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, NULL, "--show-log-entries", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, nullptr, "--show-log-entries", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, NULL, "--show-log-sum", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, nullptr, "--show-log-sum", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, NULL, "--skip-zero-entries", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, nullptr, "--skip-zero-entries", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &admin, NULL, "--admin", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &admin, nullptr, "--admin", (char*) nullptr)) {
       admin_specified = true;
-    } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &system, nullptr, "--system", (char*) nullptr)) {
       system_specified = true;
-    } else if (ceph_argparse_binary_flag(args, i, &verbose, NULL, "--verbose", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &verbose, nullptr, "--verbose", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &staging, nullptr, "--staging", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &commit, NULL, "--commit", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &commit, nullptr, "--commit", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*) nullptr)) {
       if (!errs.str().empty()) {
 	cerr << errs.str() << std::endl;
 	exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr)) {
       min_rewrite_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr)) {
       max_rewrite_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr)) {
       max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
         return EINVAL;
       }
       max_buckets_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*) nullptr)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       max_entries_specified = true;
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max entries: " << err << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr)) {
       max_size = strict_si_cast<int64_t>(val.c_str(), &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max size: " << err << std::endl;
         return EINVAL;
       }
       have_max_size = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr)) {
       max_objects = (int64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max objects: " << err << std::endl;
         return EINVAL;
       }
       have_max_objects = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*) nullptr)) {
       date = val;
       if (end_date.empty())
         end_date = date;
-    } else if (ceph_argparse_witharg(args, i, &val, "--start-date", "--start-time", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-date", "--start-time", (char*) nullptr)) {
       start_date = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*) nullptr)) {
       end_date = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr)) {
       num_shards = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse num shards: " << err << std::endl;
         return EINVAL;
       }
       num_shards_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*) nullptr)) {
       max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr)) {
       orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*) nullptr)) {
       shard_id = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
         cerr << "ERROR: failed to parse shard id: " << err << std::endl;
         return EINVAL;
       }
       specified_shard_id = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr)) {
       daemon_id = val;
       specified_daemon_id = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr)) {
       access = val;
       perm_mask = rgw_str_to_perm(access.c_str());
       set_perm = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr)) {
       temp_url_keys[0] = val;
       set_temp_url_key = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr)) {
       temp_url_keys[1] = val;
       set_temp_url_key = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*) nullptr)) {
       bucket_id = val;
       if (bucket_id.empty()) {
         cerr << "bad bucket-id" << std::endl;
         usage();
 	ceph_abort();
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*) nullptr)) {
       format = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr)) {
       string cat_str = val;
       list<string> cat_list;
       list<string>::iterator iter;
@@ -1773,132 +1773,132 @@ int main(int argc, const char **argv)
       for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
 	categories[*iter] = true;
       }
-    } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, nullptr, "--purge-objects", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &pretty_format, NULL, "--pretty-format", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &pretty_format, nullptr, "--pretty-format", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &purge_data, NULL, "--purge-data", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &purge_data, nullptr, "--purge-data", (char*) nullptr)) {
       delete_child_objects = purge_data;
-    } else if (ceph_argparse_binary_flag(args, i, &purge_keys, NULL, "--purge-keys", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &purge_keys, nullptr, "--purge-keys", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, NULL, "--yes-i-really-mean-it", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, nullptr, "--yes-i-really-mean-it", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &fix, NULL, "--fix", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &fix, nullptr, "--fix", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, NULL, "--remove-bad", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, nullptr, "--remove-bad", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, NULL, "--check-head-obj-locator", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, nullptr, "--check-head-obj-locator", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &check_objects, NULL, "--check-objects", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &check_objects, nullptr, "--check-objects", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, NULL, "--sync-stats", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, nullptr, "--sync-stats", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &include_all, nullptr, "--include-all", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &extra_info, nullptr, "--extra-info", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, NULL, "--bypass-gc", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, nullptr, "--bypass-gc", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &warnings_only, NULL, "--warnings-only", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &warnings_only, nullptr, "--warnings-only", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, nullptr, "--inconsistent-index", (char*) nullptr)) {
      // do nothing
-    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr)) {
       caps = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*) nullptr)) {
       infile = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*) nullptr)) {
       metadata_key = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--marker", (char*) nullptr)) {
       marker = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--start-marker", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--start-marker", (char*) nullptr)) {
       start_marker = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*) nullptr)) {
       end_marker = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr)) {
       quota_scope = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr)) {
       replica_log_type_str = val;
       replica_log_type = get_replicalog_type(replica_log_type_str);
       if (replica_log_type == ReplicaLog_Invalid) {
         cerr << "ERROR: invalid replica log type" << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr)) {
       string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
       if (bi_index_type == InvalidIdx) {
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_binary_flag(args, i, &is_master_int, NULL, "--master", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &is_master_int, nullptr, "--master", (char*) nullptr)) {
       is_master = (bool)is_master_int;
       is_master_set = true;
-    } else if (ceph_argparse_binary_flag(args, i, &set_default, NULL, "--default", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &set_default, nullptr, "--default", (char*) nullptr)) {
       /* do nothing */
-    } else if (ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*) nullptr)) {
       redirect_zone = val;
       redirect_zone_set = true;
-    } else if (ceph_argparse_binary_flag(args, i, &read_only_int, NULL, "--read-only", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &read_only_int, nullptr, "--read-only", (char*) nullptr)) {
       read_only = (bool)read_only_int;
       is_read_only_set = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*) nullptr)) {
       master_zone = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*) nullptr)) {
       period_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--epoch", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--epoch", (char*) nullptr)) {
       period_epoch = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--remote", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--remote", (char*) nullptr)) {
       remote = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*) nullptr)) {
       url = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*) nullptr)) {
       realm_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*) nullptr)) {
       realm_new_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*) nullptr)) {
       zonegroup_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*) nullptr)) {
       zonegroup_new_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*) nullptr)) {
       placement_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*) nullptr)) {
       get_str_list(val, tags);
-    } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*) nullptr)) {
       get_str_list(val, tags_add);
-    } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*) nullptr)) {
       get_str_list(val, tags_rm);
-    } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*) nullptr)) {
       api_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*) nullptr)) {
       zone_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*) nullptr)) {
       zone_new_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*) nullptr)) {
       get_str_list(val, endpoints);
-    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*) nullptr)) {
       get_str_list(val, sync_from);
-    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*) nullptr)) {
       get_str_list(val, sync_from_rm);
-    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--sync-from-all", (char*)NULL)) {
+    } else if (ceph_argparse_binary_flag(args, i, &tmp_int, nullptr, "--sync-from-all", (char*) nullptr)) {
       sync_from_all = (bool)tmp_int;
       sync_from_all_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*) nullptr)) {
       source_zone_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*) nullptr)) {
       tier_type = val;
       tier_type_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config", (char*) nullptr)) {
       parse_tier_config_param(val, tier_config_add);
-    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*) nullptr)) {
       parse_tier_config_param(val, tier_config_rm);
-    } else if (ceph_argparse_witharg(args, i, &val, "--index-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--index-pool", (char*) nullptr)) {
       index_pool = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-pool", (char*) nullptr)) {
       data_pool = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*) nullptr)) {
       data_extra_pool = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*) nullptr)) {
       if (val == "normal") {
         placement_index_type = RGWBIType_Normal;
       } else if (val == "indexless") {
@@ -1911,19 +1911,19 @@ int main(int argc, const char **argv)
         }
       }
       index_type_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*) nullptr)) {
       compression_type = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*) nullptr)) {
       role_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*) nullptr)) {
       path = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*) nullptr)) {
       assume_role_doc = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--policy-name", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-name", (char*) nullptr)) {
       policy_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*) nullptr)) {
       perm_policy_doc = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*) nullptr)) {
       path_prefix = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
@@ -1938,8 +1938,8 @@ int main(int argc, const char **argv)
     ceph_abort();
   }
   else {
-    const char *prev_cmd = NULL;
-    const char *prev_prev_cmd = NULL;
+    const char *prev_cmd = nullptr;
+    const char *prev_prev_cmd = nullptr;
     std::vector<const char*>::iterator i ;
     for (i = args.begin(); i != args.end(); ++i) {
       opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
@@ -2608,8 +2608,8 @@ int main(int argc, const char **argv)
         string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
-                                 (is_master_set ? &is_master : NULL),
-                                 (is_read_only_set ? &read_only : NULL),
+                                 (is_master_set ? &is_master : nullptr),
+                                 (is_read_only_set ? &read_only : nullptr),
                                  endpoints, ptier_type,
                                  psync_from_all, sync_from, sync_from_rm,
                                  predirect_zone);
@@ -3031,8 +3031,8 @@ int main(int argc, const char **argv)
           bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
           string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 	  ret = zonegroup.add_zone(zone,
-                                   (is_master_set ? &is_master : NULL),
-                                   (is_read_only_set ? &read_only : NULL),
+                                   (is_master_set ? &is_master : nullptr),
+                                   (is_read_only_set ? &read_only : nullptr),
                                    endpoints,
                                    ptier_type,
                                    psync_from_all,
@@ -3311,8 +3311,8 @@ int main(int argc, const char **argv)
         string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
 
         ret = zonegroup.add_zone(zone,
-                                 (is_master_set ? &is_master : NULL),
-                                 (is_read_only_set ? &read_only : NULL),
+                                 (is_master_set ? &is_master : nullptr),
+                                 (is_read_only_set ? &read_only : nullptr),
                                  endpoints, ptier_type,
                                  psync_from_all, sync_from, sync_from_rm,
                                  predirect_zone);
@@ -4315,14 +4315,14 @@ next:
     int ret;
 
     if (!start_date.empty()) {
-      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
       }
     }
     if (!end_date.empty()) {
-      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
@@ -4351,7 +4351,7 @@ next:
 
 
     if (!start_date.empty()) {
-      ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+      ret = utime_t::parse_date(start_date, &start_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return 1;
@@ -4359,7 +4359,7 @@ next:
     }
 
     if (!end_date.empty()) {
-      ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+      ret = utime_t::parse_date(end_date, &end_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return 1;
@@ -4672,14 +4672,14 @@ next:
     uint64_t end_epoch = 0;
 
     if (!end_date.empty()) {
-      int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+      int ret = utime_t::parse_date(end_date, &end_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return EINVAL;
       }
     }
     if (!start_date.empty()) {
-      int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+      int ret = utime_t::parse_date(start_date, &start_epoch, nullptr);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return EINVAL;
@@ -5147,7 +5147,7 @@ next:
       cerr << "ERROR: --job-id not specified" << std::endl;
       return EINVAL;
     }
-    int ret = search.init(job_id, NULL);
+    int ret = search.init(job_id, nullptr);
     if (ret < 0) {
       if (ret == -ENOENT) {
         cerr << "job not found" << std::endl;
@@ -5343,7 +5343,7 @@ next:
       meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
       bool truncated;
       do {
-	  int ret = meta_log->list_entries(handle, 1000, entries, NULL, &truncated);
+	  int ret = meta_log->list_entries(handle, 1000, entries, nullptr, &truncated);
         if (ret < 0) {
           cerr << "ERROR: meta_log->list_entries(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
