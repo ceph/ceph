@@ -128,7 +128,7 @@ WRITE_CLASS_ENCODER(RGWCacheNotifyInfo)
 
 struct ObjectCacheEntry {
   ObjectCacheInfo info;
-  std::deque<string>::iterator lru_iter;
+  std::list<string>::iterator lru_iter;
   uint64_t lru_promotion_ts;
   uint64_t gen;
   std::vector<pair<RGWChainedCache *, string> > chained_entries;
@@ -138,7 +138,7 @@ struct ObjectCacheEntry {
 
 class ObjectCache {
   std::unordered_map<string, ObjectCacheEntry> cache_map;
-  std::deque<string> lru;
+  std::list<string> lru;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
@@ -151,8 +151,8 @@ class ObjectCache {
   ceph::timespan expiry;
 
   void touch_lru(string& name, ObjectCacheEntry& entry,
-		 std::deque<string>::iterator& lru_iter);
-  void remove_lru(string& name, std::deque<string>::iterator& lru_iter);
+		 std::list<string>::iterator& lru_iter);
+  void remove_lru(string& name, std::list<string>::iterator& lru_iter);
   void invalidate_lru(ObjectCacheEntry& entry);
 
   void do_invalidate_all();
