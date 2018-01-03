@@ -6532,6 +6532,11 @@ void OSD::ms_fast_dispatch(Message *m)
 
   // peering event?
   switch (m->get_type()) {
+  case CEPH_MSG_PING:
+    dout(10) << "ping from " << m->get_source() << dendl;
+    m->put();
+    return;
+
   case MSG_OSD_PG_CREATE2:
     return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
   case MSG_OSD_PG_QUERY:
@@ -6752,13 +6757,6 @@ void OSD::_dispatch(Message *m)
   dout(20) << "_dispatch " << m << " " << *m << dendl;
 
   switch (m->get_type()) {
-
-    // -- don't need lock --
-  case CEPH_MSG_PING:
-    dout(10) << "ping from " << m->get_source() << dendl;
-    m->put();
-    break;
-
     // -- don't need OSDMap --
 
     // map and replication
