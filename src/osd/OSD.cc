@@ -6536,6 +6536,12 @@ void OSD::ms_fast_dispatch(Message *m)
     dout(10) << "ping from " << m->get_source() << dendl;
     m->put();
     return;
+  case MSG_MON_COMMAND:
+    handle_command(static_cast<MMonCommand*>(m));
+    return;
+  case MSG_COMMAND:
+    handle_command(static_cast<MCommand*>(m));
+    return;
 
   case MSG_OSD_PG_CREATE2:
     return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
@@ -6765,13 +6771,6 @@ void OSD::_dispatch(Message *m)
     break;
 
     // osd
-  case MSG_MON_COMMAND:
-    handle_command(static_cast<MMonCommand*>(m));
-    break;
-  case MSG_COMMAND:
-    handle_command(static_cast<MCommand*>(m));
-    break;
-
   case MSG_OSD_SCRUB:
     handle_scrub(static_cast<MOSDScrub*>(m));
     break;
