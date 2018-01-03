@@ -46,6 +46,7 @@
 #include "messages/MPoolOp.h"
 #include "messages/MPoolOpReply.h"
 #include "messages/MOSDPGCreate.h"
+#include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MMonCommand.h"
@@ -3292,13 +3293,14 @@ void OSDMonitor::update_creating_pgs()
     }
     auto mapped = pg.second.first;
     dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
-    mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
+    spg_t spgid(pgid);
+    mapping.get_primary_and_shard(pgid, &acting_primary, &spgid);
     // check the previous creating_pgs, look for the target to whom the pg was
     // previously mapped
     for (const auto& pgs_by_epoch : creating_pgs_by_osd_epoch) {
       const auto last_acting_primary = pgs_by_epoch.first;
       for (auto& pgs: pgs_by_epoch.second) {
-	if (pgs.second.count(pgid)) {
+	if (pgs.second.count(spgid)) {
 	  if (last_acting_primary == acting_primary) {
 	    mapped = pgs.first;
 	  } else {
@@ -3317,7 +3319,7 @@ void OSDMonitor::update_creating_pgs()
     }
     dout(10) << __func__ << " will instruct osd." << acting_primary
 	     << " to create " << pgid << "@" << mapped << dendl;
-    new_pgs_by_osd_epoch[acting_primary][mapped].insert(pgid);
+    new_pgs_by_osd_epoch[acting_primary][mapped].insert(spgid);
   }
   creating_pgs_by_osd_epoch = std::move(new_pgs_by_osd_epoch);
   creating_pgs_epoch = mapping.get_epoch();
@@ -3339,7 +3341,10 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
     return next;
   assert(!creating_pgs_by_epoch->second.empty());
 
-  MOSDPGCreate *m = nullptr;
+  MOSDPGCreate *oldm = nullptr; // for pre-mimic OSD compat
+  MOSDPGCreate2 *m = nullptr;
+  bool old = !HAVE_FEATURE(con->get_features(), SERVER_MIMIC);
+
   epoch_t last = 0;
   for (auto epoch_pgs = creating_pgs_by_epoch->second.lower_bound(next);
        epoch_pgs != creating_pgs_by_epoch->second.end(); ++epoch_pgs) {
@@ -3349,24 +3354,37 @@ epoch_t OSDMonitor::send_pg_creates(int osd, Connection *con, epoch_t next) cons
              << " : epoch " << epoch << " " << pgs.size() << " pgs" << dendl;
     last = epoch;
     for (auto& pg : pgs) {
-      if (!m)
-	m = new MOSDPGCreate(creating_pgs_epoch);
       // Need the create time from the monitor using its clock to set
       // last_scrub_stamp upon pg creation.
-      auto create = creating_pgs.pgs.find(pg);
+      auto create = creating_pgs.pgs.find(pg.pgid);
       assert(create != creating_pgs.pgs.end());
-      m->mkpg.emplace(pg, pg_create_t{create->second.first, pg, 0});
-      m->ctimes.emplace(pg, create->second.second);
+      if (old) {
+	if (!oldm) {
+	  oldm = new MOSDPGCreate(creating_pgs_epoch);
+	}
+	oldm->mkpg.emplace(pg.pgid,
+			   pg_create_t{create->second.first, pg.pgid, 0});
+	oldm->ctimes.emplace(pg.pgid, create->second.second);
+      } else {
+	if (!m) {
+	  m = new MOSDPGCreate2(creating_pgs_epoch);
+	}
+	m->pgs.emplace(pg, create->second);
+      }
       dout(20) << __func__ << " will create " << pg
 	       << " at " << create->second.first << dendl;
     }
   }
-  if (!m) {
+  if (m) {
+    con->send_message(m);
+  } else if (oldm) {
+    con->send_message(oldm);
+  } else {
     dout(20) << __func__ << " osd." << osd << " from " << next
              << " has nothing to send" << dendl;
     return next;
   }
-  con->send_message(m);
+
   // sub is current through last + 1
   return last + 1;
 }
