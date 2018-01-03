@@ -365,10 +365,6 @@ class MDSCluster(CephCluster):
     def get_mds_info(self, mds_id):
         return FSStatus(self.mon_manager).get_mds(mds_id)
 
-    def is_full(self):
-        flags = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
-        return 'full' in flags
-
     def is_pool_full(self, pool_name):
         pools = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
         for pool in pools:
@@ -1232,3 +1228,6 @@ class Filesystem(MDSCluster):
             return workers[0].value
         else:
             return None
+
+    def is_full(self):
+        return self.is_pool_full(self.get_data_pool_name())
