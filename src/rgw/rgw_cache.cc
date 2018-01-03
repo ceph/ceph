@@ -134,6 +134,8 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
   ObjectCacheEntry& entry = iter->second;
   ObjectCacheInfo& target = entry.info;
 
+  invalidate_lru(entry);
+
   entry.chained_entries.clear();
   entry.gen++;
 
