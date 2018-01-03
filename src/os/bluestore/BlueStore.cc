@@ -3498,13 +3498,14 @@ void BlueStore::AioReadBatch::aio_finish(BlueStore* const store)
     const bool buffered = store->_do_read_is_buffered(ctx.params.flags);
 
     // enumerate and postprocess (i.e. decompress) desired blobs
-    for (auto& b2r : ctx.blobs2read) {
-      b2r.second->postprocess(ctx.ready_regions, buffered);
+    for (auto& b2r : ctx.cache_response.blobs2read) {
+      b2r.second->postprocess(ctx.cache_response.ready_regions, buffered);
     }
 
     // generate a resulting buffer
     *ctx.params.outbl = \
-      store->_do_read_compose_result(ctx.ready_regions, ctx.params.offset,
+      store->_do_read_compose_result(ctx.cache_response.ready_regions,
+                                     ctx.params.offset,
                                      ctx.params.length);
     dout(20) << __func__
              << " got resbl.length() = " << ctx.params.outbl->length()
@@ -6782,10 +6783,7 @@ BlueStore::create_read_transaction(
   return std::make_unique<BlueReadTrans>(this, std::move(c), std::move(o));
 }
 
-std::tuple<BlueStore::ready_regions_t,
-           BlueStore::blobs2read_t,
-           size_t>
-BlueStore::_consult_cache(
+BlueStore::cache_response_t BlueStore::_consult_cache(
   BlueStore::OnodeRef o,
   const uint64_t offset,
   const size_t length)
@@ -6855,7 +6853,7 @@ BlueStore::_consult_cache(
     ++lp;
   }
 
-  return std::make_tuple(ready_regions, std::move(blobs2read), num_all_regions);
+  return { std::move(ready_regions), std::move(blobs2read), num_all_regions };
 }
 
 
@@ -6902,11 +6900,7 @@ int BlueStore::_do_read(
   }
 
   // build blob-wise list to of stuff read (that isn't cached)
-  ready_regions_t ready_regions;
-  blobs2read_t blobs2read;
-  size_t num_all_regions;
-  std::tie(ready_regions, blobs2read, num_all_regions) = \
-    _consult_cache(o, offset, length);
+  cache_response_t cr = _consult_cache(o, offset, length);
 
   {
     PerfGuard(logger, l_bluestore_read_onode_meta_lat);
@@ -6923,13 +6917,13 @@ int BlueStore::_do_read(
 
     int r = 0;
     IOContext ioc(cct, nullptr, true); // allow EIO
-    for (auto& p : blobs2read) {
+    for (auto& p : cr.blobs2read) {
       p.second->issue_io([&](const uint64_t offset,
                              const uint64_t length,
                              ceph::bufferlist* blobbl,
                              const size_t regions_num) {
         int r = 0;
-        if (blobs2read.size() > regions_num) {
+        if (cr.blobs2read.size() > regions_num) {
           r = this->bdev->aio_read(offset, length, blobbl, &ioc);
         } else {
           r = this->bdev->read(offset, length, blobbl, &ioc, false);
@@ -6952,12 +6946,12 @@ int BlueStore::_do_read(
 
   const bool buffered = _do_read_is_buffered(op_flags);
   // enumerate and postprocess (i.e. decompress) desired blobs
-  for (auto& b2r : blobs2read) {
-    b2r.second->postprocess(ready_regions, buffered);
+  for (auto& b2r : cr.blobs2read) {
+    b2r.second->postprocess(cr.ready_regions, buffered);
   }
 
   // generate a resulting buffer
-  bl = _do_read_compose_result(ready_regions, offset, length);
+  bl = _do_read_compose_result(cr.ready_regions, offset, length);
 
   assert(bl.length() == length);
   return bl.length();

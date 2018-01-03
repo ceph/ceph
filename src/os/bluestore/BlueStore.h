@@ -1761,11 +1761,13 @@ public:
   typedef std::map<BlobRef,
                    RegionReaderRef> blobs2read_t;
 
+  struct cache_response_t {
+    ready_regions_t ready_regions;
+    blobs2read_t blobs2read;
+    size_t num_all_regions;
+  };
   
-  std::tuple<BlueStore::ready_regions_t,
-             BlueStore::blobs2read_t,
-             size_t>
-  _consult_cache(
+  cache_response_t _consult_cache(
     BlueStore::OnodeRef o,
     const uint64_t offset,
     const size_t length);
@@ -1773,10 +1775,7 @@ public:
   struct AioReadBatch : public AioContext {
     struct read_ctx_t {
       async_read_params_t params;
-
-      ready_regions_t ready_regions;
-      blobs2read_t blobs2read;
-      size_t num_all_regions = 0;
+      cache_response_t cache_response;
 
       read_ctx_t(async_read_params_t params)
         : params(std::move(params)) {
