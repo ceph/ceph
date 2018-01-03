@@ -309,6 +309,11 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "List fragments in directory");
   assert(r == 0);
+  r = admin_socket->register_command("openfiles ls",
+                                     "openfiles ls",
+                                     asok_hook,
+                                     "List the opening files and their caps");
+  assert(r == 0);
 }
 
 void MDSDaemon::clean_up_admin_socket()
@@ -337,6 +342,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("dirfrag split");
   admin_socket->unregister_command("dirfrag merge");
   admin_socket->unregister_command("dirfrag ls");
+  admin_socket->unregister_command("openfiles ls");
   delete asok_hook;
   asok_hook = NULL;
 }

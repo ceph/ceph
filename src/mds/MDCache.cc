@@ -5631,7 +5631,33 @@ void MDCache::clean_open_file_lists()
   }
 }
 
-
+void MDCache::dump_openfiles(Formatter *f)
+{
+  f->open_array_section("openfiles");
+  for (auto p = mds->mdlog->segments.begin();
+       p != mds->mdlog->segments.end();
+       ++p) {
+    LogSegment *ls = p->second;
+    
+    auto q = ls->open_files.begin(member_offset(CInode, item_open_file));
+    while (!q.end()) {
+      CInode *in = *q;
+      ++q;
+      if ((in->last == CEPH_NOSNAP && !in->is_any_caps_wanted())
+          || (in->last != CEPH_NOSNAP && in->client_snap_caps.empty())) 
+        continue;
+      std::string path;
+      in->make_path_string(path, true);
+      if (path.empty())
+        path = "/"   
+      f->open_object_section("file");
+      f->dump_string("path", path);
+      in->dump(f);
+      f->close_section();
+    }
+  }
+  f->close_section();
+}
 
 Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds)
 {

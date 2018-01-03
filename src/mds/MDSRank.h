@@ -437,6 +437,7 @@ class MDSRank {
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
+    void command_openfiles_ls(Formatter *f);
 
   protected:
     Messenger    *messenger;

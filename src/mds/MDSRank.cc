@@ -1986,6 +1986,8 @@ bool MDSRankDispatcher::handle_asok_command(
     command_dirfrag_merge(cmdmap, ss);
   } else if (command == "dirfrag ls") {
     command_dirfrag_ls(cmdmap, ss, f);
+  } else if (command == "openfiles ls") {
+    command_openfiles_ls(f);
   } else {
     return false;
   }
@@ -2495,6 +2497,12 @@ bool MDSRank::command_dirfrag_ls(
   f->close_section();
 
   return true;
+}
+
+void MDSRank::command_openfiles_ls(Formatter *f) 
+{
+  Mutex::Locker l(mds_lock);
+  mdcache->dump_openfiles(f);
 }
 
 void MDSRank::dump_status(Formatter *f) const
