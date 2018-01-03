@@ -10,6 +10,7 @@ overrides:
         filestore odsync write: true
         osd max backfills: 2
         osd snap trim sleep: .5
+        osd debug randomize version offsets: true
 tasks:
 - thrashosds:
     timeout: 1200

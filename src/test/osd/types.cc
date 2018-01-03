@@ -564,6 +564,35 @@ TEST(pg_t, get_ancestor)
   ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(8));
 }
 
+TEST(pg_t, calc_merge_alignment)
+{
+  unsigned num, offset;
+
+  pg_t(0, 1).calc_merge_alignment(8, 8, &num, &offset);
+  ASSERT_EQ(1u, num);
+  ASSERT_EQ(0u, offset);
+
+  pg_t(0, 1).calc_merge_alignment(16, 8, &num, &offset);
+  ASSERT_EQ(2u, num);
+  ASSERT_EQ(0u, offset);
+
+  pg_t(8, 1).calc_merge_alignment(16, 8, &num, &offset);
+  ASSERT_EQ(2u, num);
+  ASSERT_EQ(1u, offset);
+
+  pg_t(0, 1).calc_merge_alignment(12, 8, &num, &offset);
+  ASSERT_EQ(2u, num);
+  ASSERT_EQ(0u, offset);
+
+  pg_t(8, 1).calc_merge_alignment(12, 8, &num, &offset);
+  ASSERT_EQ(2u, num);
+  ASSERT_EQ(1u, offset);
+
+  pg_t(4, 1).calc_merge_alignment(12, 8, &num, &offset);
+  ASSERT_EQ(1u, num);
+  ASSERT_EQ(0u, offset);
+}
+
 TEST(pg_t, split)
 {
   pg_t pgid(0, 0, -1);

@@ -540,6 +540,42 @@ pg_t pg_t::get_parent() const
   return retval;
 }
 
+void pg_t::calc_merge_alignment(
+  unsigned from_num, ///< from
+  unsigned to_num,   ///< to
+  unsigned *num,     ///< number of merging pgs
+  unsigned *offset)  ///< position of this pg among merging pgs
+{
+  // when we reduce the pg_num, pgs will be pieced back together.  calculate
+  // how many pgs will merge that involve this pg, and which position this pg
+  // will be in among them.
+  if (from_num == to_num) {
+    *num = 1;
+    *offset = 0;
+    return;
+  }
+  pg_t ancestor = get_ancestor(to_num);
+  set<pg_t> children;
+  bool split = ancestor.is_split(to_num, from_num, &children);
+  if (!split) {
+    *num = 1;
+    *offset = 0;
+    return;
+  }
+  *num = children.size() + 1;
+  if (ancestor == *this) {
+    *offset = 0;
+    return;
+  }
+  *offset = 1;
+  auto p = children.begin();
+  while (p != children.end() && *p != *this) {
+    ++p;
+    ++(*offset);
+  }
+  assert(p != children.end());
+}
+
 hobject_t pg_t::get_hobj_start() const
 {
   return hobject_t(object_t(), string(), CEPH_NOSNAP, m_seed, m_pool,

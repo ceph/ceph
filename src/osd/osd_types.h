@@ -414,6 +414,13 @@ struct pg_t {
    */
   unsigned get_split_bits(unsigned pg_num) const;
 
+  /// calculate position of pg for potential merge
+  void calc_merge_alignment(
+    unsigned pg_num,    ///< from
+    unsigned pgp_num,   ///< to
+    unsigned *num,      ///< number of merging pgs
+    unsigned *offset);  ///< position of this pg among merging pgs
+
   bool contains(int bits, const ghobject_t& oid) {
     return oid.match(bits, ps());
   }

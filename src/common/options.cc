@@ -2845,6 +2845,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osd_debug_randomize_version_offsets", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Randomly vary the interval between pg_log_entry_t version to stress test peering code"),
+
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),

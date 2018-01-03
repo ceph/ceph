@@ -985,6 +985,9 @@ protected:
                                        // which are unfound on the primary
   epoch_t last_peering_reset;
 
+  unsigned version_mask = 0;   ///< mask for low bits that must remain fixed
+  unsigned version_offset = 0; ///< fixed value of low bits
+
   epoch_t get_last_peering_reset() const {
     return last_peering_reset;
   }
@@ -2738,7 +2741,7 @@ protected:
   eversion_t get_next_version() const {
     eversion_t at_version(
       get_osdmap()->get_epoch(),
-      projected_last_update.version+1);
+      ((projected_last_update.version + version_mask + 1) & ~version_mask) + version_offset);
     assert(at_version > info.last_update);
     assert(at_version > pg_log.get_head());
     assert(at_version > projected_last_update);
