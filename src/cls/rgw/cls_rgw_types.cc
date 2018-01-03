@@ -527,8 +527,8 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
     iter->second.dump(f);
     f->close_section();
   }
-  ::encode_json("new_instance", new_instance, f);
   f->close_section();
+  ::encode_json("new_instance", new_instance, f);
 }
 
 void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
