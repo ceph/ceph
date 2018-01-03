@@ -151,6 +151,31 @@ static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
+static inline bool char_needs_aws2_escaping(const char c)
+{
+  switch (c) {
+    case '\'':
+    case ')':
+    case '(':
+    case '!':
+      return true;
+  }
+  return false;
+}
+
+static inline std::string aws2_uri_encode(std::string& src)
+{
+  std::string result;
+  for (const std::string::value_type c : src) {
+    if (char_needs_aws2_escaping(c)) {
+      rgw_uri_escape_char(c, result);
+    } else {
+      result.push_back(c);
+    }
+  }
+  return result;
+}
+
 /*
  * get the header authentication  information required to
  * compute a request's signature
@@ -205,15 +230,24 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   const auto& meta_map = info.x_meta_map;
   const auto& sub_resources = info.args.get_sub_resources();
 
-  std::string request_uri;
+  std::string request_uri, encode_request_uri;
   if (info.effective_uri.empty()) {
     request_uri = info.request_uri;
   } else {
     request_uri = info.effective_uri;
   }
 
+  const size_t key_pos = request_uri.find("/", 1);
+  if (key_pos != std::string::npos) {
+    string key;
+    key = request_uri.substr(key_pos + 1);
+    encode_request_uri = request_uri.substr(0, key_pos + 1) + aws2_uri_encode(key);
+  } else {
+    encode_request_uri = request_uri;
+  }
+
   rgw_create_s3_canonical_header(info.method, content_md5, content_type,
-                                 date.c_str(), meta_map, request_uri.c_str(),
+                                 date.c_str(), meta_map, encode_request_uri.c_str(),
                                  sub_resources, dest);
   return true;
 }
