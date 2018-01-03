@@ -25,7 +25,7 @@ To compile Ceph for profiling, first clean everything. ::
 	
 Then, export the following settings so that you can see callgraph output. :: 
 
-	export CFLAGS="-fno=omit-frame-pointer -O2 -g"
+	export CFLAGS="-fno-omit-frame-pointer -O2 -g"
 
 Finally, compile Ceph. :: 
 
