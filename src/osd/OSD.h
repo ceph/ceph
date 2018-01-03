@@ -248,6 +248,7 @@ class LogChannel;
 class CephContext;
 class MOSDOp;
 
+class MOSDPGCreate2;
 class MOSDPGQuery;
 class MOSDPGNotify;
 class MOSDPGInfo;
@@ -2028,6 +2029,7 @@ protected:
   bool require_same_or_newer_map(OpRequestRef& op, epoch_t e,
 				 bool is_fast_dispatch);
 
+  void handle_fast_pg_create(MOSDPGCreate2 *m);
   void handle_fast_pg_query(MOSDPGQuery *m);
   void handle_pg_query_nopg(const MQuery& q);
   void handle_fast_pg_notify(MOSDPGNotify *m);
@@ -2117,6 +2119,7 @@ private:
     switch (m->get_type()) {
     case CEPH_MSG_OSD_OP:
     case CEPH_MSG_OSD_BACKOFF:
+    case MSG_OSD_PG_CREATE2:
     case MSG_OSD_PG_QUERY:
     case MSG_OSD_PG_INFO:
     case MSG_OSD_PG_NOTIFY:
