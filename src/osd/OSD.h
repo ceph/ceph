@@ -2120,6 +2120,8 @@ private:
     case CEPH_MSG_PING:
     case CEPH_MSG_OSD_OP:
     case CEPH_MSG_OSD_BACKOFF:
+    case MSG_MON_COMMAND:
+    case MSG_COMMAND:
     case MSG_OSD_PG_CREATE2:
     case MSG_OSD_PG_QUERY:
     case MSG_OSD_PG_INFO:
