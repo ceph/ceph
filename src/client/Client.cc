@@ -10934,8 +10934,9 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   if (dir->snapid != CEPH_NOSNAP && dir->snapid != CEPH_SNAPDIR) {
     return -EROFS;
   }
-
-  MetaRequest *req = new MetaRequest(dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP:CEPH_MDS_OP_RMDIR);
+  
+  int op = dir->snapid == CEPH_SNAPDIR ? CEPH_MDS_OP_RMSNAP : CEPH_MDS_OP_RMDIR;
+  MetaRequest *req = new MetaRequest(op);
   filepath path;
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
@@ -10951,15 +10952,20 @@ int Client::_rmdir(Inode *dir, const char *name, int uid, int gid)
   int res = get_or_create(dir, name, &de);
   if (res < 0)
     goto fail;
+  if (op == CEPH_MDS_OP_RMDIR) 
+    req->set_dentry(de);
+  else
+    de->get();
+
   res = _lookup(dir, name, 0, &in, uid, gid);
   if (res < 0)
     goto fail;
-  if (req->get_op() == CEPH_MDS_OP_RMDIR) {
+  if (op == CEPH_MDS_OP_RMDIR) {
     req->set_inode(dir);
-    req->set_dentry(de);
     req->set_other_inode(in.get());
   } else {
     unlink(de, true, true);
+    de->put();
     req->set_other_inode(in.get());
   }
 
