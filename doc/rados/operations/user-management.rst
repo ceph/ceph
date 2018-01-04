@@ -99,20 +99,38 @@ a user.
 
 Capability syntax follows the form::
 
-	{daemon-type} '{capspec}[, {capspec} ...]'
+	{daemon-type} '{cap-spec}[, {cap-spec} ...]'
 
 - **Monitor Caps:** Monitor capabilities include ``r``, ``w``, ``x`` access
   settings or ``profile {name}``. For example::
 
-	mon 'allow rwx'
-	mon 'profile osd'
+	mon 'allow {access-spec}'
+
+	mon 'profile {name}'
+
+  The ``{access-spec}`` syntax is as follows: ::
+
+        * | all | [r][w][x]
 
 - **OSD Caps:** OSD capabilities include ``r``, ``w``, ``x``, ``class-read``,
   ``class-write`` access settings or ``profile {name}``. Additionally, OSD
   capabilities also allow for pool and namespace settings. ::
 
-	osd 'allow {access} [pool={pool-name} [namespace={namespace-name}]] [tag {application} {key}={value}]'
+	osd 'allow {access-spec} [{match-spec}]'
+
 	osd 'profile {name} [pool={pool-name} [namespace={namespace-name}]]'
+
+  The ``{access-spec}`` syntax is either of the following: ::
+
+        * | all | [r][w][x] [class-read] [class-write]
+
+        class {class name} [{method name}]
+
+  The optional ``{match-spec}`` syntax is either of the following: ::
+
+        pool={pool-name} [namespace={namespace-name}] [object_prefix {prefix}]
+
+        [namespace={namespace-name}] tag {application} {key}={value}
 
 - **Metadata Server Caps:** For administrators, use ``allow *``.  For all
   other users, such as CephFS clients, consult :doc:`/cephfs/client-auth`
@@ -122,7 +140,7 @@ Capability syntax follows the form::
           Ceph Storage Cluster, so it is not represented as a Ceph Storage
           Cluster daemon type.
 
-The following entries describe each capability.
+The following entries describe each access capability.
 
 ``allow``
 
@@ -160,12 +178,13 @@ The following entries describe each capability.
               Subset of ``x``.
 
 
-``*``
+``*``, ``all``
 
 :Description: Gives the user read, write and execute permissions for a
               particular daemon/pool, and the ability to execute
               admin commands.
 
+The following entries describe valid capability profiles:
 
 ``profile osd`` (Monitor only)
 
@@ -204,7 +223,7 @@ The following entries describe each capability.
 
 ``profile rbd-read-only`` (OSD only)
 
-:Description: Gives a user read-only permissions to an RBD image.
+:Description: Gives a user read-only permissions to RBD images.
 
 
 Pool
