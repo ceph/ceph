@@ -531,7 +531,7 @@ CephContext::CephContext(uint32_t module_type_,
     _set_gid(0),
     _set_uid_string(),
     _set_gid_string(),
-    _crypto_inited(false),
+    _crypto_inited(0),
     _service_thread(NULL),
     _log_obs(NULL),
     _admin_socket(NULL),
@@ -657,8 +657,11 @@ CephContext::~CephContext()
   
   delete _crypto_none;
   delete _crypto_aes;
-  if (_crypto_inited)
-    ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
+  if (_crypto_inited > 0) {
+    assert(_crypto_inited == 1);  // or else someone explicitly did
+				  // init but not shutdown
+    shutdown_crypto();
+  }
 }
 
 void CephContext::put() {
@@ -673,9 +676,15 @@ void CephContext::put() {
 
 void CephContext::init_crypto()
 {
-  if (!_crypto_inited) {
+  if (_crypto_inited++ == 0) {
     ceph::crypto::init(this);
-    _crypto_inited = true;
+  }
+}
+
+void CephContext::shutdown_crypto()
+{
+  if (--_crypto_inited == 0) {
+    ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
   }
 }
 
