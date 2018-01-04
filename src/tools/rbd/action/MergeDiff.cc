@@ -428,8 +428,8 @@ int execute(const po::variables_map &vm) {
   }
 
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 2),
-                          &path);
+  size_t arg_index = 2;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
