@@ -3935,14 +3935,6 @@ PG *OSD::lookup_lock_pg(spg_t pgid)
   return _lookup_lock_pg(pgid);
 }
 
-PG *OSD::_lookup_lock_pg_with_map_lock_held(spg_t pgid)
-{
-  assert(pg_map.count(pgid));
-  PG *pg = pg_map[pgid];
-  pg->lock();
-  return pg;
-}
-
 void OSD::load_pgs()
 {
   assert(osd_lock.is_locked());
