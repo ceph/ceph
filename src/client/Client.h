@@ -632,8 +632,6 @@ protected:
   void remove_cap(Cap *cap, bool queue_release);
   void remove_all_caps(Inode *in);
   void remove_session_caps(MetaSession *session);
-  void mark_caps_dirty(Inode *in, int caps);
-  void mark_caps_clean(Inode *in);
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
@@ -731,6 +729,7 @@ protected:
   void flush_mdlog_sync();
   void flush_mdlog(MetaSession *session);
   
+  xlist<Inode*> &get_dirty_list() { return dirty_list; }
   // ----------------------
   // fs ops.
 private:
