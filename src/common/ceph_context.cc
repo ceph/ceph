@@ -682,13 +682,12 @@ void CephContext::init_crypto()
 void CephContext::start_service_thread()
 {
   {
-  std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
-
-  if (_service_thread) {
-    return;
-  }
-  _service_thread = new CephContextServiceThread(this);
-  _service_thread->create("service");
+    std::lock_guard<ceph::spinlock> lg(_service_thread_lock);
+    if (_service_thread) {
+      return;
+    }
+    _service_thread = new CephContextServiceThread(this);
+    _service_thread->create("service");
   }
 
   // make logs flush on_exit()
