@@ -1249,7 +1249,7 @@ private:
   version_t last_seen_pgmap_version;
 
   mutable boost::shared_mutex rwlock;
-  using lock_guard = std::unique_lock<decltype(rwlock)>;
+  using lock_guard = std::lock_guard<decltype(rwlock)>;
   using unique_lock = std::unique_lock<decltype(rwlock)>;
   using shared_lock = boost::shared_lock<decltype(rwlock)>;
   using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
