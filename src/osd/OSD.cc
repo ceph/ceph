@@ -2261,7 +2261,12 @@ will start to track new ops received afterwards.";
     f->close_section();
   } else if (admin_command == "get_latest_osdmap") {
     get_latest_osdmap();
-  } else if (admin_command == "heap") {
+  } else if (admin_command == "heap dump" || 
+             admin_command == "heap start_profiler" || 
+             admin_command == "heap stop_profiler" ||
+             admin_command == "heap release" ||
+             admin_command == "heap stats") {
+    cmd_putval(cct, cmdmap, "heapcmd", admin_command.substr(admin_command.find(' ')));
     auto result = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
 
     // Note: Failed heap profile commands won't necessarily trigger an error:
@@ -2819,12 +2824,39 @@ void OSD::final_init()
 				     "force osd to update the latest map from "
 				     "the mon");
   assert(r == 0);
-
-  r = admin_socket->register_command( "heap",
-                                      "heap " \
-                                      "name=heapcmd,type=CephString",
+  
+  r = admin_socket->register_command( "heap dump",
+                                      "heap dump",
                                       asok_hook,
-                                      "show heap usage info (available only if "
+                                      "dump heap profile (available only if "
+                                      "compiled with tcmalloc)");
+  assert(r == 0);
+  
+  r = admin_socket->register_command( "heap start_profiler",
+                                      "heap start_profiler",
+                                      asok_hook,
+                                      "start heap profiling (available only if "
+                                      "compiled with tcmalloc)");
+  assert(r == 0);
+  
+  r = admin_socket->register_command( "heap stop_profiler",
+                                      "heap stop_profiler",
+                                      asok_hook,
+                                      "stop heap profiling (available only if "
+                                      "compiled with tcmalloc)");
+  assert(r == 0);
+  
+  r = admin_socket->register_command( "heap release",
+                                      "heap release",
+                                      asok_hook,
+                                      "release free RAM back to system (available only if "
+                                      "compiled with tcmalloc)");
+  assert(r == 0);
+  
+  r = admin_socket->register_command( "heap stats",
+                                      "heap stats",
+                                      asok_hook,
+                                      "dump tcmalloc heap stats (available only if "
                                       "compiled with tcmalloc)");
   assert(r == 0);
 
@@ -3357,7 +3389,11 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_watchers");
   cct->get_admin_socket()->unregister_command("dump_reservations");
   cct->get_admin_socket()->unregister_command("get_latest_osdmap");
-  cct->get_admin_socket()->unregister_command("heap");
+  cct->get_admin_socket()->unregister_command("heap dump");
+  cct->get_admin_socket()->unregister_command("heap start_profiler");
+  cct->get_admin_socket()->unregister_command("heap stop_profiler");
+  cct->get_admin_socket()->unregister_command("heap release");
+  cct->get_admin_socket()->unregister_command("heap stats");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
