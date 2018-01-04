@@ -88,6 +88,9 @@ public:
   /* init ceph::crypto */
   void init_crypto();
 
+  /// shutdown crypto (should match init_crypto calls)
+  void shutdown_crypto();
+
   /* Start the Ceph Context's service thread */
   void start_service_thread();
 
@@ -233,7 +236,7 @@ private:
   std::string _set_uid_string;
   std::string _set_gid_string;
 
-  bool _crypto_inited;
+  int _crypto_inited;
 
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
