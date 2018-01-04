@@ -9915,16 +9915,24 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     dout(20) << __func__ << " " << slot.to_process.back()
 	     << " queued" << dendl;
     ++slot.num_running;
+    sdata->sdata_op_ordering_lock.Unlock();
+
+    osd->service.maybe_inject_dispatch_delay();
+
+    // take the transition lock. this is intermediary step before dropping
+    // the shard lock and PG::lock()ing. there are situations where PG can
+    // be locked in shared manner (reads) but they can be determined on qi
+    // that isn't available yet.
+    slot.transition_lock.Lock();
   }
-  sdata->sdata_op_ordering_lock.Unlock();
 
-  osd->service.maybe_inject_dispatch_delay();
-
-  // [lookup +] lock pg (if we have it)
+  // [lookup pg]. locking is deferred
   if (!pg) {
-    pg = osd->_lookup_lock_pg(token);
-  } else {
-    pg->lock();
+    RWLock::RLocker l(osd->pg_map_lock);
+    const auto pg_map_entry = osd->pg_map.find(token);
+    if (pg_map_entry != osd->pg_map.end()) {
+      pg = pg_map_entry->second;
+    }
   }
 
   osd->service.maybe_inject_dispatch_delay();
@@ -9938,13 +9946,15 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   auto& slot = q->second;
   --slot.num_running;
 
+  if (!pg) {
+    // no pg means no need to lock it in the future
+    slot.transition_lock.Unlock();
+  }
+
   if (slot.to_process.empty()) {
     // raced with wake_pg_waiters or prune_pg_waiters
     dout(20) << __func__ << " " << token
 	     << " nothing queued" << dendl;
-    if (pg) {
-      pg->unlock();
-    }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
@@ -9953,9 +9963,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	     << " requeue_seq " << slot.requeue_seq << " > our "
 	     << requeue_seq << ", we raced with wake_pg_waiters"
 	     << dendl;
-    if (pg) {
-      pg->unlock();
-    }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
@@ -9971,9 +9978,6 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   if (slot.waiting_for_pg) {
     dout(20) << __func__ << " " << token
 	     << " slot is waiting_for_pg" << dendl;
-    if (pg) {
-      pg->unlock();
-    }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
   }
@@ -10024,6 +10028,10 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   }
   sdata->sdata_op_ordering_lock.Unlock();
 
+  // exchange the transition lock on PG::_lock in appropriate mode
+  pg->lock_in_mode(qi.needs_exclusive_pglock(osd));
+  osd->service.maybe_inject_dispatch_delay();
+  slot.transition_lock.Unlock();
 
   // osd_opwq_process marks the point at which an operation has been dequeued
   // and will begin to be handled by a worker thread.

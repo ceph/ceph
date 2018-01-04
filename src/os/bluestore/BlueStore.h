@@ -736,6 +736,7 @@ public:
   struct ExtentMap {
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
+    std::mutex em_lock;             ///< protects extent_map during BS::read
     blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {

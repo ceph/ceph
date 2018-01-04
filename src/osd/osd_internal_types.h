@@ -215,14 +215,18 @@ public:
     }
     bool empty() const { return state == RWNONE; }
   } rwstate;
+  Mutex rwstate_lock = {"ObjectContext::rwlock"};
 
   bool get_read(OpRequestRef op) {
+    Mutex::Locker guard(rwstate_lock);
     return rwstate.get_read(op);
   }
   bool get_write(OpRequestRef op) {
+    Mutex::Locker guard(rwstate_lock);
     return rwstate.get_write(op, false);
   }
   bool get_excl(OpRequestRef op) {
+    Mutex::Locker guard(rwstate_lock);
     return rwstate.get_excl(op);
   }
   bool get_lock_type(OpRequestRef op, RWState::State type) {
@@ -239,9 +243,11 @@ public:
     }
   }
   bool get_write_greedy(OpRequestRef op) {
+    Mutex::Locker guard(rwstate_lock);
     return rwstate.get_write(op, true);
   }
   bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
+    Mutex::Locker guard(rwstate_lock);
     if (rwstate.get_write_lock()) {
       return true;
     } else {
@@ -251,6 +257,7 @@ public:
     }
   }
   bool get_recovery_read() {
+    Mutex::Locker guard(rwstate_lock);
     rwstate.recovery_read_marker = true;
     if (rwstate.get_read_lock()) {
       return true;
@@ -258,9 +265,11 @@ public:
     return false;
   }
   bool try_get_read_lock() {
+    Mutex::Locker guard(rwstate_lock);
     return rwstate.get_read_lock();
   }
   void drop_recovery_read(list<OpRequestRef> *ls) {
+    Mutex::Locker guard(rwstate_lock);
     assert(rwstate.recovery_read_marker);
     rwstate.put_read(ls);
     rwstate.recovery_read_marker = false;
@@ -270,6 +279,7 @@ public:
     list<OpRequestRef> *to_wake,
     bool *requeue_recovery,
     bool *requeue_snaptrimmer) {
+    Mutex::Locker guard(rwstate_lock);
     switch (type) {
     case ObjectContext::RWState::RWWRITE:
       rwstate.put_write(to_wake);
@@ -293,6 +303,7 @@ public:
     }
   }
   bool is_request_pending() {
+    Mutex::Locker guard(rwstate_lock);
     return (rwstate.count > 0);
   }
 

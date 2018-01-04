@@ -2675,11 +2675,14 @@ void BlueStore::ExtentMap::fault_range(
           }
         }
       );
-      p->extents = decode_some(v);
-      p->loaded = true;
-      dout(20) << __func__ << " open shard 0x" << std::hex
+      {
+        std::lock_guard<std::mutex> l(em_lock);
+        p->extents = decode_some(v);
+        p->loaded = true;
+        dout(20) << __func__ << " open shard 0x" << std::hex
 	       << p->shard_info->offset << std::dec
 	       << " (" << v.length() << " bytes)" << dendl;
+      }
       assert(p->dirty == false);
       assert(v.length() == p->shard_info->bytes);
       onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
