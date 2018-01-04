@@ -443,12 +443,12 @@ void get_arguments_diff(po::options_description *positional,
 
 int execute_diff(const po::variables_map &vm) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
 
-  size_t arg_index = 1;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
@@ -906,7 +906,8 @@ void get_arguments(po::options_description *positional,
 
 int execute(const po::variables_map &vm) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -941,7 +942,6 @@ int execute(const po::variables_map &vm) {
     sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
   }
 
-  size_t arg_index = 1;
   std::string pool_name = deprecated_pool_name;
   std::string image_name;
   std::string snap_name = deprecated_snap_name;
