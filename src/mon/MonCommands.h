@@ -202,10 +202,7 @@ COMMAND_WITH_FLAG("injectargs " \
 	     "name=injected_args,type=CephString,n=N",			\
 	     "inject config arguments into monitor", "mon", "rw", "cli,rest",
 	     FLAG(NOFORWARD))
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"mon", "rw", "cli,rest")
+
 COMMAND("status", "show cluster status", "mon", "r", "cli,rest")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r", "cli,rest")
@@ -1098,5 +1095,18 @@ COMMAND("config set" \
 	" name=who,type=CephString" \
 	" name=name,type=CephString" \
 	" name=value,type=CephString", \
-	"set a config option",
+	"Set a configuration option for one or more entities",
 	"config", "rw", "cli,rest")
+COMMAND("config rm"						\
+	" name=who,type=CephString" \
+	" name=name,type=CephString",
+	"Clear a configuration option for one or more entities",
+	"config", "rw", "cli,rest")
+COMMAND("config get " \
+	"name=who,type=CephString " \
+	"name=key,type=CephString,req=False",
+	"Show configuration option(s) for an entity",
+	"config", "r", "cli,rest")
+COMMAND("config dump",
+	"Show all configuration option(s)",
+	"mon", "r", "cli,rest")

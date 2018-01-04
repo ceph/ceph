@@ -8,6 +8,8 @@
 #include "messages/MGetConfig.h"
 #include "messages/MMonCommand.h"
 #include "common/Formatter.h"
+#include "common/TextTable.h"
+#include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
@@ -80,7 +82,153 @@ version_t ConfigMonitor::get_trim_to() const
 
 bool ConfigMonitor::preprocess_query(MonOpRequestRef op)
 {
+  switch (op->get_req()->get_type()) {
+  case MSG_MON_COMMAND:
+    return preprocess_command(op);
+  }
   return false;
+}
+
+bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
+{
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  stringstream ss;
+  int err = 0;
+
+  map<string, cmd_vartype> cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, get_last_committed());
+    return true;
+  }
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  bufferlist odata;
+  if (prefix == "config dump") {
+    list<pair<string,Section*>> sections = {
+      make_pair("global", &config_map.global)
+    };
+    for (auto& i : config_map.by_type) {
+      sections.push_back(make_pair(i.first, &i.second));
+      auto j = config_map.by_id.lower_bound(i.first);
+      while (j != config_map.by_id.end() &&
+	     j->first.find(i.first) == 0) {
+	sections.push_back(make_pair(j->first, &j->second));
+	++j;
+      }
+    }
+    TextTable tbl;
+    if (!f) {
+      tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+    } else {
+      f->open_array_section("config");
+    }
+    for (auto s : sections) {
+      for (auto i : s.second->options) {
+	if (!f) {
+	  tbl << s.first;
+	  tbl << i.second.mask.to_str();
+          tbl << i.first;
+	  tbl << i.second.raw_value;
+	  tbl << TextTable::endrow;
+	} else {
+	  f->open_object_section("option");
+	  f->dump_string("section", s.first);
+	  i.second.dump(f.get());
+	  f->close_section();
+	}
+      }
+    }
+    if (!f) {
+      odata.append(stringify(tbl));
+    } else {
+      f->close_section();
+      f->flush(odata);
+    }
+  } else if (prefix == "config get") {
+    string who, name;
+    cmd_getval(g_ceph_context, cmdmap, "who", who);
+    cmd_getval(g_ceph_context, cmdmap, "key", name);
+
+    EntityName entity;
+    if (!entity.from_str(who)) {
+      ss << "unrecognized entity '" << who << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    map<string,string> crush_location;
+    string device_class;
+    if (entity.is_osd()) {
+      mon->osdmon()->osdmap.crush->get_full_location(who, &crush_location);
+      int id = atoi(entity.get_id().c_str());
+      const char *c = mon->osdmon()->osdmap.crush->get_item_class(id);
+      if (c) {
+	device_class = c;
+      }
+      dout(10) << __func__ << " crush_location " << crush_location
+	       << " class " << device_class << dendl;
+    }
+
+    std::map<std::string,std::string> config;
+    std::map<std::string,pair<std::string,OptionMask>> src;
+    config_map.generate_entity_map(
+      entity,
+      crush_location,
+      mon->osdmon()->osdmap.crush.get(),
+      device_class,
+      &config, &src);
+
+    TextTable tbl;
+    if (!f) {
+      tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+    } else {
+      f->open_object_section("config");
+    }
+    auto p = config.begin();
+    auto q = src.begin();
+    for (; p != config.end(); ++p, ++q) {
+      if (name.size() && p->first != name) {
+	continue;
+      }
+      if (!f) {
+	tbl << q->second.first;
+	tbl << q->second.second.to_str();
+	tbl << p->first;
+	tbl << p->second;
+	tbl << TextTable::endrow;
+      } else {
+	f->open_object_section(p->first.c_str());
+	f->dump_string("value", p->second);
+	f->dump_string("section", q->second.first);
+	f->dump_object("mask", q->second.second);
+	f->close_section();
+      }
+    }
+    if (!f) {
+      odata.append(stringify(tbl));
+    } else {
+      f->close_section();
+      f->flush(odata);
+    }
+  } else {
+    return false;
+  }
+
+  reply:
+  mon->reply_command(op, err, ss.str(), odata, get_last_committed());
+  return true;
 }
 
 void ConfigMonitor::handle_get_config(MonOpRequestRef op)
@@ -130,7 +278,8 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  if (prefix == "config set") {
+  if (prefix == "config set" ||
+      prefix == "config rm") {
     string who;
     string name, value;
     cmd_getval(g_ceph_context, cmdmap, "who", who);
@@ -154,11 +303,15 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       key += mask_str + "/";
     }
     key += name;
-    bufferlist bl;
-    bl.append(value);
 
     MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
-    t->put(CONFIG_PREFIX, key, bl);
+    if (prefix == "config set") {
+      bufferlist bl;
+      bl.append(value);
+      t->put(CONFIG_PREFIX, key, bl);
+    } else {
+      t->erase(CONFIG_PREFIX, key);
+    }
     goto update;
   } else {
     ss << "unknown command " << prefix;
@@ -216,7 +369,6 @@ void ConfigMonitor::load_config()
       name = key.substr(last_slash + 1);
       who = key.substr(0, last_slash);
     }
-    string section_name;
 
     Option fake_opt(name, Option::TYPE_STR, Option::LEVEL_DEV);
     const Option *opt = g_conf->find_option(name);
@@ -231,10 +383,13 @@ void ConfigMonitor::load_config()
 	       << value << "' for " << name << dendl;
     }
 
+    string section_name;
     MaskedOption mopt(*opt);
     mopt.raw_value = value;
-
-    if (ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+    if (who.size() &&
+	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+      derr << __func__ << " ignoring key " << key << dendl;
+    } else {
       Section *section = &config_map.global;;
       if (section_name.size()) {
 	if (section_name.find('.') != std::string::npos) {
@@ -245,8 +400,6 @@ void ConfigMonitor::load_config()
       }
       section->options.insert(make_pair(name, mopt));
       ++num;
-    } else {
-      derr << __func__ << " ignoring key " << key << dendl;
     }
     it->next();
   }
