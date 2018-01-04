@@ -107,6 +107,8 @@ public:
   set<snapid_t> filter(const set<snapid_t>& snaps) const;
   const SnapInfo* get_snap_info(snapid_t snapid) const;
   void get_snap_infos(map<snapid_t, const SnapInfo*>& infomap, const set<snapid_t>& snaps) const;
+
+  int dump_cache(Formatter *f) const;
 };
 
 #endif
