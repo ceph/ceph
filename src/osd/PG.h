@@ -233,11 +233,12 @@ struct PGPool {
       name(map->get_pool_name(id)),
       auid(map->get_pg_pool(id)->auid) {
     const pg_pool_t *pi = map->get_pg_pool(id);
-    assert(pi);
-    info = *pi;
-    snapc = pi->get_snap_context();
-    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
-      pi->build_removed_snaps(cached_removed_snaps);
+    if (pi) {
+      info = *pi;
+      snapc = pi->get_snap_context();
+      if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+	pi->build_removed_snaps(cached_removed_snaps);
+      }
     }
   }
 

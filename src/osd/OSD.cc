@@ -405,7 +405,8 @@ void OSDService::_maybe_split_pgid(OSDMapRef old_map,
     set<spg_t> children;
     if (pgid.is_split(old_pgnum,
 		  new_map->get_pg_num(pgid.pool()), &children)) { 
-      _start_split(pgid, children); }
+      _start_split(pgid, children);
+    }
   } else {
     assert(pgid.ps() < static_cast<unsigned>(new_map->get_pg_num(pgid.pool())));
   }
@@ -3752,14 +3753,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
 
 PGPool OSD::_get_pool(int id, OSDMapRef createmap)
 {
-  if (!createmap->have_pg_pool(id)) {
-    dout(5) << __func__ << ": the OSDmap does not contain a PG pool with id = "
-	    << id << dendl;
-    ceph_abort();
-  }
-
   PGPool p = PGPool(cct, createmap, id);
-
   dout(10) << "_get_pool " << p.id << dendl;
   return p;
 }
