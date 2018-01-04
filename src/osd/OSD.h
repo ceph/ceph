@@ -2122,6 +2122,7 @@ private:
     case CEPH_MSG_PING:
     case CEPH_MSG_OSD_OP:
     case CEPH_MSG_OSD_BACKOFF:
+    case MSG_OSD_SCRUB2:
     case MSG_OSD_FORCE_RECOVERY:
     case MSG_MON_COMMAND:
     case MSG_COMMAND:
@@ -2246,6 +2247,7 @@ private:
 			uuid_d& cluster_fsid, uuid_d& osd_fsid, int whoami);
 
   void handle_scrub(struct MOSDScrub *m);
+  void handle_fast_scrub(struct MOSDScrub2 *m);
   void handle_osd_ping(class MOSDPing *m);
 
   int init_op_flags(OpRequestRef& op);

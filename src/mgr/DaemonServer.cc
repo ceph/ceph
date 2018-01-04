@@ -30,6 +30,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
+#include "messages/MOSDScrub2.h"
 #include "messages/MOSDForceRecovery.h"
 #include "common/errno.h"
 
@@ -838,6 +839,7 @@ bool DaemonServer::handle_command(MCommand *m)
       prefix == "pg deep-scrub") {
     string scrubop = prefix.substr(3, string::npos);
     pg_t pgid;
+    spg_t spgid;
     string pgidstr;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
@@ -855,8 +857,10 @@ bool DaemonServer::handle_command(MCommand *m)
       return true;
     }
     int acting_primary = -1;
+    epoch_t epoch;
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-	acting_primary = osdmap.get_pg_acting_primary(pgid);
+	epoch = osdmap.get_epoch();
+	osdmap.get_primary_shard(pgid, &acting_primary, &spgid);
       });
     if (acting_primary == -1) {
       ss << "pg " << pgid << " has no primary osd";
@@ -869,14 +873,23 @@ bool DaemonServer::handle_command(MCommand *m)
 	 << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
     }
-    vector<pg_t> pgs = { pgid };
     for (auto& con : p->second) {
-      con->send_message(new MOSDScrub(monc->get_fsid(),
-				      pgs,
-				      scrubop == "repair",
-				      scrubop == "deep-scrub"));
+      if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+	vector<spg_t> pgs = { spgid };
+	con->send_message(new MOSDScrub2(monc->get_fsid(),
+					 epoch,
+					 pgs,
+					 scrubop == "repair",
+					 scrubop == "deep-scrub"));
+      } else {
+	vector<pg_t> pgs = { pgid };
+	con->send_message(new MOSDScrub(monc->get_fsid(),
+					pgs,
+					scrubop == "repair",
+					scrubop == "deep-scrub"));
+      }
     }
-    ss << "instructing pg " << pgid << " on osd." << acting_primary
+    ss << "instructing pg " << spgid << " on osd." << acting_primary
        << " to " << scrubop;
     cmdctx->reply(0, ss);
     return true;
@@ -916,15 +929,41 @@ bool DaemonServer::handle_command(MCommand *m)
     }
     set<int> sent_osds, failed_osds;
     for (auto osd : osds) {
+      vector<spg_t> spgs;
+      epoch_t epoch;
+      cluster_state.with_pgmap([&](const PGMap& pgmap) {
+	  cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+	      epoch = osdmap.get_epoch();
+	      auto p = pgmap.pg_by_osd.find(osd);
+	      if (p != pgmap.pg_by_osd.end()) {
+		for (auto pgid : p->second) {
+		  int primary;
+		  spg_t spg;
+		  osdmap.get_primary_shard(pgid, &primary, &spg);
+		  if (primary == osd) {
+		    spgs.push_back(spg);
+		  }
+		}
+	      }
+	    });
+	});
       auto p = osd_cons.find(osd);
       if (p == osd_cons.end()) {
 	failed_osds.insert(osd);
       } else {
 	sent_osds.insert(osd);
 	for (auto& con : p->second) {
-	  con->send_message(new MOSDScrub(monc->get_fsid(),
-					  pvec.back() == "repair",
-					  pvec.back() == "deep-scrub"));
+	  if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+	    con->send_message(new MOSDScrub2(monc->get_fsid(),
+					     epoch,
+					     spgs,
+					     pvec.back() == "repair",
+					     pvec.back() == "deep-scrub"));
+	  } else {
+	    con->send_message(new MOSDScrub(monc->get_fsid(),
+					    pvec.back() == "repair",
+					    pvec.back() == "deep-scrub"));
+	  }
 	}
       }
     }
