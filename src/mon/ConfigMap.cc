@@ -24,17 +24,22 @@ int MaskedOption::get_precision(const CrushWrapper *crush)
   return num_types + 1;
 }
 
+void OptionMask::dump(Formatter *f) const
+{
+  if (location_type.size()) {
+    f->dump_string("location_type", location_type);
+    f->dump_string("location_value", location_value);
+  }
+  if (device_class.size()) {
+    f->dump_string("device_class", device_class);
+  }
+}
+
 void MaskedOption::dump(Formatter *f) const
 {
   f->dump_string("name", opt.name);
   f->dump_string("value", raw_value);
-  if (mask.location_type.size()) {
-    f->dump_string("location_type", mask.location_type);
-    f->dump_string("location_value", mask.location_value);
-  }
-  if (mask.device_class.size()) {
-    f->dump_string("device_class", mask.device_class);
-  }
+  mask.dump(f);
 }
 
 ostream& operator<<(ostream& out, const MaskedOption& o)
@@ -80,21 +85,22 @@ void ConfigMap::generate_entity_map(
   const map<std::string,std::string>& crush_location,
   const CrushWrapper *crush,
   const std::string& device_class,
-  std::map<std::string,std::string> *out)
+  std::map<std::string,std::string> *out,
+  std::map<std::string,pair<std::string,OptionMask>> *src)
 {
   // global, then by type, then by full name.
-  vector<Section*> sections = { &global };
+  vector<pair<string,Section*>> sections = { make_pair("global", &global) };
   auto p = by_type.find(name.get_type_name());
   if (p != by_type.end()) {
-    sections.push_back(&p->second);
+    sections.push_back(make_pair(name.get_type_name(), &p->second));
   }
   auto q = by_id.find(name.to_str());
   if (q != by_id.end()) {
-    sections.push_back(&q->second);
+    sections.push_back(make_pair(name.to_str(), &q->second));
   }
   MaskedOption *prev = nullptr;
   for (auto s : sections) {
-    for (auto& i : s->options) {
+    for (auto& i : s.second->options) {
       auto& o = i.second;
       // match against crush location, class
       if (o.mask.device_class.size() &&
@@ -116,6 +122,9 @@ void ConfigMap::generate_entity_map(
 	continue;
       }
       (*out)[i.first] = o.raw_value;
+      if (src) {
+	(*src)[i.first] = make_pair(s.first, o.mask);
+      }
       prev = &o;
     }
   }

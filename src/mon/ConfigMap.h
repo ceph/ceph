@@ -47,6 +47,7 @@ struct OptionMask {
     }
     return r;
   }
+  void dump(Formatter *f) const;
 };
 
 struct MaskedOption {
@@ -89,7 +90,8 @@ struct ConfigMap {
     const map<std::string,std::string>& crush_location,
     const CrushWrapper *crush,
     const std::string& device_class,
-    std::map<std::string,std::string> *out);
+    std::map<std::string,std::string> *out,
+    std::map<std::string,pair<std::string,OptionMask>> *src=0);
 
   static bool parse_mask(
     const std::string& in,
