@@ -64,7 +64,7 @@ class FSStatus(object):
         for info in self.get_standbys():
             yield info
         for fs in self.map['filesystems']:
-            for info in fs['mdsmap']['info']:
+            for info in fs['mdsmap']['info'].values():
                 yield info
 
     def get_standbys(self):
@@ -97,7 +97,7 @@ class FSStatus(object):
         Get the standby:replay MDS for the given FSCID.
         """
         fs = self.get_fsmap(fscid)
-        for info in fs['mdsmap']['info']:
+        for info in fs['mdsmap']['info'].values():
             if info['state'] == 'up:standby-replay':
                 yield info
 
@@ -106,7 +106,7 @@ class FSStatus(object):
         Get the ranks for the given FSCID.
         """
         fs = self.get_fsmap(fscid)
-        for info in fs['mdsmap']['info']:
+        for info in fs['mdsmap']['info'].values():
             if info['rank'] >= 0:
                 yield info
 
@@ -118,14 +118,6 @@ class FSStatus(object):
             if info['rank'] == rank:
                 return info
         raise RuntimeError("FSCID {0} has no rank {1}".format(fscid, rank))
-
-    def get_cluster(self, fscid):
-        """
-        Get the MDS cluster for the given FSCID.
-        """
-        fs = self.get_fsmap(fscid)
-        for info in fs['mdsmap']['info']:
-            yield info
 
     def get_mds(self, name):
         """
@@ -302,8 +294,8 @@ class MDSCluster(CephCluster):
             mdsmap = fs['mdsmap']
             metadata_pool = pool_id_name[mdsmap['metadata_pool']]
 
-            for info in status.get_ranks(fs['id']):
-                self.mon_manager.raw_cluster_cmd('mds', 'fail', str(info['gid']))
+            for gid in mdsmap['up'].values():
+                self.mon_manager.raw_cluster_cmd('mds', 'fail', gid.__str__())
 
             self.mon_manager.raw_cluster_cmd('fs', 'rm', mdsmap['fs_name'], '--yes-i-really-mean-it')
             self.mon_manager.raw_cluster_cmd('osd', 'pool', 'delete',
@@ -670,11 +662,11 @@ class Filesystem(MDSCluster):
 
         log.info("are_daemons_healthy: mds map: {0}".format(mds_map))
 
-        for info in mds_map['info']:
-            if info['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
-                log.warning("Unhealthy mds state {0}:{1}".format(info['gid'], info['state']))
+        for mds_id, mds_status in mds_map['info'].items():
+            if mds_status['state'] not in ["up:active", "up:standby", "up:standby-replay"]:
+                log.warning("Unhealthy mds state {0}:{1}".format(mds_id, mds_status['state']))
                 return False
-            elif info['state'] == 'up:active':
+            elif mds_status['state'] == 'up:active':
                 active_count += 1
 
         log.info("are_daemons_healthy: {0}/{1}".format(
@@ -683,10 +675,10 @@ class Filesystem(MDSCluster):
 
         if active_count >= mds_map['max_mds']:
             # The MDSMap says these guys are active, but let's check they really are
-            for info in mds_map['info']:
-                if info['state'] == 'up:active':
+            for mds_id, mds_status in mds_map['info'].items():
+                if mds_status['state'] == 'up:active':
                     try:
-                        daemon_status = self.mds_asok(["status"], mds_id=info['name'])
+                        daemon_status = self.mds_asok(["status"], mds_id=mds_status['name'])
                     except CommandFailedError as cfe:
                         if cfe.exitstatus == errno.EINVAL:
                             # Old version, can't do this check
@@ -711,7 +703,7 @@ class Filesystem(MDSCluster):
         """
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['state'] == state or state is None:
                 result.append(mds_status['name'])
 
@@ -729,7 +721,7 @@ class Filesystem(MDSCluster):
     def get_all_mds_rank(self):
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['rank'])
 
@@ -744,7 +736,7 @@ class Filesystem(MDSCluster):
         """
         status = self.get_mds_map()
         result = []
-        for mds_status in sorted(status['info'], lambda a, b: cmp(a['rank'], b['rank'])):
+        for mds_status in sorted(status['info'].values(), lambda a, b: cmp(a['rank'], b['rank'])):
             if mds_status['rank'] != -1 and mds_status['state'] != 'up:standby-replay':
                 result.append(mds_status['name'])
 

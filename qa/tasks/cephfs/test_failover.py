@@ -83,7 +83,8 @@ class TestFailover(CephFSTestCase):
 
         # Wait for everyone to go laggy
         def laggy():
-            for info in self.fs.status().get_cluster(self.fs.id):
+            mdsmap = self.fs.get_mds_map()
+            for info in mdsmap['info'].values():
                 if "laggy_since" not in info:
                     return False
 
@@ -468,7 +469,7 @@ class TestMultiFilesystems(CephFSTestCase):
 
         def get_info_by_name(fs, mds_name):
             mds_map = fs.get_mds_map()
-            for info in mds_map['info']:
+            for gid_str, info in mds_map['info'].items():
                 if info['name'] == mds_name:
                     return info
 

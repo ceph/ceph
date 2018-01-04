@@ -114,21 +114,14 @@ class RankEvicter(threading.Thread):
 
         super(RankEvicter, self).__init__()
 
-    def _get_info(self, key, value):
-        for info in self._mds_map["info"]:
-            if info[key] == value:
-                return info
-        return {}
-
     def _ready_to_evict(self):
-        info = self._get_info('rank', self.rank)
-        if (self.rank not in self._mds_map['up']) or info.get('gid', None) != self.gid:
+        if self._mds_map['up'].get("mds_{0}".format(self.rank), None) != self.gid:
             log.info("Evicting {0} from {1}/{2}: rank no longer associated with gid, done.".format(
                 self._client_spec, self.rank, self.gid
             ))
             raise RankEvicter.GidGone()
 
-        info = self._get_info('gid', self.gid)
+        info = self._mds_map['info']["gid_{0}".format(self.gid)]
         log.debug("_ready_to_evict: state={0}".format(info['state']))
         return info['state'] in ["up:active", "up:clientreplay"]
 
@@ -400,8 +393,10 @@ class CephFSVolumeClient(object):
 
         mds_map = self.get_mds_map()
         up = {}
-        for rank in mds_map['up']:
-            up[rank] = self._get_info('rank', rank)['gid']
+        for name, gid in mds_map['up'].items():
+            # Quirk of the MDSMap JSON dump: keys in the up dict are like "mds_0"
+            assert name.startswith("mds_")
+            up[int(name[4:])] = gid
 
         # For all MDS ranks held by a daemon
         # Do the parallelism in python instead of using "tell mds.*", because
