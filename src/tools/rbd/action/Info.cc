@@ -193,7 +193,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     if (f) {
       f->dump_string("group", group_string);
     } else {
-      std::cout << "\tconsistency group: " << group_string
+      std::cout << "\tgroup: " << group_string
 		<< std::endl;
     }
   }
