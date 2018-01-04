@@ -1197,6 +1197,24 @@ inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type)
   }
 }
 
+enum RGWBucketDataLayoutType {
+  RGWDLType_SinglePool = 0,
+  RGWDLType_SplitPool = 1,
+};
+
+inline ostream& operator<<(ostream& out, const RGWBucketDataLayoutType &data_layout_type) 
+{
+  switch (data_layout_type) {
+    case RGWDLType_SinglePool:
+      return out << "SinglePool";
+    case RGWDLType_SplitPool:
+      return out << "SplitPool";
+    default:
+      return out << "Unknown";
+  }
+}
+
+
 struct RGWBucketInfo
 {
   enum BIShardsHashType {
@@ -2111,6 +2129,39 @@ struct rgw_cache_entry_info {
 
   rgw_cache_entry_info() : gen(0) {}
 };
+
+struct rgw_data_placement_volatile_config {
+  RGWBucketDataLayoutType data_layout_type;
+  rgw_pool tail_data_pool;
+
+  rgw_data_placement_volatile_config(): data_layout_type(RGWDLType_SinglePool) {}
+  rgw_data_placement_volatile_config(const rgw_data_placement_volatile_config&) = default;
+  rgw_data_placement_volatile_config(rgw_data_placement_volatile_config&&) = default;
+
+  rgw_data_placement_volatile_config(RGWBucketDataLayoutType data_layout_type,
+                                           const rgw_pool& tail_data_pool)
+     : data_layout_type(data_layout_type), tail_data_pool(tail_data_pool) {
+  }
+
+  rgw_data_placement_volatile_config&
+  operator=(const rgw_data_placement_volatile_config&) = default;
+
+  RGWBucketDataLayoutType get_data_layout_type() const {
+    return data_layout_type;
+  }
+
+  const rgw_pool& get_tail_data_pool() const {
+    return tail_data_pool;
+  }
+
+  bool empty() const {
+    return (data_layout_type == RGWDLType_SinglePool);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_oid();

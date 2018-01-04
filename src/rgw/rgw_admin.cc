@@ -270,8 +270,16 @@ void usage()
   cout << "   --index-pool=<pool>       placement target index pool\n";
   cout << "   --data-pool=<pool>        placement target data pool\n";
   cout << "   --data-extra-pool=<pool>  placement target data extra (non-ec) pool\n";
+  cout << "   --current-tail-pool=<pool>\n";
+  cout << "                             placement target tail pool\n";
+  cout << "   --data-tail-pools=<pool>[,...]\n";
+  cout << "                             placement candidate tail pools\n";
+  cout << "   --new-tail-pool=<pool>\n";
+  cout << "                             pool to be added to existing placement candidate tail pool list\n";
   cout << "   --placement-index-type=<type>\n";
   cout << "                             placement target index type (normal, indexless, or #id)\n";
+  cout << "   --placement-data-layout-type=<type>\n";
+  cout << "                             placement target data layout type (singlepool, splitpool, or #id)\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
@@ -2530,8 +2538,13 @@ int main(int argc, const char **argv)
   boost::optional<string> index_pool;
   boost::optional<string> data_pool;
   boost::optional<string> data_extra_pool;
+  boost::optional<string> current_tail_pool;
+  boost::optional<string> new_tail_pool;
+  boost::optional< list<string> > tail_pools;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
+  RGWBucketDataLayoutType placement_data_layout_type = RGWDLType_SinglePool;
   bool index_type_specified = false;
+  bool data_layout_type_specified = false;
 
   boost::optional<std::string> compression_type;
 
@@ -2861,6 +2874,27 @@ int main(int argc, const char **argv)
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*)NULL)) {
       path_prefix = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-data-layout-type", (char*)NULL)) {
+      if (val == "single-pool") {
+        placement_data_layout_type= RGWDLType_SinglePool;
+      } else if (val == "split-pool") {
+        placement_data_layout_type = RGWDLType_SplitPool;
+      } else {
+        placement_data_layout_type = (RGWBucketDataLayoutType)strict_strtol(val.c_str(), 10, &err);
+        if (!err.empty()) {
+          cerr << "ERROR: failed to parse data layout type: " << err << std::endl;
+          return EINVAL;
+        }
+      }
+      data_layout_type_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--current-tail-pool", (char*)NULL)) {
+      current_tail_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--data-tail-pools", (char*)NULL)) {
+      list<string> tmp_tail_pools;
+      get_str_list(val, tmp_tail_pools);
+			tail_pools = tmp_tail_pools;
+    } else if (ceph_argparse_witharg(args, i, &val, "--new-tail-pool", (char*)NULL)) {
+      new_tail_pool = val;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4352,6 +4386,36 @@ int main(int argc, const char **argv)
           if (compression_type) {
             info.compression_type = *compression_type;
           }
+          if (data_layout_type_specified && current_tail_pool && tail_pools) {
+            if (placement_data_layout_type != RGWDLType_SplitPool) {
+              cerr << "ERROR: --placement-data-layout-type should be splitted to make "
+                "--current-tail-pool and --data-tail-pools valid." << std::endl;
+              return EINVAL;
+            }
+            if (! tail_pools ||
+                std::find(tail_pools->begin(),
+                          tail_pools->end(),
+                          *current_tail_pool) == tail_pools->end()) {
+              cerr << "ERROR: the value specified by --current-tail-pool should be "
+                   << "in the list specified by --data-tail-pools valid"
+                   << std::endl;
+              return EINVAL;
+            }
+            info.data_layout_type = placement_data_layout_type;
+            info.current_tail_pool = *current_tail_pool;
+            info.data_tail_pools.clear();
+            for (auto &p : *tail_pools) {
+              info.data_tail_pools.push_back(rgw_pool(p));
+            }
+          } else if ((data_layout_type_specified &&
+              placement_data_layout_type==RGWDLType_SplitPool) ||
+              current_tail_pool ||
+              tail_pools) {
+            cerr << "ERROR: --placement-data-layout-type, --current-tail-pool or "
+                 << "--data-tail-pools is missing."
+                 << std::endl;
+            return EINVAL;
+					}
 
           ret = check_pool_support_omap(info.get_data_extra_pool());
           if (ret < 0) {
@@ -4381,6 +4445,31 @@ int main(int argc, const char **argv)
           }
           if (compression_type) {
             info.compression_type = *compression_type;
+          }
+          if (data_layout_type_specified) {
+            info.data_layout_type = placement_data_layout_type;
+          }
+          if (current_tail_pool) {
+            info.current_tail_pool = *current_tail_pool;
+          }
+          if (tail_pools) {
+            for (auto &p : *tail_pools) {
+              info.data_tail_pools.push_back(rgw_pool(p));
+            }
+          }
+          if (new_tail_pool) {
+            info.data_tail_pools.push_back(rgw_pool(*new_tail_pool));
+          }
+          if (info.data_layout_type == RGWDLType_SplitPool) {
+            if (info.current_tail_pool.empty() || info.data_tail_pools.empty() ||
+                std::find(info.data_tail_pools.begin(),
+                        info.data_tail_pools.end(),
+                        info.current_tail_pool) == info.data_tail_pools.end()) {
+              cerr << "ERROR: --current-tail-pool or --data-tail-pools "
+                   << "is improper for splited data layout"
+                   << std::endl;
+              return EINVAL;
+            }
           }
           
           ret = check_pool_support_omap(info.get_data_extra_pool());

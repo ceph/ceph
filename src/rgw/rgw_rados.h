@@ -142,6 +142,8 @@ class rgw_obj_select {
   rgw_obj obj;
   rgw_raw_obj raw_obj;
   bool is_raw;
+  bool is_head;
+  rgw_data_placement_volatile_config data_placement_vc;
 
 public:
   rgw_obj_select() : is_raw(false) {}
@@ -174,6 +176,20 @@ public:
 
   void set_placement_rule(const string& rule) {
     placement_rule = rule;
+  }
+
+  bool in_volatile_tail_pool() const {
+    return ! is_head &&
+      data_placement_vc.get_data_layout_type() == RGWDLType_SplitPool &&
+      ! data_placement_vc.get_tail_data_pool().empty();
+  }
+
+  void set_head(bool v) {
+    is_head = v;
+  }
+
+  void set_data_placement_volatile_config(const rgw_data_placement_volatile_config& v) {
+    data_placement_vc = v;
   }
 };
 
@@ -426,6 +442,7 @@ protected:
   string prefix;
   rgw_bucket_placement tail_placement; /* might be different than the original bucket,
                                        as object might have been copied across pools */
+  rgw_data_placement_volatile_config data_placement_vc;
   map<uint64_t, RGWObjManifestRule> rules;
 
   string tail_instance; /* tail object's instance */
@@ -456,6 +473,7 @@ public:
     tail_placement = rhs.tail_placement;
     rules = rhs.rules;
     tail_instance = rhs.tail_instance;
+    data_placement_vc = rhs.data_placement_vc;
 
     begin_iter.set_manifest(this);
     end_iter.set_manifest(this);
@@ -493,7 +511,7 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(7, 6, bl);
+    ENCODE_START(8, 6, bl);
     encode(obj_size, bl);
     encode(objs, bl);
     encode(explicit_objs, bl);
@@ -514,11 +532,17 @@ public:
     }
     encode(head_placement_rule, bl);
     encode(tail_placement.placement_rule, bl);
+    bool encode_data_placement_vc = ! data_placement_vc.empty();
+    encode(encode_data_placement_vc, bl);
+    if (encode_data_placement_vc) {
+      encode((uint32_t)data_placement_vc.data_layout_type, bl);
+      encode(data_placement_vc.tail_data_pool, bl);
+    }
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN_32(7, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN_32(8, 2, 2, bl);
     decode(obj_size, bl);
     decode(objs, bl);
     if (struct_v >= 3) {
@@ -585,6 +609,16 @@ public:
       decode(head_placement_rule, bl);
       decode(tail_placement.placement_rule, bl);
     }
+    if (struct_v >= 8) {
+      bool need_to_decode;
+      decode(need_to_decode, bl);
+      if (need_to_decode) {
+        uint32_t it;
+        decode(it, bl);
+        data_placement_vc.data_layout_type = (RGWBucketDataLayoutType)it;
+        decode(data_placement_vc.tail_data_pool, bl);
+      }
+    }
 
     update_iterators();
     DECODE_FINISH(bl);
@@ -642,6 +676,14 @@ public:
 
   const rgw_bucket_placement& get_tail_placement() {
     return tail_placement;
+  }
+
+  void set_data_placement_volatile_config(const rgw_data_placement_volatile_config& dpvc) {
+    data_placement_vc = dpvc;
+  }
+
+  const rgw_data_placement_volatile_config& get_data_placement_volatile_config() const {
+    return data_placement_vc;
   }
 
   const string& get_head_placement_rule() {
@@ -822,7 +864,13 @@ public:
   public:
     generator() : manifest(NULL), last_ofs(0), cur_part_ofs(0), cur_part_id(0), 
 		  cur_stripe(0), cur_stripe_size(0) {}
-    int create_begin(CephContext *cct, RGWObjManifest *manifest, const string& placement_rule, rgw_bucket& bucket, rgw_obj& obj);
+    int create_begin(
+      CephContext *cct,
+      RGWObjManifest *manifest,
+      const string& placement_rule,
+      const rgw_data_placement_volatile_config& dpvc,
+      rgw_bucket& bucket,
+      rgw_obj& obj);
 
     int create_next(uint64_t ofs);
 
@@ -1123,23 +1171,30 @@ struct RGWZonePlacementInfo {
   rgw_pool index_pool;
   rgw_pool data_pool;
   rgw_pool data_extra_pool; /* if not set we should use data_pool */
+  rgw_pool current_tail_pool;
+  std::vector<rgw_pool> data_tail_pools;
   RGWBucketIndexType index_type;
   std::string compression_type;
+  RGWBucketDataLayoutType data_layout_type;
 
-  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
+  RGWZonePlacementInfo() : index_type(RGWBIType_Normal),
+                           data_layout_type(RGWDLType_SinglePool) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(index_pool.to_str(), bl);
     encode(data_pool.to_str(), bl);
     encode(data_extra_pool.to_str(), bl);
     encode((uint32_t)index_type, bl);
     encode(compression_type, bl);
+    encode((uint32_t)data_layout_type, bl);
+    encode(current_tail_pool.to_str(), bl);
+    encode(data_tail_pools, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
-    DECODE_START(6, bl);
+    DECODE_START(7, bl);
     string index_pool_str;
     string data_pool_str;
     decode(index_pool_str, bl);
@@ -1159,6 +1214,16 @@ struct RGWZonePlacementInfo {
     if (struct_v >= 6) {
       decode(compression_type, bl);
     }
+    if (struct_v >= 7) {
+      uint32_t it;
+      decode(it, bl);
+      data_layout_type = (RGWBucketDataLayoutType)it;
+      string current_tail_pool_str;
+      decode(current_tail_pool_str, bl);
+      current_tail_pool = rgw_pool(current_tail_pool_str);
+      decode(data_tail_pools, bl);
+    }
+
     DECODE_FINISH(bl);
   }
   const rgw_pool& get_data_extra_pool() const {
@@ -1167,6 +1232,10 @@ struct RGWZonePlacementInfo {
     }
     return data_extra_pool;
   }
+  const rgw_pool& get_tail_data_pool() const {
+    return current_tail_pool;
+  }
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
@@ -1329,6 +1398,20 @@ struct RGWZoneParams : RGWSystemMetaObj {
     } else {
       *pool = iter->second.get_data_extra_pool();
     }
+    return true;
+  }
+
+  bool get_data_placement_volatile_config(const string& placement_id,
+                                               rgw_data_placement_volatile_config *pvc) const {
+    if (placement_id.empty()) {
+      return false;
+    }
+    auto iter = placement_pools.find(placement_id);
+    if (iter == placement_pools.end()) {
+      return false;
+    }
+    pvc->data_layout_type = iter->second.data_layout_type;
+    pvc->tail_data_pool = iter->second.get_tail_data_pool();
     return true;
   }
 };
@@ -2327,6 +2410,7 @@ class RGWRados : public AdminSocketHook
   uint32_t bucket_index_max_shards;
 
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
+  int get_obj_ioctx(const rgw_obj& obj, const rgw_pool& pool, librados::IoCtx *ioctx);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
@@ -2652,6 +2736,7 @@ public:
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
   bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
+  bool obj_to_raw(const rgw_pool& pool, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
   int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
@@ -2801,6 +2886,7 @@ public:
         librados::IoCtx io_ctx;
         rgw_obj obj;
         rgw_raw_obj head_obj;
+        librados::IoCtx tail_io_ctx;
       } state;
       
       struct ConditionParams {
@@ -3986,6 +4072,7 @@ protected:
   rgw_raw_obj cur_obj;
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
+  rgw_data_placement_volatile_config data_placement_vc;
 
   int write_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool exclusive);
   int do_complete(size_t accounted_size, const string& etag,
@@ -4029,6 +4116,10 @@ public:
 
   const string& get_version_id() const {
     return version_id;
+  }
+
+  void set_data_placement_volatile_config(const rgw_data_placement_volatile_config &vc) {
+    data_placement_vc = vc;
   }
 }; /* RGWPutObjProcessor_Atomic */
 

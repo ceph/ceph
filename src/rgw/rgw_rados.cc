@@ -145,11 +145,22 @@ static bool rgw_obj_to_raw(const RGWZoneGroup& zonegroup, const RGWZoneParams& z
   return rgw_get_obj_data_pool(zonegroup, zone_params, placement_id, obj, &raw_obj->pool);
 }
 
+static bool rgw_obj_to_raw(const rgw_pool& pool, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+{
+  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+  raw_obj->pool = pool;
+  return true;
+}
+
 rgw_raw_obj rgw_obj_select::get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    rgw_obj_to_raw(zonegroup, zone_params, placement_rule, obj, &r);
+    if (in_volatile_tail_pool()) {
+      rgw_obj_to_raw(data_placement_vc.get_tail_data_pool(), obj, &r);
+    } else {
+      rgw_obj_to_raw(zonegroup, zone_params, placement_rule, obj, &r);
+    }
     return r;
   }
   return raw_obj;
@@ -159,7 +170,11 @@ rgw_raw_obj rgw_obj_select::get_raw_obj(RGWRados *store) const
 {
   if (!is_raw) {
     rgw_raw_obj r;
-    store->obj_to_raw(placement_rule, obj, &r);
+    if (in_volatile_tail_pool()) {
+      store->obj_to_raw(data_placement_vc.get_tail_data_pool(), obj, &r);
+    } else {
+      store->obj_to_raw(placement_rule, obj, &r);
+    }
     return r;
   }
   return raw_obj;
@@ -2182,11 +2197,18 @@ void RGWObjManifest::obj_iterator::operator++()
   update_location();
 }
 
-int RGWObjManifest::generator::create_begin(CephContext *cct, RGWObjManifest *_m, const string& placement_rule, rgw_bucket& _b, rgw_obj& _obj)
+int RGWObjManifest::generator::create_begin(
+  CephContext *cct,
+  RGWObjManifest *_m,
+  const string& placement_rule,
+  const rgw_data_placement_volatile_config& dpvc,
+  rgw_bucket& _b,
+  rgw_obj& _obj)
 {
   manifest = _m;
 
   manifest->set_tail_placement(placement_rule, _b);
+  manifest->set_data_placement_volatile_config(dpvc);
   manifest->set_head(placement_rule, _obj, 0);
   last_ofs = 0;
 
@@ -2714,7 +2736,12 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
-  r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, head_obj.bucket, head_obj);
+  r = manifest_gen.create_begin(store->ctx(),
+                                &manifest,
+                                bucket_info.placement_rule,
+                                data_placement_vc,
+                                head_obj.bucket,
+                                head_obj);
   if (r < 0) {
     return r;
   }
@@ -6141,6 +6168,14 @@ bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_
   return get_obj_data_pool(placement_rule, obj, &raw_obj->pool);
 }
 
+bool RGWRados::obj_to_raw(const rgw_pool& pool, const rgw_obj& obj, rgw_raw_obj *raw_obj)
+{
+  get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
+  raw_obj->pool = pool;
+  return true;
+}
+
+
 int RGWRados::update_placement_map()
 {
   bufferlist header;
@@ -6306,6 +6341,19 @@ int RGWRados::get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj
 
   return 0;
 }
+
+int RGWRados::get_obj_ioctx(const rgw_obj& obj, const rgw_pool& pool, librados::IoCtx *ioctx)
+{
+  string oid, key;
+  get_obj_bucket_and_oid_loc(obj, oid, key);
+  int r = open_pool_ctx(pool, *ioctx);
+  if (r < 0) {
+    return r;
+  }
+  ioctx->locator_set_key(key);
+  return 0;
+}
+
 
 int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref)
 {
@@ -9868,6 +9916,17 @@ int RGWRados::Object::Read::prepare()
   if (r < 0) {
     return r;
   }
+  if (astate->has_manifest && astate->manifest.has_tail() &&
+      astate->manifest.get_data_placement_volatile_config().get_data_layout_type() == RGWDLType_SplitPool &&
+      ! astate->manifest.get_data_placement_volatile_config().get_tail_data_pool().empty() &&
+      astate->manifest.get_data_placement_volatile_config().get_tail_data_pool() != state.head_obj.pool) {
+    store->get_obj_ioctx(state.obj,
+                         astate->manifest.get_data_placement_volatile_config().get_tail_data_pool(),
+                         &state.tail_io_ctx);
+  } else {
+    state.tail_io_ctx.dup(state.io_ctx);
+  }
+
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
@@ -10231,11 +10290,13 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
     len = max_chunk_size;
 
 
-  state.io_ctx.locator_set_key(read_obj.loc);
+  librados::IoCtx effective_io_ctx;
 
   read_len = len;
 
   if (reading_from_head) {
+    effective_io_ctx.dup(state.io_ctx);
+    effective_io_ctx.locator_set_key(read_obj.loc);
     /* only when reading from the head object do we need to do the atomic test */
     r = store->append_atomic_test(&source->get_ctx(), source->get_bucket_info(), state.obj, op, &astate);
     if (r < 0)
@@ -10259,12 +10320,15 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end, bufferlist& bl)
         pbl = &read_bl;
       }
     }
+  }else {
+    effective_io_ctx.dup(state.tail_io_ctx);
+    effective_io_ctx.locator_set_key(read_obj.loc);
   }
 
   ldout(cct, 20) << "rados->read obj-ofs=" << ofs << " read_ofs=" << read_ofs << " read_len=" << read_len << dendl;
   op.read(read_ofs, read_len, pbl, NULL);
 
-  r = state.io_ctx.operate(read_obj.oid, &op, NULL);
+  r = effective_io_ctx.operate(read_obj.oid, &op, NULL);
   ldout(cct, 20) << "rados->read r=" << r << " bl.length=" << bl.length() << dendl;
 
   if (r < 0) {
@@ -10384,6 +10448,7 @@ struct get_obj_data : public RefCountedObject {
   RGWRados *rados;
   RGWObjectCtx *ctx;
   IoCtx io_ctx;
+  IoCtx tail_io_ctx;
   map<off_t, get_obj_io> io_map;
   map<off_t, librados::AioCompletion *> completion_map;
   uint64_t total_read;
@@ -10650,6 +10715,7 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
   string oid, key;
   bufferlist *pbl;
   AioCompletion *c;
+  librados::IoCtx effective_io_ctx;
 
   int r;
 
@@ -10679,6 +10745,9 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
       if (!len)
 	  return 0;
     }
+    effective_io_ctx = d->io_ctx;
+  }else {
+    effective_io_ctx = d->tail_io_ctx;
   }
 
   d->throttle.get(len);
@@ -10694,10 +10763,9 @@ int RGWRados::get_obj_iterate_cb(RGWObjectCtx *ctx, RGWObjState *astate,
   ldout(cct, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
   op.read(read_ofs, len, pbl, NULL);
 
-  librados::IoCtx io_ctx(d->io_ctx);
-  io_ctx.locator_set_key(read_obj.loc);
+  effective_io_ctx.locator_set_key(read_obj.loc);
 
-  r = io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
+  r = effective_io_ctx.aio_operate(read_obj.oid, c, &op, NULL);
   if (r < 0) {
     ldout(cct, 0) << "rados->aio_operate r=" << r << dendl;
     goto done_err;
@@ -10730,6 +10798,7 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
 
   data->rados = store;
   data->io_ctx.dup(state.io_ctx);
+  data->tail_io_ctx.dup(state.tail_io_ctx);
   data->client_cb = cb;
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj, ofs, end, cct->_conf->rgw_get_obj_max_req_size, _get_obj_iterate_cb, (void *)data);

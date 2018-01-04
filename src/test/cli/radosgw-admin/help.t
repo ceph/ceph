@@ -213,8 +213,16 @@
      --index-pool=<pool>       placement target index pool
      --data-pool=<pool>        placement target data pool
      --data-extra-pool=<pool>  placement target data extra (non-ec) pool
+     --current-tail-pool=<pool>
+                               placement target tail pool
+     --data-tail-pools=<pool>[,...]
+                               placement candidate tail pools
+     --new-tail-pool=<pool>
+                               pool to be added to existing placement candidate tail pool list
      --placement-index-type=<type>
                                placement target index type (normal, indexless, or #id)
+     --placement-data-layout-type=<type>
+                               placement target data layout type (singlepool, splitpool, or #id)
      --compression=<type>      placement target compression type (plugin name or empty/none)
      --tier-type=<type>        zone tier type
      --tier-config=<k>=<v>[,...]

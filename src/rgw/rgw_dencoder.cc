@@ -173,9 +173,12 @@ void RGWObjManifest::get_implicit_location(uint64_t cur_part_id, uint64_t cur_st
     oid = *override_prefix;
   }
 
+  location->set_head(false);
+  location->set_data_placement_volatile_config(data_placement_vc);
   if (!cur_part_id) {
     if (ofs < max_head_size) {
       location->set_placement_rule(head_placement_rule);
+      location->set_head(true);
       *location = obj;
       return;
     } else {

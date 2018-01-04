@@ -3150,7 +3150,12 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
 
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, num);
 
-  int r = manifest_gen.create_begin(store->ctx(), &manifest, s->bucket_info.placement_rule, bucket, target_obj);
+  int r = manifest_gen.create_begin(store->ctx(),
+                                    &manifest,
+                                    s->bucket_info.placement_rule,
+                                    data_placement_vc,
+                                    bucket,
+                                    target_obj);
   if (r < 0) {
     return r;
   }
@@ -3252,6 +3257,9 @@ RGWPutObjProcessor *RGWPutObj::select_processor(RGWObjectCtx& obj_ctx, bool *is_
     processor = new RGWPutObjProcessor_Atomic(obj_ctx, s->bucket_info, s->bucket, s->object.name, part_size, s->req_id, s->bucket_info.versioning_enabled());
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_olh_epoch(olh_epoch);
     (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_version_id(version_id);
+    rgw_data_placement_volatile_config dpvc;
+    store->get_zone_params().get_data_placement_volatile_config(s->bucket_info.placement_rule, &dpvc);
+    (static_cast<RGWPutObjProcessor_Atomic *>(processor))->set_data_placement_volatile_config(dpvc);
   } else {
     processor = new RGWPutObjProcessor_Multipart(obj_ctx, s->bucket_info, part_size, s);
   }

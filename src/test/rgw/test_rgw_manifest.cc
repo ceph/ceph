@@ -136,7 +136,8 @@ static void gen_obj(test_rgw_env& env, uint64_t obj_size, uint64_t head_max_size
   test_rgw_init_bucket(bucket, "buck");
 
   *head = rgw_obj(*bucket, "oid");
-  gen->create_begin(g_ceph_context, manifest, placement_id, *bucket, *head);
+  rgw_data_placement_volatile_config dpvc;
+  gen->create_begin(g_ceph_context, manifest, placement_id, dpvc, *bucket, *head);
 
   append_head(test_objs, *head);
   cout << "test_objs.size()=" << test_objs->size() << std::endl;
@@ -311,9 +312,10 @@ TEST(TestRGWManifest, multipart) {
 
     uint64_t ofs;
     rgw_obj head;
+    rgw_data_placement_volatile_config dpvc;
     for (ofs = 0; ofs < part_size; ofs += stripe_size) {
       if (ofs == 0) {
-        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement, bucket, head);
+        int r = gen.create_begin(g_ceph_context, &manifest, env.zonegroup.default_placement, dpvc, bucket, head);
         ASSERT_EQ(r, 0);
         continue;
       }

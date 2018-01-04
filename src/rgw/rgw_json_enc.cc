@@ -107,6 +107,7 @@ void RGWObjManifest::dump(Formatter *f) const
   ::encode_json("rules", rules, f);
   ::encode_json("tail_instance", tail_instance, f);
   ::encode_json("tail_placement", tail_placement, f);
+  ::encode_json("data_placement_vc", data_placement_vc, f);
 }
 
 void rgw_log_entry::dump(Formatter *f) const
@@ -583,6 +584,19 @@ void rgw_data_placement_target::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("index_pool", index_pool, obj);
 }
 
+void rgw_data_placement_volatile_config::dump(Formatter *f) const
+{
+  encode_json("data_layout_type", (uint32_t)data_layout_type, f);
+  encode_json("tail_data_pool", tail_data_pool, f);
+}
+
+void rgw_data_placement_volatile_config::decode_json(JSONObj *obj) {
+  uint32_t it(0);
+  JSONDecoder::decode_json("data_layout_type", it, obj);
+  data_layout_type = (RGWBucketDataLayoutType)it;
+  JSONDecoder::decode_json("tail_data_pool", tail_data_pool, obj);
+}
+
 void rgw_bucket::dump(Formatter *f) const
 {
   encode_json("name", name, f);
@@ -930,8 +944,11 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
   encode_json("index_pool", index_pool, f);
   encode_json("data_pool", data_pool, f);
   encode_json("data_extra_pool", data_extra_pool, f);
+  encode_json("current_tail_pool", current_tail_pool, f);
+  encode_json("data_tail_pools", data_tail_pools, f);
   encode_json("index_type", (uint32_t)index_type, f);
   encode_json("compression", compression_type, f);
+  encode_json("data_layout_type", (uint32_t)data_layout_type, f);
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)
