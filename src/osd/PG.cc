@@ -6845,6 +6845,21 @@ boost::statechart::result PG::RecoveryState::Primary::react(
 }
 
 boost::statechart::result PG::RecoveryState::Primary::react(
+  const RequestScrub& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->is_primary()) {
+    pg->unreg_next_scrub();
+    pg->scrubber.must_scrub = true;
+    pg->scrubber.must_deep_scrub = evt.deep || evt.repair;
+    pg->scrubber.must_repair = evt.repair;
+    pg->reg_next_scrub();
+    ldout(pg->cct,10) << "marking for scrub" << dendl;
+  }
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
   const SetForceBackfill&)
 {
   PG *pg = context< RecoveryMachine >().pg;

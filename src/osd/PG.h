@@ -1848,6 +1848,17 @@ public:
       *out << "UnfoundRecovery";
     }
   };
+
+  struct RequestScrub : boost::statechart::event<RequestScrub> {
+    bool deep;
+    bool repair;
+    explicit RequestScrub(bool d, bool r) : deep(d), repair(r) {}
+    void print(std::ostream *out) const {
+      *out << "RequestScrub(" << (deep ? "deep" : "shallow")
+	   << (repair ? " repair" : "");
+    }
+  };
+
 protected:
   TrivialEvent(Initialize)
   TrivialEvent(GotInfo)
@@ -2063,13 +2074,16 @@ protected:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< QueryState >,
 	boost::statechart::custom_reaction< AdvMap >,
-	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::custom_reaction< IntervalFlush >,
-	boost::statechart::transition< boost::statechart::event_base, Crashed >,
+	// ignored
+	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::custom_reaction<SetForceRecovery>,
 	boost::statechart::custom_reaction<UnsetForceRecovery>,
 	boost::statechart::custom_reaction<SetForceBackfill>,
-	boost::statechart::custom_reaction<UnsetForceBackfill>
+	boost::statechart::custom_reaction<UnsetForceBackfill>,
+	boost::statechart::custom_reaction<RequestScrub>,
+	// crash
+	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const AdvMap&);
@@ -2108,7 +2122,8 @@ protected:
 	boost::statechart::custom_reaction<SetForceRecovery>,
 	boost::statechart::custom_reaction<UnsetForceRecovery>,
 	boost::statechart::custom_reaction<SetForceBackfill>,
-	boost::statechart::custom_reaction<UnsetForceBackfill>
+	boost::statechart::custom_reaction<UnsetForceBackfill>,
+	boost::statechart::custom_reaction<RequestScrub>
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -2116,6 +2131,7 @@ protected:
       boost::statechart::result react(const UnsetForceRecovery&);
       boost::statechart::result react(const SetForceBackfill&);
       boost::statechart::result react(const UnsetForceBackfill&);
+      boost::statechart::result react(const RequestScrub&);
     };
 
     struct WaitActingChange : boost::statechart::state< WaitActingChange, Primary>,

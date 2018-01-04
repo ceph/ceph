@@ -6800,20 +6800,6 @@ void OSD::_dispatch(Message *m)
   }
 }
 
-void OSD::handle_pg_scrub(MOSDScrub *m, PG *pg)
-{
-  pg->lock();
-  if (pg->is_primary()) {
-    pg->unreg_next_scrub();
-    pg->scrubber.must_scrub = true;
-    pg->scrubber.must_deep_scrub = m->deep || m->repair;
-    pg->scrubber.must_repair = m->repair;
-    pg->reg_next_scrub();
-    dout(10) << "marking " << *pg << " for scrub" << dendl;
-  }
-  pg->unlock();
-}
-
 void OSD::handle_scrub(MOSDScrub *m)
 {
   dout(10) << "handle_scrub " << *m << dendl;
@@ -6822,33 +6808,47 @@ void OSD::handle_scrub(MOSDScrub *m)
     return;
   }
   if (m->fsid != monc->get_fsid()) {
-    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid() << dendl;
+    dout(0) << "handle_scrub fsid " << m->fsid << " != " << monc->get_fsid()
+	    << dendl;
     m->put();
     return;
   }
 
-  RWLock::RLocker l(pg_map_lock);
-  if (m->scrub_pgs.empty()) {
-    for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
-	 p != pg_map.end();
-	 ++p) {
-      if (p->second->is_deleted()) {
-	continue;
+  vector<spg_t> spgs;
+  {
+    RWLock::RLocker l(pg_map_lock);
+    if (m->scrub_pgs.empty()) {
+      for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
+	   p != pg_map.end();
+	   ++p) {
+	if (p->second->is_deleted()) {
+	  continue;
+	}
+	spgs.push_back(p->second->get_pgid());
       }
-      handle_pg_scrub(m, p->second);
-    }
-  } else {
-    for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
-	 p != m->scrub_pgs.end();
-	 ++p) {
-      spg_t pcand;
-      if (osdmap->get_primary_shard(*p, &pcand)) {
-	auto pg_map_entry = pg_map.find(pcand);
-	if (pg_map_entry != pg_map.end()) {
-	  handle_pg_scrub(m, pg_map_entry->second);
+    } else {
+      for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
+	   p != m->scrub_pgs.end();
+	   ++p) {
+	spg_t pcand;
+	if (osdmap->get_primary_shard(*p, &pcand)) {
+	  auto pg_map_entry = pg_map.find(pcand);
+	  if (pg_map_entry != pg_map.end()) {
+	    spgs.push_back(pcand);
+	  }
 	}
       }
     }
+  }
+
+  for (auto pgid : spgs) {
+    enqueue_peering_evt(
+      pgid,
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  get_osdmap()->get_epoch(),
+	  get_osdmap()->get_epoch(),
+	  PG::RequestScrub(m->deep, m->repair))));
   }
 
   m->put();
