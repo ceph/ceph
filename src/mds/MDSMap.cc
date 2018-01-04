@@ -153,9 +153,11 @@ void MDSMap::dump(Formatter *f) const
   for (set<mds_rank_t>::const_iterator p = in.begin(); p != in.end(); ++p)
     f->dump_int("mds", *p);
   f->close_section();
-  f->open_array_section("up");
+  f->open_object_section("up");
   for (map<mds_rank_t,mds_gid_t>::const_iterator p = up.begin(); p != up.end(); ++p) {
-    f->dump_int("mds", p->first);
+    char s[14];
+    sprintf(s, "mds_%d", int(p->first));
+    f->dump_int(s, p->second);
   }
   f->close_section();
   f->open_array_section("failed");
@@ -170,9 +172,11 @@ void MDSMap::dump(Formatter *f) const
   for (set<mds_rank_t>::const_iterator p = stopped.begin(); p != stopped.end(); ++p)
     f->dump_int("mds", *p);
   f->close_section();
-  f->open_array_section("info");
+  f->open_object_section("info");
   for (map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin(); p != mds_info.end(); ++p) {
-    f->open_object_section("info_item");
+    char s[25]; // 'gid_' + len(str(ULLONG_MAX)) + '\0'
+    sprintf(s, "gid_%llu", (long long unsigned)p->first);
+    f->open_object_section(s);
     p->second.dump(f);
     f->close_section();
   }
