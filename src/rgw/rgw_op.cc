@@ -457,6 +457,37 @@ static void rgw_bucket_object_pre_exec(struct req_state *s)
   dump_bucket_from_state(s);
 }
 
+// So! Now and then when we try to update bucket information, the
+// bucket has changed during the course of the operation. (Or we have
+// a cache consistency problem that Watch/Notify isn't ruling out
+// completely.)
+//
+// When this happens, we need to update the bucket info and try
+// again. We have, however, to try the right *part* again.  We can't
+// simply re-send, since that will obliterate the previous update.
+//
+// Thus, callers of this function should include everything that
+// merges information to be changed into the bucket information as
+// well as the call to set it.
+//
+// The called function must return an integer, negative on error. In
+// general, they should just return op_ret.
+namespace {
+template<typename F>
+int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
+  auto r = f();
+  for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
+    r = g->try_refresh_bucket_info(s->bucket_info, nullptr,
+				   &s->bucket_attrs);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
+}
+
+
 int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object.name);
@@ -1611,15 +1642,18 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
-    s->bucket_info.flags |= BUCKET_VERSIONED;
-    s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
-    s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      if (enable_versioning) {
+	s->bucket_info.flags |= BUCKET_VERSIONED;
+	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+      } else {
+	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+      }
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					  &s->bucket_attrs);
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+					       &s->bucket_attrs);
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
 		     << " returned err=" << op_ret << dendl;
@@ -1667,10 +1701,13 @@ void RGWSetBucketWebsite::execute()
   if (op_ret < 0)
     return;
 
-  s->bucket_info.has_website = true;
-  s->bucket_info.website_conf = website_conf;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = true;
+      s->bucket_info.website_conf = website_conf;
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -1692,10 +1729,14 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
-  s->bucket_info.has_website = false;
-  s->bucket_info.website_conf = RGWBucketWebsiteConf();
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = false;
+      s->bucket_info.website_conf = RGWBucketWebsiteConf();
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -3760,8 +3801,6 @@ int RGWPutCORS::verify_permission()
 
 void RGWPutCORS::execute()
 {
-  rgw_obj obj;
-
   op_ret = get_params();
   if (op_ret < 0)
     return;
@@ -3774,16 +3813,20 @@ void RGWPutCORS::execute()
     }
   }
 
-  bool is_object_op = (!s->object.empty());
-  if (is_object_op) {
-    store->get_bucket_instance_obj(s->bucket, obj);
-    store->set_atomic(s->obj_ctx, obj);
-    op_ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl);
-  } else {
-    map<string, bufferlist> attrs = s->bucket_attrs;
-    attrs[RGW_ATTR_CORS] = cors_bl;
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      rgw_obj obj;
+      bool is_object_op = (!s->object.empty());
+      if (is_object_op) {
+	store->get_bucket_instance_obj(s->bucket, obj);
+	store->set_atomic(s->obj_ctx, obj);
+	op_ret = store->set_attr(s->obj_ctx, obj, RGW_ATTR_CORS, cors_bl);
+      } else {
+	map<string, bufferlist> attrs = s->bucket_attrs;
+	attrs[RGW_ATTR_CORS] = cors_bl;
+	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      }
+      return op_ret;
+    });
 }
 
 int RGWDeleteCORS::verify_permission()
@@ -3796,51 +3839,54 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
-  op_ret = read_bucket_cors();
-  if (op_ret < 0)
-    return;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      op_ret = read_bucket_cors();
+      if (op_ret < 0)
+	return op_ret;
 
-  bufferlist bl;
-  rgw_obj obj;
-  if (!cors_exist) {
-    dout(2) << "No CORS configuration set yet for this bucket" << dendl;
-    op_ret = -ENOENT;
-    return;
-  }
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_atomic(s->obj_ctx, obj);
-  map<string, bufferlist> orig_attrs, attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
+      bufferlist bl;
+      rgw_obj obj;
+      if (!cors_exist) {
+	dout(2) << "No CORS configuration set yet for this bucket" << dendl;
+	op_ret = -ENOENT;
+	return op_ret;
+      }
+      store->get_bucket_instance_obj(s->bucket, obj);
+      store->set_atomic(s->obj_ctx, obj);
+      map<string, bufferlist> orig_attrs, attrs, rmattrs;
+      map<string, bufferlist>::iterator iter;
 
-  bool is_object_op = (!s->object.empty());
+      bool is_object_op = (!s->object.empty());
 
 
-  if (is_object_op) {
-    /* check if obj exists, read orig attrs */
-    op_ret = get_obj_attrs(store, s, obj, orig_attrs);
-    if (op_ret < 0)
-      return;
-  } else {
-    op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
-    if (op_ret < 0)
-      return;
-  }
+      if (is_object_op) {
+	/* check if obj exists, read orig attrs */
+	op_ret = get_obj_attrs(store, s, obj, orig_attrs);
+	if (op_ret < 0)
+	  return op_ret;
+      } else {
+	op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+	if (op_ret < 0)
+	  return op_ret;
+      }
 
-  /* only remove meta attrs */
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    dout(10) << "DeleteCORS : attr: " << name << dendl;
-    if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
-      rmattrs[name] = iter->second;
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-  if (is_object_op) {
-    op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
-  } else {
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
-  }
+      /* only remove meta attrs */
+      for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+	const string& name = iter->first;
+	dout(10) << "DeleteCORS : attr: " << name << dendl;
+	if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
+	  rmattrs[name] = iter->second;
+	} else if (attrs.find(name) == attrs.end()) {
+	  attrs[name] = iter->second;
+	}
+      }
+      if (is_object_op) {
+	op_ret = store->set_attrs(s->obj_ctx, obj, attrs, &rmattrs);
+      } else {
+	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      }
+      return op_ret;
+    });
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -3979,32 +4025,35 @@ void RGWInitMultipart::execute()
 
   rgw_get_request_metadata(s->cct, s->info, attrs);
 
-  do {
-    char buf[33];
-    gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
-    upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
-    upload_id.append(buf);
+  op_ret = retry_raced_bucket_write(store, s, [&obj, &attrs, this] {
+      do {
+	char buf[33];
+	gen_rand_alphanumeric(s->cct, buf, sizeof(buf) - 1);
+	upload_id = MULTIPART_UPLOAD_ID_PREFIX; /* v2 upload id */
+	upload_id.append(buf);
 
-    string tmp_obj_name;
-    RGWMPObj mp(s->object.name, upload_id);
-    tmp_obj_name = mp.get_meta();
+	string tmp_obj_name;
+	RGWMPObj mp(s->object.name, upload_id);
+	tmp_obj_name = mp.get_meta();
 
-    obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
-    // the meta object will be indexed with 0 size, we c
-    obj.set_in_extra_data(true);
-    obj.index_hash_source = s->object.name;
+	obj.init_ns(s->bucket, tmp_obj_name, mp_ns);
+	// the meta object will be indexed with 0 size, we c
+	obj.set_in_extra_data(true);
+	obj.index_hash_source = s->object.name;
 
-    RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-    op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
+	RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
+	op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
 
-    RGWRados::Object::Write obj_op(&op_target);
+	RGWRados::Object::Write obj_op(&op_target);
 
-    obj_op.meta.owner = s->owner.get_id();
-    obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
-    obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+	obj_op.meta.owner = s->owner.get_id();
+	obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
+	obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
 
-    op_ret = obj_op.write_meta(0, attrs);
-  } while (op_ret == -EEXIST);
+	op_ret = obj_op.write_meta(0, attrs);
+      } while (op_ret == -EEXIST);
+      return op_ret;
+    });
 }
 
 static int get_multipart_info(RGWRados *store, struct req_state *s,
