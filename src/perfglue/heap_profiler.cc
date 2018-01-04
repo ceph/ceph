@@ -68,6 +68,16 @@ bool ceph_heap_set_numeric_property(
     value);
 }
 
+double ceph_heap_get_memory_release_rate()
+{
+  return MallocExtension::instance()->GetMemoryReleaseRate();
+}
+
+void ceph_heap_set_memory_release_rate(double rate)
+{
+  return MallocExtension::instance()->SetMemoryReleaseRate(rate);
+}
+
 bool ceph_heap_profiler_running()
 {
 #ifdef HAVE_LIBTCMALLOC

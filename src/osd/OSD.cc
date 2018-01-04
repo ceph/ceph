@@ -2312,6 +2312,25 @@ will start to track new ops received afterwards.";
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
+  } else if (admin_command == "set_memory_release_rate") {
+    double rate = 0;
+    string error;
+    bool success = false;
+    if (!cmd_getval(cct, cmdmap, "rate", rate)) {
+      error = "unable to get rate";
+      success = false;
+    } else {
+      ceph_heap_set_memory_release_rate(rate);
+      success = true;
+    }
+    f->open_object_section("result");
+    f->dump_string("error", error);
+    f->dump_bool("success", success);
+    f->close_section();
+  } else if (admin_command == "get_memory_release_rate") {
+    f->open_object_section("result");
+    f->dump_float("rate", ceph_heap_get_memory_release_rate());
+    f->close_section();
   } else if (admin_command == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
   } else if (admin_command == "dump_scrubs") {
@@ -2842,6 +2861,19 @@ void OSD::final_init()
 				     asok_hook,
 				     "get malloc extension heap property");
   assert(r == 0);
+  
+  r = admin_socket->register_command("set_memory_release_rate",
+				     "set_memory_release_rate " \
+				     "name=rate,type=CephFloat,range=0.0|10.0",
+				     asok_hook,
+				     "set malloc extension memory release rate");
+  assert(r == 0);
+  
+  r = admin_socket->register_command("get_memory_release_rate",
+				     "get_memory_release_rate",
+				     asok_hook,
+				     "get malloc extension heap property");
+  assert(r == 0);
 
   r = admin_socket->register_command("dump_objectstore_kv_stats",
 				     "dump_objectstore_kv_stats",
@@ -3360,6 +3392,8 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("heap");
   cct->get_admin_socket()->unregister_command("set_heap_property");
   cct->get_admin_socket()->unregister_command("get_heap_property");
+  cct->get_admin_socket()->unregister_command("set_memory_release_rate");
+  cct->get_admin_socket()->unregister_command("get_memory_release_rate");
   cct->get_admin_socket()->unregister_command("dump_objectstore_kv_stats");
   cct->get_admin_socket()->unregister_command("dump_scrubs");
   cct->get_admin_socket()->unregister_command("calc_objectstore_db_histogram");
