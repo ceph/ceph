@@ -305,13 +305,14 @@ bool ConfigMonitor::refresh_config(MonSession *s)
     device_class,
     &out);
 
-  if (out == s->last_config) {
+  if (out == s->last_config && s->any_config) {
     dout(20) << __func__ << " no change, " << out << dendl;
     return false;
   }
 
   dout(20) << __func__ << " " << out << dendl;
   s->last_config = out;
+  s->any_config = true;
   return true;
 }
 
