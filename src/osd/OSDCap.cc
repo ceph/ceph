@@ -272,7 +272,8 @@ bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
         // compare this grant to each class in the operation
         for (size_t i = 0; i < classes.size(); ++i) {
           // check 'allow class foo'
-          if (!spec.class_name.empty() && classes[i].name == spec.class_name) {
+          if (!spec.class_name.empty() &&
+              classes[i].class_name == spec.class_name) {
             (*class_allowed)[i] = true;
             continue;
           }
