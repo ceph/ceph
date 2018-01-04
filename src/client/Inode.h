@@ -325,6 +325,8 @@ struct Inode {
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
+  void mark_caps_dirty(int caps);
+  void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
   long open_count_for_write()
