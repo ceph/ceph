@@ -62,6 +62,7 @@ struct MonSession : public RefCountedObject {
 
   string remote_host;                ///< remote host name
   map<string,string> last_config;    ///< most recently shared config
+  bool any_config = false;
 
   MonSession(const entity_inst_t& i, Connection *c) :
     RefCountedObject(g_ceph_context),
