@@ -81,5 +81,5 @@ TEST(EscapeJson, ControlChars) {
 }
 
 TEST(EscapeJson, Utf8) {
-  EXPECT_EQ(escape_xml_attrs("\xe6\xb1\x89\xe5\xad\x97\n"), "\xe6\xb1\x89\xe5\xad\x97\n");
+  EXPECT_EQ(escape_json_attrs("\xe6\xb1\x89\xe5\xad\x97\n"), "\xe6\xb1\x89\xe5\xad\x97\\n");
 }
