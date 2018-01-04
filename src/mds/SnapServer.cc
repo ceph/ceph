@@ -366,7 +366,9 @@ void SnapServer::dump(Formatter *f) const
 {
   f->open_object_section("snapserver");
 
-  f->dump_int("last_snap", last_snap.val);
+  f->dump_int("last_snap", last_snap);
+  f->dump_int("last_created", last_created);
+  f->dump_int("last_destroyed", last_destroyed);
 
   f->open_array_section("pending_noop");
   for(set<version_t>::const_iterator i = pending_noop.begin(); i != pending_noop.end(); ++i) {

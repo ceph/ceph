@@ -2020,6 +2020,23 @@ bool MDSRankDispatcher::handle_asok_command(
       ss << "Failed to dump loads: " << cpp_strerror(r);
       f->reset();
     }
+  } else if (command == "dump snaps") {
+    Mutex::Locker l(mds_lock);
+    string server;
+    cmd_getval(g_ceph_context, cmdmap, "server", server);
+    if (server == "--server") {
+      if (mdsmap->get_tableserver() == whoami) {
+	snapserver->dump(f);
+      } else {
+	ss << "Not snapserver";
+      }
+    } else {
+      int r = snapclient->dump_cache(f);
+      if (r != 0) {
+	ss << "Failed to dump snapclient: " << cpp_strerror(r);
+	f->reset();
+      }
+    }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);
     mdcache->force_readonly();

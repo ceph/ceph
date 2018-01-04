@@ -274,3 +274,42 @@ void SnapClient::get_snap_infos(map<snapid_t, const SnapInfo*>& infomap,
 
   infomap.insert(result.begin(), result.end());
 }
+
+int SnapClient::dump_cache(Formatter *f) const
+{
+  if (!is_synced()) {
+    dout(5) << "dump_cache: not synced" << dendl;
+    return -EINVAL;
+  }
+
+  map<snapid_t, const SnapInfo*> snaps;
+  for (auto& p : cached_snaps)
+    snaps[p.first] = &p.second;
+
+  for (auto tid : committing_tids) {
+    auto q = cached_pending_update.find(tid);
+    if (q != cached_pending_update.end())
+      snaps[q->second.snapid] = &q->second;
+
+    auto r = cached_pending_destroy.find(tid);
+    if (r != cached_pending_destroy.end())
+      snaps.erase(r->second.first);
+  }
+
+  f->open_object_section("snapclient");
+
+  f->dump_int("last_created", get_last_created());
+  f->dump_int("last_destroyed", get_last_destroyed());
+
+  f->open_array_section("snaps");
+  for (auto p : snaps) {
+    f->open_object_section("snap");
+    p.second->dump(f);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->close_section();
+
+  return 0;
+}
