@@ -1178,6 +1178,26 @@ public:
     }
     return false;
   }
+  bool get_primary_shard(const pg_t& pgid, int *primary, spg_t *out) const {
+    auto i = get_pools().find(pgid.pool());
+    if (i == get_pools().end()) {
+      return false;
+    }
+    vector<int> acting;
+    pg_to_acting_osds(pgid, &acting, primary);
+    if (i->second.is_erasure()) {
+      for (uint8_t i = 0; i < acting.size(); ++i) {
+	if (acting[i] == *primary) {
+	  *out = spg_t(pgid, shard_id_t(i));
+	  return true;
+	}
+      }
+    } else {
+      *out = spg_t(pgid);
+      return true;
+    }
+    return false;
+  }
 
   const mempool::osdmap::map<int64_t,snap_interval_set_t>&
   get_removed_snaps_queue() const {
