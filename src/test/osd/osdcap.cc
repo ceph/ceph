@@ -947,6 +947,33 @@ TEST(OSDCap, AllowClass) {
   ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", true, true, false}}));
 }
 
+TEST(OSDCap, AllowClassMethod) {
+  OSDCap cap;
+  ASSERT_TRUE(cap.parse("allow class foo xyz", NULL));
+
+  // can call the xyz method on class foo regardless of whitelist status
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", true, false, true}}));
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", false, true, true}}));
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", true, true, true}}));
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", true, false, false}}));
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", false, true, false}}));
+  ASSERT_TRUE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"foo", "xyz", true, true, false}}));
+
+  // does not permit invoking class bar
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", true, false, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", false, true, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", true, true, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", true, false, false}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", false, true, false}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "", true, true, false}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", true, false, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", false, true, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", true, true, true}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", true, false, false}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", false, true, false}}));
+  ASSERT_FALSE(cap.is_capable("bar", "", 0, {}, "foo", false, false, {{"bar", "xyz", true, true, false}}));
+}
+
 TEST(OSDCap, AllowClass2) {
   OSDCap cap;
   ASSERT_TRUE(cap.parse("allow class foo, allow class bar", NULL));

@@ -64,13 +64,13 @@ ostream& operator<<(ostream& out, const osd_rwxa_t& p);
 struct OSDCapSpec {
   osd_rwxa_t allow;
   std::string class_name;
-  std::string class_allow;
+  std::string method_name;
 
   OSDCapSpec() : allow(0) {}
   explicit OSDCapSpec(osd_rwxa_t v) : allow(v) {}
-  explicit OSDCapSpec(std::string n) : allow(0), class_name(std::move(n)) {}
-  OSDCapSpec(std::string n, std::string a) :
-    allow(0), class_name(std::move(n)), class_allow(std::move(a)) {}
+  OSDCapSpec(std::string class_name, std::string method_name)
+    : allow(0), class_name(std::move(class_name)),
+      method_name(std::move(method_name)) {}
 
   bool allow_all() const {
     return allow == OSD_CAP_ANY;
