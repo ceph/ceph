@@ -100,7 +100,7 @@ def get_rerun_filters(name, statuses):
     for job in run['jobs']:
         if job['status'] in statuses:
             jobs.append(job)
-    filters['descriptions'] = [job['description'] for job in jobs]
+    filters['descriptions'] = [job['description'] for job in jobs if job['description']]
     return filters
 
 
