@@ -591,6 +591,9 @@ static int update_monitor(MonitorDBStore& st)
   return 0;
 }
 
+// rebuild
+//  - mgr
+//  - mgr_command_desc
 static int update_mgrmap(MonitorDBStore& st)
 {
   auto t = make_shared<MonitorDBStore::Transaction>();
@@ -731,6 +734,9 @@ int rebuild_monstore(const char* progname,
   if ((r = update_pgmap_meta(st))) {
     return r;
   }
+  if ((r = update_mgrmap(st))) {
+    return r;
+  }
   if ((r = update_paxos(st))) {
     return r;
   }
@@ -738,9 +744,6 @@ int rebuild_monstore(const char* progname,
     return r;
   }
   if ((r = update_monitor(st))) {
-    return r;
-  }
-  if ((r = update_mgrmap(st))) {
     return r;
   }
   return 0;
