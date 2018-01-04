@@ -12,8 +12,6 @@ if(ENABLE_SHARED)
     $<TARGET_OBJECTS:librados_api_obj>
     $<TARGET_OBJECTS:librados_objs>
     $<TARGET_OBJECTS:common_buffer_obj>)
-  target_link_libraries(librados PRIVATE osdc ceph-common cls_lock_client
-    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
   set_target_properties(librados PROPERTIES
     OUTPUT_NAME rados
     VERSION 2.0.0
@@ -28,9 +26,15 @@ else(ENABLE_SHARED)
   add_library(librados STATIC
     $<TARGET_OBJECTS:librados_api_obj>
     $<TARGET_OBJECTS:librados_objs>)
-  target_link_libraries(librados osdc ceph-common cls_lock_client
-    ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 endif(ENABLE_SHARED)
+target_link_libraries(librados PRIVATE
+  osdc ceph-common cls_lock_client
+  ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
+if(WITH_STATIC_LIBSTDCXX)
+  target_link_libraries(librados
+    INTERFACE "-static-libstdc++ -static-libgcc")
+endif()
+target_link_libraries(librados ${rados_libs})
 install(TARGETS librados DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 if(WITH_EMBEDDED)
