@@ -1662,6 +1662,34 @@ void DaemonServer::got_service_map()
   }
 }
 
+void DaemonServer::got_mgr_map()
+{
+  Mutex::Locker l(lock);
+  set<std::string> have;
+  cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
+      if (mgrmap.active_name.size()) {
+	DaemonKey key("mgr", mgrmap.active_name);
+	have.insert(mgrmap.active_name);
+	if (!daemon_state.exists(key)) {
+	  auto daemon = std::make_shared<DaemonState>(daemon_state.types);
+	  daemon->key = key;
+	  daemon_state.insert(daemon);
+	  dout(10) << "added missing " << key << dendl;
+	}
+      }
+      for (auto& i : mgrmap.standbys) {
+	DaemonKey key("mgr", i.second.name);
+	have.insert(i.second.name);
+	if (!daemon_state.exists(key)) {
+	  auto daemon = std::make_shared<DaemonState>(daemon_state.types);
+	  daemon->key = key;
+	  daemon_state.insert(daemon);
+	  dout(10) << "added missing " << key << dendl;
+	}
+      }
+    });
+  daemon_state.cull("mgr", have);
+}
 
 const char** DaemonServer::get_tracked_conf_keys() const
 {

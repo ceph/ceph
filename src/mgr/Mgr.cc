@@ -593,6 +593,7 @@ bool Mgr::got_mgr_map(const MgrMap& m)
   }
 
   cluster_state.set_mgr_map(m);
+  server.got_mgr_map();
 
   return false;
 }
