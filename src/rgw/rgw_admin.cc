@@ -2301,12 +2301,36 @@ static void sync_status(Formatter *formatter)
 
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
+  int level = 0;
+  string cur_conf;
   list<string> confs;
-  get_str_list(s, ",", confs);
+  for (auto c : s) {
+    switch (c) {
+      case '{':
+        ++level;
+        break;
+      case '}':
+        --level;
+        break;
+      case ',':
+        if (level == 0) {
+          confs.push_back(cur_conf);
+        }
+        cur_conf.clear();
+        break;
+      default:
+        cur_conf += c;
+        break;
+    };
+  }
+  if (!cur_conf.empty()) {
+    confs.push_back(cur_conf);
+  }
+
   for (auto c : confs) {
     ssize_t pos = c.find("=");
     if (pos < 0) {
-      out[c] = "";
+      out[""] = c;
     } else {
       out[c.substr(0, pos)] = c.substr(pos + 1);
     }
@@ -3646,7 +3670,11 @@ int main(int argc, const char **argv)
 
         string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         for (auto a : tier_config_add) {
-          zone.tier_config.set(a.first, a.second);
+          int r = zone.tier_config.set(a.first, a.second);
+          if (r < 0) {
+            cerr << "ERROR: failed to set configurable: " << a << std::endl;
+            return EINVAL;
+          }
         }
 
         bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
@@ -4063,7 +4091,13 @@ int main(int argc, const char **argv)
         zone.system_key.id = access_key;
         zone.system_key.key = secret_key;
 	zone.realm_id = realm_id;
-        zone.tier_config = tier_config_add;
+        for (auto a : tier_config_add) {
+          int r = zone.tier_config.set(a.first, a.second);
+          if (r < 0) {
+            cerr << "ERROR: failed to set configurable: " << a << std::endl;
+            return EINVAL;
+          }
+        }
 
 	ret = zone.create();
 	if (ret < 0) {
@@ -4324,7 +4358,7 @@ int main(int argc, const char **argv)
 
         if (tier_config_add.size() > 0) {
           for (auto add : tier_config_add) {
-            zone.tier_config[add.first] = add.second;
+            zone.tier_config.set(add.first, add.second);
           }
           need_zone_update = true;
         }

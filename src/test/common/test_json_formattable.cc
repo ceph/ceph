@@ -173,3 +173,97 @@ TEST(formatable, json_encode) {
 
 }
 
+TEST(formatable, set) {
+  JSONFormattable f, f2;
+
+  f.set("", "{ \"abc\": \"xyz\"}");
+  ASSERT_EQ((string)f["abc"], "xyz");
+
+  f.set("aaa", "111");
+  ASSERT_EQ((string)f["abc"], "xyz");
+  ASSERT_EQ((int)f["aaa"], 111);
+
+  f.set("obj", "{ \"a\": \"10\", \"b\": \"20\"}");
+  ASSERT_EQ((int)f["obj"]["a"], 10);
+  ASSERT_EQ((int)f["obj"]["b"], 20);
+
+  f.set("obj.c", "30");
+
+  ASSERT_EQ((int)f["obj"]["c"], 30);
+}
+
+TEST(formatable, erase) {
+  JSONFormattable f, f2;
+
+  f.set("", "{ \"abc\": \"xyz\"}");
+  ASSERT_EQ((string)f["abc"], "xyz");
+
+  f.set("aaa", "111");
+  ASSERT_EQ((string)f["abc"], "xyz");
+  ASSERT_EQ((int)f["aaa"], 111);
+  f.erase("aaa");
+  ASSERT_EQ((int)f["aaa"], 0);
+
+  f.set("obj", "{ \"a\": \"10\", \"b\": \"20\"}");
+  ASSERT_EQ((int)f["obj"]["a"], 10);
+  ASSERT_EQ((int)f["obj"]["b"], 20);
+  f.erase("obj.a");
+  ASSERT_EQ((int)f["obj"]["a"], 0);
+  ASSERT_EQ((int)f["obj"]["b"], 20);
+}
+
+static void dumpf(const JSONFormattable& f)
+{
+  JSONFormatter formatter;
+  formatter.open_object_section("bla");
+  ::encode_json("f", f, &formatter);
+  formatter.close_section();
+  formatter.flush(cout);
+}
+
+TEST(formatable, set_array) {
+  JSONFormattable f, f2;
+
+  f.set("asd[0]", "\"xyz\"");
+  ASSERT_EQ(f["asd"].array().size(), 1);
+  ASSERT_EQ((string)f["asd"][0], "xyz");
+
+  f.set("bbb[0][0]", "10");
+  f.set("bbb[0][1]", "20");
+  ASSERT_EQ(f["bbb"].array().size(), 1);
+  ASSERT_EQ(f["bbb"][0].array().size(), 2);
+  ASSERT_EQ((string)f["bbb"][0][0], "10");
+  ASSERT_EQ((int)f["bbb"][0][1], 20);
+  f.set("bbb[0][1]", "25");
+  ASSERT_EQ(f["bbb"][0].array().size(), 2);
+  ASSERT_EQ((int)f["bbb"][0][1], 25);
+
+  f.set("foo.asd[0][0]", "{ \"field\": \"xyz\"}");
+  ASSERT_EQ((string)f["foo"]["asd"][0][0]["field"], "xyz");
+
+  ASSERT_EQ(f.set("foo[0]", "\"zzz\""), -EINVAL); /* can't assign array to an obj entity */
+
+  f2.set("[0]", "{ \"field\": \"xyz\"}");
+  ASSERT_EQ((string)f2[0]["field"], "xyz");
+}
+
+TEST(formatable, erase_array) {
+  JSONFormattable f;
+
+  f.set("asd[0]", "\"xyz\"");
+  ASSERT_EQ(f["asd"].array().size(), 1);
+  ASSERT_EQ((string)f["asd"][0], "xyz");
+  ASSERT_TRUE(f["asd"].exists(0));
+  f.erase("asd[0]");
+  ASSERT_FALSE(f["asd"].exists(0));
+  f.set("asd[0]", "\"xyz\"");
+  ASSERT_TRUE(f["asd"].exists(0));
+  f["asd"].erase("[0]");
+  ASSERT_FALSE(f["asd"].exists(0));
+  f.set("asd[0]", "\"xyz\"");
+  ASSERT_TRUE(f["asd"].exists(0));
+  f.erase("asd");
+  ASSERT_FALSE(f["asd"].exists(0));
+  ASSERT_FALSE(f.exists("asd"));
+}
+

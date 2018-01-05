@@ -6,6 +6,7 @@
 #include <include/types.h>
 
 #include <boost/algorithm/string.hpp>
+#include <boost/tokenizer.hpp>
 
 using namespace json_spirit;
 
@@ -225,10 +226,18 @@ bool JSONParser::parse(const char *buf_, int len)
 
   string json_string(buf_, len);
   success = read(json_string, data);
-  if (success)
+  if (success) {
     handle_value(data);
-  else
+    if (data.type() != obj_type &&
+        data.type() != array_type) {
+      if (data.type() == str_type)
+        data_string =  data.get_str();
+      else
+        data_string =  write(data, raw_utf8);
+    }
+  } else {
     set_failure();
+  }
 
   return success;
 }
@@ -534,6 +543,42 @@ const JSONFormattable& JSONFormattable::operator[](const string& name) const
   return i->second;
 }
 
+const JSONFormattable& JSONFormattable::operator[](size_t index) const
+{
+  if (index >= arr.size()) {
+    return default_formattable;
+  }
+  return arr[index];
+}
+
+JSONFormattable& JSONFormattable::operator[](const string& name)
+{
+  auto i = obj.find(name);
+  if (i == obj.end()) {
+    return default_formattable;
+  }
+  return i->second;
+}
+
+JSONFormattable& JSONFormattable::operator[](size_t index)
+{
+  if (index >= arr.size()) {
+    return default_formattable;
+  }
+  return arr[index];
+}
+
+bool JSONFormattable::exists(const string& name) const
+{
+  auto i = obj.find(name);
+  return (i != obj.end());
+}
+
+bool JSONFormattable::exists(size_t index) const
+{
+  return (index < arr.size());
+}
+
 bool JSONFormattable::find(const string& name, string *val) const
 {
   auto i = obj.find(name);
@@ -589,6 +634,163 @@ int JSONFormattable::get_int(const string& name, int def_val) const
 bool JSONFormattable::get_bool(const string& name, bool def_val) const
 {
   return (*this)[name].def(def_val);
+}
+
+struct field_entity {
+  bool is_obj{false}; /* either obj field or array entity */
+  string name; /* if obj */
+  int index{0}; /* if array */
+
+  field_entity() {}
+  field_entity(const string& n) : is_obj(true), name(n) {}
+  field_entity(int i) : is_obj(false), index(i) {}
+};
+
+static int parse_entity(const string& s, vector<field_entity> *result)
+{
+  size_t ofs = 0;
+
+  while (ofs < s.size()) {
+    size_t next_arr = s.find('[', ofs);
+    if (next_arr == string::npos) {
+      if (ofs != 0) {
+        return -EINVAL;
+      }
+      result->push_back(field_entity(s));
+      return 0;
+    }
+    if (next_arr > ofs) {
+      string field = s.substr(ofs, next_arr - ofs);
+      result->push_back(field_entity(field));
+      ofs = next_arr;
+    }
+    size_t end_arr = s.find(']', next_arr + 1);
+    if (end_arr == string::npos) {
+      return -EINVAL;
+    }
+
+    string index_str = s.substr(next_arr + 1, end_arr - next_arr - 1);
+
+    ofs = end_arr + 1;
+
+    result->push_back(field_entity(atoi(index_str.c_str())));
+  }
+  return 0;
+}
+
+int JSONFormattable::set(const string& name, const string& val)
+{
+  boost::escaped_list_separator<char> els('\\', '.', '"');
+  boost::tokenizer<boost::escaped_list_separator<char> > tok(name, els);
+
+  JSONFormattable *f = this;
+
+  JSONParser jp;
+
+  bool is_json = jp.parse(val.c_str(), val.size());
+
+  for (auto i : tok) {
+    vector<field_entity> v;
+    int ret = parse_entity(i, &v);
+    if (ret < 0) {
+      return ret;
+    }
+    for (auto vi : v) {
+      if (f->type == FMT_NONE) {
+        if (vi.is_obj) {
+          f->type = FMT_OBJ;
+        } else {
+          f->type = FMT_ARRAY;
+        }
+      }
+
+      if (f->type == FMT_OBJ) {
+        if (!vi.is_obj) {
+          return -EINVAL;
+        }
+        f = &f->obj[vi.name];
+      } else if (f->type == FMT_ARRAY) {
+        if (vi.is_obj) {
+          return -EINVAL;
+        }
+        if ((size_t)vi.index >= f->arr.size()) {
+          f->arr.resize(vi.index + 1);
+        }
+        f = &f->arr[vi.index];
+      }
+    }
+  }
+
+  if (is_json) {
+    f->decode_json(&jp);
+  } else {
+    f->type = FMT_STRING;
+    f->str = val;
+  }
+
+  return 0;
+}
+
+int JSONFormattable::erase(const string& name)
+{
+  boost::escaped_list_separator<char> els('\\', '.', '"');
+  boost::tokenizer<boost::escaped_list_separator<char> > tok(name, els);
+
+  JSONFormattable *f = this;
+  JSONFormattable *parent = nullptr;
+  field_entity last_entity;
+
+  for (auto i : tok) {
+    vector<field_entity> v;
+    int ret = parse_entity(i, &v);
+    if (ret < 0) {
+      return ret;
+    }
+    for (auto vi : v) {
+      if (f->type == FMT_NONE) {
+        if (vi.is_obj) {
+          f->type = FMT_OBJ;
+        } else {
+          f->type = FMT_ARRAY;
+        }
+      }
+
+      parent = f;
+
+      last_entity = vi;
+
+      if (f->type == FMT_OBJ) {
+        if (!vi.is_obj) {
+          return -EINVAL;
+        }
+        auto iter = f->obj.find(vi.name);
+        if (iter == f->obj.end()) {
+          return 0; /* nothing to erase */
+        }
+        f = &iter->second;
+      } else if (f->type == FMT_ARRAY) {
+        if (vi.is_obj) {
+          return -EINVAL;
+        }
+        if ((size_t)vi.index >= f->arr.size()) {
+          return 0; /* index beyond array boundaries */
+        }
+        f = &f->arr[vi.index];
+      }
+    }
+  }
+
+  if (!parent) {
+    *this = JSONFormattable(); /* erase everything */
+  } else {
+    if (last_entity.is_obj) {
+      parent->obj.erase(last_entity.name);
+    } else {
+      parent->arr.erase(parent->arr.begin() + last_entity.index);
+    }
+  }
+
+  return 0;
 }
 
 void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
