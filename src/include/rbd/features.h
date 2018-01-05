@@ -64,4 +64,8 @@
                                     RBD_FEATURE_FAST_DIFF      | \
                                     RBD_FEATURE_JOURNALING)
 
+/// features that will be implicitly enabled
+#define RBD_FEATURES_IMPLICIT_ENABLE  (RBD_FEATURE_STRIPINGV2 | \
+                                       RBD_FEATURE_DATA_POOL)
+
 #endif
