@@ -48,7 +48,7 @@ try using the other client, in order to find out whether the bug was
 client-specific or not (and then to let the developers know).
 
 Which kernel version?
-~~~~~~~~~~~~~~~~~~~~~
+---------------------
 
 Because the kernel client is distributed as part of the linux kernel (not
 as part of packaged ceph releases),
