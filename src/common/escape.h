@@ -15,9 +15,8 @@
 #ifndef CEPH_RGW_ESCAPE_H
 #define CEPH_RGW_ESCAPE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <ostream>
+#include <boost/utility/string_view.hpp>
 
 /* Returns the length of a buffer that would be needed to escape 'buf'
  * as an XML attrribute
@@ -45,8 +44,21 @@ void escape_json_attr(const char *buf, int src_len, char *out);
  * require this, Amazon does it in their XML responses.
  */
 
-#ifdef __cplusplus
-}
-#endif
+// stream output operators that write escaped text without making a copy
+// usage:
+//   std::string xml_input = ...;
+//   std::cout << xml_stream_escaper(xml_input) << std::endl;
+
+struct xml_stream_escaper {
+  boost::string_view str;
+  xml_stream_escaper(boost::string_view str) : str(str) {}
+};
+std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e);
+
+struct json_stream_escaper {
+  boost::string_view str;
+  json_stream_escaper(boost::string_view str) : str(str) {}
+};
+std::ostream& operator<<(std::ostream& out, const json_stream_escaper& e);
 
 #endif
