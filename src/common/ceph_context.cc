@@ -480,13 +480,13 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
           msg << "Setting not found: '" << key << "'";
           f->dump_string("error", msg.str());
         } else {
-          i->second.dump(f);
+          f->dump_object("option", i->second);
         }
       } else {
         // Output all
         f->open_array_section("options");
         for (const auto &option : ceph_options) {
-          option.dump(f);
+          f->dump_object("option", option);
         }
         f->close_section();
       }

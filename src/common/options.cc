@@ -159,7 +159,6 @@ int Option::parse_value(
 
 void Option::dump(Formatter *f) const
 {
-  f->open_object_section("option");
   f->dump_string("name", name);
 
   f->dump_string("type", type_to_str(type));
@@ -200,8 +199,6 @@ void Option::dump(Formatter *f) const
 
   dump_value("min", min, f);
   dump_value("max", max, f);
-
-  f->close_section();
 }
 
 ostream& operator<<(ostream& out, const Option::value_t& v)
