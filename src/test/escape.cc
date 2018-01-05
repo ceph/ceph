@@ -22,36 +22,48 @@ static std::string escape_xml_attrs(const char *str)
   escape_xml_attr(str, out);
   return out;
 }
+static std::string escape_xml_stream(const char *str)
+{
+  std::stringstream ss;
+  ss << xml_stream_escaper(str);
+  return ss.str();
+}
 
 TEST(EscapeXml, PassThrough) {
   ASSERT_EQ(escape_xml_attrs("simplicity itself"), "simplicity itself");
+  ASSERT_EQ(escape_xml_stream("simplicity itself"), "simplicity itself");
   ASSERT_EQ(escape_xml_attrs(""), "");
+  ASSERT_EQ(escape_xml_stream(""), "");
   ASSERT_EQ(escape_xml_attrs("simple examples please!"), "simple examples please!");
+  ASSERT_EQ(escape_xml_stream("simple examples please!"), "simple examples please!");
 }
 
 TEST(EscapeXml, EntityRefs1) {
   ASSERT_EQ(escape_xml_attrs("The \"scare quotes\""), "The &quot;scare quotes&quot;");
+  ASSERT_EQ(escape_xml_stream("The \"scare quotes\""), "The &quot;scare quotes&quot;");
   ASSERT_EQ(escape_xml_attrs("I <3 XML"), "I &lt;3 XML");
+  ASSERT_EQ(escape_xml_stream("I <3 XML"), "I &lt;3 XML");
   ASSERT_EQ(escape_xml_attrs("Some 'single' \"quotes\" here"),
+	    "Some &apos;single&apos; &quot;quotes&quot; here");
+  ASSERT_EQ(escape_xml_stream("Some 'single' \"quotes\" here"),
 	    "Some &apos;single&apos; &quot;quotes&quot; here");
 }
 
 TEST(EscapeXml, ControlChars) {
-  uint8_t cc1[] = { 0x01, 0x02, 0x03, 0x0 };
-  ASSERT_EQ(escape_xml_attrs((char*)cc1), "&#x01;&#x02;&#x03;");
+  ASSERT_EQ(escape_xml_attrs("\x01\x02\x03"), "&#x01;&#x02;&#x03;");
+  ASSERT_EQ(escape_xml_stream("\x01\x02\x03"), "&#x01;&#x02;&#x03;");
 
-  uint8_t cc2[] = { 0x61, 0x62, 0x63, 0x7f, 0x0 };
-  ASSERT_EQ(escape_xml_attrs((char*)cc2), "abc&#x7f;");
+  ASSERT_EQ(escape_xml_attrs("abc\x7f"), "abc&#x7f;");
+  ASSERT_EQ(escape_xml_stream("abc\x7f"), "abc&#x7f;");
 }
 
 TEST(EscapeXml, Utf8) {
-  uint8_t cc1[] = { 0xe6, 0xb1, 0x89, 0xe5, 0xad, 0x97, 0x0a, 0x0 };
-  ASSERT_EQ(escape_xml_attrs((const char*)cc1), (const char*)cc1);
+  const char *cc1 = "\xe6\xb1\x89\xe5\xad\x97\n";
+  ASSERT_EQ(escape_xml_attrs(cc1), cc1);
+  ASSERT_EQ(escape_xml_stream(cc1), cc1);
 
-  uint8_t cc2[] = { 0x3c, 0xe6, 0xb1, 0x89, 0xe5, 0xad, 0x97, 0x3e, 0x0a, 0x0 };
-  uint8_t cc2_out[] = { 0x26, 0x6c, 0x74, 0x3b, 0xe6, 0xb1, 0x89, 0xe5,
-			0xad, 0x97, 0x26, 0x67, 0x74, 0x3b, 0x0a, 0x0 };
-  ASSERT_EQ(escape_xml_attrs((const char*)cc2), (const char*)cc2_out);
+  ASSERT_EQ(escape_xml_attrs("<\xe6\xb1\x89\xe5\xad\x97>\n"), "&lt;\xe6\xb1\x89\xe5\xad\x97&gt;\n");
+  ASSERT_EQ(escape_xml_stream("<\xe6\xb1\x89\xe5\xad\x97>\n"), "&lt;\xe6\xb1\x89\xe5\xad\x97&gt;\n");
 }
 
 static std::string escape_json_attrs(const char *str)
@@ -62,32 +74,48 @@ static std::string escape_json_attrs(const char *str)
   escape_json_attr(str, src_len, out);
   return out;
 }
+static std::string escape_json_stream(const char *str)
+{
+  std::stringstream ss;
+  ss << json_stream_escaper(str);
+  return ss.str();
+}
 
 TEST(EscapeJson, PassThrough) {
   ASSERT_EQ(escape_json_attrs("simplicity itself"), "simplicity itself");
+  ASSERT_EQ(escape_json_stream("simplicity itself"), "simplicity itself");
   ASSERT_EQ(escape_json_attrs(""), "");
+  ASSERT_EQ(escape_json_stream(""), "");
   ASSERT_EQ(escape_json_attrs("simple examples please!"), "simple examples please!");
+  ASSERT_EQ(escape_json_stream("simple examples please!"), "simple examples please!");
 }
 
 TEST(EscapeJson, Escapes1) {
   ASSERT_EQ(escape_json_attrs("The \"scare quotes\""),
 			     "The \\\"scare quotes\\\"");
+  ASSERT_EQ(escape_json_stream("The \"scare quotes\""),
+			      "The \\\"scare quotes\\\"");
   ASSERT_EQ(escape_json_attrs("I <3 JSON"), "I <3 JSON");
+  ASSERT_EQ(escape_json_stream("I <3 JSON"), "I <3 JSON");
   ASSERT_EQ(escape_json_attrs("Some 'single' \"quotes\" here"),
       "Some 'single' \\\"quotes\\\" here");
+  ASSERT_EQ(escape_json_stream("Some 'single' \"quotes\" here"),
+      "Some 'single' \\\"quotes\\\" here");
   ASSERT_EQ(escape_json_attrs("tabs\tand\tnewlines\n, oh my"),
+      "tabs\\tand\\tnewlines\\n, oh my");
+  ASSERT_EQ(escape_json_stream("tabs\tand\tnewlines\n, oh my"),
       "tabs\\tand\\tnewlines\\n, oh my");
 }
 
 TEST(EscapeJson, ControlChars) {
-  uint8_t cc1[] = { 0x01, 0x02, 0x03, 0x0 };
-  ASSERT_EQ(escape_json_attrs((char*)cc1), "\\u0001\\u0002\\u0003");
+  ASSERT_EQ(escape_json_attrs("\x01\x02\x03"), "\\u0001\\u0002\\u0003");
+  ASSERT_EQ(escape_json_stream("\x01\x02\x03"), "\\u0001\\u0002\\u0003");
 
-  uint8_t cc2[] = { 0x61, 0x62, 0x63, 0x7f, 0x0 };
-  ASSERT_EQ(escape_json_attrs((char*)cc2), "abc\\u007f");
+  ASSERT_EQ(escape_json_attrs("abc\x7f"), "abc\\u007f");
+  ASSERT_EQ(escape_json_stream("abc\x7f"), "abc\\u007f");
 }
 
 TEST(EscapeJson, Utf8) {
-  uint8_t cc1[] = { 0xe6, 0xb1, 0x89, 0xe5, 0xad, 0x97, 0x0a, 0x0 };
-  ASSERT_EQ(escape_xml_attrs((const char*)cc1), (const char*)cc1);
+  EXPECT_EQ(escape_json_attrs("\xe6\xb1\x89\xe5\xad\x97\n"), "\xe6\xb1\x89\xe5\xad\x97\\n");
+  EXPECT_EQ(escape_json_stream("\xe6\xb1\x89\xe5\xad\x97\n"), "\xe6\xb1\x89\xe5\xad\x97\\n");
 }
