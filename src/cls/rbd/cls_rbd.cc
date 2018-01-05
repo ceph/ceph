@@ -351,6 +351,12 @@ int set_features(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  if ((mask & RBD_FEATURES_INTERNAL) != 0ULL) {
+    CLS_ERR("Attempting to set internal feature: %" PRIu64,
+            static_cast<uint64_t>(mask & RBD_FEATURES_INTERNAL));
+    return -EINVAL;
+  }
+
   // newer clients might attempt to mask off features we don't support
   mask &= RBD_FEATURES_ALL;
 
@@ -918,6 +924,112 @@ int set_flags(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_ERR("error updating flags: %s", cpp_strerror(r).c_str());
     return r;
   }
+  return 0;
+}
+
+/**
+ * Get the operation-based image features
+ *
+ * Input:
+ *
+ * Output:
+ * @param bitmask of enabled op features (uint64_t)
+ * @returns 0 on success, negative error code on failure
+ */
+int op_features_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "op_features_get");
+
+  uint64_t op_features = 0;
+  int r = read_key(hctx, "op_features", &op_features);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("failed to read op features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  encode(op_features, *out);
+  return 0;
+}
+
+/**
+ * Set the operation-based image features
+ *
+ * Input:
+ * @param op_features image op features
+ * @param mask image op feature mask
+ *
+ * Output:
+ * none
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int op_features_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t op_features;
+  uint64_t mask;
+  bufferlist::iterator iter = in->begin();
+  try {
+    decode(op_features, iter);
+    decode(mask, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  uint64_t unsupported_op_features = (mask & ~RBD_OPERATION_FEATURES_ALL);
+  if (unsupported_op_features != 0ULL) {
+    CLS_ERR("unsupported op features: %" PRIu64, unsupported_op_features);
+    return -EINVAL;
+  }
+
+  uint64_t orig_features;
+  int r = read_key(hctx, "features", &orig_features);
+  if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  uint64_t orig_op_features = 0;
+  r = read_key(hctx, "op_features", &orig_op_features);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read op features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  op_features = (orig_op_features & ~mask) | (op_features & mask);
+  CLS_LOG(10, "set_features op_features=%" PRIu64 " orig_op_features=%" PRIu64,
+          op_features, orig_op_features);
+
+  uint64_t features = orig_features;
+  if (op_features == 0ULL) {
+    features &= ~RBD_FEATURE_OPERATIONS;
+
+    r = cls_cxx_map_remove_key(hctx, "op_features");
+    if (r == -ENOENT) {
+      r = 0;
+    }
+  } else {
+    features |= RBD_FEATURE_OPERATIONS;
+
+    bufferlist bl;
+    encode(op_features, bl);
+    r = cls_cxx_map_set_val(hctx, "op_features", &bl);
+  }
+
+  if (r < 0) {
+    CLS_ERR("error updating op features: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (features != orig_features) {
+    bufferlist bl;
+    encode(features, bl);
+    r = cls_cxx_map_set_val(hctx, "features", &bl);
+    if (r < 0) {
+      CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
   return 0;
 }
 
@@ -5324,6 +5436,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_create_timestamp;
   cls_method_handle_t h_get_flags;
   cls_method_handle_t h_set_flags;
+  cls_method_handle_t h_op_features_get;
+  cls_method_handle_t h_op_features_set;
   cls_method_handle_t h_remove_parent;
   cls_method_handle_t h_add_child;
   cls_method_handle_t h_remove_child;
@@ -5482,6 +5596,11 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "set_flags",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           set_flags, &h_set_flags);
+  cls_register_cxx_method(h_class, "op_features_get", CLS_METHOD_RD,
+                          op_features_get, &h_op_features_get);
+  cls_register_cxx_method(h_class, "op_features_set",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          op_features_set, &h_op_features_set);
   cls_register_cxx_method(h_class, "metadata_list",
                           CLS_METHOD_RD,
 			  metadata_list, &h_metadata_list);
