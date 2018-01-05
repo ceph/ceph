@@ -109,6 +109,10 @@ class DaemonState
   // running config
   std::map<std::string,std::map<int32_t,std::string>> config;
 
+  // compiled-in config defaults (rarely used, so we leave them encoded!)
+  bufferlist config_defaults_bl;
+  std::map<std::string,std::string> config_defaults;
+
   // The perf counters received in MMgrReport messages
   DaemonPerfCounters perf_counters;
 
