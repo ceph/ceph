@@ -626,10 +626,15 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (*i == get_primary()) continue;
     pg_shard_t peer = *i;
     auto peer_missing_entry = peer_missing.find(peer);
+    // If an object is missing on an async_recovery_target, return false.
+    // This will not block the op and the object is async recovered later.
     if (peer_missing_entry != peer_missing.end() &&
-	peer_missing_entry->second.get_items().count(soid))
-      return true;
-
+	peer_missing_entry->second.get_items().count(soid)) {
+      if (async_recovery_targets.count(peer))
+	return false;
+      else
+	return true;
+    }
     // Object is degraded if after last_backfill AND
     // we are backfilling it
     if (is_backfill_targets(peer) &&
@@ -10073,6 +10078,15 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     repop->rep_tid,
     ctx->reqid,
     ctx->op);
+
+  for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
+       i != async_recovery_targets.end();
+       ++i) {
+    if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
+    for (auto &&entry: ctx->log) {
+      peer_missing[*i].add_next_event(entry);
+    }
+  }
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
