@@ -40,11 +40,12 @@ void ConfigMonitor::create_initial()
 
 void ConfigMonitor::update_from_paxos(bool *need_bootstrap)
 {
+  if (version == get_last_committed()) {
+    return;
+  }
   version = get_last_committed();
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << " " << version << dendl;
   load_config();
-
-#warning fixme: load changed sections to hint load_config()
 }
 
 void ConfigMonitor::create_pending()
@@ -55,17 +56,18 @@ void ConfigMonitor::create_pending()
 
 void ConfigMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 {
-  ++version;
-  dout(10) << " " << version << dendl;
-  put_last_committed(t, version);
+  dout(10) << " " << (version+1) << dendl;
+  put_last_committed(t, version+1);
 
-#warning fixme: record changed sections (osd, mds.foo, rack:bar, ...)
+  // TODO: record changed sections (osd, mds.foo, rack:bar, ...)
 
   for (auto& p : pending) {
     string key = KEY_PREFIX + p.first;
     if (p.second) {
+      dout(20) << __func__ << " set " << key << dendl;
       t->put(CONFIG_PREFIX, key, *p.second);
     } else {
+      dout(20) << __func__ << " rm " << key << dendl;
       t->erase(CONFIG_PREFIX, key);
     }
   }
@@ -294,7 +296,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
-    string key = KEY_PREFIX;
+    string key;
     if (section.size()) {
       key += section + "/";
     }
@@ -308,9 +310,9 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     if (prefix == "config set") {
       bufferlist bl;
       bl.append(value);
-      t->put(CONFIG_PREFIX, key, bl);
+      pending[key] = bl;
     } else {
-      t->erase(CONFIG_PREFIX, key);
+      pending[key] = boost::none;
     }
     goto update;
   } else {
