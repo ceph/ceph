@@ -61,7 +61,7 @@ least one :term:`Ceph Metadata Server` running.
 
 Once you have a healthy Ceph Storage Cluster with at least
 one Ceph Metadata Server, you may create and mount your Ceph Filesystem.
-Ensure that you client has network connectivity and the proper
+Ensure that your client has network connectivity and the proper
 authentication keyring.
 
 .. toctree:: 
@@ -73,6 +73,7 @@ authentication keyring.
 	Mount CephFS in fstab <fstab>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
+	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
 
 
 .. raw:: html 
