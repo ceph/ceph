@@ -519,6 +519,12 @@ public:
       }
     }
   }
+  OSDMapRef get_next_osdmap() {
+    Mutex::Locker l(pre_publish_lock);
+    if (!next_osdmap)
+      return OSDMapRef();
+    return next_osdmap;
+  }
 
 private:
   Mutex peer_map_epoch_lock;
