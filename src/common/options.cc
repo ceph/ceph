@@ -232,6 +232,42 @@ ostream& operator<<(ostream& out, const Option::value_t& v)
   ceph_abort();
 }
 
+void Option::print(ostream *out) const
+{
+  *out << name << " - " << desc << "\n";
+  *out << "  (" << type_to_str(type) << ", " << level_to_str(level) << ")\n";
+  if (!boost::get<boost::blank>(&daemon_value)) {
+    *out << "  Default (non-daemon): " << stringify(value) << "\n";
+    *out << "  Default (daemon): " << stringify(daemon_value) << "\n";
+  } else {
+    *out << "  Default: " << stringify(value) << "\n";
+  }
+  if (!enum_allowed.empty()) {
+    *out << "  Possible values: ";
+    for (auto& i : enum_allowed) {
+      *out << " " << stringify(i);
+    }
+    *out << "\n";
+  }
+  if (!boost::get<boost::blank>(&min)) {
+    *out << "  Minimum: " << stringify(min) << "\n"
+	 << "  Maximum: " << stringify(max) << "\n";
+  }
+  if (!services.empty()) {
+    *out << "  Services: " << services << "\n";
+  }
+  if (!tags.empty()) {
+    *out << "  Tags: " << tags << "\n";
+  }
+  if (!see_also.empty()) {
+    *out << "  See also: " << see_also << "\n";
+  }
+
+  if (long_desc.size()) {
+    *out << "\n" << long_desc << "\n";
+  }
+}
+
 constexpr unsigned long long operator"" _min (unsigned long long min) {
   return min * 60;
 }

@@ -111,7 +111,24 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   bufferlist odata;
-  if (prefix == "config dump") {
+  if (prefix == "config help") {
+    string name;
+    cmd_getval(g_ceph_context, cmdmap, "key", name);
+    const Option *opt = g_conf->find_option(name);
+    if (!opt) {
+      ss << "configuration option '" << name << "' not recognized";
+      err = -ENOENT;
+      goto reply;
+    }
+    if (f) {
+      f->dump_object("option", *opt);
+      f->flush(odata);
+    } else {
+      stringstream ss;
+      opt->print(&ss);
+      odata.append(ss.str());
+    }
+  } else if (prefix == "config dump") {
     list<pair<string,Section*>> sections = {
       make_pair("global", &config_map.global)
     };
