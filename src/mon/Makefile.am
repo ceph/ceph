@@ -18,7 +18,9 @@ libmon_a_SOURCES = \
 	mon/Elector.cc \
 	mon/HealthMonitor.cc \
 	mon/DataHealthService.cc \
-	mon/ConfigKeyService.cc
+	mon/ConfigKeyService.cc \
+	mds/MDSAuthCaps.cc \
+	osd/OSDCap.cc
 libmon_a_LIBADD =
 noinst_LIBRARIES += libmon.a
 
