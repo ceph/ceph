@@ -5732,7 +5732,7 @@ static std::vector<Option> get_rbd_options() {
         {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
         {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
       };
-      static_assert((RBD_FEATURE_DATA_POOL << 1) > RBD_FEATURES_ALL,
+      static_assert((RBD_FEATURE_OPERATIONS << 1) > RBD_FEATURES_ALL,
                     "new RBD feature added");
 
       // convert user-friendly comma delimited feature name list to a bitmask
@@ -5750,6 +5750,15 @@ static std::vector<Option> get_rbd_options() {
           std::stringstream ss;
           ss << "ignoring unknown feature mask 0x"
              << std::hex << unsupported_features;
+          *error_message = ss.str();
+        }
+        uint64_t internal_features = (features & RBD_FEATURES_INTERNAL);
+        if (internal_features != 0ULL) {
+          features &= ~RBD_FEATURES_INTERNAL;
+
+          std::stringstream ss;
+          ss << "ignoring internal feature mask 0x"
+             << std::hex << internal_features;
           *error_message = ss.str();
         }
       } catch (const boost::bad_lexical_cast& ) {

@@ -403,6 +403,56 @@ namespace librbd {
       op->exec("rbd", "set_flags", inbl);
     }
 
+    void op_features_get_start(librados::ObjectReadOperation *op)
+    {
+      bufferlist in_bl;
+      op->exec("rbd", "op_features_get", in_bl);
+    }
+
+    int op_features_get_finish(bufferlist::iterator *it, uint64_t *op_features)
+    {
+      try {
+        decode(*op_features, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int op_features_get(librados::IoCtx *ioctx, const std::string &oid,
+		        uint64_t *op_features)
+    {
+      librados::ObjectReadOperation op;
+      op_features_get_start(&op);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      return op_features_get_finish(&it, op_features);
+    }
+
+    void op_features_set(librados::ObjectWriteOperation *op,
+                         uint64_t op_features, uint64_t mask)
+    {
+      bufferlist inbl;
+      encode(op_features, inbl);
+      encode(mask, inbl);
+      op->exec("rbd", "op_features_set", inbl);
+    }
+
+    int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t op_features, uint64_t mask)
+    {
+      librados::ObjectWriteOperation op;
+      op_features_set(&op, op_features, mask);
+
+      return ioctx->operate(oid, &op);
+    }
+
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid)
     {
       librados::ObjectWriteOperation op;
