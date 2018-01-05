@@ -395,6 +395,10 @@ bool DaemonServer::handle_open(MMgrOpen *m)
       ::decode(daemon->config, p);
       dout(20) << " got config " << daemon->config << dendl;
     }
+    daemon->config_defaults_bl = m->config_defaults_bl;
+    daemon->config_defaults.clear();
+    dout(20) << " got config_defaults_bl " << daemon->config_defaults_bl.length()
+	     << " bytes" << dendl;
   }
 
   if (m->get_connection()->get_peer_type() != entity_name_t::TYPE_CLIENT &&

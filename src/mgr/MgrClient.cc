@@ -175,6 +175,7 @@ void MgrClient::_send_open()
       open->daemon_metadata = daemon_metadata;
     }
     cct->_conf->get_config_bl(&open->config_bl);
+    cct->_conf->get_defaults_bl(&open->config_defaults_bl);
     session->con->send_message(open);
   }
 }
