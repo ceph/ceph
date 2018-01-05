@@ -64,6 +64,7 @@ class RbdLs(RemoteViewCache):
             rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
             rbd.RBD_FEATURE_JOURNALING: "journaling",
             rbd.RBD_FEATURE_DATA_POOL: "data-pool",
+            rbd.RBD_FEATURE_OPERATIONS: "operations",
         }
 
         for key in RBD_FEATURES_NAME_MAPPING.keys():

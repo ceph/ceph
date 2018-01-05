@@ -1511,6 +1511,7 @@ TEST_F(TestClsRbd, set_features)
                                   RBD_FEATURE_DEEP_FLATTEN));
 
   ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, 0, RBD_FEATURE_LAYERING));
+  ASSERT_EQ(-EINVAL, set_features(&ioctx, oid, 0, RBD_FEATURE_OPERATIONS));
 }
 
 TEST_F(TestClsRbd, mirror) {
@@ -2498,4 +2499,50 @@ TEST_F(TestClsRbd, trash_methods)
   ASSERT_EQ(spec_res2.deferment_end_time, now1_delay);
 
   ioctx.close();
+}
+
+TEST_F(TestClsRbd, op_features)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+
+  uint64_t op_features = RBD_OPERATION_FEATURE_CLONE_V2;
+  uint64_t mask = ~RBD_OPERATION_FEATURES_ALL;
+  ASSERT_EQ(-EINVAL, op_features_set(&ioctx, oid, op_features, mask));
+
+  mask = 0;
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
+
+  uint64_t actual_op_features;
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
+  ASSERT_EQ(0, actual_op_features);
+
+  uint64_t features;
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(0u, features);
+
+  mask = RBD_OPERATION_FEATURES_ALL;
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
+  ASSERT_EQ(mask, actual_op_features);
+
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(RBD_FEATURE_OPERATIONS, features);
+
+  op_features = 0;
+  mask = RBD_OPERATION_FEATURE_CLONE_V2;
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
+
+  uint64_t expected_op_features = RBD_OPERATION_FEATURES_ALL &
+                                    ~RBD_OPERATION_FEATURE_CLONE_V2;
+  ASSERT_EQ(expected_op_features, actual_op_features);
+
+  mask = 0;
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
+  ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
+  ASSERT_EQ(0u, features);
 }
