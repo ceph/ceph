@@ -396,7 +396,7 @@ void ConfigMonitor::load_config()
     const Option *opt = g_conf->find_option(name);
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_DEV);
+      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
     }
     string err;
     int r = opt->pre_validate(&value, &err);

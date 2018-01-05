@@ -43,6 +43,7 @@ struct Option {
     LEVEL_BASIC,
     LEVEL_ADVANCED,
     LEVEL_DEV,
+    LEVEL_UNKNOWN,
   };
 
   static const char *level_to_str(level_t l) {
