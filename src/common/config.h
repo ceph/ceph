@@ -31,7 +31,7 @@ class CephContext;
 enum {
   CONF_DEFAULT,
   CONF_MON,
-  CONF_CONFFILE,
+  CONF_FILE,
   CONF_ENV,
   CONF_OVERRIDE,
   CONF_FINAL

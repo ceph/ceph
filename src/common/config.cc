@@ -57,7 +57,7 @@ const char *ceph_conf_level_name(int level)
   case CONF_DEFAULT: return "default";
   case CONF_MON: return "mon";
   case CONF_ENV: return "env";
-  case CONF_CONFFILE: return "conffile";
+  case CONF_FILE: return "file";
   case CONF_OVERRIDE: return "override";
   case CONF_FINAL: return "final";
   default: return "???";
@@ -418,7 +418,7 @@ int md_config_t::parse_config_files(const char *conf_files_str,
     int ret = _get_val_from_conf_file(my_sections, opt.name, val);
     if (ret == 0) {
       std::string error_message;
-      int r = _set_val(val, opt, CONF_CONFFILE, &error_message);
+      int r = _set_val(val, opt, CONF_FILE, &error_message);
       if (warnings != nullptr && (r < 0 || !error_message.empty())) {
         *warnings << "parse error setting '" << opt.name << "' to '" << val
                   << "'";
