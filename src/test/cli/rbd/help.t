@@ -195,9 +195,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -242,9 +241,9 @@ Skip test on FreeBSD as it generates different output there.
     --order arg                  object order [12 <= order <= 25]
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
-                                 [layering(+), striping, exclusive-lock(+*),
+                                 [layering(+), exclusive-lock(+*),
                                  object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*), data-pool]
+                                 journaling(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -287,9 +286,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -400,8 +398,7 @@ Skip test on FreeBSD as it generates different output there.
     <image-spec>         image specification
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
-                         [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten, journaling, data-pool]
+                         [exclusive-lock, object-map, fast-diff, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -420,8 +417,7 @@ Skip test on FreeBSD as it generates different output there.
     <image-spec>              image specification
                               (example: [<pool-name>/]<image-name>)
     <features>                image features
-                              [layering, striping, exclusive-lock, object-map,
-                              fast-diff, deep-flatten, journaling, data-pool]
+                              [exclusive-lock, object-map, fast-diff, journaling]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -685,9 +681,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
