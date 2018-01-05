@@ -145,6 +145,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     if (!f) {
       tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
     } else {
@@ -155,6 +156,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	if (!f) {
 	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
+	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
 	  tbl << i.second.raw_value;
 	  tbl << TextTable::endrow;
@@ -198,7 +200,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     }
 
     std::map<std::string,std::string> config;
-    std::map<std::string,pair<std::string,OptionMask>> src;
+    std::map<std::string,pair<std::string,const MaskedOption*>> src;
     config_map.generate_entity_map(
       entity,
       crush_location,
@@ -210,6 +212,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     if (!f) {
       tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
     } else {
@@ -223,7 +226,8 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       }
       if (!f) {
 	tbl << q->second.first;
-	tbl << q->second.second.to_str();
+	tbl << q->second.second->mask.to_str();
+	tbl << Option::level_to_str(q->second.second->opt->level);
 	tbl << p->first;
 	tbl << p->second;
 	tbl << TextTable::endrow;
@@ -231,7 +235,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	f->open_object_section(p->first.c_str());
 	f->dump_string("value", p->second);
 	f->dump_string("section", q->second.first);
-	f->dump_object("mask", q->second.second);
+	f->dump_object("mask", q->second.second->mask);
 	f->close_section();
       }
     }
