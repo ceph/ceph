@@ -1301,7 +1301,6 @@ public:
       }
       if (retcode < 0) {
         tn->log(0, SSTR("ERROR: failed to set sync marker: retcode=" << retcode));
-        lease_cr->go_down();
         return set_cr_error(retcode);
       }
     }
