@@ -1422,7 +1422,9 @@ protected:
   int start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
 			   boost::optional<std::function<void()>> &&on_flush);
   void finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r, ObjectContextRef obc, 
-			     uint64_t last_offset, FlushOpRef manifest_fop);
+			     uint64_t last_offset);
+  void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+			     uint64_t offset, uint64_t last_offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;

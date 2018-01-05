@@ -2444,7 +2444,6 @@ struct C_ManifestFlush : public Context {
   utime_t start;
   uint64_t offset;
   uint64_t last_offset;
-  PrimaryLogPG::FlushOpRef manifest_fop;
   C_ManifestFlush(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
     : pg(p), oid(o), last_peering_reset(lpr),
       tid(0), start(ceph_clock_now())
@@ -2453,29 +2452,38 @@ struct C_ManifestFlush : public Context {
     if (r == -ECANCELED)
       return;
     pg->lock();
-    if (manifest_fop->rval < 0) {
-      pg->unlock();
-      return;
-    }
-    manifest_fop->io_results[offset] = r;
-    for (auto &p : manifest_fop->io_results) {
-      if (p.second < 0) {
-	pg->finish_manifest_flush(oid, tid, r, manifest_fop->obc, last_offset, manifest_fop);
-	manifest_fop->rval = r;
-	pg->unlock();
-	return;
-      }
-    }
-    if (manifest_fop->chunks == manifest_fop->io_results.size()) {
-      if (last_peering_reset == pg->get_last_peering_reset()) {
-	assert(manifest_fop->obc);
-	pg->finish_manifest_flush(oid, tid, r, manifest_fop->obc, last_offset, manifest_fop);
-	pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
-      }
-    }
+    pg->handle_manifest_flush(oid, tid, r, offset, last_offset);
+    pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
     pg->unlock();
   }
 };
+
+void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+					 uint64_t offset, uint64_t last_offset)
+{
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  if (p == flush_ops.end()) {
+    dout(10) << __func__ << " no flush_op found" << dendl;
+    return;
+  }
+  if (p->second->rval < 0) {
+    return;
+  }
+  p->second->io_results[offset] = r;
+  for (auto &ior: p->second->io_results) {
+    if (ior.second < 0) {
+      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
+      p->second->rval = r;
+      return;
+    }
+  }
+  if (p->second->chunks == p->second->io_results.size()) {
+    if (last_peering_reset == get_last_peering_reset()) {
+      assert(p->second->obc);
+      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
+    }
+  }
+}
 
 int PrimaryLogPG::start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
 				       boost::optional<std::function<void()>> &&on_flush)
@@ -2546,7 +2554,6 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     C_ManifestFlush *fin = new C_ManifestFlush(this, soid, get_last_peering_reset());
     fin->offset = iter->first;
     fin->last_offset = last_offset;
-    fin->manifest_fop = manifest_fop;
     manifest_fop->chunks++;
 
     unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
@@ -2568,16 +2575,22 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
   return 0;
 }
 
-void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r, ObjectContextRef obc, 
-					 uint64_t last_offset, FlushOpRef manifest_fop)
+void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+					 ObjectContextRef obc, uint64_t last_offset)
 {
   dout(10) << __func__ << " " << oid << " tid " << tid
 	   << " " << cpp_strerror(r) << " last_offset: " << last_offset << dendl;
-  map<uint64_t, chunk_info_t>::iterator iter = obc->obs.oi.manifest.chunk_map.find(last_offset); 
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  if (p == flush_ops.end()) {
+    dout(10) << __func__ << " no flush_op found" << dendl;
+    return;
+  }
+  map<uint64_t, chunk_info_t>::iterator iter = 
+      obc->obs.oi.manifest.chunk_map.find(last_offset); 
   assert(iter != obc->obs.oi.manifest.chunk_map.end());
   for (;iter != obc->obs.oi.manifest.chunk_map.end(); ++iter) {
     if (iter->second.flags == chunk_info_t::FLAG_DIRTY && last_offset < iter->first) {
-      do_manifest_flush(manifest_fop->op, obc, manifest_fop, iter->first, manifest_fop->blocking);
+      do_manifest_flush(p->second->op, obc, p->second, iter->first, p->second->blocking);
       return;
     }
   }
