@@ -1084,6 +1084,8 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   // we better not be missing this.
   assert(!parent->get_log().get_missing().is_missing(soid));
 
+  parent->maybe_preempt_replica_scrub(soid);
+
   int ackerosd = m->get_source().num();
 
   op->mark_started();
