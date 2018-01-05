@@ -19,6 +19,7 @@
 #include <set>
 using namespace std;
 
+#include "global/global_init.h"
 #include "include/ceph_features.h"
 #include "include/types.h"
 #include "mon/PaxosService.h"
@@ -128,19 +129,9 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon caps ; don't care about caps for other services as
+  /* validate mon/osd/mds caps ; don't care about caps for other services as
    * we don't know how to validate them */
-  bool valid_caps(const vector<string>& caps, ostream *out) {
-    for (vector<string>::const_iterator p = caps.begin();
-         p != caps.end(); p += 2) {
-      if (!p->empty() && *p != "mon")
-        continue;
-      MonCap tmp;
-      if (!tmp.parse(*(p+1), out))
-        return false;
-    }
-    return true;
-  }
+  bool valid_caps(const vector<string>& caps, ostream *out);
 
   void on_active() override;
   bool should_propose(double& delay) override;
