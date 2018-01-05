@@ -885,6 +885,33 @@ int md_config_t::rm_val(const std::string& key)
   return _rm_val(key, CONF_OVERRIDE);
 }
 
+void md_config_t::get_defaults_bl(bufferlist *bl)
+{
+  Mutex::Locker l(lock);
+  if (defaults_bl.length() == 0) {
+    uint32_t n = 0;
+    bufferlist bl;
+    for (const auto &i : schema) {
+      ++n;
+      ::encode(i.second.name, bl);
+      auto j = values.find(i.second.name);
+      if (j != values.end()) {
+	auto k = j->second.find(CONF_DEFAULT);
+	if (k != j->second.end()) {
+	  ::encode(stringify(k->second), bl);
+	  continue;
+	}
+      }
+      string val;
+      conf_stringify(_get_val_default(i.second), &val);
+      ::encode(val, bl);
+    }
+    ::encode(n, defaults_bl);
+    defaults_bl.claim_append(bl);
+  }
+  *bl = defaults_bl;
+}
+
 void md_config_t::get_config_bl(bufferlist *bl)
 {
   Mutex::Locker l(lock);
