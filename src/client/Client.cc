@@ -3296,9 +3296,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->change_attr = in->change_attr;
   if (sync)
     m->flags |= MClientCaps::FLAG_SYNC;
-  if (in->cap_snaps.empty())
-    m->flags |= MClientCaps::FLAG_NO_CAPSNAP;
-  else
+  if (!in->cap_snaps.empty())
     m->flags |= MClientCaps::FLAG_PENDING_CAPSNAP;
     
   if (flush & CEPH_CAP_FILE_WR) {
