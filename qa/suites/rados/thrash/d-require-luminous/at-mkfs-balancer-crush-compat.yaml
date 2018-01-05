@@ -5,7 +5,11 @@ overrides:
         debug osd: 20
 tasks:
 - exec:
+    retry: 20
+    sleep_for_retry: 10
     mon.a:
-      - while ! ceph balancer status ; do sleep 1 ; done
+      - ceph balancer status
+- exec:
+    mon.a:
       - ceph balancer mode crush-compat
       - ceph balancer on
