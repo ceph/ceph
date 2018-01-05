@@ -142,14 +142,14 @@ static void append_escaped(const string &in, S *out)
   for (string::const_iterator i = in.begin(); i != in.end(); ++i) {
     if (*i <= '#') {
       *ptr++ = '#';
-      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
-      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else if (*i >= '~') {
       *ptr++ = '~';
-      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
-      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     } else {
       *ptr++  = *i;
+    }
+    if (*i <= '#' || *i >= '~') {
+      *ptr++ = "0123456789abcdef"[(*i >> 4) & 0x0f];
+      *ptr++ = "0123456789abcdef"[*i & 0x0f];
     }
   }
   *ptr++ = '!';
@@ -304,8 +304,7 @@ static void get_coll_key_range(const coll_t& cid, int bits,
     _key_encode_u32(0xffffffff, end);
 
     // no separate temp section
-    *temp_start = *end;
-    *temp_end = *end;
+    *temp_start = *temp_end = *end;
   }
 }
 
@@ -10452,18 +10451,14 @@ void BlueStore::_do_write_data(
     // we fall within the same block
     _do_write_small(txc, c, o, offset, length, p, wctx);
   } else {
-    uint64_t head_offset, head_length;
-    uint64_t middle_offset, middle_length;
-    uint64_t tail_offset, tail_length;
+    uint64_t head_offset = offset;
+    uint64_t head_length = P2NPHASE(offset, min_alloc_size);
 
-    head_offset = offset;
-    head_length = P2NPHASE(offset, min_alloc_size);
+    uint64_t tail_offset = P2ALIGN(end, min_alloc_size);
+    uint64_t tail_length = P2PHASE(end, min_alloc_size);
 
-    tail_offset = P2ALIGN(end, min_alloc_size);
-    tail_length = P2PHASE(end, min_alloc_size);
-
-    middle_offset = head_offset + head_length;
-    middle_length = length - head_length - tail_length;
+    uint64_t middle_offset = head_offset + head_length;
+    uint64_t middle_length = length - head_length - tail_length;
 
     if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
@@ -10650,13 +10645,11 @@ int BlueStore::_do_write(
   _dump_onode(o);
 
   if (length == 0) {
-    return 0;
+    return r;
   }
 
   uint64_t end = offset + length;
-
   GarbageCollector gc(c->store->cct);
-  int64_t benefit;
   auto dirty_start = offset;
   auto dirty_end = end;
 
@@ -10668,12 +10661,12 @@ int BlueStore::_do_write(
   if (r < 0) {
     derr << __func__ << " _do_alloc_write failed with " << cpp_strerror(r)
 	 << dendl;
-    goto out;
+    return r;
   }
 
   // NB: _wctx_finish() will empty old_extents
   // so we must do gc estimation before that
-  benefit = gc.estimate(offset,
+  int64_t benefit = gc.estimate(offset,
                         length,
 		        o->extent_map,
 			wctx.old_extents,
@@ -10694,7 +10687,7 @@ int BlueStore::_do_write(
       if (r < 0) {
         derr << __func__ << " _do_gc failed with " << cpp_strerror(r)
              << dendl;
-        goto out;
+        return r;
       }
     }
   }
@@ -10702,10 +10695,7 @@ int BlueStore::_do_write(
   o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
   o->extent_map.dirty_range(dirty_start, dirty_end - dirty_start);
 
-  r = 0;
-
- out:
-  return r;
+  return 0;
 }
 
 int BlueStore::_write(TransContext *txc,
@@ -11217,11 +11207,6 @@ int BlueStore::_set_alloc_hint(
   uint64_t expected_write_size,
   uint32_t flags)
 {
-  dout(15) << __func__ << " " << c->cid << " " << o->oid
-	   << " object_size " << expected_object_size
-	   << " write_size " << expected_write_size
-	   << " flags " << ceph_osd_alloc_hint_flag_string(flags)
-	   << dendl;
   int r = 0;
   o->onode.expected_object_size = expected_object_size;
   o->onode.expected_write_size = expected_write_size;
@@ -11555,7 +11540,6 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << dendl;
   RWLock::WLocker l(c->lock);
   RWLock::WLocker l2(d->lock);
-  int r;
 
   // flush all previous deferred writes on this sequencer.  this is a bit
   // heavyweight, but we need to make sure all deferred writes complete
@@ -11587,15 +11571,14 @@ int BlueStore::_split_collection(TransContext *txc,
   // split call for this parent (first child).
   c->cnode.bits = bits;
   assert(d->cnode.bits == bits);
-  r = 0;
 
   bufferlist bl;
   ::encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
-	   << " bits " << bits << " = " << r << dendl;
-  return r;
+	   << " bits " << bits << " = 0" << dendl;
+  return 0;
 }
 
 // DB key value Histogram
@@ -11613,10 +11596,9 @@ int BlueStore::DBHistogram::get_key_slab(size_t sz)
 
 string BlueStore::DBHistogram::get_key_slab_to_range(int slab)
 {
-  int lower_bound = slab * KEY_SLAB;
-  int upper_bound = (slab + 1) * KEY_SLAB;
-  string ret = "[" + stringify(lower_bound) + "," + stringify(upper_bound) + ")";
-  return ret;
+  return "[" + stringify(slab * KEY_SLAB)     /* lower bound */
+    + "," + stringify((slab + 1) * KEY_SLAB)  /* upper bound */
+    + ")";
 }
 
 int BlueStore::DBHistogram::get_value_slab(size_t sz)
@@ -11626,10 +11608,9 @@ int BlueStore::DBHistogram::get_value_slab(size_t sz)
 
 string BlueStore::DBHistogram::get_value_slab_to_range(int slab)
 {
-  int lower_bound = slab * VALUE_SLAB;
-  int upper_bound = (slab + 1) * VALUE_SLAB;
-  string ret = "[" + stringify(lower_bound) + "," + stringify(upper_bound) + ")";
-  return ret;
+  return "[" + stringify(slab * VALUE_SLAB)    /* lower bound */
+    + "," + stringify((slab + 1) * VALUE_SLAB) /* upper bound */
+    + ")";
 }
 
 void BlueStore::DBHistogram::update_hist_entry(map<string, map<int, struct key_dist> > &key_hist,
