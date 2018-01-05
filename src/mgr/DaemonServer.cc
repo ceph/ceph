@@ -1345,7 +1345,8 @@ bool DaemonServer::handle_command(MCommand *m)
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
-  } else if (prefix == "config show") {
+  } else if (prefix == "config show" ||
+	     prefix == "config show-with-defaults") {
     string who;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", who);
     int r = 0;
@@ -1354,63 +1355,129 @@ bool DaemonServer::handle_command(MCommand *m)
     key.first = who.substr(0, dot);
     key.second = who.substr(dot + 1);
     DaemonStatePtr daemon = daemon_state.get(key);
-    if (daemon) {
+    if (daemon &&
+	daemon->config_defaults_bl.length() > 0) {
       Mutex::Locker l(daemon->lock);
+      TextTable tbl;
       if (f) {
 	f->open_array_section("config");
-	for (auto& i : daemon->config) {
-	  dout(20) << " " << i.first << " -> " << i.second << dendl;
-	  if (i.second.empty()) {
-	    continue;
-	  }
-	  f->open_object_section("value");
-	  f->dump_string("name", i.first);
-	  f->dump_string("value", i.second.rbegin()->second);
-	  f->dump_string("source", ceph_conf_level_name(
-			   i.second.rbegin()->first));
-	  if (i.second.size() > 1) {
-	    f->open_array_section("overrides");
-	    auto j = i.second.rend();
-	    for (--j; j != i.second.rbegin(); --j) {
-	      f->open_object_section("value");
-	      f->dump_string("source", ceph_conf_level_name(j->first));
-	      f->dump_string("value", j->second);
-	      f->close_section();
-	    }
-	    f->close_section();
-	  }
-	  f->close_section();
-	}
-	f->close_section();
-	f->flush(cmdctx->odata);
       } else {
-	TextTable tbl;
 	tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+      }
+      if (prefix == "config show") {
+	// show
 	for (auto& i : daemon->config) {
+	  dout(20) << " " << i.first << " -> " << i.second << dendl;
 	  if (i.second.empty()) {
 	    continue;
 	  }
-	  dout(20) << " " << i.first << " -> " << i.second << dendl;
-	  tbl << i.first;
-	  tbl << i.second.rbegin()->second;
-	  tbl << ceph_conf_level_name(i.second.rbegin()->first);
-	  if (i.second.size() > 1) {
-	    list<string> ov;
-	    auto j = i.second.rend();
-	    for (--j; j != i.second.rbegin(); --j) {
-	      ov.push_front(ceph_conf_level_name(j->first));
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	    f->dump_string("value", i.second.rbegin()->second);
+	    f->dump_string("source", ceph_conf_level_name(
+			     i.second.rbegin()->first));
+	    if (i.second.size() > 1) {
+	      f->open_array_section("overrides");
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		f->open_object_section("value");
+		f->dump_string("source", ceph_conf_level_name(j->first));
+		f->dump_string("value", j->second);
+		f->close_section();
+	      }
+	      f->close_section();
 	    }
-	    tbl << ov;
+	    f->close_section();
+	  } else {
+	    tbl << i.first;
+	    tbl << i.second.rbegin()->second;
+	    tbl << ceph_conf_level_name(i.second.rbegin()->first);
+	    if (i.second.size() > 1) {
+	      list<string> ov;
+	      auto j = i.second.rend();
+	      for (--j; j != i.second.rbegin(); --j) {
+		ov.push_front(ceph_conf_level_name(j->first));
+	      }
+	      tbl << ov;
+	    }
+	    tbl << TextTable::endrow;
 	  }
-	  tbl << TextTable::endrow;
 	}
+      } else {
+	// show-with-defaults
+	if (daemon->config_defaults.empty()) {
+	  auto p = daemon->config_defaults_bl.begin();
+	  try {
+	    ::decode(daemon->config_defaults, p);
+	  } catch (buffer::error e) {
+	  }
+	}
+	for (auto& i : daemon->config_defaults) {
+	  if (f) {
+	    f->open_object_section("value");
+	    f->dump_string("name", i.first);
+	  } else {
+	    tbl << i.first;
+	  }
+	  auto j = daemon->config.find(i.first);
+	  if (j != daemon->config.end() && !j->second.empty()) {
+	    // have config
+	    if (f) {
+	      f->dump_string("value", j->second.rbegin()->second);
+	      f->dump_string("source", ceph_conf_level_name(
+			       j->second.rbegin()->first));
+	      if (j->second.size() > 1) {
+		f->open_array_section("overrides");
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  f->open_object_section("value");
+		  f->dump_string("source", ceph_conf_level_name(k->first));
+		  f->dump_string("value", k->second);
+		  f->close_section();
+		}
+		f->close_section();
+	      }
+	      f->close_section();
+	    } else {
+	      tbl << j->second.rbegin()->second;
+	      tbl << ceph_conf_level_name(j->second.rbegin()->first);
+	      if (j->second.size() > 1) {
+		list<string> ov;
+		auto k = j->second.rend();
+		for (--k; k != j->second.rbegin(); --k) {
+		  ov.push_front(ceph_conf_level_name(k->first));
+		}
+		tbl << ov;
+	      }
+	      tbl << TextTable::endrow;
+	    }
+	  } else {
+	    // only have default
+	    if (f) {
+	      f->dump_string("value", i.second);
+	      f->dump_string("source", ceph_conf_level_name(CONF_DEFAULT));
+	      f->close_section();
+	    } else {
+	      tbl << i.second;
+	      tbl << ceph_conf_level_name(CONF_DEFAULT);
+	      tbl << "";
+	      tbl << TextTable::endrow;
+	    }
+	  }
+	}
+      }
+      if (f) {
+	f->close_section();
+	f->flush(cmdctx->odata);
+      } else {
 	cmdctx->odata.append(stringify(tbl));
       }
     } else {
-      ss << "no state for daemon " << who;
+      ss << "no config state for daemon " << who;
       r = -ENOENT;
     }
     cmdctx->reply(r, ss);
