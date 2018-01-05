@@ -357,44 +357,43 @@ bool DaemonServer::handle_open(MMgrOpen *m)
   if (daemon_state.exists(key)) {
     daemon = daemon_state.get(key);
   }
+  if (m->service_daemon && !daemon) {
+    dout(4) << "constructing new DaemonState for " << key << dendl;
+    daemon = std::make_shared<DaemonState>(daemon_state.types);
+    daemon->key = key;
+    daemon->service_daemon = true;
+    if (m->daemon_metadata.count("hostname")) {
+      daemon->hostname = m->daemon_metadata["hostname"];
+    }
+    daemon_state.insert(daemon);
+  }
   if (daemon) {
     dout(20) << "updating existing DaemonState for " << m->daemon_name << dendl;
     Mutex::Locker l(daemon->lock);
     daemon->perf_counters.clear();
-  }
 
-  if (m->service_daemon) {
-    if (!daemon) {
-      dout(4) << "constructing new DaemonState for " << key << dendl;
-      daemon = std::make_shared<DaemonState>(daemon_state.types);
-      daemon->key = key;
-      if (m->daemon_metadata.count("hostname")) {
-        daemon->hostname = m->daemon_metadata["hostname"];
+    if (m->service_daemon) {
+      daemon->metadata = m->daemon_metadata;
+      daemon->service_status = m->daemon_status;
+
+      utime_t now = ceph_clock_now();
+      auto d = pending_service_map.get_daemon(m->service_name,
+					      m->daemon_name);
+      if (d->gid != (uint64_t)m->get_source().num()) {
+	dout(10) << "registering " << key << " in pending_service_map" << dendl;
+	d->gid = m->get_source().num();
+	d->addr = m->get_source_addr();
+	d->start_epoch = pending_service_map.epoch;
+	d->start_stamp = now;
+	d->metadata = m->daemon_metadata;
+	pending_service_map_dirty = pending_service_map.epoch;
       }
-      daemon_state.insert(daemon);
     }
-    Mutex::Locker l(daemon->lock);
-    daemon->service_daemon = true;
-    daemon->metadata = m->daemon_metadata;
-    daemon->service_status = m->daemon_status;
 
     auto p = m->config_bl.begin();
     if (p != m->config_bl.end()) {
       ::decode(daemon->config, p);
       dout(20) << " got config " << daemon->config << dendl;
-    }
-
-    utime_t now = ceph_clock_now();
-    auto d = pending_service_map.get_daemon(m->service_name,
-					    m->daemon_name);
-    if (d->gid != (uint64_t)m->get_source().num()) {
-      dout(10) << "registering " << key << " in pending_service_map" << dendl;
-      d->gid = m->get_source().num();
-      d->addr = m->get_source_addr();
-      d->start_epoch = pending_service_map.epoch;
-      d->start_stamp = now;
-      d->metadata = m->daemon_metadata;
-      pending_service_map_dirty = pending_service_map.epoch;
     }
   }
 
