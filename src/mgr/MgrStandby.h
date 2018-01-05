@@ -24,7 +24,7 @@
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
 #include "PyModuleRegistry.h"
-
+#include "MgrClient.h"
 
 class MMgrMap;
 class Mgr;
@@ -42,6 +42,8 @@ protected:
   std::unique_ptr<Messenger> client_messenger;
   Objecter objecter;
   Client client;
+
+  MgrClient mgrc;
 
   LogClient log_client;
   LogChannelRef clog, audit_clog;
