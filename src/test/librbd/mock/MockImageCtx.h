@@ -71,6 +71,8 @@ struct MockImageCtx {
       size(image_ctx.size),
       features(image_ctx.features),
       flags(image_ctx.flags),
+      op_features(image_ctx.op_features),
+      operations_disabled(image_ctx.operations_disabled),
       stripe_unit(image_ctx.stripe_unit),
       stripe_count(image_ctx.stripe_count),
       object_prefix(image_ctx.object_prefix),
@@ -262,6 +264,8 @@ struct MockImageCtx {
   uint64_t size;
   uint64_t features;
   uint64_t flags;
+  uint64_t op_features;
+  bool operations_disabled;
   uint64_t stripe_unit;
   uint64_t stripe_count;
   std::string object_prefix;
