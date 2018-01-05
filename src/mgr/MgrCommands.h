@@ -136,3 +136,7 @@ COMMAND("config show " \
 	"name=who,type=CephString",
 	"Show running configuration",
 	"mgr", "r", "cli,rest")
+COMMAND("config show-with-defaults " \
+	"name=who,type=CephString",
+	"Show running configuration (including compiled-in defaults)",
+	"mgr", "r", "cli,rest")
