@@ -45,8 +45,8 @@ struct Option {
     LEVEL_DEV,
   };
 
-  const char *level_to_str(level_t l) const {
-    switch(l) {
+  static const char *level_to_str(level_t l) {
+    switch (l) {
       case LEVEL_BASIC: return "basic";
       case LEVEL_ADVANCED: return "advanced";
       case LEVEL_DEV: return "developer";

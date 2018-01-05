@@ -86,7 +86,7 @@ void ConfigMap::generate_entity_map(
   const CrushWrapper *crush,
   const std::string& device_class,
   std::map<std::string,std::string> *out,
-  std::map<std::string,pair<std::string,OptionMask>> *src)
+  std::map<std::string,pair<std::string,const MaskedOption*>> *src)
 {
   // global, then by type, then by full name.
   vector<pair<string,Section*>> sections = { make_pair("global", &global) };
@@ -123,7 +123,7 @@ void ConfigMap::generate_entity_map(
       }
       (*out)[i.first] = o.raw_value;
       if (src) {
-	(*src)[i.first] = make_pair(s.first, o.mask);
+	(*src)[i.first] = make_pair(s.first, &o);
       }
       prev = &o;
     }
