@@ -73,6 +73,7 @@ authentication keyring.
 	Mount CephFS in fstab <fstab>
 	Manpage ceph-fuse <../../man/8/ceph-fuse>
 	Manpage mount.ceph <../../man/8/mount.ceph>
+	Manpage mount.fuse.ceph <../../man/8/mount.fuse.ceph>
 
 
 .. raw:: html 
