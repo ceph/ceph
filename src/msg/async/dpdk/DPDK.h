@@ -626,18 +626,7 @@ class DPDKQueuePair {
     // actual data buffer.
     //
     m->buf_addr      = (char*)data - RTE_PKTMBUF_HEADROOM;
-    m->buf_physaddr  = rte_malloc_virt2iova(data) - RTE_PKTMBUF_HEADROOM;
-    return true;
-  }
-
-  static bool init_noninline_rx_mbuf(rte_mbuf* m, size_t size,
-                                     std::vector<void*> &datas) {
-    if (!refill_rx_mbuf(m, size, datas)) {
-      return false;
-    }
-    // The below fields stay constant during the execution.
-    m->buf_len       = size + RTE_PKTMBUF_HEADROOM;
-    m->data_off      = RTE_PKTMBUF_HEADROOM;
+    m->buf_physaddr  = rte_mem_virt2phy(data) - RTE_PKTMBUF_HEADROOM;
     return true;
   }
 
