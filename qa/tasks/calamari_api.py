@@ -28,7 +28,7 @@ def task(ctx, config):
     api_node.run(args=['sudo', 'rm', '-rf', run.Raw('/tmp/apilog*')], check_status=False)
     api_node.run(args=['mkdir', 'api-tests'])
     api_node.run(args=['cd', 'api-tests', run.Raw(';'), 'git', 'clone',
-                 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git'])
+                 'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git'])
 
     api_node.run(args=['sudo', run.Raw('calamari-ctl'), 'initialize', run.Raw('--admin-username admin'),
                        run.Raw('--admin-password admin123'), run.Raw('--admin-email api@redhat.com')])

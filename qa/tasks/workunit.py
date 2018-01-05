@@ -391,7 +391,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
 
     git_url = teuth_config.get_ceph_qa_suite_git_url()
     # get this from config
-    git_url = 'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph.git'
+    git_url = 'http://gitlab.cee.redhat.com/ceph/ceph.git'
     # if we are running an upgrade test, and ceph-ci does not have branches like
     # `jewel`, so should use ceph.git as an alternative.
     try:

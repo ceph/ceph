@@ -238,7 +238,7 @@ def task(ctx, config):
             run.Raw(';'),
             'git',
             'clone',
-            'http://gitlab.osas.lab.eng.rdu2.redhat.com/ceph/ceph-qe-scripts.git',
+            'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git',
             ])
 
     clients[0].run(args=['virtualenv', 'venv'])
