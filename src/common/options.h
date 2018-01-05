@@ -276,6 +276,7 @@ struct Option {
   }
 
   void dump(Formatter *f) const;
+  void print(ostream *out) const;
 
   bool has_flag(flag_t f) const {
     return flags & f;
