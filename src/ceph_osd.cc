@@ -273,7 +273,6 @@ int main(int argc, const char **argv)
       bl.read_fd(fd, 64);
       if (bl.length()) {
 	store_type = string(bl.c_str(), bl.length() - 1);  // drop \n
-	g_conf->set_val("osd_objectstore", store_type);
 	dout(5) << "object store type is " << store_type << dendl;
       }
       ::close(fd);
