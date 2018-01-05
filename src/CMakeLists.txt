@@ -420,7 +420,7 @@ set(libcommon_files
   common/bloom_filter.cc
   common/Readahead.cc
   common/cmdparse.cc
-  common/escape.c
+  common/escape.cc
   common/url_escape.cc
   common/io_priority.cc
   common/Clock.cc

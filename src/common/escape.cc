@@ -16,6 +16,8 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <iomanip>
+#include <boost/optional.hpp>
 
 /*
  * Some functions for escaping RGW responses
@@ -112,6 +114,60 @@ void escape_xml_attr(const char *buf, char *out)
 	*o = '\0';
 }
 
+// applies hex formatting on construction, restores on destruction
+struct hex_formatter {
+  std::ostream& out;
+  const char old_fill;
+  const std::ostream::fmtflags old_flags;
+
+  hex_formatter(std::ostream& out)
+    : out(out),
+      old_fill(out.fill('0')),
+      old_flags(out.setf(out.hex, out.basefield))
+  {}
+  ~hex_formatter() {
+    out.fill(old_fill);
+    out.flags(old_flags);
+  }
+};
+
+std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e)
+{
+  boost::optional<hex_formatter> fmt;
+
+  for (unsigned char c : e.str) {
+    switch (c) {
+    case '<':
+      out << LESS_THAN_XESCAPE;
+      break;
+    case '&':
+      out << AMPERSAND_XESCAPE;
+      break;
+    case '>':
+      out << GREATER_THAN_XESCAPE;
+      break;
+    case '\'':
+      out << SGL_QUOTE_XESCAPE;
+      break;
+    case '"':
+      out << DBL_QUOTE_XESCAPE;
+      break;
+    default:
+      // Escape control characters.
+      if (((c < 0x20) && (c != 0x09) && (c != 0x0a)) || (c == 0x7f)) {
+        if (!fmt) {
+          fmt.emplace(out); // enable hex formatting
+        }
+        out << "&#x" << std::setw(2) << static_cast<unsigned int>(c) << ';';
+      } else {
+        out << c;
+      }
+      break;
+    }
+  }
+  return out;
+}
+
 #define DBL_QUOTE_JESCAPE "\\\""
 #define BACKSLASH_JESCAPE "\\\\"
 #define TAB_JESCAPE "\\t"
@@ -195,3 +251,36 @@ void escape_json_attr(const char *buf, size_t src_len, char *out)
 	*o = '\0';
 }
 
+std::ostream& operator<<(std::ostream& out, const json_stream_escaper& e)
+{
+  boost::optional<hex_formatter> fmt;
+
+  for (unsigned char c : e.str) {
+    switch (c) {
+    case '"':
+      out << DBL_QUOTE_JESCAPE;
+      break;
+    case '\\':
+      out << BACKSLASH_JESCAPE;
+      break;
+    case '\t':
+      out << TAB_JESCAPE;
+      break;
+    case '\n':
+      out << NEWLINE_JESCAPE;
+      break;
+    default:
+      // Escape control characters.
+      if ((c < 0x20) || (c == 0x7f)) {
+        if (!fmt) {
+          fmt.emplace(out); // enable hex formatting
+        }
+        out << "\\u" << std::setw(4) << static_cast<unsigned int>(c);
+      } else {
+        out << c;
+      }
+      break;
+    }
+  }
+  return out;
+}
