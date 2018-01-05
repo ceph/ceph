@@ -527,9 +527,10 @@ struct JSONFormattable {
   }
 
   const JSONFormattable& operator[](const std::string& name) const;
-  const JSONFormattable& operator[](const char * name) const {
-    return this->operator[](std::string(name));
-  }
+  const JSONFormattable& operator[](size_t index) const;
+
+  JSONFormattable& operator[](const std::string& name);
+  JSONFormattable& operator[](size_t index);
 
   operator std::string() const {
     return str;
@@ -545,6 +546,11 @@ struct JSONFormattable {
 
   template<class T>
   T operator[](const std::string& name) const {
+    return this->operator[](name)(T());
+  }
+
+  template<class T>
+  T operator[](const std::string& name) {
     return this->operator[](name)(T());
   }
 
@@ -564,6 +570,9 @@ struct JSONFormattable {
     return def(def_val);
   }
 
+  bool exists(const string& name) const;
+  bool exists(size_t index) const;
+
   std::string def(const std::string& def_val) const;
   int def(int def_val) const;
   bool def(bool def_val) const;
@@ -571,8 +580,12 @@ struct JSONFormattable {
   bool find(const std::string& name, std::string *val) const;
 
   std::string get(const std::string& name, const std::string& def_val) const;
+
   int get_int(const std::string& name, int def_val) const;
   bool get_bool(const std::string& name, bool def_val) const;
+
+  int set(const string& name, const string& val);
+  int erase(const string& name);
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 

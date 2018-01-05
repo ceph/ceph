@@ -60,6 +60,7 @@ add_executable(unittest_json_formattable
   test_json_formattable.cc
   )
 add_ceph_unittest(unittest_json_formattable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formattable)
+# add_dependencies(unittest_json_formattable ceph-common)
 target_link_libraries(unittest_json_formattable ceph-common global ${BLKID_LIBRARIES})
 
 # unittest_sharedptr_registry
