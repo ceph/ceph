@@ -659,6 +659,10 @@ COMMAND("config set " \
 	"name=key,type=CephString name=value,type=CephString",
 	"Set a configuration option at runtime (not persistent)",
 	"mds", "*", "cli,rest")
+COMMAND("config unset " \
+	"name=key,type=CephString",
+	"Unset a configuration option at runtime (not persistent)",
+	"mds", "*", "cli,rest")
 COMMAND("exit",
 	"Terminate this MDS",
 	"mds", "*", "cli,rest")
@@ -796,6 +800,13 @@ int MDSDaemon::_handle_command(
     std::string val;
     cmd_getval(cct, cmdmap, "value", val);
     r = cct->_conf->set_val(key, val, &ss);
+    if (r == 0) {
+      cct->_conf->apply_changes(nullptr);
+    }
+  } else if (prefix == "config unset") {
+    std::string key;
+    cmd_getval(cct, cmdmap, "key", key);
+    r = cct->_conf->rm_val(key);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
