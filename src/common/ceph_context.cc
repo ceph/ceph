@@ -435,6 +435,23 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
     if (command == "config show") {
       _conf->show_config(f);
     }
+    else if (command == "config unset") {
+      std::string var;
+      if (!(cmd_getval(this, cmdmap, "var", var))) {
+        f->dump_string("error", "syntax error: 'config unset <var>'");
+      } else {
+        int r = _conf->rm_val(var.c_str());
+        if (r < 0) {
+          f->dump_stream("error") << "error unsetting '" << var << "': "
+				  << cpp_strerror(r);
+        } else {
+          ostringstream ss;
+          _conf->apply_changes(&ss);
+          f->dump_string("success", ss.str());
+        }
+      }
+
+    }
     else if (command == "config set") {
       std::string var;
       std::vector<std::string> val;
@@ -577,6 +594,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
   _admin_socket->register_command("config help", "config help name=var,type=CephString,req=false", _admin_hook, "get config setting schema and descriptions");
   _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
+  _admin_socket->register_command("config unset", "config unset name=var,type=CephString",  _admin_hook, "config unset <field>: unset a config variable");
   _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
   _admin_socket->register_command("config diff",
       "config diff", _admin_hook,
@@ -618,6 +636,7 @@ CephContext::~CephContext()
   _admin_socket->unregister_command("perf histogram schema");
   _admin_socket->unregister_command("perf reset");
   _admin_socket->unregister_command("config show");
+  _admin_socket->unregister_command("config unset");
   _admin_socket->unregister_command("config set");
   _admin_socket->unregister_command("config get");
   _admin_socket->unregister_command("config help");
