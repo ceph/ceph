@@ -2883,9 +2883,8 @@ void Locker::handle_client_caps(MClientCaps *m)
     //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
     //  update/release).
     if (!head_in->client_need_snapflush.empty()) {
-      if ((m->flags & MClientCaps::FLAG_NO_CAPSNAP) ||
-	  (!(cap->issued() & CEPH_CAP_ANY_FILE_WR) &&
-	   !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))) {
+      if (!(cap->issued() & CEPH_CAP_ANY_FILE_WR) &&
+	  !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP)) {
 	head_in->auth_pin(this); // prevent subtree frozen
 	need_unpin = true;
 	_do_null_snapflush(head_in, client);
@@ -2893,7 +2892,7 @@ void Locker::handle_client_caps(MClientCaps *m)
 	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
       }
     }
-    if (cap->need_snapflush() && (m->flags & MClientCaps::FLAG_NO_CAPSNAP))
+    if (cap->need_snapflush() && !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))
       cap->clear_needsnapflush();
     
     if (m->get_dirty() && in->is_auth()) {
