@@ -82,6 +82,8 @@ struct Option {
   value_t value;
   value_t daemon_value;
 
+  friend ostream& operator<<(ostream&, const value_t& v);
+
   // Items like mon, osd, rgw, rbd, ceph-fuse.  This is advisory metadata
   // for presentation layers (like web dashboards, or generated docs), so that
   // they know which options to display where.

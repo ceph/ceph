@@ -204,6 +204,37 @@ void Option::dump(Formatter *f) const
   f->close_section();
 }
 
+ostream& operator<<(ostream& out, const Option::value_t& v)
+{
+  if (boost::get<boost::blank>(&v)) {
+    return out;
+  }
+  if (const bool *flag = boost::get<const bool>(&v)) {
+    return out << (*flag ? "true" : "false");
+  }
+  if (const double *dp = boost::get<const double>(&v)) {
+    ostringstream oss;
+    oss << std::fixed << *dp;
+    return out << oss.str();
+  }
+  if (const uint64_t *i = boost::get<const uint64_t>(&v)) {
+    return out << *i;
+  }
+  if (const int64_t *i = boost::get<const int64_t>(&v)) {
+    return out << *i;
+  }
+  if (const std::string *i = boost::get<const std::string>(&v)) {
+    return out << *i;
+  }
+  if (const uuid_d *i = boost::get<const uuid_d>(&v)) {
+    return out << *i;
+  }
+  if (const entity_addr_t *i = boost::get<const entity_addr_t>(&v)) {
+    return out << *i;
+  }
+  ceph_abort();
+}
+
 constexpr unsigned long long operator"" _min (unsigned long long min) {
   return min * 60;
 }
