@@ -203,7 +203,7 @@ TEST(ErasureCodeExample, decode)
 
 TEST(ErasureCodeExample, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   c->set_type_name(2, "root");
   c->set_type_name(1, "host");
