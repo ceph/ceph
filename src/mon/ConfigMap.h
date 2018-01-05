@@ -51,11 +51,24 @@ struct OptionMask {
 };
 
 struct MaskedOption {
-  string raw_value;                          ///< raw, unparsed, unvalidated value
-  Option opt;                                ///< the option
+  string raw_value;               ///< raw, unparsed, unvalidated value
+  const Option *opt;              ///< the option
   OptionMask mask;
+  unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
 
-  MaskedOption(const Option& o) : opt(o) {}
+  MaskedOption(const Option *o, bool fab=false) : opt(o) {
+    if (fab) {
+      unknown_opt.reset(o);
+    }
+  }
+  MaskedOption(MaskedOption&& o) {
+    raw_value = std::move(o.raw_value);
+    opt = o.opt;
+    mask = std::move(o.mask);
+    unknown_opt = std::move(o.unknown_opt);
+  }
+  const MaskedOption& operator=(const MaskedOption& o) = delete;
+  const MaskedOption& operator=(MaskedOption&& o) = delete;
 
   /// return a precision metric (smaller is more precise)
   int get_precision(const CrushWrapper *crush);
