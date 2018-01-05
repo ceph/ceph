@@ -889,15 +889,23 @@ void md_config_t::get_config_bl(bufferlist *bl)
 {
   Mutex::Locker l(lock);
   if (values_bl.length() == 0) {
-    ::encode((uint32_t)values.size(), values_bl);
+    uint32_t n = 0;
+    bufferlist bl;
     for (auto& i : values) {
-      ::encode(i.first, values_bl);
-      ::encode((uint32_t)i.second.size(), values_bl);
+      if (i.first == "fsid" ||
+	  i.first == "host") {
+	continue;
+      }
+      ++n;
+      ::encode(i.first, bl);
+      ::encode((uint32_t)i.second.size(), bl);
       for (auto& j : i.second) {
-	::encode(j.first, values_bl);
-	::encode(stringify(j.second), values_bl);
+	::encode(j.first, bl);
+	::encode(stringify(j.second), bl);
       }
     }
+    ::encode(n, values_bl);
+    values_bl.claim_append(bl);
   }
   *bl = values_bl;
 }
