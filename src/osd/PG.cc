@@ -452,12 +452,14 @@ void PG::proc_replica_log(
   dout(10) << " peer osd." << from << " now " << oinfo << " " << omissing << dendl;
   might_have_unfound.insert(from);
 
-  for (map<hobject_t, pg_missing_item>::const_iterator i =
+  if (cct->_conf->get_val<bool>("osd_debug_any")) {
+    for (map<hobject_t, pg_missing_item>::const_iterator i =
 	 omissing.get_items().begin();
-       i != omissing.get_items().end();
-       ++i) {
-    dout(20) << " after missing " << i->first << " need " << i->second.need
-	     << " have " << i->second.have << dendl;
+         i != omissing.get_items().end();
+         ++i) {
+      dout(20) << " after missing " << i->first << " need " << i->second.need
+	       << " have " << i->second.have << dendl;
+    }
   }
   peer_missing[from].claim(omissing);
 }
@@ -1419,11 +1421,13 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
 
-  if (cct->_conf->subsys.should_gather(dout_subsys, 10)) {
-    for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
-         p != all_info.end();
-         ++p) {
-      dout(10) << __func__ << "all_info osd." << p->first << " " << p->second << dendl;
+  if (cct->_conf->get_val<bool>("osd_debug_any")) {
+    if (cct->_conf->subsys.should_gather(dout_subsys, 10)) {
+      for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
+           p != all_info.end();
+           ++p) {
+        dout(10) << __func__ << "all_info osd." << p->first << " " << p->second << dendl;
+      }
     }
   }
 
