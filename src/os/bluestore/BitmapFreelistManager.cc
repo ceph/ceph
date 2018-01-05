@@ -58,11 +58,10 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 {
 }
 
-int BitmapFreelistManager::create(uint64_t new_size, uint64_t min_alloc_size,
+int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 				  KeyValueDB::Transaction txn)
 {
-  bytes_per_block = std::max(cct->_conf->bdev_block_size,
-			     (int64_t)min_alloc_size);
+  bytes_per_block = granularity;
   assert(ISP2(bytes_per_block));
   size = P2ALIGN(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
@@ -291,8 +290,8 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
 		 << enumerate_offset << " bit 0x" << enumerate_bl_pos
 		 << " offset 0x" << end << std::dec
 		 << dendl;
+	end = std::min(get_alloc_units() * bytes_per_block, end);
 	*length = end - *offset;
-        assert((*offset  + *length) <= size);
         dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 		 << std::dec << dendl;
 	return true;
@@ -312,14 +311,13 @@ bool BitmapFreelistManager::enumerate_next(uint64_t *offset, uint64_t *length)
     }
   }
 
-  end = size;
-  if (enumerate_offset < end) {
+  if (enumerate_offset < size) {
+    end = get_alloc_units() * bytes_per_block;
     *length = end - *offset;
     dout(10) << __func__ << std::hex << " 0x" << *offset << "~" << *length
 	     << std::dec << dendl;
-    enumerate_offset = end;
+    enumerate_offset = size;
     enumerate_bl_pos = blocks_per_key;
-    assert((*offset  + *length) <= size);
     return true;
   }
 
