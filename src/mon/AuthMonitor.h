@@ -18,10 +18,13 @@
 #include <map>
 #include <set>
 
+#include "global/global_init.h"
 #include "include/ceph_features.h"
 #include "include/types.h"
+#include "mds/MDSAuthCaps.h"
 #include "mon/PaxosService.h"
 #include "mon/MonitorDBStore.h"
+#include "osd/OSDCap.h"
 
 class MMonCommand;
 struct MAuth;
@@ -127,16 +130,28 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon caps ; don't care about caps for other services as
+  /* validate mon/osd/mds caps ; don't care about caps for other services as
    * we don't know how to validate them */
   bool valid_caps(const vector<string>& caps, ostream *out) {
     for (vector<string>::const_iterator p = caps.begin();
          p != caps.end(); p += 2) {
-      if (!p->empty() && *p != "mon")
-        continue;
-      MonCap tmp;
-      if (!tmp.parse(*(p+1), out))
-        return false;
+      if (!p->empty() && *p == "mon") {
+        MonCap tmp;
+        if (!tmp.parse(*(p+1), out))
+          return false;
+      }
+
+      if (!p->empty() && *p == "osd") {
+        OSDCap ocap;
+        if (!ocap.parse(*(p+1), out))
+          return false;
+      }
+
+      if (!p->empty() && *p == "mds") {
+        MDSAuthCaps mdscap;
+        if (!mdscap.parse(g_ceph_context, *(p+1), out))
+          return false;
+      }
     }
     return true;
   }

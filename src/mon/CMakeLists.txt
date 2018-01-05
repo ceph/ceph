@@ -18,7 +18,9 @@ set(lib_mon_srcs
   HealthMonitor.cc
   PGMap.cc
   ConfigKeyService.cc
-  ../mgr/mgr_commands.cc)
+  ../mds/MDSAuthCaps.cc
+  ../mgr/mgr_commands.cc
+  ../osd/OSDCap.cc)
 add_library(mon STATIC
   ${lib_mon_srcs}
   $<TARGET_OBJECTS:kv_objs>
