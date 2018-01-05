@@ -106,6 +106,9 @@ public:
   /// encoded, cached copy of of values
   bufferlist values_bl;
 
+  /// encoded copy of defaults (map<string,string>)
+  bufferlist defaults_bl;
+
   typedef enum {
     OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
     OPT_ADDR, OPT_U32, OPT_U64, OPT_UUID
@@ -181,6 +184,9 @@ public:
 
   /// get encoded map<string,map<int32_t,string>> of entire config
   void get_config_bl(bufferlist *bl);
+
+  /// get encoded map<string,string> of compiled-in defaults
+  void get_defaults_bl(bufferlist *bl);
 
   // Get a configuration value.
   // No metavariables will be returned (they will have already been expanded)
