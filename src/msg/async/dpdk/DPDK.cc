@@ -496,9 +496,6 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
 {
   std::string name = std::string(pktmbuf_pool_name) + std::to_string(_qid) + "_rx";
 
-  int bufs_count =  cct->_conf->ms_dpdk_rx_buffer_count_per_core - mbufs_per_queue_rx;
-  int mz_flags = RTE_MEMZONE_1GB|RTE_MEMZONE_SIZE_HINT_ONLY;
-  char mz_name[RTE_MEMZONE_NAMESIZE];
   // reserve the memory for Rx buffers containers
   _rx_free_pkts.reserve(mbufs_per_queue_rx);
   _rx_free_bufs.reserve(mbufs_per_queue_rx);
@@ -528,17 +525,12 @@ bool DPDKQueuePair::init_rx_mbuf_pool()
     }
 
     //
-    // 1) Pull all entries from the pool.
-    // 2) Bind data buffers to each of them.
-    // 3) Return them back to the pool.
-    //
-    int ret = snprintf(mz_name, sizeof(mz_name),
-         "%s",  "rx_buffer_data" + std::to_string(_qid));
-    if (ret < 0 || ret >= (int)sizeof(mz_name)) {
-      return false;
-    }
-    const struct rte_memzone *mz = rte_memzone_reserve_aligned(mz_name, mbuf_data_size*bufs_count,
-                                   _pktmbuf_pool_rx->socket_id, mz_flags, mbuf_data_size);
+    // allocate more data buffer
+    int bufs_count =  cct->_conf->ms_dpdk_rx_buffer_count_per_core - mbufs_per_queue_rx;
+    int mz_flags = RTE_MEMZONE_1GB|RTE_MEMZONE_SIZE_HINT_ONLY;
+    std::string mz_name = "rx_buffer_data" + std::to_string(_qid);
+    const struct rte_memzone *mz = rte_memzone_reserve_aligned(mz_name.c_str(),
+          mbuf_data_size*bufs_count, _pktmbuf_pool_rx->socket_id, mz_flags, mbuf_data_size);
     assert(mz);
     void* m = mz->addr;
     for (int i = 0; i < bufs_count; i++) {
