@@ -151,7 +151,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       f->open_array_section("config");
     }
     for (auto s : sections) {
-      for (auto i : s.second->options) {
+      for (auto& i : s.second->options) {
 	if (!f) {
 	  tbl << s.first;
 	  tbl << i.second.mask.to_str();
@@ -389,11 +389,10 @@ void ConfigMonitor::load_config()
       who = key.substr(0, last_slash);
     }
 
-    Option fake_opt(name, Option::TYPE_STR, Option::LEVEL_DEV);
     const Option *opt = g_conf->find_option(name);
     if (!opt) {
       dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = &fake_opt;
+      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_DEV);
     }
     string err;
     int r = opt->pre_validate(&value, &err);
@@ -403,7 +402,7 @@ void ConfigMonitor::load_config()
     }
 
     string section_name;
-    MaskedOption mopt(*opt);
+    MaskedOption mopt(opt);
     mopt.raw_value = value;
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
@@ -417,7 +416,7 @@ void ConfigMonitor::load_config()
 	  section = &config_map.by_type[section_name];
 	}
       }
-      section->options.insert(make_pair(name, mopt));
+      section->options.insert(make_pair(name, std::move(mopt)));
       ++num;
     }
     it->next();

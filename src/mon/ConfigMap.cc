@@ -37,14 +37,14 @@ void OptionMask::dump(Formatter *f) const
 
 void MaskedOption::dump(Formatter *f) const
 {
-  f->dump_string("name", opt.name);
+  f->dump_string("name", opt->name);
   f->dump_string("value", raw_value);
   mask.dump(f);
 }
 
 ostream& operator<<(ostream& out, const MaskedOption& o)
 {
-  out << o.opt.name;
+  out << o.opt->name;
   if (o.mask.location_type.size()) {
     out << "@" << o.mask.location_type << '=' << o.mask.location_value;
   }
@@ -114,7 +114,7 @@ void ConfigMap::generate_entity_map(
 	  continue;
 	}
       }
-      if (prev && prev->opt.name != i.first) {
+      if (prev && prev->opt->name != i.first) {
 	prev = nullptr;
       }
       if (prev &&
