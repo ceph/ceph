@@ -6927,12 +6927,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  map<string,bufferlist> to_set;
 	  bufferlist::iterator pt = to_set_bl.begin();
 	  ::decode(to_set, pt);
-	  for (map<string, bufferlist>::iterator i = to_set.begin();
-	       i != to_set.end();
-	       ++i) {
-	    dout(20) << "\t" << i->first << dendl;
+          if (cct->_conf->get_val<bool>("osd_debug_any")) {
+            for (map<string, bufferlist>::iterator i = to_set.begin();
+	         i != to_set.end();
+	         ++i) {
+	      dout(20) << "\t" << i->first << dendl;
+	    }
 	  }
-	}
+        }
 	t->omap_setkeys(soid, to_set_bl);
 	ctx->delta_stats.num_wr++;
         ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(to_set_bl.length(), 10);
@@ -11310,17 +11312,19 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
   if (requeue) {
     requeue_ops(rq);
     if (!waiting_for_ondisk.empty()) {
-      for (map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator i =
-	     waiting_for_ondisk.begin();
-	   i != waiting_for_ondisk.end();
-	   ++i) {
-	for (list<pair<OpRequestRef, version_t> >::iterator j =
-	       i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  derr << __func__ << ": op " << *(j->first->get_req()) << " waiting on "
-	       << i->first << dendl;
-	}
+      if (cct->_conf->get_val<bool>("osd_debug_any")) {
+        for (map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator i =
+	       waiting_for_ondisk.begin();
+	     i != waiting_for_ondisk.end();
+	     ++i) {
+	  for (list<pair<OpRequestRef, version_t> >::iterator j =
+	         i->second.begin();
+	       j != i->second.end();
+	       ++j) {
+	    derr << __func__ << ": op " << *(j->first->get_req()) << " waiting on "
+	         << i->first << dendl;
+	  }
+        }
       }
       assert(waiting_for_ondisk.empty());
     }
@@ -11463,15 +11467,16 @@ void PrimaryLogPG::on_activate()
     assert(!last_backfill_started.is_max());
     dout(5) << __func__ << ": bft=" << backfill_targets
 	   << " from " << last_backfill_started << dendl;
-    for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-	 i != backfill_targets.end();
-	 ++i) {
-      dout(5) << "target shard " << *i
-	     << " from " << peer_info[*i].last_backfill
-	     << dendl;
+    if (cct->_conf->get_val<bool>("osd_debug_any")) {
+      for (set<pg_shard_t>::iterator i = backfill_targets.begin();
+           i != backfill_targets.end();
+	   ++i) {
+        dout(5) << "target shard " << *i
+	       << " from " << peer_info[*i].last_backfill
+	       << dendl;
+      }
     }
   }
-
   hit_set_setup();
   agent_setup();
 }
@@ -12354,15 +12359,17 @@ uint64_t PrimaryLogPG::recover_backfill(
     pending_backfill_updates.clear();
   }
 
-  for (set<pg_shard_t>::iterator i = backfill_targets.begin();
-       i != backfill_targets.end();
-       ++i) {
-    dout(10) << "peer osd." << *i
-	   << " info " << peer_info[*i]
-	   << " interval " << peer_backfill_info[*i].begin
-	   << "-" << peer_backfill_info[*i].end
-	   << " " << peer_backfill_info[*i].objects.size() << " objects"
-	   << dendl;
+  if (cct->_conf->get_val<bool>("debug_osd_any")) {
+   for (set<pg_shard_t>::iterator i = backfill_targets.begin();
+         i != backfill_targets.end();
+         ++i) {
+      dout(10) << "peer osd." << *i
+	     << " info " << peer_info[*i]
+	     << " interval " << peer_backfill_info[*i].begin
+	     << "-" << peer_backfill_info[*i].end
+	     << " " << peer_backfill_info[*i].objects.size() << " objects"
+	     << dendl;
+    }
   }
 
   // update our local interval to cope with recent changes
@@ -12594,10 +12601,12 @@ uint64_t PrimaryLogPG::recover_backfill(
   pgbackend->run_recovery_op(h, get_recovery_op_priority());
 
   dout(5) << "backfill_pos is " << backfill_pos << dendl;
-  for (set<hobject_t>::iterator i = backfills_in_flight.begin();
-       i != backfills_in_flight.end();
-       ++i) {
-    dout(20) << *i << " is still in flight" << dendl;
+  if (cct->_conf->get_val<bool>("osd_debug_any")) {
+    for (set<hobject_t>::iterator i = backfills_in_flight.begin();
+         i != backfills_in_flight.end();
+         ++i) {
+      dout(20) << *i << " is still in flight" << dendl;
+    }
   }
 
   hobject_t next_backfill_to_complete = backfills_in_flight.empty() ?

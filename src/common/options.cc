@@ -2773,6 +2773,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("osd_debug_any", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description(""),
+
     Option("osd_debug_shutdown", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Turn up debug levels during shutdown"),
