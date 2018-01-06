@@ -27,7 +27,7 @@ class SimpleLRU {
   map<K, V, C> pinned;
 
   void trim_cache() {
-    while (lru.size() > max_size) {
+    while (contents.size() > max_size) {
       contents.erase(lru.back().first);
       lru.pop_back();
     }
