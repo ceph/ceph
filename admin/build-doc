@@ -20,7 +20,22 @@ if command -v dpkg >/dev/null; then
         exit 1
     fi
 elif command -v yum >/dev/null; then
-    for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
+    packages="doxygen ditaa ant libxml2-devel libxslt-devel graphviz"
+    py_pkgs="python-devel python-virtualenv python-pip Cython"
+    # python-pip is renamed to python2-pip in EPEL for EL7, and in Fedora 26
+    case $(lsb_release -si) in
+        CentOS|RedHatEnterpriseServer)
+            if [ $(lsb_release -rs | cut -f1 -d.) -eq 7 ]; then
+                py_pkgs="python-devel python-virtualenv python2-pip Cython"
+            fi
+            ;;
+        Fedora)
+            if [ $(lsb_release -rs | cut -f1 -d.) -ge 26 ]; then
+                py_pkgs="python3-devel python3-virtualenv python3-pip python3-Cython"
+            fi
+            ;;
+    esac
+    for package in $packages $py_pkgs; do
 	if ! rpm -q $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
