@@ -100,8 +100,8 @@ ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
 # NOTE: If you change this version number make sure the package is available
 # at the three URLs referenced below (may involve uploading to download.ceph.com)
-boost_version=1.63.0
-download_boost $boost_version 1c837ecd990bb022d07e7aab32b09847 \
+boost_version=1.66.0
+download_boost $boost_version b2dfbd6c717be4a7bb2d88018eaccf75 \
                https://dl.bintray.com/boostorg/release/$boost_version/source \
                https://downloads.sourceforge.net/project/boost/boost/$boost_version \
                https://download.ceph.com/qa
