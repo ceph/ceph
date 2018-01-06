@@ -342,6 +342,7 @@ std::vector<Option> get_global_options() {
     .set_description("path to MonMap file")
     .set_long_description("This option is normally used during mkfs, but can also "
   			"be used to identify which monitors to connect to.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("mon")
     .add_tag("mkfs"),
 
@@ -351,11 +352,13 @@ std::vector<Option> get_global_options() {
   			"list of IP addresses or hostnames. Hostnames are "
   			"resolved via DNS and all A or AAAA records are "
   			"included in the search list.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common"),
 
     Option("mon_dns_srv_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("ceph-mon")
     .set_description("name of DNS SRV record to check for monitor addresses")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common")
     .add_tag("network")
     .add_see_also("mon_host"),
@@ -363,6 +366,7 @@ std::vector<Option> get_global_options() {
     // lockdep
     Option("lockdep", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_description("enable lockdep lock dependency analyzer")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("common"),
 
     Option("lockdep_force_backtrace", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -392,6 +396,7 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_daemon_default(true)
     .set_description("whether to daemonize (background) after startup")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also({"pid_file", "chdir"}),
@@ -424,6 +429,7 @@ std::vector<Option> get_global_options() {
 
     Option("chdir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_description("path to chdir(2) to after daemonizing")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service")
     .add_see_also("daemonize"),
@@ -702,12 +708,14 @@ std::vector<Option> get_global_options() {
 
     Option("mempool_debug", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("key", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Authentication key")
     .set_long_description("A CephX authentication key, base64 encoded.  It normally looks something like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("keyfile")
     .add_see_also("keyring"),
 
@@ -715,6 +723,7 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Path to a file containing a key")
     .set_long_description("The file should contain a CephX authentication key and optionally a trailing newline, but nothing else.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key"),
 
     Option("keyring", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -729,6 +738,7 @@ std::vector<Option> get_global_options() {
     )
     .set_description("Path to a keyring file.")
     .set_long_description("A keyring file is an INI-style formatted file where the section names are client or daemon names (e.g., 'osd.0') and each section contains a 'key' property with CephX authentication key as the value.")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_see_also("key")
     .add_see_also("keyfile"),
 
@@ -1023,11 +1033,14 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_default("/var/lib/ceph/mon/$cluster-$id")
     .set_description(""),
 
     Option("mon_initial_members", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1236,22 +1249,32 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_osd_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.95)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_osd_backfillfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.90)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_osd_nearfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.85)
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jewel")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .set_description(""),
 
     Option("mon_allow_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1829,10 +1852,12 @@ std::vector<Option> get_global_options() {
 
     Option("osd_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("osd_journal", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id/journal")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description(""),
 
     Option("osd_journal_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -4554,6 +4579,8 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful status balancer")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
+    .add_tag("mkfs")
     .add_service("mon")
     .set_description("List of manager modules to enable when the cluster is "
                      "first started")
@@ -4565,6 +4592,7 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mgr/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("mgr")
     .set_description("Filesystem path to the ceph-mgr data directory, used to "
                      "contain keyring."),
@@ -4775,6 +4803,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/radosgw/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("Alternative location for RGW configuration.")
     .set_long_description(
         "If this is set, the different Ceph system configurables (such as the keyring file "
@@ -6294,6 +6323,7 @@ std::vector<Option> get_mds_options() {
   return std::vector<Option>({
     Option("mds_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/mds/$cluster-$id")
+    .set_flag(Option::FLAG_NO_MON_UPDATE)
     .set_description("path to MDS data and keyring"),
 
     Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
