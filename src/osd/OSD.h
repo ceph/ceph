@@ -794,7 +794,7 @@ public:
 
 private:
   /// throttle promotion attempts
-  std::atomic_uint promote_probability_millis{1000}; ///< probability thousands. one word.
+  std::atomic<unsigned int> promote_probability_millis{1000}; ///< probability thousands. one word.
   PromoteCounter promote_counter;
   utime_t last_recalibrate;
   unsigned long promote_max_objects, promote_max_bytes;
@@ -845,7 +845,7 @@ public:
 
   // -- tids --
   // for ops i issue
-  std::atomic_uint last_tid{0};
+  std::atomic<unsigned int> last_tid{0};
   ceph_tid_t get_tid() {
     return (ceph_tid_t)last_tid++;
   }
@@ -1144,7 +1144,7 @@ public:
     NOT_STOPPING,
     PREPARING_TO_STOP,
     STOPPING };
-  std::atomic_int state{NOT_STOPPING};
+  std::atomic<int> state{NOT_STOPPING};
   int get_state() const {
     return state;
   }
@@ -1341,7 +1341,7 @@ public:
   }
 
 private:
-  std::atomic_int state{STATE_INITIALIZING};
+  std::atomic<int> state{STATE_INITIALIZING};
 
 public:
   int get_state() const {
@@ -1487,7 +1487,7 @@ private:
   map<int, int> debug_heartbeat_drops_remaining;
   Cond heartbeat_cond;
   bool heartbeat_stop;
-  std::atomic_bool heartbeat_need_update;   
+  std::atomic<bool> heartbeat_need_update;   
   map<int,HeartbeatInfo> heartbeat_peers;  ///< map of osd id to HeartbeatInfo
   utime_t last_mon_heartbeat;
   Messenger *hb_front_client_messenger;
