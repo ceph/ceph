@@ -300,6 +300,7 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  bufferlist odata;
 
   if (prefix == "config set" ||
       prefix == "config rm") {
@@ -336,13 +337,92 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       pending[key] = boost::none;
     }
     goto update;
+  } else if (prefix == "config assimilate-conf") {
+    ConfFile cf;
+    deque<string> errors;
+    bufferlist bl = m->get_data();
+    err = cf.parse_bufferlist(&bl, &errors, &ss);
+    if (err < 0) {
+      ss << "parse errors: " << errors;
+      goto reply;
+    }
+    bool updated = false;
+    ostringstream newconf;
+    for (auto i = cf.sections_begin(); i != cf.sections_end(); ++i) {
+      string section = i->first;
+      const ConfSection& s = i->second;
+      dout(20) << __func__ << " [" << section << "]" << dendl;
+      bool did_section = false;
+      for (auto& j : s.lines) {
+	Option::value_t real_value;
+	string value;
+	string errstr;
+	if (!j.key.size()) {
+	  continue;
+	}
+	// a known and worthy option?
+	const Option *o = g_conf->find_option(j.key);
+	if (!o ||
+	    o->flags & Option::FLAG_NO_MON_UPDATE) {
+	  goto skip;
+	}
+	// normalize
+	err = o->parse_value(j.val, &real_value, &errstr, &value);
+	if (err < 0) {
+	  dout(20) << __func__ << " failed to parse " << j.key << " = '"
+		   << j.val << "'" << dendl;
+	  goto skip;
+	}
+	// does it conflict with an existing value?
+	{
+	  const Section *s = config_map.find_section(section);
+	  if (s) {
+	    auto k = s->options.find(j.key);
+	    if (k != s->options.end()) {
+	      if (value != k->second.raw_value) {
+		dout(20) << __func__ << " have " << j.key
+			 << " = " << k->second.raw_value
+			 << " (not " << value << ")" << dendl;
+		goto skip;
+	      }
+	      dout(20) << __func__ << " already have " << j.key
+		       << " = " << k->second.raw_value << dendl;
+	      continue;
+	    }
+	  }
+	}
+	dout(20) << __func__ << "  add " << j.key << " = " << value
+		 << " (" << j.val << ")" << dendl;
+	{
+	  string key = section + "/" + j.key;
+	  bufferlist bl;
+	  bl.append(value);
+	  pending[key] = bl;
+	  updated = true;
+	}
+	continue;
+
+       skip:
+	dout(20) << __func__ << " skip " << j.key << " = " << value
+		 << " (" << j.val << ")" << dendl;
+	if (!did_section) {
+	  newconf << "\n[" << section << "]\n";
+	  did_section = true;
+	}
+	newconf << "\t" << j.key << " = " << j.val << "\n";
+      }
+    }
+    odata.append(newconf.str());
+    if (updated) {
+      goto update;
+    }
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
   }
 
 reply:
-  mon->reply_command(op, err, ss.str(), get_last_committed());
+  mon->reply_command(op, err, ss.str(), odata, get_last_committed());
   return false;
 
 update:
@@ -350,7 +430,7 @@ update:
   wait_for_finished_proposal(
     op,
     new Monitor::C_Command(
-      mon, op, 0, ss.str(),
+      mon, op, 0, ss.str(), odata,
       get_last_committed() + 1));
   return true;
 }

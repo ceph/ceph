@@ -92,6 +92,20 @@ struct ConfigMap {
   std::map<std::string,Section> by_type;
   std::map<std::string,Section> by_id;
 
+  Section *find_section(const std::string& name) {
+    if (name == "global") {
+      return &global;
+    }
+    auto i = by_type.find(name);
+    if (i != by_type.end()) {
+      return &i->second;
+    }
+    i = by_id.find(name);
+    if (i != by_id.end()) {
+      return &i->second;
+    }
+    return nullptr;
+  }
   void clear() {
     global.clear();
     by_type.clear();
