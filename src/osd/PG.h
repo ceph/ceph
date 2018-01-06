@@ -519,7 +519,7 @@ protected:
   // unlock() when done with the current pointer (_most common_).
   mutable Mutex _lock = {"PG::_lock"};
 
-  std::atomic_uint ref{0};
+  std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
   Mutex _ref_id_lock = {"PG::_ref_id_lock"};
