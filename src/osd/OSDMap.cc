@@ -3206,7 +3206,7 @@ public:
     return !filter;
   }
 
-  void dump(TextTable *tbl) {
+  void init_table(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
@@ -3214,12 +3214,19 @@ public:
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
+  }
+  void dump(TextTable *tbl, string& bucket) {
+    init_table(tbl);
 
-    Parent::dump(tbl);
-
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
-	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
+    if (!bucket.empty()) {
+      set_root(bucket);
+      Parent::dump(tbl);
+    } else {
+      Parent::dump(tbl);
+      for (int i = 0; i < osdmap->get_max_osd(); i++) {
+	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
+	}
       }
     }
   }
@@ -3296,16 +3303,23 @@ public:
     return !filter;
   }
 
-  void dump(Formatter *f) {
-    f->open_array_section("nodes");
-    Parent::dump(f);
-    f->close_section();
-    f->open_array_section("stray");
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+  void dump(Formatter *f, string& bucket) {
+    if (!bucket.empty()) {
+      set_root(bucket);
+      f->open_array_section("nodes");
+      Parent::dump(f);
+      f->close_section();
+    } else {
+      f->open_array_section("nodes");
+      Parent::dump(f);
+      f->close_section();
+      f->open_array_section("stray");
+      for (int i = 0; i < osdmap->get_max_osd(); i++) {
+	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+      }
+      f->close_section();
     }
-    f->close_section();
   }
 
 protected:
@@ -3333,14 +3347,14 @@ private:
   const unsigned filter;
 };
 
-void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
+void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter, string bucket) const
 {
   if (f) {
-    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f);
+    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f, bucket);
   } else {
     assert(out);
     TextTable tbl;
-    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl);
+    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl, bucket);
     *out << tbl;
   }
 }
