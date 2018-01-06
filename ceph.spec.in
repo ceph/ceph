@@ -862,9 +862,9 @@ cmake .. \
     -DWITH_OCF=ON \
 %endif
 %ifarch aarch64 armv7hl mips mipsel ppc ppc64 ppc64le %{ix86} x86_64
-    -DWITH_RADOSGW_BEAST_FRONTEND=ON \
+    -DWITH_BOOST_CONTEXT=ON \
 %else
-    -DWITH_RADOSGW_BEAST_FRONTEND=OFF \
+    -DWITH_BOOST_CONTEXT=OFF \
 %endif
     -DBOOST_J=%{_smp_ncpus}
 

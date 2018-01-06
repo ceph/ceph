@@ -390,6 +390,11 @@ if(WITH_BLKIN)
   include_directories(SYSTEM src/blkin/blkin-lib)
 endif(WITH_BLKIN)
 
+option(WITH_BOOST_CONTEXT "Enable boost::asio stackful coroutines" ON)
+if(WITH_BOOST_CONTEXT)
+  set(HAVE_BOOST_CONTEXT ON)
+endif()
+
 #option for RGW
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
@@ -398,6 +403,10 @@ if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   if(WITH_RADOSGW_FCGI_FRONTEND)
     find_package(fcgi REQUIRED)
+  endif()
+  if(WITH_RADOSGW_BEAST_FRONTEND AND NOT WITH_BOOST_CONTEXT)
+    message(WARNING "disabling WITH_RADOSGW_BEAST_FRONTEND, which depends on WITH_BOOST_CONTEXT")
+    set(WITH_RADOSGW_BEAST_FRONTEND OFF)
   endif()
 endif(WITH_RADOSGW)
 
@@ -570,6 +579,9 @@ set(BOOST_HEADER_COMPONENTS container)
 if(WITH_MGR)
 	list(APPEND BOOST_COMPONENTS python)
 endif()
+if(WITH_BOOST_CONTEXT)
+  list(APPEND BOOST_COMPONENTS context coroutine)
+endif()
 
 set(Boost_USE_MULTITHREADED ON)
 # require minimally the bundled version
@@ -579,13 +591,13 @@ if(WITH_SYSTEM_BOOST)
   else()
     set(Boost_USE_STATIC_LIBS ON)
   endif()
-  find_package(Boost 1.61 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
+  find_package(Boost 1.66 COMPONENTS ${BOOST_COMPONENTS} REQUIRED)
 else()
   set(BOOST_J 1 CACHE STRING
     "max jobs for Boost build") # override w/-DBOOST_J=<n>
   set(Boost_USE_STATIC_LIBS ON)
   include(BuildBoost)
-  build_boost(1.63
+  build_boost(1.66
     COMPONENTS ${BOOST_COMPONENTS} ${BOOST_HEADER_COMPONENTS})
   include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 endif()
