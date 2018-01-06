@@ -14,7 +14,6 @@ overrides:
     log-whitelist:
     - reached quota
     - scrub
-    - osd_map_max_advance
     - wrongly marked
     fs: xfs
     conf:
