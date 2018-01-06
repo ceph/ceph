@@ -145,6 +145,9 @@ public:
   // Absorb config settings from argv
   int parse_argv(std::vector<const char*>& args);
 
+  // do any commands we got from argv (--show-config, --show-config-val)
+  void do_argv_commands();
+
   // Expand all metavariables. Make any pending observer callbacks.
   void apply_changes(std::ostream *oss);
   void _apply_changes(std::ostream *oss);
@@ -300,6 +303,9 @@ private:
   // This will be set to true when it is safe to start threads.
   // Once it is true, it will never change.
   bool safe_to_start_threads = false;
+
+  bool do_show_config = false;
+  string do_show_config_value;
 
   obs_map_t observers;
   changed_set_t changed;

@@ -521,10 +521,6 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
     return -ENOSYS;
   }
 
-  bool show_config = false;
-  bool show_config_value = false;
-  string show_config_value_arg;
-
   // In this function, don't change any parts of the configuration directly.
   // Instead, use set_val to set them. This will allow us to send the proper
   // observer notifications later.
@@ -541,11 +537,10 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       _exit(0);
     }
     else if (ceph_argparse_flag(args, i, "--show_config", (char*)NULL)) {
-      show_config = true;
+      do_show_config = true;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
-      show_config_value = true;
-      show_config_value_arg = val;
+      do_show_config_value = val;
     }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
@@ -585,30 +580,34 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       }
     }
   }
+  return 0;
+}
 
-  if (show_config) {
+void md_config_t::do_argv_commands()
+{
+  Mutex::Locker l(lock);
+
+  if (do_show_config) {
     _show_config(&cout, NULL);
     _exit(0);
   }
 
-  if (show_config_value) {
+  if (do_show_config_value.size()) {
     string val;
-    int r = conf_stringify(_get_val(show_config_value_arg), &val);
+    int r = conf_stringify(_get_val(do_show_config_value), &val);
     if (r < 0) {
       if (r == -ENOENT)
 	std::cerr << "failed to get config option '"
-		  << show_config_value_arg << "': option not found" << std::endl;
+		  << do_show_config_value << "': option not found" << std::endl;
       else
 	std::cerr << "failed to get config option '"
-		  << show_config_value_arg << "': " << cpp_strerror(r)
+		  << do_show_config_value << "': " << cpp_strerror(r)
 		  << std::endl;
       _exit(1);
     }
     std::cout << val << std::endl;
     _exit(0);
   }
-
-  return 0;
 }
 
 int md_config_t::parse_option(std::vector<const char*>& args,

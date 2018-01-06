@@ -147,6 +147,9 @@ void global_pre_init(
     }
   }
 
+  // do the --show-config[-val], if present in argv
+  conf->do_argv_commands();
+
   // Now we're ready to complain about config file parse errors
   g_conf->complain_about_parse_errors(g_ceph_context);
 }
