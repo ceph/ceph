@@ -3628,6 +3628,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
   else if (prefix == "osd dump" ||
 	   prefix == "osd tree" ||
+	   prefix == "osd tree-from" ||
 	   prefix == "osd ls" ||
 	   prefix == "osd getmap" ||
 	   prefix == "osd getcrushmap" ||
@@ -3698,7 +3699,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
       rdata.append(ds);
-    } else if (prefix == "osd tree") {
+    } else if (prefix == "osd tree" || prefix == "osd tree-from") {
+      string bucket;
+      if (prefix == "osd tree-from")
+	cmd_getval(cct, cmdmap, "bucket", bucket);
+
       vector<string> states;
       cmd_getval(cct, cmdmap, "states", states);
       unsigned filter = 0;
@@ -3737,11 +3742,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
       if (f) {
 	f->open_object_section("tree");
-	p->print_tree(f.get(), NULL, filter);
+	p->print_tree(f.get(), NULL, filter, bucket);
 	f->close_section();
 	f->flush(ds);
       } else {
-	p->print_tree(NULL, &ds, filter);
+	p->print_tree(NULL, &ds, filter, bucket);
       }
       rdata.append(ds);
     } else if (prefix == "osd getmap") {
