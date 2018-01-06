@@ -293,6 +293,11 @@ endif(WITH_LEVELDB)
 
 find_package(snappy REQUIRED)
 
+option(WITH_BROTLI "Brotli compression support" OFF)
+if(WITH_BROTLI)
+  set(HAVE_BROTLI TRUE)
+endif()
+
 option(WITH_LZ4 "LZ4 compression support" OFF)
 if(WITH_LZ4)
   find_package(LZ4 1.7 REQUIRED)
