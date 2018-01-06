@@ -205,6 +205,7 @@ void MDSTableServer::handle_rollback(MMDSTableRequest *req)
 {
   dout(7) << "handle_rollback " << *req << dendl;
 
+  assert(g_conf->mds_kill_mdstable_at != 8);
   version_t tid = req->get_tid();
   assert(pending_for_mds.count(tid));
   assert(!committing_tids.count(tid));
@@ -222,7 +223,6 @@ void MDSTableServer::_rollback_logged(MMDSTableRequest *req)
 {
   dout(7) << "_rollback_logged " << *req << dendl;
 
-  assert(g_conf->mds_kill_mdstable_at != 7);
   version_t tid = req->get_tid();
 
   pending_for_mds.erase(tid);
