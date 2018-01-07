@@ -1178,7 +1178,7 @@ public:
   int dump_cache(const std::string &filename);
   int dump_cache(Formatter *f);
   int dump_cache(const std::string& dump_root, int depth, Formatter *f);
-  
+
   int cache_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;

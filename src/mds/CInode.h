@@ -196,6 +196,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     }
   }
 
+  // -- dump flags --
+  static const int DUMP_INODE_STORE_BASE = (1 << 0);
+  static const int DUMP_MDS_CACHE_OBJECT = (1 << 1);
+  static const int DUMP_LOCKS =            (1 << 2);
+  static const int DUMP_STATE =            (1 << 3);
+  static const int DUMP_CAPS =             (1 << 4);
+  static const int DUMP_PATH =             (1 << 5);
+  static const int DUMP_ALL =              (-1);
+  static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH);
+
   // -- state --
   static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
   static const int STATE_OPENINGDIR =  (1<<5);
@@ -1096,7 +1106,7 @@ public:
   bool is_exportable(mds_rank_t dest) const;
 
   void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
 
   /**
    * @defgroup Scrubbing and fsck
