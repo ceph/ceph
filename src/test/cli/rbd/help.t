@@ -32,7 +32,7 @@ Skip test on FreeBSD as it generates different output there.
       group remove (group rm)           Delete a group.
       group snap create                 Make a snapshot of a group.
       group snap list                   List snapshots of a group.
-      group snap remove                 Remove a snapshot from a group.
+      group snap remove (group snap rm) Remove a snapshot from a group.
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
