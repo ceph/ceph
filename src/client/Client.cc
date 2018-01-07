@@ -8941,21 +8941,16 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   Mutex flock("Client::_read_sync flock");
   Cond cond;
   while (left > 0) {
-    int r = 0;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
+    C_SaferCond onfinish("Client::_read_sync flock");
     bufferlist tbl;
 
     int wanted = left;
     filer->read_trunc(in->ino, &in->layout, in->snapid,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
-		      onfinish);
+		      &onfinish);
     client_lock.Unlock();
-    flock.Lock();
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    int r = onfinish.wait();
     client_lock.Lock();
 
     // if we get ENOENT from OSD, assume 0 bytes returned
