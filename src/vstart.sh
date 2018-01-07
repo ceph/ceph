@@ -1022,7 +1022,11 @@ do_rgw()
     for rgw in j k l m n o p q r s t u v; do
         current_port=$((CEPH_RGW_PORT_NUM + i))
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        FRONTEND_ARGS="port=${current_port}${CEPH_RGW_HTTPS}"
+        if [[ "${rgw_frontend}" = "civetweb" ]]; then
+            FRONTEND_ARGS="$FRONTEND_ARGS access_log_file=${CEPH_OUT_DIR}/radosgw.${current_port}.access.log"
+        fi
+        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} ${FRONTEND_ARGS}"
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
     done
