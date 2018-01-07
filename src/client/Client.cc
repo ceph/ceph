@@ -8762,19 +8762,12 @@ retry:
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
 
-  Mutex uninline_flock("Client::_read_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
 
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (!(have & CEPH_CAP_FILE_CACHE)) {
-      onuninline = new C_SafeCond(&uninline_flock,
-                                  &uninline_cond,
-                                  &uninline_done,
-                                  &uninline_ret);
-      uninline_data(in, onuninline);
+      onuninline.reset(new C_SaferCond("Client::_read_uninline_data flock"));
+      uninline_data(in, onuninline.get());
     } else {
       uint32_t len = in->inline_data.length();
 
@@ -8841,21 +8834,17 @@ success:
 done:
   // done!
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int ret = onuninline->wait();
     client_lock.Lock();
-
-    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+    if (ret >= 0 || ret == -ECANCELED) {
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
       check_caps(in, 0);
     } else
-      r = uninline_ret;
+      r = ret;
   }
 
   if (have)
