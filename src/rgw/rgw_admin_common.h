@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#ifndef CEPH_RGW_ADMIN_COMMON_H
+#define CEPH_RGW_ADMIN_COMMON_H
+
 #include "rgw_user.h"
 
 enum {
@@ -214,3 +217,10 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
                                  boost::optional<string>& compression_type, string& role_name, string& path,
                                  string& assume_role_doc, string& policy_name, string& perm_policy_doc,
                                  string& path_prefix);
+
+int read_input(const string& infile, bufferlist& bl);
+
+int init_bucket(RGWRados *store, const string& tenant_name, const string& bucket_name, const string& bucket_id,
+                RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs = nullptr);
+
+#endif //CEPH_RGW_ADMIN_COMMON_H
