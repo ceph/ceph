@@ -3,20 +3,14 @@
 
 #include "rgw_admin_common.h"
 
-#include <sstream>
 #include <common/safe_io.h>
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
 #include "common/ceph_json.h"
-#include "common/config.h"
 #include "common/ceph_argparse.h"
 
-#include "cls/rgw/cls_rgw_client.h"
-#include "global/global_init.h"
-
-#include "rgw_user.h"
 #include "rgw_replica_log.h"
 #include "rgw_sync.h"
 #include "rgw_rest_conn.h"
