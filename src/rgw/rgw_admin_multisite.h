@@ -27,5 +27,11 @@ int update_period(RGWRados *store, const string& realm_id, const string& realm_n
                   const string& period_epoch, bool commit, const string& remote, const string& url,
                   const string& access, const string& secret, Formatter *formatter, bool force);
 
+int do_period_pull(RGWRados *store, RGWRESTConn *remote_conn, const string& url,
+                   const string& access_key, const string& secret_key,
+                   const string& realm_id, const string& realm_name,
+                   const string& period_id, const string& period_epoch,
+                   RGWPeriod *period);
+
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H
