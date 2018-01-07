@@ -605,7 +605,7 @@ static void tab_dump(const string& header, int width, const list<string>& entrie
 }
 
 
-static void sync_status(Formatter *formatter)
+static void sync_status()
 {
   RGWRealm& realm = store->realm;
   RGWZoneGroup& zonegroup = store->get_zonegroup();
@@ -4327,7 +4327,7 @@ next:
   }
 
   if (opt_cmd == OPT_SYNC_STATUS) {
-    sync_status(formatter);
+    sync_status();
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
