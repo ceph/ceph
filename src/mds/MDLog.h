@@ -246,10 +246,6 @@ public:
       return segments[seq];
     return NULL;
   }
-  
-  const std::map<uint64_t,LogSegment*> &get_segments() {
-    return segments;
-  }
 
   bool have_any_segments() const {
     return !segments.empty();
