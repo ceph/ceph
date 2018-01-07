@@ -396,7 +396,23 @@ int main(int argc, const char *argv[]) {
   vector<const char*> args;
 
   argv_to_vec(argc, argv, args);
-  md_config_t().parse_argv(args);
+
+  std::string conf_file_list;
+  std::string cluster;
+  CephInitParameters iparams = ceph_argparse_early_args(
+      args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
+
+  md_config_t config;
+  config.name = iparams.name;
+  config.cluster = cluster;
+
+  if (!conf_file_list.empty()) {
+    config.parse_config_files(conf_file_list.c_str(), nullptr, 0);
+  } else {
+    config.parse_config_files(nullptr, nullptr, 0);
+  }
+  config.parse_env();
+  config.parse_argv(args);
 
   std::string format;
   bool pretty_format = false;
