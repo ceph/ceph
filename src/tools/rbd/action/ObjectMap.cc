@@ -34,7 +34,8 @@ void get_rebuild_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_rebuild(const po::variables_map &vm) {
+int execute_rebuild(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -84,7 +85,8 @@ void get_check_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_check(const po::variables_map &vm) {
+int execute_check(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;

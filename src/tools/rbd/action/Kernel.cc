@@ -376,7 +376,8 @@ void get_show_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_show(const po::variables_map &vm) {
+int execute_show(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
@@ -403,7 +404,8 @@ void get_map_arguments(po::options_description *positional,
     ("exclusive", po::bool_switch(), "disable automatic exclusive lock transitions");
 }
 
-int execute_map(const po::variables_map &vm) {
+int execute_map(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -471,7 +473,8 @@ void get_unmap_arguments(po::options_description *positional,
     ("options,o", po::value<std::string>(), "unmap options");
 }
 
-int execute_unmap(const po::variables_map &vm) {
+int execute_unmap(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();

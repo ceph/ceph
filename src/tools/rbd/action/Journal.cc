@@ -810,7 +810,8 @@ void get_info_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_info(const po::variables_map &vm) {
+int execute_info(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -848,7 +849,8 @@ void get_status_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_status(const po::variables_map &vm) {
+int execute_status(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -884,7 +886,8 @@ void get_reset_arguments(po::options_description *positional,
   at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_reset(const po::variables_map &vm) {
+int execute_reset(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -917,7 +920,8 @@ void get_client_disconnect_arguments(po::options_description *positional,
      "client ID (or leave unspecified to disconnect all)");
 }
 
-int execute_client_disconnect(const po::variables_map &vm) {
+int execute_client_disconnect(const po::variables_map &vm,
+                              const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -954,7 +958,8 @@ void get_inspect_arguments(po::options_description *positional,
   at::add_verbose_option(options);
 }
 
-int execute_inspect(const po::variables_map &vm) {
+int execute_inspect(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -989,7 +994,8 @@ void get_export_arguments(po::options_description *positional,
   at::add_no_error_option(options);
 }
 
-int execute_export(const po::variables_map &vm) {
+int execute_export(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string journal_name;
@@ -1030,7 +1036,8 @@ void get_import_arguments(po::options_description *positional,
   at::add_no_error_option(options);
 }
 
-int execute_import(const po::variables_map &vm) {
+int execute_import(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
   size_t arg_index = 0;
   int r = utils::get_path(vm, &arg_index, &path);

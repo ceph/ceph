@@ -441,7 +441,8 @@ void get_arguments_diff(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_diff(const po::variables_map &vm) {
+int execute_diff(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
   size_t arg_index = 0;
   int r = utils::get_path(vm, &arg_index, &path);
@@ -903,7 +904,8 @@ void get_arguments(po::options_description *positional,
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, " (deprecated)");
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
   size_t arg_index = 0;
   int r = utils::get_path(vm, &arg_index, &path);

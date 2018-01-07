@@ -527,7 +527,8 @@ void get_peer_add_arguments(po::options_description *positional,
     ("remote-cluster", po::value<std::string>(), "remote cluster name");
 }
 
-int execute_peer_add(const po::variables_map &vm) {
+int execute_peer_add(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -588,7 +589,8 @@ void get_peer_remove_arguments(po::options_description *positional,
   add_uuid_option(positional);
 }
 
-int execute_peer_remove(const po::variables_map &vm) {
+int execute_peer_remove(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -628,7 +630,8 @@ void get_peer_set_arguments(po::options_description *positional,
     ("value", "new client or cluster name");
 }
 
-int execute_peer_set(const po::variables_map &vm) {
+int execute_peer_set(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -730,7 +733,8 @@ int execute_enable_disable(const std::string &pool_name,
   return 0;
 }
 
-int execute_disable(const po::variables_map &vm) {
+int execute_disable(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -738,7 +742,8 @@ int execute_disable(const po::variables_map &vm) {
                                 "disabled");
 }
 
-int execute_enable(const po::variables_map &vm) {
+int execute_enable(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -762,7 +767,8 @@ void get_info_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_info(const po::variables_map &vm) {
+int execute_info(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -837,7 +843,8 @@ void get_status_arguments(po::options_description *positional,
   at::add_verbose_option(options);
 }
 
-int execute_status(const po::variables_map &vm) {
+int execute_status(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -948,7 +955,8 @@ void get_promote_arguments(po::options_description *positional,
   at::add_pool_options(positional, options);
 }
 
-int execute_promote(const po::variables_map &vm) {
+int execute_promote(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -978,7 +986,8 @@ void get_demote_arguments(po::options_description *positional,
   at::add_pool_options(positional, options);
 }
 
-int execute_demote(const po::variables_map &vm) {
+int execute_demote(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
