@@ -5697,10 +5697,6 @@ int RGWRados::Bucket::List::list_objects(int64_t max,
       result->emplace_back(std::move(entry));
       count++;
     }
-
-    // Either the back-end telling us truncated, or we don't consume all
-    // items returned per the amount caller request
-    truncated = (truncated || eiter != ent_map.end());
   }
 
 done:
