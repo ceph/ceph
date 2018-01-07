@@ -16,7 +16,6 @@
 #include "common/config.h"
 #include "common/ceph_argparse.h"
 #include "common/errno.h"
-#include "common/safe_io.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -37,9 +36,10 @@
 #include "rgw_role.h"
 #include "rgw_reshard.h"
 
-#include "rgw_admin_opt_bucket.h"
 #include "rgw_admin_common.h"
 #include "rgw_admin_multisite.h"
+#include "rgw_admin_opt_bucket.h"
+#include "rgw_admin_opt_policy.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -55,44 +55,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(cout);
   cout << std::endl;
-}
-
-static void show_perm_policy(const string& perm_policy, Formatter* formatter)
-{
-  formatter->open_object_section("role");
-  formatter->dump_string("Permission policy", perm_policy);
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
-static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
-{
-  formatter->open_array_section("PolicyNames");
-  for (const auto& it : policy_names) {
-    formatter->dump_string("policyname", it);
-  }
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
-static void show_role_info(RGWRole& role, Formatter* formatter)
-{
-  formatter->open_object_section("role");
-  role.dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
-static void show_roles_info(const vector<RGWRole>& roles, Formatter* formatter)
-{
-  formatter->open_array_section("Roles");
-  for (const auto& it : roles) {
-    formatter->open_object_section("role");
-    it.dump(formatter);
-    formatter->close_section();
-  }
-  formatter->close_section();
-  formatter->flush(cout);
 }
 
 class StoreDestructor {
