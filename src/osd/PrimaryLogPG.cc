@@ -5063,7 +5063,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     // a read operation of 0 bytes does *not* do nothing, this is why
     // the trimmed_read boolean is needed
   } else if (pool.info.is_erasure()) {
-    boost::optional<uint32_t> maybe_crc;
+    // The initialisation below is required to silence a false positive
+    // -Wmaybe-uninitialized warning
+    boost::optional<uint32_t> maybe_crc = boost::make_optional(false, uint32_t());
     // If there is a data digest and it is possible we are reading
     // entire object, pass the digest.  FillInVerifyExtent will
     // will check the oi.size again.
