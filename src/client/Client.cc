@@ -8894,26 +8894,16 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
                  << " max_periods=" << conf->client_readahead_max_periods << dendl;
 
   // read (and possibly block)
-  int r, rvalue = 0;
-  Mutex flock("Client::_read_async flock");
-  Cond cond;
-  bool done = false;
-  Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
+  int r = 0;
+  C_SaferCond onfinish("Client::_read_async flock");
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      off, len, bl, 0, onfinish);
+			      off, len, bl, 0, &onfinish);
   if (r == 0) {
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.Unlock();
-    flock.Lock();
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    r = onfinish.wait();
     client_lock.Lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-    r = rvalue;
-  } else {
-    // it was cached.
-    delete onfinish;
   }
 
   if(f->readahead.get_min_readahead_size() > 0) {
