@@ -1,10 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <errno.h>
+#include <cerrno>
 #include <iostream>
 #include <sstream>
-#include <stdlib.h>
+#include <cstdlib>
 
 #include <boost/optional.hpp>
 
@@ -126,7 +126,7 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
 static int read_input(const string& infile, bufferlist& bl)
 {
   int fd = 0;
-  if (infile.size()) {
+  if (!infile.empty()) {
     fd = open(infile.c_str(), O_RDONLY);
     if (fd < 0) {
       int err = -errno;
@@ -153,7 +153,7 @@ static int read_input(const string& infile, bufferlist& bl)
   err = 0;
 
  out:
-  if (infile.size()) {
+  if (!infile.empty()) {
     close(fd);
   }
   return err;
@@ -532,7 +532,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
     count += result.size();
 
-    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+    for (auto iter = result.begin(); iter != result.end(); ++iter) {
       rgw_obj_key key = iter->key;
       rgw_obj obj(bucket, key);
 
@@ -786,8 +786,8 @@ static void get_md_sync_status(list<string>& status)
 
   map<int, string> shards_behind;
   if (sync_status.sync_info.period != master_period) {
-    status.push_back(string("master is on a different period: master_period=" +
-                            master_period + " local_period=" + sync_status.sync_info.period));
+    status.emplace_back("master is on a different period: master_period=" +
+                        master_period + " local_period=" + sync_status.sync_info.period);
   } else {
     for (auto local_iter : sync_status.sync_markers) {
       int shard_id = local_iter.first;
@@ -1013,7 +1013,7 @@ static void sync_status(Formatter *formatter)
   list<string> md_status;
 
   if (store->is_meta_master()) {
-    md_status.push_back("no sync (zone is master)");
+    md_status.emplace_back("no sync (zone is master)");
   } else {
     get_md_sync_status(md_status);
   }
@@ -1113,7 +1113,7 @@ int main(int argc, const char **argv)
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
-    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region.c_str());
+    g_conf->set_val_or_die("rgw_zonegroup", g_conf->rgw_region);
   }
 
   common_init_finish(g_ceph_context);
@@ -1784,11 +1784,11 @@ int main(int argc, const char **argv)
           return EINVAL;
         }
         RGWEnv env;
-        req_info info(g_ceph_context, &env);
-        info.method = "GET";
-        info.request_uri = "/admin/realm";
+        req_info r_info(g_ceph_context, &env);
+        r_info.method = "GET";
+        r_info.request_uri = "/admin/realm";
 
-        map<string, string> &params = info.args.get_params();
+        map<string, string> &params = r_info.args.get_params();
         if (!realm_id.empty())
           params["id"] = realm_id;
         if (!realm_name.empty())
@@ -1796,7 +1796,7 @@ int main(int argc, const char **argv)
 
         bufferlist bl;
         JSONParser p;
-        int ret = send_to_url(url, access_key, secret_key, info, bl, p);
+        int ret = send_to_url(url, access_key, secret_key, r_info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
           if (ret == -EACCES) {
@@ -2377,7 +2377,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
+        for (auto iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
           RGWZoneGroup zonegroup(string(), *iter);
           int ret = zonegroup.init(g_ceph_context, store);
           if (ret < 0) {
@@ -2554,14 +2554,14 @@ int main(int argc, const char **argv)
           need_zone_update = true;
         }
 
-        if (tier_config_add.size() > 0) {
+        if (!tier_config_add.empty()) {
           for (auto add : tier_config_add) {
             zone.tier_config[add.first] = add.second;
           }
           need_zone_update = true;
         }
 
-        if (tier_config_rm.size() > 0) {
+        if (!tier_config_rm.empty()) {
           for (auto rm : tier_config_rm) {
             zone.tier_config.erase(rm.first);
           }
@@ -2680,23 +2680,23 @@ int main(int argc, const char **argv)
             return EINVAL;
           }
 
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
+          RGWZonePlacementInfo& placement_info = zone.placement_pools[placement_id];
 
-          info.index_pool = *index_pool;
-          info.data_pool = *data_pool;
+          placement_info.index_pool = *index_pool;
+          placement_info.data_pool = *data_pool;
           if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
+            placement_info.data_extra_pool = *data_extra_pool;
           }
           if (index_type_specified) {
-            info.index_type = placement_index_type;
+            placement_info.index_type = placement_index_type;
           }
           if (compression_type) {
-            info.compression_type = *compression_type;
+            placement_info.compression_type = *compression_type;
           }
 
-          ret = check_pool_support_omap(info.get_data_extra_pool());
+          ret = check_pool_support_omap(placement_info.get_data_extra_pool());
           if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+             cerr << "ERROR: the data extra (non-ec) pool '" << placement_info.get_data_extra_pool()
                  << "' does not support omap" << std::endl;
              return ret;
           }
@@ -2807,7 +2807,7 @@ int main(int argc, const char **argv)
     user_op.set_perm(perm_mask);
 
   if (set_temp_url_key) {
-    map<int, string>::iterator iter = temp_url_keys.begin();
+    auto iter = temp_url_keys.begin();
     for (; iter != temp_url_keys.end(); ++iter) {
       user_op.set_temp_url_key(iter->second, iter->first);
     }
@@ -2957,11 +2957,11 @@ int main(int argc, const char **argv)
   case OPT_PERIOD_PUSH:
     {
       RGWEnv env;
-      req_info info(g_ceph_context, &env);
-      info.method = "POST";
-      info.request_uri = "/admin/realm/period";
+      req_info r_info(g_ceph_context, &env);
+      r_info.method = "POST";
+      r_info.request_uri = "/admin/realm/period";
 
-      map<string, string> &params = info.args.get_params();
+      map<string, string> &params = r_info.args.get_params();
       if (!realm_id.empty())
         params["realm_id"] = realm_id;
       if (!realm_name.empty())
@@ -2986,7 +2986,7 @@ int main(int argc, const char **argv)
 
       JSONParser p;
       ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
-                                  info, bl, p);
+                                  r_info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3368,7 +3368,7 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+        for (auto iter = result.begin(); iter != result.end(); ++iter) {
           rgw_bucket_dir_entry& entry = *iter;
           encode_json("entry", entry, formatter);
         }
@@ -3392,7 +3392,6 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
-    string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
@@ -3410,7 +3409,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_LOG_LIST) {
     // filter by date?
-    if (date.size() && date.size() != 10) {
+    if (!date.empty() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
       return EINVAL;
     }
@@ -3575,9 +3574,9 @@ next:
     }
     formatter->reset();
     formatter->open_array_section("pools");
-    for (auto siter = pools.begin(); siter != pools.end(); ++siter) {
+    for (const auto &pool : pools) {
       formatter->open_object_section("pool");
-      formatter->dump_string("name",  siter->to_str());
+      formatter->dump_string("name", pool.to_str());
       formatter->close_section();
     }
     formatter->close_section();
@@ -3587,7 +3586,7 @@ next:
 
   if (opt_cmd == OPT_USAGE_SHOW) {
     uint64_t start_epoch = 0;
-    uint64_t end_epoch = (uint64_t)-1;
+    auto end_epoch = (uint64_t)-1;
 
     int ret;
 
@@ -3624,7 +3623,7 @@ next:
     }
     int ret;
     uint64_t start_epoch = 0;
-    uint64_t end_epoch = (uint64_t)-1;
+    auto end_epoch = (uint64_t)-1;
 
 
     if (!start_date.empty()) {
@@ -4119,8 +4118,7 @@ next:
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
         }
-        for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
-          cls_rgw_reshard_entry& entry = *iter;
+        for (auto &entry : entries) {
           encode_json("entry", entry, formatter);
           entry.get_key(&marker);
         }
@@ -4563,7 +4561,7 @@ next:
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
-	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
 	  formatter->dump_string("key", *iter);
           ++count;
 	}
@@ -4624,7 +4622,7 @@ next:
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
           store->meta_mgr->dump_log_entry(entry, formatter);
         }
@@ -5037,7 +5035,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter);
 
@@ -5223,7 +5221,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_data_change_log_entry& entry = *iter;
         if (!extra_info) {
           encode_json("entry", entry.entry, formatter);
@@ -5296,7 +5294,7 @@ next:
         return -ret;
       }
 
-      for (list<cls_statelog_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         oc.dump_entry(*iter, formatter);
       }
 
