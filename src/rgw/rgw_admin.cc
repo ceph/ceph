@@ -1396,7 +1396,6 @@ int main(int argc, const char **argv)
   uint32_t perm_mask = 0;
   RGWUserInfo info;
   int opt_cmd = OPT_NO_CMD;
-  bool need_more;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
@@ -1525,78 +1524,11 @@ int main(int argc, const char **argv)
   if (ret != 0)
     return ret;
 
-  if (args.empty()) {
-    usage();
-    ceph_abort();
-  }
-  else {
-    const char *prev_cmd = nullptr;
-    const char *prev_prev_cmd = nullptr;
-    std::vector<const char*>::iterator i ;
-    for (i = args.begin(); i != args.end(); ++i) {
-      opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
-      if (opt_cmd < 0) {
-	cerr << "unrecognized arg " << *i << std::endl;
-	usage();
-	ceph_abort();
-      }
-      if (!need_more) {
-	++i;
-	break;
-      }
-      prev_prev_cmd = prev_cmd;
-      prev_cmd = *i;
-    }
+  ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd, metadata_key, tenant,
+                      user_id);
+  if (ret != 0)
+    return ret;
 
-    if (opt_cmd == OPT_NO_CMD) {
-      usage();
-      ceph_abort();
-    }
-
-    /* some commands may have an optional extra param */
-    if (i != args.end()) {
-      switch (opt_cmd) {
-        case OPT_METADATA_GET:
-        case OPT_METADATA_PUT:
-        case OPT_METADATA_RM:
-        case OPT_METADATA_LIST:
-          metadata_key = *i;
-          break;
-        default:
-          break;
-      }
-    }
-
-    if (tenant.empty()) {
-      tenant = user_id.tenant;
-    } else {
-      if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE
-                          && opt_cmd != OPT_ROLE_DELETE
-                          && opt_cmd != OPT_ROLE_GET
-                          && opt_cmd != OPT_ROLE_MODIFY
-                          && opt_cmd != OPT_ROLE_LIST
-                          && opt_cmd != OPT_ROLE_POLICY_PUT
-                          && opt_cmd != OPT_ROLE_POLICY_LIST
-                          && opt_cmd != OPT_ROLE_POLICY_GET
-                          && opt_cmd != OPT_ROLE_POLICY_DELETE
-                          && opt_cmd != OPT_RESHARD_ADD
-                          && opt_cmd != OPT_RESHARD_CANCEL
-                          && opt_cmd != OPT_RESHARD_STATUS) {
-        cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
-        return EINVAL;
-      }
-      user_id.tenant = tenant;
-    }
-    /* check key parameter conflict */
-    if ((!access_key.empty()) && gen_access_key) {
-        cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
-        return EINVAL;
-    }
-    if ((!secret_key.empty()) && gen_secret_key) {
-        cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
-        return EINVAL;
-    }
-  }
 
   // default to pretty json
   if (format.empty()) {
