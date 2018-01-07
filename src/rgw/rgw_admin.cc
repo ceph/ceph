@@ -1497,29 +1497,33 @@ int main(int argc, const char **argv)
 
   boost::optional<std::string> compression_type;
 
-  int ret = parse_commandline_parameters(args, user_id, tenant, access_key, subuser, secret_key, user_email,user_op, display_name,
-                               bucket_name, pool_name,pool, object, object_version, client_id, op_id, state_str,
-                               op_mask_str, key_type, job_id, gen_access_key, gen_secret_key, show_log_entries,
-                               show_log_sum, skip_zero_entries, admin, admin_specified, system, system_specified,
-                               verbose, staging, commit, min_rewrite_size, max_rewrite_size, min_rewrite_stripe_size,
-                               max_buckets, max_buckets_specified, max_entries, max_entries_specified, max_size,
-                               have_max_size, max_objects, have_max_objects, date, start_date, end_date, num_shards,
-                               num_shards_specified, max_concurrent_ios, orphan_stale_secs, shard_id,
-                               specified_shard_id, daemon_id, specified_daemon_id, access, perm_mask, set_perm,
-                               temp_url_keys, set_temp_url_key, bucket_id, format, categories, delete_child_objects,
-                               pretty_format, purge_data, purge_keys, yes_i_really_mean_it, fix, remove_bad,
-                               check_head_obj_locator, check_objects, sync_stats, include_all, extra_info, bypass_gc,
-                               warnings_only, inconsistent_index, caps, infile, metadata_key, marker, start_marker,
-                               end_marker, quota_scope, replica_log_type_str, replica_log_type, bi_index_type,
-                               is_master, is_master_set, set_default, redirect_zone, redirect_zone_set, read_only,
-                               is_read_only_set, master_zone, period_id, period_epoch, remote, url, realm_id,
-                               realm_new_name, zonegroup_id, zonegroup_new_name, placement_id, tags, tags_add, tags_rm,
-                               api_name, zone_id, zone_new_name, endpoints, sync_from, sync_from_rm, sync_from_all,
-                               sync_from_all_specified, source_zone_name, tier_type, tier_type_specified,
-                               tier_config_add, tier_config_rm, index_pool, data_pool, data_extra_pool,
-                               placement_index_type, index_type_specified, compression_type, role_name, path,
-                               assume_role_doc, policy_name, perm_policy_doc, path_prefix);
-  if (ret != 0) return ret;
+  int ret = parse_commandline_parameters(args, user_id, tenant, access_key, subuser, secret_key, user_email,user_op,
+                                         display_name, bucket_name, pool_name,pool, object, object_version, client_id,
+                                         op_id, state_str, op_mask_str, key_type, job_id, gen_access_key,
+                                         gen_secret_key, show_log_entries, show_log_sum, skip_zero_entries, admin,
+                                         admin_specified, system, system_specified, verbose, staging, commit,
+                                         min_rewrite_size, max_rewrite_size, min_rewrite_stripe_size, max_buckets,
+                                         max_buckets_specified, max_entries, max_entries_specified, max_size,
+                                         have_max_size, max_objects, have_max_objects, date, start_date, end_date,
+                                         num_shards, num_shards_specified, max_concurrent_ios, orphan_stale_secs,
+                                         shard_id, specified_shard_id, daemon_id, specified_daemon_id, access,
+                                         perm_mask, set_perm, temp_url_keys, set_temp_url_key, bucket_id, format,
+                                         categories, delete_child_objects, pretty_format, purge_data, purge_keys,
+                                         yes_i_really_mean_it, fix, remove_bad, check_head_obj_locator, check_objects,
+                                         sync_stats, include_all, extra_info, bypass_gc, warnings_only,
+                                         inconsistent_index, caps, infile, metadata_key, marker, start_marker,
+                                         end_marker, quota_scope, replica_log_type_str, replica_log_type, bi_index_type,
+                                         is_master, is_master_set, set_default, redirect_zone, redirect_zone_set,
+                                         read_only, is_read_only_set, master_zone, period_id, period_epoch, remote, url,
+                                         realm_id, realm_new_name, zonegroup_id, zonegroup_new_name, placement_id, tags,
+                                         tags_add, tags_rm, api_name, zone_id, zone_new_name, endpoints, sync_from,
+                                         sync_from_rm, sync_from_all, sync_from_all_specified, source_zone_name,
+                                         tier_type, tier_type_specified, tier_config_add, tier_config_rm, index_pool,
+                                         data_pool, data_extra_pool, placement_index_type, index_type_specified,
+                                         compression_type, role_name, path, assume_role_doc, policy_name,
+                                         perm_policy_doc, path_prefix);
+  if (ret != 0)
+    return ret;
 
   if (args.empty()) {
     usage();
