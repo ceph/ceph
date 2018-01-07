@@ -55,7 +55,7 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   cout << std::endl;
 }
 
-static void show_perm_policy(string perm_policy, Formatter* formatter)
+static void show_perm_policy(const string& perm_policy, Formatter* formatter)
 {
   formatter->open_object_section("role");
   formatter->dump_string("Permission policy", perm_policy);
@@ -63,7 +63,7 @@ static void show_perm_policy(string perm_policy, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_policy_names(std::vector<string> policy_names, Formatter* formatter)
+static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
 {
   formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
@@ -81,7 +81,7 @@ static void show_role_info(RGWRole& role, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
+static void show_roles_info(const vector<RGWRole>& roles, Formatter* formatter)
 {
   formatter->open_array_section("Roles");
   for (const auto& it : roles) {
@@ -1037,7 +1037,7 @@ static void sync_status(Formatter *formatter)
   tab_dump("data sync", width, data_status);
 }
 
-static int check_pool_support_omap(rgw_pool pool) 
+static int check_pool_support_omap(const rgw_pool& pool)
 {
   librados::IoCtx io_ctx;
   int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
