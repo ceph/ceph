@@ -5646,13 +5646,8 @@ void MDCache::dump_openfiles(Formatter *f)
       if ((in->last == CEPH_NOSNAP && !in->is_any_caps_wanted())
           || (in->last != CEPH_NOSNAP && in->client_snap_caps.empty())) 
         continue;
-      std::string path;
-      in->make_path_string(path, true);
-      if (path.empty())
-        path = "/"   
       f->open_object_section("file");
-      f->dump_string("path", path);
-      in->dump(f);
+      in->dump(f, CInode::DUMP_PATH | CInode::DUMP_INODE_STORE_BASE | CInode::DUMP_CAPS);
       f->close_section();
     }
   }
