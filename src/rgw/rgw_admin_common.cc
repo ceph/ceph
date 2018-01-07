@@ -794,6 +794,83 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
+int parse_command(const string& access_key, int gen_access_key, const string& secret_key, int gen_secret_key,
+                  vector<const char*>& args, int& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id)
+{
+  if (args.empty()) {
+    usage();
+    ceph_abort();
+  }
+  bool need_more;
+  const char *prev_cmd = nullptr;
+  const char *prev_prev_cmd = nullptr;
+  std::vector<const char*>::iterator i ;
+  for (i = args.begin(); i != args.end(); ++i) {
+    opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
+    if (opt_cmd < 0) {
+      cerr << "unrecognized arg " << *i << std::endl;
+      usage();
+      ceph_abort();
+    }
+    if (!need_more) {
+      ++i;
+      break;
+    }
+    prev_prev_cmd = prev_cmd;
+    prev_cmd = *i;
+  }
+
+  if (opt_cmd == OPT_NO_CMD) {
+    usage();
+    ceph_abort();
+  }
+
+  /* some commands may have an optional extra param */
+  if (i != args.end()) {
+    switch (opt_cmd) {
+      case OPT_METADATA_GET:
+      case OPT_METADATA_PUT:
+      case OPT_METADATA_RM:
+      case OPT_METADATA_LIST:
+        metadata_key = *i;
+        break;
+      default:
+        break;
+    }
+  }
+
+  if (tenant.empty()) {
+    tenant = user_id.tenant;
+  } else {
+    if (user_id.empty() && opt_cmd != OPT_ROLE_CREATE
+        && opt_cmd != OPT_ROLE_DELETE
+        && opt_cmd != OPT_ROLE_GET
+        && opt_cmd != OPT_ROLE_MODIFY
+        && opt_cmd != OPT_ROLE_LIST
+        && opt_cmd != OPT_ROLE_POLICY_PUT
+        && opt_cmd != OPT_ROLE_POLICY_LIST
+        && opt_cmd != OPT_ROLE_POLICY_GET
+        && opt_cmd != OPT_ROLE_POLICY_DELETE
+        && opt_cmd != OPT_RESHARD_ADD
+        && opt_cmd != OPT_RESHARD_CANCEL
+        && opt_cmd != OPT_RESHARD_STATUS) {
+      cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
+      return EINVAL;
+    }
+    user_id.tenant = tenant;
+  }
+  /* check key parameter conflict */
+  if ((!access_key.empty()) && gen_access_key) {
+    cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
+    return EINVAL;
+  }
+  if ((!secret_key.empty()) && gen_secret_key) {
+    cerr << "ERROR: key parameter conflict, --secret & --gen-secret" << std::endl;
+    return EINVAL;
+  }
+  return 0;
+}
+
 int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, string& tenant, string& access_key,
                                  string& subuser, string& secret_key, string& user_email, RGWUserAdminOpState& user_op,
                                  string& display_name, string& bucket_name, string& pool_name, rgw_pool& pool,
