@@ -26,43 +26,18 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 static int call_ggate_cmd(const po::variables_map &vm,
-                          const std::vector<const char*> &args)
-{
+                          const std::vector<std::string> &args,
+                          const std::vector<std::string> &ceph_global_args) {
   SubProcess process("rbd-ggate", SubProcess::KEEP, SubProcess::KEEP,
                      SubProcess::KEEP);
 
-  if (vm.count("conf")) {
-    process.add_cmd_arg("--conf");
-    process.add_cmd_arg(vm["conf"].as<std::string>().c_str());
-  }
-  if (vm.count("cluster")) {
-    process.add_cmd_arg("--cluster");
-    process.add_cmd_arg(vm["cluster"].as<std::string>().c_str());
-  }
-  if (vm.count("id")) {
-    process.add_cmd_arg("--id");
-    process.add_cmd_arg(vm["id"].as<std::string>().c_str());
-  }
-  if (vm.count("name")) {
-    process.add_cmd_arg("--name");
-    process.add_cmd_arg(vm["name"].as<std::string>().c_str());
-  }
-  if (vm.count("mon_host")) {
-    process.add_cmd_arg("--mon_host");
-    process.add_cmd_arg(vm["mon_host"].as<std::string>().c_str());
-  }
-  if (vm.count("keyfile")) {
-    process.add_cmd_arg("--keyfile");
-    process.add_cmd_arg(vm["keyfile"].as<std::string>().c_str());
-  }
-  if (vm.count("keyring")) {
-    process.add_cmd_arg("--keyring");
-    process.add_cmd_arg(vm["keyring"].as<std::string>().c_str());
+  for (auto &arg : ceph_global_args) {
+    process.add_cmd_arg(arg.c_str());
   }
 
-  for (std::vector<const char*>::const_iterator p = args.begin();
-       p != args.end(); ++p)
-    process.add_cmd_arg(*p);
+  for (auto &arg : args) {
+    process.add_cmd_arg(arg.c_str());
+  }
 
   if (process.spawn()) {
     std::cerr << "rbd: failed to run rbd-ggate: " << process.err() << std::endl;
@@ -105,21 +80,21 @@ void get_list_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_list(const po::variables_map &vm)
-{
-  std::vector<const char*> args;
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
+  std::vector<std::string> args;
 
   args.push_back("list");
 
   if (vm.count("format")) {
     args.push_back("--format");
-    args.push_back(vm["format"].as<at::Format>().value.c_str());
+    args.push_back(vm["format"].as<at::Format>().value);
   }
   if (vm["pretty-format"].as<bool>()) {
     args.push_back("--pretty-format");
   }
 
-  return call_ggate_cmd(vm, args);
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
 void get_map_arguments(po::options_description *positional,
@@ -133,9 +108,9 @@ void get_map_arguments(po::options_description *positional,
     ("device", po::value<std::string>(), "specify ggate device");
 }
 
-int execute_map(const po::variables_map &vm)
-{
-  std::vector<const char*> args;
+int execute_map(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
+  std::vector<std::string> args;
 
   args.push_back("map");
   std::string img;
@@ -143,7 +118,7 @@ int execute_map(const po::variables_map &vm)
   if (r < 0) {
     return r;
   }
-  args.push_back(img.c_str());
+  args.push_back(img);
 
   if (vm["read-only"].as<bool>())
     args.push_back("--read-only");
@@ -153,10 +128,10 @@ int execute_map(const po::variables_map &vm)
 
   if (vm.count("device")) {
     args.push_back("--device");
-    args.push_back(vm["device"].as<std::string>().c_str());
+    args.push_back(vm["device"].as<std::string>());
   }
 
-  return call_ggate_cmd(vm, args);
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
 void get_unmap_arguments(po::options_description *positional,
@@ -171,8 +146,8 @@ void get_unmap_arguments(po::options_description *positional,
   at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_unmap(const po::variables_map &vm)
-{
+int execute_unmap(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   std::string device_name = utils::get_positional_argument(vm, 0);
   if (!boost::starts_with(device_name, "/dev/")) {
     device_name.clear();
@@ -192,13 +167,12 @@ int execute_unmap(const po::variables_map &vm)
     return -EINVAL;
   }
 
-  std::vector<const char*> args;
+  std::vector<std::string> args;
 
   args.push_back("unmap");
-  args.push_back(device_name.empty() ? image_name.c_str() :
-                 device_name.c_str());
+  args.push_back(device_name.empty() ? image_name : device_name);
 
-  return call_ggate_cmd(vm, args);
+  return call_ggate_cmd(vm, args, ceph_global_init_args);
 }
 
 Shell::SwitchArguments switched_arguments({"read-only", "exclusive"});
