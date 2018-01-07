@@ -805,11 +805,14 @@ int get_image_size(const boost::program_options::variables_map &vm,
 }
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path) {
-  if (!positional_path.empty()) {
-    *path = positional_path;
-  } else if (vm.count(at::PATH)) {
+             size_t *arg_index, std::string *path) {
+  if (vm.count(at::PATH)) {
     *path = vm[at::PATH].as<std::string>();
+  } else {
+    *path = get_positional_argument(vm, *arg_index);
+    if (!path->empty()) {
+      ++(*arg_index);
+    }
   }
 
   if (path->empty()) {
