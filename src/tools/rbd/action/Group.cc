@@ -295,12 +295,24 @@ int execute_list_images(const po::variables_map &vm) {
     if (GROUP_IMAGE_STATE_INCOMPLETE == state) {
       state_string = "incomplete";
     }
+
+    std::string pool_name = "";
+
+    librados::Rados rados(io_ctx);
+    librados::IoCtx pool_io_ctx;
+    r = rados.ioctx_create2(image.pool, pool_io_ctx);
+    if (r < 0) {
+      pool_name = "<missing data pool " + stringify(image.pool) + ">";
+    } else {
+      pool_name = pool_io_ctx.get_pool_name();
+    }
+
     if (f) {
       f->dump_string("image name", image_name);
-      f->dump_int("pool", image.pool);
+      f->dump_string("pool", pool_name);
       f->dump_int("state", state);
     } else
-      std::cout << image.pool << "/" << image_name << " " << state_string << std::endl;
+      std::cout << pool_name << "/" << image_name << " " << state_string << std::endl;
   }
 
   if (f) {
