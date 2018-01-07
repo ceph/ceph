@@ -280,55 +280,6 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   return 0;
 }
 
-static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
-                          const string& access_key, const string& secret_key,
-                          const string& realm_id, const string& realm_name,
-                          const string& period_id, const string& period_epoch,
-                          RGWPeriod *period)
-{
-  RGWEnv env;
-  req_info info(g_ceph_context, &env);
-  info.method = "GET";
-  info.request_uri = "/admin/realm/period";
-
-  map<string, string> &params = info.args.get_params();
-  if (!realm_id.empty())
-    params["realm_id"] = realm_id;
-  if (!realm_name.empty())
-    params["realm_name"] = realm_name;
-  if (!period_id.empty())
-    params["period_id"] = period_id;
-  if (!period_epoch.empty())
-    params["epoch"] = period_epoch;
-
-  bufferlist bl;
-  JSONParser p;
-  int ret = send_to_remote_or_url(remote_conn, url, access_key, secret_key,
-                                  info, bl, p);
-  if (ret < 0) {
-    cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  ret = period->init(g_ceph_context, store, false);
-  if (ret < 0) {
-    cerr << "faile to init period " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  try {
-    decode_json_obj(*period, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
-    return -EINVAL;
-  }
-  ret = period->store_info(false);
-  if (ret < 0) {
-    cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
-  }
-  // store latest epoch (ignore errors)
-  period->update_latest_epoch(period->get_epoch());
-  return 0;
-}
-
 static int read_current_period_id(RGWRados* store, const std::string& realm_id,
                                   const std::string& realm_name,
                                   std::string* period_id)
@@ -1134,7 +1085,7 @@ int main(int argc, const char **argv)
         }
 
         RGWPeriod period;
-        int ret = do_period_pull(remote_conn, url, access_key, secret_key,
+        int ret = do_period_pull(store, remote_conn, url, access_key, secret_key,
                                  realm_id, realm_name, period_id, period_epoch,
                                  &period);
         if (ret < 0) {
@@ -1474,7 +1425,7 @@ int main(int argc, const char **argv)
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
           // pull the latest epoch of the realm's current period
-          ret = do_period_pull(nullptr, url, access_key, secret_key,
+          ret = do_period_pull(store, nullptr, url, access_key, secret_key,
                                realm_id, realm_name, current_period, "",
                                &period);
           if (ret < 0) {
