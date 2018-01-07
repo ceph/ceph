@@ -9391,19 +9391,16 @@ int Client::fsync(int fd, bool syncdataonly)
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
   int r = 0;
-  Mutex lock("Client::_fsync::lock");
-  Cond cond;
-  bool done = false;
-  C_SafeCond *object_cacher_completion = NULL;
+  std::unique_ptr<C_SaferCond> object_cacher_completion = nullptr;
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
 
   ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
   if (cct->_conf->client_oc) {
-    object_cacher_completion = new C_SafeCond(&lock, &cond, &done, &r);
-    tmp_ref = in; // take a reference; C_SafeCond doesn't and _flush won't either
-    _flush(in, object_cacher_completion);
+    object_cacher_completion.reset(new C_SaferCond("Client::_fsync::lock"));
+    tmp_ref = in; // take a reference; C_SaferCond doesn't and _flush won't either
+    _flush(in, object_cacher_completion.get());
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
   
@@ -9422,13 +9419,10 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     put_request(req);
   }
 
-  if (object_cacher_completion) { // wait on a real reply instead of guessing
+  if (nullptr != object_cacher_completion) { // wait on a real reply instead of guessing
     client_lock.Unlock();
-    lock.Lock();
     ldout(cct, 15) << "waiting on data to flush" << dendl;
-    while (!done)
-      cond.Wait(lock);
-    lock.Unlock();
+    r = object_cacher_completion->wait();
     client_lock.Lock();
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
@@ -10050,13 +10044,11 @@ int Client::_sync_fs()
   ldout(cct, 10) << "_sync_fs" << dendl;
 
   // flush file data
-  Mutex lock("Client::_fsync::lock");
-  Cond cond;
-  bool flush_done = false;
-  if (cct->_conf->client_oc)
-    objectcacher->flush_all(new C_SafeCond(&lock, &cond, &flush_done));
-  else
-    flush_done = true;
+  std::unique_ptr<C_SaferCond> cond = nullptr; 
+  if (cct->_conf->client_oc) {
+    cond.reset(new C_SaferCond("Client::_sync_fs:lock"));
+    objectcacher->flush_all(cond.get());
+  }
 
   // flush caps
   flush_caps_sync();
@@ -10067,13 +10059,11 @@ int Client::_sync_fs()
 
   wait_sync_caps(flush_tid);
 
-  if (!flush_done) {
+  if (nullptr != cond) {
     client_lock.Unlock();
-    lock.Lock();
-    ldout(cct, 15) << "waiting on data to flush" << dendl;
-    while (!flush_done)
-      cond.Wait(lock);
-    lock.Unlock();
+    ldout(cct, 15) << __func__ << "waiting on data to flush" << dendl;
+    cond->wait();
+    ldout(cct, 15) << __func__ << "flush finished" << dendl;
     client_lock.Lock();
   }
 
