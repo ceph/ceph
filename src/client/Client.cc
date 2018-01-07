@@ -9186,21 +9186,14 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  Mutex uninline_flock("Client::_write_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
-
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
+  
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (endoff > cct->_conf->client_max_inline_size ||
         endoff > CEPH_INLINE_MAX_SIZE ||
         !(have & CEPH_CAP_FILE_BUFFER)) {
-      onuninline = new C_SafeCond(&uninline_flock,
-                                  &uninline_cond,
-                                  &uninline_done,
-                                  &uninline_ret);
-      uninline_data(in, onuninline);
+      onuninline.reset(new C_SaferCond("Client::_write_uninline_data flock"));
+      uninline_data(in, onuninline.get());
     } else {
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
@@ -9251,24 +9244,16 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       _flush_range(in, offset, size);
 
     // simple, non-atomic sync write
-    Mutex flock("Client::_write flock");
-    Cond cond;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-
+    C_SaferCond onfinish("Client::_write flock");
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
-		       onfinish);
+		       &onfinish);
     client_lock.Unlock();
-    flock.Lock();
-
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    onfinish.wait();
     client_lock.Lock();
     _sync_write_commit(in);
   }
@@ -9306,12 +9291,9 @@ success:
 
 done:
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int uninline_ret = onuninline->wait();
     client_lock.Lock();
 
     if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
