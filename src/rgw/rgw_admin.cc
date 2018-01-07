@@ -37,6 +37,7 @@
 #include "rgw_role.h"
 #include "rgw_reshard.h"
 
+#include "rgw_admin_opt_bucket.h"
 #include "rgw_admin_common.h"
 #include "rgw_admin_multisite.h"
 
@@ -103,63 +104,6 @@ public:
   }
 };
 
-static int init_bucket(const string& tenant_name, const string& bucket_name, const string& bucket_id,
-                       RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs = nullptr)
-{
-  if (!bucket_name.empty()) {
-    RGWObjectCtx obj_ctx(store);
-    int r;
-    if (bucket_id.empty()) {
-      r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, pattrs);
-    } else {
-      string bucket_instance_id = bucket_name + ":" + bucket_id;
-      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, nullptr, pattrs);
-    }
-    if (r < 0) {
-      cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
-      return r;
-    }
-    bucket = bucket_info.bucket;
-  }
-  return 0;
-}
-
-static int read_input(const string& infile, bufferlist& bl)
-{
-  int fd = 0;
-  if (infile.size()) {
-    fd = open(infile.c_str(), O_RDONLY);
-    if (fd < 0) {
-      int err = -errno;
-      cerr << "error reading input file " << infile << std::endl;
-      return err;
-    }
-  }
-
-#define READ_CHUNK 8196
-  int r;
-  int err;
-
-  do {
-    char buf[READ_CHUNK];
-
-    r = safe_read(fd, buf, READ_CHUNK);
-    if (r < 0) {
-      err = -errno;
-      cerr << "error while reading input" << std::endl;
-      goto out;
-    }
-    bl.append(buf, r);
-  } while (r > 0);
-  err = 0;
-
- out:
-  if (infile.size()) {
-    close(fd);
-  }
-  return err;
-}
-
 template <class T>
 static int read_decode_json(const string& infile, T& t)
 {
@@ -177,30 +121,6 @@ static int read_decode_json(const string& infile, T& t)
 
   try {
     decode_json_obj(t, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
-    return -EINVAL;
-  }
-  return 0;
-}
-
-template <class T, class K>
-static int read_decode_json(const string& infile, T& t, K *k)
-{
-  bufferlist bl;
-  int ret = read_input(infile, bl);
-  if (ret < 0) {
-    cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  JSONParser p;
-  if (!p.parse(bl.c_str(), bl.length())) {
-    cout << "failed to parse JSON" << std::endl;
-    return -EINVAL;
-  }
-
-  try {
-    t.decode_json(&p, k);
   } catch (JSONDecoder::err& e) {
     cout << "failed to decode JSON input: " << e.message << std::endl;
     return -EINVAL;
@@ -349,13 +269,6 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   return 0;
 }
 
-static bool bucket_object_check_filter(const string& name)
-{
-  rgw_obj_key k;
-  string ns; /* empty namespace */
-  return rgw_obj_key::oid_to_key_in_ns(name, &k, ns);
-}
-
 int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
   map<string, bufferlist> attrs;
@@ -403,224 +316,6 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
     }
   }
   *need_rewrite = false;
-
-  return 0;
-}
-
-
-int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, bool remove_bad, Formatter *f) {
-  f->open_object_section("object");
-  f->open_object_section("key");
-  f->dump_string("type", "head");
-  f->dump_string("name", key.name);
-  f->dump_string("instance", key.instance);
-  f->close_section();
-
-  string oid;
-  string locator;
-
-  get_obj_bucket_and_oid_loc(obj, oid, locator);
-
-  f->dump_string("oid", oid);
-  f->dump_string("locator", locator);
-
-
-  RGWObjectCtx obj_ctx(store);
-
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  int ret = read_op.prepare();
-  bool needs_fixing = (ret == -ENOENT);
-
-  f->dump_bool("needs_fixing", needs_fixing);
-
-  string status = (needs_fixing ? "needs_fixing" : "ok");
-
-  if ((needs_fixing || remove_bad) && fix) {
-    ret = store->fix_head_obj_locator(bucket_info, needs_fixing, remove_bad, key);
-    if (ret < 0) {
-      cerr << "ERROR: fix_head_object_locator() returned ret=" << ret << std::endl;
-      goto done;
-    }
-    status = "fixed";
-  }
-
-done:
-  f->dump_string("status", status);
-
-  f->close_section();
-
-  return 0;
-}
-
-int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_obj_key& key, bool fix, Formatter *f) {
-  f->open_object_section("object");
-  f->open_object_section("key");
-  f->dump_string("type", "tail");
-  f->dump_string("name", key.name);
-  f->dump_string("instance", key.instance);
-  f->close_section();
-
-  bool needs_fixing;
-  string status;
-
-  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
-  if (ret < 0) {
-    cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
-    status = "failed";
-  } else {
-    status = (needs_fixing && !fix ? "needs_fixing" : "ok");
-  }
-
-  f->dump_bool("needs_fixing", needs_fixing);
-  f->dump_string("status", status);
-
-  f->close_section();
-
-  return 0;
-}
-
-int do_check_object_locator(const string& tenant_name, const string& bucket_name,
-                            bool fix, bool remove_bad, Formatter *f)
-{
-  if (remove_bad && !fix) {
-    cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
-    return -EINVAL;
-  }
-
-  RGWBucketInfo bucket_info;
-  rgw_bucket bucket;
-  string bucket_id;
-
-  f->open_object_section("bucket");
-  f->dump_string("bucket", bucket_name);
-  int ret = init_bucket(tenant_name, bucket_name, bucket_id, bucket_info, bucket);
-  if (ret < 0) {
-    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  bool truncated;
-  int count = 0;
-
-  int max_entries = 1000;
-
-  string prefix;
-  string delim;
-  vector<rgw_bucket_dir_entry> result;
-  map<string, bool> common_prefixes;
-  string ns;
-
-  RGWRados::Bucket target(store, bucket_info);
-  RGWRados::Bucket::List list_op(&target);
-
-  string marker;
-
-  list_op.params.prefix = prefix;
-  list_op.params.delim = delim;
-  list_op.params.marker = rgw_obj_key(marker);
-  list_op.params.ns = ns;
-  list_op.params.enforce_ns = true;
-  list_op.params.list_versions = true;
-
-  f->open_array_section("check_objects");
-  do {
-    ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
-    if (ret < 0) {
-      cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    count += result.size();
-
-    for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
-      rgw_obj_key key = iter->key;
-      rgw_obj obj(bucket, key);
-
-      if (key.name[0] == '_') {
-        ret = check_obj_locator_underscore(bucket_info, obj, key, fix, remove_bad, f);
-
-	if (ret >= 0) {
-          ret = check_obj_tail_locator_underscore(bucket_info, obj, key, fix, f);
-          if (ret < 0) {
-              cerr << "ERROR: check_obj_tail_locator_underscore(): " << cpp_strerror(-ret) << std::endl;
-              return -ret;
-          }
-	}
-      }
-    }
-    f->flush(cout);
-  } while (truncated && count < max_entries);
-  f->close_section();
-  f->close_section();
-
-  f->flush(cout);
-
-  return 0;
-}
-
-int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
-{
-  RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
-  RGWObjectCtx obj_ctx(store);
-
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, &attrs);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  if (opt_cmd == OPT_BUCKET_SYNC_ENABLE) {
-    bucket_info.flags &= ~BUCKET_DATASYNC_DISABLED;
-  } else if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
-  }
-
-  r = store->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
-  if (r < 0) {
-    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  int shards_num = bucket_info.num_shards? bucket_info.num_shards : 1;
-  int shard_id = bucket_info.num_shards? 0 : -1;
-
-  if (opt_cmd == OPT_BUCKET_SYNC_DISABLE) {
-    r = store->stop_bi_log_entries(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing stop bilog" << dendl;
-      return r;
-    }
-  } else {
-    r = store->resync_bi_log_entries(bucket_info, -1);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing resync bilog" << dendl;
-      return r;
-    }
-  }
-
-  for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = store->data_log->add_entry(bucket_info.bucket, shard_id);
-    if (r < 0) {
-      lderr(store->ctx()) << "ERROR: failed writing data log" << dendl;
-      return r;
-    }
-  }
-
-  return 0;
-}
-
-static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
-                                const string& bucket_id, rgw_bucket& bucket)
-{
-  RGWBucketInfo bucket_info;
-
-  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
-  if (ret < 0) {
-    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
 
   return 0;
 }
@@ -787,8 +482,8 @@ static void get_md_sync_status(list<string>& status)
 
   map<int, string> shards_behind;
   if (sync_status.sync_info.period != master_period) {
-    status.push_back(string("master is on a different period: master_period=" +
-                            master_period + " local_period=" + sync_status.sync_info.period));
+    status.emplace_back("master is on a different period: master_period=" +
+                        master_period + " local_period=" + sync_status.sync_info.period);
   } else {
     for (auto local_iter : sync_status.sync_markers) {
       int shard_id = local_iter.first;
@@ -1014,7 +709,7 @@ static void sync_status(Formatter *formatter)
   list<string> md_status;
 
   if (store->is_meta_master()) {
-    md_status.push_back("no sync (zone is master)");
+    md_status.emplace_back("no sync (zone is master)");
   } else {
     get_md_sync_status(md_status);
   }
@@ -1082,7 +777,7 @@ int check_reshard_bucket_params(RGWRados *store,
     return -EINVAL;
   }
 
-  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return -ret;
@@ -1785,11 +1480,11 @@ int main(int argc, const char **argv)
           return EINVAL;
         }
         RGWEnv env;
-        req_info info(g_ceph_context, &env);
-        info.method = "GET";
-        info.request_uri = "/admin/realm";
+        req_info r_info(g_ceph_context, &env);
+        r_info.method = "GET";
+        r_info.request_uri = "/admin/realm";
 
-        map<string, string> &params = info.args.get_params();
+        map<string, string> &params = r_info.args.get_params();
         if (!realm_id.empty())
           params["id"] = realm_id;
         if (!realm_name.empty())
@@ -1797,7 +1492,7 @@ int main(int argc, const char **argv)
 
         bufferlist bl;
         JSONParser p;
-        int ret = send_to_url(url, access_key, secret_key, info, bl, p);
+        int ret = send_to_url(url, access_key, secret_key, r_info, bl, p);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
           if (ret == -EACCES) {
@@ -2380,7 +2075,7 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
+        for (auto iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
           RGWZoneGroup zonegroup(string(), *iter);
           int ret = zonegroup.init(g_ceph_context, store);
           if (ret < 0) {
@@ -2557,14 +2252,14 @@ int main(int argc, const char **argv)
           need_zone_update = true;
         }
 
-        if (tier_config_add.size() > 0) {
+        if (!tier_config_add.empty()) {
           for (auto add : tier_config_add) {
             zone.tier_config[add.first] = add.second;
           }
           need_zone_update = true;
         }
 
-        if (tier_config_rm.size() > 0) {
+        if (!tier_config_rm.empty()) {
           for (auto rm : tier_config_rm) {
             zone.tier_config.erase(rm.first);
           }
@@ -2683,23 +2378,23 @@ int main(int argc, const char **argv)
             return EINVAL;
           }
 
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
+          RGWZonePlacementInfo& placement_info = zone.placement_pools[placement_id];
 
-          info.index_pool = *index_pool;
-          info.data_pool = *data_pool;
+          placement_info.index_pool = *index_pool;
+          placement_info.data_pool = *data_pool;
           if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
+            placement_info.data_extra_pool = *data_extra_pool;
           }
           if (index_type_specified) {
-            info.index_type = placement_index_type;
+            placement_info.index_type = placement_index_type;
           }
           if (compression_type) {
-            info.compression_type = *compression_type;
+            placement_info.compression_type = *compression_type;
           }
 
-          ret = check_pool_support_omap(info.get_data_extra_pool());
+          ret = check_pool_support_omap(placement_info.get_data_extra_pool());
           if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+             cerr << "ERROR: the data extra (non-ec) pool '" << placement_info.get_data_extra_pool()
                  << "' does not support omap" << std::endl;
              return ret;
           }
@@ -2810,7 +2505,7 @@ int main(int argc, const char **argv)
     user_op.set_perm(perm_mask);
 
   if (set_temp_url_key) {
-    map<int, string>::iterator iter = temp_url_keys.begin();
+    auto iter = temp_url_keys.begin();
     for (; iter != temp_url_keys.end(); ++iter) {
       user_op.set_temp_url_key(iter->second, iter->first);
     }
@@ -2960,11 +2655,11 @@ int main(int argc, const char **argv)
   case OPT_PERIOD_PUSH:
     {
       RGWEnv env;
-      req_info info(g_ceph_context, &env);
-      info.method = "POST";
-      info.request_uri = "/admin/realm/period";
+      req_info r_info(g_ceph_context, &env);
+      r_info.method = "POST";
+      r_info.request_uri = "/admin/realm/period";
 
-      map<string, string> &params = info.args.get_params();
+      map<string, string> &params = r_info.args.get_params();
       if (!realm_id.empty())
         params["realm_id"] = realm_id;
       if (!realm_name.empty())
@@ -2989,7 +2684,7 @@ int main(int argc, const char **argv)
 
       JSONParser p;
       ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
-                                  info, bl, p);
+                                  r_info, bl, p);
       if (ret < 0) {
         cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3335,7 +3030,7 @@ int main(int argc, const char **argv)
       RGWBucketAdminOp::info(store, bucket_op, f);
     } else {
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -3371,7 +3066,7 @@ int main(int argc, const char **argv)
 
         count += result.size();
 
-        for (vector<rgw_bucket_dir_entry>::iterator iter = result.begin(); iter != result.end(); ++iter) {
+        for (auto iter = result.begin(); iter != result.end(); ++iter) {
           rgw_bucket_dir_entry& entry = *iter;
           encode_json("entry", entry, formatter);
         }
@@ -3395,7 +3090,6 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
-    string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
@@ -3413,7 +3107,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_LOG_LIST) {
     // filter by date?
-    if (date.size() && date.size() != 10) {
+    if (!date.empty() && date.size() != 10) {
       cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
       return EINVAL;
     }
@@ -3578,9 +3272,9 @@ next:
     }
     formatter->reset();
     formatter->open_array_section("pools");
-    for (auto siter = pools.begin(); siter != pools.end(); ++siter) {
+    for (const auto &pool : pools) {
       formatter->open_object_section("pool");
-      formatter->dump_string("name",  siter->to_str());
+      formatter->dump_string("name", pool.to_str());
       formatter->close_section();
     }
     formatter->close_section();
@@ -3590,7 +3284,7 @@ next:
 
   if (opt_cmd == OPT_USAGE_SHOW) {
     uint64_t start_epoch = 0;
-    uint64_t end_epoch = (uint64_t)-1;
+    auto end_epoch = (uint64_t)-1;
 
     int ret;
 
@@ -3627,7 +3321,7 @@ next:
     }
     int ret;
     uint64_t start_epoch = 0;
-    uint64_t end_epoch = (uint64_t)-1;
+    auto end_epoch = (uint64_t)-1;
 
 
     if (!start_date.empty()) {
@@ -3666,7 +3360,7 @@ next:
 
   if (opt_cmd == OPT_OLH_GET) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3684,7 +3378,7 @@ next:
 
   if (opt_cmd == OPT_OLH_READLOG) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3724,7 +3418,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3752,7 +3446,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3780,7 +3474,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3835,7 +3529,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3843,7 +3537,7 @@ next:
 
     RGWBucketInfo cur_bucket_info;
     rgw_bucket cur_bucket;
-    ret = init_bucket(tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
+    ret = init_bucket(store, tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3876,7 +3570,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_RM) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3901,7 +3595,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -3942,7 +3636,7 @@ next:
     }
 
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -4122,8 +3816,7 @@ next:
           cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
           return ret;
         }
-        for (auto iter=entries.begin(); iter != entries.end(); ++iter) {
-          cls_rgw_reshard_entry& entry = *iter;
+        for (auto &entry : entries) {
           encode_json("entry", entry, formatter);
           entry.get_key(&marker);
         }
@@ -4151,7 +3844,7 @@ next:
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -4208,7 +3901,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -4227,7 +3920,7 @@ next:
 
   if (opt_cmd == OPT_OBJECT_STAT) {
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -4266,8 +3959,6 @@ next:
         handled = dump_string("tag", bl, formatter);
       } else if (iter->first == RGW_ATTR_ETAG) {
         handled = dump_string("etag", bl, formatter);
-      } else if (iter->first == RGW_ATTR_COMPRESSION) {
-        handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter);
       }
 
       if (!handled)
@@ -4289,7 +3980,7 @@ next:
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter);
+      do_check_object_locator(store, tenant, bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(store, bucket_op, f);
     }
@@ -4568,7 +4259,7 @@ next:
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
-	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
 	  formatter->dump_string("key", *iter);
           ++count;
 	}
@@ -4629,7 +4320,7 @@ next:
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
           store->meta_mgr->dump_log_entry(entry, formatter);
         }
@@ -4906,7 +4597,7 @@ next:
       return EINVAL;
     }
     rgw_bucket bucket;
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
+    int ret = init_bucket_for_sync(store, tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -4963,7 +4654,7 @@ next:
       return EINVAL;
     }
     rgw_bucket bucket;
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
+    int ret = init_bucket_for_sync(store, tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -4996,7 +4687,7 @@ next:
       return EINVAL;
     }
     rgw_bucket bucket;
-    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, bucket);
+    int ret = init_bucket_for_sync(store, tenant, bucket_name, bucket_id, bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -5021,7 +4712,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5042,7 +4733,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter);
 
@@ -5165,7 +4856,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5183,7 +4874,7 @@ next:
       return EINVAL;
     }
     RGWBucketInfo bucket_info;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -5255,7 +4946,7 @@ next:
 
       count += entries.size();
 
-      for (list<rgw_data_change_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_data_change_log_entry& entry = *iter;
         if (!extra_info) {
           encode_json("entry", entry.entry, formatter);
@@ -5328,7 +5019,7 @@ next:
         return -ret;
       }
 
-      for (list<cls_statelog_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         oc.dump_entry(*iter, formatter);
       }
 
@@ -5420,7 +5111,7 @@ next:
         return EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -5471,7 +5162,7 @@ next:
         return EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -5533,7 +5224,7 @@ next:
         return EINVAL;
       }
       RGWBucketInfo bucket_info;
-      int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+      int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
