@@ -75,31 +75,6 @@ BIIndexType get_bi_index_type(const string& type_str) {
   return InvalidIdx;
 }
 
-void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
-{
-  bufferlist::iterator iter = bl.begin();
-  switch (index_type) {
-    case PlainIdx:
-    case InstanceIdx:
-      {
-        rgw_bucket_dir_entry entry;
-        ::decode(entry, iter);
-        encode_json("entry", entry, formatter);
-      }
-      break;
-    case OLHIdx:
-      {
-        rgw_bucket_olh_entry entry;
-        ::decode(entry, iter);
-        encode_json("entry", entry, formatter);
-      }
-      break;
-    default:
-      ceph_abort();
-      break;
-  }
-}
-
 static void show_user_info(RGWUserInfo& info, Formatter *formatter)
 {
   encode_json("user_info", info, formatter);
@@ -1406,34 +1381,6 @@ int check_reshard_bucket_params(RGWRados *store,
 	 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
     return -EINVAL;
   }
-  return 0;
-}
-
-int create_new_bucket_instance(RGWRados *store,
-			       int new_num_shards,
-			       const RGWBucketInfo& bucket_info,
-			       map<string, bufferlist>& attrs,
-			       RGWBucketInfo& new_bucket_info)
-{
-
-  store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-  new_bucket_info.bucket.oid.clear();
-
-  new_bucket_info.num_shards = new_num_shards;
-  new_bucket_info.objv_tracker.clear();
-
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
-  if (ret < 0) {
-    cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  ret = store->put_bucket_instance_info(new_bucket_info, true, real_time(), &attrs);
-  if (ret < 0) {
-    cerr << "ERROR: failed to store new bucket instance info: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
   return 0;
 }
 
