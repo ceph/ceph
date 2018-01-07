@@ -96,7 +96,7 @@ int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
 }
 
 int commit_period(RGWRados *store, RGWRealm& realm, RGWPeriod& period,
-                  const string remote, const string& url,
+                  string remote, const string& url,
                   const string& access, const string& secret,
                   bool force)
 {
