@@ -1,9 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <errno.h>
+#include <cerrno>
 #include <iostream>
 #include <sstream>
+#include <cstdlib>
 #include <string>
 
 #include <boost/optional.hpp>
@@ -4853,7 +4854,7 @@ next:
     }
 
     RGWSyncModuleInstanceRef sync_module;
-    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type, 
+    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type,
         store->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
