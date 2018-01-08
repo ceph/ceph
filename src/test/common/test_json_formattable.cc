@@ -238,6 +238,12 @@ TEST(formatable, set_array) {
   ASSERT_EQ(f["bbb"][0].array().size(), 2);
   ASSERT_EQ((int)f["bbb"][0][1], 25);
 
+  f.set("bbb[0][]", "26"); /* append operation */
+  ASSERT_EQ((int)f["bbb"][0][2], 26);
+  f.set("bbb[0][-1]", "27"); /* replace last */
+  ASSERT_EQ((int)f["bbb"][0][2], 27);
+  ASSERT_EQ(f["bbb"][0].array().size(), 3);
+
   f.set("foo.asd[0][0]", "{ \"field\": \"xyz\"}");
   ASSERT_EQ((string)f["foo"]["asd"][0][0]["field"], "xyz");
 
@@ -265,5 +271,21 @@ TEST(formatable, erase_array) {
   f.erase("asd");
   ASSERT_FALSE(f["asd"].exists(0));
   ASSERT_FALSE(f.exists("asd"));
+
+  f.set("bbb[]", "10");
+  f.set("bbb[]", "20");
+  f.set("bbb[]", "30");
+  ASSERT_EQ((int)f["bbb"][0], 10);
+  ASSERT_EQ((int)f["bbb"][1], 20);
+  ASSERT_EQ((int)f["bbb"][2], 30);
+  f.erase("bbb[-2]");
+  ASSERT_FALSE(f.exists("bbb[2]"));
+
+  ASSERT_EQ((int)f["bbb"][0], 10);
+  ASSERT_EQ((int)f["bbb"][1], 30);
+
+  if (0) { /* for debugging when needed */
+    dumpf(f);
+  }
 }
 
