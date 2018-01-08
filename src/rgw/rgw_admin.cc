@@ -35,6 +35,7 @@
 #include "rgw_reshard.h"
 
 #include "rgw_admin_argument_parsing.h"
+#include "rgw_admin_common.h"
 #include "rgw_admin_multisite.h"
 #include "rgw_admin_opt_bucket.h"
 #include "rgw_admin_opt_policy.h"

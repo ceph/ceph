@@ -6,6 +6,8 @@
 
 #include "cls/rgw/cls_rgw_client.h"
 
+#include "rgw_admin_common.h"
+
 bool bucket_object_check_filter(const string& name)
 {
   rgw_obj_key k;
