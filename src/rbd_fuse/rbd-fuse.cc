@@ -831,6 +831,8 @@ rbdfs_destroy(void *unused)
     image_data_lock.lock();
     clear_rbd_image_data();
     free(rbd_image_list.buf);
+    rbd_image_list.buf = NULL;
+    rbd_image_list.buf_len = 0;
     image_data_lock.unlock();
 
     rados_ioctx_destroy(ioctx);
@@ -1174,8 +1176,10 @@ failed_shutdown:
 int main(int argc, char *argv[])
 {
     // Initialize the cached image list to empty
+    image_data_lock.lock();
     rbd_image_list.buf = NULL;
     rbd_image_list.buf_len = 0;
+    image_data_lock.unlock();
 
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
