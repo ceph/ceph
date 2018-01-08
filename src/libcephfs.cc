@@ -209,11 +209,7 @@ public:
   int conf_parse_env(const char *name)
   {
     md_config_t *conf = cct->_conf;
-    vector<const char*> args;
-    env_to_vec(args, name);
-    int ret = conf->parse_argv(args, CONF_ENV);
-    if (ret)
-      return ret;
+    conf->parse_env(name);
     conf->apply_changes(nullptr);
     return 0;
   }
