@@ -1244,6 +1244,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
   uint64_t cl = max + 2 + boundary.size();
 
   if (max > in_data.length()) {
+    ACCOUNTING_IO(s)->set_account(true);
     uint64_t need_to_read = cl - in_data.length();
 
     bufferptr bp(need_to_read);
@@ -1253,6 +1254,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
       return read_len;
     }
     in_data.append(bp, 0, read_len);
+    ACCOUNTING_IO(s)->set_account(false);
   }
 
   done = false;
@@ -1278,6 +1280,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
   if (reached_boundary) {
     int left = in_data.length() - max;
     if (left < skip + 2) {
+      ACCOUNTING_IO(s)->set_account(true);
       int need = skip + 2 - left;
       bufferptr boundary_bp(need);
       const int r = recv_body(s, boundary_bp.c_str(), need);
@@ -1285,6 +1288,7 @@ int RGWPostObj_ObjStore::read_with_boundary(ceph::bufferlist& bl,
         return r;
       }
       in_data.append(boundary_bp);
+      ACCOUNTING_IO(s)->set_account(false);
     }
     max += skip; // skip boundary for next time
     if (in_data.length() >= max + 2) {
