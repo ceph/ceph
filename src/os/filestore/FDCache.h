@@ -56,14 +56,14 @@ private:
 
 public:
   explicit FDCache(CephContext *cct) : cct(cct),
-  registry_shards(MAX(cct->_conf->filestore_fd_cache_shards, 1)) {
+  registry_shards(std::max<int64_t>(cct->_conf->filestore_fd_cache_shards, 1)) {
     assert(cct);
     cct->_conf->add_observer(this);
     registry = new SharedLRU<ghobject_t, FD>[registry_shards];
     for (int i = 0; i < registry_shards; ++i) {
       registry[i].set_cct(cct);
       registry[i].set_size(
-          MAX((cct->_conf->filestore_fd_cache_size / registry_shards), 1));
+          std::max<int64_t>((cct->_conf->filestore_fd_cache_size / registry_shards), 1));
     }
   }
   ~FDCache() override {
@@ -101,7 +101,7 @@ public:
     if (changed.count("filestore_fd_cache_size")) {
       for (int i = 0; i < registry_shards; ++i)
         registry[i].set_size(
-              MAX((conf->filestore_fd_cache_size / registry_shards), 1));
+              std::max<int64_t>((conf->filestore_fd_cache_size / registry_shards), 1));
     }
   }
 

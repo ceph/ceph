@@ -3810,7 +3810,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     loff_t dstpos = dstoff;
     while (pos < end) {
-      int l = MIN(end-pos, buflen);
+      int l = std::min<int>(end-pos, buflen);
       r = safe_splice(from, &pos, pipefd[1], nullptr, l, SPLICE_F_NONBLOCK);
       dout(10) << "  safe_splice read from " << pos << "~" << l << " got " << r << dendl;
       if (r < 0) {
@@ -3863,7 +3863,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 
     char buf[buflen];
     while (pos < end) {
-      int l = MIN(end-pos, buflen);
+      int l = std::min<int>(end-pos, buflen);
       r = ::read(from, buf, l);
       dout(25) << "  read from " << pos << "~" << l << " got " << r << dendl;
       if (r < 0) {
@@ -5724,7 +5724,7 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
 
   {
     // TODO: a more elaborate hint calculation
-    uint64_t hint = MIN(expected_write_size, m_filestore_max_alloc_hint_size);
+    uint64_t hint = std::min<uint64_t>(expected_write_size, m_filestore_max_alloc_hint_size);
 
     ret = backend->set_alloc_hint(**fd, hint);
     dout(20) << __FUNC__ << ": hint " << hint << " ret " << ret << dendl;
