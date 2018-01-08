@@ -12,8 +12,9 @@
  *
  */
 
+#include <cstddef>
+#include <utility>
 #include <type_traits>
-#include "common/backport_std.h"
 
 namespace ceph {
 // `static_ptr`
@@ -86,12 +87,12 @@ class static_ptr {
   //
   template<typename T, std::size_t S>
   constexpr static int create_ward() noexcept {
-    static_assert(ceph::is_void_v<Base> ||
-                  ceph::is_base_of_v<Base, std::decay_t<T>>,
+    static_assert(std::is_void_v<Base> ||
+                  std::is_base_of_v<Base, std::decay_t<T>>,
                   "Value to store must be a derivative of the base.");
     static_assert(S <= Size, "Value too large.");
-    static_assert(ceph::is_void_v<Base> || !std::is_const<Base>{} ||
-                  ceph::is_const_v<T>,
+    static_assert(std::is_void_v<Base> || !std::is_const<Base>{} ||
+                  std::is_const_v<T>,
                   "Cannot assign const pointer to non-const pointer.");
     return 0;
   }
@@ -135,13 +136,13 @@ public:
   //
   // Since the templated versions don't count for overriding the defaults
   static_ptr(const static_ptr& rhs)
-    noexcept(ceph::is_nothrow_copy_constructible_v<Base>) : operate(rhs.operate) {
+    noexcept(std::is_nothrow_copy_constructible_v<Base>) : operate(rhs.operate) {
     if (operate) {
       operate(_mem::op::copy, &rhs.buf, &buf);
     }
   }
   static_ptr(static_ptr&& rhs)
-    noexcept(ceph::is_nothrow_move_constructible_v<Base>) : operate(rhs.operate) {
+    noexcept(std::is_nothrow_move_constructible_v<Base>) : operate(rhs.operate) {
     if (operate) {
       operate(_mem::op::move, &rhs.buf, &buf);
     }
@@ -149,7 +150,7 @@ public:
 
   template<typename U, std::size_t S>
   static_ptr(const static_ptr<U, S>& rhs)
-    noexcept(ceph::is_nothrow_copy_constructible_v<U>) : operate(rhs.operate) {
+    noexcept(std::is_nothrow_copy_constructible_v<U>) : operate(rhs.operate) {
     create_ward<U, S>();
     if (operate) {
       operate(_mem::op::copy, &rhs.buf, &buf);
@@ -157,7 +158,7 @@ public:
   }
   template<typename U, std::size_t S>
   static_ptr(static_ptr<U, S>&& rhs)
-    noexcept(ceph::is_nothrow_move_constructible_v<U>) : operate(rhs.operate) {
+    noexcept(std::is_nothrow_move_constructible_v<U>) : operate(rhs.operate) {
     create_ward<U, S>();
     if (operate) {
       operate(_mem::op::move, &rhs.buf, &buf);
@@ -165,7 +166,7 @@ public:
   }
 
   static_ptr& operator =(const static_ptr& rhs)
-    noexcept(ceph::is_nothrow_copy_constructible_v<Base>) {
+    noexcept(std::is_nothrow_copy_constructible_v<Base>) {
     reset();
     if (rhs) {
       operate = rhs.operate;
@@ -175,7 +176,7 @@ public:
     return *this;
   }
   static_ptr& operator =(static_ptr&& rhs)
-    noexcept(ceph::is_nothrow_move_constructible_v<Base>) {
+    noexcept(std::is_nothrow_move_constructible_v<Base>) {
     reset();
     if (rhs) {
       operate = rhs.operate;
@@ -186,7 +187,7 @@ public:
 
   template<typename U, std::size_t S>
   static_ptr& operator =(const static_ptr<U, S>& rhs)
-    noexcept(ceph::is_nothrow_copy_constructible_v<U>) {
+    noexcept(std::is_nothrow_copy_constructible_v<U>) {
     create_ward<U, S>();
     reset();
     if (rhs) {
@@ -198,7 +199,7 @@ public:
   }
   template<typename U, std::size_t S>
   static_ptr& operator =(static_ptr<U, S>&& rhs)
-    noexcept(ceph::is_nothrow_move_constructible_v<U>) {
+    noexcept(std::is_nothrow_move_constructible_v<U>) {
     create_ward<U, S>();
     reset();
     if (rhs) {
@@ -215,13 +216,13 @@ public:
   // unnecessary. Also it doesn't fit the pointer idiom as well.
   //
   template<typename T, typename... Args>
-  static_ptr(in_place_type_t<T>, Args&& ...args)
-    noexcept(ceph::is_nothrow_constructible_v<T, Args...>)
+  static_ptr(std::in_place_type_t<T>, Args&& ...args)
+    noexcept(std::is_nothrow_constructible_v<T, Args...>)
     : operate(&_mem::op_fun<T>){
-    static_assert((!ceph::is_nothrow_copy_constructible_v<Base> ||
-		   ceph::is_nothrow_copy_constructible_v<T>) &&
-		  (!ceph::is_nothrow_move_constructible_v<Base> ||
-		   ceph::is_nothrow_move_constructible_v<T>),
+    static_assert((!std::is_nothrow_copy_constructible_v<Base> ||
+		   std::is_nothrow_copy_constructible_v<T>) &&
+		  (!std::is_nothrow_move_constructible_v<Base> ||
+		   std::is_nothrow_move_constructible_v<T>),
 		  "If declared type of static_ptr is nothrow "
 		  "move/copy constructible, then any "
 		  "type assigned to it must be as well. "
@@ -239,7 +240,7 @@ public:
   //
   template<typename T, typename... Args>
   void emplace(Args&& ...args)
-    noexcept(ceph::is_nothrow_constructible_v<T, Args...>) {
+    noexcept(std::is_nothrow_constructible_v<T, Args...>) {
     create_ward<T, sizeof(T)>();
     reset();
     operate = &_mem::op_fun<T>;
@@ -251,11 +252,11 @@ public:
     return operate ? reinterpret_cast<Base*>(&buf) : nullptr;
   }
   template<typename U = Base>
-  std::enable_if_t<!ceph::is_void_v<U>, Base*> operator->() const noexcept {
+  std::enable_if_t<!std::is_void_v<U>, Base*> operator->() const noexcept {
     return get();
   }
   template<typename U = Base>
-  std::enable_if_t<!ceph::is_void_v<U>, Base&> operator *() const noexcept {
+  std::enable_if_t<!std::is_void_v<U>, Base&> operator *() const noexcept {
     return *get();
   }
   operator bool() const noexcept {
@@ -402,7 +403,7 @@ static_ptr<U, Z> reinterpret_pointer_cast(static_ptr<T, S>&& p) {
 // returns a null value rather than throwing.
 template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> resize_pointer_cast(const static_ptr<T, S>& p) {
-  static_assert(ceph::is_same_v<U, T>,
+  static_assert(std::is_same_v<U, T>,
                 "resize_pointer_cast only changes size, not type.");
   static_ptr<U, Z> r;
   if (Z >= p.operate(_mem::op::size, &p.buf, nullptr)) {
@@ -413,7 +414,7 @@ static_ptr<U, Z> resize_pointer_cast(const static_ptr<T, S>& p) {
 }
 template<typename U, std::size_t Z, typename T, std::size_t S>
 static_ptr<U, Z> resize_pointer_cast(static_ptr<T, S>&& p) {
-  static_assert(ceph::is_same_v<U, T>,
+  static_assert(std::is_same_v<U, T>,
                 "resize_pointer_cast only changes size, not type.");
   static_ptr<U, Z> r;
   if (Z >= p.operate(_mem::op::size, &p.buf, nullptr)) {
@@ -438,6 +439,6 @@ bool operator ==(std::nullptr_t, static_ptr<Base, Size> s) {
 template<typename Base, typename Derived = Base,
          std::size_t Size = sizeof(Derived), typename... Args>
 static_ptr<Base, Size> make_static(Args&& ...args) {
-  return { ceph::in_place_type<Derived>, std::forward<Args>(args)... };
+  return { std::in_place_type<Derived>, std::forward<Args>(args)... };
 }
 }

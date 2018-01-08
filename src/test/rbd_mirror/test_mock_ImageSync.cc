@@ -330,14 +330,14 @@ TEST_F(TestMockImageSync, CancelNotifySyncRequest) {
   C_SaferCond notify_sync_ctx;
   EXPECT_CALL(mock_instance_watcher,
               notify_sync_request(mock_local_image_ctx.id, _))
-    .WillOnce(Invoke([this, &on_sync_start, &notify_sync_ctx](
+    .WillOnce(Invoke([&on_sync_start, &notify_sync_ctx](
                          const std::string &, Context *ctx) {
                        on_sync_start = ctx;
                        notify_sync_ctx.complete(0);
                      }));
   EXPECT_CALL(mock_instance_watcher,
               cancel_sync_request(mock_local_image_ctx.id))
-    .WillOnce(Invoke([this, &on_sync_start](const std::string &) {
+    .WillOnce(Invoke([&on_sync_start](const std::string &) {
           EXPECT_NE(nullptr, on_sync_start);
           on_sync_start->complete(-ECANCELED);
           return true;

@@ -59,7 +59,7 @@ TEST(StaticPtr, EmptyCreation) {
 
 TEST(StaticPtr, CreationCall) {
   {
-    static_ptr<base, sizeof(grandchild)> p(ceph::in_place_type_t<sibling1>{});
+    static_ptr<base, sizeof(grandchild)> p(std::in_place_type_t<sibling1>{});
     EXPECT_TRUE(p);
     EXPECT_FALSE(p == nullptr);
     EXPECT_FALSE(nullptr == p);
@@ -82,7 +82,7 @@ TEST(StaticPtr, CreationCall) {
 
 TEST(StaticPtr, CreateReset) {
   {
-    static_ptr<base, sizeof(grandchild)> p(ceph::in_place_type_t<sibling1>{});
+    static_ptr<base, sizeof(grandchild)> p(std::in_place_type_t<sibling1>{});
     EXPECT_EQ((p.get())->func(), 0);
     p.reset();
     EXPECT_FALSE(p);
@@ -91,7 +91,7 @@ TEST(StaticPtr, CreateReset) {
     EXPECT_TRUE(p.get() == nullptr);
   }
   {
-    static_ptr<base, sizeof(grandchild)> p(ceph::in_place_type_t<sibling1>{});
+    static_ptr<base, sizeof(grandchild)> p(std::in_place_type_t<sibling1>{});
     EXPECT_EQ((p.get())->func(), 0);
     p = nullptr;
     EXPECT_FALSE(p);
@@ -102,7 +102,7 @@ TEST(StaticPtr, CreateReset) {
 }
 
 TEST(StaticPtr, CreateEmplace) {
-  static_ptr<base, sizeof(grandchild)> p(ceph::in_place_type_t<sibling1>{});
+  static_ptr<base, sizeof(grandchild)> p(std::in_place_type_t<sibling1>{});
   EXPECT_EQ((p.get())->func(), 0);
   p.emplace<grandchild>(30);
   EXPECT_EQ(p->func(), 9);
@@ -110,10 +110,10 @@ TEST(StaticPtr, CreateEmplace) {
 
 TEST(StaticPtr, CopyMove) {
   // Won't compile. Good.
-  // static_ptr<base, sizeof(base)> p1(ceph::in_place_type_t<grandchild>{}, 3);
+  // static_ptr<base, sizeof(base)> p1(std::in_place_type_t<grandchild>{}, 3);
 
-  static_ptr<base, sizeof(base)> p1(ceph::in_place_type_t<sibling1>{});
-  static_ptr<base, sizeof(grandchild)> p2(ceph::in_place_type_t<grandchild>{},
+  static_ptr<base, sizeof(base)> p1(std::in_place_type_t<sibling1>{});
+  static_ptr<base, sizeof(grandchild)> p2(std::in_place_type_t<grandchild>{},
                                           3);
 
   // This also does not compile. Good.
@@ -127,7 +127,7 @@ TEST(StaticPtr, CopyMove) {
 
 TEST(StaticPtr, ImplicitUpcast) {
   static_ptr<base, sizeof(grandchild)> p1;
-  static_ptr<sibling2, sizeof(grandchild)> p2(ceph::in_place_type_t<grandchild>{}, 3);
+  static_ptr<sibling2, sizeof(grandchild)> p2(std::in_place_type_t<grandchild>{}, 3);
 
   p1 = p2;
   EXPECT_EQ(p1->func(), 9);
@@ -142,7 +142,7 @@ TEST(StaticPtr, ImplicitUpcast) {
 }
 
 TEST(StaticPtr, StaticCast) {
-  static_ptr<base, sizeof(grandchild)> p1(ceph::in_place_type_t<grandchild>{}, 3);
+  static_ptr<base, sizeof(grandchild)> p1(std::in_place_type_t<grandchild>{}, 3);
   static_ptr<sibling2, sizeof(grandchild)> p2;
 
   p2 = ceph::static_pointer_cast<sibling2, sizeof(grandchild)>(p1);
@@ -157,25 +157,25 @@ TEST(StaticPtr, StaticCast) {
 TEST(StaticPtr, DynamicCast) {
   static constexpr auto sz = sizeof(great_grandchild);
   {
-    static_ptr<base, sz> p1(ceph::in_place_type_t<grandchild>{}, 3);
+    static_ptr<base, sz> p1(std::in_place_type_t<grandchild>{}, 3);
     auto p2 = ceph::dynamic_pointer_cast<great_grandchild, sz>(p1);
     EXPECT_FALSE(p2);
   }
   {
-    static_ptr<base, sz> p1(ceph::in_place_type_t<grandchild>{}, 3);
+    static_ptr<base, sz> p1(std::in_place_type_t<grandchild>{}, 3);
     auto p2 = ceph::dynamic_pointer_cast<great_grandchild, sz>(std::move(p1));
     EXPECT_FALSE(p2);
   }
 
   {
-    static_ptr<base, sz> p1(ceph::in_place_type_t<grandchild>{}, 3);
+    static_ptr<base, sz> p1(std::in_place_type_t<grandchild>{}, 3);
     auto p2 = ceph::dynamic_pointer_cast<grandchild, sz>(p1);
     EXPECT_TRUE(p2);
     EXPECT_EQ(p2->func(), 9);
     EXPECT_EQ(p2->call(10), 30);
   }
   {
-    static_ptr<base, sz> p1(ceph::in_place_type_t<grandchild>{}, 3);
+    static_ptr<base, sz> p1(std::in_place_type_t<grandchild>{}, 3);
     auto p2 = ceph::dynamic_pointer_cast<grandchild, sz>(std::move(p1));
     EXPECT_TRUE(p2);
     EXPECT_EQ(p2->func(), 9);
@@ -254,7 +254,7 @@ struct exceptional {
 };
 
 TEST(StaticPtr, Exceptional) {
-  static_ptr<exceptional> p1(ceph::in_place_type_t<exceptional>{});
+  static_ptr<exceptional> p1(std::in_place_type_t<exceptional>{});
   EXPECT_ANY_THROW(static_ptr<exceptional> p2(p1));
   EXPECT_ANY_THROW(static_ptr<exceptional> p2(std::move(p1)));
 }

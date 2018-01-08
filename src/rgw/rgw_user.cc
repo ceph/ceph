@@ -11,7 +11,6 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
-#include "common/backport_std.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 

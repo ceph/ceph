@@ -265,7 +265,7 @@ void MgrStatMonitor::check_sub(Subscription *sub)
     auto m = new MServiceMap(service_map);
     sub->session->con->send_message(m);
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

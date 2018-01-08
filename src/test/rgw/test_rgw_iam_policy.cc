@@ -35,7 +35,6 @@ using boost::container::flat_set;
 using boost::intrusive_ptr;
 using boost::make_optional;
 using boost::none;
-using boost::optional;
 
 using rgw::auth::Identity;
 using rgw::auth::Principal;
@@ -132,7 +131,7 @@ public:
 };
 
 TEST_F(PolicyTest, Parse1) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example1)));
@@ -183,7 +182,7 @@ TEST_F(PolicyTest, Eval1) {
 }
 
 TEST_F(PolicyTest, Parse2) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example2)));
@@ -264,7 +263,7 @@ TEST_F(PolicyTest, Eval2) {
 }
 
 TEST_F(PolicyTest, Parse3) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(example3)));
@@ -622,7 +621,7 @@ TEST_F(IPPolicyTest, IPEnvironment) {
 }
 
 TEST_F(IPPolicyTest, ParseIPAddress) {
-  optional<Policy> p;
+  boost::optional<Policy> p;
 
   ASSERT_NO_THROW(p = Policy(cct.get(), arbitrary_tenant,
 			     bufferlist::static_from_string(ip_address_full_example)));
@@ -659,7 +658,7 @@ TEST_F(IPPolicyTest, ParseIPAddress) {
   EXPECT_EQ(p->statements[0].conditions[0].vals.size(), 2U);
   EXPECT_EQ(p->statements[0].conditions[0].vals[0], "192.168.1.0/24");
   EXPECT_EQ(p->statements[0].conditions[0].vals[1], "::1");
-  optional<rgw::IAM::MaskedIP> convertedIPv4 = rgw::IAM::Condition::as_network(p->statements[0].conditions[0].vals[0]);
+  boost::optional<rgw::IAM::MaskedIP> convertedIPv4 = rgw::IAM::Condition::as_network(p->statements[0].conditions[0].vals[0]);
   EXPECT_TRUE(convertedIPv4.is_initialized());
   if (convertedIPv4.is_initialized()) {
     EXPECT_EQ(*convertedIPv4, allowedIPv4Range);
@@ -671,7 +670,7 @@ TEST_F(IPPolicyTest, ParseIPAddress) {
   EXPECT_EQ(p->statements[0].conditions[1].vals.size(), 2U);
   EXPECT_EQ(p->statements[0].conditions[1].vals[0], "192.168.1.1/32");
   EXPECT_EQ(p->statements[0].conditions[1].vals[1], "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
-  optional<rgw::IAM::MaskedIP> convertedIPv6 = rgw::IAM::Condition::as_network(p->statements[0].conditions[1].vals[1]);
+  boost::optional<rgw::IAM::MaskedIP> convertedIPv6 = rgw::IAM::Condition::as_network(p->statements[0].conditions[1].vals[1]);
   EXPECT_TRUE(convertedIPv6.is_initialized());
   if (convertedIPv6.is_initialized()) {
     EXPECT_EQ(*convertedIPv6, allowedIPv6);

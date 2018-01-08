@@ -1292,7 +1292,7 @@ int MDBalancer::dump_loads(Formatter *f)
   f->open_object_section("mds_load");
   {
 
-    auto dump_mds_load = [this, f, now](mds_load_t& load) {
+    auto dump_mds_load = [f, now](mds_load_t& load) {
       f->dump_float("request_rate", load.req_rate);
       f->dump_float("cache_hit_rate", load.cache_hit_rate);
       f->dump_float("queue_length", load.queue_len);

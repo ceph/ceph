@@ -1365,7 +1365,7 @@ void MDSRank::reconnect_start()
   objecter->enable_blacklist_events();
   std::set<entity_addr_t> blacklist;
   epoch_t epoch = 0;
-  objecter->with_osdmap([this, &blacklist, &epoch](const OSDMap& o) {
+  objecter->with_osdmap([&blacklist, &epoch](const OSDMap& o) {
       o.get_blacklist(&blacklist);
       epoch = o.get_epoch();
   });
@@ -2743,7 +2743,7 @@ bool MDSRank::evict_client(int64_t session_id,
     Context *on_blacklist_done = new FunctionContext([this, session_id, fn](int r) {
       objecter->wait_for_latest_osdmap(
        new C_OnFinisher(
-         new FunctionContext([this, session_id, fn](int r) {
+         new FunctionContext([this, fn](int r) {
               Mutex::Locker l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
                   return o.get_epoch();
@@ -2760,7 +2760,7 @@ bool MDSRank::evict_client(int64_t session_id,
     monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
   };
 
-  auto blocking_blacklist = [this, cmd, &err_ss, background_blacklist](){
+  auto blocking_blacklist = [this, cmd, background_blacklist](){
     C_SaferCond inline_ctx;
     background_blacklist([&inline_ctx](){inline_ctx.complete(0);});
     mds_lock.Unlock();
