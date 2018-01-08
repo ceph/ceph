@@ -141,7 +141,7 @@ public:
 			 std::ostream *warnings, int flags);
 
   // Absorb config settings from the environment
-  void parse_env();
+  void parse_env(const char *env_var = "CEPH_ARGS");
 
   // Absorb config settings from argv
   int parse_argv(std::vector<const char*>& args, int level=CONF_CMDLINE);
