@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "rgw_admin_common.h"
+#include "rgw_admin_argument_parsing.h"
 
 #include <common/safe_io.h>
 
