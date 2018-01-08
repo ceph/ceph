@@ -485,25 +485,42 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   url = new_url;
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& attrs, bool send)
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send)
 {
+  map<string, string> new_attrs;
   /* merge send headers */
-  for (auto& attr: attrs) {
+  for (auto& attr: rgw_attrs) {
     bufferlist& bl = attr.second;
     const string& name = attr.first;
     string val = bl.c_str();
     if (name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
       string header_name = RGW_AMZ_META_PREFIX;
       header_name.append(name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1));
-      new_env.set(header_name, val);
-      new_info.x_meta_map[header_name] = val;
+      new_attrs[header_name] = val;
     }
   }
+
   RGWAccessControlPolicy policy;
-  int ret = rgw_policy_from_attrset(cct, attrs, &policy);
+  int ret = rgw_policy_from_attrset(cct, rgw_attrs, &policy);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: couldn't get policy ret=" << ret << dendl;
     return ret;
+  }
+
+  return send_ready(key, new_attrs, policy, send);
+}
+
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+                                      RGWAccessControlPolicy& policy, bool send)
+{
+  /* merge send headers */
+  for (auto& attr: http_attrs) {
+    const string& val = attr.second;
+    const string& name = lowercase_dash_http_attr(attr.first);
+    if (name.compare(0, sizeof(RGW_AMZ_META_PREFIX) - 1, RGW_AMZ_META_PREFIX) == 0) {
+      new_env.set(name, val);
+      new_info.x_meta_map[name] = val;
+    }
   }
 
   /* update acl headers */
@@ -517,7 +534,7 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>
     grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
   }
   add_grants_headers(grants_by_type, new_env, new_info.x_meta_map);
-  ret = sign_request(cct, key, new_env, new_info);
+  int ret = sign_request(cct, key, new_env, new_info);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to sign request" << dendl;
     return ret;

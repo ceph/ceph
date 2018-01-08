@@ -190,7 +190,9 @@ public:
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw_obj& obj);
-  int send_ready(RGWAccessKey& key, map<string, bufferlist>& attrs, bool send);
+  int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
+  int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
+                 RGWAccessControlPolicy& policy, bool send);
 
   int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
 
