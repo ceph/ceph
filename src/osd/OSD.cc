@@ -4651,7 +4651,7 @@ void OSD::heartbeat_check()
              << " (oldest deadline " << oldest_deadline << ")"
              << dendl;
 	// fail
-	failure_queue[p->first] = p->second.last_tx;
+	failure_queue[p->first] = p->second.first_tx;
       } else {
 	derr << "heartbeat_check: no reply from "
              << p->second.con_front->get_peer_addr().get_sockaddr()
