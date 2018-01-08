@@ -10,7 +10,7 @@
 #include "common/ceph_json.h"
 #include "common/errno.h"
 
-#include "rgw_admin_common.h"
+#include "rgw_admin_argument_parsing.h"
 
 template <class T, class K>
 int read_decode_json(const string& infile, T& t, K *k)
