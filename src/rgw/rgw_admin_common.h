@@ -1,7 +1,3 @@
-//
-// Created by cache-nez on 08.01.18.
-//
-
 #ifndef CEPH_RGW_ADMIN_COMMON_H
 #define CEPH_RGW_ADMIN_COMMON_H
 

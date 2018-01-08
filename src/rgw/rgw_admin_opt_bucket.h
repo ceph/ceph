@@ -1,7 +1,3 @@
-//
-// Created by cache-nez on 08.01.18.
-//
-
 #ifndef CEPH_RGW_ADMIN_BUCKET_H
 #define CEPH_RGW_ADMIN_BUCKET_H
 
@@ -11,6 +7,7 @@
 #include "common/errno.h"
 
 #include "rgw_admin_argument_parsing.h"
+#include "rgw_admin_common.h"
 
 template <class T, class K>
 int read_decode_json(const string& infile, T& t, K *k)
