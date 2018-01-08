@@ -3424,9 +3424,6 @@ static int rgw_cls_lc_rm_entry(cls_method_context_t hctx, bufferlist *in, buffer
     return -EINVAL;
   }
 
-  bufferlist bl;
-  ::encode(op.entry, bl);
-
   int ret = cls_cxx_map_remove_key(hctx, op.entry.first);
   return ret;
 }
