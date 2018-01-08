@@ -47,6 +47,12 @@ class MgrCluster(CephCluster):
     def get_standby_ids(self):
         return [s['name'] for s in self.get_mgr_map()["standbys"]]
 
+    def set_module_conf(self, module, key, val):
+        self.mon_manager.raw_cluster_cmd("config-key", "set",
+                                         "mgr/{0}/{1}".format(
+                                             module, key
+                                         ), val)
+
     def set_module_localized_conf(self, module, mgr_id, key, val):
         self.mon_manager.raw_cluster_cmd("config-key", "set",
                                          "mgr/{0}/{1}/{2}".format(
