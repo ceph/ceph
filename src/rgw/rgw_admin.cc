@@ -43,7 +43,6 @@
 #include "rgw_admin_opt_policy.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
@@ -66,48 +65,6 @@ public:
     RGWStoreManager::close_storage(store);
   }
 };
-
-template <class T>
-static int read_decode_json(const string& infile, T& t)
-{
-  bufferlist bl;
-  int ret = read_input(infile, bl);
-  if (ret < 0) {
-    cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  JSONParser p;
-  if (!p.parse(bl.c_str(), bl.length())) {
-    cout << "failed to parse JSON" << std::endl;
-    return -EINVAL;
-  }
-
-  try {
-    decode_json_obj(t, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
-    return -EINVAL;
-  }
-  return 0;
-}
-
-static int parse_date_str(const string& date_str, utime_t& ut)
-{
-  uint64_t epoch = 0;
-  uint64_t nsec = 0;
-
-  if (!date_str.empty()) {
-    int ret = utime_t::parse_date(date_str, &epoch, &nsec);
-    if (ret < 0) {
-      cerr << "ERROR: failed to parse date: " << date_str << std::endl;
-      return -EINVAL;
-    }
-  }
-
-  ut = utime_t(epoch, nsec);
-
-  return 0;
-}
 
 template <class T>
 static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
@@ -229,71 +186,6 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
     return -r;
   }
-  return 0;
-}
-
-int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
-{
-  map<string, bufferlist> attrs;
-  uint64_t obj_size;
-
-  RGWObjectCtx obj_ctx(store);
-  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
-  RGWRados::Object::Read read_op(&op_target);
-
-  read_op.params.attrs = &attrs;
-  read_op.params.obj_size = &obj_size;
-
-  int ret = read_op.prepare();
-  if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
-    return ret;
-  }
-
-  map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_MANIFEST);
-  if (iter == attrs.end()) {
-    *need_rewrite = (obj_size >= min_stripe_size);
-    return 0;
-  }
-
-  RGWObjManifest manifest;
-
-  try {
-    bufferlist& bl = iter->second;
-    bufferlist::iterator biter = bl.begin();
-    ::decode(manifest, biter);
-  } catch (buffer::error& err) {
-    ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
-    return -EIO;
-  }
-
-  map<uint64_t, RGWObjManifestPart>& objs = manifest.get_explicit_objs();
-  map<uint64_t, RGWObjManifestPart>::iterator oiter;
-  for (oiter = objs.begin(); oiter != objs.end(); ++oiter) {
-    RGWObjManifestPart& part = oiter->second;
-
-    if (part.size >= min_stripe_size) {
-      *need_rewrite = true;
-      return 0;
-    }
-  }
-  *need_rewrite = false;
-
-  return 0;
-}
-
-static int read_current_period_id(RGWRados* store, const std::string& realm_id,
-                                  const std::string& realm_name,
-                                  std::string* period_id)
-{
-  RGWRealm realm(realm_id, realm_name);
-  int ret = realm.init(g_ceph_context, store);
-  if (ret < 0) {
-    std::cerr << "failed to read realm: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  *period_id = realm.get_current_period();
   return 0;
 }
 
@@ -662,48 +554,6 @@ static int check_pool_support_omap(const rgw_pool& pool)
     return ret;
   }
   io_ctx.close();
-  return 0;
-}
-
-int check_reshard_bucket_params(RGWRados *store,
-				const string& bucket_name,
-				const string& tenant,
-				const string& bucket_id,
-				bool num_shards_specified,
-				int num_shards,
-				int yes_i_really_mean_it,
-				rgw_bucket& bucket,
-				RGWBucketInfo& bucket_info,
-				map<string, bufferlist>& attrs)
-{
-  if (bucket_name.empty()) {
-    cerr << "ERROR: bucket not specified" << std::endl;
-    return -EINVAL;
-  }
-
-  if (!num_shards_specified) {
-    cerr << "ERROR: --num-shards not specified" << std::endl;
-    return -EINVAL;
-  }
-
-  if (num_shards > (int)store->get_max_bucket_shards()) {
-    cerr << "ERROR: num_shards too high, max value: " << store->get_max_bucket_shards() << std::endl;
-    return -EINVAL;
-  }
-
-  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
-  if (ret < 0) {
-    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
-  }
-
-  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
-
-  if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
-    cerr << "num shards is less or equal to current shards count" << std::endl
-	 << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-    return -EINVAL;
-  }
   return 0;
 }
 
