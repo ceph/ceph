@@ -172,20 +172,11 @@ public:
   void send_ready(const rgw_rest_obj& rest_obj) override {
     RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
 
-    /* here we need to convert rest_obj.attrs to cloud specific representation */
-
-    map<string, bufferlist> new_attrs;
-
-    for (auto attr : rest_obj.attrs) {
-      new_attrs[attr.first].append(attr.second);
-    }
-
     RGWAccessControlPolicy policy;
-    ::encode(policy, new_attrs[RGW_ATTR_ACL]);
 
     r->set_send_length(rest_obj.content_len);
 
-    r->send_ready(conn->get_key(), new_attrs, false);
+    r->send_ready(conn->get_key(), rest_obj.attrs, policy, false);
   }
 
   void handle_headers(const map<string, string>& headers) {
