@@ -134,9 +134,11 @@ void global_pre_init(
     _exit(1);
   }
 
-  conf->parse_env(); // environment variables override
+  // environment variables override (CEPH_ARGS, CEPH_KEYRING)
+  conf->parse_env();
 
-  conf->parse_argv(args); // argv override
+  // command line (as passed by caller)
+  conf->parse_argv(args);
 
   if (!iparams.no_mon_config) {
     MonClient mc_bootstrap(g_ceph_context);

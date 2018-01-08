@@ -458,14 +458,22 @@ int md_config_t::parse_config_files(const char *conf_files_str,
   return 0;
 }
 
-void md_config_t::parse_env()
+void md_config_t::parse_env(const char *args_var)
 {
-  Mutex::Locker l(lock);
   if (safe_to_start_threads)
     return;
+  if (!args_var) {
+    args_var = "CEPH_ARGS";
+  }
   if (getenv("CEPH_KEYRING")) {
+    Mutex::Locker l(lock);
     string k = getenv("CEPH_KEYRING");
     values["keyring"][CONF_ENV] = Option::value_t(k);
+  }
+  if (getenv(args_var)) {
+    vector<const char *> env_args;
+    env_to_vec(env_args, args_var);
+    parse_argv(env_args, CONF_ENV);
   }
 }
 
