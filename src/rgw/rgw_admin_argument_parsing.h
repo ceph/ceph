@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef CEPH_RGW_ADMIN_COMMON_H
-#define CEPH_RGW_ADMIN_COMMON_H
+#ifndef CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
+#define CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
 
 #include "rgw_user.h"
 
@@ -218,4 +218,4 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
                                  string& assume_role_doc, string& policy_name, string& perm_policy_doc,
                                  string& path_prefix);
 
-#endif //CEPH_RGW_ADMIN_COMMON_H
+#endif //CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
