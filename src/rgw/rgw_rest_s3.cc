@@ -4177,15 +4177,16 @@ rgw::auth::s3::LocalEngine::authenticate(
 
   const VersionAbstractor::server_signature_t server_signature = \
     signature_factory(cct, k.key, string_to_sign);
+  auto compare = signature.compare(server_signature);
 
   ldout(cct, 15) << "string_to_sign="
                  << rgw::crypt_sanitize::log_content{string_to_sign}
                  << dendl;
   ldout(cct, 15) << "server signature=" << server_signature << dendl;
   ldout(cct, 15) << "client signature=" << signature << dendl;
-  ldout(cct, 15) << "compare=" << signature.compare(server_signature) << dendl;
+  ldout(cct, 15) << "compare=" << compare << dendl;
 
-  if (static_cast<boost::string_view>(server_signature) != signature) {
+  if (compare != 0) {
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
