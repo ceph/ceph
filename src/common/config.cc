@@ -54,12 +54,12 @@ static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluste
 const char *ceph_conf_level_name(int level)
 {
   switch (level) {
-  case CONF_DEFAULT: return "default";
-  case CONF_MON: return "mon";
-  case CONF_ENV: return "env";
-  case CONF_FILE: return "file";
-  case CONF_CMDLINE: return "cmdline";
-  case CONF_OVERRIDE: return "override";
+  case CONF_DEFAULT: return "default";   // built-in default
+  case CONF_MON: return "mon";           // monitor config database
+  case CONF_ENV: return "env";           // process environment (CEPH_ARGS)
+  case CONF_FILE: return "file";         // ceph.conf file
+  case CONF_CMDLINE: return "cmdline";   // process command line args
+  case CONF_OVERRIDE: return "override"; // injectargs or 'config set' at runtime
   case CONF_FINAL: return "final";
   default: return "???";
   }
