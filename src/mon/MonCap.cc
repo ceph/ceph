@@ -26,8 +26,8 @@
 #include "common/Formatter.h"
 
 #include <algorithm>
+#include <regex>
 
-#include <boost/regex.hpp>
 #include "include/assert.h"
 
 static inline bool is_not_alnum_space(char c)
@@ -340,12 +340,14 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
 	  return 0;
         break;
       case StringConstraint::MATCH_TYPE_REGEX:
-        {
-	  boost::regex pattern(
-            p->second.value, boost::regex::extended | boost::regex::no_except);
-          if (pattern.empty() || !boost::regex_match(q->second, pattern))
+        try {
+	  std::regex pattern(
+            p->second.value, std::regex::extended);
+          if (!std::regex_match(q->second, pattern))
 	    return 0;
-        }
+        } catch(const std::regex_error&) {
+	  return 0;
+	}
         break;
       default:
         break;
