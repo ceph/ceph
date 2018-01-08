@@ -1634,3 +1634,17 @@ void RGWLifecycleConfiguration::dump(Formatter *f) const
   }
   f->close_section();
 }
+
+void compression_block::dump(Formatter *f) const
+{
+  f->dump_unsigned("old_ofs", old_ofs);
+  f->dump_unsigned("new_ofs", new_ofs);
+  f->dump_unsigned("len", len);
+}
+
+void RGWCompressionInfo::dump(Formatter *f) const
+{
+  f->dump_string("compression_type", compression_type);
+  f->dump_unsigned("orig_size", orig_size);
+  ::encode_json("blocks", blocks, f);
+}
