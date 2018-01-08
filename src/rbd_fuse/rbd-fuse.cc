@@ -38,11 +38,12 @@ rados_t cluster;
 rados_ioctx_t ioctx;
 int next_descriptor = 0;
 
-std::mutex readdir_lock;           // Locks access to the FUSE directory
-std::mutex in_flight_writes_lock;  // Locks access to the in-flight write recordset
-std::mutex file_descriptor_lock;   // Serialize increments to the next file descriptor
-std::mutex image_data_lock;        // Locks access to the image data map
-std::mutex open_images_lock;       // Locks access to the open image map
+// Mutexes currently need to be re-entrant (std::recursive_mutex instead of std::mutex)
+std::recursive_mutex readdir_lock;           // Locks access to the FUSE directory
+std::recursive_mutex in_flight_writes_lock;  // Locks access to the in-flight write recordset
+std::recursive_mutex file_descriptor_lock;   // Serialize increments to the next file descriptor
+std::recursive_mutex image_data_lock;        // Locks access to the image data map
+std::recursive_mutex open_images_lock;       // Locks access to the open image map
 
 struct rbd_stat {
     u_char valid;
@@ -414,8 +415,9 @@ build_image_data_from_list(char *list_buffer, size_t list_buffer_len)
     clear_rbd_image_data();
     free(rbd_image_list.buf);
     // Save the image list for a future comparison
-    rbd_image_list.buf = list_buffer;
+    rbd_image_list.buf = malloc(list_buffer_len);
     rbd_image_list.buf_len = list_buffer_len;
+    memcpy(rbd_image_list.buf, list_buffer, list_buffer_len);
 
     for (ip = list_buffer; ip < &list_buffer[list_buffer_len]; ip += strlen(ip) + 1)  {
         // Add the image to the map if there is room and we are either not restricting by name or the name matches
@@ -468,7 +470,6 @@ enumerate_images()
         build_image_data_from_list(ibuf, ibuf_len);
     else
         fprintf(stderr, "\n");
-        free(ibuf);
 }
 
 // Open an image and return a file descriptor
@@ -1163,6 +1164,10 @@ failed_shutdown:
 
 int main(int argc, char *argv[])
 {
+    // Initialize the cached image list to empty
+    rbd_image_list.buf = NULL;
+    rbd_image_list.buf_len = 0;
+
 	struct fuse_args args = FUSE_ARGS_INIT(argc, argv);
 
 	if (fuse_opt_parse(&args, &rbd_options, rbdfs_opts, rbdfs_opt_proc) == -1) {
