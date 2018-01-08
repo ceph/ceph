@@ -689,7 +689,7 @@ Summary:	Ceph benchmarks and test tools
 %if 0%{?suse_version}
 Group:		System/Benchmark
 %endif
-Requires:	ceph-common
+Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:	xmlstarlet
 Requires:	jq
 Requires:	socat
