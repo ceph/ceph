@@ -199,10 +199,14 @@ public:
 	}
 	uint32_t rand_offset = rand() % max_len;
 	uint32_t rand_length = rand() % max_len;
+	rand_offset = rand_offset - (rand_offset % 512);
+	rand_length = rand_length - (rand_length % 512);
 
 	while (rand_offset + rand_length > max_len || rand_length == 0) {
 	  rand_offset = rand() % max_len;
 	  rand_length = rand() % max_len;
+	  rand_offset = rand_offset - (rand_offset % 512);
+	  rand_length = rand_length - (rand_length % 512);
 	}
 	uint32_t rand_tgt_offset = rand_offset;
 	cout << m_op << ": " << "set_chunk oid " << oid.str() << " offset: " << rand_offset 

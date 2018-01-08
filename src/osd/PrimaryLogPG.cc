@@ -2383,6 +2383,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   case object_manifest_t::TYPE_CHUNKED: 
     {
       if (can_proxy_chunked_read(op, obc)) {
+	map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
+        if (p != flush_ops.end()) {
+          do_proxy_chunked_op(op, obc->obs.oi.soid, obc, true);
+          return cache_result_t::HANDLED_PROXY;
+        }
 	do_proxy_chunked_op(op, obc->obs.oi.soid, obc, write_ordered);
 	return cache_result_t::HANDLED_PROXY;
       }
@@ -2412,6 +2417,16 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 	  return cache_result_t::BLOCKED_PROMOTE;
 	}
       }
+
+      bool all_dirty = true;
+      for (auto& p : obc->obs.oi.manifest.chunk_map) {
+	if (p.second.flags != chunk_info_t::FLAG_DIRTY) {
+	  all_dirty = false;
+	}
+      }
+      if (all_dirty) {
+	start_flush(OpRequestRef(), obc, true, NULL, boost::none);
+      }
       return cache_result_t::NOOP;
     }
   default:
@@ -2419,6 +2434,167 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
   }
 
   return cache_result_t::NOOP;
+}
+
+struct C_ManifestFlush : public Context {
+  PrimaryLogPGRef pg;
+  hobject_t oid;
+  epoch_t last_peering_reset;
+  ceph_tid_t tid;
+  utime_t start;
+  uint64_t offset;
+  uint64_t last_offset;
+  C_ManifestFlush(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
+    : pg(p), oid(o), last_peering_reset(lpr),
+      tid(0), start(ceph_clock_now())
+  {}
+  void finish(int r) override {
+    if (r == -ECANCELED)
+      return;
+    pg->lock();
+    pg->handle_manifest_flush(oid, tid, r, offset, last_offset);
+    pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
+    pg->unlock();
+  }
+};
+
+void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+					 uint64_t offset, uint64_t last_offset)
+{
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  if (p == flush_ops.end()) {
+    dout(10) << __func__ << " no flush_op found" << dendl;
+    return;
+  }
+  if (p->second->rval < 0) {
+    return;
+  }
+  p->second->io_results[offset] = r;
+  for (auto &ior: p->second->io_results) {
+    if (ior.second < 0) {
+      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
+      p->second->rval = r;
+      return;
+    }
+  }
+  if (p->second->chunks == p->second->io_results.size()) {
+    if (last_peering_reset == get_last_peering_reset()) {
+      assert(p->second->obc);
+      finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
+    }
+  }
+}
+
+int PrimaryLogPG::start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
+				       boost::optional<std::function<void()>> &&on_flush)
+{
+  auto p = obc->obs.oi.manifest.chunk_map.begin();
+  FlushOpRef manifest_fop(std::make_shared<FlushOp>());
+  manifest_fop->op = op;
+  manifest_fop->obc = obc;
+  manifest_fop->flushed_version = obc->obs.oi.user_version;
+  manifest_fop->blocking = blocking;
+  manifest_fop->on_flush = std::move(on_flush);
+  int r = do_manifest_flush(op, obc, manifest_fop, p->first, blocking);
+  if (r < 0) {
+    return r;
+  }
+
+  flush_ops[obc->obs.oi.soid] = manifest_fop;
+  return -EINPROGRESS;
+}
+
+int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, FlushOpRef manifest_fop,
+				    uint64_t start_offset, bool block)
+{
+  struct object_manifest_t &manifest = obc->obs.oi.manifest;
+  hobject_t soid = obc->obs.oi.soid;
+  ceph_tid_t tid;
+  SnapContext snapc;
+  uint64_t max_copy_size = 0, last_offset = 0;
+
+  map<uint64_t, chunk_info_t>::iterator iter = manifest.chunk_map.find(start_offset); 
+  assert(iter != manifest.chunk_map.end());
+  for (;iter != manifest.chunk_map.end(); ++iter) {
+    if (iter->second.flags == chunk_info_t::FLAG_DIRTY) {
+      last_offset = iter->first;
+      max_copy_size += iter->second.length;
+    }
+    if (get_copy_chunk_size() < max_copy_size) {
+      break;
+    }
+  }
+
+  iter = manifest.chunk_map.find(start_offset);
+  for (;iter != manifest.chunk_map.end(); ++iter) {
+    if (iter->second.flags != chunk_info_t::FLAG_DIRTY) {
+      continue;
+    }
+    uint64_t tgt_length = iter->second.length;
+    uint64_t tgt_offset= iter->second.offset;
+    hobject_t tgt_soid = iter->second.oid;
+    object_locator_t oloc(tgt_soid);
+    ObjectOperation obj_op;
+    bufferlist chunk_data;
+    int r = pgbackend->objects_read_sync(
+	soid, iter->first, tgt_length, 0, &chunk_data);
+    if (r < 0) {
+      dout(0) << __func__ << " read fail " << " offset: " << tgt_offset
+	      << " len: " << tgt_length << " r: " << r << dendl;
+      return r;
+    }
+    if (!chunk_data.length()) {
+      return -ENODATA;
+    }
+    tgt_length = chunk_data.length();
+    obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
+
+    unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
+		     CEPH_OSD_FLAG_RWORDERED ;
+    C_ManifestFlush *fin = new C_ManifestFlush(this, soid, get_last_peering_reset());
+    fin->offset = iter->first;
+    fin->last_offset = last_offset;
+    manifest_fop->chunks++;
+
+    unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+    tid = osd->objecter->mutate(
+      tgt_soid.oid, oloc, obj_op, snapc,
+      ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+      flags, new C_OnFinisher(fin, osd->objecter_finishers[n]));
+    fin->tid = tid;
+    manifest_fop->io_tids[iter->first] = tid;
+
+    dout(20) << __func__ << " offset: " << tgt_offset << " len: " << tgt_length 
+	    << " oid: " << tgt_soid.oid << " ori oid: " << soid.oid.name 
+	    << " tid: " << tid << dendl;
+    if (last_offset < iter->first) {
+      break;
+    }
+  }
+
+  return 0;
+}
+
+void PrimaryLogPG::finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+					 ObjectContextRef obc, uint64_t last_offset)
+{
+  dout(10) << __func__ << " " << oid << " tid " << tid
+	   << " " << cpp_strerror(r) << " last_offset: " << last_offset << dendl;
+  map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
+  if (p == flush_ops.end()) {
+    dout(10) << __func__ << " no flush_op found" << dendl;
+    return;
+  }
+  map<uint64_t, chunk_info_t>::iterator iter = 
+      obc->obs.oi.manifest.chunk_map.find(last_offset); 
+  assert(iter != obc->obs.oi.manifest.chunk_map.end());
+  for (;iter != obc->obs.oi.manifest.chunk_map.end(); ++iter) {
+    if (iter->second.flags == chunk_info_t::FLAG_DIRTY && last_offset < iter->first) {
+      do_manifest_flush(p->second->op, obc, p->second, iter->first, p->second->blocking);
+      return;
+    }
+  }
+  finish_flush(oid, tid, r);
 }
 
 void PrimaryLogPG::record_write_error(OpRequestRef op, const hobject_t &soid,
@@ -3153,14 +3329,14 @@ void PrimaryLogPG::do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing
       dout(20) << __func__ << " chunk_index: " << chunks->first 
 	      << " next_length: " << chunks->second << " cursor: " 
 	      << p.first << dendl;
-      do_proxy_chunked_read(op, obc, i, chunks->first, p.first, chunks->second, req_len);
+      do_proxy_chunked_read(op, obc, i, chunks->first, p.first, chunks->second, req_len, write_ordered);
     }
   } 
 }
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
-					 uint64_t req_total_len)
+					 uint64_t req_total_len, bool write_ordered)
 {
   MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
   object_manifest_t *manifest = &obc->obs.oi.manifest;
@@ -3172,6 +3348,9 @@ void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, 
   hobject_t ori_soid = m->get_hobj();
   object_locator_t oloc(soid);
   unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY;
+  if (write_ordered) {
+    flags |= CEPH_OSD_FLAG_RWORDERED;
+  }
   
   if (!chunk_length || soid == hobject_t()) {
     return;
@@ -7627,6 +7806,15 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     }
     delta_stats.num_bytes += oi.extents.size();
   }
+  
+  if (oi.has_manifest() && oi.manifest.is_chunked()) {
+    for (auto &p : oi.manifest.chunk_map) {
+      if ((p.first <= offset && p.first + p.second.length > offset) ||
+	  (p.first > offset && p.first <= offset + length)) {
+	p.second.flags = chunk_info_t::FLAG_DIRTY;
+      }
+    }
+  }
   delta_stats.num_wr++;
   delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
 }
@@ -8736,12 +8924,12 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 	      sub_chunk.outdata.length(),
 	      sub_chunk.outdata,
 	      p.second->dest_obj_fadvise_flags);
-      obs.oi.manifest.chunk_map[p.second->cursor.data_offset].flags = 0; // clean
       dout(20) << __func__ << " offset: " << p.second->cursor.data_offset 
 	      << " length: " << sub_chunk.outdata.length() << dendl;
       sub_chunk.outdata.clear();
       write_update_size_and_usage(ctx->delta_stats, obs.oi, ctx->modified_ranges,
 				  p.second->cursor.data_offset, sub_chunk.outdata.length());
+      obs.oi.manifest.chunk_map[p.second->cursor.data_offset].flags = 0; // clean
     }
     obs.oi.clear_data_digest();
     ctx->at_version = get_next_version(); 
@@ -9350,6 +9538,15 @@ int PrimaryLogPG::start_flush(
     cancel_flush(fop, false);
   }
 
+  if (obc->obs.oi.has_manifest() && obc->obs.oi.manifest.is_chunked()) {
+    int r = start_manifest_flush(op, obc, blocking, std::move(on_flush));
+    if (r != -EINPROGRESS) {
+      if (blocking)
+	obc->stop_block();
+    }
+    return r;
+  }
+
   /**
    * In general, we need to send a delete and a copyfrom.
    * Consider snapc 10:[10, 9, 8, 4, 3, 2]:[10(10, 9), 4(4,3,2)]
@@ -9466,7 +9663,7 @@ void PrimaryLogPG::finish_flush(hobject_t oid, ceph_tid_t tid, int r)
     return;
   }
   FlushOpRef fop = p->second;
-  if (tid != fop->objecter_tid) {
+  if (tid != fop->objecter_tid && !fop->obc->obs.oi.has_manifest()) {
     dout(10) << __func__ << " tid " << tid << " != fop " << fop
 	     << " tid " << fop->objecter_tid << dendl;
     return;
@@ -9550,7 +9747,7 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   }
 
   // successfully flushed, can we evict this object?
-  if (!fop->op && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
+  if (!obc->obs.oi.has_manifest() && !fop->op && agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
       agent_maybe_evict(obc, true)) {
     osd->logger->inc(l_osd_tier_clean);
     if (fop->on_flush) {
@@ -9597,6 +9794,40 @@ int PrimaryLogPG::try_flush_mark_clean(FlushOpRef fop)
   ctx->new_obs = obc->obs;
   ctx->new_obs.oi.clear_flag(object_info_t::FLAG_DIRTY);
   --ctx->delta_stats.num_objects_dirty;
+  if (fop->obc->obs.oi.has_manifest()) {
+    assert(obc->obs.oi.manifest.is_chunked());
+    PGTransaction* t = ctx->op_t.get();
+    uint64_t chunks_size = 0;
+    for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
+      chunks_size += p.second.length;
+    }
+    if (ctx->new_obs.oi.is_omap() && pool.info.supports_omap()) {
+      t->omap_clear(oid);
+      ctx->new_obs.oi.clear_omap_digest();
+      ctx->new_obs.oi.clear_flag(object_info_t::FLAG_OMAP);
+    }
+    if (obc->obs.oi.size == chunks_size) { 
+      t->truncate(oid, 0);
+      interval_set<uint64_t> trim;
+      trim.insert(0, ctx->new_obs.oi.size);
+      ctx->modified_ranges.union_of(trim);
+      truncate_update_size_and_usage(ctx->delta_stats,
+				     ctx->new_obs.oi,
+				     0);
+      ctx->new_obs.oi.new_object();
+      for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
+	p.second.flags = chunk_info_t::FLAG_MISSING;
+      }
+    } else {
+      for (auto &p : ctx->new_obs.oi.manifest.chunk_map) {
+	if (p.second.flags == chunk_info_t::FLAG_DIRTY) {
+	  dout(20) << __func__ << " offset: " << p.second.offset 
+		  << " length: " << p.second.length << dendl;
+	  p.second.flags = 0; // CLEAN
+	}
+      }
+    }
+  }
 
   finish_ctx(ctx.get(), pg_log_entry_t::CLEAN);
 
@@ -9631,7 +9862,13 @@ void PrimaryLogPG::cancel_flush(FlushOpRef fop, bool requeue)
     osd->objecter->op_cancel(fop->objecter_tid, -ECANCELED);
     fop->objecter_tid = 0;
   }
-  if (fop->blocking) {
+  if (fop->io_tids.size()) {
+    for (auto &p : fop->io_tids) {
+      osd->objecter->op_cancel(p.second, -ECANCELED);
+      p.second = 0;
+    } 
+  }
+  if (fop->blocking && fop->obc->is_blocked()) {
     fop->obc->stop_block();
     kick_object_context_blocked(fop->obc);
   }

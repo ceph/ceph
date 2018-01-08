@@ -243,10 +243,14 @@ public:
     bool blocking;              ///< whether we are blocking updates
     bool removal;               ///< we are removing the backend object
     boost::optional<std::function<void()>> on_flush; ///< callback, may be null
+    // for chunked object
+    map<uint64_t, int> io_results; 
+    map<uint64_t, ceph_tid_t> io_tids; 
+    uint64_t chunks;
 
     FlushOp()
       : flushed_version(0), objecter_tid(0), rval(0),
-	blocking(false), removal(false) {}
+	blocking(false), removal(false), chunks(0) {}
     ~FlushOp() { assert(!on_flush); }
   };
   typedef ceph::shared_ptr<FlushOp> FlushOpRef;
@@ -1407,16 +1411,25 @@ protected:
 			   ObjectContextRef obc, bool write_ordered);
   void do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 			     uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
-			     uint64_t req_total_len);
+			     uint64_t req_total_len, bool write_ordered);
   bool can_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc);
   void _copy_some_manifest(ObjectContextRef obc, CopyOpRef cop, uint64_t start_offset);
   void process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, int r, uint64_t offset);
   void finish_promote_manifest(int r, CopyResults *results, ObjectContextRef obc);
   void cancel_and_requeue_proxy_ops(hobject_t oid);
+  int do_manifest_flush(OpRequestRef op, ObjectContextRef obc, FlushOpRef manifest_fop,
+			uint64_t start_offset, bool block);
+  int start_manifest_flush(OpRequestRef op, ObjectContextRef obc, bool blocking,
+			   boost::optional<std::function<void()>> &&on_flush);
+  void finish_manifest_flush(hobject_t oid, ceph_tid_t tid, int r, ObjectContextRef obc, 
+			     uint64_t last_offset);
+  void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
+			     uint64_t offset, uint64_t last_offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
   friend class C_CopyChunk;
+  friend struct C_ManifestFlush;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
