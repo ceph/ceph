@@ -32,7 +32,6 @@ static void handle_signal(int signum)
 int main(int argc, const char **argv)
 {
   std::vector<const char*> args;
-  env_to_vec(args);
   argv_to_vec(argc, argv, args);
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,

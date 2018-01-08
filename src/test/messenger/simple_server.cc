@@ -50,7 +50,6 @@ int main(int argc, const char **argv)
 	cout << "Simple Server starting..." << endl;
 
 	argv_to_vec(argc, argv, args);
-	env_to_vec(args);
 
 	auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_ANY,
 			       CODE_ENVIRONMENT_DAEMON,

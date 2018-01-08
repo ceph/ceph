@@ -689,7 +689,6 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
       for (const auto& elt : spl_args) {
 	args.push_back(elt.c_str());
       }
-      env_to_vec(args);
       rc = rgwlib.init(args);
     }
   }

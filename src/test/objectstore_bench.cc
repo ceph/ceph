@@ -152,7 +152,6 @@ int main(int argc, const char *argv[])
   // command-line arguments
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
 			 CODE_ENVIRONMENT_UTILITY, 0);

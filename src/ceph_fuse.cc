@@ -77,7 +77,6 @@ int main(int argc, const char **argv, const char *envp[]) {
   if (args.empty()) {
     usage();
   }
-  env_to_vec(args);
 
   std::map<std::string,std::string> defaults = {
     { "pid_file", "" },

@@ -110,7 +110,6 @@ int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   map<string,string> defaults = {
     // We want to enable leveldb's log, while allowing users to override this

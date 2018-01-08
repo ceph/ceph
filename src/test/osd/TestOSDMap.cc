@@ -14,7 +14,6 @@ using namespace std;
 
 int main(int argc, char **argv) {
   std::vector<const char*> args(argv, argv+argc);
-  env_to_vec(args);
   auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);

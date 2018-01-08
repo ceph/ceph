@@ -45,7 +45,6 @@ int main(int argc, const char **argv)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
 
   map<string,string> defaults = {
     { "keyring", "$mgr_data/keyring" }

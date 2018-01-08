@@ -67,7 +67,6 @@ int main(int argc, const char **argv)
 	ts.tv_nsec = 0;
 
 	argv_to_vec(argc, argv, args);
-	env_to_vec(args);
 
 	auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_ANY,
 			       CODE_ENVIRONMENT_UTILITY,

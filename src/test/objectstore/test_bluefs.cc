@@ -570,7 +570,6 @@ TEST(BlueFS, test_replay) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
   map<string,string> defaults = {
     { "debug_bluefs", "1/20" },
