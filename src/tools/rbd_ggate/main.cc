@@ -336,7 +336,7 @@ static int do_list(const std::string &format, bool pretty_format)
   }
 
   if (f) {
-    f->open_object_section("devices");
+    f->open_array_section("devices");
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
@@ -361,7 +361,8 @@ static int do_list(const std::string &format, bool pretty_format)
     parse_imgpath(info.substr(4), &poolname, &imgname, &snapname);
 
     if (f) {
-      f->open_object_section(stringify(id).c_str());
+      f->open_object_section("device");
+      f->dump_string("id", id);
       f->dump_string("pool", poolname);
       f->dump_string("image", imgname);
       f->dump_string("snap", snapname);
