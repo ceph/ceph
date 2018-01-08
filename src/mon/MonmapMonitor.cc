@@ -769,7 +769,7 @@ void MonmapMonitor::check_sub(Subscription *sub)
   if (sub->next <= epoch) {
     mon->send_latest_monmap(sub->session->con.get());
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

@@ -156,8 +156,8 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   for (off_t i = 0; i < num; i++)
   {
     memset(sha, 0x00, sizeof(sha));
-    h->Update((byte *)pstr, info.piece_length);
-    h->Final((byte *)sha);
+    h->Update((::byte *)pstr, info.piece_length);
+    h->Final((::byte *)sha);
     set_info_pieces(sha);
     pstr += info.piece_length;
   }
@@ -166,8 +166,8 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   if (0 != remain)
   {
     memset(sha, 0x00, sizeof(sha));
-    h->Update((byte *)pstr, remain);
-    h->Final((byte *)sha);
+    h->Update((::byte *)pstr, remain);
+    h->Final((::byte *)sha);
     set_info_pieces(sha);
   }
 }

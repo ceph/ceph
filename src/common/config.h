@@ -15,7 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
-#include "common/backport_std.h"
+#include <map>
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -81,7 +81,7 @@ public:
    * The configuration schema, in the form of Option objects describing
    * possible settings.
    */
-  std::map<std::string, const Option &> schema;
+  std::map<std::string, const Option&> schema;
 
   /**
    * The current values of all settings described by the schema

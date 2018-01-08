@@ -89,7 +89,9 @@ md_config_t::md_config_t(bool is_daemon)
                 << std::endl;
       ceph_abort();
     }
-    schema.insert({i.name, i});
+    schema.emplace(std::piecewise_construct,
+		   std::forward_as_tuple(i.name),
+		   std::forward_as_tuple(i));
   }
 
   // Populate list of legacy_values according to the OPTION() definitions
