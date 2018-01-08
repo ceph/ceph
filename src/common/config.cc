@@ -58,6 +58,7 @@ const char *ceph_conf_level_name(int level)
   case CONF_MON: return "mon";
   case CONF_ENV: return "env";
   case CONF_FILE: return "file";
+  case CONF_CMDLINE: return "cmdline";
   case CONF_OVERRIDE: return "override";
   case CONF_FINAL: return "final";
   default: return "???";
@@ -574,7 +575,7 @@ int md_config_t::parse_argv(std::vector<const char*>& args)
       set_val_or_die("client_mountpoint", val.c_str());
     }
     else {
-      int r = parse_option(args, i, NULL);
+      int r = parse_option(args, i, NULL, CONF_CMDLINE);
       if (r < 0) {
         return r;
       }
@@ -611,8 +612,9 @@ void md_config_t::do_argv_commands()
 }
 
 int md_config_t::parse_option(std::vector<const char*>& args,
-			       std::vector<const char*>::iterator& i,
-			       ostream *oss)
+			      std::vector<const char*>::iterator& i,
+			      ostream *oss,
+			      int level)
 {
   int ret = 0;
   size_t o = 0;
@@ -632,9 +634,9 @@ int md_config_t::parse_option(std::vector<const char*>& args,
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
 	if (res == 0)
-	  ret = _set_val("false", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("false", opt, level, &error_message);
 	else if (res == 1)
-	  ret = _set_val("true", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("true", opt, level, &error_message);
 	else
 	  ret = res;
 	break;
@@ -642,7 +644,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	std::string no("--no-");
 	no += opt.name;
 	if (ceph_argparse_flag(args, i, no.c_str(), (char*)NULL)) {
-	  ret = _set_val("false", opt, CONF_OVERRIDE, &error_message);
+	  ret = _set_val("false", opt, level, &error_message);
 	  break;
 	}
       }
@@ -658,7 +660,7 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	*oss << "You cannot change " << opt.name << " using injectargs.\n";
         return -ENOSYS;
       }
-      ret = _set_val(val, opt, CONF_OVERRIDE, &error_message);
+      ret = _set_val(val, opt, level, &error_message);
       break;
     }
     ++o;
@@ -696,7 +698,7 @@ int md_config_t::parse_injectargs(std::vector<const char*>& args,
   assert(lock.is_locked());
   int ret = 0;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
-    int r = parse_option(args, i, oss);
+    int r = parse_option(args, i, oss, CONF_OVERRIDE);
     if (r < 0)
       ret = r;
   }

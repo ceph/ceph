@@ -33,6 +33,7 @@ enum {
   CONF_MON,
   CONF_FILE,
   CONF_ENV,
+  CONF_CMDLINE,
   CONF_OVERRIDE,
   CONF_FINAL
 };
@@ -262,7 +263,8 @@ private:
 
   int parse_option(std::vector<const char*>& args,
 		   std::vector<const char*>::iterator& i,
-		   std::ostream *oss);
+		   std::ostream *oss,
+		   int level);
   int parse_injectargs(std::vector<const char*>& args,
 		      std::ostream *oss);
 
