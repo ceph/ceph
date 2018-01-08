@@ -12697,28 +12697,17 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 			   uint64_t length, file_layout_t* layout,
 			   uint64_t snapseq, uint32_t sync)
 {
-  Mutex flock("Client::ll_write_block flock");
   vinodeno_t vino = ll_get_vino(in);
-  Cond cond;
-  bool done;
   int r = 0;
-  Context *onsafe = nullptr;
-
+  std::unique_ptr<C_SaferCond> onsafe = nullptr;
+  
   if (length == 0) {
     return -EINVAL;
   }
   if (true || sync) {
     /* if write is stable, the epilogue is waiting on
      * flock */
-    onsafe = new C_SafeCond(&flock, &cond, &done, &r);
-    done = false;
-  } else {
-    /* if write is unstable, we just place a barrier for
-     * future commits to wait on */
-    /*onsafe = new C_Block_Sync(this, vino.ino,
-			      barrier_interval(offset, offset + length), &r);
-    */
-    done = true;
+    onsafe.reset(new C_SaferCond("Client::ll_write_block flock"));
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
@@ -12736,7 +12725,6 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   client_lock.Lock();
   if (unmounting) {
     client_lock.Unlock();
-    delete onsafe;
     return -ENOTCONN;
   }
 
@@ -12748,14 +12736,11 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 		  bl,
 		  ceph::real_clock::now(),
 		  0,
-		  onsafe);
+		  onsafe.get());
 
   client_lock.Unlock();
-  if (!done /* also !sync */) {
-    flock.Lock();
-    while (! done)
-      cond.Wait(flock);
-    flock.Unlock();
+  if (nullptr != onsafe) {
+    r = onsafe->wait();
   }
 
   if (r < 0) {
@@ -12879,12 +12864,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if (r < 0)
     return r;
 
-  Mutex uninline_flock("Client::_fallocate_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
-
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
   if (mode & FALLOC_FL_PUNCH_HOLE) {
     if (in->inline_version < CEPH_INLINE_NONE &&
         (have & CEPH_CAP_FILE_BUFFER)) {
@@ -12908,17 +12888,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
     } else {
       if (in->inline_version < CEPH_INLINE_NONE) {
-        onuninline = new C_SafeCond(&uninline_flock,
-                                    &uninline_cond,
-                                    &uninline_done,
-                                    &uninline_ret);
-        uninline_data(in, onuninline);
+        onuninline.reset(new C_SaferCond("Client::_fallocate_uninline_data flock"));
+        uninline_data(in, onuninline.get());
       }
 
-      Mutex flock("Client::_punch_hole flock");
-      Cond cond;
-      bool done = false;
-      Context *onfinish = new C_SafeCond(&flock, &cond, &done);
+      C_SaferCond onfinish("Client::_punch_hole flock");
 
       unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -12928,16 +12902,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  in->snaprealm->get_snap_context(),
 		  offset, length,
 		  ceph::real_clock::now(),
-		  0, true, onfinish);
+		  0, true, &onfinish);
       in->mtime = ceph_clock_now();
       in->change_attr++;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
 
       client_lock.Unlock();
-      flock.Lock();
-      while (!done)
-        cond.Wait(flock);
-      flock.Unlock();
+      onfinish.wait();
       client_lock.Lock();
       _sync_write_commit(in);
     }
@@ -12957,21 +12928,18 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     }
   }
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int ret = onuninline->wait();
     client_lock.Lock();
 
-    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+    if (ret >= 0 || ret == -ECANCELED) {
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       mark_caps_dirty(in, CEPH_CAP_FILE_WR);
       check_caps(in, 0);
     } else
-      r = uninline_ret;
+      r = ret;
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
