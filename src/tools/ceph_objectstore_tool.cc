@@ -3033,7 +3033,6 @@ int main(int argc, char **argv)
   head = (vm.count("head") > 0);
 
   vector<const char *> ceph_options;
-  env_to_vec(ceph_options);
   ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
        i != ceph_option_strings.end();

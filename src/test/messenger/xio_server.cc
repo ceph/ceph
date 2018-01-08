@@ -53,7 +53,6 @@ int main(int argc, const char **argv)
 	cout << "Xio Server starting..." << endl;
 
 	argv_to_vec(argc, argv, args);
-	env_to_vec(args);
 
 	global_init(NULL, args, CEPH_ENTITY_TYPE_ANY, CODE_ENVIRONMENT_DAEMON,
 		    0);

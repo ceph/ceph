@@ -292,7 +292,6 @@ int main(int argc, char **argv)
   for (auto& i : ceph_option_strings) {
     args.push_back(i.c_str());
   }
-  env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY, 0);

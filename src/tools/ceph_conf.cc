@@ -174,7 +174,6 @@ int main(int argc, const char **argv)
   std::string dump_format;
 
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
   vector<const char*> orig_args = args;
 
   global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
