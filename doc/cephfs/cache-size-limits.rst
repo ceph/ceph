@@ -13,3 +13,10 @@ In addition, you can specify a cache reservation by using the `mds_cache_reserva
 The `mds_cache_reservation` parameter replaces the `mds_health_cache_threshold` in all situations except when MDS nodes sends a health alert to the Monitors indicating the cache is too large. By default, `mds_health_cache_threshold` is 150% of the maximum cache size.
 
 Be aware that the cache limit is not a hard limit. Potential bugs in the CephFS client or MDS or misbehaving applications might cause the MDS to exceed its cache size. The  `mds_health_cache_threshold` configures the cluster health warning message so that operators can investigate why the MDS cannot shrink its cache.
+
+.. warning::
+
+    The memory tracking used is currently imprecise by a constant factor. This
+    will be addressed in http://tracker.ceph.com/issues/22599. MDS deployments
+    with large `mds_cache_memory_limit` (64GB+) should underallocate RAM to
+    accomodate.
