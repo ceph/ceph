@@ -4933,16 +4933,7 @@ void RGWPutLC::execute()
 
 void RGWDeleteLC::execute()
 {
-  bufferlist bl;
-  map<string, bufferlist> attrs;
-  map<string, bufferlist>::iterator iter;
-  rgw_raw_obj obj;
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_prefetch_data(s->obj_ctx, obj);
-  op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
-  if (op_ret < 0)
-    return;
-
+  map<string, bufferlist> attrs = s->bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				&s->bucket_info.objv_tracker);
@@ -5040,21 +5031,13 @@ void RGWDeleteCORS::execute()
       if (op_ret < 0)
 	return op_ret;
 
-      rgw_raw_obj obj;
       if (!cors_exist) {
 	dout(2) << "No CORS configuration set yet for this bucket" << dendl;
 	op_ret = -ENOENT;
 	return op_ret;
       }
-      store->get_bucket_instance_obj(s->bucket, obj);
-      store->set_prefetch_data(s->obj_ctx, obj);
-      map<string, bufferlist> attrs;
-      map<string, bufferlist>::iterator iter;
 
-      op_ret = get_system_obj_attrs(store, s, obj, attrs, NULL, &s->bucket_info.objv_tracker);
-      if (op_ret < 0)
-	return op_ret;
-
+      map<string, bufferlist> attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_CORS);
       op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
 				&s->bucket_info.objv_tracker);
