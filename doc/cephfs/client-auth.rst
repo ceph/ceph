@@ -107,4 +107,4 @@ for files, but client.1 cannot.
         caps: [osd] allow rw pool=data
 
 
-.. _User Management - Add a User to a Keyring: ../rados/operations/user-management/#add-a-user-to-a-keyring
+.. _User Management - Add a User to a Keyring: ../../rados/operations/user-management/#add-a-user-to-a-keyring
