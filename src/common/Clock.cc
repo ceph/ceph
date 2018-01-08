@@ -11,20 +11,22 @@
  * Foundation.  See file COPYING.
  *
  */
+#include "common/ceph_clock.h"
 
+utime_t ceph_clock_now() {
+  return ceph_clock<utime_t>();
+}
 
-#include "common/Clock.h"
+template <>
+coarse_mono_time ceph_clock_now() {
+  return ceph_clock<coarse_mono_time>();
+}
 
-utime_t ceph_clock_now()
-{
-#if defined(__linux__)
-  struct timespec tp;
-  clock_gettime(CLOCK_REALTIME, &tp);
-  utime_t n(tp);
-#else
-  struct timeval tv;
-  gettimeofday(&tv, nullptr);
-  utime_t n(&tv);
-#endif
-  return n;
+utime_t get_duration(utime_t start) {
+  return ceph_clock<utime_t>() - start;
+}
+
+template <>
+ceph::time_detail::signedspan get_duration(coarse_mono_time start) {
+  return ceph_clock<coarse_mono_time>() - start;
 }
