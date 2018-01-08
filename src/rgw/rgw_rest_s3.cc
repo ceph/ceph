@@ -103,7 +103,7 @@ int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_of
   iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
   if (iter != attrs.end()) {
     bufferlist &bl = iter->second;
-    s->redirect = string(bl.c_str(), bl.length());
+    s->redirect = bl.c_str();
     s->err.http_ret = 301;
     ldout(s->cct, 20) << __CEPH_ASSERT_FUNCTION << " redirecting per x-amz-website-redirect-location=" << s->redirect << dendl;
     op_ret = -ERR_WEBSITE_REDIRECT;
