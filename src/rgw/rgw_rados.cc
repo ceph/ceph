@@ -8856,7 +8856,7 @@ int RGWRados::Object::Delete::delete_obj()
     /* only delete object if mtime is less than or equal to params.unmod_since */
     store->cls_obj_check_mtime(op, params.unmod_since, params.high_precision_time, CLS_RGW_CHECK_TIME_MTIME_LE);
   }
-  uint64_t obj_size = state->size;
+  uint64_t obj_accounted_size = state->accounted_size;
 
   if (!real_clock::is_zero(params.expiration_time)) {
     bufferlist bl;
@@ -8938,7 +8938,7 @@ int RGWRados::Object::Delete::delete_obj()
     return r;
 
   /* update quota cache */
-  store->quota_handler->update_stats(params.bucket_owner, obj.bucket, -1, 0, obj_size);
+  store->quota_handler->update_stats(params.bucket_owner, obj.bucket, -1, 0, obj_accounted_size);
 
   return 0;
 }
