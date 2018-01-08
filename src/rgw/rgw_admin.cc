@@ -2084,6 +2084,13 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     return;
   }
 
+  set<int> recovering_shards;
+  ret = sync.read_recovering_shards(sync_status.sync_info.num_shards, recovering_shards);
+  if (ret < 0 && ret != ENOENT) {
+    push_ss(ss, status, tab) << string("failed read recovering shards: ") + cpp_strerror(-ret);
+    return;
+  }
+
   string status_str;
   switch (sync_status.sync_info.state) {
     case rgw_data_sync_info::StateInit:
@@ -2169,9 +2176,10 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   }
 
   int total_behind = shards_behind.size() + (sync_status.sync_info.num_shards - num_inc);
-  if (total_behind == 0) {
+  int total_recovering = recovering_shards.size();
+  if (total_behind == 0 && total_recovering == 0) {
     push_ss(ss, status, tab) << "data is caught up with source";
-  } else {
+  } else if (total_behind > 0) {
     push_ss(ss, status, tab) << "data is behind on " << total_behind << " shards";
 
     push_ss(ss, status, tab) << "behind shards: " << "[" << shards_behind_set << "]" ;
@@ -2199,6 +2207,11 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
         push_ss(ss, status, tab) << "oldest incremental change not applied: " << oldest;
       }
     }
+  }
+
+  if (total_recovering > 0) {
+    push_ss(ss, status, tab) << total_recovering << " shards are recovering";
+    push_ss(ss, status, tab) << "recovering shards: " << "[" << recovering_shards << "]";
   }
 
   flush_ss(ss, status);
