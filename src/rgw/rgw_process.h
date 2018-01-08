@@ -196,7 +196,8 @@ extern int process_request(RGWRados* store,
                            const std::string& frontend_prefix,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
-                           OpsLogSocket* olog);
+                           OpsLogSocket* olog,
+                           int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
