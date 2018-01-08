@@ -1526,6 +1526,11 @@ private:
     }
 
     bool is_healthy(utime_t now) {
+      if (last_rx_front == utime_t() || last_rx_back == utime_t()) {
+        // only declare to be healthy until we have received the first
+        // replies from both front/back connections
+        return false;
+      }
       return !is_unhealthy(now);
     }
   };
