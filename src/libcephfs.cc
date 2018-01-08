@@ -211,7 +211,7 @@ public:
     md_config_t *conf = cct->_conf;
     vector<const char*> args;
     env_to_vec(args, name);
-    int ret = conf->parse_argv(args);
+    int ret = conf->parse_argv(args, CONF_ENV);
     if (ret)
       return ret;
     conf->apply_changes(nullptr);

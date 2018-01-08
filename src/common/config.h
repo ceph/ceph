@@ -144,7 +144,7 @@ public:
   void parse_env();
 
   // Absorb config settings from argv
-  int parse_argv(std::vector<const char*>& args);
+  int parse_argv(std::vector<const char*>& args, int level=CONF_CMDLINE);
 
   // do any commands we got from argv (--show-config, --show-config-val)
   void do_argv_commands();
