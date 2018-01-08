@@ -818,12 +818,21 @@ rbdfs_destroy(void *unused)
     for (rbd_open_image_map::iterator open_image = rbd_open_images.begin();
             open_image != rbd_open_images.end();
             open_image++) {
-        wait_for_in_flight_writes(open_image->second.name, 0);
-        rbd_flush(open_image->second.image);
-        rbd_close(open_image->second.image);
+        // Don't try to treat invalid "files" as rbd images in the event that the OS has done something goofy
+        if (open_image->second.image != NULL) {
+            wait_for_in_flight_writes(open_image->second.name, 0);
+            rbd_flush(open_image->second.image);
+            rbd_close(open_image->second.image);
+        }
     }
     rbd_open_images.clear();
     open_images_lock.unlock();
+
+    image_data_lock.lock();
+    clear_rbd_image_data();
+    free(rbd_image_list.buf);
+    image_data_lock.unlock();
+
     rados_ioctx_destroy(ioctx);
     rados_shutdown(cluster);
 }
