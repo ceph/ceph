@@ -53,6 +53,15 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
   dout(10) << "handle_request " << *m << dendl;
   assert(m->table == table);
 
+  if (mds->get_state() < MDSMap::STATE_RESOLVE) {
+    if (mds->get_want_state() == CEPH_MDS_STATE_RESOLVE) {
+      mds->wait_for_resolve(new C_MDS_RetryMessage(mds, m));
+    } else {
+      m->put();
+    }
+    return;
+  }
+
   version_t tid = m->get_tid();
   uint64_t reqid = m->reqid;
 
