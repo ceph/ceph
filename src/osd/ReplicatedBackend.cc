@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <random>
 #include "common/errno.h"
 #include "ReplicatedBackend.h"
 #include "messages/MOSDOp.h"
@@ -1363,10 +1364,15 @@ void ReplicatedBackend::prepare_pull(
   assert(!q->second.empty());
 
   // pick a pullee
-  vector<pg_shard_t> shuffle(q->second.begin(), q->second.end());
-  random_shuffle(shuffle.begin(), shuffle.end());
-  vector<pg_shard_t>::iterator p = shuffle.begin();
+  std::random_device rd;
+  std::mt19937 mersenne_random(rd());
+  std::uniform_int_distribution<> rand_integer(0, q->second.size()-1);
+  int index = rand_integer(mersenne_random);
+  set<pg_shard_t>::iterator p = q->second.begin();
+  for (int i = 0; i < index; ++p);
+  
   assert(get_osdmap()->is_up(p->osd));
+  
   pg_shard_t fromshard = *p;
 
   dout(7) << "pull " << soid
