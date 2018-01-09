@@ -95,15 +95,11 @@ public:
     map<string, bufferlist> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
-    interval_set<uint64_t> extents; // object logical extents map
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
     bool is_omap_digest() {
       return flags & object_copy_data_t::FLAG_OMAP_DIGEST;
-    }
-    bool has_extents() {
-      return flags & object_copy_data_t::FLAG_EXTENTS;
     }
     CopyResults()
       : object_size(0), started_temp_obj(false),
@@ -1141,7 +1137,7 @@ protected:
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
 				   uint64_t length, bool write_full=false);
-  void truncate_update_size_and_usage(
+  inline void truncate_update_size_and_usage(
     object_stat_sum_t& delta_stats,
     object_info_t& oi,
     uint64_t truncate_size);
