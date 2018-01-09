@@ -1,9 +1,9 @@
 #include <errno.h>
 #include <lua.hpp>
 #include "include/types.h"
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "cls/lua/cls_lua_client.h"
 #include "cls/lua/cls_lua.h"
 

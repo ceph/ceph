@@ -13,6 +13,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>

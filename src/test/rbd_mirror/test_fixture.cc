@@ -8,7 +8,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "tools/rbd_mirror/Threads.h"
 
 namespace rbd {

@@ -3,7 +3,7 @@
 
 #include "librados/AioCompletionImpl.h"
 #include "librbd/ManagedLock.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "test/librbd/mock/MockImageCtx.h"

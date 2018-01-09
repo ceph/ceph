@@ -45,7 +45,7 @@ set(rbd_srcs
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
 set_target_properties(rbd PROPERTIES OUTPUT_NAME rbd)
-target_link_libraries(rbd librbd librados
+target_link_libraries(rbd librbd librados-cxx
   cls_journal_client cls_rbd_client
   rbd_types
   journal

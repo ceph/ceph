@@ -11,7 +11,7 @@
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using rbd::mirror::InstanceWatcher;

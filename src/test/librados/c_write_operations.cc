@@ -1,10 +1,10 @@
 // Tests for the C API coverage of atomic write operations
 
 #include <errno.h>
+#include "gtest/gtest.h"
 #include "include/err.h"
 #include "include/rados/librados.h"
 #include "test/librados/test.h"
-#include "gtest/gtest.h"
 
 TEST(LibradosCWriteOps, NewDelete) {
   rados_write_op_t op = rados_create_write_op();
