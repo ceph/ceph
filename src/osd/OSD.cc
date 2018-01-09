@@ -2581,6 +2581,36 @@ int OSD::init()
     goto out;
   }
 
+  // load up "current" osdmap
+  assert_warn(!osdmap);
+  if (osdmap) {
+    derr << "OSD::init: unable to read current osdmap" << dendl;
+    r = -EINVAL;
+    goto out;
+  }
+  osdmap = get_map(superblock.current_epoch);
+
+  // make sure we don't have legacy pgs deleting
+  {
+    vector<coll_t> ls;
+    int r = store->list_collections(ls);
+    ceph_assert(r >= 0);
+    for (auto c : ls) {
+      spg_t pgid;
+      if (c.is_pg(&pgid) &&
+	  !osdmap->have_pg_pool(pgid.pool())) {
+	ghobject_t oid = make_final_pool_info_oid(pgid.pool());
+	if (!store->exists(coll_t::meta(), oid)) {
+	  derr << __func__ << " missing pg_pool_t for deleted pool "
+	       << pgid.pool() << " for pg " << pgid
+	       << "; please downgrade to luminous and allow "
+	       << "pg deletion to complete before upgrading" << dendl;
+	  ceph_abort();
+	}
+      }
+    }
+  }
+
   initial = get_osd_initial_compat_set();
   diff = superblock.compat_features.unsupported(initial);
   if (superblock.compat_features.merge(initial)) {
@@ -2613,14 +2643,6 @@ int OSD::init()
       dout(1) << "warning: got an error loading one or more classes: " << cpp_strerror(r) << dendl;
   }
 
-  // load up "current" osdmap
-  assert_warn(!osdmap);
-  if (osdmap) {
-    derr << "OSD::init: unable to read current osdmap" << dendl;
-    r = -EINVAL;
-    goto out;
-  }
-  osdmap = get_map(superblock.current_epoch);
   check_osdmap_features();
 
   create_recoverystate_perf();
@@ -3751,13 +3773,6 @@ void OSD::recursive_remove_collection(CephContext* cct,
 // ======================================================
 // PG's
 
-PGPool OSD::_get_pool(int id, OSDMapRef createmap)
-{
-  PGPool p = PGPool(cct, createmap, id);
-  dout(10) << "_get_pool " << p.id << dendl;
-  return p;
-}
-
 PG *OSD::_open_lock_pg(
   OSDMapRef createmap,
   spg_t pgid, bool no_lockdep_check)
@@ -3780,16 +3795,28 @@ PG* OSD::_make_pg(
   spg_t pgid)
 {
   dout(10) << "_open_lock_pg " << pgid << dendl;
-  PGPool pool = _get_pool(pgid.pool(), createmap);
-
-  // create
+  pg_pool_t pi;
+  string name;
+  if (createmap->have_pg_pool(pgid.pool())) {
+    pi = *createmap->get_pg_pool(pgid.pool());
+    name = createmap->get_pool_name(pgid.pool());
+  } else {
+    // pool was deleted; grab final pg_pool_t off disk.
+    ghobject_t oid = make_final_pool_info_oid(pgid.pool());
+    bufferlist bl;
+    int r = store->read(coll_t::meta(), oid, 0, 0, bl);
+    ceph_assert(r >= 0);
+    auto p = bl.begin();
+    decode(pi, p);
+    decode(name, p);
+  }
+  PGPool pool(cct, createmap, pgid.pool(), pi, name);
   PG *pg;
-  if (createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_REPLICATED ||
-      createmap->get_pg_type(pgid.pgid) == pg_pool_t::TYPE_ERASURE)
+  if (pi.type == pg_pool_t::TYPE_REPLICATED ||
+      pi.type == pg_pool_t::TYPE_ERASURE)
     pg = new PrimaryLogPG(&service, createmap, pool, pgid);
   else
     ceph_abort();
-
   return pg;
 }
 
@@ -7015,12 +7042,12 @@ struct C_OnMapCommit : public Context {
 
 struct C_OnMapApply : public Context {
   OSDService *service;
-  list<OSDMapRef> pinned_maps;
+  map<epoch_t,OSDMapRef> pinned_maps;
   epoch_t e;
   C_OnMapApply(OSDService *service,
-	       const list<OSDMapRef> &pinned_maps,
+	       map<epoch_t,OSDMapRef> &&pinned_maps,
 	       epoch_t e)
-    : service(service), pinned_maps(pinned_maps), e(e) {}
+    : service(service), pinned_maps(std::move(pinned_maps)), e(e) {}
   void finish(int r) override {
     service->clear_map_bl_cache_pins(e);
   }
@@ -7089,7 +7116,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // off of disk. Otherwise these maps will probably not stay in the cache,
   // and reading those OSDMaps before they are actually written can result
   // in a crash. 
-  list<OSDMapRef> pinned_maps;
+  map<epoch_t,OSDMapRef> pinned_maps;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
 	    << monc->get_fsid() << dendl;
@@ -7211,7 +7238,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
       pin_map_bl(e, bl);
-      pinned_maps.push_back(add_map(o));
+      pinned_maps[e] = add_map(o);
 
       got_full_map(e);
       continue;
@@ -7269,7 +7296,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
       pin_map_bl(e, fbl);
-      pinned_maps.push_back(add_map(o));
+      pinned_maps[e] = add_map(o);
       continue;
     }
 
@@ -7302,12 +7329,36 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.clean_thru = last;
   }
 
+  // check for deleted pools
+  OSDMapRef lastmap;
+  for (auto& i : pinned_maps) {
+    if (!lastmap) {
+      lastmap = get_map(i.first - 1);
+    }
+    assert(lastmap->get_epoch() + 1 == i.second->get_epoch());
+    for (auto& j : lastmap->get_pools()) {
+      if (!i.second->have_pg_pool(j.first)) {
+	dout(10) << __func__ << " recording final pg_pool_t for pool "
+		 << j.first << dendl;
+	// this information is needed by _make_pg() if have to restart before
+	// the pool is deleted and need to instantiate a new (zombie) PG[Pool].
+	ghobject_t obj = make_final_pool_info_oid(j.first);
+	bufferlist bl;
+	encode(j.second, bl, CEPH_FEATURES_ALL);
+	string name = lastmap->get_pool_name(j.first);
+	encode(name, bl);
+	t.write(coll_t::meta(), obj, 0, bl.length(), bl);
+      }
+    }
+    lastmap = i.second;
+  }
+
   // superblock and commit
   write_superblock(t);
   store->queue_transaction(
     service.meta_osr.get(),
     std::move(t),
-    new C_OnMapApply(&service, pinned_maps, last),
+    new C_OnMapApply(&service, std::move(pinned_maps), last),
     new C_OnMapCommit(this, start, last, m), 0);
   service.publish_superblock(superblock);
 }
