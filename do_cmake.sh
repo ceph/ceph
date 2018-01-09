@@ -5,7 +5,6 @@ if test -e build; then
     exit 1
 fi
 
-ARGS=""
 if which ccache ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
