@@ -231,7 +231,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     return; // pool has been deleted
   }
   info = *pi;
-  auid = pi->auid;
   name = map->get_pool_name(id);
 
   bool updated = false;
@@ -1929,7 +1928,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
     req->get_hobj().get_key();
 
   bool cap = caps.is_capable(pool.name, req->get_hobj().nspace,
-                             pool.auid,
+                             pool.info.auid,
 			     pool.info.application_metadata,
 			     key,
 			     op->need_read_cap(),
@@ -1940,7 +1939,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
            << "session=" << session
            << " pool=" << pool.id << " (" << pool.name
            << " " << req->get_hobj().nspace
-	   << ") owner=" << pool.auid
+	   << ") owner=" << pool.info.auid
 	   << " pool_app_metadata=" << pool.info.application_metadata
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()

@@ -217,7 +217,6 @@ struct PGPool {
   epoch_t cached_epoch;
   int64_t id;
   string name;
-  uint64_t auid;
 
   pg_pool_t info;      
   SnapContext snapc;   // the default pool snapc, ready to go.
@@ -230,8 +229,7 @@ struct PGPool {
     : cct(cct),
       cached_epoch(map->get_epoch()),
       id(i),
-      name(map->get_pool_name(id)),
-      auid(map->get_pg_pool(id)->auid) {
+      name(map->get_pool_name(id)) {
     const pg_pool_t *pi = map->get_pg_pool(id);
     if (pi) {
       info = *pi;
