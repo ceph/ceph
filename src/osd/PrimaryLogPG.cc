@@ -2849,6 +2849,36 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     do_proxy_read(op);
     return cache_result_t::HANDLED_PROXY;
 
+  case pg_pool_t::CACHEMODE_TEMPTRACK:
+  {
+    if (must_promote ||
+        agent_state->promote_mode == TierAgentState::PROMOTE_MODE_WARMING) {
+      if (agent_state &&
+          agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+        dout(20) << __func__ << " cache pool full, waiting" << dendl;
+        block_write_on_full_cache(missing_oid, op);
+        return cache_result_t::BLOCKED_FULL;
+      }
+      agent_state->promote_queue.erase(missing_oid);
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
+    }
+    auto ob = agent_state->promote_queue.find(missing_oid);
+    if (agent_state->promote_mode == TierAgentState::PROMOTE_MODE_SOME &&
+        ob != agent_state->promote_queue.end()) {
+      agent_state->promote_queue.erase(missing_oid);
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
+    }
+    if (op->may_write() || op->may_cache() || write_ordered) {
+      do_proxy_write(op);
+      return cache_result_t::HANDLED_PROXY;
+    } else {
+      do_proxy_read(op);
+      return cache_result_t::HANDLED_PROXY;
+    }
+  }
+
   default:
     assert(0 == "unrecognized cache_mode");
   }
