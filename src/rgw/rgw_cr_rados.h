@@ -413,7 +413,6 @@ class RGWRadosGetOmapKeysCR : public RGWSimpleCoroutine {
   map<string, bufferlist> *entries;
   int max_entries;
 
-  int rval;
   rgw_rados_ref ref;
 
   rgw_raw_obj obj;
@@ -427,10 +426,7 @@ public:
 		      map<string, bufferlist> *_entries, int _max_entries);
 
   int send_request() override;
-
-  int request_complete() override {
-    return rval;
-  }
+  int request_complete() override;
 };
 
 class RGWRadosRemoveOmapKeysCR : public RGWSimpleCoroutine {
