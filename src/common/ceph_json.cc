@@ -694,7 +694,16 @@ int JSONFormattable::set(const string& name, const string& val)
 
   JSONParser jp;
 
-  bool is_json = jp.parse(val.c_str(), val.size());
+  if (!jp.parse(val.c_str(), val.size())) {
+    /* can't parse, input is raw string */
+    if (!name.empty()) {
+      f->type = FMT_OBJ;
+      f = &f->obj[name];
+    }
+    f->type = FMT_STRING;
+    f->str = val;
+    return 0;
+  }
 
   for (auto i : tok) {
     vector<field_entity> v;
@@ -737,12 +746,7 @@ int JSONFormattable::set(const string& name, const string& val)
     }
   }
 
-  if (is_json) {
-    f->decode_json(&jp);
-  } else {
-    f->type = FMT_STRING;
-    f->str = val;
-  }
+  f->decode_json(&jp);
 
   return 0;
 }
@@ -763,7 +767,8 @@ int JSONFormattable::erase(const string& name)
       return ret;
     }
     for (auto vi : v) {
-      if (f->type == FMT_NONE) {
+      if (f->type == FMT_NONE ||
+          f->type == FMT_STRING) {
         if (vi.is_obj) {
           f->type = FMT_OBJ;
         } else {
