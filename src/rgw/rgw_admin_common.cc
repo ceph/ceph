@@ -1,7 +1,3 @@
-//
-// Created by cache-nez on 08.01.18.
-//
-
 #include "rgw_admin_common.h"
 
 #define dout_subsys ceph_subsys_rgw
