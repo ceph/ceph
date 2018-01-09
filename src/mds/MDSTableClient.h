@@ -80,6 +80,13 @@ public:
     ack_waiters[tid].push_back(c);
   }
 
+  set<version_t> get_journaled_tids() const {
+    set<version_t> tids;
+    for (auto p : pending_commit)
+      tids.insert(p.first);
+    return tids;
+  }
+
   void handle_mds_failure(mds_rank_t mds);
 
   // child must implement
