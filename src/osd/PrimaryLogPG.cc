@@ -2202,8 +2202,19 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
         in_hit_set = true;
     }
     if (!op->hitset_inserted) {
-      hit_set->insert(oid);
       op->hitset_inserted = true;
+      if (hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+	if (op->get_reqid().name.is_client()){
+	  TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+	  bool exsited = obc.get() && obc->obs.exists;
+	  if (pool.info.is_tier())
+	    th->insert(oid, exsited);
+	  else
+	    th->insert(oid, exsited || can_create);
+	}
+      } else {
+        hit_set->insert(oid);
+      }
       if (hit_set->is_full() ||
           hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
         hit_set_persist();
@@ -7422,6 +7433,13 @@ inline int PrimaryLogPG::_delete_oid(
   }
   oi.size = 0;
   oi.new_object();
+
+  // remove object in hit set
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP &&
+      !whiteout) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->evict(soid);
+  }
 
   // disconnect all watchers
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
