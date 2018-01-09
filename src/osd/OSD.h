@@ -1183,6 +1183,15 @@ public:
     hobject_t oid(sobject_t("infos", CEPH_NOSNAP));
     return ghobject_t(oid);
   }
+
+  static ghobject_t make_final_pool_info_oid(int64_t pool) {
+    return ghobject_t(
+      hobject_t(
+	sobject_t(
+	  object_t(string("final_pool_") + stringify(pool)),
+	  CEPH_NOSNAP)));
+  }
+
   static void recursive_remove_collection(CephContext* cct,
 					  ObjectStore *store,
 					  spg_t pgid,
@@ -1824,8 +1833,6 @@ protected:
 
   map<spg_t, list<PGPeeringEventRef> > peering_wait_for_split;
   PGRecoveryStats pg_recovery_stats;
-
-  PGPool _get_pool(int id, OSDMapRef createmap);
 
   PG   *_lookup_lock_pg_with_map_lock_held(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);

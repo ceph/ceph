@@ -225,18 +225,16 @@ struct PGPool {
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
-  PGPool(CephContext* cct, OSDMapRef map, int64_t i)
+  PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
+	 const string& name)
     : cct(cct),
       cached_epoch(map->get_epoch()),
       id(i),
-      name(map->get_pool_name(id)) {
-    const pg_pool_t *pi = map->get_pg_pool(id);
-    if (pi) {
-      info = *pi;
-      snapc = pi->get_snap_context();
-      if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
-	pi->build_removed_snaps(cached_removed_snaps);
-      }
+      name(name),
+      info(info) {
+    snapc = info.get_snap_context();
+    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+      info.build_removed_snaps(cached_removed_snaps);
     }
   }
 
