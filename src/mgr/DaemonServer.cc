@@ -1355,8 +1355,25 @@ bool DaemonServer::handle_command(MCommand *m)
     key.first = who.substr(0, dot);
     key.second = who.substr(dot + 1);
     DaemonStatePtr daemon = daemon_state.get(key);
-    if (daemon &&
-	daemon->config_defaults_bl.length() > 0) {
+    string name;
+    if (!daemon) {
+      ss << "no config state for daemon " << who;
+      r = -ENOENT;
+    } else if (cmd_getval(g_ceph_context, cmdctx->cmdmap, "key", name)) {
+      auto p = daemon->config.find(name);
+      if (p != daemon->config.end() &&
+	  !p->second.empty()) {
+	cmdctx->odata.append(p->second.rbegin()->second + "\n");
+      } else {
+	auto& defaults = daemon->get_config_defaults();
+	auto q = defaults.find(name);
+	if (q != defaults.end()) {
+	  cmdctx->odata.append(q->second + "\n");
+	} else {
+	  r = -ENOENT;
+	}
+      }
+    } else if (daemon->config_defaults_bl.length() > 0) {
       Mutex::Locker l(daemon->lock);
       TextTable tbl;
       if (f) {
@@ -1414,14 +1431,8 @@ bool DaemonServer::handle_command(MCommand *m)
 	}
       } else {
 	// show-with-defaults
-	if (daemon->config_defaults.empty()) {
-	  auto p = daemon->config_defaults_bl.begin();
-	  try {
-	    ::decode(daemon->config_defaults, p);
-	  } catch (buffer::error e) {
-	  }
-	}
-	for (auto& i : daemon->config_defaults) {
+	auto& defaults = daemon->get_config_defaults();
+	for (auto& i : defaults) {
 	  if (f) {
 	    f->open_object_section("value");
 	    f->dump_string("name", i.first);
@@ -1486,9 +1497,6 @@ bool DaemonServer::handle_command(MCommand *m)
       } else {
 	cmdctx->odata.append(stringify(tbl));
       }
-    } else {
-      ss << "no config state for daemon " << who;
-      r = -ENOENT;
     }
     cmdctx->reply(r, ss);
     return true;

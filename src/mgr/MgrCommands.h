@@ -133,7 +133,7 @@ COMMAND("service status",
         "dump service state", "service", "r", "cli,rest")
 
 COMMAND("config show " \
-	"name=who,type=CephString",
+	"name=who,type=CephString name=key,type=CephString,req=False",
 	"Show running configuration",
 	"mgr", "r", "cli,rest")
 COMMAND("config show-with-defaults " \
