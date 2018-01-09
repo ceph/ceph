@@ -10,7 +10,7 @@
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Types.h"
 #include "test/rbd_mirror/test_fixture.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/librbd/test_support.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>

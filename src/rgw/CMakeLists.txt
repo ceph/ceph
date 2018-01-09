@@ -169,7 +169,7 @@ add_dependencies(rgw_a civetweb_h)
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(rgw_a PRIVATE
-  librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+  librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
   cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
@@ -296,7 +296,7 @@ add_library(rgw_admin_user SHARED
 add_dependencies(rgw_admin_user civetweb_h)
 
 target_link_libraries(rgw_admin_user PRIVATE
-  librados
+  librados-cxx
   cls_rgw_client
   cls_otp_client
   cls_lock_client

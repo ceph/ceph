@@ -41,6 +41,7 @@
 #include <vector>
 
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/librbd/test_support.h"
 #include "common/event_socket.h"
 #include "include/interval_set.h"

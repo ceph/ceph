@@ -17,7 +17,7 @@
 #include "librbd/Types.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <errno.h>
 #include <string>

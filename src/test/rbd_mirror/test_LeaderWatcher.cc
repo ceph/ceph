@@ -10,7 +10,7 @@
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using librbd::util::unique_lock_name;

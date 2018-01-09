@@ -153,7 +153,7 @@ target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
-  librados 
+  librados-cxx
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 

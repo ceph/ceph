@@ -27,6 +27,7 @@
 #include "common/common_init.h"
 #include "common/ceph_json.h"
 #include "common/errno.h"
+#include "common/ceph_json.h"
 #include "include/buffer.h"
 #include "include/stringify.h"
 #include "include/util.h"
@@ -1121,7 +1122,7 @@ mon_feature_t librados::RadosClient::get_required_monitor_features() const
 }
 
 int librados::RadosClient::get_inconsistent_pgs(int64_t pool_id,
-                                                std::vector<std::string>* pgs)
+						std::vector<std::string>* pgs)
 {
   vector<string> cmd = {
     "{\"prefix\": \"pg ls\","
