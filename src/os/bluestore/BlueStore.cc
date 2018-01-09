@@ -9584,7 +9584,7 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-void BlueStore::_dump_onode(OnodeRef o, int log_level)
+void BlueStore::_dump_onode(const OnodeRef& o, int log_level)
 {
   if (!cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
     return;
