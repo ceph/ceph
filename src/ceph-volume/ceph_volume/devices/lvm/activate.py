@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators
+from ceph_volume import process, conf, decorators, terminal
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.systemd import systemctl
@@ -161,6 +161,7 @@ class Activate(object):
             activate_bluestore(lvs)
         elif args.filestore:
             activate_filestore(lvs)
+        terminal.success("ceph-volume lvm activate successful for osd ID: %s" % args.osd_id)
 
     def main(self):
         sub_command_help = dedent("""
