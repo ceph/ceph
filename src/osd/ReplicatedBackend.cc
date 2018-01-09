@@ -21,6 +21,8 @@
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
 
+#include <boost/random/random_device.hpp>
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -1363,8 +1365,9 @@ void ReplicatedBackend::prepare_pull(
   assert(!q->second.empty());
 
   // pick a pullee
+  // boost::random_device rng;
+  // boost::mt19937 urng(rng());
   vector<pg_shard_t> shuffle(q->second.begin(), q->second.end());
-  random_shuffle(shuffle.begin(), shuffle.end());
   vector<pg_shard_t>::iterator p = shuffle.begin();
   assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;
