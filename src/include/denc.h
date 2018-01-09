@@ -1066,7 +1066,6 @@ public:
     if constexpr (traits::bounded) {
       if constexpr (traits::featured) {
         size_t elem_size = 0;
-        p += sizeof(uint32_t);
         if (!s.empty()) {
           denc(*s.begin(), elem_size, f);
           p += elem_size * s.size();
