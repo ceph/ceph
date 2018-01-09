@@ -470,7 +470,7 @@ protected:
   bool resolves_pending;
   set<mds_rank_t> resolve_gather;	// nodes i need resolves from
   set<mds_rank_t> resolve_ack_gather;	// nodes i need a resolve_ack from
-  map<metareqid_t, mds_rank_t> need_resolve_rollback;  // rollbacks i'm writing to the journal
+  map<metareqid_t, mds_rank_t> resolve_need_rollback;  // rollbacks i'm writing to the journal
   map<mds_rank_t, MMDSResolve*> delayed_resolve;
   
   void handle_resolve(MMDSResolve *m);
@@ -484,6 +484,11 @@ protected:
   void add_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master, MDSlaveUpdate*);
   void finish_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
   MDSlaveUpdate* get_uncommitted_slave_update(metareqid_t reqid, mds_rank_t master);
+
+  void send_slave_resolves();
+  void send_subtree_resolves();
+  void maybe_finish_slave_resolve();
+
 public:
   void recalc_auth_bits(bool replay);
   void remove_inode_recursive(CInode *in);
@@ -505,7 +510,7 @@ public:
   }
 
   void add_rollback(metareqid_t reqid, mds_rank_t master) {
-    need_resolve_rollback[reqid] = master;
+    resolve_need_rollback[reqid] = master;
   }
   void finish_rollback(metareqid_t reqid);
 
@@ -523,8 +528,6 @@ public:
   void finish_ambiguous_import(dirfrag_t dirino);
   void resolve_start(MDSInternalContext *resolve_done_);
   void send_resolves();
-  void send_slave_resolves();
-  void send_subtree_resolves();
   void maybe_send_pending_resolves() {
     if (resolves_pending)
       send_subtree_resolves();
