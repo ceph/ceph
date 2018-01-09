@@ -54,6 +54,9 @@ struct denc_traits {
   static constexpr bool need_contiguous = true;
 };
 
+template<typename T>
+inline constexpr bool denc_supported = denc_traits<T>::supported;
+
 
 // hack for debug only; FIXME
 //#include <iostream>
@@ -69,7 +72,7 @@ struct denc_traits {
 //#define ENCODE_DUMP_PATH /tmp/something
 
 #ifdef ENCODE_DUMP_PATH
-# include <stdio.h>
+# include <cstdio>
 # include <sys/types.h>
 # include <sys/stat.h>
 # include <fcntl.h>
@@ -224,16 +227,8 @@ struct denc_traits {
 // ---------------------------------------------------------------------
 // raw types
 namespace _denc {
-template<class T, class...>
-struct is_any_of : std::false_type {};
-template<class T, class Head, class... Tail>
-struct is_any_of<T, Head, Tail...> : std::conditional<
-  std::is_same<T, Head>::value,
-  std::true_type,
-  is_any_of<T, Tail...>>::type
-{};
 template<typename T, typename... Us>
-inline constexpr bool is_any_of_v = is_any_of<T, Us...>::value;
+inline constexpr bool is_any_of = (... || std::is_same_v<T, Us>);
 
 template<typename T, typename=void> struct underlying_type {
   using type = T;
@@ -251,8 +246,8 @@ template<typename T>
 struct denc_traits<
   T,
   std::enable_if_t<
-    _denc::is_any_of_v<_denc::underlying_type_t<T>,
-		       ceph_le64, ceph_le32, ceph_le16, uint8_t
+    _denc::is_any_of<_denc::underlying_type_t<T>,
+		     ceph_le64, ceph_le32, ceph_le16, uint8_t
 #ifndef _CHAR_IS_SIGNED
 		       , int8_t
 #endif
