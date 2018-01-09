@@ -44,10 +44,12 @@ The default Ceph configuration file locations in sequential order include:
 #. ``$CEPH_CONF`` (*i.e.,* the path following the ``$CEPH_CONF`` 
    environment variable)
 #. ``-c path/path``  (*i.e.,* the ``-c`` command line argument)
-#. ``/etc/ceph/ceph.conf``
-#. ``~/.ceph/config``
-#. ``./ceph.conf`` (*i.e.,* in the current working directory)
+#. ``/etc/ceph/$cluster.conf``
+#. ``~/.ceph/$cluster.conf``
+#. ``./$cluster.conf`` (*i.e.,* in the current working directory)
+#. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
 
+where ``$cluster`` is the cluster's name (default ``ceph``).
 
 The Ceph configuration file uses an *ini* style syntax. You can add comments 
 by preceding comments with a pound sign (#) or a semi-colon (;).  For example:
