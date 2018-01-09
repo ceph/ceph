@@ -2404,8 +2404,9 @@ void MDCache::logged_master_update(metareqid_t reqid)
   dout(10) << "logged_master_update " << reqid << dendl;
   assert(uncommitted_masters.count(reqid));
   uncommitted_masters[reqid].safe = true;
-  if (pending_masters.count(reqid)) {
-    pending_masters.erase(reqid);
+  auto p = pending_masters.find(reqid);
+  if (p != pending_masters.end()) {
+    pending_masters.erase(p);
     if (pending_masters.empty())
       process_delayed_resolve();
   }
@@ -2679,9 +2680,9 @@ void MDCache::send_resolves()
 	     << resolve_ack_gather << ")" << dendl;
     return;
   }
-  if (!need_resolve_rollback.empty()) {
+  if (!resolve_need_rollback.empty()) {
     dout(10) << "send_resolves still waiting for rollback to commit on ("
-	     << need_resolve_rollback << ")" << dendl;
+	     << resolve_need_rollback << ")" << dendl;
     return;
   }
   send_subtree_resolves();
@@ -2853,6 +2854,13 @@ void MDCache::send_subtree_resolves()
     mds->send_message_mds(m, p->first);
   }
   resolves_pending = false;
+}
+
+void MDCache::maybe_finish_slave_resolve() {
+  if (resolve_ack_gather.empty() && resolve_need_rollback.empty()) {
+    send_subtree_resolves();
+    process_delayed_resolve();
+  }
 }
 
 void MDCache::handle_mds_failure(mds_rank_t who)
@@ -3191,7 +3199,7 @@ void MDCache::handle_resolve(MMDSResolve *m)
     return;
   }
 
-  if (!resolve_ack_gather.empty() || !need_resolve_rollback.empty()) {
+  if (!resolve_ack_gather.empty() || !resolve_need_rollback.empty()) {
     dout(10) << "delay processing subtree resolve" << dendl;
     delayed_resolve[from] = m;
     return;
@@ -3302,7 +3310,7 @@ void MDCache::discard_delayed_resolve(mds_rank_t who)
 void MDCache::maybe_resolve_finish()
 {
   assert(resolve_ack_gather.empty());
-  assert(need_resolve_rollback.empty());
+  assert(resolve_need_rollback.empty());
 
   if (!resolve_gather.empty()) {
     dout(10) << "maybe_resolve_finish still waiting for resolves ("
@@ -3411,11 +3419,9 @@ void MDCache::handle_resolve_ack(MMDSResolveAck *ack)
     }
   }
 
-  if (!ambiguous_slave_updates.count(from))
+  if (!ambiguous_slave_updates.count(from)) {
     resolve_ack_gather.erase(from);
-  if (resolve_ack_gather.empty() && need_resolve_rollback.empty()) {
-    send_subtree_resolves();
-    process_delayed_resolve();
+    maybe_finish_slave_resolve();
   }
 
   ack->put();
@@ -3489,14 +3495,12 @@ MDSlaveUpdate* MDCache::get_uncommitted_slave_update(metareqid_t reqid, mds_rank
 }
 
 void MDCache::finish_rollback(metareqid_t reqid) {
-  assert(need_resolve_rollback.count(reqid));
+  auto p = resolve_need_rollback.find(reqid);
+  assert(p != resolve_need_rollback.end());
   if (mds->is_resolve())
-    finish_uncommitted_slave_update(reqid, need_resolve_rollback[reqid]);
-  need_resolve_rollback.erase(reqid);
-  if (resolve_ack_gather.empty() && need_resolve_rollback.empty()) {
-    send_subtree_resolves();
-    process_delayed_resolve();
-  }
+    finish_uncommitted_slave_update(reqid, p->second);
+  resolve_need_rollback.erase(p);
+  maybe_finish_slave_resolve();
 }
 
 void MDCache::disambiguate_other_imports()
