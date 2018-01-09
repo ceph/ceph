@@ -8920,7 +8920,6 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
   if (obj_cop->failed) {
     return;
   }                                                                                                                  
-
   if (!chunk_data.outdata.length()) {
     r = -EIO;
     obj_cop->failed = true;
@@ -8937,6 +8936,18 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 
   {
     OpContextUPtr ctx = simple_opc_create(obj_cop->obc);
+    if (!ctx->lock_manager.take_write_lock(
+	  obj_cop->obc->obs.oi.soid,
+	  obj_cop->obc)) {
+      // recovery op can take read lock. 
+      // so need to wait for recovery completion 
+      r = -EAGAIN;
+      obj_cop->failed = true;
+      close_op_ctx(ctx.release());
+      goto out;
+    }
+    dout(20) << __func__ << " took lock on obc, " << obj_cop->obc->rwstate << dendl;
+
     PGTransaction *t = ctx->op_t.get();
     ObjectState& obs = ctx->new_obs;
     for (auto p : obj_cop->chunk_cops) {
@@ -9352,7 +9363,7 @@ void PrimaryLogPG::finish_promote_manifest(int r, CopyResults *results,
   dout(10) << __func__ << " " << soid << " r=" << r
 	   << " uv" << results->user_version << dendl;
 
-  if (r == -ECANCELED) {
+  if (r == -ECANCELED || r == -EAGAIN) {
     return;
   }
 
