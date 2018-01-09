@@ -8557,7 +8557,9 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  flags,
 				  gather.new_sub(),
 				  // discover the object version if we don't know it yet
-				  cop->results.user_version ? NULL : &cop->results.user_version);
+				  cop->results.user_version ? NULL : &cop->results.user_version,
+				  NULL, 0,
+				  &cop->results.temperature);
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();
@@ -9298,6 +9300,11 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   simple_opc_submit(std::move(tctx));
 
   osd->logger->inc(l_osd_tier_promote);
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->set_temp(soid, results->temperature ? results->temperature : agent_state->promote_temp);
+  }
 
   if (agent_state &&
       agent_state->is_idle())

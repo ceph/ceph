@@ -70,6 +70,7 @@ public:
    */
   struct CopyResults {
     ceph::real_time mtime; ///< the copy source's mtime
+    uint32_t temperature;        ///< the copy source's temperature
     uint64_t object_size; ///< the copied object's size
     bool started_temp_obj; ///< true if the callback needs to delete temp object
     hobject_t temp_oid;    ///< temp object (if any)
