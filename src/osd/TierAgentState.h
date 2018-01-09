@@ -66,9 +66,35 @@ struct TierAgentState {
     return get_evict_mode_name(evict_mode);
   }
 
+  enum promote_mode_t {
+    PROMOTE_MODE_WARMING,      // promote anything
+    PROMOTE_MODE_SOME,      // promote some thing hot enough
+    PROMOTE_MODE_FULL,      // promote nothing
+  } promote_mode;     ///< current promote behavior
+  static const char *get_promote_mode_name(promote_mode_t m) {
+    switch (m) {
+    case PROMOTE_MODE_WARMING: return "warming";
+    case PROMOTE_MODE_SOME: return "some";
+    case PROMOTE_MODE_FULL: return "full";
+    default: assert(0 == "bad promote mode");
+    }
+  }
+  const char *get_promote_mode_name() const {
+    return get_promote_mode_name(promote_mode);
+  }
+
   /// approximate ratio of objects (assuming they are uniformly
   /// distributed) that i should aim to evict.
   unsigned evict_effort;
+
+  uint64_t evict_temp;
+  uint32_t promote_temp;
+  uint32_t flush_temp;
+
+  struct promote_info_t {
+    uint32_t temp;
+    utime_t request_time;
+  };
 
   TierAgentState()
     : started(0),
@@ -76,7 +102,11 @@ struct TierAgentState {
       hist_age(0),
       flush_mode(FLUSH_MODE_IDLE),
       evict_mode(EVICT_MODE_IDLE),
-      evict_effort(0)
+      promote_mode(PROMOTE_MODE_WARMING),
+      evict_effort(0),
+      evict_temp(0),
+      promote_temp(0),
+      flush_temp(0)
   {}
 
   /// false if we have any work to do
@@ -106,8 +136,11 @@ struct TierAgentState {
   void dump(Formatter *f) const {
     f->dump_string("flush_mode", get_flush_mode_name());
     f->dump_string("evict_mode", get_evict_mode_name());
+    f->dump_string("promote_mode", get_promote_mode_name());
     f->dump_unsigned("evict_effort", evict_effort);
     f->dump_stream("position") << position;
+    f->dump_stream("evict temperature") << evict_temp;
+    f->dump_stream("promote temperature") << promote_temp;
     f->open_object_section("temp_hist");
     temp_hist.dump(f);
     f->close_section();

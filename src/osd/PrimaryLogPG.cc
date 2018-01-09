@@ -2250,8 +2250,19 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
         in_hit_set = true;
     }
     if (!op->hitset_inserted) {
-      hit_set->insert(oid);
       op->hitset_inserted = true;
+      if (hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+	if (op->get_reqid().name.is_client()){
+	  TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+	  bool exsited = obc.get() && obc->obs.exists;
+	  if (pool.info.is_tier())
+	    th->insert(oid, exsited);
+	  else
+	    th->insert(oid, exsited || can_create);
+	}
+      } else {
+        hit_set->insert(oid);
+      }
       if (hit_set->is_full() ||
           hit_set_start_stamp + pool.info.hit_set_period <= m->get_recv_stamp()) {
         hit_set_persist();
@@ -2902,6 +2913,28 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     do_proxy_read(op);
     return cache_result_t::HANDLED_PROXY;
 
+  case pg_pool_t::CACHEMODE_SWAP:
+  {
+    if (must_promote ||
+        (agent_state->promote_mode == TierAgentState::PROMOTE_MODE_WARMING &&
+	 !op->need_skip_promote())) {
+      if (agent_state &&
+          agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
+        dout(20) << __func__ << " cache pool full, waiting" << dendl;
+        block_write_on_full_cache(missing_oid, op);
+        return cache_result_t::BLOCKED_FULL;
+      }
+      promote_object(obc, missing_oid, oloc, op, promote_obc);
+      return cache_result_t::BLOCKED_PROMOTE;
+    }
+    if (op->may_write() || op->may_cache() || write_ordered) {
+      do_proxy_write(op);
+    } else {
+      do_proxy_read(op);
+    }
+    return cache_result_t::HANDLED_PROXY;
+  }
+
   default:
     assert(0 == "unrecognized cache_mode");
   }
@@ -3129,7 +3162,8 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
     flags, new C_OnFinisher(fin, osd->objecter_finishers[n]),
     &prdop->user_version,
     &prdop->data_offset,
-    m->get_features());
+    m->get_features(),
+    &prdop->temperature);
   fin->tid = tid;
   prdop->objecter_tid = tid;
   proxyread_ops[tid] = prdop;
@@ -3190,6 +3224,16 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   ctx->data_off = prdop->data_offset;
   ctx->ignore_log_op_stats = true;
   complete_read_ctx(r, ctx);
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
+      prdop->temperature > agent_state->promote_temp &&
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL &&
+      !prdop->op->need_skip_promote()) {
+    ObjectContextRef obc = get_object_context(oid, false);
+    if (obc.get() && obc->is_blocked())
+      return;
+    const object_locator_t oloc = m->get_object_locator();
+    maybe_promote(ObjectContextRef(), oid, oloc, false, 0, OpRequestRef(), NULL);
+  }
 }
 
 void PrimaryLogPG::kick_proxy_ops_blocked(hobject_t& soid)
@@ -3322,7 +3366,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(pwop->mtime),
     flags, new C_OnFinisher(fin, osd->objecter_finishers[n]),
-    &pwop->user_version, pwop->reqid);
+    &pwop->user_version, pwop->reqid, &pwop->temperature);
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
@@ -3638,6 +3682,17 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   delete pwop->ctx;
   pwop->ctx = NULL;
+
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
+      pwop->temperature > agent_state->promote_temp &&
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL &&
+      !pwop->op->need_skip_promote()) {
+    ObjectContextRef obc = get_object_context(oid, false);
+    if (obc.get() && obc->is_blocked())
+      return;
+    const object_locator_t oloc = m->get_object_locator();
+    maybe_promote(ObjectContextRef(), oid, oloc, false, 0, OpRequestRef(), NULL);
+  }
 }
 
 void PrimaryLogPG::cancel_proxy_write(ProxyWriteOpRef pwop,
@@ -3919,6 +3974,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   }
 
   ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    ctx->reply->set_temperature(th->get_temp(soid));
+  }
 
   assert(op->may_write() || op->may_cache());
 
@@ -7669,6 +7729,13 @@ inline int PrimaryLogPG::_delete_oid(
   oi.size = 0;
   oi.new_object();
 
+  // remove object in hit set
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP &&
+      !whiteout) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->evict(soid);
+  }
+
   // disconnect all watchers
   for (map<pair<uint64_t, entity_name_t>, watch_info_t>::iterator p =
 	 oi.watchers.begin();
@@ -8800,7 +8867,9 @@ void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 				  flags,
 				  gather.new_sub(),
 				  // discover the object version if we don't know it yet
-				  cop->results.user_version ? NULL : &cop->results.user_version);
+				  cop->results.user_version ? NULL : &cop->results.user_version,
+				  NULL, 0,
+				  &cop->results.temperature);
   fin->tid = tid;
   cop->objecter_tid = tid;
   gather.activate();
@@ -9542,6 +9611,30 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
       get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS);
   }
   dout(20) << __func__ << " new_snapset " << tctx->new_snapset << dendl;
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->set_temp(soid, results->temperature ? results->temperature : agent_state->promote_temp);
+  }
+
+  if (obc->obs.oi.soid.snap == CEPH_NOSNAP &&
+      pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP) {
+    // delete head object in tier_of and mark it dirty in cache tier to save space
+    tctx->new_obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+    object_locator_t base_oloc(soid);
+    base_oloc.pool = pool.info.tier_of;
+    ObjectOperation o;
+    o.remove();
+    osd->objecter->mutate(
+      tctx->new_obs.oi.soid.oid,
+      base_oloc,
+      o,
+      obc->ssc->snapset.get_ssc_as_of(obc->ssc->snapset.seq),
+      ceph::real_clock::from_ceph_timespec(tctx->new_obs.oi.mtime),
+      (CEPH_OSD_FLAG_IGNORE_OVERLAY |
+       CEPH_OSD_FLAG_ENFORCE_SNAPC),
+      NULL /* no callback, we'll rely on the ordering w.r.t the next op */);
+  }
 
   // take RWWRITE lock for duration of our local write.  ignore starvation.
   if (!tctx->lock_manager.take_write_lock(
@@ -13439,6 +13532,22 @@ void PrimaryLogPG::hit_set_create()
 
     dout(10) << __func__ << " target_size " << p->target_size
 	     << " fpp " << p->get_fpp() << dendl;
+  } else if (pool.info.hit_set_params.get_type() == HitSet::TYPE_TEMP) {
+    if (!hit_set) {
+      // try loading the temp hit set in local storage
+      pg_hit_set_info_t& p = info.hit_set.history.back();
+      hobject_t oid = get_hit_set_archive_object(p.begin, p.end, p.using_gmt);
+      hit_set = hit_set_load(oid);
+    }
+    if (!hit_set || hit_set->impl->get_type() != HitSet::TYPE_TEMP)
+      hit_set.reset(new HitSet(params));
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->set_dp(pool.info.hit_set_period);
+    hit_set->sealed = false;
+    if (pool.info.is_tier())
+      th->sync(true);
+    hit_set_start_stamp = now;
+    return;
   }
   hit_set.reset(new HitSet(params));
   hit_set_start_stamp = now;
@@ -13604,6 +13713,44 @@ void PrimaryLogPG::hit_set_persist()
   simple_opc_submit(std::move(ctx));
 }
 
+HitSetRef PrimaryLogPG::hit_set_load(hobject_t& oid) {
+  if (!pool.info.is_replicated()) {
+    // FIXME: EC not supported here yet
+    derr << __func__ << " on non-replicated pool" << dendl;
+    return HitSetRef();
+  }
+
+  if (is_unreadable_object(oid)) {
+    dout(10) << __func__ << " unreadable " << oid << ", waiting" << dendl;
+    return HitSetRef();
+  }
+
+  ObjectContextRef obc = get_object_context(oid, false);
+  if (!obc) {
+    derr << __func__ << ": could not load hitset " << oid << dendl;
+    return HitSetRef();
+  }
+
+  int r;
+  bufferlist bl;
+  {
+    obc->ondisk_read_lock();
+    r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
+    obc->ondisk_read_unlock();
+  }
+  if (r < 0)
+    return HitSetRef();
+  HitSetRef hs(new HitSet);
+  bufferlist::iterator pbl = bl.begin();
+  try {
+    ::decode(*hs, pbl);
+    return hs;
+  } catch (...) {
+    dout(0) << __func__ << ": error on loading hitset." << dendl;
+  }
+  return HitSetRef();
+}
+
 void PrimaryLogPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
 {
   assert(ctx->updated_hset_history);
@@ -13703,13 +13850,6 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   }
 
   assert(!deleting);
-
-  if (agent_state->is_idle()) {
-    dout(10) << __func__ << " idle, stopping" << dendl;
-    unlock();
-    return true;
-  }
-
   osd->logger->inc(l_osd_agent_wake);
 
   dout(10) << __func__
@@ -13797,6 +13937,7 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
     }
 
     if (agent_state->evict_mode != TierAgentState::EVICT_MODE_IDLE &&
+        pool.info.cache_mode != pg_pool_t::CACHEMODE_SWAP &&
 	agent_maybe_evict(obc, false))
       ++started;
     else if (agent_state->flush_mode != TierAgentState::FLUSH_MODE_IDLE &&
@@ -13837,6 +13978,10 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
     else
       total_started = 0;
     agent_state->start = next;
+    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+      TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+      th->sync(true);
+    }
   }
   agent_state->started = total_started;
 
@@ -13941,6 +14086,16 @@ bool PrimaryLogPG::agent_maybe_flush(ObjectContextRef& obc)
     return false;
   }
 
+  if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW &&
+      hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    if (th->get_temp(obc->obs.oi.soid) > agent_state->flush_temp) {
+      dout(20) << __func__ << " skip (hot) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      return false;
+    }
+  }
+
   dout(10) << __func__ << " flushing " << obc->obs.oi << dendl;
 
   // FIXME: flush anything dirty, regardless of what distribution of
@@ -14011,6 +14166,12 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
       return false;
     }
     // is this object old and/or cold enough?
+    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+      TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+      if (th->get_temp(soid) > agent_state->evict_temp)
+	return false;
+      goto skip_calc;
+    }
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
     if (hit_set)
@@ -14036,6 +14197,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
       return false;
   }
 
+ skip_calc:
   dout(10) << __func__ << " evicting " << obc->obs.oi << dendl;
   OpContextUPtr ctx = simple_opc_create(obc);
 
@@ -14115,7 +14277,9 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 
   TierAgentState::flush_mode_t flush_mode = TierAgentState::FLUSH_MODE_IDLE;
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
+  TierAgentState::promote_mode_t promote_mode = TierAgentState::PROMOTE_MODE_FULL;
   unsigned evict_effort = 0;
+  uint32_t evict_temp = 0, flush_temp = 0, promote_temp = 0;
 
   if (info.stats.stats_invalid) {
     // idle; stats can't be trusted until we scrub.
@@ -14253,6 +14417,47 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     assert(evict_effort >= inc && evict_effort <= 1000000);
     dout(30) << __func__ << " evict_effort " << was << " quantized by " << inc << " to " << evict_effort << dendl;
   }
+
+  // promote mode
+  // TODO: add an pool config to control the promote slope
+  float slope = 0.9;
+  if (full_micro > 1000000)
+    promote_mode = TierAgentState::PROMOTE_MODE_FULL;
+  else if (agent_state->promote_mode != TierAgentState::PROMOTE_MODE_WARMING ||
+           full_micro >= slope * evict_target)
+    promote_mode = TierAgentState::PROMOTE_MODE_SOME;
+  else
+    promote_mode = TierAgentState::PROMOTE_MODE_WARMING;
+
+  // flush the object only if it need to be evicted
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP) {
+    if (evict_mode == TierAgentState::EVICT_MODE_FULL)
+      flush_mode = TierAgentState::FLUSH_MODE_HIGH;
+    else if (evict_mode == TierAgentState::EVICT_MODE_SOME)
+      flush_mode = TierAgentState::FLUSH_MODE_LOW;
+    else
+      flush_mode = TierAgentState::FLUSH_MODE_IDLE;
+  }
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    uint64_t target_objects = UINT64_MAX;
+    uint32_t min_recency_for_promote = MAX(pool.info.min_read_recency_for_promote,
+      pool.info.min_write_recency_for_promote);
+    if (pool.info.target_max_objects)
+      target_objects = pool.info.target_max_objects / divisor;
+    if (pool.info.target_max_bytes &&
+        num_user_objects > 0 &&
+        num_user_bytes > 0) {
+      uint64_t target_objects_size = pool.info.target_max_bytes / divisor / \
+        MAX(1, num_user_bytes / num_user_objects);
+      target_objects = MIN(target_objects, target_objects_size);
+    }
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    evict_temp = th->get_rank_temp(slope * evict_target * target_objects / 1000000);
+    flush_temp = evict_temp;
+    promote_temp = MAX(min_recency_for_promote, evict_temp * 2);
+  }
+
   }
 
   skip_calc:
@@ -14306,6 +14511,14 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     }
     agent_state->evict_mode = evict_mode;
   }
+  if (promote_mode != agent_state->promote_mode) {
+    dout(5) << __func__ << " promote mode "
+      << TierAgentState::get_promote_mode_name(agent_state->promote_mode)
+      << " -> "
+      << TierAgentState::get_promote_mode_name(promote_mode)
+      << dendl;
+    agent_state->promote_mode = promote_mode;
+  }
   uint64_t old_effort = agent_state->evict_effort;
   if (evict_effort != agent_state->evict_effort) {
     dout(5) << __func__ << " evict_effort "
@@ -14315,6 +14528,9 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	    << dendl;
     agent_state->evict_effort = evict_effort;
   }
+  agent_state->promote_temp = promote_temp;
+  agent_state->evict_temp = evict_temp;
+  agent_state->flush_temp = flush_temp;
 
   // NOTE: we are using evict_effort as a proxy for *all* agent effort
   // (including flush).  This is probably fine (they should be

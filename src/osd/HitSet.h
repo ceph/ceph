@@ -19,8 +19,10 @@
 
 #include "include/encoding.h"
 #include "include/unordered_set.h"
+#include "include/unordered_map.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/Clock.h"
 
 /**
  * generic container for a HitSet
@@ -36,7 +38,8 @@ public:
     TYPE_NONE = 0,
     TYPE_EXPLICIT_HASH = 1,
     TYPE_EXPLICIT_OBJECT = 2,
-    TYPE_BLOOM = 3
+    TYPE_BLOOM = 3,
+    TYPE_TEMP = 4
   } impl_type_t;
 
   static const char *get_type_name(impl_type_t t) {
@@ -45,6 +48,7 @@ public:
     case TYPE_EXPLICIT_HASH: return "explicit_hash";
     case TYPE_EXPLICIT_OBJECT: return "explicit_object";
     case TYPE_BLOOM: return "bloom";
+    case TYPE_TEMP: return "temp";
     default: return "???";
     }
   }
@@ -77,6 +81,11 @@ public:
   class Params {
     /// create an Impl* of the given type
     bool create_impl(impl_type_t t);
+
+    typedef enum {
+      EXT_TYPE_NONE,
+      EXT_TYPE_TEMP
+    } expansion_type_t;
 
   public:
     class Impl {
@@ -449,5 +458,245 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(BloomHitSet)
+
+/**
+ * explicitly enumerate hash hits with incremental temp in the set
+ */
+class TempHitSet : public HitSet::Impl {
+public:
+  static const uint32_t TEMPMAX = UINT32_MAX * 0.9;
+
+  template <class T>
+  struct ExclusiveKeyAsHash {
+      size_t operator()(T key) const noexcept{
+        return key;
+      }
+  };
+
+  struct temperature_t {
+    uint32_t temp;
+    uint32_t last_decay;
+
+    temperature_t() : temp(0) {
+      last_decay = ceph_clock_now().tv.tv_sec;
+    }
+    temperature_t(uint32_t t) {
+      temp = MIN(t, TEMPMAX);
+      last_decay = ceph_clock_now().tv.tv_sec;
+    }
+    temperature_t(uint32_t t, uint32_t l) : last_decay(l) {
+      temp = MIN(t, TEMPMAX);
+    }
+    temperature_t(const temperature_t& ti) : last_decay(ti.last_decay) {
+      temp = MIN(ti.temp, TEMPMAX);
+    }
+
+    DENC(temperature_t, v, p) {
+      DENC_START(1, 1, p);
+      denc_varint(v.temp, p);
+      denc(v.last_decay, p);
+      DENC_FINISH(p);
+    }
+  };
+
+  class RankHistogram {
+    std::vector<int32_t> h; // histogram
+    uint32_t total;
+
+    private:
+      void _expand_to(unsigned s) {
+	if (s > h.size())
+	  h.resize(s, 0);
+      }
+      void _contract() {
+	unsigned p = h.size();
+	while (p > 1 && h[p-1] == 0)
+	  --p;
+	h.resize(p);
+      }
+    public:
+      RankHistogram() : total(0) {}
+
+      void clear() {
+	h.clear();
+        total = 0;
+      }
+
+      void add(uint32_t v) {
+	unsigned bin = cbits(v);
+	bin = MIN(31, bin);
+	_expand_to(bin + 1);
+	h[bin]++;
+	total++;
+	_contract();
+      }
+
+      void insert(uint32_t v) {
+	unsigned bin = cbits(v);
+	if (bin > 0 && bin != cbits(v-1)) {
+	  _expand_to(bin + 1);
+	  h[bin]++;
+	  h[bin-1]--;
+	  _contract();
+	}
+      }
+
+      void sub(uint32_t v) {
+	unsigned bin = cbits(v);
+	if (total > 0 &&
+      bin + 1 <= h.size() &&
+      h[bin] > 0) {
+	  h[bin]--;
+	  total--;
+	  _contract();
+	}
+      }
+
+      void decay(uint32_t bits) {
+	if (h.empty())
+	  return;
+	auto p = h.begin();
+	/// Objects at a temperature of 0 don't decay
+	p++;
+	for ( ; p != h.end(); ++p) {
+	  /// demote objects to a lower bar
+	  *(p-1) += *p - (*p >> bits);
+	  *p >>= bits;
+	}
+      }
+
+      uint32_t get_position_value(uint64_t pos) {
+        if (pos >= total)
+          return 0;
+	int64_t target = total - pos;
+	uint32_t bins = 1;
+	for (auto p = h.begin(); p != h.end(); ++p) {
+          target -= *p;
+	  if (target <= 0) {
+                break;
+          }
+	  bins <<= 1;
+	}
+	return bins;
+      }
+
+      uint32_t get_avg() const {
+	float avg = 0;
+	int bin = 0;
+	for (auto p = h.begin(); p != h.end(); ++p) {
+	  avg += (float)(*p) / total * bin;
+	  bin = (bin ? bin << 1 : 1);
+	}
+	return (uint32_t)avg;
+      }
+    };
+
+private:
+  typedef ceph::unordered_map<
+    uint32_t, temperature_t, ExclusiveKeyAsHash<unsigned>
+    > HitTable;
+
+  HitTable hits;
+  boost::scoped_ptr<RankHistogram> rank;
+  utime_t last_decay;
+
+public:
+  uint32_t decay_period;
+
+public:
+  class Params : public HitSet::Params::Impl {
+  public:
+    HitSet::impl_type_t get_type() const override {
+      return HitSet::TYPE_TEMP;
+    }
+    HitSet::Impl *get_new_impl() const override {
+      return new TempHitSet;
+    }
+
+    static void generate_test_instances(list<Params*>& o) {
+      o.push_back(new Params);
+    }
+  };
+
+  explicit TempHitSet()
+    : decay_period(1024) {
+      last_decay = ceph_clock_now();
+    }
+  explicit TempHitSet(const TempHitSet::Params *p)
+    : decay_period(1024) {
+      last_decay = ceph_clock_now();
+    }
+  TempHitSet(const TempHitSet &o)
+    : hits(o.hits), last_decay(o.last_decay), decay_period(o.decay_period) {}
+
+  HitSet::Impl *clone() const override {
+    return new TempHitSet(*this);
+  }
+
+  HitSet::impl_type_t get_type() const override {
+    return HitSet::TYPE_TEMP;
+  }
+  bool is_full() const override {
+    return false;
+  }
+  void set_dp(uint32_t dp) {
+    decay_period = MAX(1, dp);
+  }
+  void insert(const hobject_t &o) override {
+    insert(o, false);
+  }
+  void insert(const hobject_t &o, bool created);
+  bool contains(const hobject_t& o) const override {
+    return hits.count(o.get_hash());
+  }
+  unsigned insert_count() const override {
+    if (!rank.get()) {
+      uint64_t count = 0;
+      for (auto iter = hits.begin(); iter != hits.end(); ++iter)
+        count += iter->second.temp;
+      return count;
+    } else {
+      uint32_t avg_temp = rank->get_avg();
+      return _smooth(avg_temp, last_decay) * hits.size();
+    }
+  }
+  unsigned approx_unique_insert_count() const override {
+    return hits.size();
+  }
+  uint32_t get_temp(const hobject_t& o);
+  void set_temp(const hobject_t &o, uint32_t t);
+  void evict(const hobject_t& o);
+  uint32_t get_rank_temp(uint64_t r);
+  uint32_t get_avg_temp();
+  // sync the temperature and rank histogram
+  bool sync(bool deep = false);
+
+  void encode(bufferlist &bl) const override {
+    ENCODE_START(1, 1, bl);
+    encode(hits, bl);
+    encode(last_decay, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) override {
+    DECODE_START(1, bl);
+    decode(hits, bl);
+    decode(last_decay, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const override;
+  static void generate_test_instances(list<TempHitSet*>& o) {
+    o.push_back(new TempHitSet);
+    o.push_back(new TempHitSet);
+    o.back()->insert(hobject_t());
+    o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+    o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  }
+
+private:
+  uint32_t _update_temp(temperature_t& t);
+  uint32_t _smooth(uint32_t temp, utime_t last_decay) const;
+};
+WRITE_CLASS_DENC(TempHitSet::temperature_t)
+WRITE_CLASS_ENCODER(TempHitSet)
 
 #endif

@@ -37,6 +37,10 @@ HitSet::HitSet(const HitSet::Params& params)
     impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
     break;
 
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet(static_cast<TempHitSet::Params*>(params.impl.get())));
+    break;
+
   default:
     assert (0 == "unknown HitSet type");
   }
@@ -70,6 +74,9 @@ void HitSet::decode(bufferlist::iterator &bl)
     break;
   case TYPE_BLOOM:
     impl.reset(new BloomHitSet);
+    break;
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet);
     break;
   case TYPE_NONE:
     impl.reset(NULL);
@@ -105,6 +112,10 @@ void HitSet::generate_test_instances(list<HitSet*>& o)
   o.back()->insert(hobject_t());
   o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  o.push_back(new HitSet(new TempHitSet));
+  o.back()->insert(hobject_t());
+  o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+  o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
 }
 
 HitSet::Params::Params(const Params& o)
@@ -136,12 +147,21 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
 
 void HitSet::Params::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   if (impl) {
-    encode((__u8)impl->get_type(), bl);
-    impl->encode(bl);
+    if (impl->get_type() == TYPE_TEMP) {
+      encode((__u8)TYPE_NONE, bl);
+      uint8_t expansion_type = EXT_TYPE_TEMP;
+      encode(expansion_type, bl);
+      impl->encode(bl);
+    } else {
+      encode((__u8)impl->get_type(), bl);
+      impl->encode(bl);
+    }
   } else {
     encode((__u8)TYPE_NONE, bl);
+    uint8_t flags = EXT_TYPE_NONE;
+    encode(flags, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -158,6 +178,9 @@ bool HitSet::Params::create_impl(impl_type_t type)
   case TYPE_BLOOM:
     impl.reset(new BloomHitSet::Params);
     break;
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet::Params);
+    break;
   case TYPE_NONE:
     impl.reset(NULL);
     break;
@@ -169,9 +192,15 @@ bool HitSet::Params::create_impl(impl_type_t type)
 
 void HitSet::Params::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   __u8 type;
   decode(type, bl);
+  if (struct_v > 1 && (impl_type_t)type == TYPE_NONE) {
+    uint8_t expansion_type = 0;
+    decode(expansion_type, bl);
+    if ((expansion_type & EXT_TYPE_TEMP) == EXT_TYPE_TEMP)
+      type = (__u8)TYPE_TEMP;
+  }
   if (!create_impl((impl_type_t)type))
     throw buffer::malformed_input("unrecognized HitMap type");
   if (impl)
@@ -203,6 +232,8 @@ void HitSet::Params::generate_test_instances(list<HitSet::Params*>& o)
   loop_hitset_params(ExplicitHashHitSet);
   o.push_back(new Params(new ExplicitObjectHitSet::Params));
   loop_hitset_params(ExplicitObjectHitSet);
+  o.push_back(new Params(new TempHitSet::Params));
+  loop_hitset_params(TempHitSet);
 }
 
 ostream& operator<<(ostream& out, const HitSet::Params& p) {
@@ -248,5 +279,142 @@ void BloomHitSet::Params::dump(Formatter *f) const {
 void BloomHitSet::dump(Formatter *f) const {
   f->open_object_section("bloom_filter");
   bloom.dump(f);
+  f->close_section();
+}
+
+void TempHitSet::insert(const hobject_t &o, bool created) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end()) {
+    if (!created)
+      return ;
+    hits.emplace(o.get_hash(), 1);
+    if (rank.get()) {
+      sync();
+      rank->add(1);
+    }
+  } else {
+    _update_temp(it->second);
+    (it->second.temp)++;
+    if (rank.get()) {
+      sync();
+      rank->insert(it->second.temp);
+    }
+  }
+}
+
+uint32_t TempHitSet::get_temp(const hobject_t& o) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end())
+    return 0;
+  else {
+    return _update_temp(it->second);
+  }
+}
+
+void TempHitSet::set_temp(const hobject_t &o, uint32_t t) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end()) {
+    hits.emplace(o.get_hash(), t);
+    if (rank.get()) {
+      sync();
+      rank->add(t);
+    }
+  } else {
+    if (rank.get()) {
+      sync();
+      rank->sub(it->second.temp);
+    }
+    it->second.temp = t;
+    if (rank.get()) {
+      rank->add(it->second.temp);
+    }
+  }
+}
+
+void TempHitSet::evict(const hobject_t& o) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end())
+    return;
+  hits.erase(it);
+  if (rank.get()) {
+    sync();
+    rank->sub(it->second.temp);
+  }
+}
+
+uint32_t TempHitSet::get_rank_temp(uint64_t r) {
+  if (!rank.get())
+    return 0;
+  sync();
+  uint32_t temp = rank->get_position_value(r);
+  return _smooth(temp, last_decay);
+}
+
+uint32_t TempHitSet::get_avg_temp() {
+  if (!rank.get())
+    return 0;
+  sync();
+  uint32_t temp = rank->get_avg();
+  return _smooth(temp, last_decay);
+}
+
+bool TempHitSet::sync(bool deep) {
+  if (!rank.get() && !deep)
+    return false;
+  utime_t now = ceph_clock_now();
+  assert(now >= last_decay);
+  assert(decay_period > 0);
+  uint32_t passed = (now - last_decay).sec();
+  uint32_t periods = passed / decay_period;
+  uint32_t remain = passed % decay_period;
+  if (deep) {
+    rank.reset(new RankHistogram);
+    for (HitTable::iterator it = hits.begin(); it != hits.end(); ++it) {
+      _update_temp(it->second);
+      rank->add(it->second.temp);
+    }
+    last_decay = now - utime_t(remain, 0);
+    return true;
+  }
+  if (periods == 0)
+    return false;
+   else {
+    rank->decay(periods);
+    last_decay = now - utime_t(remain, 0);
+    return true;
+  }
+}
+
+uint32_t TempHitSet::_update_temp(temperature_t& t) {
+  uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+  assert(t.last_decay <= now_sec);
+  assert(decay_period > 0);
+  uint32_t periods = (now_sec - t.last_decay) / decay_period;
+  if (periods == 0)
+    t.temp = MIN(TEMPMAX, t.temp);
+  else {
+    t.temp >>= periods;
+    t.last_decay += periods * decay_period;
+  }
+  return _smooth(t.temp, utime_t(t.last_decay, 0));
+}
+
+uint32_t TempHitSet::_smooth(uint32_t temp, utime_t last_decay) const {
+  utime_t now = ceph_clock_now();
+  uint32_t remain = (now - last_decay).sec() % decay_period;
+  uint32_t temp_smooth = temp - temp * remain / 2 / decay_period;
+  return temp_smooth;
+}
+
+void TempHitSet::dump(Formatter *f) const {
+  f->open_object_section("temp_count");
+  f->open_array_section("hash_set");
+  for (HitTable::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p){
+    f->dump_unsigned("hash", p->first);
+    f->dump_unsigned("temp", p->second.temp);
+    f->dump_unsigned("last_decay", p->second.last_decay);
+  }
   f->close_section();
 }

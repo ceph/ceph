@@ -32,7 +32,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -48,6 +48,7 @@ class MOSDOpReply : public Message {
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  uint32_t temperature = 0;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -60,6 +61,9 @@ public:
   int get_result() const { return result; }
   const eversion_t& get_replay_version() const { return replay_version; }
   const version_t& get_user_version() const { return user_version; }
+  uint32_t get_temperature() const { return temperature; }
+
+  void set_temperature(uint32_t temp) { temperature = temp; }
   
   void set_result(int r) { result = r; }
 
@@ -212,6 +216,11 @@ public:
         }
       }
       encode_trace(payload, features);
+      if ((features & CEPH_FEATURE_NEW_CACHEMODE_SWAP) == 0) {
+        header.version = 9;
+      } else {
+        encode(temperature, payload);
+      }
     }
   }
   void decode_payload() override {
@@ -245,6 +254,7 @@ public:
       if (do_redirect)
 	decode(redirect, p);
       decode_trace(p);
+      decode(temperature, p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
       decode(head, p);
@@ -306,6 +316,9 @@ public:
       }
       if (header.version >= 8) {
         decode_trace(p);
+      }
+      if (header.version >= 10) {
+        decode(temperature, p);
       }
     }
   }

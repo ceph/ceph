@@ -1015,7 +1015,7 @@ COMMAND_WITH_FLAG("osd tier remove " \
     FLAG(DEPRECATED))
 COMMAND("osd tier cache-mode " \
 	"name=pool,type=CephPoolname " \
-	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|proxy|readproxy " \
+	"name=mode,type=CephChoices,strings=none|writeback|forward|readonly|readforward|proxy|readproxy|swap " \
 	"name=sure,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
 	"specify the caching mode for cache tier <pool>", "osd", "rw", "cli,rest")
 COMMAND("osd tier set-overlay " \

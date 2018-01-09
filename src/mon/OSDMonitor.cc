@@ -6788,6 +6788,13 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     p.hit_set_period = n;
+    if (p.is_tier() && p.cache_mode ==  pg_pool_t::CACHEMODE_SWAP) {
+      const pg_pool_t *base_pool = osdmap.get_pg_pool(p.tier_of);
+      assert(base_pool);
+      pg_pool_t *nbp = pending_inc.get_new_pool(p.tier_of, base_pool);
+      nbp->hit_set_period = n;
+      ss <<"WARNING: automatically set hit_set_period in base pool! ";
+    }
   } else if (var == "hit_set_count") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
@@ -11372,6 +11379,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      *  readforward: Writes are in writeback mode, Reads are in forward mode
      *  proxy:       Proxy all reads and writes to base pool
      *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
+     *  swap:       Swap hot objects with cold objects in cache tier
      *
      * Hence, these are the allowed transitions:
      *
@@ -11442,6 +11450,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         goto reply;
       }
     }
+
+    if (mode == pg_pool_t::CACHEMODE_SWAP) {
+      err = check_cluster_features(CEPH_FEATURE_NEW_CACHEMODE_SWAP, ss);
+      if (err == -EAGAIN)
+        goto wait;
+      if (err)
+        goto reply;
+    }
+
     // go
     pg_pool_t *np = pending_inc.get_new_pool(pool_id, p);
     np->cache_mode = mode;
@@ -11456,6 +11473,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (base_pool->read_tier == pool_id ||
 	  base_pool->write_tier == pool_id)
 	ss <<" (WARNING: pool is still configured as read or write tier)";
+    } else if (mode ==  pg_pool_t::CACHEMODE_SWAP) {
+      const pg_pool_t *base_pool = osdmap.get_pg_pool(np->tier_of);
+      assert(base_pool);
+      np->hit_set_params = HitSet::Params(new TempHitSet::Params);
+      np->hit_set_count = 1;
+      np->hit_set_period = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
+      pg_pool_t *nbp = pending_inc.get_new_pool(np->tier_of, base_pool);
+      nbp->hit_set_params = HitSet::Params(new TempHitSet::Params);
+      nbp->hit_set_count = 1;
+      nbp->hit_set_period = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
+      ss <<" (WARNING: automatically create temperature HitSet in base pool)";
     }
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
