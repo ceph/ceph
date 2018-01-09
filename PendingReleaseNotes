@@ -1,4 +1,4 @@
-13.0.0
+13.0.1
 ------
 
 * The RBD C API's rbd_discard method now enforces a maximum length of
@@ -24,6 +24,10 @@
     are configurable via `ceph fs set`. The MDS config options
     mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
     obsolete.
+
+* The sample ``crush-location-hook`` script has been removed.  Its output is
+  equivalent to the built-in default behavior, so it has been replaced with an
+  example in the CRUSH documentation.
 
 
 
