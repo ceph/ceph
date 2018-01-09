@@ -27,6 +27,7 @@
 #include <array>
 #include <cstring>
 #include <map>
+#include <optional>
 #include <set>
 #include <string>
 #include <type_traits>
@@ -1464,6 +1465,114 @@ struct denc_traits<boost::none_t> {
   }
 
   static void encode(const boost::none_t& v,
+		     bufferlist::contiguous_appender& p) {
+    denc(false, p);
+  }
+};
+
+//
+// std::optional<T>
+//
+template<typename T>
+struct denc_traits<
+  std::optional<T>,
+  std::enable_if_t<denc_traits<T>::supported>> {
+  using traits = denc_traits<T>;
+
+  static constexpr bool supported = true;
+  static constexpr bool featured = traits::featured;
+  static constexpr bool bounded = false;
+  static constexpr bool need_contiguous = traits::need_contiguous;
+
+  template<typename U = T>
+  static std::enable_if_t<!!sizeof(U)>
+  bound_encode(const std::optional<T>& v, size_t& p, uint64_t f = 0) {
+    p += sizeof(bool);
+    if (v) {
+      if constexpr (featured) {
+        denc(*v, p, f);
+      } else {
+        denc(*v, p);
+      }
+    }
+  }
+
+  template<typename U = T>
+  static std::enable_if_t<!!sizeof(U)>
+  encode(const std::optional<T>& v, bufferlist::contiguous_appender& p,
+	 uint64_t f = 0) {
+    denc((bool)v, p);
+    if (v) {
+      if constexpr (featured) {
+        denc(*v, p, f);
+      } else {
+        denc(*v, p);
+      }
+    }
+  }
+
+  static void decode(std::optional<T>& v, buffer::ptr::iterator& p,
+		     uint64_t f = 0) {
+    bool x;
+    denc(x, p, f);
+    if (x) {
+      v = T{};
+      denc(*v, p, f);
+    } else {
+      v = std::nullopt;
+    }
+  }
+
+  template<typename U = T>
+  static std::enable_if_t<!!sizeof(U) && !need_contiguous>
+  decode(std::optional<T>& v, buffer::list::iterator& p) {
+    bool x;
+    denc(x, p);
+    if (x) {
+      v = T{};
+      denc(*v, p);
+    } else {
+      v = std::nullopt;
+    }
+  }
+
+  template<typename U = T>
+  static std::enable_if_t<!!sizeof(U)>
+  encode_nohead(const std::optional<T>& v,
+		bufferlist::contiguous_appender& p,
+		uint64_t f = 0) {
+    if (v) {
+      if constexpr (featured) {
+        denc(*v, p, f);
+      } else {
+        denc(*v, p);
+      }
+    }
+  }
+
+  static void decode_nohead(bool num, std::optional<T>& v,
+			    buffer::ptr::iterator& p, uint64_t f = 0) {
+    if (num) {
+      v = T();
+      denc(*v, p, f);
+    } else {
+      v = std::nullopt;
+    }
+  }
+};
+
+template<>
+struct denc_traits<std::nullopt_t> {
+  static constexpr bool supported = true;
+  static constexpr bool featured = false;
+  static constexpr bool bounded = true;
+  static constexpr bool need_contiguous = false;
+
+  static void bound_encode(const std::nullopt_t& v, size_t& p) {
+    p += sizeof(bool);
+  }
+
+  static void encode(const std::nullopt_t& v,
 		     bufferlist::contiguous_appender& p) {
     denc(false, p);
   }
