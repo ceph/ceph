@@ -59,7 +59,7 @@ optional<real_time> from_iso_8601(const string_ref s,
     return f;
   };
 
-  auto read_digits = [end, &read_digit](sriter& c, std::size_t n) {
+  auto read_digits = [&read_digit](sriter& c, std::size_t n) {
     auto v = 0ULL;
     for (auto i = 0U; i < n; ++i) {
       auto d = read_digit(c);

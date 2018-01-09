@@ -251,7 +251,7 @@ public:
                                 })),
                               Return(true)));
       } else {
-        expect.WillOnce(DoAll(WithArg<6>(Invoke([&mock_image_ctx, snap_id, state, r](Context *ctx) {
+        expect.WillOnce(DoAll(WithArg<6>(Invoke([&mock_image_ctx, snap_id, state](Context *ctx) {
                                   assert(mock_image_ctx.image_ctx->snap_lock.is_locked());
                                   assert(mock_image_ctx.image_ctx->object_map_lock.is_wlocked());
                                   mock_image_ctx.image_ctx->object_map->aio_update<Context>(

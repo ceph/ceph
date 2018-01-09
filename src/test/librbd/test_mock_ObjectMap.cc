@@ -139,7 +139,7 @@ public:
                                                current_state))
       .Times(1);
     EXPECT_CALL(mock_update_request, send())
-      .WillOnce(Invoke([&mock_image_ctx, &mock_update_request, on_finish]() {
+      .WillOnce(Invoke([&mock_update_request, on_finish]() {
           *on_finish = mock_update_request.on_finish;
         }));
   }
