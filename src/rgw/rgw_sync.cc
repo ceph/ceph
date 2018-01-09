@@ -1360,8 +1360,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  std::set<std::string> entries;
+  std::set<std::string>::iterator iter;
 
   string oid;
 
@@ -1562,20 +1562,20 @@ public:
         }
         iter = entries.begin();
         for (; iter != entries.end(); ++iter) {
-          tn->log(20, SSTR("full sync: " << iter->first));
+          marker = *iter;
+          tn->log(20, SSTR("full sync: " << marker));
           total_entries++;
-          if (!marker_tracker->start(iter->first, total_entries, real_time())) {
-            tn->log(0, SSTR("ERROR: cannot start syncing " << iter->first << ". Duplicate entry?"));
+          if (!marker_tracker->start(marker, total_entries, real_time())) {
+            tn->log(0, SSTR("ERROR: cannot start syncing " << marker << ". Duplicate entry?"));
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, iter->first, iter->first, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
               // stack_to_pos holds a reference to the stack
-              stack_to_pos[stack] = iter->first;
-              pos_to_prev[iter->first] = marker;
+              stack_to_pos[stack] = marker;
+              pos_to_prev[marker] = marker;
             }
           }
-          marker = iter->first;
         }
         collect_children();
       } while ((int)entries.size() == max_entries && can_adjust_marker);
