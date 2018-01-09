@@ -13460,6 +13460,7 @@ void PrimaryLogPG::agent_setup()
       info.pgid.pgid,
       rand()));
     agent_state->start = agent_state->position;
+    agent_state->promote_q_trim_pos = hobject_t();
 
     dout(10) << __func__ << " allocated new state, position "
 	     << agent_state->position << dendl;
@@ -13491,6 +13492,25 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   }
 
   assert(!deleting);
+
+  {
+    // trim promote queue
+    int promote_q_ls_max = cct->_conf->osd_pool_default_cache_max_evict_check_size;
+    int promote_q_ls = 0;
+    map<hobject_t, utime_t>::iterator pos =
+      agent_state->promote_queue.lower_bound(agent_state->promote_q_trim_pos);
+    while (pos != agent_state->promote_queue.end() &&
+           promote_q_ls < promote_q_ls_max) {
+      // TODO: add promote_queue out time to osd conf
+      if (pos->second + utime_t(60, 0) < ceph_clock_now()) {
+        pos = agent_state->promote_queue.erase(pos);
+      } else
+        ++pos;
+      ++promote_q_ls;
+    }
+    if (pos == agent_state->promote_queue.end())
+      agent_state->promote_q_trim_pos = hobject_t();
+  }
 
   if (agent_state->is_idle()) {
     dout(10) << __func__ << " idle, stopping" << dendl;
@@ -13905,6 +13925,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
   TierAgentState::promote_mode_t promote_mode = TierAgentState::PROMOTE_MODE_FULL;
   unsigned evict_effort = 0;
+  uint32_t evict_temp = 0, flush_temp = 0, promote_temp = 0;
 
   if (info.stats.stats_invalid) {
     // idle; stats can't be trusted until we scrub.
@@ -14044,13 +14065,23 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   }
 
   // promote mode
-  uint64_t target_promote_micro = (evict_target + 1000000) / 2;
+  // TODO: add an pool config to control the promote slope
+  float slope = 0.9;
+  uint64_t target_promote_micro = slope * 1000000;
   if (full_micro > target_promote_micro)
     promote_mode = TierAgentState::PROMOTE_MODE_FULL;
-  else if (full_micro < 0.8 * evict_target)
+  else if (full_micro < slope * evict_target)
     promote_mode = TierAgentState::PROMOTE_MODE_WARMING;
   else
     promote_mode = TierAgentState::PROMOTE_MODE_SOME;
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    evict_temp = th->get_rank_temp(slope * evict_target);
+    flush_temp = th->get_rank_temp(slope * flush_target);
+    promote_temp = slope * evict_temp;
+  }
+
   }
 
   skip_calc:
@@ -14121,6 +14152,9 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 	    << dendl;
     agent_state->evict_effort = evict_effort;
   }
+  agent_state->promote_temp = promote_temp;
+  agent_state->evict_temp = evict_temp;
+  agent_state->flush_temp = flush_temp;
 
   // NOTE: we are using evict_effort as a proxy for *all* agent effort
   // (including flush).  This is probably fine (they should be

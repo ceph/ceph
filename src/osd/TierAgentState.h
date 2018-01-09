@@ -87,6 +87,13 @@ struct TierAgentState {
   /// distributed) that i should aim to evict.
   unsigned evict_effort;
 
+  uint64_t evict_temp;
+  uint32_t promote_temp;
+  uint32_t flush_temp;
+
+  hobject_t promote_q_trim_pos;
+  map<hobject_t, utime_t> promote_queue;
+
   TierAgentState()
     : started(0),
       delaying(false),
@@ -95,6 +102,9 @@ struct TierAgentState {
       evict_mode(EVICT_MODE_IDLE),
       promote_mode(PROMOTE_MODE_FULL),
       evict_effort(0),
+      evict_temp(0),
+      promote_temp(0),
+      flush_temp(0)
   {}
 
   /// false if we have any work to do
@@ -127,6 +137,8 @@ struct TierAgentState {
     f->dump_string("promote_mode", get_promote_mode_name());
     f->dump_unsigned("evict_effort", evict_effort);
     f->dump_stream("position") << position;
+    f->dump_stream("evict temperature") << evict_temp;
+    f->dump_stream("promote temperature") << promote_temp;
     f->open_object_section("temp_hist");
     temp_hist.dump(f);
     f->close_section();

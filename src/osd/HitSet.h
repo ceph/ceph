@@ -688,6 +688,7 @@ public:
   explicit TempHitSet(const TempHitSet::Params *p)
     : decay_period(1024) {
     uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+    rh.reset(new RankHistogram(decay_period, now_sec));
   }
   TempHitSet(const TempHitSet &o)
     : hits(o.hits), decay_period(o.decay_period) {
