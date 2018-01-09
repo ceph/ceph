@@ -38,7 +38,7 @@
 #include "rgw_admin_common.h"
 #include "rgw_admin_multisite.h"
 #include "rgw_admin_opt_bucket.h"
-#include "rgw_admin_opt_policy.h"
+#include "rgw_admin_opt_role.h"
 
 #define dout_context g_ceph_context
 

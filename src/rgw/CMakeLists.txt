@@ -195,7 +195,7 @@ set(radosgw_admin_srcs
   rgw_admin_common.cc
   rgw_admin_multisite.cc
   rgw_admin_opt_bucket.cc
-  rgw_admin_opt_policy.cc
+    rgw_admin_opt_role.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin rgw_a librados
