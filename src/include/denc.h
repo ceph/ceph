@@ -1110,224 +1110,94 @@ public:
   }
 };
 
-namespace _denc {
-  template<size_t... I>
-  struct indices {};
-
-  template<size_t ...S>
-  struct build_indices_helper;
-  template<size_t N, size_t ...Is>
-  struct build_indices_helper<N, N, Is...> {
-    using type = indices<Is...>;
-  };
-  template<size_t N, size_t I, size_t ...Is>
-  struct build_indices_helper<N, I, Is...> {
-    using type = typename build_indices_helper<N, I + 1, Is..., I>::type;
-  };
-
-  template<size_t I>
-  struct build_indices {
-    using type = typename build_indices_helper<I, 1, 0>::type;
-  };
-  template<>
-  struct build_indices<0> {
-    using type = indices<>;
-  };
-  template<>
-  struct build_indices<1> {
-    using type = indices<0>;
-  };
-
-  template<size_t I>
-  using build_indices_t = typename  build_indices<I>::type;
-
-  template<typename ...Ts>
-  struct tuple_traits;
-  template<typename T, typename ...Ts>
-  struct tuple_traits<T, Ts...> {
-    static constexpr bool supported = (denc_traits<T>::supported &&
-				       tuple_traits<Ts...>::supported);
-    static constexpr bool bounded = (denc_traits<T>::bounded &&
-				     tuple_traits<Ts...>::bounded);
-    static constexpr bool featured = (denc_traits<T>::featured ||
-				    tuple_traits<Ts...>::featured);
-    static constexpr bool need_contiguous =
-      (denc_traits<T>::need_contiguous ||
-       tuple_traits<Ts...>::need_contiguous);
-  };
-  template<>
-  struct tuple_traits<> {
-    static constexpr bool supported = true;
-    static constexpr bool bounded = true;
-    static constexpr bool featured = false;
-    static constexpr bool need_contiguous = false;
-  };
-}
-
-template<typename ...Ts>
+template<typename... Ts>
 struct denc_traits<
   std::tuple<Ts...>,
-  std::enable_if_t<_denc::tuple_traits<Ts...>::supported>> {
+  std::enable_if_t<(denc_traits<Ts>::supported && ...)>> {
+
 private:
   static_assert(sizeof...(Ts) > 0,
 		"Zero-length tuples are not supported.");
   using container = std::tuple<Ts...>;
 
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_nfnb(const T& s, size_t& p,
-				       _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    bound_encode_helper_nfnb(s, p, _denc::indices<J, Is...>{});
+  template<typename U = container, size_t... Is>
+  static std::enable_if_t<denc_traits<U>::featured>
+  bound_encode_helper(const U& s, size_t& p,
+		      std::uint64_t f,
+		      std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p, f), ..., void());
   }
-  template<typename T, size_t I>
-  static void bound_encode_helper_nfnb(const T& s, size_t& p,
-				       _denc::indices<I>) {
-    denc(std::get<I>(s), p);
-  }
-
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_nfb(const T& s, size_t& p,
-				      _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    bound_encode_helper_nfb(s, p, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void bound_encode_helper_nfb(const T& s, size_t& p,
-				      _denc::indices<I>) {
-    denc(std::get<I>(s), p);
+  template<typename U = container, size_t... Is>
+  static std::enable_if_t<!denc_traits<U>::featured>
+  bound_encode_helper(const U& s, size_t& p,
+		      std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p), ..., void());
   }
 
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_fnb(const T& s, size_t& p, uint64_t f,
-				      _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p, f);
-    bound_encode_helper_fnb(s, p, f, _denc::indices<J, Is...>{});
+  template<typename U = container, size_t... Is>
+  static std::enable_if_t<denc_traits<U>::featured>
+  encode_helper(const U& s, buffer::list::contiguous_appender& p,
+		      std::uint64_t f,
+		      std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p, f), ..., void());
   }
-  template<typename T, size_t I>
-  static void bound_encode_helper_fnb(const T& s, size_t& p, uint64_t f,
-				      _denc::indices<I>) {
-    denc(std::get<I>(s), p, f);
-  }
-
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
-				     _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    bound_encode_helper_fb(s, p, f, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void bound_encode_helper_fb(const T& s, size_t& p, uint64_t f,
-				     _denc::indices<I>) {
-    denc(std::get<I>(s), p);
+  template<typename U = container, size_t... Is>
+  static std::enable_if_t<!denc_traits<U>::featured>
+  encode_helper(const U& s, buffer::list::contiguous_appender& p,
+		std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p), ..., void());
   }
 
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void encode_helper_nf(const T& s, buffer::list::contiguous_appender& p,
-			       _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    encode_helper_nf(s, p, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void encode_helper_nf(const T& s, buffer::list::contiguous_appender& p,
-			_denc::indices<I>) {
-    denc(std::get<I>(s), p);
+  template<size_t... Is>
+  static void decode_helper(container& s, buffer::ptr::iterator& p,
+			    std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p), ..., void());
   }
 
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void encode_helper_f(const T& s, buffer::list::contiguous_appender& p,
-			      uint64_t f, _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p, f);
-    encode_helper_nf(s, p, f, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void encode_helper_f(const T& s, buffer::list::contiguous_appender& p,
-		       uint64_t f, _denc::indices<I>) {
-    denc(std::get<I>(s), p, f);
-  }
-
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void decode_helper(T& s, buffer::ptr::iterator& p,
-			    _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    decode_helper(s, p, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void decode_helper(T& s, buffer::ptr::iterator& p,
-		     _denc::indices<I>) {
-    denc(std::get<I>(s), p);
-  }
-  template<typename T, size_t I, size_t J, size_t ...Is>
-  static void decode_helper(T& s, buffer::list::iterator& p,
-			    _denc::indices<I, J, Is...>) {
-    denc(std::get<I>(s), p);
-    decode_helper(s, p, _denc::indices<J, Is...>{});
-  }
-  template<typename T, size_t I>
-  static void decode_helper(T& s, buffer::list::iterator& p,
-			    _denc::indices<I>) {
-    denc(std::get<I>(s), p);
+  template<typename U = container, size_t... Is>
+  static std::enable_if_t<!denc_traits<U>::need_contiguous>
+  decode_helper(U& s, buffer::list::iterator& p, std::index_sequence<Is...>) {
+    (denc(std::get<Is>(s), p), ..., void());
   }
 
 public:
-  using traits = _denc::tuple_traits<Ts...>;
 
   static constexpr bool supported = true;
-  static constexpr bool featured = traits::featured;
-  static constexpr bool bounded = traits::bounded;
-  static constexpr bool need_contiguous = traits::need_contiguous;
+  static constexpr bool featured = (denc_traits<Ts>::featured || ...);
+  static constexpr bool bounded = (denc_traits<Ts>::bounded && ...);
+  static constexpr bool need_contiguous =
+      (denc_traits<Ts>::need_contiguous || ...);
 
-
-  template<typename U = traits>
-  static std::enable_if_t<U::supported &&
-			  !traits::bounded &&
-			  !traits::featured>
-  bound_encode(const container& s, size_t& p) {
-    bound_encode_helper_nfnb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
-  }
-  template<typename U = traits>
-  static std::enable_if_t<U::supported &&
-			  traits::bounded &&
-			  !traits::featured, void>
-  bound_encode(const container& s, size_t& p) {
-    bound_encode_helper_nfb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
-  }
-  template<typename U = traits>
-  static std::enable_if_t<U::traits &&
-			  !traits::bounded &&
-			  traits::featured, void>
+  template<typename U = container>
+  static std::enable_if_t<denc_traits<U>::featured>
   bound_encode(const container& s, size_t& p, uint64_t f) {
-    bound_encode_helper_fnb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+    bound_encode_helper(s, p, f, std::index_sequence_for<Ts...>{});
   }
-  template<typename U = traits>
-  static std::enable_if_t<U::traits &&
-			  traits::bounded &&
-			  traits::featured>
-  bound_encode(const container& s, size_t& p, uint64_t f) {
-    bound_encode_helper_fb(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+  template<typename U = container>
+  static std::enable_if_t<!denc_traits<U>::featured>
+  bound_encode(const container& s, size_t& p) {
+    bound_encode_helper(s, p, std::index_sequence_for<Ts...>{});
   }
 
-  template<typename U = traits>
-  static std::enable_if_t<U::supported &&
-			  !traits::featured>
+  template<typename U = container>
+  static std::enable_if_t<denc_traits<U>::featured>
+  encode(const container& s, buffer::list::contiguous_appender& p, uint64_t f) {
+    encode_helper(s, p, f, std::index_sequence_for<Ts...>{});
+  }
+  template<typename U = container>
+  static std::enable_if_t<!denc_traits<U>::featured>
   encode(const container& s, buffer::list::contiguous_appender& p) {
-    encode_helper_nf(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
-  }
-  template<typename U = traits>
-  static std::enable_if_t<U::supported &&
-			  traits::featured>
-  encode(const container& s, buffer::list::contiguous_appender& p,
-	 uint64_t f) {
-    encode_helper_f(s, p, f, _denc::build_indices_t<sizeof...(Ts)>{});
+    encode_helper(s, p, std::index_sequence_for<Ts...>{});
   }
 
   static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
-    decode_helper(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+    decode_helper(s, p, std::index_sequence_for<Ts...>{});
   }
-  template<typename U = traits>
-  static std::enable_if_t<U::supported &&
-			  !need_contiguous>
+
+  template<typename U = container>
+  static std::enable_if_t<!denc_traits<U>::need_contiguous>
   decode(container& s, buffer::list::iterator& p, uint64_t f = 0) {
-    decode_helper(s, p, _denc::build_indices_t<sizeof...(Ts)>{});
+    decode_helper(s, p, std::index_sequence_for<Ts...>{});
   }
 };
 
