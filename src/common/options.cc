@@ -346,7 +346,9 @@ std::vector<Option> get_global_options() {
     .set_description("send critical error log lines to stderr"),
 
     Option("log_stderr_prefix", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_description("String to prefix log messages with when sent to stderr"),
+    .set_description("String to prefix log messages with when sent to stderr")
+    .set_long_description("This is useful in container environments when combined with mon_cluster_log_to_stderr.  The mon log prefixes each line with the channel name (e.g., 'default', 'audit'), while log_stderr_prefix can be set to 'debug '.")
+    .add_see_also("mon_cluster_log_to_stderr"),
 
     Option("log_to_syslog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
@@ -432,7 +434,8 @@ std::vector<Option> get_global_options() {
 
     Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description("Send cluster log messages to stderr (prefixed by channel)"),
+    .set_description("Send cluster log messages to stderr (prefixed by channel)")
+    .add_see_also("log_stderr_prefix"),
 
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")
