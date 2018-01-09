@@ -2,7 +2,7 @@ from __future__ import print_function
 from textwrap import dedent
 import logging
 from ceph_volume.util import system
-from ceph_volume import decorators
+from ceph_volume import decorators, terminal
 from .common import create_parser, rollback_osd
 from .prepare import Prepare
 from .activate import Activate
@@ -34,6 +34,7 @@ class Create(object):
             logger.info('will rollback OSD ID creation')
             rollback_osd(args, osd_id)
             raise
+        terminal.success("ceph-volume lvm create successful for: %s" % args.data)
 
     def main(self):
         sub_command_help = dedent("""
