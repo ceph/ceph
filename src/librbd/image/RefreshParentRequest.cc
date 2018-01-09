@@ -109,6 +109,7 @@ void RefreshParentRequest<I>::send_open_parent() {
   // reset the snap_name and snap_exists fields after we read the header
   m_parent_image_ctx = new I("", m_parent_md.spec.image_id, NULL, parent_io_ctx,
                              true);
+  m_parent_image_ctx->child = &m_child_image_ctx;
 
   // set rados flags for reading the parent image
   if (m_child_image_ctx.balance_parent_reads) {
@@ -212,6 +213,8 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
   delete m_parent_image_ctx;
+  m_parent_image_ctx = nullptr;
+
   if (*result < 0) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)
                << dendl;

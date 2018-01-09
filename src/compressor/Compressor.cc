@@ -31,6 +31,9 @@ const char * Compressor::get_comp_alg_name(int a) {
 #ifdef HAVE_LZ4
   case COMP_ALG_LZ4: return "lz4";
 #endif
+#ifdef HAVE_BROTLI
+  case COMP_ALG_BROTLI: return "brotli";
+#endif
   default: return "???";
   }
 }
@@ -45,6 +48,10 @@ boost::optional<Compressor::CompressionAlgorithm> Compressor::get_comp_alg_type(
 #ifdef HAVE_LZ4
   if (s == "lz4")
     return COMP_ALG_LZ4;
+#endif
+#ifdef HAVE_BROTLI
+  if (s == "brotli")
+    return COMP_ALG_BROTLI;
 #endif
   if (s == "" || s == "none")
     return COMP_ALG_NONE;

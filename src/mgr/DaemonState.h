@@ -97,6 +97,9 @@ class DaemonState
   // The metadata (hostname, version, etc) sent from the daemon
   std::map<std::string, std::string> metadata;
 
+  // TODO: this can be generalized to other daemons
+  std::vector<OSDHealthMetric> osd_health_metrics;
+
   // Ephemeral state
   bool service_daemon = false;
   utime_t service_status_stamp;

@@ -21,7 +21,6 @@
 #include "common/Clock.h"
 #include "common/HeartbeatMap.h"
 #include "common/Timer.h"
-#include "common/backport14.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/entity_name.h"
@@ -254,6 +253,11 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "dump metadata cache for subtree");
   assert(r == 0);
+  r = admin_socket->register_command("dump loads",
+                                     "dump loads",
+                                     asok_hook,
+                                     "dump metadata loads");
+  assert(r == 0);
   r = admin_socket->register_command("session evict",
 				     "session evict name=client_id,type=CephString",
 				     asok_hook,
@@ -323,6 +327,7 @@ void MDSDaemon::clean_up_admin_socket()
   admin_socket->unregister_command("dump cache");
   admin_socket->unregister_command("cache status");
   admin_socket->unregister_command("dump tree");
+  admin_socket->unregister_command("dump loads");
   admin_socket->unregister_command("session evict");
   admin_socket->unregister_command("osdmap barrier");
   admin_socket->unregister_command("session ls");
@@ -445,7 +450,7 @@ int MDSDaemon::init()
   messenger->add_dispatcher_tail(&beacon);
   messenger->add_dispatcher_tail(this);
 
-  // get monmap
+  // init monc
   monc->set_messenger(messenger);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD |
@@ -453,7 +458,7 @@ int MDSDaemon::init()
   int r = 0;
   r = monc->init();
   if (r < 0) {
-    derr << "ERROR: failed to get monmap: " << cpp_strerror(-r) << dendl;
+    derr << "ERROR: failed to init monc: " << cpp_strerror(-r) << dendl;
     mds_lock.Lock();
     suicide();
     mds_lock.Unlock();
@@ -732,7 +737,7 @@ int MDSDaemon::_handle_command(
 
   if (prefix == "get_command_descriptions") {
     int cmdnum = 0;
-    std::unique_ptr<JSONFormatter> f(ceph::make_unique<JSONFormatter>());
+    std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
     for (MDSCommand *cp = mds_commands;
 	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {
@@ -823,18 +828,19 @@ int MDSDaemon::_handle_command(
     cpu_profiler_handle_command(argvec, ds);
   } else {
     // Give MDSRank a shot at the command
-    if (mds_rank) {
+    if (!mds_rank) {
+      ss << "MDS not active";
+      r = -EINVAL;
+    }
+    else {
       bool handled = mds_rank->handle_command(cmdmap, m, &r, &ds, &ss,
 					      need_reply);
-      if (handled) {
-        goto out;
+      if (!handled) {
+        // MDSDaemon doesn't know this command
+        ss << "unrecognized command! " << prefix;
+        r = -EINVAL;
       }
     }
-
-    // Neither MDSDaemon nor MDSRank know this command
-    std::ostringstream ss;
-    ss << "unrecognized command! " << prefix;
-    r = -EINVAL;
   }
 
 out:

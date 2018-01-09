@@ -41,7 +41,7 @@ Once the gateway is running, you should be able to access it on port ``7480``.
 Configuring the Ceph Object Gateway Instance
 ============================================
 
-#. To change the default port (e.g,. to port ``80``), modify your Ceph
+#. To change the default port (e.g., to port ``80``), modify your Ceph
    configuration file. Add a section entitled ``[client.rgw.<client-node>]``,
    replacing ``<client-node>`` with the short node name of your Ceph client
    node (i.e., ``hostname -s``). For example, if your node name is

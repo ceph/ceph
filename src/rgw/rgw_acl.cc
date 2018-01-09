@@ -15,7 +15,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {

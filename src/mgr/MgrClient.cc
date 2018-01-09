@@ -216,6 +216,19 @@ bool MgrClient::ms_handle_refused(Connection *con)
   return false;
 }
 
+void MgrClient::send_stats()
+{
+  send_report();
+  send_pgstats();
+  if (stats_period != 0) {
+    report_callback = timer.add_event_after(
+      stats_period,
+      new FunctionContext([this](int) {
+	  send_stats();
+	}));
+  }
+}
+
 void MgrClient::send_report()
 {
   assert(lock.is_locked_by_me());
@@ -313,14 +326,8 @@ void MgrClient::send_report()
     daemon_dirty_status = false;
   }
 
+  report->osd_health_metrics = std::move(osd_health_metrics);
   session->con->send_message(report);
-
-  if (stats_period != 0) {
-    report_callback = new FunctionContext([this](int r){send_report();});
-    timer.add_event_after(stats_period, report_callback);
-  }
-
-  send_pgstats();
 }
 
 void MgrClient::send_pgstats()
@@ -352,7 +359,7 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
   bool starting = (stats_period == 0) && (m->stats_period != 0);
   stats_period = m->stats_period;
   if (starting) {
-    send_report();
+    send_stats();
   }
 
   m->put();
@@ -453,11 +460,16 @@ int MgrClient::service_daemon_register(
 }
 
 int MgrClient::service_daemon_update_status(
-  const std::map<std::string,std::string>& status)
+  std::map<std::string,std::string>&& status)
 {
   Mutex::Locker l(lock);
   ldout(cct,10) << status << dendl;
-  daemon_status = status;
+  daemon_status = std::move(status);
   daemon_dirty_status = true;
   return 0;
+}
+
+void MgrClient::update_osd_health(std::vector<OSDHealthMetric>&& metrics)
+{
+  osd_health_metrics = std::move(metrics);
 }

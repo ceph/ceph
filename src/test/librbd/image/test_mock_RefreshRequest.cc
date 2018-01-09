@@ -4,6 +4,7 @@
 #include "test/librbd/test_mock_fixture.h"
 #include "test/librbd/test_support.h"
 #include "test/librbd/mock/MockImageCtx.h"
+#include "test/librbd/mock/MockImageWatcher.h"
 #include "test/librbd/mock/MockJournal.h"
 #include "test/librbd/mock/MockJournalPolicy.h"
 #include "test/librbd/mock/MockObjectMap.h"
@@ -162,6 +163,8 @@ public:
       expect.WillOnce(Return(r));
     } else {
       expect.WillOnce(DoDefault());
+      EXPECT_CALL(*mock_image_ctx.image_watcher, is_unregistered())
+        .WillOnce(Return(false));
     }
   }
 

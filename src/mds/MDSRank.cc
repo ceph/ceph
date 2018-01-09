@@ -55,7 +55,7 @@ MDSRank::MDSRank(
     Context *suicide_hook_)
   :
     whoami(whoami_), incarnation(0),
-    mds_lock(mds_lock_), clog(clog_), timer(timer_),
+    mds_lock(mds_lock_), cct(msgr->cct), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
@@ -97,7 +97,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_osdmap_full();
 
-  finisher = new Finisher(msgr->cct);
+  finisher = new Finisher(cct);
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -112,10 +112,10 @@ MDSRank::MDSRank(
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
-  op_tracker.set_complaint_and_threshold(msgr->cct->_conf->mds_op_complaint_time,
-                                         msgr->cct->_conf->mds_op_log_threshold);
-  op_tracker.set_history_size_and_duration(msgr->cct->_conf->mds_op_history_size,
-                                           msgr->cct->_conf->mds_op_history_duration);
+  op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
+                                         cct->_conf->mds_op_log_threshold);
+  op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
+                                           cct->_conf->mds_op_history_duration);
 }
 
 MDSRank::~MDSRank()
@@ -1097,7 +1097,7 @@ void MDSRank::boot_start(BootStep step, int r)
 	MDSGatherBuilder gather(g_ceph_context,
 	    new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
 
-	if (!standby_replaying && !purge_queue.is_recovered()) {
+	if (!standby_replaying) {
 	  dout(2) << "boot_start " << step << ": waiting for purge queue recovered" << dendl;
 	  purge_queue.wait_for_recovery(new C_IO_Wrapper(this, gather.new_sub()));
 	}
@@ -1365,7 +1365,7 @@ void MDSRank::reconnect_start()
   objecter->enable_blacklist_events();
   std::set<entity_addr_t> blacklist;
   epoch_t epoch = 0;
-  objecter->with_osdmap([this, &blacklist, &epoch](const OSDMap& o) {
+  objecter->with_osdmap([&blacklist, &epoch](const OSDMap& o) {
       o.get_blacklist(&blacklist);
       epoch = o.get_epoch();
   });
@@ -1474,7 +1474,7 @@ void MDSRank::recovery_done(int oldstate)
   // kick snaptable (resent AGREEs)
   if (mdsmap->get_tableserver() == whoami) {
     set<mds_rank_t> active;
-    mdsmap->get_clientreplay_or_active_or_stopping_mds_set(active);
+    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
     snapserver->finish_recovery(active);
   }
 
@@ -1697,12 +1697,8 @@ void MDSRankDispatcher::handle_mds_map(
 	oldstate == MDSMap::STATE_STARTING) {
       // ACTIVE|CLIENTREPLAY|REJOIN => we can discover from them.
       set<mds_rank_t> olddis, dis;
-      oldmap->get_mds_set(olddis, MDSMap::STATE_ACTIVE);
-      oldmap->get_mds_set(olddis, MDSMap::STATE_CLIENTREPLAY);
-      oldmap->get_mds_set(olddis, MDSMap::STATE_REJOIN);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_ACTIVE);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_CLIENTREPLAY);
-      mdsmap->get_mds_set(dis, MDSMap::STATE_REJOIN);
+      oldmap->get_mds_set_lower_bound(olddis, MDSMap::STATE_REJOIN);
+      mdsmap->get_mds_set_lower_bound(dis, MDSMap::STATE_REJOIN);
       for (set<mds_rank_t>::iterator p = dis.begin(); p != dis.end(); ++p)
 	if (*p != whoami &&            // not me
 	    olddis.count(*p) == 0) {  // newly so?
@@ -1726,10 +1722,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldstate >= MDSMap::STATE_CLIENTREPLAY &&
       (is_clientreplay() || is_active() || is_stopping())) {
     set<mds_rank_t> oldactive, active;
-    oldmap->get_mds_set(oldactive, MDSMap::STATE_ACTIVE);
-    oldmap->get_mds_set(oldactive, MDSMap::STATE_CLIENTREPLAY);
-    mdsmap->get_mds_set(active, MDSMap::STATE_ACTIVE);
-    mdsmap->get_mds_set(active, MDSMap::STATE_CLIENTREPLAY);
+    oldmap->get_mds_set_lower_bound(oldactive, MDSMap::STATE_CLIENTREPLAY);
+    mdsmap->get_mds_set_lower_bound(active, MDSMap::STATE_CLIENTREPLAY);
     for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
       if (*p != whoami &&            // not me
 	  oldactive.count(*p) == 0)  // newly so?
@@ -1975,6 +1969,13 @@ bool MDSRankDispatcher::handle_asok_command(
         ss << "Failed to dump tree: " << cpp_strerror(r);
         f->reset();
       }
+    }
+  } else if (command == "dump loads") {
+    Mutex::Locker l(mds_lock);
+    int r = balancer->dump_loads(f);
+    if (r != 0) {
+      ss << "Failed to dump loads: " << cpp_strerror(r);
+      f->reset();
     }
   } else if (command == "force_readonly") {
     Mutex::Locker l(mds_lock);
@@ -2637,13 +2638,13 @@ void MDSRank::create_logger()
 
 void MDSRank::check_ops_in_flight()
 {
+  string summary;
   vector<string> warnings;
   int slow = 0;
-  if (op_tracker.check_ops_in_flight(warnings, &slow)) {
-    for (vector<string>::iterator i = warnings.begin();
-        i != warnings.end();
-        ++i) {
-      clog->warn() << *i;
+  if (op_tracker.check_ops_in_flight(&summary, warnings, &slow)) {
+    clog->warn() << summary;
+    for (const auto& warning : warnings) {
+      clog->warn() << warning;
     }
   }
  
@@ -2742,7 +2743,7 @@ bool MDSRank::evict_client(int64_t session_id,
     Context *on_blacklist_done = new FunctionContext([this, session_id, fn](int r) {
       objecter->wait_for_latest_osdmap(
        new C_OnFinisher(
-         new FunctionContext([this, session_id, fn](int r) {
+         new FunctionContext([this, fn](int r) {
               Mutex::Locker l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
                   return o.get_epoch();
@@ -2759,7 +2760,7 @@ bool MDSRank::evict_client(int64_t session_id,
     monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
   };
 
-  auto blocking_blacklist = [this, cmd, &err_ss, background_blacklist](){
+  auto blocking_blacklist = [this, cmd, background_blacklist](){
     C_SaferCond inline_ctx;
     background_blacklist([&inline_ctx](){inline_ctx.complete(0);});
     mds_lock.Unlock();

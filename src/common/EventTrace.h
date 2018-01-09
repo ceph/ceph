@@ -30,7 +30,7 @@
   EventTrace::trace_oid_elapsed(oid, event, "", elapsed, __FILE__, __func__, __LINE__)
 #define OID_ELAPSED_WITH_MSG(m, elapsed, event, incl_oid) \
   EventTrace::trace_oid_elapsed(m, event, elapsed, __FILE__, __func__, __LINE__, incl_oid)
-#define FUNCTRACE() EventTrace _t1(g_ceph_context, __FILE__, __func__, __LINE__)
+#define FUNCTRACE(cct) EventTrace _t1(cct, __FILE__, __func__, __LINE__)
 #define OID_ELAPSED_FUNC_EVENT(event) _t1.log_event_latency(event)
 
 #else
@@ -39,7 +39,7 @@
 #define OID_EVENT_TRACE_WITH_MSG(msg, event, incl_oid)
 #define OID_ELAPSED(oid, elapsed, event)
 #define OID_ELAPSED_WITH_MSG(m, elapsed, event, incl_oid)
-#define FUNCTRACE()
+#define FUNCTRACE(cct)
 #define OID_ELAPSED_FUNC_EVENT(event)
 
 #endif

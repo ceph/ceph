@@ -7,7 +7,6 @@
 #include "common/errno.h"
 #include "include/assert.h"
 #include "librbd/ImageState.h"
-#include "librbd/Journal.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
@@ -17,6 +16,8 @@
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::image::CloneRequest: "
+
+#define MAX_KEYS 64
 
 namespace librbd {
 namespace image {
@@ -69,13 +70,15 @@ void CloneRequest<I>::validate_options() {
   m_opts.get(RBD_IMAGE_OPTION_FORMAT, &format);
   if (format < 2) {
     lderr(m_cct) << "format 2 or later required for clone" << dendl;
-    return complete(-EINVAL);
+    complete(-EINVAL);
+    return;
   }
 
   if (m_opts.get(RBD_IMAGE_OPTION_FEATURES, &m_features) == 0) {
     if (m_features & ~RBD_FEATURES_ALL) {
       lderr(m_cct) << "librbd does not support requested features" << dendl;
-      return complete(-ENOSYS);
+      complete(-ENOSYS);
+      return;
     }
     m_use_p_features = false;
   }
@@ -89,12 +92,14 @@ void CloneRequest<I>::send_validate_parent() {
 
   if (m_p_imctx->snap_id == CEPH_NOSNAP) {
     lderr(m_cct) << "image to be cloned must be a snapshot" << dendl;
-    return complete(-EINVAL);
+    complete(-EINVAL);
+    return;
   }
 
   if (m_p_imctx->old_format) {
     lderr(m_cct) << "parent image must be in new format" << dendl;
-    return complete(-EINVAL);
+    complete(-EINVAL);
+    return;
   }
 
   int r = 0;
@@ -107,47 +112,20 @@ void CloneRequest<I>::send_validate_parent() {
 
   if ((m_p_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     lderr(m_cct) << "parent image must support layering" << dendl;
-    return complete(-ENOSYS);
+    complete(-ENOSYS);
+    return;
   }
 
   if (r < 0) {
     lderr(m_cct) << "unable to locate parent's snapshot" << dendl;
-    return complete(r);
+    complete(r);
+    return;
   }
 
   if (!snap_protected) {
     lderr(m_cct) << "parent snapshot must be protected" << dendl;
-    return complete(-EINVAL);
-  }
-
-  if ((m_p_features & RBD_FEATURE_JOURNALING) != 0) {
-    m_force_non_primary = !m_non_primary_global_image_id.empty();
-    using klass = CloneRequest<I>;
-    Context *ctx = create_context_callback<
-	klass, &klass::handle_validate_parent>(this);
-
-    Journal<I>::is_tag_owner(m_p_imctx, &m_is_primary, ctx);
+    complete(-EINVAL);
     return;
-  }
-
-  send_validate_child();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_validate_parent(int r) {
-  ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to determine tag ownership: " << cpp_strerror(r)
-	       << dendl;
-    return complete(r);
-  }
-
-  if ((m_p_features & RBD_FEATURE_JOURNALING) != 0) {
-    if (!m_is_primary && !m_force_non_primary) {
-      lderr(m_cct) << "parent is non-primary mirrored image" << dendl;
-      return complete(-EINVAL);
-    }
   }
 
   send_validate_child();
@@ -174,7 +152,8 @@ void CloneRequest<I>::handle_validate_child(int r) {
 
   if (r != -ENOENT) {
     lderr(m_cct) << "rbd image " << m_name << " already exists" << dendl;
-    return complete(r);
+    complete(r);
+    return;
   }
 
   send_create();
@@ -194,7 +173,8 @@ void CloneRequest<I>::send_create() {
   }
   if ((m_features & RBD_FEATURE_LAYERING) != RBD_FEATURE_LAYERING) {
     lderr(m_cct) << "cloning image must support layering" << dendl;
-    return complete(-ENOSYS);
+    complete(-ENOSYS);
+    return;
   }
   m_opts.set(RBD_IMAGE_OPTION_FEATURES, m_features);
 
@@ -214,7 +194,8 @@ void CloneRequest<I>::handle_create(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "error creating child: " << cpp_strerror(r) << dendl;
-    return complete(r);
+    complete(r);
+    return;
   }
   send_open();
 }
@@ -238,7 +219,8 @@ void CloneRequest<I>::handle_open(int r) {
   if (r < 0) {
     lderr(m_cct) << "Error opening new image: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
-    return send_remove();
+    send_remove();
+    return;
   }
 
   send_set_parent();
@@ -267,7 +249,8 @@ void CloneRequest<I>::handle_set_parent(int r) {
   if (r < 0) {
     lderr(m_cct) << "couldn't set parent: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
-    return send_close();
+    send_close();
+    return;
   }
 
   send_add_child();
@@ -295,7 +278,8 @@ void CloneRequest<I>::handle_add_child(int r) {
   if (r < 0) {
     lderr(m_cct) << "couldn't add child: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
-    return send_close();
+    send_close();
+    return;
   }
 
   send_refresh();
@@ -325,7 +309,8 @@ void CloneRequest<I>::handle_refresh(int r) {
 
   if (r < 0 || !snap_protected) {
     m_r_saved = -EINVAL;
-    return send_close();
+    send_remove_child();
+    return;
   }
 
   send_metadata_list();
@@ -333,10 +318,11 @@ void CloneRequest<I>::handle_refresh(int r) {
 
 template <typename I>
 void CloneRequest<I>::send_metadata_list() {
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+  ldout(m_cct, 20) << this << " " << __func__ << ": "
+                   << "start_key=" << m_last_metadata_key << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, "", 0);
+  cls_client::metadata_list_start(&op, m_last_metadata_key, 0);
 
   using klass = CloneRequest<I>;
   librados::AioCompletion *comp =
@@ -351,24 +337,43 @@ template <typename I>
 void CloneRequest<I>::handle_metadata_list(int r) {
   ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
+  map<string, bufferlist> metadata;
   if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    r = cls_client::metadata_list_finish(&it, &m_pairs);
+    r = cls_client::metadata_list_finish(&it, &metadata);
   }
 
-  if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-    lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-    m_r_saved = r;
-    send_remove_child();
-  } else if (r == 0 && !m_pairs.empty()) {
-    send_metadata_set();
+  if (r < 0) {
+    if (r == -EOPNOTSUPP || r == -EIO) {
+      ldout(m_cct, 10) << "config metadata not supported by OSD" << dendl;
+      get_mirror_mode();
+    } else {
+      lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
+      m_r_saved = r;
+      send_remove_child();
+    }
+    return;
+  }
+
+  if (!metadata.empty()) {
+    m_pairs.insert(metadata.begin(), metadata.end());
+    m_last_metadata_key = m_pairs.rbegin()->first;
+  }
+
+  if (metadata.size() == MAX_KEYS) {
+    send_metadata_list();
   } else {
-    get_mirror_mode();
+    send_metadata_set();
   }
 }
 
 template <typename I>
 void CloneRequest<I>::send_metadata_set() {
+  if (m_pairs.empty()) {
+    get_mirror_mode();
+    return;
+  }
+
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   librados::ObjectWriteOperation op;
@@ -446,7 +451,8 @@ void CloneRequest<I>::send_enable_mirror() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   using klass = CloneRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_enable_mirror>(this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_enable_mirror>(this);
 
   mirror::EnableRequest<I> *req = mirror::EnableRequest<I>::create(
     m_imctx->md_ctx, m_id, m_non_primary_global_image_id,
@@ -490,7 +496,8 @@ void CloneRequest<I>::handle_close(int r) {
 
   if (r < 0) {
     lderr(m_cct) << "couldn't close image: " << cpp_strerror(r) << dendl;
-    return complete(r);
+    complete(r);
+    return;
   }
 
   if (m_r_saved == 0) {
@@ -510,7 +517,7 @@ void CloneRequest<I>::send_remove_child() {
   using klass = CloneRequest<I>;
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_remove_child>(this);
-  int r = m_p_imctx->md_ctx.aio_operate(RBD_CHILDREN, comp, &op);
+  int r = m_ioctx.aio_operate(RBD_CHILDREN, comp, &op);
   assert(r == 0);
   comp->release();
 }
@@ -534,7 +541,7 @@ void CloneRequest<I>::send_remove() {
   using klass = CloneRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_remove>(this);
 
-  librbd::image::RemoveRequest<> *req = librbd::image::RemoveRequest<>::create(
+  auto req = librbd::image::RemoveRequest<I>::create(
    m_ioctx, m_name, m_id, false, false, m_no_op, m_op_work_queue, ctx);
   req->send();
 }
@@ -547,7 +554,7 @@ void CloneRequest<I>::handle_remove(int r) {
     lderr(m_cct) << "Error removing failed clone: "
 		 << cpp_strerror(r) << dendl;
   }
-  complete(r);
+  complete(m_r_saved);
 }
 
 template <typename I>

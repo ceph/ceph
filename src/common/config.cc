@@ -41,7 +41,7 @@ using std::ostringstream;
 using std::pair;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)
     ", /usr/local/etc/ceph/$cluster.conf"
 #endif
@@ -89,7 +89,9 @@ md_config_t::md_config_t(bool is_daemon)
                 << std::endl;
       ceph_abort();
     }
-    schema.insert({i.name, i});
+    schema.emplace(std::piecewise_construct,
+		   std::forward_as_tuple(i.name),
+		   std::forward_as_tuple(i));
   }
 
   // Populate list of legacy_values according to the OPTION() definitions
@@ -221,7 +223,7 @@ int md_config_t::parse_config_files(const char *conf_files,
 {
   Mutex::Locker l(lock);
 
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return -ENOSYS;
 
   if (!cluster.size() && !conf_files) {
@@ -372,7 +374,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
 void md_config_t::parse_env()
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return;
   if (getenv("CEPH_KEYRING")) {
     set_val_or_die("keyring", getenv("CEPH_KEYRING"));
@@ -430,7 +432,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
 int md_config_t::parse_argv(std::vector<const char*>& args)
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads) {
+  if (safe_to_start_threads) {
     return -ENOSYS;
   }
 
@@ -662,13 +664,6 @@ void md_config_t::apply_changes(std::ostream *oss)
     _apply_changes(oss);
 }
 
-bool md_config_t::_internal_field(const string& s)
-{
-  if (s == "internal_safe_to_start_threads")
-    return true;
-  return false;
-}
-
 void md_config_t::_apply_changes(std::ostream *oss)
 {
   /* Maps observers to the configuration options that they care about which
@@ -698,8 +693,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
     if ((oss) &&
-	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
-	!_internal_field(key)) {
+	!_get_val(key.c_str(), &bufptr, sizeof(buf))) {
       (*oss) << key << " = '" << buf << "' ";
       if (range.first == range.second) {
 	(*oss) << "(not observed, change may require restart) ";
@@ -748,6 +742,16 @@ void md_config_t::call_all_observers()
        ++p) {
     p->first->handle_conf_change(this, p->second);
   }
+}
+
+void md_config_t::set_safe_to_start_threads()
+{
+  safe_to_start_threads = true;
+}
+
+void md_config_t::_clear_safe_to_start_threads()
+{
+  safe_to_start_threads = false;
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
@@ -839,7 +843,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
-    if ((!opt.is_safe()) && internal_safe_to_start_threads) {
+    if ((!opt.is_safe()) && safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
       if (observers.find(opt.name) == observers.end()) {
         // And there is no observer to safely change it...
@@ -871,21 +875,18 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
   return _get_val(key, buf,len);
 }
 
-const Option::value_t&
-md_config_t::get_val_generic(const std::string &key) const
+Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
   return _get_val_generic(key);
 }
 
-const Option::value_t&
-md_config_t::_get_val_generic(const std::string &key) const
+Option::value_t md_config_t::_get_val_generic(const std::string &key) const
 {
   assert(lock.is_locked());
 
-  static const Option::value_t empty{boost::blank()};
   if (key.empty()) {
-    return empty;
+    return Option::value_t(boost::blank());
   }
 
   // In key names, leading and trailing whitespace are not significant.
@@ -897,7 +898,7 @@ md_config_t::_get_val_generic(const std::string &key) const
     // entries in ::values
     return values.at(k);
   } else {
-    return empty;
+    return Option::value_t(boost::blank());
   }
 }
 
@@ -905,12 +906,12 @@ int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
   std::string normalized_key(ConfFile::normalize_key_name(key));
-  auto& config_value = _get_val_generic(normalized_key.c_str());
+  Option::value_t config_value = _get_val_generic(normalized_key.c_str());
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
-    if (auto *flag = boost::get<bool>(&config_value)) {
+    if (bool *flag = boost::get<bool>(&config_value)) {
       oss << (*flag ? "true" : "false");
-    } else if (auto *dp = boost::get<double>(&config_value)) {
+    } else if (double *dp = boost::get<double>(&config_value)) {
       oss << std::fixed << *dp;
     } else {
       oss << config_value;

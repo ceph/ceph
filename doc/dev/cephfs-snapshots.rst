@@ -33,8 +33,16 @@ Important Data Structures
 
 Creating a snapshot
 -------------------
+Because CephFS snapshot currently is an experimental feature, we are supposed 
+to enable it explicitly by the command below before testing.
+
+.. code::
+
+       $ ceph fs set <fs_name> allow_new_snaps true --yes-i-really-mean-it
+
+
 To make a snapshot on directory "/1/2/3/foo", the client invokes "mkdir" on
-"/1/2/3/foo/.snaps" directory. This is transmitted to the MDS Server as a
+"/1/2/3/foo/.snap" directory. This is transmitted to the MDS Server as a
 CEPH_MDS_OP_MKSNAP-tagged `MClientRequest`, and initially handled in
 Server::handle_client_mksnap(). It allocates a `snapid` from the `SnapServer`,
 projects a new inode with the new SnapRealm, and commits it to the MDLog as
@@ -89,7 +97,7 @@ pinned and in the journal.
 
 Deleting snapshots
 ------------------
-Snapshots are deleted by invoking "rmdir" on the ".snaps" directory they are
+Snapshots are deleted by invoking "rmdir" on the ".snap" directory they are
 rooted in. (Attempts to delete a directory which roots snapshots *will fail*;
 you must delete the snapshots first.) Once deleted, they are entered into the
 `OSDMap` list of deleted snapshots and the file data is removed by the OSDs.

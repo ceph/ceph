@@ -8,7 +8,7 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 #undef dout_prefix
-#define dout_prefix *_dout << "stupidalloc "
+#define dout_prefix *_dout << "stupidalloc 0x" << this << " "
 
 StupidAllocator::StupidAllocator(CephContext* cct)
   : cct(cct), num_free(0),
@@ -72,7 +72,7 @@ void StupidAllocator::unreserve(uint64_t unused)
 
 /// return the effective length of the extent if we align to alloc_unit
 uint64_t StupidAllocator::_aligned_len(
-  btree_interval_set<uint64_t,allocator>::iterator p,
+  StupidAllocator::interval_set_t::iterator p,
   uint64_t alloc_unit)
 {
   uint64_t skew = p.get_start() % alloc_unit;
@@ -93,7 +93,7 @@ int64_t StupidAllocator::allocate_int(
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
 	   	 << dendl;
-  uint64_t want = MAX(alloc_unit, want_size);
+  uint64_t want = std::max(alloc_unit, want_size);
   int bin = _choose_bin(want);
   int orig_bin = bin;
 
@@ -159,7 +159,7 @@ int64_t StupidAllocator::allocate_int(
   if (skew)
     skew = alloc_unit - skew;
   *offset = p.get_start() + skew;
-  *length = MIN(MAX(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
+  *length = std::min(std::max(alloc_unit, want_size), P2ALIGN((p.get_len() - skew), alloc_unit));
   if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
       alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
@@ -222,7 +222,7 @@ int64_t StupidAllocator::allocate(
   ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
 
   while (allocated_size < want_size) {
-    res = allocate_int(MIN(max_alloc_size, (want_size - allocated_size)),
+    res = allocate_int(std::min(max_alloc_size, (want_size - allocated_size)),
        alloc_unit, hint, &offset, &length);
     if (res != 0) {
       /*
@@ -292,10 +292,10 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
   std::lock_guard<std::mutex> l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   	 << std::dec << dendl;
-  btree_interval_set<uint64_t,allocator> rm;
+  interval_set_t rm;
   rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
-    btree_interval_set<uint64_t,allocator> overlap;
+    interval_set_t overlap;
     overlap.intersection_of(rm, free[i]);
     if (!overlap.empty()) {
       ldout(cct, 20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap

@@ -202,6 +202,7 @@ public:
       "log_max_recent",
       "log_to_syslog",
       "err_to_syslog",
+      "log_stderr_prefix",
       "log_to_stderr",
       "err_to_stderr",
       "log_to_graylog",
@@ -234,6 +235,10 @@ public:
     if (changed.count("log_file")) {
       log->set_log_file(conf->log_file);
       log->reopen_log_file();
+    }
+
+    if (changed.count("log_stderr_prefix")) {
+      log->set_log_stderr_prefix(conf->get_val<string>("log_stderr_prefix"));
     }
 
     if (changed.count("log_max_new")) {
@@ -743,7 +748,7 @@ void CephContext::start_service_thread()
 
   // Trigger callbacks on any config observers that were waiting for
   // it to become safe to start threads.
-  _conf->set_val("internal_safe_to_start_threads", "true");
+  _conf->set_safe_to_start_threads();
   _conf->call_all_observers();
 
   // start admin socket

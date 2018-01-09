@@ -146,7 +146,6 @@ public:
   // Read the Journaler header for an existing queue and start consuming
   void open(Context *completion);
 
-  bool is_recovered();
   void wait_for_recovery(Context *c);
 
   // Submit one entry to the work queue.  Call back when it is persisted

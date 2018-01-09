@@ -130,7 +130,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
     inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
-    got_bad_auth(false), authorizer(NULL), replacing(false),
+    msg_left(0), cur_msg_size(0), got_bad_auth(false), authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0),
     worker(w), center(&w->center)
 {
@@ -138,7 +138,6 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   write_handler = new C_handle_write(this);
   wakeup_handler = new C_time_wakeup(this);
   tick_handler = new C_tick_wakeup(this);
-  memset(msgvec, 0, sizeof(msgvec));
   // double recv_max_prefetch see "read_until"
   recv_buf = new char[2*recv_max_prefetch];
   state_buffer = new char[4096];
@@ -160,11 +159,16 @@ AsyncConnection::~AsyncConnection()
 void AsyncConnection::maybe_start_delay_thread()
 {
   if (!delay_state) {
-    auto pos = async_msgr->cct->_conf->get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(peer_type));
-    if (pos != string::npos) {
-      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue" << dendl;
-      delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue, conn_id);
-    }
+    async_msgr->cct->_conf->with_val<std::string>(
+      "ms_inject_delay_type",
+      [this](const string& s) {
+	if (s.find(ceph_entity_type_name(peer_type)) != string::npos) {
+	  ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
+			      << dendl;
+	  delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
+					    conn_id);
+	}
+      });
   }
 }
 
@@ -435,15 +439,9 @@ void AsyncConnection::process()
           recv_stamp = ceph_clock_now();
           ldout(async_msgr->cct, 20) << __func__ << " begin MSG" << dendl;
           ceph_msg_header header;
-          ceph_msg_header_old oldheader;
           __u32 header_crc = 0;
-          unsigned len;
-          if (has_feature(CEPH_FEATURE_NOSRCADDR))
-            len = sizeof(header);
-          else
-            len = sizeof(oldheader);
 
-          r = read_until(len, state_buffer);
+          r = read_until(sizeof(header), state_buffer);
           if (r < 0) {
             ldout(async_msgr->cct, 1) << __func__ << " read message header failed" << dendl;
             goto fail;
@@ -453,35 +451,24 @@ void AsyncConnection::process()
 
           ldout(async_msgr->cct, 20) << __func__ << " got MSG header" << dendl;
 
-          if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-            header = *((ceph_msg_header*)state_buffer);
-            if (msgr->crcflags & MSG_CRC_HEADER)
-              header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                                       sizeof(header) - sizeof(header.crc));
-          } else {
-            oldheader = *((ceph_msg_header_old*)state_buffer);
-            // this is fugly
-            memcpy(&header, &oldheader, sizeof(header));
-            header.src = oldheader.src.name;
-            header.reserved = oldheader.reserved;
-            if (msgr->crcflags & MSG_CRC_HEADER) {
-              header.crc = oldheader.crc;
-              header_crc = ceph_crc32c(0, (unsigned char *)&oldheader, sizeof(oldheader) - sizeof(oldheader.crc));
-            }
-          }
+          header = *((ceph_msg_header*)state_buffer);
 
-          ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
+	  ldout(async_msgr->cct, 20) << __func__ << " got envelope type=" << header.type
                               << " src " << entity_name_t(header.src)
                               << " front=" << header.front_len
                               << " data=" << header.data_len
                               << " off " << header.data_off << dendl;
 
-          // verify header crc
-          if (msgr->crcflags & MSG_CRC_HEADER && header_crc != header.crc) {
-            ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
-                                     << header_crc << " != " << header.crc << dendl;
-            goto fail;
-          }
+	  if (msgr->crcflags & MSG_CRC_HEADER) {
+	    header_crc = ceph_crc32c(0, (unsigned char *)&header,
+		sizeof(header) - sizeof(header.crc));
+	    // verify header crc
+	    if (header_crc != header.crc) {
+	      ldout(async_msgr->cct,0) << __func__ << " got bad header crc "
+		<< header_crc << " != " << header.crc << dendl;
+	      goto fail;
+	    }
+	  }
 
           // Reset state
           data_buf.clear();
@@ -779,15 +766,13 @@ void AsyncConnection::process()
           auto fast_dispatch_time = ceph::mono_clock::now();
           logger->tinc(l_msgr_running_recv_time, fast_dispatch_time - recv_start_time);
           if (delay_state) {
-            utime_t release = message->get_recv_stamp();
             double delay_period = 0;
             if (rand() % 10000 < async_msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
               delay_period = async_msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
-              release += delay_period;
-              ldout(async_msgr->cct, 1) << "queue_received will delay until " << release << " on "
-                                        << message << " " << *message << dendl;
+              ldout(async_msgr->cct, 1) << "queue_received will delay after " << (ceph_clock_now() + delay_period)
+					<< " on " << message << " " << *message << dendl;
             }
-            delay_state->queue(delay_period, release, message);
+            delay_state->queue(delay_period, message);
           } else if (async_msgr->ms_can_fast_dispatch(message)) {
             lock.unlock();
             dispatch_queue->fast_dispatch(message);
@@ -1841,7 +1826,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   }
   if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
     ldout(async_msgr->cct, 1) << __func__ << " state changed while accept_conn, it must be mark_down" << dendl;
-    assert(state == STATE_CLOSED);
+    assert(state == STATE_CLOSED || state == STATE_NONE);
     goto fail_registered;
   }
 
@@ -1898,7 +1883,7 @@ void AsyncConnection::accept(ConnectedSocket socket, entity_addr_t &addr)
 
 int AsyncConnection::send_message(Message *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddr() << " --> "
 		      << get_peer_addr() << " -- "
@@ -1974,13 +1959,13 @@ void AsyncConnection::requeue_sent()
     return;
 
   list<pair<bufferlist, Message*> >& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  out_seq -= sent.size();
   while (!sent.empty()) {
     Message* m = sent.back();
     sent.pop_back();
     ldout(async_msgr->cct, 10) << __func__ << " " << *m << " for resend "
                                << " (" << m->get_seq() << ")" << dendl;
     rq.push_front(make_pair(bufferlist(), m));
-    out_seq--;
   }
 }
 
@@ -2190,7 +2175,7 @@ void AsyncConnection::prepare_send_message(uint64_t features, Message *m, buffer
 
 ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
 {
-  FUNCTRACE();
+  FUNCTRACE(async_msgr->cct);
   assert(center->in_thread());
   m->set_seq(++out_seq);
 
@@ -2218,23 +2203,8 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
     }
   }
   
-  unsigned original_bl_len = outcoming_bl.length();
-
   outcoming_bl.append(CEPH_MSGR_TAG_MSG);
-
-  if (has_feature(CEPH_FEATURE_NOSRCADDR)) {
-    outcoming_bl.append((char*)&header, sizeof(header));
-  } else {
-    ceph_msg_header_old oldheader;
-    memcpy(&oldheader, &header, sizeof(header));
-    oldheader.src.name = header.src;
-    oldheader.src.addr = get_peer_addr();
-    oldheader.orig_src = oldheader.src;
-    oldheader.reserved = header.reserved;
-    oldheader.crc = ceph_crc32c(0, (unsigned char*)&oldheader,
-                                sizeof(oldheader) - sizeof(oldheader.crc));
-    outcoming_bl.append((char*)&oldheader, sizeof(oldheader));
-  }
+  outcoming_bl.append((char*)&header, sizeof(header));
 
   ldout(async_msgr->cct, 20) << __func__ << " sending message type=" << header.type
                              << " src " << entity_name_t(header.src)
@@ -2275,12 +2245,9 @@ ssize_t AsyncConnection::write_message(Message *m, bufferlist& bl, bool more)
   if (rc < 0) {
     ldout(async_msgr->cct, 1) << __func__ << " error sending " << m << ", "
                               << cpp_strerror(rc) << dendl;
-  } else if (rc == 0) {
-    logger->inc(l_msgr_send_bytes, total_send_size - original_bl_len);
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " done." << dendl;
   } else {
     logger->inc(l_msgr_send_bytes, total_send_size - outcoming_bl.length());
-    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << " continuely." << dendl;
+    ldout(async_msgr->cct, 10) << __func__ << " sending " << m << (rc ? " continuely." :" done.") << dendl;
   }
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OP_END", false);
@@ -2355,15 +2322,7 @@ void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
       return ;
     if (delay_queue.empty())
       return ;
-    utime_t release = delay_queue.front().first;
-    m = delay_queue.front().second;
-    string delay_msg_type = msgr->cct->_conf->ms_inject_delay_msg_type;
-    utime_t now = ceph_clock_now();
-    if ((release > now &&
-        (delay_msg_type.empty() || m->get_type_name() == delay_msg_type))) {
-      utime_t t = release - now;
-      t.sleep();
-    }
+    m = delay_queue.front();
     delay_queue.pop_front();
   }
   if (msgr->ms_can_fast_dispatch(m)) {
@@ -2379,7 +2338,7 @@ void AsyncConnection::DelayedDelivery::flush() {
       center->get_id(), [this] () mutable {
     std::lock_guard<std::mutex> l(delay_lock);
     while (!delay_queue.empty()) {
-      Message *m = delay_queue.front().second;
+      Message *m = delay_queue.front();
       if (msgr->ms_can_fast_dispatch(m)) {
         dispatch_queue->fast_dispatch(m);
       } else {
@@ -2464,28 +2423,33 @@ void AsyncConnection::handle_write()
         prepare_send_message(get_features(), m, data);
 
       r = write_message(m, data, more);
-      if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
-        goto fail;
-      }
+
       write_lock.lock();
-      if (r > 0)
-        break;
+      if (r == 0) {
+	;
+      } else if (r < 0) {
+	ldout(async_msgr->cct, 1) << __func__ << " send msg failed" << dendl;
+	break;
+      } else if (r > 0)
+	break;
     } while (can_write == WriteStatus::CANWRITE);
     write_lock.unlock();
 
-    uint64_t left = ack_left;
-    if (left) {
-      ceph_le64 s;
-      s = in_seq;
-      outcoming_bl.append(CEPH_MSGR_TAG_ACK);
-      outcoming_bl.append((char*)&s, sizeof(s));
-      ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
-      ack_left -= left;
-      left = ack_left;
-      r = _try_send(left);
-    } else if (is_queued()) {
-      r = _try_send();
+    // if r > 0 mean data still lefted, so no need _try_send.
+    if (r == 0) {
+      uint64_t left = ack_left;
+      if (left) {
+	ceph_le64 s;
+	s = in_seq;
+	outcoming_bl.append(CEPH_MSGR_TAG_ACK);
+	outcoming_bl.append((char*)&s, sizeof(s));
+	ldout(async_msgr->cct, 10) << __func__ << " try send msg ack, acked " << left << " messages" << dendl;
+	ack_left -= left;
+	left = ack_left;
+	r = _try_send(left);
+      } else if (is_queued()) {
+	r = _try_send();
+      }
     }
 
     logger->tinc(l_msgr_running_send_time, ceph::mono_clock::now() - start);

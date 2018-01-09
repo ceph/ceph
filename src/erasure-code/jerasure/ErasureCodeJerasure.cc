@@ -18,7 +18,6 @@
 #include "common/debug.h"
 #include "ErasureCodeJerasure.h"
 
-using namespace std;
 
 extern "C" {
 #include "jerasure.h"
@@ -300,6 +299,14 @@ void ErasureCodeJerasureCauchy::prepare_schedule(int *matrix)
 {
   bitmatrix = jerasure_matrix_to_bitmatrix(k, m, w, matrix);
   schedule = jerasure_smart_bitmatrix_to_schedule(k, m, w, bitmatrix);
+}
+
+ErasureCodeJerasureCauchy::~ErasureCodeJerasureCauchy() 
+{
+  if (bitmatrix)
+    free(bitmatrix);
+  if (schedule)
+    jerasure_free_schedule(schedule);
 }
 
 // 

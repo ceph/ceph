@@ -1,5 +1,5 @@
 add_library(fio_ceph_objectstore SHARED fio_ceph_objectstore.cc)
-target_include_directories(fio_ceph_objectstore PUBLIC ${FIO_INCLUDE_DIR})
+target_include_directories(fio_ceph_objectstore SYSTEM PUBLIC ${FIO_INCLUDE_DIR})
 
 # prevent fio from adding a 'typedef int bool'
 set(FIO_CFLAGS "-DCONFIG_HAVE_BOOL")

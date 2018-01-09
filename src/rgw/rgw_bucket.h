@@ -20,7 +20,7 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-// define as static when RGWBucket implementation compete
+// define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
@@ -180,8 +180,8 @@ extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           std::string placement_rule,
-                           bool update_entrypoint = true);
+                           bool update_entrypoint = true,
+                           bool update_stats = true);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
@@ -209,8 +209,11 @@ struct RGWBucketAdminOpState {
   bool delete_child_objects;
   bool bucket_stored;
   int max_aio = 0;
+  bool update_stats;
 
   rgw_bucket bucket;
+
+  RGWQuotaInfo quota;
 
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
@@ -218,6 +221,7 @@ struct RGWBucketAdminOpState {
   void set_delete_children(bool value) { delete_child_objects = value; }
 
   void set_max_aio(int value) { max_aio = value; }
+  void set_update_stats(bool value) { update_stats = value; }
 
   void set_user_id(const rgw_user& user_id) {
     if (!user_id.empty())
@@ -229,6 +233,10 @@ struct RGWBucketAdminOpState {
   void set_object(std::string& object_str) {
     object_name = object_str;
   }
+  void set_quota(RGWQuotaInfo& value) {
+    quota = value;
+  }
+
 
   rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
@@ -254,10 +262,11 @@ struct RGWBucketAdminOpState {
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }
+  bool will_update_stats() { return update_stats;}
 
   RGWBucketAdminOpState() : list_buckets(false), stat_buckets(false), check_objects(false), 
                             fix_index(false), delete_child_objects(false),
-                            bucket_stored(false)  {}
+                            bucket_stored(false), update_stats(true)  {}
 };
 
 /*
@@ -297,6 +306,7 @@ public:
   int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
@@ -328,6 +338,7 @@ public:
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
+  static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
 };
 
 

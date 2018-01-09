@@ -25,6 +25,7 @@
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "common/perf_counters.h"
+#include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "auth/Crypto.h"
@@ -34,9 +35,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-using boost::none;
-using boost::optional;
 
 using rgw::IAM::ARN;
 using rgw::IAM::Effect;
@@ -1085,25 +1083,37 @@ bool verify_requester_payer_permission(struct req_state *s)
   return false;
 }
 
+namespace {
+Effect eval_or_pass(const boost::optional<Policy>& policy,
+		    const rgw::IAM::Environment& env,
+		    const rgw::auth::Identity& id,
+		    const uint64_t op,
+		    const ARN& arn) {
+  if (!policy)
+    return Effect::Pass;
+  else
+    return policy->eval(env, id, op, arn);
+}
+}
+
 bool verify_bucket_permission(struct req_state * const s,
 			      const rgw_bucket& bucket,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
-			      const optional<Policy>& bucket_policy,
+			      const boost::optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_policy) {
-    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(bucket));
-    if (r == Effect::Allow)
-      // It looks like S3 ACLs only GRANT permissions rather than
-      // denying them, so this should be safe.
-      return true;
-    else if (r == Effect::Deny)
-      return false;
-  }
+  auto r = eval_or_pass(bucket_policy, s->env, *s->auth.identity,
+			op, ARN(bucket));
+  if (r == Effect::Allow)
+    // It looks like S3 ACLs only GRANT permissions rather than
+    // denying them, so this should be safe.
+    return true;
+  else if (r == Effect::Deny)
+    return false;
 
   const auto perm = op_to_perm(op);
 
@@ -1152,11 +1162,30 @@ bool verify_bucket_permission(struct req_state * const s, const uint64_t op)
                                   op);
 }
 
+// Authorize anyone permitted by the policy and the bucket owner
+// unless explicitly denied by the policy.
+
+int verify_bucket_owner_or_policy(struct req_state* const s,
+				  const uint64_t op)
+{
+  auto e = eval_or_pass(s->iam_policy,
+			s->env, *s->auth.identity,
+			op, ARN(s->bucket));
+  if (e == Effect::Allow ||
+      (e == Effect::Pass &&
+       s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
+    return 0;
+  } else {
+    return -EACCES;
+  }
+}
+
+
 static inline bool check_deferred_bucket_perms(struct req_state * const s,
 					       const rgw_bucket& bucket,
 					       RGWAccessControlPolicy * const user_acl,
 					       RGWAccessControlPolicy * const bucket_acl,
-					       const optional<Policy>& bucket_policy,
+					       const boost::optional<Policy>& bucket_policy,
 					       const uint8_t deferred_check,
 					       const uint64_t op)
 {
@@ -1179,21 +1208,20 @@ bool verify_object_permission(struct req_state * const s,
                               RGWAccessControlPolicy * const user_acl,
                               RGWAccessControlPolicy * const bucket_acl,
                               RGWAccessControlPolicy * const object_acl,
-                              const optional<Policy>& bucket_policy,
+                              const boost::optional<Policy>& bucket_policy,
                               const uint64_t op)
 {
   if (!verify_requester_payer_permission(s))
     return false;
 
-  if (bucket_policy) {
-    auto r = bucket_policy->eval(s->env, *s->auth.identity, op, ARN(obj));
-    if (r == Effect::Allow)
-      // It looks like S3 ACLs only GRANT permissions rather than
-      // denying them, so this should be safe.
-      return true;
-    else if (r == Effect::Deny)
-      return false;
-  }
+
+  auto r = eval_or_pass(bucket_policy, s->env, *s->auth.identity, op, ARN(obj));
+  if (r == Effect::Allow)
+    // It looks like S3 ACLs only GRANT permissions rather than
+    // denying them, so this should be safe.
+    return true;
+  else if (r == Effect::Deny)
+    return false;
 
   const auto perm = op_to_perm(op);
 
@@ -1794,11 +1822,10 @@ void rgw_raw_obj::decode_from_rgw_obj(bufferlist::iterator& bl)
   pool = old_obj.get_explicit_data_pool();
 }
 
-std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
+std::string rgw_bucket::get_key(char tenant_delim, char id_delim, size_t reserve) const
 {
-  static constexpr size_t shard_len{12}; // ":4294967295\0"
   const size_t max_len = tenant.size() + sizeof(tenant_delim) +
-      name.size() + sizeof(id_delim) + bucket_id.size() + shard_len;
+      name.size() + sizeof(id_delim) + bucket_id.size() + reserve;
 
   std::string key;
   key.reserve(max_len);
@@ -1817,7 +1844,8 @@ std::string rgw_bucket::get_key(char tenant_delim, char id_delim) const
 std::string rgw_bucket_shard::get_key(char tenant_delim, char id_delim,
                                       char shard_delim) const
 {
-  auto key = bucket.get_key(tenant_delim, id_delim);
+  static constexpr size_t shard_len{12}; // ":4294967295\0"
+  auto key = bucket.get_key(tenant_delim, id_delim, shard_len);
   if (shard_id >= 0 && shard_delim) {
     key.append(1, shard_delim);
     key.append(std::to_string(shard_id));
@@ -1863,4 +1891,57 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
     last_pos_pattern = cur_pos_pattern + 1;
     last_pos_input = cur_pos_input + 1;
   }
+}
+
+/*
+ * make attrs look-like-this
+ * converts underscores to dashes
+ */
+string lowercase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+        buf[i] = '-';
+        break;
+      default:
+        buf[i] = tolower(*s);
+    }
+  }
+  return string(buf);
+}
+
+/*
+ * make attrs Look-Like-This
+ * converts underscores to dashes
+ */
+string camelcase_dash_http_attr(const string& orig)
+{
+  const char *s = orig.c_str();
+  char buf[orig.size() + 1];
+  buf[orig.size()] = '\0';
+
+  bool last_sep = true;
+
+  for (size_t i = 0; i < orig.size(); ++i, ++s) {
+    switch (*s) {
+      case '_':
+      case '-':
+        buf[i] = '-';
+        last_sep = true;
+        break;
+      default:
+        if (last_sep) {
+          buf[i] = toupper(*s);
+        } else {
+          buf[i] = tolower(*s);
+        }
+        last_sep = false;
+    }
+  }
+  return string(buf);
 }

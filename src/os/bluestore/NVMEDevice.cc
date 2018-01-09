@@ -17,6 +17,7 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <strings.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -226,7 +227,7 @@ struct Task {
   IORequest io_request;
   std::mutex lock;
   std::condition_variable cond;
-  SharedDriverQueueData *queue;
+  SharedDriverQueueData *queue = nullptr;
   Task(NVMEDevice *dev, IOCommand c, uint64_t off, uint64_t l, int64_t rc = 0)
     : device(dev), command(c), offset(off), len(l),
       return_code(rc),
@@ -358,6 +359,8 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
 
   int r = 0;
   uint64_t lba_off, lba_count;
+  uint32_t max_io_completion = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_max_io_completion");
+  uint64_t io_sleep_in_us = g_conf->get_val<uint64_t>("bluestore_spdk_io_sleep");
 
   ceph::coarse_real_clock::time_point cur, start
     = ceph::coarse_real_clock::now();
@@ -365,7 +368,12 @@ void SharedDriverQueueData::_aio_handle(Task *t, IOContext *ioc)
  again:
     dout(40) << __func__ << " polling" << dendl;
     if (current_queue_depth) {
-      spdk_nvme_qpair_process_completions(qpair, g_conf->bluestore_spdk_max_io_completion);
+      r = spdk_nvme_qpair_process_completions(qpair, max_io_completion);
+      if (r < 0) {
+        ceph_abort();
+      } else if (r == 0) {
+        usleep(io_sleep_in_us);
+      }
     }
 
     for (; t; t = t->next) {
@@ -573,37 +581,9 @@ static void attach_cb(void *cb_ctx, const struct spdk_nvme_transport_id *trid,
 int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 {
   Mutex::Locker l(lock);
-  int r = 0;
-  unsigned long long core_value;
-  uint32_t core_num = 0;
-  int m_core_arg = -1;
-  uint32_t mem_size_arg = g_conf->bluestore_spdk_mem;
-  char *coremask_arg = (char *)g_conf->bluestore_spdk_coremask.c_str();
-
   if (sn_tag.empty()) {
-    r = -ENOENT;
-    derr << __func__ << " empty serial number: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  core_value = strtoll(coremask_arg, NULL, 16);
-  for (uint32_t i = 0; i < sizeof(long long) * 8; i++) {
-    bool tmp = (core_value >> i) & 0x1;
-    if (tmp) {
-      core_num += 1;
-      // select the least signficant bit as the master core
-      if(m_core_arg < 0) {
-        m_core_arg = i;
-      }
-    }
-  }
-
-  // at least one core is needed for using spdk
-  if (core_num < 1) {
-    r = -ENOENT;
-    derr << __func__ << " invalid spdk coremask, at least one core is needed: "
-         << cpp_strerror(r) << dendl;
-    return r;
+    derr << __func__ << " empty serial number" << dendl;
+    return -ENOENT;
   }
 
   for (auto &&it : shared_driver_datas) {
@@ -612,6 +592,27 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
       return 0;
     }
   }
+
+  auto coremask_arg = g_conf->get_val<std::string>("bluestore_spdk_coremask");
+  int m_core_arg = -1;
+  try {
+    auto core_value = stoull(coremask_arg, nullptr, 16);
+    m_core_arg = ffsll(core_value);
+  } catch (const std::logic_error& e) {
+    derr << __func__ << " invalid bluestore_spdk_coremask: "
+	 << coremask_arg << dendl;
+    return -EINVAL;
+  }
+  // at least one core is needed for using spdk
+  if (m_core_arg == 0) {
+    derr << __func__ << " invalid bluestore_spdk_coremask, "
+	 << "at least one core is needed" << dendl;
+    return -ENOENT;
+  }
+  m_core_arg -= 1;
+
+  uint32_t mem_size_arg = (uint32_t)g_conf->get_val<uint64_t>("bluestore_spdk_mem");
+
 
   if (!init) {
     init = true;
@@ -622,10 +623,11 @@ int NVMEManager::try_get(const string &sn_tag, SharedDriverData **driver)
 
         spdk_env_opts_init(&opts);
         opts.name = "nvme-device-manager";
-        opts.core_mask = coremask_arg;
+        opts.core_mask = coremask_arg.c_str();
         opts.master_core = m_core_arg;
         opts.mem_size = mem_size_arg;
         spdk_env_init(&opts);
+        spdk_unaffinitize_thread();
 
         spdk_nvme_retry_count = g_ceph_context->_conf->bdev_nvme_retry_count;
         if (spdk_nvme_retry_count < 0)

@@ -20,7 +20,6 @@
 
 #include <map>
 #include <set>
-using namespace std;
 
 #include "include/types.h"
 #include "mds/FSMap.h"
@@ -96,13 +95,6 @@ class MDSMonitor : public PaxosService {
       mds_role_t *role,
       std::ostream &ss);
 
-  void modify_legacy_filesystem(
-      std::function<void(std::shared_ptr<Filesystem> )> fn);
-  int legacy_filesystem_command(
-      MonOpRequestRef op,
-      std::string const &prefix,
-      map<string, cmd_vartype> &cmdmap,
-      std::stringstream &ss);
   int filesystem_command(
       MonOpRequestRef op,
       std::string const &prefix,

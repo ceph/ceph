@@ -66,14 +66,11 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
-BlueFS *open_bluefs(
+void add_devices(
+  BlueFS *fs,
   CephContext *cct,
-  const string& path,
   const vector<string>& devs)
 {
-  validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
-
   string main;
   set<int> got;
   for (auto& i : devs) {
@@ -113,6 +110,37 @@ BlueFS *open_bluefs(
       exit(EXIT_FAILURE);
     }
   }
+}
+
+void log_dump(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+  
+  add_devices(fs, cct, devs);
+
+  int r = fs->log_dump(cct, path, devs);
+  if (r < 0) {
+    cerr << "log_dump failed" << ": "
+         << cpp_strerror(r) << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  delete fs;
+}
+
+BlueFS *open_bluefs(
+  CephContext *cct,
+  const string& path,
+  const vector<string>& devs)
+{
+  validate_path(cct, path, true);
+  BlueFS *fs = new BlueFS(cct);
+
+  add_devices(fs, cct, devs);
 
   int r = fs->mount();
   if (r < 0) {
@@ -121,6 +149,18 @@ BlueFS *open_bluefs(
     exit(EXIT_FAILURE);
   }
   return fs;
+}
+
+void infering_bluefs_devices(vector<string>& devs, std::string& path)
+{
+  cout << "infering bluefs devices from bluestore path" << std::endl;
+  for (auto fn : {"block", "block.wal", "block.db"}) {
+    string p = path + "/" + fn;
+    struct stat st;
+    if (::stat(p.c_str(), &st) == 0) {
+      devs.push_back(p);
+    }
+  }
 }
 
 int main(int argc, char **argv)
@@ -147,7 +187,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, set-label-key, rm-label-key, prime-osd-dir")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -183,7 +223,7 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-  if (action == "prime-osd-dev") {
+  if (action == "prime-osd-dir") {
     if (devs.size() != 1) {
       cerr << "must specify the main bluestore device" << std::endl;
       exit(EXIT_FAILURE);
@@ -213,48 +253,26 @@ int main(int argc, char **argv)
       cerr << "must specify bluestore path *or* raw device(s)" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (devs.empty()) {
-      cout << "infering bluefs devices from bluestore path" << std::endl;
-      for (auto fn : {"block", "block.wal", "block.db"}) {
-	string p = path + "/" + fn;
-	struct stat st;
-	if (::stat(p.c_str(), &st) == 0) {
-	  devs.push_back(p);
-	}
-      }
-    }
+    if (devs.empty())
+      infering_bluefs_devices(devs, path);
   }
-  if (action == "bluefs-export") {
+  if (action == "bluefs-export" || action == "bluefs-log-dump") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    if (out_dir.empty()) {
+    if ((action == "bluefs-export") && out_dir.empty()) {
       cerr << "must specify out-dir to export bluefs" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-        devs.push_back(p);
-      }
-    }
+    infering_bluefs_devices(devs, path);
   }
   if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
     }
-    cout << "infering bluefs devices from bluestore path" << std::endl;
-    for (auto fn : {"block", "block.wal", "block.db"}) {
-      string p = path + "/" + fn;
-      struct stat st;
-      if (::stat(p.c_str(), &st) == 0) {
-        devs.push_back(p);
-      }
-    }
+    infering_bluefs_devices(devs, path);
   }
 
   vector<const char*> args;
@@ -332,16 +350,35 @@ int main(int argc, char **argv)
 	v += label.meta["whoami"];
 	v += "]\nkey = " + i->second;
       }
-      v += "\n";
       if (k.find("path_") == 0) {
 	p = path + "/" + k.substr(5);
 	int r = ::symlink(v.c_str(), p.c_str());
+	if (r < 0 && errno == EEXIST) {
+	  struct stat st;
+	  r = ::stat(p.c_str(), &st);
+	  if (r == 0 && S_ISLNK(st.st_mode)) {
+	    char target[PATH_MAX];
+	    r = ::readlink(p.c_str(), target, sizeof(target));
+	    if (r > 0) {
+	      if (v == target) {
+		r = 0;  // already matches our target
+	      } else {
+		::unlink(p.c_str());
+		r = ::symlink(v.c_str(), p.c_str());
+	      }
+	    } else {
+	      cerr << "error reading existing link at " << p << ": " << cpp_strerror(errno)
+		   << std::endl;
+	    }
+	  }
+	}
 	if (r < 0) {
 	  cerr << "error symlinking " << p << ": " << cpp_strerror(errno)
 	       << std::endl;
 	  exit(EXIT_FAILURE);
 	}
       } else {
+	v += "\n";
 	int fd = ::open(p.c_str(), O_CREAT|O_TRUNC|O_WRONLY, 0600);
 	if (fd < 0) {
 	  cerr << "error writing " << p << ": " << cpp_strerror(errno)
@@ -424,6 +461,7 @@ int main(int argc, char **argv)
     for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
       interval_set<uint64_t> before;
       fs->get_block_extents(devid, &before);
+      if (before.empty()) continue;
       uint64_t end = before.range_end();
       uint64_t size = fs->get_block_device_size(devid);
       if (end < size) {
@@ -490,7 +528,6 @@ int main(int argc, char **argv)
 	  cerr << "open " << path << " failed: " << cpp_strerror(r) << std::endl;
 	  exit(EXIT_FAILURE);
 	}
-	assert(fd >= 0);
 	if (size > 0) {
 	  BlueFS::FileReader *h;
 	  r = fs->open_for_read(dir, file, &h, false);
@@ -525,6 +562,8 @@ int main(int argc, char **argv)
     }
     fs->umount();
     delete fs;
+  } else if (action == "bluefs-log-dump") {
+    log_dump(cct.get(), path, devs);
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

@@ -1071,7 +1071,7 @@ TEST_F(TestInternal, TestCoR)
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
-    printf("\t [%-8ld, %-8ld]\n",
+    printf("\t [%-8lu, %-8lu]\n",
            (unsigned long)itr->first, (unsigned long)itr->second);
 
   bufferlist bl;
@@ -1080,7 +1080,7 @@ TEST_F(TestInternal, TestCoR)
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\twrite object-%-4ld\t\n", (unsigned long)itr->first);
+    printf("\twrite object-%-4lu\t\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
@@ -1090,7 +1090,7 @@ TEST_F(TestInternal, TestCoR)
   printf("verify written data by reading\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1131,14 +1131,14 @@ TEST_F(TestInternal, TestCoR)
   printf("read from \"child\"\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
 
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1146,7 +1146,7 @@ TEST_F(TestInternal, TestCoR)
   printf("read again reversely\n");
   for (map<uint64_t, uint64_t>::iterator itr = --write_tracker.end();
        itr != write_tracker.begin(); --itr) {
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }
@@ -1213,7 +1213,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("generated random write map:\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr)
-    printf("\t [%-8ld, %-8ld]\n",
+    printf("\t [%-8lu, %-8lu]\n",
            (unsigned long)itr->first, (unsigned long)itr->second);
 
   bufferlist bl;
@@ -1222,7 +1222,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("write data based on random map\n");
   for (map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
        itr != write_tracker.end(); ++itr) {
-    printf("\twrite object-%-4ld\t\n", (unsigned long)itr->first);
+    printf("\twrite object-%-4lu\t\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.write(itr->second, TEST_IO_SIZE, bl));
   }
 
@@ -1232,7 +1232,7 @@ TEST_F(TestInternal, FlattenNoEmptyObjects)
   printf("verify written data by reading\n");
   {
     map<uint64_t, uint64_t>::iterator itr = write_tracker.begin();
-    printf("\tread object-%-4ld\n", (unsigned long)itr->first);
+    printf("\tread object-%-4lu\n", (unsigned long)itr->first);
     ASSERT_EQ(TEST_IO_SIZE, image.read(itr->second, TEST_IO_SIZE, readbl));
     ASSERT_TRUE(readbl.contents_equal(bl));
   }

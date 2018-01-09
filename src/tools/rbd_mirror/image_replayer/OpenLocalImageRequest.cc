@@ -125,8 +125,12 @@ void OpenLocalImageRequest<I>::handle_open_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << ": failed to open image '" << m_local_image_id << "': "
-         << cpp_strerror(r) << dendl;
+    if (r == -ENOENT) {
+      dout(10) << ": local image does not exist" << dendl;
+    } else {
+      derr << ": failed to open image '" << m_local_image_id << "': "
+           << cpp_strerror(r) << dendl;
+    }
     (*m_local_image_ctx)->destroy();
     *m_local_image_ctx = nullptr;
     finish(r);

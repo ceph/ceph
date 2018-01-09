@@ -249,7 +249,7 @@ Valid fields are:
 	* ``size``: Sets the number of copies of data in the pool.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_ruleset``: rule number for mapping placement.
+	* ``crush_rule``: rule number for mapping placement.
 
 Get the value of a pool setting. ::
 
@@ -286,11 +286,11 @@ MDS Subsystem
 
 Change configuration parameters on a running mds. ::
 
-	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
+	ceph tell mds.{mds-id} config set {setting} {value}
 
 Example::
 
-	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
+	ceph tell mds.0 config set debug_ms 1
 
 Enables debug messages. ::
 

@@ -44,14 +44,11 @@ private:
    * <start>
    *    |
    *    v
-   * GET_MIRROR_MODE  * * * * * * *
-   *    |                         *
+   * GET_MIRROR_IMAGE * * * * * * *
+   *    |                         * (on error)
    *    v                         *
    * GET_TAG_OWNER  * * * * * * * *
    *    |                         *
-   *    v                         *
-   * GET_MIRROR_IMAGE * * * * * * *
-   *    |                         * (on error)
    *    v                         *
    * SET_MIRROR_IMAGE * * * * * * *
    *    |                         *
@@ -79,11 +76,11 @@ private:
   bufferlist m_out_bl;
   cls::rbd::MirrorImage m_mirror_image;
 
-  void send_get_tag_owner();
-  Context *handle_get_tag_owner(int *result);
-
   void send_get_mirror_image();
   Context *handle_get_mirror_image(int *result);
+
+  void send_get_tag_owner();
+  Context *handle_get_tag_owner(int *result);
 
   void send_set_mirror_image();
   Context *handle_set_mirror_image(int *result);

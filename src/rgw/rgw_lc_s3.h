@@ -185,11 +185,14 @@ public:
 
 class LCRule_S3 : public LCRule, public XMLObj
 {
+private:
+  CephContext *cct;
 public:
-  LCRule_S3() {}
+  LCRule_S3(): cct(nullptr) {}
+  LCRule_S3(CephContext *_cct): cct(_cct) {}
   ~LCRule_S3() override {}
 
-  void to_xml(CephContext *cct, ostream& out);
+  void to_xml(ostream& out);
   bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
   void dump_xml(Formatter *f) const {
@@ -218,6 +221,10 @@ public:
 
     f->close_section(); // Rule
   }
+
+  void set_ctx(CephContext *ctx) {
+    cct = ctx;
+  }
 };
 
 class RGWLCXMLParser_S3 : public RGWXMLParser
@@ -243,7 +250,7 @@ public:
     multimap<string, LCRule>::iterator iter;
     for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
       LCRule_S3& rule = static_cast<LCRule_S3&>(iter->second);
-      rule.to_xml(cct, out);
+      rule.to_xml(out);
     }
     out << "</LifecycleConfiguration>";
   }

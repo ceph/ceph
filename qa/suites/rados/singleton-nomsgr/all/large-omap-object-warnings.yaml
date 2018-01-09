@@ -1,0 +1,26 @@
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 10 # GB
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
+overrides:
+  ceph:
+    log-whitelist:
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_FULL\)
+      - \(MDS_READ_ONLY\)
+      - large omap objects
+      - Large omap object found
+      - application not enabled
+    conf:
+      osd:
+        osd deep scrub large omap object value sum threshold: 8800000
+        osd deep scrub large omap object key threshold: 20000
+tasks:
+- install:
+- ceph:
+- workunit:
+    clients:
+      all:
+        - rados/test_large_omap_detection.py

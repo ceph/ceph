@@ -40,7 +40,7 @@ endif(HAVE_INTEL_SSE4_1 AND HAVE_BETTER_YASM_ELF64 AND (NOT APPLE))
 add_library(ceph_zlib SHARED ${zlib_sources})
 add_dependencies(ceph_zlib ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 target_link_libraries(ceph_zlib ${ZLIB_LIBRARIES})
-target_include_directories(ceph_zlib PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
+target_include_directories(ceph_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
 set_target_properties(ceph_zlib PROPERTIES
   VERSION 2.0.0
   SOVERSION 2
@@ -49,6 +49,6 @@ install(TARGETS ceph_zlib DESTINATION ${compressor_plugin_dir})
 
 if(WITH_EMBEDDED)
   add_library(cephd_compressor_zlib STATIC ${zlib_sources})
-	target_include_directories(cephd_compressor_zlib PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
+	target_include_directories(cephd_compressor_zlib SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/isa-l/include")
   set_target_properties(cephd_compressor_zlib PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
 endif()

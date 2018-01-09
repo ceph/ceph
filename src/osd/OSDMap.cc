@@ -206,6 +206,8 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
     if (!new_pool.second.tiers.empty()) {
       pg_pool_t& base = new_pool.second;
 
+      auto new_rem_it = new_removed_snaps.find(new_pool.first);
+
       for (const auto &tier_pool : base.tiers) {
 	const auto &r = new_pools.find(tier_pool);
 	pg_pool_t *tier = 0;
@@ -230,6 +232,10 @@ int OSDMap::Incremental::propagate_snaps_to_tiers(CephContext *cct,
 	tier->snap_epoch = base.snap_epoch;
 	tier->snaps = base.snaps;
 	tier->removed_snaps = base.removed_snaps;
+
+	if (new_rem_it != new_removed_snaps.end()) {
+	  new_removed_snaps[tier_pool] = new_rem_it->second;
+	}
       }
     }
   }
@@ -472,9 +478,12 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 5;
+    uint8_t v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
+    }
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      v = 5;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     ::encode(fsid, bl);
@@ -511,6 +520,10 @@ void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
       ::encode(old_pg_upmap, bl);
       ::encode(new_pg_upmap_items, bl);
       ::encode(old_pg_upmap_items, bl);
+    }
+    if (v >= 6) {
+      ::encode(new_removed_snaps, bl);
+      ::encode(new_purged_snaps, bl);
     }
     ENCODE_FINISH(bl); // client-usable data
   }
@@ -693,7 +706,7 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
     return;
   }
   {
-    DECODE_START(5, bl); // client-usable data
+    DECODE_START(6, bl); // client-usable data
     ::decode(fsid, bl);
     ::decode(epoch, bl);
     ::decode(modified, bl);
@@ -735,6 +748,10 @@ void OSDMap::Incremental::decode(bufferlist::iterator& bl)
       ::decode(old_pg_upmap, bl);
       ::decode(new_pg_upmap_items, bl);
       ::decode(old_pg_upmap_items, bl);
+    }
+    if (struct_v >= 6) {
+      ::decode(new_removed_snaps, bl);
+      ::decode(new_purged_snaps, bl);
     }
     DECODE_FINISH(bl); // client-usable data
   }
@@ -1053,6 +1070,37 @@ void OSDMap::Incremental::dump(Formatter *f) const
     f->dump_string("old", erasure_code_profile.c_str());
   }
   f->close_section();
+
+  f->open_array_section("new_removed_snaps");
+  for (auto& p : new_removed_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_purged_snaps");
+  for (auto& p : new_purged_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void OSDMap::Incremental::generate_test_instances(list<Incremental*>& o)
@@ -1224,6 +1272,15 @@ void OSDMap::get_out_osds(set<int32_t>& ls) const
   }
 }
 
+void OSDMap::get_flag_set(set<string> *flagset) const
+{
+  for (unsigned i = 0; i < sizeof(flags) * 8; ++i) {
+    if (flags & (1<<i)) {
+      flagset->insert(get_flag_string(flags & (1<<i)));
+    }
+  }
+}
+
 void OSDMap::calc_state_set(int state, set<string>& st)
 {
   unsigned t = state;
@@ -1310,10 +1367,6 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     if (pool.second.has_flag(pg_pool_t::FLAG_HASHPSPOOL)) {
       features |= CEPH_FEATURE_OSDHASHPSPOOL;
     }
-    if (pool.second.is_erasure() &&
-	entity_type != CEPH_ENTITY_TYPE_CLIENT) { // not for clients
-      features |= CEPH_FEATURE_OSD_ERASURE_CODES;
-    }
     if (!pool.second.tiers.empty() ||
 	pool.second.is_tier()) {
       features |= CEPH_FEATURE_OSD_CACHEPOOL;
@@ -1330,21 +1383,7 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
     }
   }
-  if (entity_type == CEPH_ENTITY_TYPE_OSD) {
-    for (auto &erasure_code_profile : erasure_code_profiles) {
-      auto& profile = erasure_code_profile.second;
-      const auto& plugin = profile.find("plugin");
-      if (plugin != profile.end()) {
-	if (plugin->second == "isa" || plugin->second == "lrc")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V2;
-	if (plugin->second == "shec")
-	  features |= CEPH_FEATURE_ERASURE_CODE_PLUGINS_V3;
-      }
-    }
-  }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
-  if (entity_type != CEPH_ENTITY_TYPE_CLIENT)
-    mask |= CEPH_FEATURE_OSD_ERASURE_CODES;
 
   if (osd_primary_affinity) {
     for (int i = 0; i < max_osd; ++i) {
@@ -1392,7 +1431,6 @@ uint8_t OSDMap::get_min_compat_client() const
   }
   if (HAVE_FEATURE(f, OSD_PRIMARY_AFFINITY) || // v0.76-553-gf825624
       HAVE_FEATURE(f, CRUSH_TUNABLES3) ||      // v0.76-395-ge20a55d
-      HAVE_FEATURE(f, OSD_ERASURE_CODES) ||    // v0.73-498-gbfc86a8
       HAVE_FEATURE(f, OSD_CACHEPOOL)) {        // v0.67-401-gb91c1c5
     return CEPH_RELEASE_FIREFLY;   // v0.80.0
   }
@@ -1610,6 +1648,24 @@ int OSDMap::apply_incremental(const Incremental &inc)
   for (const auto &pool : inc.new_pools) {
     pools[pool.first] = pool.second;
     pools[pool.first].last_change = epoch;
+  }
+
+  new_removed_snaps = inc.new_removed_snaps;
+  new_purged_snaps = inc.new_purged_snaps;
+  for (auto p = new_removed_snaps.begin();
+       p != new_removed_snaps.end();
+       ++p) {
+    removed_snaps_queue[p->first].union_of(p->second);
+  }
+  for (auto p = new_purged_snaps.begin();
+       p != new_purged_snaps.end();
+       ++p) {
+    auto q = removed_snaps_queue.find(p->first);
+    assert(q != removed_snaps_queue.end());
+    q->second.subtract(p->second);
+    if (q->second.empty()) {
+      removed_snaps_queue.erase(q);
+    }
   }
 
   for (const auto &pname : inc.new_pool_names) {
@@ -2068,24 +2124,22 @@ void OSDMap::_get_temp_osds(const pg_pool_t& pool, pg_t pg,
 
 void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
 {
-  *primary = -1;
-  raw->clear();
   const pg_pool_t *pool = get_pg_pool(pg.pool());
-  if (!pool)
+  if (!pool) {
+    *primary = -1;
+    raw->clear();
     return;
+  }
   _pg_to_raw_osds(*pool, pg, raw, NULL);
-  if (primary)
-    *primary = _pick_primary(*raw);
+  *primary = _pick_primary(*raw);
 }
 
 void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool) {
-    if (primary)
-      *primary = -1;
-    if (up)
-      up->clear();
+    *primary = -1;
+    up->clear();
     return;
   }
   vector<int> raw;
@@ -2318,9 +2372,12 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   ENCODE_START(8, 7, bl);
 
   {
-    uint8_t v = 6;
+    uint8_t v = 7;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       v = 3;
+    }
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      v = 6;
     }
     ENCODE_START(v, 1, bl); // client-usable data
     // base
@@ -2384,13 +2441,20 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (v >= 6) {
       ::encode(crush_version, bl);
     }
+    if (v >= 7) {
+      ::encode(new_removed_snaps, bl);
+      ::encode(new_purged_snaps, bl);
+    }
     ENCODE_FINISH(bl); // client-usable data
   }
 
   {
-    uint8_t target_v = 5;
+    uint8_t target_v = 6;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
+    }
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      target_v = 5;
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     ::encode(osd_addrs->hb_back_addr, bl, features);
@@ -2418,6 +2482,9 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
     if (target_v >= 5) {
       ::encode(require_min_compat_client, bl);
       ::encode(require_osd_release, bl);
+    }
+    if (target_v >= 6) {
+      ::encode(removed_snaps_queue, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -2594,7 +2661,7 @@ void OSDMap::decode(bufferlist::iterator& bl)
    * Since we made it past that hurdle, we can use our normal paths.
    */
   {
-    DECODE_START(6, bl); // client-usable data
+    DECODE_START(7, bl); // client-usable data
     // base
     ::decode(fsid, bl);
     ::decode(epoch, bl);
@@ -2652,11 +2719,15 @@ void OSDMap::decode(bufferlist::iterator& bl)
     if (struct_v >= 6) {
       ::decode(crush_version, bl);
     }
+    if (struct_v >= 7) {
+      ::decode(new_removed_snaps, bl);
+      ::decode(new_purged_snaps, bl);
+    }
     DECODE_FINISH(bl); // client-usable data
   }
 
   {
-    DECODE_START(5, bl); // extended, osd-only data
+    DECODE_START(6, bl); // extended, osd-only data
     ::decode(osd_addrs->hb_back_addr, bl);
     ::decode(osd_info, bl);
     ::decode(blacklist, bl);
@@ -2704,6 +2775,9 @@ void OSDMap::decode(bufferlist::iterator& bl)
       } else {
 	require_osd_release = 0;
       }
+    }
+    if (struct_v >= 6) {
+      ::decode(removed_snaps_queue, bl);
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -2773,6 +2847,14 @@ void OSDMap::dump(Formatter *f) const
   f->dump_stream("created") << get_created();
   f->dump_stream("modified") << get_modified();
   f->dump_string("flags", get_flag_string());
+  f->dump_unsigned("flags_num", flags);
+  f->open_array_section("flags_set");
+  set<string> flagset;
+  get_flag_set(&flagset);
+  for (auto p : flagset) {
+    f->dump_string("flag", p);
+  }
+  f->close_section();
   f->dump_unsigned("crush_version", get_crush_version());
   f->dump_float("full_ratio", full_ratio);
   f->dump_float("backfillfull_ratio", backfillfull_ratio);
@@ -2886,6 +2968,52 @@ void OSDMap::dump(Formatter *f) const
   f->close_section();
 
   dump_erasure_code_profiles(erasure_code_profiles, f);
+
+  f->open_array_section("removed_snaps_queue");
+  for (auto& p : removed_snaps_queue) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_removed_snaps");
+  for (auto& p : new_removed_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_purged_snaps");
+  for (auto& p : new_purged_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", p.first);
+    f->open_array_section("snaps");
+    for (auto q = p.second.begin(); q != p.second.end(); ++q) {
+      f->open_object_section("interval");
+      f->dump_unsigned("begin", q.get_start());
+      f->dump_unsigned("length", q.get_len());
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void OSDMap::generate_test_instances(list<OSDMap*>& o)
@@ -2934,6 +3062,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",nodeep-scrub";
   if (f & CEPH_OSDMAP_NOTIERAGENT)
     s += ",notieragent";
+  if (f & CEPH_OSDMAP_NOSNAPTRIM)
+    s += ",nosnaptrim";
   if (f & CEPH_OSDMAP_SORTBITWISE)
     s += ",sortbitwise";
   if (f & CEPH_OSDMAP_REQUIRE_JEWEL)
@@ -2972,6 +3102,10 @@ void OSDMap::print_pools(ostream& out) const
 
     if (!pool.second.removed_snaps.empty())
       out << "\tremoved_snaps " << pool.second.removed_snaps << "\n";
+    auto p = removed_snaps_queue.find(pool.first);
+    if (p != removed_snaps_queue.end()) {
+      out << "\tremoved_snaps_queue " << p->second << "\n";
+    }
   }
   out << std::endl;
 }
@@ -3072,7 +3206,7 @@ public:
     return !filter;
   }
 
-  void dump(TextTable *tbl) {
+  void init_table(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("CLASS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("WEIGHT", TextTable::LEFT, TextTable::RIGHT);
@@ -3080,12 +3214,19 @@ public:
     tbl->define_column("STATUS", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("REWEIGHT", TextTable::LEFT, TextTable::RIGHT);
     tbl->define_column("PRI-AFF", TextTable::LEFT, TextTable::RIGHT);
+  }
+  void dump(TextTable *tbl, string& bucket) {
+    init_table(tbl);
 
-    Parent::dump(tbl);
-
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
-	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
+    if (!bucket.empty()) {
+      set_root(bucket);
+      Parent::dump(tbl);
+    } else {
+      Parent::dump(tbl);
+      for (int i = 0; i < osdmap->get_max_osd(); i++) {
+	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i)) {
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), tbl);
+	}
       }
     }
   }
@@ -3162,16 +3303,23 @@ public:
     return !filter;
   }
 
-  void dump(Formatter *f) {
-    f->open_array_section("nodes");
-    Parent::dump(f);
-    f->close_section();
-    f->open_array_section("stray");
-    for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
-	dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+  void dump(Formatter *f, string& bucket) {
+    if (!bucket.empty()) {
+      set_root(bucket);
+      f->open_array_section("nodes");
+      Parent::dump(f);
+      f->close_section();
+    } else {
+      f->open_array_section("nodes");
+      Parent::dump(f);
+      f->close_section();
+      f->open_array_section("stray");
+      for (int i = 0; i < osdmap->get_max_osd(); i++) {
+	if (osdmap->exists(i) && !is_touched(i) && should_dump_leaf(i))
+	  dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+      }
+      f->close_section();
     }
-    f->close_section();
   }
 
 protected:
@@ -3199,14 +3347,14 @@ private:
   const unsigned filter;
 };
 
-void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter) const
+void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter, string bucket) const
 {
   if (f) {
-    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f);
+    OSDTreeFormattingDumper(crush.get(), this, filter).dump(f, bucket);
   } else {
     assert(out);
     TextTable tbl;
-    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl);
+    OSDTreePlainDumper(crush.get(), this, filter).dump(&tbl, bucket);
     *out << tbl;
   }
 }
@@ -4586,6 +4734,7 @@ void OSDMap::check_health(health_check_map_t *checks) const
       CEPH_OSDMAP_NOSCRUB |
       CEPH_OSDMAP_NODEEP_SCRUB |
       CEPH_OSDMAP_NOTIERAGENT |
+      CEPH_OSDMAP_NOSNAPTRIM |
       CEPH_OSDMAP_NOREBALANCE;
     if (test_flag(warn_flags)) {
       ostringstream ss;
@@ -4668,11 +4817,9 @@ void OSDMap::check_health(health_check_map_t *checks) const
   }
 
   // OSD_NO_SORTBITWISE
-  if (!test_flag(CEPH_OSDMAP_SORTBITWISE) &&
-      (get_up_osd_features() &
-       CEPH_FEATURE_OSD_BITWISE_HOBJ_SORT)) {
+  if (!test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     ostringstream ss;
-    ss << "no legacy OSD present but 'sortbitwise' flag is not set";
+    ss << "'sortbitwise' flag is not set";
     checks->add("OSD_NO_SORTBITWISE", HEALTH_WARN, ss.str());
   }
 

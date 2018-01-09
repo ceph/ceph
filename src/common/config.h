@@ -15,6 +15,7 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
+#include <map>
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
 #include "common/code_environment.h"
@@ -23,17 +24,7 @@
 #include "common/config_obs.h"
 #include "common/options.h"
 
-#define OSD_REP_PRIMARY 0
-#define OSD_REP_SPLAY   1
-#define OSD_REP_CHAIN   2
-
 class CephContext;
-
-extern const char *CEPH_CONF_FILE_DEFAULT;
-
-#define LOG_TO_STDERR_NONE 0
-#define LOG_TO_STDERR_SOME 1
-#define LOG_TO_STDERR_ALL 2
 
 /** This class represents the current Ceph configuration.
  *
@@ -55,7 +46,7 @@ extern const char *CEPH_CONF_FILE_DEFAULT;
  *
  * To prevent serious problems resulting from thread-safety issues, we disallow
  * changing std::string configuration values after
- * md_config_t::internal_safe_to_start_threads becomes true. You can still
+ * md_config_t::safe_to_start_threads becomes true. You can still
  * change integer or floating point values, and the option declared with
  * SAFE_OPTION macro. Notice the latter options can not be read directly
  * (conf->foo), one should use either observers or get_val() method
@@ -90,7 +81,7 @@ public:
    * The configuration schema, in the form of Option objects describing
    * possible settings.
    */
-  std::map<std::string, const Option &> schema;
+  std::map<std::string, const Option&> schema;
 
   /**
    * The current values of all settings described by the schema
@@ -139,6 +130,9 @@ public:
   bool _internal_field(const string& k);
   void call_all_observers();
 
+  void set_safe_to_start_threads();
+  void _clear_safe_to_start_threads();  // this is only used by the unit test
+
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
 
@@ -160,8 +154,15 @@ public:
   // No metavariables will be returned (they will have already been expanded)
   int get_val(const std::string &key, char **buf, int len) const;
   int _get_val(const std::string &key, char **buf, int len) const;
-  const Option::value_t& get_val_generic(const std::string &key) const;
-  template<typename T> const T& get_val(const std::string &key) const;
+  Option::value_t get_val_generic(const std::string &key) const;
+  template<typename T> const T get_val(const std::string &key) const;
+  template<typename T, typename Callback, typename...Args>
+  auto with_val(const string& key, Callback&& cb, Args&&... args) const ->
+    std::result_of_t<Callback(const T&, Args...)> {
+    return std::forward<Callback>(cb)(
+      boost::get<T>(this->get_val_generic(key)),
+      std::forward<Args>(args)...);
+  }
 
   void get_all_keys(std::vector<std::string> *keys) const;
 
@@ -199,7 +200,7 @@ private:
   void validate_default_settings();
 
   int _get_val(const std::string &key, std::string *value) const;
-  const Option::value_t& _get_val_generic(const std::string &key) const;
+  Option::value_t _get_val_generic(const std::string &key) const;
   void _show_config(std::ostream *out, Formatter *f);
 
   void _get_my_sections(std::vector <std::string> &sections) const;
@@ -254,6 +255,10 @@ private:
 public:
   std::deque<std::string> parse_errors;
 private:
+
+  // This will be set to true when it is safe to start threads.
+  // Once it is true, it will never change.
+  bool safe_to_start_threads = false;
 
   obs_map_t observers;
   changed_set_t changed;
@@ -319,7 +324,7 @@ public:
 };
 
 template<typename T>
-const T& md_config_t::get_val(const std::string &key) const {
+const T md_config_t::get_val(const std::string &key) const {
   return boost::get<T>(this->get_val_generic(key));
 }
 

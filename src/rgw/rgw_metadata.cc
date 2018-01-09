@@ -844,12 +844,13 @@ struct list_keys_handle {
   RGWMetadataHandler *handler;
 };
 
-int RGWMetadataManager::list_keys_init(string& section, void **handle)
+int RGWMetadataManager::list_keys_init(const string& section, void **handle)
 {
   return list_keys_init(section, string(), handle);
 }
 
-int RGWMetadataManager::list_keys_init(string& section, const string& marker, void **handle)
+int RGWMetadataManager::list_keys_init(const string& section,
+                                       const string& marker, void **handle)
 {
   string entry;
   RGWMetadataHandler *handler;
@@ -1008,7 +1009,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
                                bl.c_str(), bl.length(), false,
                                &otracker, mtime, pattrs);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: rgw_put_system_obj() oid=" << oid << ") returned ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: rgw_put_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
   }
 
@@ -1031,7 +1032,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
   rgw_raw_obj obj(heap_pool, oid);
   int ret = store->delete_system_obj(obj);
   if (ret < 0) {
-    ldout(store->ctx(), 0) << "ERROR: store->delete_system_obj()=" << oid << ") returned ret=" << ret << dendl;
+    ldout(store->ctx(), 0) << "ERROR: store->delete_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
   }
 

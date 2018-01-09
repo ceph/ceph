@@ -248,6 +248,7 @@ void test_compress(CompressorRef compressor, size_t size)
     int res = compressor->compress(in, out);
     EXPECT_EQ(res, 0);
   }
+  free(data);
 }
 
 void test_decompress(CompressorRef compressor, size_t size)
@@ -265,6 +266,7 @@ void test_decompress(CompressorRef compressor, size_t size)
     int res = compressor->decompress(out, out_dec);
     EXPECT_EQ(res, 0);
   }
+  free(data);
 }
 
 TEST_P(CompressorTest, compress_1024)
@@ -330,6 +332,9 @@ INSTANTIATE_TEST_CASE_P(
 #endif
     "zlib/noisal",
     "snappy",
+#ifdef HAVE_BROTLI
+    "brotli",
+#endif
     "zstd"));
 
 #ifdef __x86_64__
@@ -386,7 +391,7 @@ TEST(CompressionPlugin, all)
   CompressionPlugin *factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "invalid"));
   EXPECT_FALSE(factory);
   factory = dynamic_cast<CompressionPlugin*>(reg->get_with_load("compressor", "example"));
-  EXPECT_TRUE(factory);
+  ASSERT_TRUE(factory);
   stringstream ss;
   EXPECT_EQ(0, factory->factory(&compressor, &ss));
   EXPECT_TRUE(compressor.get());

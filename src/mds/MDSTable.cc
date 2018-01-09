@@ -60,7 +60,8 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
 	     << committing_version << " >= needed " << v << dendl;
-    waitfor_save[v].push_back(onfinish);
+    if (onfinish)
+      waitfor_save[v].push_back(onfinish);
     return;
   }
   

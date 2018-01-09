@@ -5,6 +5,28 @@ ioengine=libfio_ceph_objectstore.so # must be found in your LD_LIBRARY_PATH
 conf=ceph-bluestore.conf # must point to a valid ceph configuration file
 directory=/mnt/fio-bluestore # directory for osd_data
 
+#oi_attr_len=350-4000 # specifies OI(aka '_') attribute length range to couple
+                      # writes with. Default: 0 (disabled)
+
+#snapset_attr_len=35  # specifies snapset attribute length range to couple
+                      # writes with. Default: 0 (disabled)
+
+#_fastinfo_omap_len=186 # specifies _fastinfo omap entry length range to
+                        # couple writes with. Default: 0 (disabled)
+
+#pglog_simulation=1   # couples write and omap generation in OSD PG log manner.
+                      # Ceph's osd_min_pg_log_entries, osd_pg_log_trim_min,
+					  # osd_pg_log_dups_tracked settings control cyclic
+					  # omap keys creation/removal.
+                      # Following additional FIO pglog_ settings to apply too:
+
+#pglog_omap_len=173   # specifies PG log entry length range to couple
+                      # writes with. Default: 0 (disabled)
+
+#pglog_dup_omap_len=57 # specifies duplicate PG log entry length range
+                       # to couple writes with. Default: 0 (disabled)
+
+
 rw=randwrite
 iodepth=16
 

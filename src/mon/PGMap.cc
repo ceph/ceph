@@ -27,7 +27,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 2;
+  uint8_t v = 3;
   if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
     v = 1;
   }
@@ -57,12 +57,15 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   ::encode(pg_sum_delta, bl, features);
   ::encode(stamp_delta, bl);
   ::encode(avail_space_by_rule, bl);
+  if (struct_v >= 3) {
+    ::encode(purged_snaps, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
-  DECODE_START(2, p);
+  DECODE_START(3, p);
   ::decode(num_pg, p);
   ::decode(num_pg_active, p);
   ::decode(num_pg_unknown, p);
@@ -87,6 +90,9 @@ void PGMapDigest::decode(bufferlist::iterator& p)
   ::decode(pg_sum_delta, p);
   ::decode(stamp_delta, p);
   ::decode(avail_space_by_rule, p);
+  if (struct_v >= 3) {
+    ::decode(purged_snaps, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -136,6 +142,21 @@ void PGMapDigest::dump(Formatter *f) const
     f->dump_unsigned("num_primary_pg", p.second.primary);
     f->dump_unsigned("num_acting_pg", p.second.acting);
     f->dump_unsigned("num_up_pg", p.second.up);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("purged_snaps");
+  for (auto& j : purged_snaps) {
+    f->open_object_section("pool");
+    f->dump_int("pool", j.first);
+    f->open_object_section("purged_snaps");
+    for (auto i = j.second.begin(); i != j.second.end(); ++i) {
+      f->open_object_section("interval");
+      f->dump_stream("start") << i.get_start();
+      f->dump_stream("length") << i.get_len();
+      f->close_section();
+    }
+    f->close_section();
     f->close_section();
   }
   f->close_section();
@@ -845,8 +866,9 @@ void PGMapDigest::dump_object_stat_sum(
     curr_object_copies_rate = (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
 
   float used = 0.0;
+  // note avail passed in is raw_avail, calc raw_used here.
   if (avail) {
-    used = sum.num_bytes * curr_object_copies_rate;
+    used = sum.num_bytes * raw_used_rate * curr_object_copies_rate;
     used /= used + avail;
   } else if (sum.num_bytes) {
     used = 1.0;
@@ -1021,11 +1043,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   assert(inc.version == version+1);
   version++;
 
-  utime_t delta_t;
-  delta_t = inc.stamp;
-  delta_t -= stamp;
-  stamp = inc.stamp;
-
   pool_stat_t pg_sum_old = pg_sum;
   mempool::pgmap::unordered_map<uint64_t, pool_stat_t> pg_pool_sum_old;
 
@@ -1085,18 +1102,26 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
   }
 
-  // calculate a delta, and average over the last 2 deltas.
-  pool_stat_t d = pg_sum;
-  d.stats.sub(pg_sum_old.stats);
-  pg_sum_deltas.push_back(make_pair(d, delta_t));
-  stamp_delta += delta_t;
-
-  pg_sum_delta.stats.add(d.stats);
-  if (pg_sum_deltas.size() > (unsigned)MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1)) {
-    pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
-    stamp_delta -= pg_sum_deltas.front().second;
-    pg_sum_deltas.pop_front();
+  // skip calculating delta while sum was not synchronized
+  if (!stamp.is_zero() && !pg_sum_old.stats.sum.is_zero()) {
+    utime_t delta_t;
+    delta_t = inc.stamp;
+    delta_t -= stamp;
+    // calculate a delta, and average over the last 2 deltas.
+    pool_stat_t d = pg_sum;
+    d.stats.sub(pg_sum_old.stats);
+    pg_sum_deltas.push_back(make_pair(d, delta_t));
+    stamp_delta += delta_t;
+    pg_sum_delta.stats.add(d.stats);
+    auto smooth_intervals =
+      cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
+    if (pg_sum_deltas.size() > smooth_intervals) {
+      pg_sum_delta.stats.sub(pg_sum_deltas.front().first.stats);
+      stamp_delta -= pg_sum_deltas.front().second;
+      pg_sum_deltas.pop_front();
+    }
   }
+  stamp = inc.stamp;
 
   update_pool_deltas(cct, inc.stamp, pg_pool_sum_old);
 
@@ -1262,6 +1287,28 @@ void PGMap::stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
   }
 }
 
+void PGMap::calc_purged_snaps()
+{
+  purged_snaps.clear();
+  set<int64_t> unknown;
+  for (auto& i : pg_stat) {
+    if (i.second.state == 0) {
+      unknown.insert(i.first.pool());
+      purged_snaps.erase(i.first.pool());
+      continue;
+    } else if (unknown.count(i.first.pool())) {
+      continue;
+    }
+    auto j = purged_snaps.find(i.first.pool());
+    if (j == purged_snaps.end()) {
+      // base case
+      purged_snaps[i.first.pool()] = i.second.purged_snaps;
+    } else {
+      j->second.intersection_of(i.second.purged_snaps);
+    }
+  }
+}
+
 void PGMap::stat_osd_add(int osd, const osd_stat_t &s)
 {
   num_osd++;
@@ -1281,9 +1328,10 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
 }
 
 void PGMap::encode_digest(const OSDMap& osdmap,
-			  bufferlist& bl, uint64_t features) const
+			  bufferlist& bl, uint64_t features)
 {
   get_rules_avail(osdmap, &avail_space_by_rule);
+  calc_purged_snaps();
   PGMapDigest::encode(bl, features);
 }
 
@@ -1895,33 +1943,22 @@ void PGMap::update_delta(
    */
   pool_stat_t d = current_pool_sum;
   d.stats.sub(old_pool_sum.stats);
-  delta_avg_list->push_back(make_pair(d,delta_t));
-  *result_ts_delta += delta_t;
 
   /* Aggregate current delta, and take out the last seen delta (if any) to
    * average it out.
+   * Skip calculating delta while sum was not synchronized.
    */
-  result_pool_delta->stats.add(d.stats);
-  size_t s = MAX(1, cct ? cct->_conf->mon_stat_smooth_intervals : 1);
+  if(!old_pool_sum.stats.sum.is_zero()) {
+    delta_avg_list->push_back(make_pair(d,delta_t));
+    *result_ts_delta += delta_t;
+    result_pool_delta->stats.add(d.stats);
+  }
+  size_t s = cct ? cct->_conf->get_val<uint64_t>("mon_stat_smooth_intervals") : 1;
   if (delta_avg_list->size() > s) {
     result_pool_delta->stats.sub(delta_avg_list->front().first.stats);
     *result_ts_delta -= delta_avg_list->front().second;
     delta_avg_list->pop_front();
   }
-}
-
-/**
- * update aggregated delta
- *
- * @param cct            ceph context
- * @param ts             Timestamp
- * @param pg_sum_old     Old pg_sum
- */
-void PGMap::update_global_delta(CephContext *cct,
-                                const utime_t ts, const pool_stat_t& pg_sum_old)
-{
-  update_delta(cct, ts, pg_sum_old, &stamp, pg_sum, &pg_sum_delta,
-               &stamp_delta, &pg_sum_deltas);
 }
 
 /**
@@ -2083,7 +2120,7 @@ void PGMap::get_health_checks(
   health_check_map_t *checks) const
 {
   utime_t now = ceph_clock_now();
-  const unsigned max = cct->_conf->mon_health_max_detail;
+  const auto max = cct->_conf->get_val<uint64_t>("mon_health_max_detail");
   const auto& pools = osdmap.get_pools();
 
   typedef enum pg_consequence_t {
@@ -2145,8 +2182,7 @@ void PGMap::get_health_checks(
     { PG_STATE_UNDERSIZED,       {DEGRADED,    [](const pg_stat_t &p){return p.last_fullsized;} } },
     { PG_STATE_STALE,            {UNAVAILABLE, [](const pg_stat_t &p){return p.last_unstale;}   } },
     // Delayed and inverted reports
-    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} },
-    { PG_STATE_CLEAN,            {DEGRADED,    [](const pg_stat_t &p){return p.last_clean;}, true} }
+    { PG_STATE_ACTIVE,           {UNAVAILABLE, [](const pg_stat_t &p){return p.last_active;}, true} }
   };
 
   // Specialized state printer that takes account of inversion of
@@ -2190,7 +2226,7 @@ void PGMap::get_health_checks(
     }
   }
 
-  utime_t cutoff = now - utime_t(cct->_conf->mon_pg_stuck_threshold, 0);
+  utime_t cutoff = now - utime_t(cct->_conf->get_val<int64_t>("mon_pg_stuck_threshold"), 0);
   // Loop over all PGs, if there are any possibly-unhealthy states in there
   if (!possible_responses.empty()) {
     for (const auto& i : pg_stat) {
@@ -2343,6 +2379,39 @@ void PGMap::get_health_checks(
     checks->add("OSD_SCRUB_ERRORS", HEALTH_ERR, ss.str());
   }
 
+  // LARGE_OMAP_OBJECTS
+  if (pg_sum.stats.sum.num_large_omap_objects) {
+    list<string> detail;
+    for (auto &pool : pools) {
+      const string& pool_name = osdmap.get_pool_name(pool.first);
+      auto it2 = pg_pool_sum.find(pool.first);
+      if (it2 == pg_pool_sum.end()) {
+        continue;
+      }
+      const pool_stat_t *pstat = &it2->second;
+      if (pstat == nullptr) {
+        continue;
+      }
+      const object_stat_sum_t& sum = pstat->stats.sum;
+      if (sum.num_large_omap_objects) {
+        stringstream ss;
+        ss << sum.num_large_omap_objects << " large objects found in pool "
+           << "'" << pool_name << "'";
+        detail.push_back(ss.str());
+      }
+    }
+    if (!detail.empty()) {
+      ostringstream ss;
+      ss << pg_sum.stats.sum.num_large_omap_objects << " large omap objects";
+      auto& d = checks->add("LARGE_OMAP_OBJECTS", HEALTH_WARN, ss.str());
+      stringstream tip;
+      tip << "Search the cluster log for 'Large omap object found' for more "
+          << "details.";
+      detail.push_back(tip.str());
+      d.detail.swap(detail);
+    }
+  }
+
   // CACHE_POOL_NEAR_FULL
   {
     list<string> detail;
@@ -2425,6 +2494,12 @@ void PGMap::get_health_checks(
   // MANY_OBJECTS_PER_PG
   if (!pg_stat.empty()) {
     list<string> pgp_detail, many_detail;
+    const auto mon_pg_warn_min_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_objects");
+    const auto mon_pg_warn_min_pool_objects =
+      cct->_conf->get_val<int64_t>("mon_pg_warn_min_pool_objects");
+    const auto mon_pg_warn_max_object_skew =
+      cct->_conf->get_val<double>("mon_pg_warn_max_object_skew");
     for (auto p = pg_pool_sum.begin();
          p != pg_pool_sum.end();
          ++p) {
@@ -2442,13 +2517,12 @@ void PGMap::get_health_checks(
       }
       int average_objects_per_pg = pg_sum.stats.sum.num_objects / pg_stat.size();
       if (average_objects_per_pg > 0 &&
-          pg_sum.stats.sum.num_objects >= cct->_conf->mon_pg_warn_min_objects &&
-          p->second.stats.sum.num_objects >=
-	  cct->_conf->mon_pg_warn_min_pool_objects) {
+          pg_sum.stats.sum.num_objects >= mon_pg_warn_min_objects &&
+          p->second.stats.sum.num_objects >= mon_pg_warn_min_pool_objects) {
 	int objects_per_pg = p->second.stats.sum.num_objects / pi->get_pg_num();
 	float ratio = (float)objects_per_pg / (float)average_objects_per_pg;
-	if (cct->_conf->mon_pg_warn_max_object_skew > 0 &&
-	    ratio > cct->_conf->mon_pg_warn_max_object_skew) {
+	if (mon_pg_warn_max_object_skew > 0 &&
+	    ratio > mon_pg_warn_max_object_skew) {
 	  ostringstream ss;
 	  ss << "pool " << name << " objects per pg ("
 	     << objects_per_pg << ") is more than " << ratio
@@ -2476,8 +2550,8 @@ void PGMap::get_health_checks(
   // POOL_FULL
   // POOL_NEAR_FULL
   {
-    float warn_threshold = (float)g_conf->mon_pool_quota_warn_threshold/100;
-    float crit_threshold = (float)g_conf->mon_pool_quota_crit_threshold/100;
+    float warn_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_warn_threshold")/100;
+    float crit_threshold = (float)g_conf->get_val<int64_t>("mon_pool_quota_crit_threshold")/100;
     list<string> full_detail, nearfull_detail;
     unsigned full_pools = 0, nearfull_pools = 0;
     for (auto it : pools) {
@@ -2592,7 +2666,9 @@ void PGMap::get_health_checks(
 
   // REQUEST_SLOW
   // REQUEST_STUCK
-  if (cct->_conf->mon_osd_warn_op_age > 0 &&
+  // SLOW_OPS unifies them in mimic.
+  if (osdmap.require_osd_release < CEPH_RELEASE_MIMIC &&
+      cct->_conf->mon_osd_warn_op_age > 0 &&
       !osd_sum.op_queue_age_hist.h.empty() &&
       osd_sum.op_queue_age_hist.upper_bound() / 1000.0 >
       cct->_conf->mon_osd_warn_op_age) {
@@ -2992,7 +3068,7 @@ int process_pg_map_command(
       stuckop_vec.push_back("unclean");
     int64_t threshold;
     cmd_getval(g_ceph_context, cmdmap, "threshold", threshold,
-               int64_t(g_conf->mon_pg_stuck_threshold));
+               g_conf->get_val<int64_t>("mon_pg_stuck_threshold"));
 
     r = pg_map.dump_stuck_pg_stats(ds, f, (int)threshold, stuckop_vec);
     odata->append(ds);
@@ -3297,7 +3373,7 @@ void PGMapUpdater::check_down_pgs(
   // if a large number of osds changed state, just iterate over the whole
   // pg map.
   if (need_check_down_pg_osds.size() > (unsigned)osdmap.get_num_osds() *
-      g_conf->mon_pg_check_down_all_threshold) {
+      g_conf->get_val<double>("mon_pg_check_down_all_threshold")) {
     check_all = true;
   }
 

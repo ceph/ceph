@@ -24,6 +24,7 @@
 #include "include/str_list.h"
 #include "include/stringify.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Timer.h"
@@ -50,16 +51,19 @@
 #include "rgw_lib_frontend.h"
 
 #include <errno.h>
-#include <chrono>
 #include <thread>
 #include <string>
-#include <string.h>
 #include <mutex>
 
 
 #define dout_subsys ceph_subsys_rgw
 
 bool global_stop = false;
+
+static void handle_sigterm(int signum)
+{
+  dout(20) << __func__ << " SIGUSR1 ignored" << dendl;
+}
 
 namespace rgw {
 
@@ -239,6 +243,11 @@ namespace rgw {
       abort_req(s, op, ret);
       goto done;
     }
+
+    /* now expected by rgw_log_op() */
+    rgw_env.set("REQUEST_METHOD", s->info.method);
+    rgw_env.set("REQUEST_URI", s->info.request_uri);
+    rgw_env.set("QUERY_STRING", "");
 
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
@@ -539,6 +548,9 @@ namespace rgw {
     fec = new RGWFrontendConfig("rgwlib");
     fe = new RGWLibFrontend(env, fec);
 
+    init_async_signal_handler();
+    register_async_signal_handler(SIGUSR1, handle_sigterm);
+
     map<string, string> service_map_meta;
     service_map_meta["pid"] = stringify(getpid());
     service_map_meta["frontend_type#" + fe_count] = "rgw-nfs";
@@ -572,6 +584,9 @@ namespace rgw {
     delete fe;
     delete fec;
     delete ldh;
+
+    unregister_async_signal_handler(SIGUSR1, handle_sigterm);
+    shutdown_async_signal_handler();
 
     rgw_log_usage_finalize();
 

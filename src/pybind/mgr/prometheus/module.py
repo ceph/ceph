@@ -15,7 +15,7 @@ DEFAULT_PORT = 9283
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
-def os_exit_noop():
+def os_exit_noop(*args, **kwargs):
     pass
 
 
@@ -42,7 +42,7 @@ def health_status_to_number(status):
     elif status == 'HEALTH_ERR':
         return 2
 
-PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'degraded',
+PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'deep', 'degraded',
         'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
         'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
         'incomplete', 'stale', 'remapped', 'undersized', 'peered']
@@ -52,7 +52,9 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
-OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr', 'weight')
+OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
+
+OSD_STATUS = ['weight', 'up', 'in']
 
 POOL_METADATA = ('pool_id', 'name')
 
@@ -179,7 +181,7 @@ class Module(MgrModule):
         # so that we can stably use the same tag names that
         # the Prometheus node_exporter does
         metrics['disk_occupation'] = Metric(
-            'undef',
+            'untyped',
             'disk_occupation',
             'Associate Ceph daemon with disk used',
             DISK_OCCUPATION
@@ -191,6 +193,15 @@ class Module(MgrModule):
             'POOL Metadata',
             POOL_METADATA
         )
+        for state in OSD_STATUS:
+            path = 'osd_{}'.format(state)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'untyped',
+                path,
+                'OSD status {}'.format(state),
+                ('ceph_daemon',)
+            )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -252,29 +263,38 @@ class Module(MgrModule):
                          key.split('+')]
         for state, value in reported_pg_s:
             path = 'pg_{}'.format(state)
-            self.metrics[path].set(value)
+            try:
+                self.metrics[path].set(value)
+            except KeyError:
+                self.log.warn("skipping pg in unknown state {}".format(state))
         reported_states = [s[0] for s in reported_pg_s]
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             if state not in reported_states:
-                self.metrics[path].set(0)
+                try:
+                    self.metrics[path].set(0)
+                except KeyError:
+                    self.log.warn("skipping pg in unknown state {}".format(state))
 
-    def get_osd_metadata(self):
+    def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
-            p_addr = osd['public_addr']
-            c_addr = osd['cluster_addr']
-            w = osd['weight']
+            p_addr = osd['public_addr'].split(':')[0]
+            c_addr = osd['cluster_addr'].split(':')[0]
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
             self.metrics['osd_metadata'].set(0, (
                 c_addr,
                 dev_class['class'],
                 id_,
-                p_addr,
-                w
+                p_addr
             ))
+            for state in OSD_STATUS:
+                status = osd[state]
+                self.metrics['osd_{}'.format(state)].set(
+                    status,
+                    ('osd.{}'.format(id_),))
 
             osd_metadata = self.get_metadata("osd", str(id_))
             dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
@@ -306,7 +326,7 @@ class Module(MgrModule):
         self.get_health()
         self.get_df()
         self.get_quorum_status()
-        self.get_osd_metadata()
+        self.get_metadata_and_osd_status()
         self.get_pg_status()
 
         for daemon, counters in self.get_all_perf_counters().iteritems():

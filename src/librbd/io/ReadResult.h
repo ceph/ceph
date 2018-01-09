@@ -15,6 +15,9 @@
 struct CephContext;
 
 namespace librbd {
+
+struct ImageCtx;
+
 namespace io {
 
 struct AioCompletion;
@@ -45,8 +48,10 @@ public:
   };
 
   struct C_SparseReadRequestBase : public C_ReadRequest {
-    C_SparseReadRequestBase(AioCompletion *aio_completion)
-      : C_ReadRequest(aio_completion) {
+    bool ignore_enoent;
+
+    C_SparseReadRequestBase(AioCompletion *aio_completion, bool ignore_enoent)
+      : C_ReadRequest(aio_completion), ignore_enoent(ignore_enoent) {
     }
 
     using C_ReadRequest::finish;
@@ -54,17 +59,19 @@ public:
                 uint64_t offset, size_t length, bufferlist &bl, int r);
   };
 
-  template <typename ImageCtxT>
+  template <typename ImageCtxT = ImageCtx>
   struct C_SparseReadRequest : public C_SparseReadRequestBase {
-    ObjectReadRequest<ImageCtxT> *request;
+    ObjectReadRequest<ImageCtxT> *request = nullptr;
+    Extents buffer_extents;
 
-    C_SparseReadRequest(AioCompletion *aio_completion)
-      : C_SparseReadRequestBase(aio_completion) {
+    C_SparseReadRequest(AioCompletion *aio_completion, Extents&& buffer_extents,
+                        bool ignore_enoent)
+      : C_SparseReadRequestBase(aio_completion, ignore_enoent),
+        buffer_extents(std::move(buffer_extents)) {
     }
 
     void finish(int r) override {
-      C_SparseReadRequestBase::finish(request->get_extent_map(),
-                                      request->get_buffer_extents(),
+      C_SparseReadRequestBase::finish(request->get_extent_map(), buffer_extents,
                                       request->get_offset(),
                                       request->get_length(), request->data(),
                                       r);

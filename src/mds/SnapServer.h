@@ -81,8 +81,8 @@ public:
 
   // server bits
   void _prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds) override;
-  bool _is_prepared(version_t tid) const;
-  bool _commit(version_t tid, MMDSTableRequest *req=NULL) override;
+  void _get_reply_buffer(version_t tid, bufferlist *pbl) const override;
+  void _commit(version_t tid, MMDSTableRequest *req=NULL) override;
   void _rollback(version_t tid) override;
   void _server_update(bufferlist& bl) override;
   void handle_query(MMDSTableRequest *m) override;

@@ -121,7 +121,7 @@ TEST(AES, Loop) {
   bufferptr secret(16);
   random.get_bytes(secret.c_str(), secret.length());
 
-  bufferptr orig_plaintext(1024);
+  bufferptr orig_plaintext(256);
   random.get_bytes(orig_plaintext.c_str(), orig_plaintext.length());
 
   bufferlist plaintext;

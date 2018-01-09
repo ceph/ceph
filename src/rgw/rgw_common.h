@@ -22,7 +22,6 @@
 
 #include "common/ceph_crypto.h"
 #include "common/perf_counters.h"
-#include "acconfig.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_iam_policy.h"
@@ -403,7 +402,7 @@ class RGWEnv {
 public:
   void init(CephContext *cct);
   void init(CephContext *cct, char **envp);
-  void set(const boost::string_ref& name, const boost::string_ref& val);
+  void set(std::string name, std::string val);
   const char *get(const char *name, const char *def_val = nullptr) const;
   int get_int(const char *name, int def_val = 0) const;
   bool get_bool(const char *name, bool def_val = 0);
@@ -1081,7 +1080,8 @@ struct rgw_bucket {
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
   std::string get_key(char tenant_delim = '/',
-                      char id_delim = ':') const;
+                      char id_delim = ':',
+                      size_t reserve = 0) const;
 
   const rgw_pool& get_data_extra_pool() const {
     return explicit_placement.get_data_extra_pool();
@@ -1537,6 +1537,10 @@ struct rgw_obj_key {
     instance = i;
   }
 
+  const string& get_instance() const {
+    return instance;
+  }
+
   string get_index_key_name() const {
     if (ns.empty()) {
       if (name.size() < 1 || name[0] != '_') {
@@ -1728,6 +1732,7 @@ struct rgw_obj_key {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
@@ -1799,6 +1804,7 @@ struct req_state {
   string zonegroup_endpoint;
   string bucket_instance_id;
   int bucket_instance_shard_id;
+  string redirect_zone_endpoint;
 
   string redirect;
 
@@ -1910,8 +1916,7 @@ struct RGWBucketEnt {
       size(e.size),
       size_rounded(e.size_rounded),
       creation_time(e.creation_time),
-      count(e.count),
-      placement_rule(std::move(e.placement_rule)) {
+      count(e.count) {
   }
 
   RGWBucketEnt& operator=(const RGWBucketEnt&) = default;
@@ -2261,6 +2266,8 @@ bool verify_bucket_permission_no_policy(
   const int perm);
 bool verify_bucket_permission_no_policy(struct req_state * const s,
 					const int perm);
+int verify_bucket_owner_or_policy(struct req_state* const s,
+				  const uint64_t op);
 extern bool verify_object_permission(
   struct req_state * const s,
   const rgw_obj& obj,
@@ -2365,5 +2372,8 @@ static constexpr uint32_t MATCH_POLICY_STRING = 0x08;
 
 extern bool match_policy(boost::string_view pattern, boost::string_view input,
                          uint32_t flag);
+
+extern string camelcase_dash_http_attr(const string& orig);
+extern string lowercase_dash_http_attr(const string& orig);
 
 #endif

@@ -253,6 +253,7 @@ private:
   static const int STATE_ACTIVE = 3;
   static const int STATE_REREADHEAD = 4;
   static const int STATE_REPROBING = 5;
+  static const int STATE_STOPPING = 6;
 
   int state;
   int error;
@@ -411,7 +412,7 @@ public:
     fetch_len(0), temp_fetch_len(0),
     on_readable(0), on_write_error(NULL), called_write_error(false),
     expire_pos(0), trimming_pos(0), trimmed_pos(0), readable(false),
-    write_iohint(0), stopping(false)
+    write_iohint(0)
   {
   }
 
@@ -510,8 +511,6 @@ public:
    * to -EAGAIN.
    */
   void shutdown();
-protected:
-  bool stopping;
 public:
 
   // Synchronous getters
@@ -522,6 +521,7 @@ public:
   }
   file_layout_t& get_layout() { return layout; }
   bool is_active() { return state == STATE_ACTIVE; }
+  bool is_stopping() { return state == STATE_STOPPING; }
   int get_error() { return error; }
   bool is_readonly() { return readonly; }
   bool is_readable();

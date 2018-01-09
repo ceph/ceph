@@ -3,7 +3,6 @@
 
 #include <algorithm>
 #include <map>
-#include <set>
 #include <iterator>
 #include <string>
 #include <vector>
@@ -16,7 +15,6 @@
 #include "rgw_rest.h"
 #include "rgw_crypt_sanitize.h"
 
-#include <boost/algorithm/string/join.hpp>
 #include <boost/container/small_vector.hpp>
 #include <boost/utility/string_view.hpp>
 
@@ -248,41 +246,24 @@ static inline int parse_v4_query_string(const req_info& info,              /* in
     return -EPERM;
   }
 
-  /* Used for pre-signatured url, We shouldn't return -ERR_REQUEST_TIME_SKEWED
-   * when current time <= X-Amz-Expires */
-  bool qsr = false;
-
-  uint64_t now_req = 0;
-  uint64_t now = ceph_clock_now();
-
   boost::string_view expires = info.args.get("X-Amz-Expires");
-  if (!expires.empty()) {
-    /* X-Amz-Expires provides the time period, in seconds, for which
-       the generated presigned URL is valid. The minimum value
-       you can set is 1, and the maximum is 604800 (seven days) */
-    time_t exp = atoll(expires.data());
-    if ((exp < 1) || (exp > 7*24*60*60)) {
-      dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
-      return -EPERM;
-    }
-    /* handle expiration in epoch time */
-    now_req = (uint64_t)internal_timegm(&date_t);
-    if (now >= now_req + exp) {
-      dout(10) << "NOTICE: now = " << now << ", now_req = " << now_req << ", exp = " << exp << dendl;
-      return -EPERM;
-    }
-    qsr = true;
+  if (expires.empty()) {
+    return -EPERM;
   }
-
-  if ((now_req < now - RGW_AUTH_GRACE_MINS * 60 ||
-     now_req > now + RGW_AUTH_GRACE_MINS * 60) && !qsr) {
-    dout(10) << "NOTICE: request time skew too big." << dendl;
-    dout(10) << "now_req = " << now_req << " now = " << now
-             << "; now - RGW_AUTH_GRACE_MINS="
-             << now - RGW_AUTH_GRACE_MINS * 60
-             << "; now + RGW_AUTH_GRACE_MINS="
-             << now + RGW_AUTH_GRACE_MINS * 60 << dendl;
-    return -ERR_REQUEST_TIME_SKEWED;
+  /* X-Amz-Expires provides the time period, in seconds, for which
+     the generated presigned URL is valid. The minimum value
+     you can set is 1, and the maximum is 604800 (seven days) */
+  time_t exp = atoll(expires.data());
+  if ((exp < 1) || (exp > 7*24*60*60)) {
+    dout(10) << "NOTICE: exp out of range, exp = " << exp << dendl;
+    return -EPERM;
+  }
+  /* handle expiration in epoch time */
+  uint64_t req_sec = (uint64_t)internal_timegm(&date_t);
+  uint64_t now = ceph_clock_now();
+  if (now >= req_sec + exp) {
+    dout(10) << "NOTICE: now = " << now << ", req_sec = " << req_sec << ", exp = " << exp << dendl;
+    return -EPERM;
   }
 
   signedheaders = info.args.get("X-Amz-SignedHeaders");
@@ -419,13 +400,10 @@ int parse_credentials(const req_info& info,                     /* in */
                       boost::string_view& signedheaders,        /* out */
                       boost::string_view& signature,            /* out */
                       boost::string_view& date,                 /* out */
-                      bool& using_qs)                           /* out */
+                      const bool using_qs)                      /* in */
 {
-  const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
-  using_qs = http_auth == nullptr || http_auth[0] == '\0';
-
-  int ret;
   boost::string_view credential;
+  int ret;
   if (using_qs) {
     ret = parse_v4_query_string(info, credential, signedheaders,
                                 signature, date);
@@ -438,7 +416,7 @@ int parse_credentials(const req_info& info,                     /* in */
     return ret;
   }
 
-  /* AKIAIVKTAZLOCF43WNQD/AAAAMMDD/region/host/aws4_request */
+  /* access_key/YYYYMMDD/region/service/aws4_request */
   dout(10) << "v4 credential format = " << credential << dendl;
 
   if (std::count(credential.begin(), credential.end(), '/') != 4) {
@@ -569,7 +547,7 @@ get_v4_canonical_headers(const req_info& info,
                          const bool using_qs,
                          const bool force_boto2_compat)
 {
-  std::set<std::string> canonical_hdrs_set;
+  std::map<boost::string_view, std::string> canonical_hdrs_map;
   for (const auto& token : get_str_vec<5>(signedheaders, ";")) {
     /* TODO(rzarzynski): we'd like to switch to sstring here but it should
      * get push_back() and reserve() first. */
@@ -616,14 +594,17 @@ get_v4_canonical_headers(const req_info& info,
       }
     }
 
-    canonical_hdrs_set.insert(
-	boost::algorithm::join(std::vector<std::string>(
-	    {std::string(token), rgw_trim_whitespace(token_value)} ), ":"));
+    canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
   std::string canonical_hdrs;
-  for (const auto& header : canonical_hdrs_set) {
-    canonical_hdrs.append(header.data(), header.length())
+  for (const auto& header : canonical_hdrs_map) {
+    const boost::string_view& name = header.first;
+    const std::string& value = header.second;
+
+    canonical_hdrs.append(name.data(), name.length())
+                  .append(":", std::strlen(":"))
+                  .append(value)
                   .append("\n", std::strlen("\n"));
   }
 

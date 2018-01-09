@@ -1097,6 +1097,7 @@ public:
     decode(sample, p);
   }
   void dump(Formatter *f) const;
+  void dump(Formatter *f, utime_t now, const DecayRate& rate);
   static void generate_test_instances(list<dirfrag_load_vec_t*>& ls);
 
   DecayCounter &get(int t) { 

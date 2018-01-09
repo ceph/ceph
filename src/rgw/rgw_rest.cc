@@ -165,59 +165,6 @@ string uppercase_underscore_http_attr(const string& orig)
   return string(buf);
 }
 
-/*
- * make attrs look-like-this
- * converts underscores to dashes
- */
-string lowercase_dash_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-        buf[i] = '-';
-        break;
-      default:
-        buf[i] = tolower(*s);
-    }
-  }
-  return string(buf);
-}
-
-/*
- * make attrs Look-Like-This
- * converts underscores to dashes
- */
-string camelcase_dash_http_attr(const string& orig)
-{
-  const char *s = orig.c_str();
-  char buf[orig.size() + 1];
-  buf[orig.size()] = '\0';
-
-  bool last_sep = true;
-
-  for (size_t i = 0; i < orig.size(); ++i, ++s) {
-    switch (*s) {
-      case '_':
-      case '-':
-        buf[i] = '-';
-        last_sep = true;
-        break;
-      default:
-        if (last_sep) {
-          buf[i] = toupper(*s);
-        } else {
-          buf[i] = tolower(*s);
-        }
-        last_sep = false;
-    }
-  }
-  return string(buf);
-}
-
 /* avoid duplicate hostnames in hostnames lists */
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
@@ -728,6 +675,23 @@ void end_header(struct req_state* s, RGWOp* op, const char *content_type,
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+static void build_redirect_url(req_state *s, const string& redirect_base, string *redirect_url)
+{
+  string& dest_uri = *redirect_url;
+  
+  dest_uri = redirect_base;
+  /*
+   * reqest_uri is always start with slash, so we need to remove
+   * the unnecessary slash at the end of dest_uri.
+   */
+  if (dest_uri[dest_uri.size() - 1] == '/') {
+    dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
+  }
+  dest_uri += s->info.request_uri;
+  dest_uri += "?";
+  dest_uri += s->info.request_params;
+}
+
 void abort_early(struct req_state *s, RGWOp* op, int err_no,
 		RGWHandler* handler)
 {
@@ -759,6 +723,13 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
     if (!s->err.http_ret || s->err.http_ret == 200) {
       set_req_state_err(s, err_no);
     }
+
+    if (s->err.http_ret == 404 && !s->redirect_zone_endpoint.empty()) {
+      s->err.http_ret = 301;
+      err_no = -ERR_PERMANENT_REDIRECT;
+      build_redirect_url(s, s->redirect_zone_endpoint, &s->redirect);
+    }
+
     dump_errno(s);
     dump_bucket_from_state(s);
     if (err_no == -ERR_PERMANENT_REDIRECT || err_no == -ERR_WEBSITE_REDIRECT) {
@@ -766,17 +737,7 @@ void abort_early(struct req_state *s, RGWOp* op, int err_no,
       if (!s->redirect.empty()) {
         dest_uri = s->redirect;
       } else if (!s->zonegroup_endpoint.empty()) {
-        dest_uri = s->zonegroup_endpoint;
-        /*
-         * reqest_uri is always start with slash, so we need to remove
-         * the unnecessary slash at the end of dest_uri.
-         */
-        if (dest_uri[dest_uri.size() - 1] == '/') {
-          dest_uri = dest_uri.substr(0, dest_uri.size() - 1);
-        }
-        dest_uri += s->info.request_uri;
-        dest_uri += "?";
-        dest_uri += s->info.request_params;
+        build_redirect_url(s, s->zonegroup_endpoint, &dest_uri);
       }
 
       if (!dest_uri.empty()) {
@@ -1156,9 +1117,6 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   if ((uint64_t)ofs + len > s->cct->_conf->rgw_max_put_size) {
     return -ERR_TOO_LARGE;
   }
-
-  if (!ofs)
-    supplied_md5_b64 = s->info.env->get("HTTP_CONTENT_MD5");
 
   return len;
 }
@@ -1853,6 +1811,14 @@ int RGWHandler_REST::validate_bucket_name(const string& bucket)
   else if (len > MAX_BUCKET_NAME_LEN) {
     // Name too long
     return -ERR_INVALID_BUCKET_NAME;
+  }
+
+  const char *s = bucket.c_str();
+  for (int i = 0; i < len; ++i, ++s) {
+    if (*(unsigned char *)s == 0xff)
+      return -ERR_INVALID_BUCKET_NAME;
+    if (*(unsigned char *)s == '/')
+      return -ERR_INVALID_BUCKET_NAME;
   }
 
   return 0;

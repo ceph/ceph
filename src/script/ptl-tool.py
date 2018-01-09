@@ -2,7 +2,8 @@
 
 # README:
 #
-# This tool's purpose is to make it easier to merge PRs into Ceph.
+# This tool's purpose is to make it easier to merge PRs into test branches and
+# into master.
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
@@ -18,9 +19,42 @@
 #
 # ** Here are some basic exmples to get started: **
 #
+# Merging all PRs labeled 'wip-pdonnell-testing' into a new test branch:
+#
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing
+# Adding labeled PR #18805 to PR list
+# Adding labeled PR #18774 to PR list
+# Adding labeled PR #18600 to PR list
+# Will merge PRs: [18805, 18774, 18600]
+# Detaching HEAD onto base: master
+# Merging PR #18805
+# Merging PR #18774
+# Merging PR #18600
+# Checked out new branch wip-pdonnell-testing-20171108.054517
+# Created tag testing/wip-pdonnell-testing-20171108.054517
+#
+#
+# Merging all PRs labeled 'wip-pdonnell-testing' into master:
+#
+# $ src/script/ptl-tool.py --pr-label wip-pdonnell-testing --branch master
+# Adding labeled PR #18805 to PR list
+# Adding labeled PR #18774 to PR list
+# Adding labeled PR #18600 to PR list
+# Will merge PRs: [18805, 18774, 18600]
+# Detaching HEAD onto base: master
+# Merging PR #18805
+# Merging PR #18774
+# Merging PR #18600
+# Checked out branch master
+#
+# Now push to master:
+# $ git push upstream master
+# ...
+#
+#
 # Merging PR #1234567 and #2345678 into a new test branch with a testing label added to the PR:
 #
-# $ src/script/ptl-tool.py --base master 1234567 2345678 --label wip-pdonnell-testing
+# $ src/script/ptl-tool.py 1234567 2345678 --label wip-pdonnell-testing
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Labeled PR #1234567 wip-pdonnell-testing
@@ -33,7 +67,7 @@
 #
 # Merging PR #1234567 into master leaving a detached HEAD (i.e. do not update your repo's master branch) and do not label:
 #
-# $ src/script/ptl-tool.py --base master --branch HEAD --merge-branch-name master 1234567
+# $ src/script/ptl-tool.py --branch HEAD --merge-branch-name master 1234567
 # Detaching HEAD onto base: master
 # Merging PR #1234567
 # Leaving HEAD detached; no branch anchors your commits
@@ -85,14 +119,15 @@ log = logging.getLogger(__name__)
 log.addHandler(logging.StreamHandler())
 log.setLevel(logging.INFO)
 
+BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
+BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
 BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/heads/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
-USER = getpass.getuser()
+USER = os.getenv("PTL_TOOL_USER", getpass.getuser())
 with open(expanduser("~/.github.key")) as f:
     PASSWORD = f.read().strip()
-BRANCH_PREFIX = "wip-%s-testing-" % USER
-TESTING_BRANCH_NAME = BRANCH_PREFIX + datetime.datetime.now().strftime("%Y%m%d")
+TEST_BRANCH = os.getenv("PTL_TOOL_TEST_BRANCH", "wip-{user}-testing-%Y%m%d.%H%M%S")
 
 SPECIAL_BRANCHES = ('master', 'luminous', 'jewel', 'HEAD')
 
@@ -113,10 +148,16 @@ with open(".githubmap") as f:
         m = patt.match(line)
         CONTRIBUTORS[m.group(1)] = m.group(2)
 
+BZ_MATCH = re.compile("(.*https?://bugzilla.redhat.com/.*)")
+TRACKER_MATCH = re.compile("(.*https?://tracker.ceph.com/.*)")
+
 def build_branch(args):
     base = args.base
-    branch = args.branch
+    branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
     label = args.label
+    merge_branch_name = args.merge_branch_name
+    if merge_branch_name is False:
+        merge_branch_name = branch
 
     if label:
         #Check the label format
@@ -125,7 +166,7 @@ def build_branch(args):
             sys.exit(1)
 
         #Check if the Label exist in the repo
-        res = requests.get("https://api.github.com/repos/ceph/ceph/labels/{lblname}".format(lblname=label), auth=(USER, PASSWORD))
+        res = requests.get("https://api.github.com/repos/{project}/{repo}/labels/{lblname}".format(lblname=label, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if res.status_code != 200:
             log.error("Label '{lblname}' not found in the repo".format(lblname=label))
             sys.exit(1)
@@ -142,7 +183,7 @@ def build_branch(args):
             log.error("--pr-label must have a non-space value")
             sys.exit(1)
         payload = {'labels': args.pr_label, 'sort': 'created', 'direction': 'desc'}
-        labeled_prs = requests.get("https://api.github.com/repos/ceph/ceph/issues", auth=(USER, PASSWORD), params=payload)
+        labeled_prs = requests.get("https://api.github.com/repos/{project}/{repo}/issues".format(project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD), params=payload)
         if labeled_prs.status_code != 200:
             log.error("Failed to load labeled PRs: {}".format(labeled_prs))
             sys.exit(1)
@@ -182,30 +223,47 @@ def build_branch(args):
             sys.exit(1)
         tip = fi[0].ref.commit
 
-        message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, args.merge_branch_name, remote_ref)
+        pr_req = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}".format(pr=pr), auth=(USER, PASSWORD))
+        if pr_req.status_code != 200:
+            log.error("PR '{pr}' not found: {c}".format(pr=pr,c=pr_req))
+            sys.exit(1)
+
+        message = "Merge PR #%d into %s\n\n* %s:\n" % (pr, merge_branch_name, remote_ref)
 
         for commit in G.iter_commits(rev="HEAD.."+str(tip)):
             message = message + ("\t%s\n" % commit.message.split('\n', 1)[0])
+            # Get tracker issues / bzs cited so the PTL can do updates
+            short = commit.hexsha[:8]
+            for m in BZ_MATCH.finditer(commit.message):
+                log.info("[ {sha1} ] BZ cited: {cite}".format(sha1=short, cite=m.group(1)))
+            for m in TRACKER_MATCH.finditer(commit.message):
+                log.info("[ {sha1} ] Ceph tracker cited: {cite}".format(sha1=short, cite=m.group(1)))
 
         message = message + "\n"
 
-        comments = requests.get("https://api.github.com/repos/ceph/ceph/issues/{pr}/comments".format(pr=pr), auth=(USER, PASSWORD))
+        comments = requests.get("https://api.github.com/repos/{project}/{repo}/issues/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if comments.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
 
-        reviews = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}/reviews".format(pr=pr), auth=(USER, PASSWORD))
+        reviews = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/reviews".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if reviews.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
 
-        review_comments = requests.get("https://api.github.com/repos/ceph/ceph/pulls/{pr}/comments".format(pr=pr), auth=(USER, PASSWORD))
+        review_comments = requests.get("https://api.github.com/repos/{project}/{repo}/pulls/{pr}/comments".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), auth=(USER, PASSWORD))
         if review_comments.status_code != 200:
             log.error("PR '{pr}' not found: {c}".format(pr=pr,c=comments))
             sys.exit(1)
 
         indications = set()
-        for comment in comments.json()+review_comments.json():
+        for comment in [pr_req.json()]+comments.json()+reviews.json()+review_comments.json():
+            body = comment["body"]
+            url = comment["html_url"]
+            for m in BZ_MATCH.finditer(body):
+                log.info("[ {url} ] BZ cited: {cite}".format(url=url, cite=m.group(1)))
+            for m in TRACKER_MATCH.finditer(body):
+                log.info("[ {url} ] Ceph tracker cited: {cite}".format(url=url, cite=m.group(1)))
             for indication in INDICATIONS:
                 for cap in indication.findall(comment["body"]):
                     indications.add(cap)
@@ -221,7 +279,7 @@ def build_branch(args):
                         indications.add("Reviewed-by: "+NEW_CONTRIBUTORS[user])
                     except KeyError as e:
                         try:
-                            name = raw_input("Need name for contributor \"%s\"; Reviewed-by: " % user)
+                            name = raw_input("Need name for contributor \"%s\" (use ^D to skip); Reviewed-by: " % user)
                             name = name.strip()
                             if len(name) == 0:
                                 continue
@@ -252,7 +310,7 @@ def build_branch(args):
         G.git.merge(c.hexsha, '--no-ff', m=message)
 
         if label:
-            req = requests.post("https://api.github.com/repos/ceph/ceph/issues/{pr}/labels".format(pr=pr), data=json.dumps([label]), auth=(USER, PASSWORD))
+            req = requests.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
             if req.status_code != 200:
                 log.error("PR #%d could not be labeled %s: %s" % (pr, label, req))
                 sys.exit(1)
@@ -262,28 +320,25 @@ def build_branch(args):
     if branch == 'HEAD':
         log.info("Leaving HEAD detached; no branch anchors your commits")
     else:
-        G.head.reference = G.create_head(branch, force=True)
-        log.info("Checked out new branch {branch}".format(branch=branch))
+        created_branch = False
+        try:
+            G.head.reference = G.create_head(branch)
+            log.info("Checked out new branch {branch}".format(branch=branch))
+            created_branch = True
+        except:
+            G.head.reference = G.create_head(branch, force=True)
+            log.info("Checked out branch {branch}".format(branch=branch))
 
-        # tag it for future reference.
-        for i in range(0, 100):
-            if i == 0:
-                name = "testing/%s" % branch
-            else:
-                name = "testing/%s_%02d" % (branch, i)
-            try:
-                git.refs.tag.Tag.create(G, name)
-                log.info("Created tag %s" % name)
-                break
-            except:
-                pass
-            if i == 99:
-                raise RuntimeException("ran out of numbers")
+        if created_branch:
+            # tag it for future reference.
+            tag = "testing/%s" % branch
+            git.refs.tag.Tag.create(G, tag)
+            log.info("Created tag %s" % tag)
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph PTL tool")
     default_base = 'master'
-    default_branch = TESTING_BRANCH_NAME
+    default_branch = TEST_BRANCH
     default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
@@ -293,7 +348,7 @@ def main():
     else:
         argv = sys.argv[1:]
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
-    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', help='name of the branch for merge messages')
+    parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')
     parser.add_argument('--git-dir', dest='git', action='store', default=GITDIR, help='git directory')
@@ -301,8 +356,6 @@ def main():
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
     args = parser.parse_args(argv)
-    if getattr(args, 'merge_branch_name') is None:
-        setattr(args, 'merge_branch_name', args.branch)
     return build_branch(args)
 
 if __name__ == "__main__":

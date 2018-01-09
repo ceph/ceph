@@ -270,15 +270,6 @@ The procedure is as follows:
 	sudo /etc/init.d/ceph start mon.node1
 
 
-#. Verify that Ceph created the default pool. ::
-
-	ceph osd lspools
-
-   You should see output like this::
-
-	0 rbd,
-
-
 #. Verify that the monitor is running. ::
 
 	ceph -s
@@ -289,9 +280,7 @@ The procedure is as follows:
 
       cluster:
         id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
-        health: HEALTH_ERR
-                no osds
-                64 pgs stale
+        health: HEALTH_OK
 
       services:
         mon: 1 daemons, quorum node1
@@ -299,10 +288,10 @@ The procedure is as follows:
         osd: 0 osds: 0 up, 0 in
 
       data:
-        pools:   1 pools, 64 pgs
+        pools:   0 pools, 0 pgs
         objects: 0 objects, 0 bytes
         usage:   0 kB used, 0 kB / 0 kB avail
-        pgs:     64 creating
+        pgs:
 
 
    **Note:** Once you add OSDs and start them, the placement group health errors
@@ -313,7 +302,7 @@ Manager daemon configuration
 
 On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
 
-See `ceph-mgr Administrator Guide`_
+See :ref:`mgr-administrator-guide`
 
 Adding OSDs
 ===========
@@ -329,36 +318,90 @@ a Ceph Node.
 Short Form
 ----------
 
-Ceph provides the ``ceph-disk`` utility, which can prepare a disk, partition or
-directory for use with Ceph. The ``ceph-disk`` utility creates the OSD ID by
-incrementing the index. Additionally, ``ceph-disk`` will add the new OSD to the
-CRUSH map under the host for you. Execute ``ceph-disk -h`` for CLI details.
-The ``ceph-disk`` utility automates the steps of the `Long Form`_ below. To
+Ceph provides the ``ceph-volume`` utility, which can prepare a logical volume, disk, or partition
+for use with Ceph. The ``ceph-volume`` utility creates the OSD ID by
+incrementing the index. Additionally, ``ceph-volume`` will add the new OSD to the
+CRUSH map under the host for you. Execute ``ceph-volume -h`` for CLI details.
+The ``ceph-volume`` utility automates the steps of the `Long Form`_ below. To
 create the first two OSDs with the short form procedure, execute the following
 on  ``node2`` and ``node3``:
 
-
-#. Prepare the OSD. ::
+bluestore
+^^^^^^^^^
+#. Create the OSD. ::
 
 	ssh {node-name}
-	sudo ceph-disk prepare --cluster {cluster-name} --cluster-uuid {uuid} {data-path} [{journal-path}]
+	sudo ceph-volume lvm create --data {data-path}
 
    For example::
 
 	ssh node1
-	sudo ceph-disk prepare --cluster ceph --cluster-uuid a7f64266-0894-4f1e-a635-d0aeaca0e993 --fs-type ext4 /dev/hdd1
+	sudo ceph-volume lvm create --data /dev/hdd1
 
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
 
-#. Activate the OSD::
+#. Prepare the OSD. ::
 
-	sudo ceph-disk activate {data-path} [--activate-key {path}]
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --data {data-path} {data-path}
 
    For example::
 
-	sudo ceph-disk activate /dev/hdd1
+	ssh node1
+	sudo ceph-volume prepare --data /dev/hdd1
 
-   **Note:** Use the ``--activate-key`` argument if you do not have a copy
-   of ``/var/lib/ceph/bootstrap-osd/{cluster}.keyring`` on the Ceph Node.
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
+
+
+filestore
+^^^^^^^^^
+#. Create the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm create --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume lvm create --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+Alternatively, the creation process can be split in two phases (prepare, and
+activate):
+
+#. Prepare the OSD. ::
+
+	ssh {node-name}
+	sudo ceph-volume lvm prepare --filestore --data {data-path} --journal {journal-path}
+
+   For example::
+
+	ssh node1
+	sudo ceph-volume prepare --filestore --data /dev/hdd1 --journal /dev/hdd2
+
+   Once prepared, the ``ID`` and ``FSID`` of the prepared OSD are required for
+   activation. These can be obtained by listing OSDs in the current server::
+
+    sudo ceph-volume lvm list
+
+#. Activate the OSD::
+
+	sudo ceph-volume lvm activate --filestore {ID} {FSID}
+
+   For example::
+
+	sudo ceph-volume lvm activate --filestore 0 a7f64266-0894-4f1e-a635-d0aeaca0e993
 
 
 Long Form
@@ -504,4 +547,3 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
 .. _create a Ceph filesystem: ../../cephfs/createfs
-.. _ceph-mgr Administrator Guide: :ref:`mgr-administrator-guide`

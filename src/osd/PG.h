@@ -43,6 +43,7 @@
 #include "messages/MOSDPGLog.h"
 #include "include/str_list.h"
 #include "PGBackend.h"
+#include "PGPeeringEvent.h"
 
 #include <atomic>
 #include <list>
@@ -50,7 +51,6 @@
 #include <stack>
 #include <string>
 #include <tuple>
-using namespace std;
 
 //#define DEBUG_RECOVERY_OIDS   // track set of recovering oids explicitly, to find counting bugs
 //#define PG_DEBUG_REFS    // track provenance of pg refs, helpful for finding leaks
@@ -222,6 +222,7 @@ struct PGPool {
   pg_pool_t info;      
   SnapContext snapc;   // the default pool snapc, ready to go.
 
+  // these two sets are for < mimic only
   interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
   interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
 
@@ -235,10 +236,12 @@ struct PGPool {
     assert(pi);
     info = *pi;
     snapc = pi->get_snap_context();
-    pi->build_removed_snaps(cached_removed_snaps);
+    if (map->require_osd_release < CEPH_RELEASE_MIMIC) {
+      pi->build_removed_snaps(cached_removed_snaps);
+    }
   }
 
-  void update(OSDMapRef map);
+  void update(CephContext *cct, OSDMapRef map);
 };
 
 /** PG - Replica Placement Group
@@ -255,33 +258,6 @@ public:
   ceph::shared_ptr<ObjectStore::Sequencer> osr;
 
   ObjectStore::CollectionHandle ch;
-
-  // -- classes --
-  class CephPeeringEvt {
-    epoch_t epoch_sent;
-    epoch_t epoch_requested;
-    boost::intrusive_ptr< const boost::statechart::event_base > evt;
-    string desc;
-  public:
-    MEMPOOL_CLASS_HELPERS();
-    template <class T>
-    CephPeeringEvt(epoch_t epoch_sent,
-		   epoch_t epoch_requested,
-		   const T &evt_) :
-      epoch_sent(epoch_sent), epoch_requested(epoch_requested),
-      evt(evt_.intrusive_from_this()) {
-      stringstream out;
-      out << "epoch_sent: " << epoch_sent
-	  << " epoch_requested: " << epoch_requested << " ";
-      evt_.print(&out);
-      desc = out.str();
-    }
-    epoch_t get_epoch_sent() { return epoch_sent; }
-    epoch_t get_epoch_requested() { return epoch_requested; }
-    const boost::statechart::event_base &get_event() { return *evt; }
-    string get_desc() { return desc; }
-  };
-  typedef ceph::shared_ptr<CephPeeringEvt> CephPeeringEvtRef;
 
   class RecoveryCtx;
 
@@ -432,8 +408,8 @@ public:
   bool set_force_recovery(bool b);
   bool set_force_backfill(bool b);
 
-  void queue_peering_event(CephPeeringEvtRef evt);
-  void process_peering_event(RecoveryCtx *rctx);
+  void queue_peering_event(PGPeeringEventRef evt);
+  void do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rcx);
   void queue_query(epoch_t msg_epoch, epoch_t query_epoch,
 		   pg_shard_t from, const pg_query_t& q);
   void queue_null(epoch_t msg_epoch, epoch_t query_epoch);
@@ -543,7 +519,7 @@ protected:
   // unlock() when done with the current pointer (_most common_).
   mutable Mutex _lock = {"PG::_lock"};
 
-  std::atomic_uint ref{0};
+  std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
   Mutex _ref_id_lock = {"PG::_ref_id_lock"};
@@ -572,11 +548,12 @@ protected:
   bool eio_errors_to_process = false;
 
   virtual PGBackend *get_pgbackend() = 0;
+  virtual const PGBackend* get_pgbackend() const = 0;
 
 protected:
   /*** PG ****/
   /// get_is_recoverable_predicate: caller owns returned pointer and must delete when done
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const {
     return get_pgbackend()->get_is_recoverable_predicate();
   }
 protected:
@@ -840,7 +817,7 @@ protected:
   int recovery_ops_active;
   set<pg_shard_t> waiting_on_backfill;
 #ifdef DEBUG_RECOVERY_OIDS
-  set<hobject_t> recovering_oids;
+  multiset<hobject_t> recovering_oids;
 #endif
 
 protected:
@@ -861,6 +838,10 @@ protected:
     eversion_t v;
     C_UpdateLastRollbackInfoTrimmedToApplied(PG *pg, epoch_t e, eversion_t v)
       : pg(pg), e(e), v(v) {}
+    bool sync_finish(int r) override {
+      pg->last_rollback_info_trimmed_to_applied = v;
+      return true;
+    }
     void finish(int) override {
       pg->lock();
       if (!pg->pg_has_reset_since(e)) {
@@ -1253,11 +1234,11 @@ protected:
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
     const pg_info_t &info,
     epoch_t oldest_map) {
-    epoch_t start = MAX(
+    epoch_t start = std::max(
       info.history.last_epoch_clean ? info.history.last_epoch_clean :
        info.history.epoch_pool_created,
       oldest_map);
-    epoch_t end = MAX(
+    epoch_t end = std::max(
       info.history.same_interval_since,
       info.history.epoch_pool_created);
     return make_pair(start, end);
@@ -1361,7 +1342,6 @@ protected:
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
-    pg_shard_t *want_primary,
     ostream &ss);
   static void calc_replicated_acting(
     map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard,
@@ -1374,7 +1354,6 @@ protected:
     vector<int> *want,
     set<pg_shard_t> *backfill,
     set<pg_shard_t> *acting_backfill,
-    pg_shard_t *want_primary,
     ostream &ss);
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
@@ -1478,6 +1457,7 @@ public:
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
     int deep_errors;
+    int large_omap_objects = 0;
     int fixed;
     ScrubMap primary_scrubmap;
     map<pg_shard_t, ScrubMap> received_maps;
@@ -1493,7 +1473,7 @@ public:
     bool must_scrub, must_deep_scrub, must_repair;
 
     // Priority to use for scrub scheduling
-    unsigned priority;
+    unsigned priority = 0;
 
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
@@ -1593,6 +1573,7 @@ public:
       subset_last_update = eversion_t();
       shallow_errors = 0;
       deep_errors = 0;
+      large_omap_objects = 0;
       fixed = 0;
       deep = false;
       seed = 0;
@@ -1685,8 +1666,8 @@ protected:
       pg(pg), epoch(epoch), evt(evt) {}
     void finish(int r) override {
       pg->lock();
-      pg->queue_peering_event(PG::CephPeeringEvtRef(
-				new PG::CephPeeringEvt(
+      pg->queue_peering_event(PGPeeringEventRef(
+				new PGPeeringEvent(
 				  epoch,
 				  epoch,
 				  evt)));
@@ -1695,8 +1676,7 @@ protected:
   };
 
 
-  list<CephPeeringEvtRef> peering_queue;  // op queue
-  list<CephPeeringEvtRef> peering_waiters;
+  list<PGPeeringEventRef> peering_waiters;
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -1795,6 +1775,15 @@ public:
       *out << "RequestBackfillPrio: priority " << priority;
     }
   };
+  struct RequestRecoveryPrio : boost::statechart::event< RequestRecoveryPrio > {
+    unsigned priority;
+    explicit RequestRecoveryPrio(unsigned prio) :
+              boost::statechart::event< RequestRecoveryPrio >(),
+			  priority(prio) {}
+    void print(std::ostream *out) const {
+      *out << "RequestRecoveryPrio: priority " << priority;
+    }
+  };
 #define TrivialEvent(T) struct T : boost::statechart::event< T > { \
     T() : boost::statechart::event< T >() {}			   \
     void print(std::ostream *out) const {			   \
@@ -1844,11 +1833,14 @@ protected:
   TrivialEvent(RejectRemoteReservation)
   public:
   TrivialEvent(RemoteReservationRejected)
+  TrivialEvent(RemoteReservationRevokedTooFull)
+  TrivialEvent(RemoteReservationRevoked)
   TrivialEvent(RemoteReservationCanceled)
   TrivialEvent(RequestBackfill)
-  TrivialEvent(RequestRecovery)
   TrivialEvent(RecoveryDone)
   protected:
+  TrivialEvent(RemoteRecoveryPreempted)
+  TrivialEvent(RemoteBackfillPreempted)
   TrivialEvent(BackfillTooFull)
   TrivialEvent(RecoveryTooFull)
 
@@ -1952,6 +1944,36 @@ protected:
     friend class RecoveryMachine;
 
     /* States */
+    // Initial
+    // Reset
+    // Start
+    //   Started
+    //     Primary
+    //       WaitActingChange
+    //       Peering
+    //         GetInfo
+    //         GetLog
+    //         GetMissing
+    //         WaitUpThru
+    //         Incomplete
+    //       Active
+    //         Activating
+    //         Clean
+    //         Recovered
+    //         Backfilling
+    //         WaitRemoteBackfillReserved
+    //         WaitLocalBackfillReserved
+    //         NotBackfilling
+    //         NotRecovering
+    //         Recovering
+    //         WaitRemoteRecoveryReserved
+    //         WaitLocalRecoveryReserved
+    //     ReplicaActive
+    //       RepNotRecovering
+    //       RepRecovering
+    //       RepWaitBackfillReserved
+    //       RepWaitRecoveryReserved
+    //     Stray
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       explicit Crashed(my_context ctx);
@@ -1964,13 +1986,14 @@ protected:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::transition< Initialize, Reset >,
+	boost::statechart::custom_reaction< Initialize >,
 	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const Load&);
+      boost::statechart::result react(const Initialize&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
@@ -2115,7 +2138,10 @@ protected:
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
+	boost::statechart::custom_reaction< RemoteReservationRevoked>,
+	boost::statechart::custom_reaction< DoRecovery>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -2137,6 +2163,15 @@ protected:
 	return discard_event();
       }
       boost::statechart::result react(const UnfoundBackfill& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevokedTooFull&) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevoked&) {
+	return discard_event();
+      }
+      boost::statechart::result react(const DoRecovery&) {
 	return discard_event();
       }
     };
@@ -2168,12 +2203,21 @@ protected:
 	boost::statechart::transition< Backfilled, Recovered >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundBackfill >,
-	boost::statechart::custom_reaction< RemoteReservationRejected >
+	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
+	boost::statechart::custom_reaction< RemoteReservationRevoked>
 	> reactions;
       explicit Backfilling(my_context ctx);
-      boost::statechart::result react(const RemoteReservationRejected& evt);
+      boost::statechart::result react(const RemoteReservationRejected& evt) {
+	// for compat with old peers
+	post_event(RemoteReservationRevokedTooFull());
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteReservationRevokedTooFull& evt);
+      boost::statechart::result react(const RemoteReservationRevoked& evt);
       boost::statechart::result react(const DeferBackfill& evt);
       boost::statechart::result react(const UnfoundBackfill& evt);
+      void cancel_backfill();
       void exit();
     };
 
@@ -2181,13 +2225,16 @@ protected:
       typedef boost::mpl::list<
 	boost::statechart::custom_reaction< RemoteBackfillReserved >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >,
+	boost::statechart::custom_reaction< RemoteReservationRevoked >,
 	boost::statechart::transition< AllBackfillsReserved, Backfilling >
 	> reactions;
       set<pg_shard_t>::const_iterator backfill_osd_it;
       explicit WaitRemoteBackfillReserved(my_context ctx);
+      void retry();
       void exit();
       boost::statechart::result react(const RemoteBackfillReserved& evt);
       boost::statechart::result react(const RemoteReservationRejected& evt);
+      boost::statechart::result react(const RemoteReservationRevoked& evt);
     };
 
     struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
@@ -2243,7 +2290,9 @@ protected:
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
 	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< RemoteBackfillPreempted >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -2263,6 +2312,12 @@ protected:
       boost::statechart::result react(const UnfoundBackfill& evt) {
 	return discard_event();
       }
+      boost::statechart::result react(const RemoteBackfillPreempted& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryPreempted& evt) {
+	return discard_event();
+      }
     };
 
     struct RepRecovering : boost::statechart::state< RepRecovering, ReplicaActive >, NamedState {
@@ -2271,10 +2326,14 @@ protected:
 	// for compat with old peers
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
-	boost::statechart::custom_reaction< BackfillTooFull >
+	boost::statechart::custom_reaction< BackfillTooFull >,
+	boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
+	boost::statechart::custom_reaction< RemoteBackfillPreempted >
 	> reactions;
       explicit RepRecovering(my_context ctx);
+      boost::statechart::result react(const RemoteRecoveryPreempted &evt);
       boost::statechart::result react(const BackfillTooFull &evt);
+      boost::statechart::result react(const RemoteBackfillPreempted &evt);
       void exit();
     };
 
@@ -2313,15 +2372,26 @@ protected:
 
     struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
       typedef boost::mpl::list<
+	boost::statechart::custom_reaction< RequestRecoveryPrio >,
 	boost::statechart::custom_reaction< RequestBackfillPrio >,
-        boost::statechart::transition< RequestRecovery, RepWaitRecoveryReserved >,
 	boost::statechart::custom_reaction< RejectRemoteReservation >,
 	boost::statechart::transition< RemoteReservationRejected, RepNotRecovering >,
 	boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
+	boost::statechart::custom_reaction< RemoteRecoveryReserved >,
+	boost::statechart::custom_reaction< RemoteBackfillReserved >,
 	boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
 	> reactions;
       explicit RepNotRecovering(my_context ctx);
+      boost::statechart::result react(const RequestRecoveryPrio &evt);
       boost::statechart::result react(const RequestBackfillPrio &evt);
+      boost::statechart::result react(const RemoteBackfillReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
+      boost::statechart::result react(const RemoteRecoveryReserved &evt) {
+	// my reservation completion raced with a RELEASE from primary
+	return discard_event();
+      }
       boost::statechart::result react(const RejectRemoteReservation &evt);
       void exit();
     };
@@ -2521,7 +2591,7 @@ protected:
       end_handle();
     }
 
-    void handle_event(CephPeeringEvtRef evt,
+    void handle_event(PGPeeringEventRef evt,
 		      RecoveryCtx *rctx) {
       start_handle(rctx);
       machine.process_event(evt->get_event());
@@ -2537,6 +2607,9 @@ protected:
   uint64_t upacting_features;
 
   epoch_t last_epoch;
+
+  /// most recently consumed osdmap's require_osd_version
+  unsigned last_require_osd_release = 0;
 
 protected:
   void reset_min_peer_features() {
@@ -2753,7 +2826,7 @@ protected:
   bool can_discard_replica_op(OpRequestRef& op);
 
   bool old_peering_msg(epoch_t reply_epoch, epoch_t query_epoch);
-  bool old_peering_evt(CephPeeringEvtRef evt) {
+  bool old_peering_evt(PGPeeringEventRef evt) {
     return old_peering_msg(evt->get_epoch_sent(), evt->get_epoch_requested());
   }
   static bool have_same_or_newer_map(epoch_t cur_epoch, epoch_t e) {

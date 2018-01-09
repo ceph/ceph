@@ -188,6 +188,11 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   }
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks" << dendl;
+  dout(20) << "pending_digest:\n";
+  JSONFormatter jf(true);
+  pending_digest.dump(&jf);
+  jf.flush(*_dout);
+  *_dout << dendl;
   return true;
 }
 
@@ -260,7 +265,7 @@ void MgrStatMonitor::check_sub(Subscription *sub)
     auto m = new MServiceMap(service_map);
     sub->session->con->send_message(m);
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

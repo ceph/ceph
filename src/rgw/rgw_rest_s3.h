@@ -11,7 +11,6 @@
 #include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 
-#include "common/backport14.h"
 #include "common/sstring.hh"
 #include "rgw_op.h"
 #include "rgw_rest.h"
@@ -22,7 +21,6 @@
 #include "rgw_keystone.h"
 #include "rgw_rest_conn.h"
 #include "rgw_ldap.h"
-#include "rgw_rest.h"
 
 #include "rgw_token.h"
 #include "include/assert.h"
@@ -699,7 +697,7 @@ public:
      * avoid dynamic allocations. The multiplier comes from representing digest
      * in the base64-encoded form. */
     static constexpr size_t SIGNATURE_MAX_SIZE = \
-      ceph::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
+      std::max(DIGEST_SIZE_V2, DIGEST_SIZE_V4) * 2 + sizeof('\0');
 
   public:
     virtual ~VersionAbstractor() {};
@@ -767,8 +765,7 @@ public:
 class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
   CephContext* const cct;
 
-  bool is_time_skew_ok(const utime_t& header_time,
-                       const bool qsr) const;
+  bool is_time_skew_ok(const utime_t& header_time) const;
 
   virtual boost::optional<std::string>
   get_v4_canonical_headers(const req_info& info,
@@ -776,7 +773,7 @@ class AWSGeneralAbstractor : public AWSEngine::VersionAbstractor {
                            const bool using_qs) const;
 
   auth_data_t get_auth_data_v2(const req_state* s) const;
-  auth_data_t get_auth_data_v4(const req_state* s, bool using_qs) const;
+  auth_data_t get_auth_data_v4(const req_state* s, const bool using_qs) const;
 
 public:
   AWSGeneralAbstractor(CephContext* const cct)

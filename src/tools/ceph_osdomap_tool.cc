@@ -23,7 +23,6 @@
 #include "kv/KeyValueDB.h"
 
 namespace po = boost::program_options;
-using namespace std;
 
 int main(int argc, char **argv) {
   po::options_description desc("Allowed options");
@@ -37,7 +36,7 @@ int main(int argc, char **argv) {
     ("debug", "Additional debug output from DBObjectMap")
     ("oid", po::value<string>(&oid), "Restrict to this object id when dumping objects")
     ("command", po::value<string>(&cmd),
-     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair], mandatory")
+     "command arg is one of [dump-raw-keys, dump-raw-key-vals, dump-objects, dump-objects-with-keys, check, dump-headers, repair, compact], mandatory")
     ("backend", po::value<string>(&backend),
      "DB backend (default rocksdb)")
     ;
@@ -203,6 +202,9 @@ int main(int argc, char **argv) {
     omap.state.v = 2;
     omap.state.legacy = false;
     omap.set_state();
+  } else if (cmd == "compact") {
+    omap.compact();
+    return 0;
   } else {
     std::cerr << "Did not recognize command " << cmd << std::endl;
     return 1;

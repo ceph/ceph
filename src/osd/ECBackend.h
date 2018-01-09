@@ -97,8 +97,6 @@ public:
   void on_change() override;
   void clear_recovery_state() override;
 
-  void on_flushed() override;
-
   void dump_recovery_info(Formatter *f) const override;
 
   void call_write_ordered(std::function<void(void)> &&cb) override;
@@ -359,12 +357,12 @@ public:
   };
   struct read_request_t {
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
-    const set<pg_shard_t> need;
+    const map<pg_shard_t, vector<pair<int, int>>> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
     read_request_t(
       const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
-      const set<pg_shard_t> &need,
+      const map<pg_shard_t, vector<pair<int, int>>> &need,
       bool want_attrs,
       GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
       : to_read(to_read), need(need), want_attrs(want_attrs),
@@ -471,7 +469,7 @@ public:
     map<hobject_t, ObjectContextRef> obc_map;
 
     /// see call_write_ordered
-    std::list<std::function<void(void)> > on_write;
+    std::function<void(void)> on_write;
 
     /// Generated internally
     set<hobject_t> temp_added;
@@ -509,6 +507,10 @@ public:
     Context *on_local_applied_sync = nullptr;
     Context *on_all_applied = nullptr;
     Context *on_all_commit = nullptr;
+
+    Op() {}
+    Op(ceph_tid_t t, std::function<void(void)>&& cb)
+      : tid(t), on_write(cb) { }
     ~Op() {
       delete on_local_applied_sync;
       delete on_all_applied;
@@ -598,11 +600,11 @@ public:
 	   ++i) {
 	have.insert(i->shard);
       }
-      set<int> min;
+      map<int, vector<pair<int, int>>> min;
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return new ECRecPred(ec_impl);
   }
 
@@ -622,7 +624,7 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() override {
+  IsPGReadablePredicate *get_is_readable_predicate() const override {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
@@ -649,13 +651,13 @@ public:
     const set<int> &want,      ///< [in] desired shards
     bool for_recovery,         ///< [in] true if we may use non-acting replicas
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-    set<pg_shard_t> *to_read   ///< [out] shards to read
+    map<pg_shard_t, vector<pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
 
   int get_remaining_shards(
     const hobject_t &hoid,
     const set<int> &avail,
-    set<pg_shard_t> *to_read,
+    map<pg_shard_t, vector<pair<int, int>>> *to_read,
     bool for_recovery);
 
   int objects_get_attrs(
@@ -673,7 +675,8 @@ public:
     const hobject_t &obj,
     uint32_t seed,
     ScrubMap::object &o,
-    ThreadPool::TPHandle &handle) override;
+    ThreadPool::TPHandle &handle,
+    ScrubMap* const map = nullptr) override;
   uint64_t be_get_ondisk_size(uint64_t logical_size) override {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }

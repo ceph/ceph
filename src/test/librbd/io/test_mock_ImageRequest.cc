@@ -34,29 +34,6 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
   static ObjectRequest* s_instance;
   Context *on_finish = nullptr;
 
-  static ObjectRequest* create_remove(librbd::MockTestImageCtx *ictx,
-                                      const std::string &oid,
-                                      uint64_t object_no,
-                                      const ::SnapContext &snapc,
-                                      const ZTracer::Trace &parent_trace,
-                                      Context *completion) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = completion;
-    return s_instance;
-  }
-
-  static ObjectRequest* create_truncate(librbd::MockTestImageCtx *ictx,
-                                        const std::string &oid,
-                                        uint64_t object_no,
-                                        uint64_t object_off,
-                                        const ::SnapContext &snapc,
-                                        const ZTracer::Trace &parent_trace,
-                                        Context *completion) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = completion;
-    return s_instance;
-  }
-
   static ObjectRequest* create_write(librbd::MockTestImageCtx *ictx,
                                      const std::string &oid,
                                      uint64_t object_no,
@@ -70,14 +47,18 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
     return s_instance;
   }
 
-  static ObjectRequest* create_zero(librbd::MockTestImageCtx *ictx,
-                                    const std::string &oid,
-                                    uint64_t object_no, uint64_t object_off,
-                                    uint64_t object_len,
-                                    const ::SnapContext &snapc,
-                                    const ZTracer::Trace &parent_trace,
-                                    Context *completion) {
+  static ObjectRequest* create_discard(librbd::MockTestImageCtx *ictx,
+                                       const std::string &oid,
+                                       uint64_t object_no, uint64_t object_off,
+                                       uint64_t object_len,
+                                       const ::SnapContext &snapc,
+                                       bool disable_remove_on_clone,
+                                       bool update_object_map,
+                                       const ZTracer::Trace &parent_trace,
+                                       Context *completion) {
     assert(s_instance != nullptr);
+    EXPECT_TRUE(disable_remove_on_clone);
+    EXPECT_TRUE(update_object_map);
     s_instance->on_finish = completion;
     return s_instance;
   }
@@ -121,8 +102,8 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
     s_instance = nullptr;
   }
 
-  MOCK_METHOD1(complete, void(int));
   MOCK_METHOD0(send, void());
+  MOCK_METHOD1(fail, void(int));
 };
 
 template <>
@@ -136,8 +117,7 @@ struct ObjectReadRequest<librbd::MockTestImageCtx> : public ObjectRequest<librbd
                                    const std::string &oid,
                                    uint64_t objectno, uint64_t offset,
                                    uint64_t len, Extents &buffer_extents,
-                                   librados::snap_t snap_id, bool sparse,
-                                   int op_flags,
+                                   librados::snap_t snap_id, int op_flags,
                                    const ZTracer::Trace &parent_trace,
                                    Context *completion) {
     assert(s_instance != nullptr);

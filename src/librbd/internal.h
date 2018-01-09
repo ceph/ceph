@@ -17,44 +17,6 @@
 #include "common/WorkQueue.h"
 #include "librbd/Types.h"
 
-enum {
-  l_librbd_first = 26000,
-
-  l_librbd_rd,               // read ops
-  l_librbd_rd_bytes,         // bytes read
-  l_librbd_rd_latency,       // average latency
-  l_librbd_wr,
-  l_librbd_wr_bytes,
-  l_librbd_wr_latency,
-  l_librbd_discard,
-  l_librbd_discard_bytes,
-  l_librbd_discard_latency,
-  l_librbd_flush,
-  l_librbd_flush_latency,
-  l_librbd_ws,
-  l_librbd_ws_bytes,
-  l_librbd_ws_latency,
-
-  l_librbd_cmp,
-  l_librbd_cmp_bytes,
-  l_librbd_cmp_latency,
-
-  l_librbd_snap_create,
-  l_librbd_snap_remove,
-  l_librbd_snap_rollback,
-  l_librbd_snap_rename,
-
-  l_librbd_notify,
-  l_librbd_resize,
-
-  l_librbd_readahead,
-  l_librbd_readahead_bytes,
-
-  l_librbd_invalidate_cache,
-
-  l_librbd_last,
-};
-
 namespace librbd {
 
   struct ImageCtx;
@@ -102,7 +64,7 @@ namespace librbd {
 
   int list(librados::IoCtx& io_ctx, std::vector<std::string>& names);
   int list_children(ImageCtx *ictx,
-		    std::set<std::pair<std::string, std::string> > & names);
+                    std::vector<child_info_t> *names);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
 	     int *order);
   int create(librados::IoCtx& io_ctx, const char *imgname, uint64_t size,
@@ -208,6 +170,9 @@ namespace librbd {
   int metadata_list(ImageCtx *ictx, const string &last, uint64_t max, map<string, bufferlist> *pairs);
   int metadata_get(ImageCtx *ictx, const std::string &key, std::string *value);
 
+  int list_watchers(ImageCtx *ictx, std::list<librbd::image_watcher_t> &watchers);
 }
+
+std::ostream &operator<<(std::ostream &os, const librbd::ImageOptions &opts);
 
 #endif

@@ -21,7 +21,9 @@
 #include "include/utime.h"
 #include "osd/OpRequest.h"
 #include "osd/PG.h"
-
+#include "common/mClockCommon.h"
+#include "messages/MOSDOp.h"
+#include "PGPeeringEvent.h"
 
 class OSD;
 
@@ -39,6 +41,7 @@ public:
   public:
     enum class op_type_t {
       client_op,
+      peering_event,
       bg_snaptrim,
       bg_recovery,
       bg_scrub
@@ -73,6 +76,7 @@ public:
 private:
   OpQueueable::Ref qitem;
   int cost;
+  dmc::ReqParams qos_params;
   unsigned priority;
   utime_t start_time;
   uint64_t owner;  ///< global id (e.g., client.XXX)
@@ -92,7 +96,15 @@ public:
       start_time(start_time),
       owner(owner),
       map_epoch(e)
-  {}
+  {
+    if (auto op = maybe_get_op()) {
+      auto req = (*op)->get_req();
+      if (req->get_type() == CEPH_MSG_OSD_OP) {
+	const MOSDOp *m = static_cast<const MOSDOp*>(req);
+	qos_params = m->get_qos_params();
+      }
+    }
+  }
   OpQueueItem(OpQueueItem &&) = default;
   OpQueueItem(const OpQueueItem &) = delete;
   OpQueueItem &operator=(OpQueueItem &&) = default;
@@ -125,6 +137,8 @@ public:
   utime_t get_start_time() const { return start_time; }
   uint64_t get_owner() const { return owner; }
   epoch_t get_map_epoch() const { return map_epoch; }
+  dmc::ReqParams get_qos_params() const { return qos_params; }
+  void set_qos_params(dmc::ReqParams qparams) { qos_params =  qparams; }
 
   friend ostream& operator<<(ostream& out, const OpQueueItem& item) {
     return out << "OpQueueItem("
@@ -181,6 +195,19 @@ public:
   }
   boost::optional<OpRequestRef> maybe_get_op() const override final {
     return op;
+  }
+  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGPeeringItem : public PGOpQueueable {
+  PGPeeringEventRef evt;
+public:
+  PGPeeringItem(spg_t pg, PGPeeringEventRef e) : PGOpQueueable(pg), evt(e) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::peering_event;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
   void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };

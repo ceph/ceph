@@ -177,8 +177,8 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 
   // version
   // note: this is sorta busted, but should only be used for dirty buffers
-  left->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
-  left->last_write = MAX( left->last_write, right->last_write );
+  left->last_write_tid =  std::max( left->last_write_tid, right->last_write_tid );
+  left->last_write = std::max( left->last_write, right->last_write );
 
   left->set_dontneed(right->get_dontneed() ? left->get_dontneed() : false);
   left->set_nocache(right->get_nocache() ? left->get_nocache() : false);
@@ -242,7 +242,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 
     if (p->first <= cur) {
       // have part of it
-      loff_t lenfromcur = MIN(p->second->end() - cur, left);
+      loff_t lenfromcur = std::min(p->second->end() - cur, left);
       cur += lenfromcur;
       left -= lenfromcur;
       ++p;
@@ -332,7 +332,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         ceph_abort();
       }
 
-      loff_t lenfromcur = MIN(e->end() - cur, left);
+      loff_t lenfromcur = std::min(e->end() - cur, left);
       cur += lenfromcur;
       left -= lenfromcur;
       ++p;
@@ -342,7 +342,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       // gap.. miss
       loff_t next = p->first;
       BufferHead *n = new BufferHead(this);
-      loff_t len = MIN(next - cur, left);
+      loff_t len = std::min(next - cur, left);
       n->set_start(cur);
       n->set_length(len);
       oc->bh_add(this,n);
@@ -354,8 +354,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         missing[cur] = n;
         ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
       }
-      cur += MIN(left, n->length());
-      left -= MIN(left, n->length());
+      cur += std::min(left, n->length());
+      left -= std::min(left, n->length());
       continue;    // more?
     } else {
       ceph_abort();
@@ -492,7 +492,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     } else {
       // gap!
       loff_t next = p->first;
-      loff_t glen = MIN(next - cur, max);
+      loff_t glen = std::min(next - cur, max);
       ldout(oc->cct, 10) << "map_write gap " << cur << "~" << glen << dendl;
       if (final) {
         oc->bh_stat_sub(final);
@@ -1462,7 +1462,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  if (success) {
 	    ldout(cct, 10) << "readx missed, waiting on cache to complete "
 			   << waitfor_read.size() << " blocked reads, "
-			   << (MAX(rx_bytes, max_size) - max_size)
+			   << (std::max(rx_bytes, max_size) - max_size)
 			   << " read bytes" << dendl;
 	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish,
 						   *trace));
@@ -1552,7 +1552,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  BufferHead *bh = bh_it->second;
 	  assert(opos == (loff_t)(bh->start() + bhoff));
 
-	  uint64_t len = MIN(f_it->second - foff, bh->length() - bhoff);
+	  uint64_t len = std::min(f_it->second - foff, bh->length() - bhoff);
 	  ldout(cct, 10) << "readx rmap opos " << opos << ": " << *bh << " +"
 			 << bhoff << " frag " << f_it->first << "~"
 			 << f_it->second << " +" << foff << "~" << len

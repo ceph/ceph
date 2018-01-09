@@ -969,6 +969,16 @@ void dirfrag_load_vec_t::dump(Formatter *f) const
   f->close_section();
 }
 
+void dirfrag_load_vec_t::dump(Formatter *f, utime_t now, const DecayRate& rate)
+{
+  f->dump_float("meta_load", meta_load(now, rate));
+  f->dump_float("IRD", get(META_POP_IRD).get(now, rate));
+  f->dump_float("IWR", get(META_POP_IWR).get(now, rate));
+  f->dump_float("READDIR", get(META_POP_READDIR).get(now, rate));
+  f->dump_float("FETCH", get(META_POP_FETCH).get(now, rate));
+  f->dump_float("STORE", get(META_POP_STORE).get(now, rate));
+}
+
 void dirfrag_load_vec_t::generate_test_instances(list<dirfrag_load_vec_t*>& ls)
 {
   utime_t sample;

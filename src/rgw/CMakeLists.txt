@@ -76,6 +76,7 @@ set(rgw_a_srcs
   rgw_sync_module_es.cc
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
+  rgw_sync_log_trim.cc
   rgw_sync_trace.cc
   rgw_period_history.cc
   rgw_period_puller.cc
@@ -141,8 +142,7 @@ add_library(rgw_a STATIC ${rgw_a_srcs})
 
 add_dependencies(rgw_a civetweb_h)
 
-target_include_directories(rgw_a PUBLIC
-  "../Beast/include"
+target_include_directories(rgw_a SYSTEM PUBLIC
   ${FCGI_INCLUDE_DIR}
   "../rapidjson/include"
   )
@@ -174,11 +174,6 @@ endif (WITH_RADOSGW_BEAST_FRONTEND)
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
 target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
-if(WITH_RADOSGW_BEAST_FRONTEND)
-  target_link_libraries(radosgw_a
-    Boost::coroutine
-    Boost::context)
-endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
@@ -263,7 +258,7 @@ if(WITH_EMBEDDED)
   include(MergeStaticLibraries)
   add_library(cephd_rgw_base STATIC rgw_main.cc ${radosgw_admin_srcs})
   if(WITH_RADOSGW_FCGI_FRONTEND)  
-    target_include_directories(cephd_rgw_base PUBLIC ${FCGI_INCLUDE_DIR})
+    target_include_directories(cephd_rgw_base SYSTEM PUBLIC ${FCGI_INCLUDE_DIR})
   endif()
   set_target_properties(cephd_rgw_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
   merge_static_libraries(cephd_rgw cephd_rgw_base rgw_a radosgw_a)

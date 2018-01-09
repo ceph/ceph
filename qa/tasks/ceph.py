@@ -44,7 +44,9 @@ def generate_caps(type_):
             osd='allow *',
         ),
         mgr=dict(
-            mon='allow *',
+            mon='allow profile mgr',
+            osd='allow *',
+            mds='allow *',
         ),
         mds=dict(
             mon='allow *',
@@ -367,7 +369,8 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem...')
 
-        fs = Filesystem(ctx, name='cephfs', create=True)
+        fs = Filesystem(ctx, name='cephfs', create=True,
+                        ec_profile=config.get('cephfs_ec_profile', None))
 
         is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
         all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
@@ -1342,6 +1345,39 @@ def created_pool(ctx, config):
 
 
 @contextlib.contextmanager
+def tweaked_option(ctx, config):
+    """
+    set an option, and then restore it with its original value
+
+    Note, due to the way how tasks are executed/nested, it's not suggested to
+    use this method as a standalone task. otherwise, it's likely that it will
+    restore the tweaked option at the /end/ of 'tasks' block.
+    """
+    saved_options = {}
+    # we can complicate this when necessary
+    options = ['mon-health-to-clog']
+    type_, id_ = 'mon', '*'
+    cluster = config.get('cluster', 'ceph')
+    manager = ctx.managers[cluster]
+    if id_ == '*':
+        get_from = next(teuthology.all_roles_of_type(ctx.cluster, type_))
+    else:
+        get_from = id_
+    for option in options:
+        if option not in config:
+            continue
+        value = 'true' if config[option] else 'false'
+        option = option.replace('-', '_')
+        old_value = manager.get_config(type_, get_from, option)
+        if value != old_value:
+            saved_options[option] = old_value
+            manager.inject_args(type_, id_, option, value)
+    yield
+    for option, value in saved_options.items():
+        manager.inject_args(type_, id_, option, value)
+
+
+@contextlib.contextmanager
 def restart(ctx, config):
     """
    restart ceph daemons
@@ -1372,12 +1408,14 @@ def restart(ctx, config):
 
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
     clusters = set()
-    for role in daemons:
-        cluster, type_, id_ = teuthology.split_role(role)
-        ctx.daemons.get_daemon(type_, id_, cluster).restart()
-        clusters.add(cluster)
-
     manager = ctx.managers['ceph']
+
+    with tweaked_option(ctx, config):
+        for role in daemons:
+            cluster, type_, id_ = teuthology.split_role(role)
+            ctx.daemons.get_daemon(type_, id_, cluster).restart()
+            clusters.add(cluster)
+
     for dmon in daemons:
         if '.' in dmon:
             dm_parts = dmon.split('.')

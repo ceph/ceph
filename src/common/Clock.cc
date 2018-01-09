@@ -23,13 +23,8 @@ utime_t ceph_clock_now()
   utime_t n(tp);
 #else
   struct timeval tv;
-  gettimeofday(&tv, NULL);
+  gettimeofday(&tv, nullptr);
   utime_t n(&tv);
 #endif
   return n;
-}
-
-time_t ceph_clock_gettime()
-{
-  return time(NULL);
 }

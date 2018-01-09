@@ -192,11 +192,12 @@ struct MDRequestImpl : public MutationImpl {
   inodeno_t alloc_ino, used_prealloc_ino;  
   interval_set<inodeno_t> prealloc_inos;
 
-  int snap_caps;
-  int getattr_caps;       ///< caps requested by getattr
-  bool did_early_reply;
-  bool o_trunc;           ///< request is an O_TRUNC mutation
-  bool has_completed;     ///< request has already completed
+  int snap_caps = 0;
+  int getattr_caps = 0;		///< caps requested by getattr
+  bool no_early_reply = false;
+  bool did_early_reply = false;
+  bool o_trunc = false;		///< request is an O_TRUNC mutation
+  bool has_completed = false;	///< request has already completed
 
   bufferlist reply_extra_bl;
 
@@ -299,8 +300,6 @@ struct MDRequestImpl : public MutationImpl {
     session(NULL), item_session_request(this),
     client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
-    snap_caps(0), getattr_caps(0),
-    did_early_reply(false), o_trunc(false), has_completed(false),
     slave_request(NULL), internal_op(params.internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
@@ -332,7 +331,7 @@ struct MDRequestImpl : public MutationImpl {
   const filepath& get_filepath2();
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
-  bool is_replay() const;
+  bool is_queued_for_replay() const;
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;

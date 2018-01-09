@@ -2,6 +2,7 @@ import errno
 import os
 import pwd
 import platform
+import tempfile
 import uuid
 from ceph_volume import process
 from . import as_string
@@ -66,6 +67,46 @@ def chown(path, recursive=True):
         process.run(['chown', '-R', 'ceph:ceph', path])
     else:
         os.chown(path, uid, gid)
+
+
+def is_binary(path):
+    """
+    Detect if a file path is a binary or not. Will falsely report as binary
+    when utf-16 encoded. In the ceph universe there is no such risk (yet)
+    """
+    with open(path, 'rb') as fp:
+        contents = fp.read(8192)
+    if b'\x00' in contents:  # a null byte may signal binary
+        return True
+    return False
+
+
+class tmp_mount(object):
+    """
+    Temporarily mount a device on a temporary directory,
+    and unmount it upon exit
+    """
+
+    def __init__(self, device):
+        self.device = device
+        self.path = None
+
+    def __enter__(self):
+        self.path = tempfile.mkdtemp()
+        process.run([
+            'mount',
+            '-v',
+            self.device,
+            self.path
+        ])
+        return self.path
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        process.run([
+            'umount',
+            '-v',
+            self.path
+        ])
 
 
 def path_is_mounted(path, destination=None):

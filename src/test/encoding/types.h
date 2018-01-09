@@ -274,6 +274,8 @@ TYPE(librbd::journal::ClientData)
 TYPE(librbd::journal::TagData)
 #include "librbd/mirroring_watcher/Types.h"
 TYPE(librbd::mirroring_watcher::NotifyMessage)
+#include "librbd/trash_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)
@@ -281,6 +283,9 @@ TYPE(librbd::watch_notify::ResponseMessage)
 #include "rbd_replay/ActionTypes.h"
 TYPE(rbd_replay::action::Dependency)
 TYPE(rbd_replay::action::ActionEntry);
+
+#include "tools/rbd_mirror/image_map/Types.h"
+TYPE(rbd::mirror::image_map::PolicyData)
 #endif
 
 #ifdef WITH_RADOSGW
@@ -305,6 +310,9 @@ TYPE(RGWAccessControlPolicy)
 TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
+
+#include "rgw/rgw_lc.h"
+TYPE(RGWLifecycleConfiguration)
 
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
@@ -349,6 +357,7 @@ TYPE(cls_rgw_reshard_get_ret)
 TYPE(cls_rgw_reshard_remove_op)
 TYPE(cls_rgw_set_bucket_resharding_op)
 TYPE(cls_rgw_clear_bucket_resharding_op)
+TYPE(cls_rgw_lc_obj_head)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
@@ -388,6 +397,18 @@ TYPE(rgw_obj)
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
 
+#include "rgw/rgw_sync.h"
+TYPE(rgw_meta_sync_info)
+TYPE(rgw_meta_sync_marker)
+TYPE(rgw_meta_sync_status)
+
+#include "rgw/rgw_data_sync.h"
+TYPE(rgw_data_sync_info)
+TYPE(rgw_data_sync_marker)
+TYPE(rgw_data_sync_status)
+
+#endif
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
@@ -397,8 +418,6 @@ TYPE(cls_rbd_snap)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
-#endif
-
 #endif
 
 #include "cls/lock/cls_lock_types.h"

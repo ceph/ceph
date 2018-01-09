@@ -174,6 +174,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             user_quota,
             static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
     dump_errno(s);
+    dump_header(s, "Accept-Ranges", "bytes");
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
   }
 
@@ -888,7 +889,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     MD5 etag_sum;
     uint64_t total_size = 0;
     for (const auto& entry : slo_info->entries) {
-      etag_sum.Update((const byte *)entry.etag.c_str(),
+      etag_sum.Update((const ::byte *)entry.etag.c_str(),
                       entry.etag.length());
       total_size += entry.size_bytes;
 
@@ -2753,6 +2754,8 @@ int RGWHandler_REST_SWIFT::validate_bucket_name(const string& bucket)
 
   for (size_t i = 0; i < len; ++i, ++s) {
     if (*(unsigned char *)s == 0xff)
+      return -ERR_INVALID_BUCKET_NAME;
+    if (*(unsigned char *)s == '/')
       return -ERR_INVALID_BUCKET_NAME;
   }
 
