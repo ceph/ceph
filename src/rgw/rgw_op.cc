@@ -280,19 +280,6 @@ static int modify_obj_attr(RGWRados *store, struct req_state *s, rgw_obj& obj, c
   return store->set_attrs(s->obj_ctx, s->bucket_info, read_op.state.obj, attrs, NULL);
 }
 
-static int get_system_obj_attrs(RGWRados *store, struct req_state *s, rgw_raw_obj& obj, map<string, bufferlist>& attrs,
-                         uint64_t *obj_size, RGWObjVersionTracker *objv_tracker)
-{
-  RGWRados::SystemObject src(store, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
-  RGWRados::SystemObject::Read rop(&src);
-
-  rop.stat_params.attrs = &attrs;
-  rop.stat_params.obj_size = obj_size;
-
-  int ret = rop.stat(objv_tracker);
-  return ret;
-}
-
 static int read_bucket_policy(RGWRados *store,
                               struct req_state *s,
                               RGWBucketInfo& bucket_info,
