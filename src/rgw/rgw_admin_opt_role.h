@@ -1,5 +1,5 @@
-#ifndef CEPH_RGW_ADMIN_OPT_POLICY_H
-#define CEPH_RGW_ADMIN_OPT_POLICY_H
+#ifndef CEPH_RGW_ADMIN_OPT_ROLE_H
+#define CEPH_RGW_ADMIN_OPT_ROLE_H
 
 
 #include "rgw_rest_conn.h"
@@ -35,4 +35,4 @@ int handle_opt_role_policy_get(const string& role_name, const string& policy_nam
 int handle_opt_role_policy_delete(const string& role_name, const string& policy_name, const string& tenant,
                            CephContext *context, RGWRados *store);
 
-#endif //CEPH_RGW_ADMIN_OPT_POLICY_H
+#endif //CEPH_RGW_ADMIN_OPT_ROLE_H
