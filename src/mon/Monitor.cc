@@ -3849,8 +3849,7 @@ void Monitor::remove_all_sessions()
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
-    if (logger)
-      logger->inc(l_mon_session_rm);
+    logger->inc(l_mon_session_rm);
   }
   if (logger)
     logger->set(l_mon_num_sessions, session_map.get_size());
