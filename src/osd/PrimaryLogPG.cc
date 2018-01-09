@@ -13903,6 +13903,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
 
   TierAgentState::flush_mode_t flush_mode = TierAgentState::FLUSH_MODE_IDLE;
   TierAgentState::evict_mode_t evict_mode = TierAgentState::EVICT_MODE_IDLE;
+  TierAgentState::promote_mode_t promote_mode = TierAgentState::PROMOTE_MODE_FULL;
   unsigned evict_effort = 0;
 
   if (info.stats.stats_invalid) {
@@ -14041,6 +14042,15 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     assert(evict_effort >= inc && evict_effort <= 1000000);
     dout(30) << __func__ << " evict_effort " << was << " quantized by " << inc << " to " << evict_effort << dendl;
   }
+
+  // promote mode
+  uint64_t target_promote_micro = (evict_target + 1000000) / 2;
+  if (full_micro > target_promote_micro)
+    promote_mode = TierAgentState::PROMOTE_MODE_FULL;
+  else if (full_micro < 0.8 * evict_target)
+    promote_mode = TierAgentState::PROMOTE_MODE_WARMING;
+  else
+    promote_mode = TierAgentState::PROMOTE_MODE_SOME;
   }
 
   skip_calc:
@@ -14093,6 +14103,14 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
       info.stats.stats.sum.num_evict_mode_full = 0;
     }
     agent_state->evict_mode = evict_mode;
+  }
+  if (promote_mode != agent_state->promote_mode) {
+    dout(5) << __func__ << " promote mode "
+      << TierAgentState::get_promote_mode_name(agent_state->promote_mode)
+      << " -> "
+      << TierAgentState::get_promote_mode_name(promote_mode)
+      << dendl;
+    agent_state->promote_mode = promote_mode;
   }
   uint64_t old_effort = agent_state->evict_effort;
   if (evict_effort != agent_state->evict_effort) {
