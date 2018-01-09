@@ -3076,7 +3076,8 @@ void PrimaryLogPG::do_proxy_read(OpRequestRef op, ObjectContextRef obc)
     flags, new C_OnFinisher(fin, osd->objecter_finishers[n]),
     &prdop->user_version,
     &prdop->data_offset,
-    m->get_features());
+    m->get_features(),
+    &prdop->temperature);
   fin->tid = tid;
   prdop->objecter_tid = tid;
   proxyread_ops[tid] = prdop;
@@ -3269,7 +3270,7 @@ void PrimaryLogPG::do_proxy_write(OpRequestRef op, ObjectContextRef obc)
     soid.oid, oloc, obj_op, snapc,
     ceph::real_clock::from_ceph_timespec(pwop->mtime),
     flags, new C_OnFinisher(fin, osd->objecter_finishers[n]),
-    &pwop->user_version, pwop->reqid);
+    &pwop->user_version, pwop->reqid, &pwop->temperature);
   fin->tid = tid;
   pwop->objecter_tid = tid;
   proxywrite_ops[tid] = pwop;
@@ -3768,6 +3769,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   }
 
   ctx->reply->set_reply_versions(ctx->at_version, ctx->user_at_version);
+
+  if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    ctx->reply->set_temperature(th->get_temp(soid));
+  }
 
   assert(op->may_write() || op->may_cache());
 

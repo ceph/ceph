@@ -3502,6 +3502,8 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     *op->reply_epoch = m->get_map_epoch();
   if (op->data_offset)
     *op->data_offset = m->get_header().data_off;
+  if (op->temperature)
+    *op->temperature = m->get_temperature();
 
   // got data?
   if (op->outbl) {

@@ -1388,6 +1388,8 @@ public:
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
 
+    uint32_t *temperature;
+
     Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>& op,
        int f, Context *fin, version_t *ov, int *offset = NULL,
        ZTracer::Trace *parent_trace = nullptr) :
@@ -1408,7 +1410,8 @@ public:
       budgeted(false),
       should_resend(true),
       ctx_budgeted(false),
-      data_offset(offset) {
+      data_offset(offset),
+      temperature(NULL) {
       ops.swap(op);
 
       /* initialize out_* to match op vector */
@@ -2269,9 +2272,12 @@ public:
     ObjectOperation& op, const SnapContext& snapc,
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
-    osd_reqid_t reqid = osd_reqid_t()) {
+    osd_reqid_t reqid = osd_reqid_t(),
+    uint32_t *temperature = NULL) {
     Op *o = prepare_mutate_op(oid, oloc, op, snapc, mtime, flags,
 			      oncommit, objver, reqid);
+    if (temperature)
+      o->temperature = temperature;
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -2302,11 +2308,14 @@ public:
     snapid_t snapid, bufferlist *pbl, int flags,
     Context *onack, version_t *objver = NULL,
     int *data_offset = NULL,
-    uint64_t features = 0) {
+    uint64_t features = 0,
+    uint32_t *temperature = NULL) {
     Op *o = prepare_read_op(oid, oloc, op, snapid, pbl, flags, onack, objver,
 			    data_offset);
     if (features)
       o->features = features;
+    if (temperature)
+      o->temperature = temperature;
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
