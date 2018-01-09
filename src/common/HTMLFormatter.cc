@@ -24,6 +24,8 @@
 #include <string>
 #include <string.h>     // for strdup
 
+#include "common/escape.h"
+
 // -----------------------
 namespace ceph {
 
@@ -109,7 +111,7 @@ void HTMLFormatter::dump_float(const char *name, double d)
 
 void HTMLFormatter::dump_string(const char *name, boost::string_view s)
 {
-  dump_template(name, escape_xml_str(s.data()));
+  dump_template(name, xml_stream_escaper(s.data()));
 }
 
 void HTMLFormatter::dump_string_with_attrs(const char *name, boost::string_view s, const FormatterAttrs& attrs)
@@ -118,7 +120,7 @@ void HTMLFormatter::dump_string_with_attrs(const char *name, boost::string_view 
   std::string attrs_str;
   get_attrs_str(&attrs, attrs_str);
   print_spaces();
-  m_ss << "<li>" << e << ": " << escape_xml_str(s.data()) << attrs_str << "</li>";
+  m_ss << "<li>" << e << ": " << xml_stream_escaper(s.data()) << attrs_str << "</li>";
   if (m_pretty)
     m_ss << "\n";
 }
@@ -139,9 +141,9 @@ void HTMLFormatter::dump_format_va(const char* name, const char *ns, bool quoted
   std::string e(name);
   print_spaces();
   if (ns) {
-    m_ss << "<li xmlns=\"" << ns << "\">" << e << ": " << escape_xml_str(buf) << "</li>";
+    m_ss << "<li xmlns=\"" << ns << "\">" << e << ": " << xml_stream_escaper(buf) << "</li>";
   } else {
-    m_ss << "<li>" << e << ": " << escape_xml_str(buf) << "</li>";
+    m_ss << "<li>" << e << ": " << xml_stream_escaper(buf) << "</li>";
   }
 
   if (m_pretty)
