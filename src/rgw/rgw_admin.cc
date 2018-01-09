@@ -207,6 +207,8 @@ void usage()
   cout << "  reshard status             read bucket resharding status\n";
   cout << "  reshard process            process of scheduled reshard jobs\n";
   cout << "  reshard cancel             cancel resharding a bucket\n";
+  cout << "  sync error list            list sync error\n";
+  cout << "  sync error trim            trim sync error\n";
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
@@ -441,6 +443,7 @@ enum {
   OPT_MDLOG_FETCH,
   OPT_MDLOG_STATUS,
   OPT_SYNC_ERROR_LIST,
+  OPT_SYNC_ERROR_TRIM,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_BILOG_STATUS,
@@ -851,6 +854,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
 	     (strcmp(prev_cmd, "error") == 0)) {
     if (strcmp(cmd, "list") == 0)
       return OPT_SYNC_ERROR_LIST;
+    if (strcmp(cmd, "trim") == 0)
+      return OPT_SYNC_ERROR_TRIM; 
   } else if (strcmp(prev_cmd, "mdlog") == 0) {
     if (strcmp(cmd, "list") == 0)
       return OPT_MDLOG_LIST;
@@ -6750,6 +6755,33 @@ next:
 
     formatter->close_section();
     formatter->flush(cout);
+  }
+
+  if (opt_cmd == OPT_SYNC_ERROR_TRIM) {
+    utime_t start_time, end_time;
+    int ret = parse_date_str(start_date, start_time);
+    if (ret < 0)
+      return -ret;
+
+    ret = parse_date_str(end_date, end_time);
+    if (ret < 0)
+      return -ret;
+
+    if (shard_id < 0) {
+      shard_id = 0;
+    }
+
+    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+      string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+      ret = store->time_log_trim(oid, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
+      if (ret < 0 && ret != -ENODATA) {
+        cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+      if (specified_shard_id) {
+        break;
+      }
+    }
   }
 
   if (opt_cmd == OPT_BILOG_TRIM) {

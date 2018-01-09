@@ -150,6 +150,8 @@
     reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
+    sync error list            list sync error
+    sync error trim            trim sync error
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
