@@ -32,7 +32,7 @@ endif()
 function(gperf_generate input output)
   add_custom_command(
     OUTPUT ${output}
-    COMMAND ${GPERF} ${input} > ${output}
+    COMMAND ${GPERF} ${input} | sed "s/register //g" > ${output}
     DEPENDS ${input}
     COMMENT "Generate ${output}"
     )
