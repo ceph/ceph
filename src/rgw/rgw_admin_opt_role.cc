@@ -7,7 +7,7 @@
 #include "rgw_role.h"
 #include "rgw_admin_common.h"
 
-void show_perm_policy(const string& perm_policy, Formatter* formatter)
+static void show_perm_policy(const string& perm_policy, Formatter* formatter)
 {
   formatter->open_object_section("role");
   formatter->dump_string("Permission policy", perm_policy);
@@ -15,7 +15,7 @@ void show_perm_policy(const string& perm_policy, Formatter* formatter)
   formatter->flush(cout);
 }
 
-void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
+static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
 {
   formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
@@ -25,7 +25,7 @@ void show_policy_names(const std::vector<string>& policy_names, Formatter* forma
   formatter->flush(cout);
 }
 
-void show_role_info(RGWRole& role, Formatter* formatter)
+static void show_role_info(RGWRole& role, Formatter* formatter)
 {
   formatter->open_object_section("role");
   role.dump(formatter);
@@ -33,7 +33,7 @@ void show_role_info(RGWRole& role, Formatter* formatter)
   formatter->flush(cout);
 }
 
-void show_roles_info(const vector<RGWRole>& roles, Formatter* formatter)
+static void show_roles_info(const vector<RGWRole>& roles, Formatter* formatter)
 {
   formatter->open_array_section("Roles");
   for (const auto& it : roles) {
