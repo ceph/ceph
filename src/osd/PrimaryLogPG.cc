@@ -8937,13 +8937,15 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
     finish_ctx(ctx.get(), pg_log_entry_t::PROMOTE);
     simple_opc_submit(std::move(ctx));
 
-    auto p = cobc->obs.oi.manifest.chunk_map.end();
+    auto p = cobc->obs.oi.manifest.chunk_map.rbegin();
     /* check remaining work */
-    if (obj_cop->last_offset >= p->first + p->second.length) {
-      for (auto &en : cobc->obs.oi.manifest.chunk_map) {
-	if (obj_cop->last_offset < en.first) {
-	  _copy_some_manifest(cobc, obj_cop, en.first);
-	  return;
+    if (p != cobc->obs.oi.manifest.chunk_map.rend()) {
+      if (obj_cop->last_offset >= p->first + p->second.length) {
+	for (auto &en : cobc->obs.oi.manifest.chunk_map) {
+	  if (obj_cop->last_offset < en.first) {
+	    _copy_some_manifest(cobc, obj_cop, en.first);
+	    return;
+	  }
 	}
       }
     }
