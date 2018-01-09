@@ -120,6 +120,18 @@ class DaemonState
     : perf_counters(types_)
   {
   }
+
+  const std::map<std::string,std::string>& get_config_defaults() {
+    if (config_defaults.empty() &&
+	config_defaults_bl.length()) {
+      auto p = config_defaults_bl.begin();
+      try {
+	::decode(config_defaults, p);
+      } catch (buffer::error e) {
+      }
+    }
+    return config_defaults;
+  }
 };
 
 typedef std::shared_ptr<DaemonState> DaemonStatePtr;
