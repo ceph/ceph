@@ -54,6 +54,16 @@ set_target_properties(ceph_test_rados_api_aio PROPERTIES COMPILE_FLAGS
 target_link_libraries(ceph_test_rados_api_aio
   librados ${UNITTEST_LIBS} radostest)
 
+# ceph_test_rados_api_asio
+add_executable(ceph_test_rados_api_asio asio.cc)
+set_target_properties(ceph_test_rados_api_asio PROPERTIES COMPILE_FLAGS
+  ${UNITTEST_CXX_FLAGS})
+target_link_libraries(ceph_test_rados_api_asio global
+  librados ${UNITTEST_LIBS})
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(ceph_test_rados_api_asio Boost::coroutine Boost::context)
+endif()
+
 # ceph_test_rados_api_list
 add_executable(ceph_test_rados_api_list
   list.cc
@@ -150,6 +160,7 @@ target_link_libraries(ceph_test_rados_api_snapshots
 
 install(TARGETS
   ceph_test_rados_api_aio
+  ceph_test_rados_api_asio
   ceph_test_rados_api_c_read_operations
   ceph_test_rados_api_c_write_operations
   ceph_test_rados_api_cmd
