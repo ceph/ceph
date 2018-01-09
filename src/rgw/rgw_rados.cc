@@ -12856,13 +12856,13 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
     *is_truncated = (*is_truncated || iter->second.is_truncated);
   }
 
-  // Create a map to track the next candidate entry from each shard, if the entry
+  // Create a vector to track the next candidate entry from each shard, if the entry
   // from a specified shard is selected/erased, the next entry from that shard will
   // be inserted for next round selection
-  map<string, size_t> candidates;
+  vector<size_t> candidates;
   for (size_t i = 0; i < vcurrents.size(); ++i) {
     if (vcurrents[i] != vends[i]) {
-      candidates[vcurrents[i]->first] = i;
+      candidates.push_back(i);
     }
   }
 
@@ -12871,7 +12871,7 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
   while (count < num_entries && !candidates.empty()) {
     r = 0;
     // Select the next one
-    int pos = candidates.begin()->second;
+    size_t pos = candidates.front();
     const string& name = vcurrents[pos]->first;
     struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
 
@@ -12895,11 +12895,8 @@ int RGWRados::cls_bucket_list(RGWBucketInfo& bucket_info, int shard_id, rgw_obj_
       ++count;
     }
 
-    // Refresh the candidates map
-    candidates.erase(candidates.begin());
-    ++vcurrents[pos];
-    if (vcurrents[pos] != vends[pos]) {
-      candidates[vcurrents[pos]->first] = pos;
+    if (++vcurrents[pos] == vends[pos]) {
+      candidates.erase(candidates.begin()); // Refresh the candidates vector
     }
   }
 
