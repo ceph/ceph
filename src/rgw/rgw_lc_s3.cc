@@ -64,6 +64,8 @@ bool LCMPExpiration_S3::xml_end(const char *el) {
 bool RGWLifecycleConfiguration_S3::xml_end(const char *el) {
   XMLObjIter iter = find("Rule");
   LCRule_S3 *rule = static_cast<LCRule_S3 *>(iter.get_next());
+  if (!rule)
+    return false;
   while (rule) {
     add_rule(rule);
     rule = static_cast<LCRule_S3 *>(iter.get_next());
