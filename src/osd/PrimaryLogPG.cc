@@ -3139,6 +3139,11 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   ctx->data_off = prdop->data_offset;
   ctx->ignore_log_op_stats = true;
   complete_read_ctx(r, ctx);
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
+      prdop->temperature > agent_state->promote_temp &&
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
+    agent_state->promote_queue[oid] = ceph_clock_now();
+  }
 }
 
 void PrimaryLogPG::kick_proxy_ops_blocked(hobject_t& soid)
@@ -3519,6 +3524,12 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   delete pwop->ctx;
   pwop->ctx = NULL;
+
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
+      pwop->temperature > agent_state->promote_temp &&
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
+    agent_state->promote_queue[oid] = ceph_clock_now();
+  }
 }
 
 void PrimaryLogPG::cancel_proxy_write(ProxyWriteOpRef pwop)

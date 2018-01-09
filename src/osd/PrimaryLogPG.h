@@ -199,12 +199,13 @@ public:
     version_t user_version;
     int data_offset;
     bool canceled;              ///< true if canceled
+    uint32_t temperature;
 
     ProxyReadOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops)
       : op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), data_offset(0),
-	canceled(false) { }
+	canceled(false), temperature(0) { }
   };
   typedef ceph::shared_ptr<ProxyReadOp> ProxyReadOpRef;
 
@@ -219,13 +220,14 @@ public:
     utime_t mtime;
     bool canceled;
     osd_reqid_t reqid;
+    uint32_t temperature;
 
     ProxyWriteOp(OpRequestRef _op, hobject_t oid, vector<OSDOp>& _ops, osd_reqid_t _reqid)
       : ctx(NULL), op(_op), soid(oid),
         objecter_tid(0), ops(_ops),
 	user_version(0), sent_reply(false),
 	canceled(false),
-        reqid(_reqid) { }
+        reqid(_reqid), temperature(0) { }
   };
   typedef ceph::shared_ptr<ProxyWriteOp> ProxyWriteOpRef;
 
@@ -921,6 +923,7 @@ protected:
   void hit_set_setup();     ///< initialize HitSet state
   void hit_set_create();    ///< create a new HitSet
   void hit_set_persist();   ///< persist hit info
+  HitSetRef hit_set_load(hobject_t& oid); ///< load hitset by oid
   bool hit_set_apply_log(); ///< apply log entries to update in-memory HitSet
   void hit_set_trim(OpContextUPtr &ctx, unsigned max); ///< discard old HitSets
   void hit_set_in_memory_trim(uint32_t max_in_memory); ///< discard old in memory HitSets
