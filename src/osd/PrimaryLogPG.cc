@@ -13172,6 +13172,23 @@ void PrimaryLogPG::hit_set_create()
 
     dout(10) << __func__ << " target_size " << p->target_size
 	     << " fpp " << p->get_fpp() << dendl;
+  } else if (pool.info.hit_set_params.get_type() == HitSet::TYPE_TEMP) {
+    if (!hit_set) {
+      // try loading the temp hit set in local storage
+      pg_hit_set_info_t& p = info.hit_set.history.back();
+      hobject_t oid = get_hit_set_archive_object(p.begin, p.end, p.using_gmt);
+      hit_set = hit_set_load(oid);
+    }
+    // No need to create a new temp_hit_set if cur temp_hit_set exist
+    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+      TempHitSet* th =
+        static_cast<TempHitSet*>(hit_set->impl.get());
+      th->set_dp(cct->_conf->osd_agent_hist_halflife);
+      hit_set->sealed = false;
+      th->sync();
+      hit_set_start_stamp = now;
+      return;
+    }
   }
   hit_set.reset(new HitSet(params));
   hit_set_start_stamp = now;
@@ -13335,6 +13352,44 @@ void PrimaryLogPG::hit_set_persist()
   hit_set_trim(ctx, max);
 
   simple_opc_submit(std::move(ctx));
+}
+
+HitSetRef PrimaryLogPG::hit_set_load(hobject_t& oid) {
+  if (!pool.info.is_replicated()) {
+    // FIXME: EC not supported here yet
+    derr << __func__ << " on non-replicated pool" << dendl;
+    return HitSetRef();
+  }
+
+  if (is_unreadable_object(oid)) {
+    dout(10) << __func__ << " unreadable " << oid << ", waiting" << dendl;
+    return HitSetRef();
+  }
+
+  ObjectContextRef obc = get_object_context(oid, false);
+  if (!obc) {
+    derr << __func__ << ": could not load hitset " << oid << dendl;
+    return HitSetRef();
+  }
+
+  int r;
+  bufferlist bl;
+  {
+    obc->ondisk_read_lock();
+    r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
+    obc->ondisk_read_unlock();
+  }
+  if (r < 0)
+    return HitSetRef();
+  HitSetRef hs(new HitSet);
+  bufferlist::iterator pbl = bl.begin();
+  try {
+    ::decode(*hs, pbl);
+    return hs;
+  } catch (...) {
+    dout(0) << __func__ << ": error on loading hitset." << dendl;
+  }
+  return HitSetRef();
 }
 
 void PrimaryLogPG::hit_set_trim(OpContextUPtr &ctx, unsigned max)
