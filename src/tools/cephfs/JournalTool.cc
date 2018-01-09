@@ -277,6 +277,8 @@ int JournalTool::main_header(std::vector<const char*> &argv)
       field = &(js.header->expire_pos);
     } else if (field_name == "write_pos") {
       field = &(js.header->write_pos);
+    } else if (field_name == "pool_id") {
+      field = (uint64_t*)(&(js.header->layout.pool_id));
     } else {
       derr << "Invalid field '" << field_name << "'" << dendl;
       return -EINVAL;
