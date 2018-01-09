@@ -144,21 +144,6 @@ class Module(MgrModule):
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
 
-    def _stattype_to_str(self, stattype):
-
-        typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
-        if typeonly == 0:
-            return 'gauge'
-        if typeonly == self.PERFCOUNTER_LONGRUNAVG:
-            # this lie matches the DaemonState decoding: only val, no counts
-            return 'counter'
-        if typeonly == self.PERFCOUNTER_COUNTER:
-            return 'counter'
-        if typeonly == self.PERFCOUNTER_HISTOGRAM:
-            return 'histogram'
-
-        return ''
-
     def _setup_static_metrics(self):
         metrics = {}
         metrics['health_status'] = Metric(

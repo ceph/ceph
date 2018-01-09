@@ -104,11 +104,12 @@
                     post_load();
                     setTimeout(refresh, 3000);
                 });
-            };
+	    };
 
             // Wait 1s to load irrespective of normal frequency,
             // to promptly load our first delta
-            setTimeout(refresh, 1000);
+	    setTimeout(refresh, 1000);
+				    
         });
 </script>
 
@@ -116,11 +117,12 @@
 <section class="content-header">
     <h1>
         osd.{osd.osd}
+        <button class="pull-right btn btn-default"><a rv-href="url_perf">Performance Counters</a></button>
     </h1>
 </section>
 
 <section class="content">
-
+  
     <table>
         <tr>
             <td>
@@ -150,7 +152,7 @@
             <tbody>
             <tr rv-each-item="osd_list">
                 <td>{item.key}</td>
-                <td>{item.value}</td>
+                <td>{item.value}</td>		
             </tr>
             </tbody>
         </table>
