@@ -177,7 +177,6 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "config get") {
     string who, name;
     cmd_getval(g_ceph_context, cmdmap, "who", who);
-    cmd_getval(g_ceph_context, cmdmap, "key", name);
 
     EntityName entity;
     if (!entity.from_str(who)) {
@@ -208,42 +207,65 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       device_class,
       &config, &src);
 
-    TextTable tbl;
-    if (!f) {
-      tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
-      tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+    if (cmd_getval(g_ceph_context, cmdmap, "key", name)) {
+      // get a single value
+      auto p = config.find(name);
+      if (p != config.end()) {
+	odata.append(p->second);
+	odata.append("\n");
+	goto reply;
+      }
+      const Option *opt = g_conf->find_option(name);
+      if (!opt) {
+	err = -ENOENT;
+	goto reply;
+      }
+      if (!entity.is_client() &&
+	  !boost::get<boost::blank>(&opt->daemon_value)) {
+	odata.append(stringify(opt->daemon_value));
+      } else {
+	odata.append(stringify(opt->value));
+      }
+      odata.append("\n");
     } else {
-      f->open_object_section("config");
-    }
-    auto p = config.begin();
-    auto q = src.begin();
-    for (; p != config.end(); ++p, ++q) {
-      if (name.size() && p->first != name) {
-	continue;
+      // dump all (non-default) values for this entity
+      TextTable tbl;
+      if (!f) {
+	tbl.define_column("WHO", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("MASK", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+      } else {
+	f->open_object_section("config");
+      }
+      auto p = config.begin();
+      auto q = src.begin();
+      for (; p != config.end(); ++p, ++q) {
+	if (name.size() && p->first != name) {
+	  continue;
+	}
+	if (!f) {
+	  tbl << q->second.first;
+	  tbl << q->second.second->mask.to_str();
+	  tbl << Option::level_to_str(q->second.second->opt->level);
+	  tbl << p->first;
+	  tbl << p->second;
+	  tbl << TextTable::endrow;
+	} else {
+	  f->open_object_section(p->first.c_str());
+	  f->dump_string("value", p->second);
+	  f->dump_string("section", q->second.first);
+	  f->dump_object("mask", q->second.second->mask);
+	  f->close_section();
+	}
       }
       if (!f) {
-	tbl << q->second.first;
-	tbl << q->second.second->mask.to_str();
-	tbl << Option::level_to_str(q->second.second->opt->level);
-	tbl << p->first;
-	tbl << p->second;
-	tbl << TextTable::endrow;
+	odata.append(stringify(tbl));
       } else {
-	f->open_object_section(p->first.c_str());
-	f->dump_string("value", p->second);
-	f->dump_string("section", q->second.first);
-	f->dump_object("mask", q->second.second->mask);
 	f->close_section();
+	f->flush(odata);
       }
-    }
-    if (!f) {
-      odata.append(stringify(tbl));
-    } else {
-      f->close_section();
-      f->flush(odata);
     }
   } else {
     return false;
