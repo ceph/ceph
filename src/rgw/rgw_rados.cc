@@ -5960,7 +5960,11 @@ int RGWRados::select_bucket_location_by_rule(const string& location_rule, RGWZon
     /* we can only reach here if we're trying to set a bucket location from a bucket
      * created on a different zone, using a legacy / default pool configuration
      */
-    return select_legacy_bucket_placement(rule_info);
+    if (rule_info) {
+      return select_legacy_bucket_placement(rule_info);
+    }
+
+    return 0;
   }
 
   /*
@@ -6002,7 +6006,11 @@ int RGWRados::select_bucket_placement(RGWUserInfo& user_info, const string& zone
     pselected_rule_name->clear();
   }
 
-  return select_legacy_bucket_placement(rule_info);
+  if (rule_info) {
+    return select_legacy_bucket_placement(rule_info);
+  }
+
+  return 0;
 }
 
 int RGWRados::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
