@@ -13816,6 +13816,13 @@ bool PrimaryLogPG::agent_maybe_flush(ObjectContextRef& obc)
     return false;
   }
 
+  if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW &&
+      hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    if (th->get_temp(obc->obs.oi.soid) > agent_state->flush_temp)
+      return false;
+  }
+
   dout(10) << __func__ << " flushing " << obc->obs.oi << dendl;
 
   // FIXME: flush anything dirty, regardless of what distribution of
@@ -13886,6 +13893,12 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
       return false;
     }
     // is this object old and/or cold enough?
+    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+      TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+      if (th->get_temp(soid) > agent_state->evict_temp)
+	return false;
+      goto skip_calc;
+    }
     int temp = 0;
     uint64_t temp_upper = 0, temp_lower = 0;
     if (hit_set)
@@ -13911,6 +13924,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
       return false;
   }
 
+ skip_calc:
   dout(10) << __func__ << " evicting " << obc->obs.oi << dendl;
   OpContextUPtr ctx = simple_opc_create(obc);
 
@@ -14145,7 +14159,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
     evict_temp = th->get_rank_temp(slope * evict_target);
     flush_temp = th->get_rank_temp(slope * flush_target);
-    promote_temp = slope * evict_temp;
+    promote_temp = th->get_rank_temp(slope * slope * evict_target);
   }
 
   }
