@@ -39,21 +39,17 @@ If the port is not configured, the web app will bind to port ``7000``.
 If the address it not configured, the web app will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
 
-You can configure a prefix for all URLs::
+Reverse proxies
+---------------
+
+If you are accessing the dashboard via a reverse proxy configuration,
+you may wish to service it under a URL prefix.  To get the dashboard
+to use hyperlinks that include your prefix, you can set the
+``url_prefix`` setting:
+
+::
 
   ceph config-key set mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
 
-
-Load balancer
--------------
-
-Please note that the dashboard will *only* start on the manager which
-is active at that moment. Query the Ceph cluster status to see which
-manager is active (e.g., ``ceph mgr dump``).  In order to make the
-dashboard available via a consistent URL regardless of which manager
-daemon is currently active, you may want to set up a load balancer
-front-end to direct traffic to whichever manager endpoint is
-available. If you use a reverse http proxy that forwards a subpath to
-the dashboard, you need to configure ``url_prefix`` (see above).
