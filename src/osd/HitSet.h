@@ -21,6 +21,7 @@
 #include "include/unordered_set.h"
 #include "common/bloom_filter.hpp"
 #include "common/hobject.h"
+#include "common/Clock.h"
 
 /**
  * generic container for a HitSet
@@ -36,7 +37,8 @@ public:
     TYPE_NONE = 0,
     TYPE_EXPLICIT_HASH = 1,
     TYPE_EXPLICIT_OBJECT = 2,
-    TYPE_BLOOM = 3
+    TYPE_BLOOM = 3,
+    TYPE_TEMP = 4
   } impl_type_t;
 
   static const char *get_type_name(impl_type_t t) {
@@ -45,6 +47,7 @@ public:
     case TYPE_EXPLICIT_HASH: return "explicit_hash";
     case TYPE_EXPLICIT_OBJECT: return "explicit_object";
     case TYPE_BLOOM: return "bloom";
+    case TYPE_TEMP: return "temp";
     default: return "???";
     }
   }
@@ -449,5 +452,351 @@ public:
   }
 };
 WRITE_CLASS_ENCODER(BloomHitSet)
+
+/**
+ * explicitly enumerate hash hits with incremental temp in the set
+ */
+class TempHitSet : public HitSet::Impl {
+public:
+  static const uint32_t TEMPMAX = UINT32_MAX * 0.9;
+
+  template <class T>
+  struct ExclusiveKeyAsHash {
+      size_t operator()(T key) const noexcept{
+        return key;
+      }
+  };
+
+  struct temp_info {
+    uint32_t temp;
+    uint32_t last_decay;
+
+    temp_info() : temp(0) {
+      last_decay = ceph_clock_now().tv.tv_sec;
+    }
+    temp_info(uint32_t t) {
+      temp = MIN(t, TEMPMAX);
+      last_decay = ceph_clock_now().tv.tv_sec;
+    }
+    temp_info(uint32_t t, uint32_t l) : last_decay(l) {
+      temp = MIN(t, TEMPMAX);
+    }
+    temp_info(const temp_info& ti) : last_decay(ti.last_decay) {
+      temp = MIN(ti.temp, TEMPMAX);
+    }
+
+    DENC(temp_info, v, p) {
+      DENC_START(1, 1, p);
+      denc_varint(v.temp, p);
+      denc(v.last_decay, p);
+      DENC_FINISH(p);
+    }
+  };
+
+  class RankHistogram {
+    std::vector<int32_t> h; // savepoint histogram
+    std::vector<int32_t> present; // present histogram
+    uint32_t period, total;
+    bool fresh_p; // if the present hist is fresh
+    uint64_t last_decay_c; // last decay cycle
+    uint64_t last_decay_r; // last decay remiander
+
+    private:
+      void _expand_to(unsigned s) {
+	if (s > h.size())
+	  h.resize(s, 0);
+      }
+      void _contract() {
+	unsigned p = h.size();
+	while (p > 1 && h[p-1] == 0)
+	  --p;
+	h.resize(p);
+      }
+    public:
+      RankHistogram(uint32_t p, uint32_t time) : 
+	period(p), total(0), fresh_p(false), last_decay_r(0){
+	last_decay_c = time / period;
+      }
+
+      void set_dp(uint32_t dp) {
+	last_decay_c = period * last_decay_c / dp;
+	period = dp;
+	last_decay_r = 0;
+	fresh_p = false;
+      }
+
+      void clear(uint32_t time) {
+	h.clear();
+	present.clear();
+        total = 0;
+	fresh_p = false;
+	last_decay_c = time / period;
+	last_decay_r = 0;
+      }
+
+      template< class InputIt >
+      void sync(InputIt begin, InputIt end, uint32_t time = 0) {
+	clear(time);
+	while(begin != end) {
+	  add(*begin);
+	  begin++;
+	}
+      }
+
+      void add(uint32_t v) {
+	unsigned bin = cbits(v);
+	bin = MIN(31, bin);
+	_expand_to(bin + 1);
+	h[bin]++;
+	total++;
+	_contract();
+      }
+
+      void insert(uint32_t v) {
+	unsigned bin = cbits(v);
+	if (bin > 0 && bin != cbits(v-1)) {
+	  _expand_to(bin + 1);
+	  h[bin]++;
+	  h[bin-1]--;
+	  _contract();
+	}
+      }
+
+      void sub(uint32_t v) {
+	unsigned bin = cbits(v);
+	if (total > 0 &&
+      bin + 1 <= h.size() &&
+      h[bin] > 0) {
+	  h[bin]--;
+	  total--;
+	  _contract();
+	}
+      }
+
+      void decay(uint64_t time) {
+	int bits = time / period - last_decay_c;
+	if (bits <= 0 || h.empty())
+	  return;
+	auto p = h.begin();
+	/// Objects at a temperature of 0 don't decay
+	p++;
+	for ( ; p != h.end(); ++p) {
+	  /// demote objs to a lower bar
+	  *(p-1) += *p - (*p >> bits);
+	  *p >>= bits;
+	}
+	last_decay_c = time / period;
+	last_decay_r = 0;
+	fresh_p = false;
+      }
+
+      /// generate a present histogram which is more accurate
+      bool fresh_present(uint64_t time) {
+	decay(time);
+	uint64_t remainder = (time - last_decay_c* period) % period;
+	if (h.empty() ||
+	    (fresh_p && remainder - last_decay_r < period / 8))
+	  return false;
+
+	// fresh the present histogram
+	present.resize(h.size());
+	auto p1 = present.begin();
+	auto p2 = h.begin();
+	/// Objects at a temperature of 0 don't decay
+	*(p1++) = *(p2++);
+	for ( ; p2 != h.end(); ++p2, ++p1) {
+	  uint32_t demote = remainder * (*p2) / (2 * period);
+	  *(p1 - 1) += demote;
+	  *p1 = *p2 - demote;
+	}
+	fresh_p = true;
+	last_decay_r = remainder;
+	return true;
+      }
+
+      uint32_t get_position_value(uint64_t m) {
+        if (m >= total)
+          return 0;
+	int64_t target = total - m;
+	uint32_t pos = 1;
+	for (auto p = present.begin(); p != present.end(); ++p) {
+          target -= *p;
+	  if (target <= 0) {
+                pos += target * MAX(pos/2 ,1) / MAX(1, *p);
+                break;
+          }
+	  pos <<= 1;
+	}
+	return pos;
+      }
+
+      uint64_t get_value_position(uint32_t v) {
+        int64_t lower = 0;
+        uint32_t pos = 1;
+        for (auto p = present.begin(); p!= present.end(); ++p) {
+          if (v < pos) {
+                // lower += (*p) * (v - pos / 2) / MAX(pos / 2, 1);
+                break;
+          }
+          pos <<= 1;
+          lower += *p;
+      	}
+        return total - lower;
+      }
+      uint32_t get_avg() const {
+	float avg  = 0;
+	int bin = 0;
+	for (auto p = present.begin(); p != present.end(); ++p) {
+	  avg += float(*p) / total * bin;
+	  bin = (bin ? bin << 1 : 1 );
+	}
+	return (uint32_t)avg;
+      }
+  };
+
+private:
+  typedef ceph::unordered_map<
+    uint32_t, temp_info, ExclusiveKeyAsHash<unsigned>
+    > HitTable;
+
+  HitTable hits;
+  boost::scoped_ptr<RankHistogram> rh;
+
+public:
+  uint32_t decay_period;
+
+public:
+  class Params : public HitSet::Params::Impl {
+  public:
+    HitSet::impl_type_t get_type() const override {
+      return HitSet::TYPE_TEMP;
+    }
+    HitSet::Impl *get_new_impl() const override {
+      return new TempHitSet;
+    }
+
+    static void generate_test_instances(list<Params*>& o) {
+      o.push_back(new Params);
+    }
+  };
+
+  explicit TempHitSet()
+    : decay_period(1024) {
+    uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+    rh.reset(new RankHistogram(decay_period, now_sec));
+  }
+  explicit TempHitSet(const TempHitSet::Params *p)
+    : decay_period(1024) {
+    uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+  }
+  TempHitSet(const TempHitSet &o)
+    : hits(o.hits), decay_period(o.decay_period) {
+    uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+    rh.reset(new RankHistogram(decay_period, now_sec));
+  }
+
+  HitSet::Impl *clone() const override {
+    return new TempHitSet(*this);
+  }
+
+  HitSet::impl_type_t get_type() const override {
+    return HitSet::TYPE_TEMP;
+  }
+  bool is_full() const override {
+    return false;
+  }
+  void set_dp(uint32_t dp) {
+    decay_period = dp;
+  }
+  void insert(const hobject_t &o) override {
+    insert(o, false);
+  }
+  uint32_t insert(const hobject_t &o, bool created);
+  void set_temp(const hobject_t &o, uint32_t t) {
+    HitTable::iterator it = hits.find(o.get_hash());
+    if (it == hits.end()) {
+      hits.emplace(o.get_hash(), t);
+      rh->add(t);
+    } else {
+      it->second.temp = t;
+    }
+  }
+  bool contains(const hobject_t& o) const override {
+    return hits.count(o.get_hash());
+  }
+  unsigned insert_count() const override {
+    // use histogram rather than count to prevent overflow
+    return rh->get_avg() * hits.size();
+  }
+  unsigned approx_unique_insert_count() const override {
+    return hits.size();
+  }
+  uint32_t get_temp(const hobject_t& o) {
+    HitTable::iterator it = hits.find(o.get_hash());
+    if (it == hits.end())
+      return 0;
+    else {
+      _update_temp(it->second);
+      return it->second.temp;
+    }
+  }
+  void evict(const hobject_t& o) {
+    HitTable::iterator it = hits.find(o.get_hash());
+    if (it == hits.end())
+      return;
+    rh->sub(it->second.temp);
+    hits.erase(it);
+  }
+  uint32_t get_rank_temp(uint64_t m) {
+    rh->fresh_present(ceph_clock_now().tv.tv_sec);
+    return rh->get_position_value(m * approx_unique_insert_count() / 1000000);
+  }
+  uint64_t get_oid_rank(const hobject_t& o) {
+    rh->fresh_present(ceph_clock_now().tv.tv_sec);
+    uint32_t temp = get_temp(o);
+    return rh->get_value_position(temp) * 1000000 / approx_unique_insert_count();
+  }
+  uint32_t get_avg_temp() {
+    rh->fresh_present(ceph_clock_now().tv.tv_sec);
+    return rh->get_avg();
+  }
+  // sync the temperature and rank histogram
+  void sync();
+
+  void encode(bufferlist &bl) const override {
+    ENCODE_START(1, 1, bl);
+    ::encode(hits, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator &bl) override {
+    DECODE_START(1, bl);
+    ::decode(hits, bl);
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const override;
+  static void generate_test_instances(list<TempHitSet*>& o) {
+    o.push_back(new TempHitSet);
+    o.push_back(new TempHitSet);
+    o.back()->insert(hobject_t());
+    o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+    o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  }
+
+private:
+  void _update_temp(temp_info& t) {
+    uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+    assert(t.last_decay <= now_sec);
+    assert(decay_period > 0);
+    uint32_t periods = (now_sec - t.last_decay) / decay_period;
+    if (periods == 0)
+      t.temp = MIN(TEMPMAX, t.temp);
+    else {
+      t.temp >>= periods;
+      t.last_decay = now_sec;
+    }
+  }
+};
+WRITE_CLASS_DENC(TempHitSet::temp_info)
+WRITE_CLASS_ENCODER(TempHitSet)
 
 #endif

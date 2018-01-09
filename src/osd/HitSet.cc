@@ -37,6 +37,10 @@ HitSet::HitSet(const HitSet::Params& params)
     impl.reset(new ExplicitObjectHitSet(static_cast<ExplicitObjectHitSet::Params*>(params.impl.get())));
     break;
 
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet(static_cast<TempHitSet::Params*>(params.impl.get())));
+    break;
+
   default:
     assert (0 == "unknown HitSet type");
   }
@@ -71,6 +75,9 @@ void HitSet::decode(bufferlist::iterator &bl)
   case TYPE_BLOOM:
     impl.reset(new BloomHitSet);
     break;
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet);
+    break;
   case TYPE_NONE:
     impl.reset(NULL);
     break;
@@ -102,6 +109,10 @@ void HitSet::generate_test_instances(list<HitSet*>& o)
   o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
   o.push_back(new HitSet(new ExplicitObjectHitSet));
+  o.back()->insert(hobject_t());
+  o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
+  o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
+  o.push_back(new HitSet(new TempHitSet));
   o.back()->insert(hobject_t());
   o.back()->insert(hobject_t("asdf", "", CEPH_NOSNAP, 123, 1, ""));
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
@@ -158,6 +169,9 @@ bool HitSet::Params::create_impl(impl_type_t type)
   case TYPE_BLOOM:
     impl.reset(new BloomHitSet::Params);
     break;
+  case TYPE_TEMP:
+    impl.reset(new TempHitSet::Params);
+    break;
   case TYPE_NONE:
     impl.reset(NULL);
     break;
@@ -203,6 +217,8 @@ void HitSet::Params::generate_test_instances(list<HitSet::Params*>& o)
   loop_hitset_params(ExplicitHashHitSet);
   o.push_back(new Params(new ExplicitObjectHitSet::Params));
   loop_hitset_params(ExplicitObjectHitSet);
+  o.push_back(new Params(new TempHitSet::Params));
+  loop_hitset_params(TempHitSet);
 }
 
 ostream& operator<<(ostream& out, const HitSet::Params& p) {
@@ -248,5 +264,43 @@ void BloomHitSet::Params::dump(Formatter *f) const {
 void BloomHitSet::dump(Formatter *f) const {
   f->open_object_section("bloom_filter");
   bloom.dump(f);
+  f->close_section();
+}
+
+uint32_t TempHitSet::insert(const hobject_t &o, bool created) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end()) {
+    if (!created)
+      return 0;
+    hits.emplace(o.get_hash(), 1);
+    rh->add(1);
+    return 1;
+  } else {
+    _update_temp(it->second);
+    (it->second.temp)++;
+    rh->insert(it->second.temp);
+    return it->second.temp;
+  }
+}
+
+void TempHitSet::sync() {
+  std::vector<uint32_t> temps;
+  for (HitTable::iterator it = hits.begin(); it != hits.end(); ++it) {
+    _update_temp(it->second);
+    temps.push_back(it->second.temp);
+  }
+  rh->sync(temps.begin(), temps.end(), ceph_clock_now().tv.tv_sec);
+}
+
+void TempHitSet::dump(Formatter *f) const {
+  f->open_object_section("temp_count");
+  f->open_array_section("hash_set");
+  for (HitTable::const_iterator p = hits.begin();
+       p != hits.end();
+       ++p){
+    f->dump_unsigned("hash", p->first);
+    f->dump_unsigned("temp", p->second.temp);
+    f->dump_unsigned("last_decay", p->second.last_decay);
+  }
   f->close_section();
 }
