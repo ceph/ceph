@@ -3934,6 +3934,7 @@ void Client::remove_cap(Cap *cap, bool queue_release)
   }
   size_t n = in->caps.erase(mds);
   assert(n == 1);
+  delete cap; // remove myself from session's cap list
   cap = nullptr;
 
   if (!in->is_any_caps()) {
@@ -3965,7 +3966,7 @@ void Client::remove_session_caps(MetaSession *s)
       in->requested_max_size = 0;
       in->flags |= I_CAP_DROPPED;
     }
-    remove_cap(cap, false);
+    remove_cap(cap, false);  // this will remove the cap from s->caps list.
     signal_cond_list(in->waitfor_caps);
     if (cap_snaps) {
       InodeRef tmp_ref(in);
