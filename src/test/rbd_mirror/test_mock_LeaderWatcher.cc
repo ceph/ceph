@@ -108,7 +108,7 @@ struct ManagedLock<MockTestImageCtx> {
       });
 
     Context *release_ctx = new FunctionContext(
-      [this, on_released, post_release_ctx](int r) {
+      [on_released, post_release_ctx](int r) {
         if (r < 0) {
           on_released->complete(r);
         } else {
