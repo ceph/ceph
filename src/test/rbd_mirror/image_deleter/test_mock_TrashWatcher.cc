@@ -169,7 +169,7 @@ public:
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_TRASH, _, StrEq("rbd"), StrEq("trash_list"),
                      ContentsEqual(bl), _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([this, out_bl](bufferlist *bl) {
+      .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
                         })),
                       Return(r)));

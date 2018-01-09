@@ -207,7 +207,7 @@ public:
 
   void expect_set_head(MockSetHeadRequest &mock_set_head_request, int r) {
     EXPECT_CALL(mock_set_head_request, send())
-      .WillOnce(Invoke([this, &mock_set_head_request, r]() {
+      .WillOnce(Invoke([&mock_set_head_request, r]() {
             mock_set_head_request.on_finish->complete(r);
           }));
   }

@@ -397,7 +397,7 @@ public:
                          bool ignore_orphan, int r) {
     EXPECT_CALL(mock_image_deleter,
                 trash_move(global_image_id, ignore_orphan, _))
-      .WillOnce(WithArg<2>(Invoke([this, &mock_image_deleter, r](Context* ctx) {
+      .WillOnce(WithArg<2>(Invoke([this, r](Context* ctx) {
                              m_threads->work_queue->queue(ctx, r);
                            })));
   }
