@@ -316,7 +316,8 @@ Engine::Engine(thread_data* td)
 
   // claim the g_ceph_context reference and release it on destruction
   cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_OSD,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+		    CODE_ENVIRONMENT_UTILITY,
+		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
   // create the ObjectStore

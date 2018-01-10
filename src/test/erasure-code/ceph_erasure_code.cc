@@ -86,7 +86,7 @@ int ErasureCodeCommand::setup(int argc, char** argv) {
   cct = global_init(
     NULL, ceph_options, CEPH_ENTITY_TYPE_CLIENT,
     CODE_ENVIRONMENT_UTILITY,
-    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+    CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf->apply_changes(NULL);
 
