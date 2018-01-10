@@ -472,8 +472,10 @@ int execute_group_snap_list(const po::variables_map &vm) {
       return r;
     }
     if (f) {
+      f->open_object_section("group_snap");
       f->dump_string("snap name", snap_name);
       f->dump_string("state", state_string);
+      f->close_section();
     } else {
       t << snap_name << state_string << TextTable::endrow;
     }
