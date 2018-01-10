@@ -4343,7 +4343,7 @@ void CInode::dump(Formatter *f) const
     f->dump_string("pending", ccap_string(it->second->pending()));
     f->dump_string("issued", ccap_string(it->second->issued()));
     f->dump_string("wanted", ccap_string(it->second->wanted()));
-    f->dump_string("last_sent", ccap_string(it->second->get_last_sent()));
+    f->dump_int("last_sent", it->second->get_last_sent());
     f->close_section();
   }
   f->close_section();
