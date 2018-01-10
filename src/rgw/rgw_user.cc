@@ -11,7 +11,6 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
-#include "common/backport_std.h"
 #include "rgw_rados.h"
 #include "rgw_acl.h"
 
@@ -262,16 +261,16 @@ int rgw_get_user_info_from_index(RGWRados * const store,
                                  RGWObjVersionTracker * const objv_tracker,
                                  real_time * const pmtime)
 {
-  user_info_entry e;
-  if (uinfo_cache.find(key, &e)) {
-    info = e.info;
+  if (auto e = uinfo_cache.find(key)) {
+    info = e->info;
     if (objv_tracker)
-      *objv_tracker = e.objv_tracker;
+      *objv_tracker = e->objv_tracker;
     if (pmtime)
-      *pmtime = e.mtime;
+      *pmtime = e->mtime;
     return 0;
   }
 
+  user_info_entry e;
   bufferlist bl;
   RGWUID uid;
   RGWObjectCtx obj_ctx(store);
@@ -294,10 +293,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
     return -EIO;
   }
 
-  list<rgw_cache_entry_info *> cache_info_entries;
-  cache_info_entries.push_back(&cache_info);
-
-  uinfo_cache.put(store, key, &e, cache_info_entries);
+  uinfo_cache.put(store, key, &e, { &cache_info });
 
   info = e.info;
   if (objv_tracker)

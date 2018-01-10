@@ -1376,7 +1376,7 @@ public:
     DUMP_DOWN = 8,       // only 'down' osds
     DUMP_DESTROYED = 16, // only 'destroyed' osds
   };
-  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0) const;
+  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0, string bucket="") const;
 
   int summarize_mapping_stats(
     OSDMap *newmap,

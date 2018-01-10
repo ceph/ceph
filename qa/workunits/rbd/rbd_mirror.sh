@@ -229,8 +229,7 @@ wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL} ${clone_image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${clone_image} 'up+replaying' 'master_position'
 compare_images ${POOL} ${clone_image}
 
-expect_failure "is non-primary" clone_image ${CLUSTER1} ${PARENT_POOL} \
-    ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
+clone_image ${CLUSTER1} ${PARENT_POOL} ${parent_image} ${parent_snap} ${POOL} ${clone_image}1
 
 testlog "TEST: data pool"
 dp_image=test_data_pool
@@ -420,15 +419,11 @@ testlog "TEST: split-brain"
 image=split-brain
 create_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'
-demote_image ${CLUSTER2} ${POOL} ${image}
-wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
-promote_image ${CLUSTER1} ${POOL} ${image}
+promote_image ${CLUSTER1} ${POOL} ${image} --force
+wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
 write_image ${CLUSTER1} ${POOL} ${image} 10
 demote_image ${CLUSTER1} ${POOL} ${image}
-if [ -n "${RBD_MIRROR_USE_RBD_MIRROR}" ]; then
-    wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
-fi
-promote_image ${CLUSTER2} ${POOL} ${image}
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+error' 'split-brain'
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying' 'master_position'

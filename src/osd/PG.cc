@@ -1237,10 +1237,11 @@ void PG::calc_replicated_acting(
   set<pg_shard_t> *acting_backfill,
   ostream &ss)
 {
-  ss << "calc_acting newest update on osd." << auth_log_shard->first
+  pg_shard_t auth_log_shard_id = auth_log_shard->first;
+
+  ss << __func__ << " newest update on osd." << auth_log_shard_id
      << " with " << auth_log_shard->second
      << (restrict_to_up_acting ? " restrict_to_up_acting" : "") << std::endl;
-  pg_shard_t auth_log_shard_id = auth_log_shard->first;
   
   // select primary
   map<pg_shard_t,pg_info_t>::const_iterator primary = all_info.find(up_primary);
@@ -1256,7 +1257,7 @@ void PG::calc_replicated_acting(
     primary = auth_log_shard;
   }
 
-  ss << "calc_acting primary is osd." << primary->first
+  ss << __func__ << " primary is osd." << primary->first
      << " with " << primary->second << std::endl;
   want->push_back(primary->first.osd);
   acting_backfill->insert(primary->first);
@@ -1418,10 +1419,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   map<pg_shard_t, pg_info_t> all_info(peer_info.begin(), peer_info.end());
   all_info[pg_whoami] = info;
 
-  for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
-       p != all_info.end();
-       ++p) {
-    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
+  if (cct->_conf->subsys.should_gather(dout_subsys, 10)) {
+    for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
+         p != all_info.end();
+         ++p) {
+      dout(10) << __func__ << "all_info osd." << p->first << " " << p->second << dendl;
+    }
   }
 
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =
@@ -1429,13 +1432,13 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
 
   if (auth_log_shard == all_info.end()) {
     if (up != acting) {
-      dout(10) << "choose_acting no suitable info found (incomplete backfills?),"
+      dout(10) << __func__ << " no suitable info found (incomplete backfills?),"
 	       << " reverting to up" << dendl;
       want_acting = up;
       vector<int> empty;
       osd->queue_want_pg_temp(info.pgid.pgid, empty);
     } else {
-      dout(10) << "choose_acting failed" << dendl;
+      dout(10) << __func__ << " failed" << dendl;
       assert(want_acting.empty());
     }
     return false;
@@ -1493,7 +1496,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       (pool.info.is_erasure() ||
        !cct->_conf->osd_allow_recovery_below_min_size)) {
     want_acting.clear();
-    dout(10) << "choose_acting failed, below min size" << dendl;
+    dout(10) << __func__ << " failed, below min size" << dendl;
     return false;
   }
 
@@ -1502,12 +1505,12 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     get_pgbackend()->get_is_recoverable_predicate());
   if (!(*recoverable_predicate)(have)) {
     want_acting.clear();
-    dout(10) << "choose_acting failed, not recoverable" << dendl;
+    dout(10) << __func__ << " failed, not recoverable" << dendl;
     return false;
   }
 
   if (want != acting) {
-    dout(10) << "choose_acting want " << want << " != acting " << acting
+    dout(10) << __func__ << " want " << want << " != acting " << acting
 	     << ", requesting pg_temp change" << dendl;
     want_acting = want;
 
@@ -1536,7 +1539,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
       ++i) {
     assert(stray_set.find(*i) == stray_set.end());
   }
-  dout(10) << "choose_acting want " << want << " (== acting) backfill_targets " 
+  dout(10) << __func__ << " want " << want << " (== acting) backfill_targets "
 	   << want_backfill << dendl;
   return true;
 }
@@ -2667,6 +2670,7 @@ void PG::_update_calc_stats()
   info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
+  info.stats.snaptrimq_len = snap_trimq.size();
 
   // If actingset is larger then upset we will have misplaced,
   // so we will report based on actingset size.
@@ -5318,7 +5322,7 @@ struct FlushState {
   ~FlushState() {
     pg->lock();
     if (!pg->pg_has_reset_since(epoch))
-      pg->queue_flushed(epoch);
+      pg->on_flushed();
     pg->unlock();
   }
 };
@@ -5734,14 +5738,15 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
   // connection to it when handling the new osdmap marking it down, and also
   // resets the messenger sesssion when the replica reconnects. to avoid the
   // out-of-order replies, the messages from that replica should be discarded.
-  if (osd->get_osdmap()->is_down(from))
+  OSDMapRef next_map = osd->get_next_osdmap();
+  if (next_map->is_down(from))
     return true;
   /* Mostly, this overlaps with the old_peering_msg
    * condition.  An important exception is pushes
    * sent by replicas not in the acting set, since
    * if such a replica goes down it does not cause
    * a new interval. */
-  if (get_osdmap()->get_down_at(from) >= m->map_epoch)
+  if (next_map->get_down_at(from) >= m->map_epoch)
     return true;
 
   // same pg?
@@ -5875,14 +5880,6 @@ void PG::queue_null(epoch_t msg_epoch,
   queue_peering_event(
     PGPeeringEventRef(std::make_shared<PGPeeringEvent>(msg_epoch, query_epoch,
 					 NullEvt())));
-}
-
-void PG::queue_flushed(epoch_t e)
-{
-  dout(10) << "flushed" << dendl;
-  queue_peering_event(
-    PGPeeringEventRef(std::make_shared<PGPeeringEvent>(e, e,
-					 FlushedEvt())));
 }
 
 void PG::queue_query(epoch_t msg_epoch,
@@ -6124,16 +6121,6 @@ PG::RecoveryState::Started::react(const IntervalFlush&)
   return discard_event();
 }
 
-
-boost::statechart::result
-PG::RecoveryState::Started::react(const FlushedEvt&)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->on_flushed();
-  return discard_event();
-}
-
-
 boost::statechart::result PG::RecoveryState::Started::react(const AdvMap& advmap)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -6182,14 +6169,6 @@ PG::RecoveryState::Reset::Reset(my_context ctx)
 
   pg->flushes_in_progress = 0;
   pg->set_last_peering_reset();
-}
-
-boost::statechart::result
-PG::RecoveryState::Reset::react(const FlushedEvt&)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->on_flushed();
-  return discard_event();
 }
 
 boost::statechart::result

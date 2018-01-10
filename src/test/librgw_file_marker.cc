@@ -24,7 +24,6 @@
 #include "rgw/rgw_lib_frontend.h" // direct requests
 
 #include "gtest/gtest.h"
-#include "common/backport_std.h"
 #include "common/ceph_argparse.h"
 #include "common/debug.h"
 #include "global/global_init.h"

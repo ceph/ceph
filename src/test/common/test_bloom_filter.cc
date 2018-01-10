@@ -177,10 +177,10 @@ TEST(BloomFilter, BinSweep) {
     int max = total_max / bins;
     float fpp = total_fpp / bins;//pow(total_fpp, bins);
 
-    std::vector<bloom_filter*> ls;
+    std::vector<std::unique_ptr<bloom_filter>> ls;
     bufferlist bl;
     for (int i=0; i<bins; i++) {
-      ls.push_back(new bloom_filter(max, fpp, i));
+      ls.push_back(std::make_unique<bloom_filter>(max, fpp, i));
       for (int j=0; j<max; j++) {
 	ls.back()->insert(10000 * (i+1) + j);
       }
@@ -190,7 +190,7 @@ TEST(BloomFilter, BinSweep) {
     int hit = 0;
     int test = max * 100;
     for (int i=0; i<test; ++i) {
-      for (std::vector<bloom_filter*>::iterator j = ls.begin(); j != ls.end(); ++j) {
+      for (std::vector<std::unique_ptr<bloom_filter>>::iterator j = ls.begin(); j != ls.end(); ++j) {
 	if ((*j)->contains(i * 732)) {  // note: sequential i does not work here; the intenral int hash is weak!!
 	  hit++;
 	  break;

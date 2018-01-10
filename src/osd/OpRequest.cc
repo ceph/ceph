@@ -194,7 +194,7 @@ bool OpRequest::filter_out(const set<string>& filters)
 
 ostream& operator<<(ostream& out, const OpRequest::ClassInfo& i)
 {
-  out << "class " << i.name << " rd " << i.read
-    << " wr " << i.write << " wl " << i.whitelisted;
+  out << "class " << i.class_name << " method " << i.method_name
+      << " rd " << i.read << " wr " << i.write << " wl " << i.whitelisted;
   return out;
 }

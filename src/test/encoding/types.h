@@ -274,6 +274,8 @@ TYPE(librbd::journal::ClientData)
 TYPE(librbd::journal::TagData)
 #include "librbd/mirroring_watcher/Types.h"
 TYPE(librbd::mirroring_watcher::NotifyMessage)
+#include "librbd/trash_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)

@@ -279,7 +279,7 @@ TEST(ErasureCodeTest, encode)
 
 TEST(ErasureCodeTest, create_rule)
 {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c = std::make_unique<CrushWrapper>();
   c->create();
   int root_type = 2;
   c->set_type_name(root_type, "root");

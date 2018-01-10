@@ -1963,6 +1963,10 @@ struct pg_stat_t {
   int32_t up_primary;
   int32_t acting_primary;
 
+  // snaptrimq.size() is 64bit, but let's be serious - anything over 50k is
+  // absurd already, so cap it to 2^32 and save 4 bytes at  the same time
+  uint32_t snaptrimq_len;
+
   bool stats_invalid:1;
   /// true if num_objects_dirty is not accurate (because it was not
   /// maintained starting from pool creation)
@@ -1982,6 +1986,7 @@ struct pg_stat_t {
       mapping_epoch(0),
       up_primary(-1),
       acting_primary(-1),
+      snaptrimq_len(0),
       stats_invalid(false),
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
@@ -2010,17 +2015,29 @@ struct pg_stat_t {
       log_size = f;
     if (ondisk_log_size < f)
       ondisk_log_size = f;
+    if (snaptrimq_len < f)
+      snaptrimq_len = f;
   }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    if (((uint64_t)snaptrimq_len + (uint64_t)o.snaptrimq_len) > (uint64_t)(1 << 31)) {
+      snaptrimq_len = 1 << 31;
+    } else {
+      snaptrimq_len += o.snaptrimq_len;
+    }
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    if (o.snaptrimq_len < snaptrimq_len) {
+      snaptrimq_len -= o.snaptrimq_len;
+    } else {
+      snaptrimq_len = 0;
+    }
   }
 
   bool is_acting_osd(int32_t osd, bool primary) const;
@@ -4286,7 +4303,6 @@ struct object_copy_data_t {
   enum {
     FLAG_DATA_DIGEST = 1<<0,
     FLAG_OMAP_DIGEST = 1<<1,
-    FLAG_EXTENTS     = 1<<2,
   };
   object_copy_cursor_t cursor;
   uint64_t size;
@@ -4308,9 +4324,6 @@ struct object_copy_data_t {
 
   uint64_t truncate_seq;
   uint64_t truncate_size;
-
-  ///< object logical extents map
-  interval_set<uint64_t> extents;
 
 public:
   object_copy_data_t() :
@@ -4637,7 +4650,6 @@ struct object_info_t {
     FLAG_CACHE_PIN   = 1<<6, // pin the object in cache tier
     FLAG_MANIFEST    = 1<<7, // has manifest
     FLAG_USES_TMAP   = 1<<8, // deprecated; no longer used
-    FLAG_EXTENTS     = 1<<9, // logical extents map is valid
   } flag_t;
 
   flag_t flags;
@@ -4662,8 +4674,6 @@ struct object_info_t {
       s += "|cache_pin";
     if (flags & FLAG_MANIFEST)
       s += "|manifest";
-    if (flags & FLAG_EXTENTS)
-      s += "|extents";
     if (s.length())
       return s.substr(1);
     return s;
@@ -4685,7 +4695,6 @@ struct object_info_t {
   uint32_t alloc_hint_flags;
 
   struct object_manifest_t manifest;
-  interval_set<uint64_t> extents; // deduplicated logical extents map
 
   void copy_user_bits(const object_info_t& other);
 
@@ -4721,9 +4730,6 @@ struct object_info_t {
   }
   bool has_manifest() const {
     return test_flag(FLAG_MANIFEST);
-  }
-  bool has_extents() const {
-    return test_flag(FLAG_EXTENTS);
   }
   void set_data_digest(__u32 d) {
     set_flag(FLAG_DATA_DIGEST);
@@ -5211,9 +5217,9 @@ WRITE_CLASS_ENCODER(obj_list_snap_response_t)
 // PromoteCounter
 
 struct PromoteCounter {
-  std::atomic_ullong  attempts{0};
-  std::atomic_ullong  objects{0};
-  std::atomic_ullong  bytes{0};
+  std::atomic<unsigned long long>  attempts{0};
+  std::atomic<unsigned long long>  objects{0};
+  std::atomic<unsigned long long>  bytes{0};
 
   void attempt() {
     attempts++;

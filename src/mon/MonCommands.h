@@ -453,6 +453,11 @@ COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false " \
 	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
 	"print OSD tree", "osd", "r", "cli,rest")
+COMMAND("osd tree-from " \
+	"name=epoch,type=CephInt,range=0,req=false " \
+	"name=bucket,type=CephString " \
+	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
+	"print OSD tree in bucket", "osd", "r", "cli,rest")
 COMMAND("osd ls " \
 	"name=epoch,type=CephInt,range=0,req=false", \
 	"show all OSD ids", "osd", "r", "cli,rest")

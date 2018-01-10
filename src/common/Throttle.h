@@ -29,7 +29,7 @@ class Throttle {
   CephContext *cct;
   const std::string name;
   PerfCountersRef logger;
-  std::atomic<unsigned> count = { 0 }, max = { 0 };
+  std::atomic<int64_t> count = { 0 }, max = { 0 };
   std::mutex lock;
   std::list<std::condition_variable> conds;
   const bool use_perf;
@@ -384,7 +384,7 @@ public:
     uint64_t got = m_throttle.get(c);
     if (got < c) {
       // Not enough tokens, add a blocker for it.
-      Context *ctx = new FunctionContext([this, handler, item](int r) {
+      Context *ctx = new FunctionContext([handler, item](int r) {
   	(handler->*MF)(r, item);
         });
       m_blockers.emplace_back(c - got, ctx);

@@ -533,7 +533,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, session->info.inst.name.num());
+      mds->locker->remove_client_cap(in, session->get_client());
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -773,7 +773,7 @@ void Server::find_idle_sessions()
 
     if (g_conf->mds_session_blacklist_on_timeout) {
       std::stringstream ss;
-      mds->evict_client(session->info.inst.name.num(), false, true,
+      mds->evict_client(session->get_client().v, false, true,
                         ss, nullptr);
     } else {
       kill_session(session, NULL);
@@ -1042,7 +1042,7 @@ void Server::reconnect_tick()
 
       if (g_conf->mds_session_blacklist_on_timeout) {
         std::stringstream ss;
-        mds->evict_client(session->info.inst.name.num(), false, true, ss,
+        mds->evict_client(session->get_client().v, false, true, ss,
                           gather.new_sub());
       } else {
         kill_session(session, NULL);
@@ -1125,7 +1125,7 @@ void Server::recall_client_state(void)
 	     << ", leases " << session->leases.size()
 	     << dendl;
 
-    uint64_t newlim = MAX(MIN((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
+    uint64_t newlim = std::max(std::min<uint64_t>((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
     if (session->caps.size() > newlim) {
       MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
@@ -1739,7 +1739,8 @@ void Server::handle_osd_map()
    * using osdmap_full_flag(), because we want to know "is the flag set"
    * rather than "does the flag apply to us?" */
   mds->objecter->with_osdmap([this](const OSDMap& o) {
-      is_full = o.test_flag(CEPH_OSDMAP_FULL);
+      auto pi = o.get_pg_pool(mds->mdsmap->get_metadata_pool());
+      is_full = pi && pi->has_flag(pg_pool_t::FLAG_FULL);
       dout(7) << __func__ << ": full = " << is_full << " epoch = "
 	      << o.get_epoch() << dendl;
     });
@@ -3915,11 +3916,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
  */
 class C_MDS_inode_update_finish : public ServerLogContext {
   CInode *in;
-  bool truncating_smaller, changed_ranges;
+  bool truncating_smaller, changed_ranges, new_realm;
 public:
   C_MDS_inode_update_finish(Server *s, MDRequestRef& r, CInode *i,
-			    bool sm=false, bool cr=false) :
-    ServerLogContext(s, r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
+			    bool sm=false, bool cr=false, bool nr=false) :
+    ServerLogContext(s, r), in(i),
+    truncating_smaller(sm), changed_ranges(cr), new_realm(nr) { }
   void finish(int r) override {
     assert(r == 0);
 
@@ -3927,13 +3929,20 @@ public:
     in->pop_and_dirty_projected_inode(mdr->ls);
     mdr->apply();
 
+    MDSRank *mds = get_mds();
+
     // notify any clients
     if (truncating_smaller && in->inode.is_truncating()) {
-      get_mds()->locker->issue_truncate(in);
-      get_mds()->mdcache->truncate_inode(in, mdr->ls);
+      mds->locker->issue_truncate(in);
+      mds->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
+    if (new_realm) {
+      int op = CEPH_SNAP_OP_SPLIT;
+      mds->mdcache->do_realm_invalidate_and_update_notify(in, op);
+    }
+
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
 
     server->respond_to_request(mdr, 0);
 
@@ -4138,7 +4147,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();
 
-  uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  uint64_t old_size = std::max<uint64_t>(pi->size, req->head.args.setattr.old_size);
 
   // ENOSPC on growing file while full, but allow shrinks
   if (is_full && req->head.args.setattr.size > old_size) {
@@ -4251,7 +4260,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   pi->mtime = pi->ctime = mdr->get_op_stamp();
   pi->change_attr++;
 
-  uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
+  uint64_t old_size = std::max<uint64_t>(pi->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
     pi->truncate(old_size, 0);
     le->metablob.add_truncate_start(in->ino());
@@ -4670,6 +4679,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     return;
   }
 
+  bool new_realm = false;
   if (name.compare(0, 15, "ceph.dir.layout") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -4735,11 +4745,22 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
 
     xlocks.insert(&cur->policylock);
+    if (quota.is_enable() && !cur->get_projected_srnode()) {
+      xlocks.insert(&cur->snaplock);
+      new_realm = true;
+    }
+
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
     pi = cur->project_inode();
     pi->quota = quota;
+
+    if (new_realm) {
+      SnapRealm *realm = cur->find_snaprealm();
+      sr_t *newsnap = cur->project_snaprealm(realm->get_newest_seq());
+      newsnap->seq = realm->get_newest_seq();
+    }
     mdr->no_early_reply = true;
   } else if (name.find("ceph.dir.pin") == 0) {
     if (!cur->is_dir() || cur->is_root()) {
@@ -4783,7 +4804,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
+								   false, false, new_realm));
   return;
 }
 
@@ -5976,7 +5998,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   SnapRealm *realm = in->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
   if (straydn)
-    straydn->first = MAX((uint64_t)in->first, follows + 1);
+    straydn->first = std::max<uint64_t>(in->first, follows + 1);
 
   // yay!
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
@@ -7296,7 +7318,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-  snapid_t next_dest_snap = MAX(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
+  snapid_t next_dest_snap = std::max(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
 
   // add it all to the metablob
   // target inode
@@ -7307,7 +7329,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
-	straydn->first = MAX((uint64_t)oldin->first, dest_realm->get_newest_seq() + 1);
+	straydn->first = std::max<uint64_t>(oldin->first, dest_realm->get_newest_seq() + 1);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
@@ -7345,7 +7367,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	// FIXME: stray reintegration, do we need to update destdn->first?
-	destdn->first = MAX(destdn->first, next_dest_snap);
+	destdn->first = std::max(destdn->first, next_dest_snap);
 
       if (destdn->is_auth())
         metablob->add_primary_dentry(destdn, destdnl->get_inode(), true, true);
@@ -7359,7 +7381,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
 
-    destdn->first = MAX(srci->first, next_dest_snap);
+    destdn->first = std::max(srci->first, next_dest_snap);
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);

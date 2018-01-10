@@ -6172,7 +6172,7 @@ TEST_F(TestLibRBD, ExclusiveLock)
 
   int owner_id = -1;
   mutex lock;
-  const auto pingpong = [&,this](int m_id, rbd_image_t &m_image) {
+  const auto pingpong = [&](int m_id, rbd_image_t &m_image) {
       for (int i = 0; i < 10; i++) {
 	{
 	  lock_guard<mutex> locker(lock);

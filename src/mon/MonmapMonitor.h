@@ -22,7 +22,6 @@
 #include <map>
 #include <set>
 
-
 #include "include/types.h"
 #include "msg/Messenger.h"
 
@@ -79,8 +78,6 @@ class MonmapMonitor : public PaxosService {
 
 private:
   void check_subs();
-
-private:
   bufferlist monmap_bl;
 };
 

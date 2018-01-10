@@ -889,7 +889,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params()
     MD5 etag_sum;
     uint64_t total_size = 0;
     for (const auto& entry : slo_info->entries) {
-      etag_sum.Update((const byte *)entry.etag.c_str(),
+      etag_sum.Update((const ::byte *)entry.etag.c_str(),
                       entry.etag.length());
       total_size += entry.size_bytes;
 
@@ -1052,7 +1052,6 @@ int RGWPutMetadataObject_ObjStore_SWIFT::get_params()
     return r;
   }
 
-  placement_rule = s->info.env->get("HTTP_X_STORAGE_POLICY", "");
   dlo_manifest = s->info.env->get("HTTP_X_OBJECT_MANIFEST");
 
   return 0;

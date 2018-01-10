@@ -15,7 +15,7 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <sstream>
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "include/assert.h"
 #include "include/stringify.h"
@@ -119,20 +119,20 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     pending_health.merge(p.second);
   }
   for (auto &p : pending_health.checks) {
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%hasorhave%"),
+      std::regex("%hasorhave%"),
       names[p.first].size() > 1 ? "have" : "has");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%names%"), stringify(names[p.first]));
-    p.second.summary = boost::regex_replace(
+      std::regex("%names%"), stringify(names[p.first]));
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%plurals%"),
+      std::regex("%plurals%"),
       names[p.first].size() > 1 ? "s" : "");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%isorare%"),
+      std::regex("%isorare%"),
       names[p.first].size() > 1 ? "are" : "is");
   }
 

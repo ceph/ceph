@@ -2388,6 +2388,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  osr.flush();
   {
     bool empty;
     int r = store->collection_empty(cid, &empty);
@@ -2407,6 +2408,7 @@ TEST_P(StoreTest, SimpleAttrTest) {
     r = apply_transaction(store, &osr, std::move(t));
     ASSERT_EQ(r, 0);
   }
+  osr.flush();
   {
     bool empty;
     int r = store->collection_empty(cid, &empty);
@@ -6731,6 +6733,42 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
   g_conf->apply_changes(NULL);
 }
 #endif
+
+TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf->set_val("bluestore_block_size", stringify(0x280005000)); //10 Gb + 4K
+  g_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_conf->set_val("bluestore_fsck_on_umount", "false");
+  StartDeferred(0x4000);
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
+  store->mount();
+
+  g_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_conf->set_val("bluestore_block_size", stringify(0x280000000)); // 10 Gb
+  g_conf->apply_changes(NULL);
+}
+
+TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_conf->set_val("bluestore_block_size", stringify(0x280005000)); //10 Gb + 20K
+  g_conf->set_val("bluestore_fsck_on_mount", "false");
+  g_conf->set_val("bluestore_fsck_on_umount", "false");
+  StartDeferred(0x1000);
+  store->umount();
+  ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
+  store->mount();
+
+  g_conf->set_val("bluestore_block_size", stringify(0x280000000)); // 10 Gb
+  g_conf->set_val("bluestore_fsck_on_mount", "true");
+  g_conf->set_val("bluestore_fsck_on_umount", "true");
+  g_conf->apply_changes(NULL);
+}
 
 int main(int argc, char **argv) {
   vector<const char*> args;
