@@ -2071,7 +2071,9 @@ void RGWDataChangesLog::read_clear_modified(map<int, set<string> > &modified)
 
 void RGWBucketCompleteInfo::dump(Formatter *f) const {
   encode_json("bucket_info", info, f);
-  encode_json("attrs", attrs, f);
+  map<string, bufferlist> encode_attrs = attrs;
+  encode_attrs.erase(RGW_ATTR_LC);
+  encode_json("attrs", encode_attrs, f);
 }
 
 void RGWBucketCompleteInfo::decode_json(JSONObj *obj) {
@@ -2311,6 +2313,10 @@ public:
       /* existing bucket, keep its placement */
       bci.info.bucket.explicit_placement = old_bci.info.bucket.explicit_placement;
       bci.info.placement_rule = old_bci.info.placement_rule;
+      map<string, bufferlist>::iterator aiter = old_bci.attrs.find(RGW_ATTR_LC);
+      if (aiter != old_bci.attrs.end()) {
+        bci.attrs[RGW_ATTR_LC] = old_bci.attrs[RGW_ATTR_LC];
+      }
     }
 
     if (exists && old_bci.info.datasync_flag_enabled() != bci.info.datasync_flag_enabled()) {
