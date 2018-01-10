@@ -451,8 +451,7 @@ std::vector<Option> get_global_options() {
     Option("erasure_code_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR"/erasure-code")
     .set_description("directory where erasure-code plugins can be found")
-    .add_service({"mon", "osd"})
-    .set_safe(),
+    .add_service({"mon", "osd"}),
 
     // logging
     Option("log_file", Option::TYPE_STR, Option::LEVEL_BASIC)
@@ -615,8 +614,7 @@ std::vector<Option> get_global_options() {
 
     Option("plugin_dir", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_PKGLIBDIR)
-    .set_description("")
-    .set_safe(),
+    .set_description(""),
 
     Option("xio_trace_mempool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
