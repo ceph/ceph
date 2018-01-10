@@ -39,13 +39,7 @@ OpRequest::OpRequest(Message *req, OpTracker *tracker) :
   } else if (req->get_type() == MSG_OSD_REPOPREPLY) {
     reqid = static_cast<MOSDRepOpReply*>(req)->reqid;
   }
-  if (tracker->is_tracking()) {
-    req_src_inst = req->get_source_inst();
-    mark_event("header_read", request->get_recv_stamp());
-    mark_event("throttled", request->get_throttle_stamp());
-    mark_event("all_read", request->get_recv_complete_stamp());
-    mark_event("dispatched", request->get_dispatch_stamp());
-  }
+  req_src_inst = req->get_source_inst();
 }
 
 void OpRequest::_dump(Formatter *f) const
