@@ -5026,7 +5026,7 @@ void OSD::tick_without_osd_lock()
   dout(10) << "tick_without_osd_lock" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
+  logger->set(l_osd_history_alloc_bytes, shift_round_up(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
   logger->set(l_osd_cached_crc, buffer::get_cached_crc());
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());

@@ -83,6 +83,15 @@ using ceph_le64 = ceph_le<__u64>;
 using ceph_le32 = ceph_le<__u32>;
 using ceph_le16 = ceph_le<__u16>;
 
+namespace std {
+template<>
+struct is_integral<ceph_le64> : public true_type {};
+template<>
+struct is_integral<ceph_le32> : public true_type {};
+template<>
+struct is_integral<ceph_le16> : public true_type {};
+}
+
 inline __u64 init_le64(__u64 x) {
   return mswab<__u64>(x);
 }

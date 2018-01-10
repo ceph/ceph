@@ -575,7 +575,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       ::decode(uuid, p);
       ::decode(seq, p);
       if (len + 6 > bl.length()) {
-	more = ROUND_UP_TO(len + 6 - bl.length(), super.block_size);
+	more = round_up_to(len + 6 - bl.length(), super.block_size);
       }
     }
     if (uuid != super.uuid) {
@@ -1057,11 +1057,11 @@ int BlueFS::_read(
       buf->bl_off = off & super.block_mask();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(buf->bl_off, &x_off);
-      uint64_t want = ROUND_UP_TO(len + (off & ~super.block_mask()),
+      uint64_t want = round_up_to(len + (off & ~super.block_mask()),
 				  super.block_size);
       want = std::max(want, buf->max_prefetch);
       uint64_t l = std::min(p->length - x_off, want);
-      uint64_t eof_offset = ROUND_UP_TO(h->file->fnode.size, super.block_size);
+      uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
       if (!h->ignore_eof &&
 	  buf->bl_off + l > eof_offset) {
 	l = eof_offset - buf->bl_off;
@@ -1115,7 +1115,7 @@ void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
            << dendl;
   if (offset & ~super.block_mask()) {
     offset &= super.block_mask();
-    length = ROUND_UP_TO(length, super.block_size);
+    length = round_up_to(length, super.block_size);
   }
   uint64_t x_off = 0;
   auto p = f->fnode.seek(offset, &x_off);
@@ -1139,7 +1139,7 @@ uint64_t BlueFS::_estimate_log_size()
     size += p.num_intervals() * (1 + 1 + sizeof(uint64_t) * 2);
   size += dir_map.size() + (1 + avg_dir_size);
   size += file_map.size() * (1 + avg_dir_size + avg_file_size);
-  return ROUND_UP_TO(size, super.block_size);
+  return round_up_to(size, super.block_size);
 }
 
 void BlueFS::compact_log()
@@ -1337,7 +1337,7 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   _compact_log_dump_metadata(&t);
 
   // conservative estimate for final encoded size
-  new_log_jump_to = ROUND_UP_TO(t.op_bl.length() + super.block_size * 2,
+  new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
                                 cct->_conf->bluefs_alloc_size);
   t.op_jump(log_seq, new_log_jump_to);
 
@@ -1932,7 +1932,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   assert(id < alloc.size());
   uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
 
-  uint64_t left = ROUND_UP_TO(len, min_alloc_size);
+  uint64_t left = round_up_to(len, min_alloc_size);
   int r = -ENOSPC;
   int64_t alloc_len = 0;
   AllocExtentVector extents;

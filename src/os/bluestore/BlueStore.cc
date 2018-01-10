@@ -588,8 +588,8 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
 {
   assert(start_offset <= start_touch_offset && end_offset>= end_touch_offset);
 
-  uint64_t lookup_start_offset = P2ALIGN(start_offset, min_alloc_size);
-  uint64_t lookup_end_offset = ROUND_UP_TO(end_offset, min_alloc_size);
+  uint64_t lookup_start_offset = p2align(start_offset, min_alloc_size);
+  uint64_t lookup_end_offset = round_up_to(end_offset, min_alloc_size);
 
   dout(30) << __func__ << " (hex): [" << std::hex
            << lookup_start_offset << ", " << lookup_end_offset 
@@ -681,7 +681,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
     if (bi.referenced_bytes == 0) {
       uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
       int64_t blob_expected_for_release =
-        ROUND_UP_TO(len_on_disk, min_alloc_size) / min_alloc_size;
+        round_up_to(len_on_disk, min_alloc_size) / min_alloc_size;
 
       dout(30) << __func__ << " " << *(b_it->first)
                << " expected4release=" << blob_expected_for_release
@@ -3089,7 +3089,7 @@ bool BlueStore::WriteContext::has_conflict(
   assert((loffs_end % min_alloc_size) == 0);
   for (auto w : writes) {
     if (b == w.b) {
-      auto loffs2 = P2ALIGN(w.logical_offset, min_alloc_size);
+      auto loffs2 = p2align(w.logical_offset, min_alloc_size);
       auto loffs2_end = P2ROUNDUP(w.logical_offset + w.length0, min_alloc_size);
       if ((loffs <= loffs2 && loffs_end > loffs2) ||
           (loffs >= loffs2 && loffs < loffs2_end)) {
@@ -4350,14 +4350,14 @@ int BlueStore::_open_fm(bool create)
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    uint64_t reserved = ROUND_UP_TO(std::max(uint64_t(SUPER_RESERVED), min_alloc_size),
+    uint64_t reserved = round_up_to(std::max(uint64_t(SUPER_RESERVED), min_alloc_size),
 				    min_alloc_size);
     fm->allocate(0, reserved, t);
 
     if (cct->_conf->bluestore_bluefs) {
       assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = ROUND_UP_TO(p.get_start() + p.get_len(), min_alloc_size);
+      reserved = round_up_to(p.get_start() + p.get_len(), min_alloc_size);
       dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
 	       << " for bluefs" << dendl;
       bufferlist bl;
@@ -4382,7 +4382,7 @@ int BlueStore::_open_fm(bool create)
 	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
 	if (start + l > end) {
 	  l = end - start;
-          l = P2ALIGN(l, min_alloc_size);
+          l = p2align(l, min_alloc_size);
         }
         assert(start + l <= end);
 
@@ -4391,7 +4391,7 @@ int BlueStore::_open_fm(bool create)
         if (start + l + u > end) {
           u = end - (start + l);
           // trim to align so we don't overflow again
-          u = P2ALIGN(u, min_alloc_size);
+          u = p2align(u, min_alloc_size);
           stop = true;
         }
         assert(start + l + u <= end);
@@ -4746,7 +4746,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
       // align to bluefs's alloc_size
       initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
       // put bluefs in the middle of the device in case it is an HDD
-      uint64_t start = P2ALIGN((bdev->get_size() - initial) / 2,
+      uint64_t start = p2align((bdev->get_size() - initial) / 2,
 			       cct->_conf->bluefs_alloc_size);
       bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
       bluefs_extents.insert(start, initial);
@@ -5409,7 +5409,7 @@ int BlueStore::mkfs()
   }
 
   // make sure min_alloc_size is power of 2 aligned.
-  if (!ISP2(min_alloc_size)) {
+  if (!isp2(min_alloc_size)) {
     derr << __func__ << " min_alloc_size 0x"
 	 << std::hex << min_alloc_size << std::dec
 	 << " is not power of 2 aligned!"
@@ -5666,7 +5666,7 @@ static void apply(uint64_t off,
                   BlueStore::mempool_dynamic_bitset &bitset,
                   std::function<void(uint64_t,
 				     BlueStore::mempool_dynamic_bitset &)> f) {
-  auto end = ROUND_UP_TO(off + len, granularity);
+  auto end = round_up_to(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
     f(pos, bitset);
@@ -6016,7 +6016,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
 	  uint64_t start = l.blob_offset / chunk_size;
 	  uint64_t end =
-	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
+	    round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
 	  for (auto i = start; i < end; ++i) {
 	    (*pu) |= (1u << i);
 	  }
@@ -6273,8 +6273,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    length == min_alloc_size - SUPER_RESERVED) {
 	  // this is due to the change just after luminous to min_alloc_size
 	  // granularity allocations, and our baked in assumption at the top
-	  // of _fsck that 0~ROUND_UP_TO(SUPER_RESERVED,min_alloc_size) is used
-	  // (vs luminous's ROUND_UP_TO(SUPER_RESERVED,block_size)).  harmless,
+	  // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
+	  // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
 	  // since we will never allocate this region below min_alloc_size.
 	  dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
 		   << " and min_alloc_size, 0x" << std::hex << offset << "~"
@@ -9750,7 +9750,7 @@ void BlueStore::_do_write_small(
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
   uint32_t alloc_len = min_alloc_size;
-  auto offset0 = P2ALIGN(offset, alloc_len);
+  auto offset0 = p2align(offset, alloc_len);
 
   bool any_change;
 
@@ -9778,8 +9778,8 @@ void BlueStore::_do_write_small(
 	uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
 	// can we pad our head/tail out with zeros?
 	uint64_t head_pad, tail_pad;
-	head_pad = P2PHASE(offset, chunk_size);
-	tail_pad = P2NPHASE(end_offs, chunk_size);
+	head_pad = p2phase(offset, chunk_size);
+	tail_pad = p2nphase(end_offs, chunk_size);
 	if (head_pad || tail_pad) {
 	  o->extent_map.fault_range(db, offset - head_pad,
 				    end_offs - offset + head_pad + tail_pad);
@@ -9843,8 +9843,8 @@ void BlueStore::_do_write_small(
 	  return;
 	}
 	// read some data to fill out the chunk?
-	uint64_t head_read = P2PHASE(b_off, chunk_size);
-	uint64_t tail_read = P2NPHASE(b_off + b_len, chunk_size);
+	uint64_t head_read = p2phase(b_off, chunk_size);
+	uint64_t tail_read = p2nphase(b_off + b_len, chunk_size);
 	if ((head_read || tail_read) &&
 	    (b->get_blob().get_ondisk_length() >= b_off + b_len + tail_read) &&
 	    head_read + tail_read < min_alloc_size) {
@@ -10007,13 +10007,13 @@ void BlueStore::_do_write_small(
       } else {
 	prev_ep = end; // to avoid useless first extent re-check
       }
-    } // if (prev_ep != end && prev_ep->logical_offset >= min_off) 
+    } // if (prev_ep != end && prev_ep->logical_offset >= min_off)
   } while (any_change);
 
   // new blob.
-  
+
   BlobRef b = c->new_blob();
-  uint64_t b_off = P2PHASE(offset, alloc_len);
+  uint64_t b_off = p2phase(offset, alloc_len);
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
@@ -10315,7 +10315,7 @@ int BlueStore::_do_alloc_write(
     for (auto& p : extents) {
       txc->allocated.insert(p.offset, p.length);
     }
-    dblob.allocated(P2ALIGN(b_off, min_alloc_size), final_length, extents);
+    dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
 
     dout(20) << __func__ << " blob " << *b << dendl;
     if (dblob.has_csum()) {
@@ -10457,10 +10457,10 @@ void BlueStore::_do_write_data(
     uint64_t tail_offset, tail_length;
 
     head_offset = offset;
-    head_length = P2NPHASE(offset, min_alloc_size);
+    head_length = p2nphase(offset, min_alloc_size);
 
-    tail_offset = P2ALIGN(end, min_alloc_size);
-    tail_length = P2PHASE(end, min_alloc_size);
+    tail_offset = p2align(end, min_alloc_size);
+    tail_length = p2phase(end, min_alloc_size);
 
     middle_offset = head_offset + head_length;
     middle_length = length - head_length - tail_length;

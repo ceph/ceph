@@ -296,9 +296,9 @@ public:
 				int mempool = mempool::mempool_buffer_anon) {
       if (!align)
 	align = sizeof(size_t);
-      size_t rawlen = ROUND_UP_TO(sizeof(buffer::raw_combined),
+      size_t rawlen = round_up_to(sizeof(buffer::raw_combined),
 				  alignof(buffer::raw_combined));
-      size_t datalen = ROUND_UP_TO(len, alignof(buffer::raw_combined));
+      size_t datalen = round_up_to(len, alignof(buffer::raw_combined));
 
 #ifdef DARWIN
       char *ptr = (char *) valloc(rawlen + datalen);
@@ -1763,7 +1763,7 @@ public:
 
     if (max_buffers && _buffers.size() > max_buffers
 	&& _len > (max_buffers * align_size)) {
-      align_size = ROUND_UP_TO(ROUND_UP_TO(_len, max_buffers) / max_buffers, align_size);
+      align_size = round_up_to(round_up_to(_len, max_buffers) / max_buffers, align_size);
     }
     std::list<ptr>::iterator p = _buffers.begin();
     while (p != _buffers.end()) {
@@ -1940,8 +1940,8 @@ public:
       
       // make a new append_buffer.  fill out a complete page, factoring in the
       // raw_combined overhead.
-      size_t need = ROUND_UP_TO(len, sizeof(size_t)) + sizeof(raw_combined);
-      size_t alen = ROUND_UP_TO(need, CEPH_BUFFER_ALLOC_UNIT) -
+      size_t need = round_up_to(size_t(len), sizeof(size_t)) + sizeof(raw_combined);
+      size_t alen = round_up_to(need, CEPH_BUFFER_ALLOC_UNIT) -
 	sizeof(raw_combined);
       append_buffer = raw_combined::create(alen, 0, get_mempool());
       append_buffer.set_length(0);   // unused, so far.

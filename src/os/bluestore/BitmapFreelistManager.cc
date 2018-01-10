@@ -62,8 +62,8 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
-  assert(ISP2(bytes_per_block));
-  size = P2ALIGN(new_size, bytes_per_block);
+  assert(isp2(bytes_per_block));
+  size = p2align(new_size, bytes_per_block);
   blocks_per_key = cct->_conf->bluestore_freelist_blocks_per_key;
 
   _init_misc();
