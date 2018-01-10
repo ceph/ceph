@@ -70,7 +70,7 @@ int MDBalancer::proc_message(Message *m)
     break;
 
   default:
-    dout(0) << " balancer unknown message " << m->get_type() << dendl;
+    derr << " balancer unknown message " << m->get_type() << dendl_impl;
     assert(0 == "balancer unknown message");
   }
 
@@ -236,7 +236,7 @@ mds_load_t MDBalancer::get_load(utime_t now)
   if (cpu.is_open())
     cpu >> load.cpu_load_avg;
   else
-    dout(0) << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl;
+    derr << "input file " PROCPREFIX "'/proc/loadavg' not found" << dendl_impl;
   
   dout(15) << "get_load " << load << dendl;
   return load;
@@ -280,7 +280,7 @@ int MDBalancer::localize_balancer()
     }
     bal_code.assign(lua_src.to_str());
     bal_version.assign(oid.name);
-    dout(0) << "localized balancer, bal_code=" << bal_code << dendl;
+    dout(10) << "localized balancer, bal_code=" << bal_code << dendl;
   }
   return r;
 }
@@ -340,7 +340,7 @@ void MDBalancer::send_heartbeat()
   for (set<mds_rank_t>::iterator p = up.begin(); p != up.end(); ++p) {
     if (*p == mds->get_nodeid())
       continue;
-    MHeartbeat *hb = new MHeartbeat(load, beat_epoch);
+    MHeartbeat *hb = new MHeartbeat(load, beat_epoch, last_epoch_under);
     hb->get_import_map() = import_map;
     messenger->send_message(hb,
                             mds->mdsmap->get_inst(*p));
@@ -397,8 +397,7 @@ void MDBalancer::handle_heartbeat(MHeartbeat *m)
     }
   }
   mds_import_map[ who ] = m->get_import_map();
-
-  //dout(0) << "  load is " << load << " have " << mds_load.size() << dendl;
+  mds_last_epoch_under_info[who] = m->get_last_epoch_under();
 
   {
     unsigned cluster_size = mds->get_mds_map()->get_num_in_mds();
@@ -448,7 +447,7 @@ double MDBalancer::try_match(balance_state_t& state, mds_rank_t ex, double& maxe
 {
   if (maxex <= 0 || maxim <= 0) return 0.0;
 
-  double howmuch = MIN(maxex, maxim);
+  double howmuch = std::min(maxex, maxim);
   if (howmuch <= 0) return 0.0;
 
   dout(5) << "   - mds." << ex << " exports " << howmuch << " to mds." << im << dendl;
@@ -630,7 +629,7 @@ void MDBalancer::prep_rebalance(int beat)
       mds_meta_load[i] = l;
 
       if (whoami == 0)
-	dout(0) << "  mds." << i
+	dout(5) << "  mds." << i
 		<< " " << load
 		<< " = " << load.mds_load()
 		<< " ~ " << l << dendl;
@@ -678,10 +677,13 @@ void MDBalancer::prep_rebalance(int beat)
 	dout(15) << "   mds." << it->second << " is importer" << dendl;
 	importers.insert(pair<double,mds_rank_t>(it->first,it->second));
 	importer_set.insert(it->second);
-      } else {
-	dout(15) << "   mds." << it->second << " is exporter" << dendl;
-	exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
-	exporter_set.insert(it->second);
+      } else if (it->first > target_load * (1.0 + g_conf->mds_bal_min_rebalance)) {
+        int mds_last_epoch_under = (it->second == whoami) ? 0 : mds_last_epoch_under_info[it->second];
+        if (!mds_last_epoch_under || beat_epoch - mds_last_epoch_under >= 2) {
+	  dout(15) << "   mds." << it->second << " is exporter" << dendl;
+	  exporters.insert(pair<double,mds_rank_t>(it->first,it->second));
+	  exporter_set.insert(it->second);
+        }
       }
     }
 
@@ -824,7 +826,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	pop < g_conf->mds_bal_idle_threshold &&
 	im->inode != mds->mdcache->get_root() &&
 	im->inode->authority().first != mds->get_nodeid()) {
-      dout(0) << " exporting idle (" << pop << ") import " << *im
+      dout(5) << " exporting idle (" << pop << ") import " << *im
 	      << " back to mds." << im->inode->authority().first
 	      << dendl;
       mds->mdcache->migrator->export_dir_nicely(im, im->inode->authority().first);
@@ -876,7 +878,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 	assert(dir->inode->authority().first == target);  // cuz that's how i put it in the map, dummy
 
 	if (pop <= amount-have) {
-	  dout(0) << "reexporting " << *dir
+	  dout(5) << "reexporting " << *dir
 		  << " pop " << pop
 		  << " back to mds." << target << dendl;
 	  mds->mdcache->migrator->export_dir_nicely(dir, target);
@@ -905,7 +907,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 
 	double pop = (*import).first;
 	if (pop < amount-have || pop < MIN_REEXPORT) {
-	  dout(0) << "reexporting " << *imp
+	  dout(5) << "reexporting " << *imp
 		  << " pop " << pop
 		  << " back to mds." << imp->inode->authority()
 		  << dendl;
@@ -936,7 +938,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
     //fudge = amount - have;
 
     for (list<CDir*>::iterator it = exports.begin(); it != exports.end(); ++it) {
-      dout(0) << "   - exporting "
+      dout(5) << "   - exporting "
 	       << (*it)->pop_auth_subtree
 	       << " "
 	       << (*it)->pop_auth_subtree.meta_load(rebalance_time, mds->mdcache->decayrate)
@@ -1154,7 +1156,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	rd_adj = rdp / mds->get_mds_map()->get_num_in_mds() - rdp;
 	rd_adj /= 2.0;  // temper somewhat
 
-	dout(0) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
+	dout(5) << "replicating dir " << *dir << " pop " << dir_pop << " .. rdp " << rdp << " adj " << rd_adj << dendl;
 
 	dir->dir_rep = CDir::REP_ALL;
 	mds->mdcache->send_dir_updates(dir, true);
@@ -1168,7 +1170,7 @@ void MDBalancer::hit_dir(utime_t now, CDir *dir, int type, int who, double amoun
 	  dir->is_rep() &&
 	  dir_pop < g_conf->mds_bal_unreplicate_threshold) {
 	// unreplicate
-	dout(0) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
+	dout(5) << "unreplicating dir " << *dir << " pop " << dir_pop << dendl;
 
 	dir->dir_rep = CDir::REP_NONE;
 	mds->mdcache->send_dir_updates(dir);
@@ -1267,11 +1269,9 @@ int MDBalancer::dump_loads(Formatter *f)
     CDir *dir = dfs.front();
     dfs.pop_front();
 
-    if (f) {
-      f->open_object_section("dir");
-      dir->dump_load(f, now, decayrate);
-      f->close_section();
-    }
+    f->open_object_section("dir");
+    dir->dump_load(f, now, decayrate);
+    f->close_section();
 
     for (CDir::map_t::iterator it = dir->begin(); it != dir->end(); ++it) {
       CInode *in = it->second->get_linkage()->get_inode();
@@ -1292,7 +1292,7 @@ int MDBalancer::dump_loads(Formatter *f)
   f->open_object_section("mds_load");
   {
 
-    auto dump_mds_load = [this, f, now](mds_load_t& load) {
+    auto dump_mds_load = [f, now](mds_load_t& load) {
       f->dump_float("request_rate", load.req_rate);
       f->dump_float("cache_hit_rate", load.cache_hit_rate);
       f->dump_float("queue_length", load.queue_len);

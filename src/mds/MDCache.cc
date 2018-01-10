@@ -3918,13 +3918,13 @@ void MDCache::rejoin_start(MDSInternalContext *rejoin_done_)
 /*
  * rejoin phase!
  *
- * this initiates rejoin.  it shoudl be called before we get any
+ * this initiates rejoin.  it should be called before we get any
  * rejoin or rejoin_ack messages (or else mdsmap distribution is broken).
  *
  * we start out by sending rejoins to everyone in the recovery set.
  *
  * if we are rejoin, send for all regions in our cache.
- * if we are active|stopping, send only to nodes that are are rejoining.
+ * if we are active|stopping, send only to nodes that are rejoining.
  */
 void MDCache::rejoin_send_rejoins()
 {
@@ -5465,7 +5465,7 @@ void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
       break;
 
     bool need_snapflush = false;
-    for (auto p = snaps.lower_bound(MAX(in->first, (snapid_t)(follows + 1)));
+    for (auto p = snaps.lower_bound(std::max<snapid_t>(in->first, (follows + 1)));
 	 p != snaps.end() && *p <= in->last;
 	 ++p) {
       head_in->add_need_snapflush(in, *p, client);
@@ -5733,7 +5733,7 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 			    uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 			    int peer, int p_flags)
 {
-  client_t client = session->info.inst.name.num();
+  client_t client = session->get_client();
   SnapRealm *realm = in->find_snaprealm();
   if (realm->have_past_parents_open()) {
     dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
@@ -11985,7 +11985,7 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
     }
   }
 
-  auto dump_func = [this, fd, f, depth, &dump_root](CInode *in) {
+  auto dump_func = [fd, f, depth, &dump_root](CInode *in) {
     int r;
     if (!dump_root.empty()) {
       string ipath;

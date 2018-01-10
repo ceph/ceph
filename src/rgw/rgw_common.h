@@ -1647,11 +1647,11 @@ struct rgw_obj_key {
       return true;
     }
 
-    if (oid[0] != '_' || oid.size() < 3) // for namespace, min size would be 3: _x_
+    if (oid.size() < 3) // for namespace, min size would be 3: _x_
       return false;
 
-    int pos = oid.find('_', 1);
-    if (pos <= 1) // if it starts with __, it's not in our namespace
+    size_t pos = oid.find('_', 2); // oid must match ^_[^_].+$
+    if (pos == string::npos)
       return false;
 
     key->ns = oid.substr(1, pos - 1);

@@ -111,12 +111,6 @@ class CephFSTestCase(CephTestCase):
         self.fs = None # is now invalid!
         self.recovery_fs = None
 
-        # In case the previous filesystem had filled up the RADOS cluster, wait for that
-        # flag to pass.
-        osd_mon_report_interval_max = int(self.mds_cluster.get_config("osd_mon_report_interval_max", service_type='osd'))
-        self.wait_until_true(lambda: not self.mds_cluster.is_full(),
-                             timeout=osd_mon_report_interval_max * 5)
-
         # In case anything is in the OSD blacklist list, clear it out.  This is to avoid
         # the OSD map changing in the background (due to blacklist expiry) while tests run.
         try:

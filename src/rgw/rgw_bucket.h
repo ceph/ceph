@@ -20,7 +20,7 @@
 #include "common/ceph_time.h"
 #include "rgw_formats.h"
 
-// define as static when RGWBucket implementation compete
+// define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, string& buckets_obj_id);
 
 extern int rgw_bucket_store_info(RGWRados *store, const string& bucket_name, bufferlist& bl, bool exclusive,
@@ -213,6 +213,8 @@ struct RGWBucketAdminOpState {
 
   rgw_bucket bucket;
 
+  RGWQuotaInfo quota;
+
   void set_fetch_stats(bool value) { stat_buckets = value; }
   void set_check_objects(bool value) { check_objects = value; }
   void set_fix_index(bool value) { fix_index = value; }
@@ -231,6 +233,10 @@ struct RGWBucketAdminOpState {
   void set_object(std::string& object_str) {
     object_name = object_str;
   }
+  void set_quota(RGWQuotaInfo& value) {
+    quota = value;
+  }
+
 
   rgw_user& get_user_id() { return uid; }
   std::string& get_user_display_name() { return display_name; }
@@ -300,6 +306,7 @@ public:
   int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
@@ -331,6 +338,7 @@ public:
 			 const std::list<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
+  static int set_quota(RGWRados *store, RGWBucketAdminOpState& op_state);
 };
 
 

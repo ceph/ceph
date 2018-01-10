@@ -55,7 +55,7 @@ MDSRank::MDSRank(
     Context *suicide_hook_)
   :
     whoami(whoami_), incarnation(0),
-    mds_lock(mds_lock_), clog(clog_), timer(timer_),
+    mds_lock(mds_lock_), cct(msgr->cct), clog(clog_), timer(timer_),
     mdsmap(mdsmap_),
     objecter(new Objecter(g_ceph_context, msgr, monc_, nullptr, 0, 0)),
     server(NULL), mdcache(NULL), locker(NULL), mdlog(NULL),
@@ -97,7 +97,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_osdmap_full();
 
-  finisher = new Finisher(msgr->cct);
+  finisher = new Finisher(cct);
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -112,10 +112,10 @@ MDSRank::MDSRank(
   server = new Server(this);
   locker = new Locker(this, mdcache);
 
-  op_tracker.set_complaint_and_threshold(msgr->cct->_conf->mds_op_complaint_time,
-                                         msgr->cct->_conf->mds_op_log_threshold);
-  op_tracker.set_history_size_and_duration(msgr->cct->_conf->mds_op_history_size,
-                                           msgr->cct->_conf->mds_op_history_duration);
+  op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
+                                         cct->_conf->mds_op_log_threshold);
+  op_tracker.set_history_size_and_duration(cct->_conf->mds_op_history_size,
+                                           cct->_conf->mds_op_history_duration);
 }
 
 MDSRank::~MDSRank()
@@ -1365,7 +1365,7 @@ void MDSRank::reconnect_start()
   objecter->enable_blacklist_events();
   std::set<entity_addr_t> blacklist;
   epoch_t epoch = 0;
-  objecter->with_osdmap([this, &blacklist, &epoch](const OSDMap& o) {
+  objecter->with_osdmap([&blacklist, &epoch](const OSDMap& o) {
       o.get_blacklist(&blacklist);
       epoch = o.get_epoch();
   });
@@ -2050,7 +2050,7 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, MCommand *m)
   C_GatherBuilder gather(g_ceph_context, reply);
   for (const auto s : victims) {
     std::stringstream ss;
-    evict_client(s->info.inst.name.num(), false,
+    evict_client(s->get_client().v, false,
                  g_conf->mds_session_blacklist_on_evict, ss, gather.new_sub());
   }
   gather.activate();
@@ -2743,7 +2743,7 @@ bool MDSRank::evict_client(int64_t session_id,
     Context *on_blacklist_done = new FunctionContext([this, session_id, fn](int r) {
       objecter->wait_for_latest_osdmap(
        new C_OnFinisher(
-         new FunctionContext([this, session_id, fn](int r) {
+         new FunctionContext([this, fn](int r) {
               Mutex::Locker l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
                   return o.get_epoch();
@@ -2760,7 +2760,7 @@ bool MDSRank::evict_client(int64_t session_id,
     monc->start_mon_command(cmd, {}, nullptr, nullptr, on_blacklist_done);
   };
 
-  auto blocking_blacklist = [this, cmd, &err_ss, background_blacklist](){
+  auto blocking_blacklist = [this, cmd, background_blacklist](){
     C_SaferCond inline_ctx;
     background_blacklist([&inline_ctx](){inline_ctx.complete(0);});
     mds_lock.Unlock();

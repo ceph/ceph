@@ -87,6 +87,9 @@
 /* Defined if you have LZ4 */
 #cmakedefine HAVE_LZ4
 
+/* Defined if you have BROTLI */
+#cmakedefine HAVE_BROTLI
+
 /* Defined if you have libaio */
 #cmakedefine HAVE_LIBAIO
 
@@ -329,5 +332,8 @@
 
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
+
+/* Defined if boost::context is available */
+#cmakedefine HAVE_BOOST_CONTEXT
 
 #endif /* CONFIG_H */

@@ -1988,6 +1988,105 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
       o->c->store->cct->_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
+void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+  uint64_t& length, uint64_t& dstoff) {
+
+  auto cct = onode->c->store->cct;
+  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
+  for (auto& e : oldo->extent_map.extent_map) {
+    e.blob->last_encoded_id = -1;
+  }
+
+  int n = 0;
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end();
+    ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    BlobRef cb;
+    bool blob_duped = true;
+    if (e.blob->last_encoded_id >= 0) {
+      cb = id_to_blob[e.blob->last_encoded_id];
+      blob_duped = false;
+    } else { 
+      // dup the blob
+      const bluestore_blob_t& blob = e.blob->get_blob();
+      // make sure it is shared
+      if (!blob.is_shared()) {
+        c->make_blob_shared(b->_assign_blobid(txc), e.blob);
+        if (!src_dirty) {
+          src_dirty = true; 
+          dirty_range_begin = e.logical_offset;
+        }
+        assert(e.logical_end() > 0);
+        // -1 to exclude next potential shard
+        dirty_range_end = e.logical_end() - 1;
+      } else {
+        c->load_shared_blob(e.blob->shared_blob);
+      }
+      cb = new Blob();
+      e.blob->last_encoded_id = n;
+      id_to_blob[n] = cb;
+      e.blob->dup(*cb);
+      // bump the extent refs on the copied blob's extents
+      for (auto p : blob.get_extents()) {
+        if (p.is_valid()) {
+          e.blob->shared_blob->get_ref(p.offset, p.length);
+        }
+      }
+      txc->write_shared_blob(e.blob->shared_blob);
+      dout(20) << __func__ << "    new " << *cb << dendl;
+    }
+
+    int skip_front, skip_back;
+    if (e.logical_offset < srcoff) {
+      skip_front = srcoff - e.logical_offset;
+    } else {
+      skip_front = 0;
+    }
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
+    } else {
+      skip_back = 0;
+    }
+
+    Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+      e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
+    newo->extent_map.extent_map.insert(*ne);
+    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    // fixme: we may leave parts of new blob unreferenced that could
+    // be freed (relative to the shared_blob).
+    txc->statfs_delta.stored() += ne->length;
+    if (e.blob->get_blob().is_compressed()) {
+      txc->statfs_delta.compressed_original() += ne->length;
+      if (blob_duped) {
+        txc->statfs_delta.compressed() +=
+          cb->get_blob().get_compressed_payload_length();
+      }
+    }
+    dout(20) << __func__ << "  dst " << *ne << dendl;
+    ++n;
+  }
+  if (src_dirty) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
+    txc->write_onode(oldo);
+  }
+  txc->write_onode(newo);
+
+  if (dstoff + length > newo->onode.size) {
+    newo->onode.size = dstoff + length;
+  }
+  newo->extent_map.dirty_range(dstoff, length);
+}
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
@@ -4013,9 +4112,11 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 int BlueStore::_open_path()
 {
   // sanity check(s)
-  if (cct->_conf->get_val<uint64_t>("osd_max_object_size") >=
-      4*1024*1024*1024ull) {
-    derr << __func__ << " osd_max_object_size >= 4GB; BlueStore has hard limit of 4GB." << dendl;
+  auto osd_max_object_size =
+    cct->_conf->get_val<uint64_t>("osd_max_object_size");
+  if (osd_max_object_size >= (uint64_t)OBJECT_MAX_SIZE) {
+    derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
+      << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
     return -EINVAL;
   }
   assert(path_fd < 0);
@@ -4241,7 +4342,10 @@ int BlueStore::_open_fm(bool create)
       bl.append(freelist_type);
       t->set(PREFIX_SUPER, "freelist_type", bl);
     }
-    fm->create(bdev->get_size(), min_alloc_size, t);
+    // being able to allocate in units less than bdev block size 
+    // seems to be a bad idea.
+    assert( cct->_conf->bdev_block_size <= (int64_t)min_alloc_size);
+    fm->create(bdev->get_size(), (int64_t)min_alloc_size, t);
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
@@ -5575,6 +5679,7 @@ int BlueStore::_fsck_check_extents(
   const PExtentVector& extents,
   bool compressed,
   mempool_dynamic_bitset &used_blocks,
+  uint64_t granularity,
   store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
@@ -5588,8 +5693,9 @@ int BlueStore::_fsck_check_extents(
     }
     bool already = false;
     apply(
-      e.offset, e.length, min_alloc_size, used_blocks,
+      e.offset, e.length, granularity, used_blocks,
       [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
 	if (bs.test(pos))
 	  already = true;
 	else
@@ -5694,10 +5800,11 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (r < 0)
     goto out_scan;
 
-  used_blocks.resize(bdev->get_size() / min_alloc_size);
+  used_blocks.resize(fm->get_alloc_units());
   apply(
-    0, MAX(min_alloc_size, SUPER_RESERVED), min_alloc_size, used_blocks,
+    0, MAX(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
       bs.set(pos);
     }
   );
@@ -5705,8 +5812,9 @@ int BlueStore::_fsck(bool deep, bool repair)
   if (bluefs) {
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
           bs.set(pos);
         }
 	);
@@ -5993,6 +6101,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  errors += _fsck_check_extents(oid, blob.get_extents(),
 					blob.is_compressed(),
 					used_blocks,
+					fm->get_alloc_size(),
 					expected_statfs);
         }
       }
@@ -6057,7 +6166,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	errors += _fsck_check_extents(p->second.oids.front(),
 				      extents,
 				      p->second.compressed,
-				      used_blocks, expected_statfs);
+				      used_blocks,
+				      fm->get_alloc_size(),
+				      expected_statfs);
 	sb_info.erase(p);
       }
     }
@@ -6119,8 +6230,9 @@ int BlueStore::_fsck(bool deep, bool repair)
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+          e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
             bs.set(pos);
           }
         );
@@ -6134,8 +6246,9 @@ int BlueStore::_fsck(bool deep, bool repair)
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), min_alloc_size, used_blocks,
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	assert(pos < bs.size());
 	  bs.reset(pos);
         }
       );
@@ -6145,8 +6258,9 @@ int BlueStore::_fsck(bool deep, bool repair)
     while (fm->enumerate_next(&offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, min_alloc_size, used_blocks,
+        offset, length, fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  assert(pos < bs.size());
           if (bs.test(pos)) {
             intersects = true;
           } else {
@@ -6186,8 +6300,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  size_t next = used_blocks.find_next(cur);
 	  if (next != cur + 1) {
 	    derr << "fsck error: leaked extent 0x" << std::hex
-		 << ((uint64_t)start * min_alloc_size) << "~"
-		 << ((cur + 1 - start) * min_alloc_size) << std::dec
+		 << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		 << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
 		 << dendl;
 	    start = next;
 	    break;
@@ -6513,7 +6627,7 @@ int BlueStore::read(
   }
 
  out:
-  if (r == 0 && _debug_data_eio(oid)) {
+  if (r >= 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
   } else if (cct->_conf->bluestore_debug_random_read_err &&
@@ -6619,7 +6733,7 @@ int BlueStore::_do_read(
       pos += hole;
       left -= hole;
     }
-    BlobRef bptr = lp->blob;
+    BlobRef& bptr = lp->blob;
     unsigned l_off = pos - lp->logical_offset;
     unsigned b_off = l_off + lp->blob_offset;
     unsigned b_len = std::min(left, lp->length - l_off);
@@ -6669,7 +6783,7 @@ int BlueStore::_do_read(
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL, true); // allow EIO
   for (auto& p : blobs2read) {
-    BlobRef bptr = p.first;
+    const BlobRef& bptr = p.first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need " << p.second << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
@@ -6768,7 +6882,7 @@ int BlueStore::_do_read(
   auto p = compressed_blob_bls.begin();
   blobs2read_t::iterator b2r_it = blobs2read.begin();
   while (b2r_it != blobs2read.end()) {
-    BlobRef bptr = b2r_it->first;
+    const BlobRef& bptr = b2r_it->first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b2r_it->second << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
@@ -8325,7 +8439,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   {
     // submit anything pending
     deferred_lock.lock();
-    if (osr->deferred_pending) {
+    if (osr->deferred_pending && !osr->deferred_running) {
       _deferred_submit_unlock(osr);
     } else {
       deferred_lock.unlock();
@@ -9470,7 +9584,7 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-void BlueStore::_dump_onode(OnodeRef o, int log_level)
+void BlueStore::_dump_onode(const OnodeRef& o, int log_level)
 {
   if (!cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
     return;
@@ -11223,100 +11337,8 @@ int BlueStore::_do_clone_range(
   _dump_onode(oldo);
   _dump_onode(newo);
 
-  // hmm, this could go into an ExtentMap::dup() method.
-  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
-  for (auto &e : oldo->extent_map.extent_map) {
-    e.blob->last_encoded_id = -1;
-  }
-  int n = 0;
-  uint64_t end = srcoff + length;
-  uint32_t dirty_range_begin = 0;
-  uint32_t dirty_range_end = 0;
-  bool src_dirty = false;
-  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
-       ep != oldo->extent_map.extent_map.end();
-       ++ep) {
-    auto& e = *ep;
-    if (e.logical_offset >= end) {
-      break;
-    }
-    dout(20) << __func__ << "  src " << e << dendl;
-    BlobRef cb;
-    bool blob_duped = true;
-    if (e.blob->last_encoded_id >= 0) {
-      // blob is already duped
-      cb = id_to_blob[e.blob->last_encoded_id];
-      blob_duped = false;
-    } else {
-      // dup the blob
-      const bluestore_blob_t& blob = e.blob->get_blob();
-      // make sure it is shared
-      if (!blob.is_shared()) {
-	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	if (!src_dirty) {
-	  src_dirty = true;
-          dirty_range_begin = e.logical_offset;
-        }
-        assert(e.logical_end() > 0);
-        // -1 to exclude next potential shard
-        dirty_range_end = e.logical_end() - 1;
-      } else {
-	c->load_shared_blob(e.blob->shared_blob);
-      }
-      cb = new Blob();
-      e.blob->last_encoded_id = n;
-      id_to_blob[n] = cb;
-      e.blob->dup(*cb);
-      // bump the extent refs on the copied blob's extents
-      for (auto p : blob.get_extents()) {
-	if (p.is_valid()) {
-	  e.blob->shared_blob->get_ref(p.offset, p.length);
-	}
-      }
-      txc->write_shared_blob(e.blob->shared_blob);
-      dout(20) << __func__ << "    new " << *cb << dendl;
-    }
-    // dup extent
-    int skip_front, skip_back;
-    if (e.logical_offset < srcoff) {
-      skip_front = srcoff - e.logical_offset;
-    } else {
-      skip_front = 0;
-    }
-    if (e.logical_end() > end) {
-      skip_back = e.logical_end() - end;
-    } else {
-      skip_back = 0;
-    }
-    Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
-			    e.blob_offset + skip_front,
-			    e.length - skip_front - skip_back, cb);
-    newo->extent_map.extent_map.insert(*ne);
-    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
-    // fixme: we may leave parts of new blob unreferenced that could
-    // be freed (relative to the shared_blob).
-    txc->statfs_delta.stored() += ne->length;
-    if (e.blob->get_blob().is_compressed()) {
-      txc->statfs_delta.compressed_original() += ne->length;
-      if (blob_duped){
-        txc->statfs_delta.compressed() +=
-          cb->get_blob().get_compressed_payload_length();
-      }
-    }
-    dout(20) << __func__ << "  dst " << *ne << dendl;
-    ++n;
-  }
-  if (src_dirty) {
-    oldo->extent_map.dirty_range(dirty_range_begin,
-      dirty_range_end - dirty_range_begin);
-    txc->write_onode(oldo);
-  }
-  txc->write_onode(newo);
+  oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
 
-  if (dstoff + length > newo->onode.size) {
-    newo->onode.size = dstoff + length;
-  }
-  newo->extent_map.dirty_range(dstoff, length);
   _dump_onode(oldo);
   _dump_onode(newo);
   return 0;

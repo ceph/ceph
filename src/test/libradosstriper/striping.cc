@@ -8,7 +8,6 @@
 #include "include/radosstriper/libradosstriper.h"
 #include "include/radosstriper/libradosstriper.hpp"
 #include "include/ceph_fs.h"
-#include "common/backport_std.h"
 #include "test/librados/test.h"
 #include "test/libradosstriper/TestCase.h"
 

@@ -1043,10 +1043,10 @@ bool SessionFilter::match(
 
 std::ostream& operator<<(std::ostream &out, const Session &s)
 {
- if (s.get_human_name() == stringify(s.info.inst.name.num())) {
+ if (s.get_human_name() == stringify(s.get_client())) {
    out << s.get_human_name();
  } else {
-   out << s.get_human_name() << " (" << std::dec << s.info.inst.name.num() << ")";
+   out << s.get_human_name() << " (" << std::dec << s.get_client() << ")";
  }
  return out;
 }

@@ -270,23 +270,21 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
   vector<rgw_bucket_dir_entry> objs;
   RGWObjectCtx obj_ctx(store);
   string marker;
-  map<string, bool> common_prefixes;
   bool is_truncated;
 
   do {
     ret = list_bucket_multiparts(store, bucket_info, prefix, marker, delim,
-				max, &objs, &common_prefixes, &is_truncated);
+				max, &objs, nullptr, &is_truncated);
     if (ret < 0) {
       return ret;
     }
     if (!objs.empty()) {
-      RGWMultipartUploadEntry entry;
+      RGWMPObj mp;
       for (const auto& obj : objs) {
         rgw_obj_key key(obj.key);
-        if (!entry.mp.from_meta(key.name))
+        if (!mp.from_meta(key.name))
           continue;
-        entry.obj = obj;
-        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, entry.mp);
+        ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
         if (ret < 0) {
           return ret;
         }

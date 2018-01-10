@@ -527,11 +527,7 @@ int ErasureCodeLrc::init(ErasureCodeProfile &profile,
     return ERROR_LRC_MAPPING;
   }
   string mapping = profile.find("mapping")->second;
-  data_chunk_count = 0;
-  for(std::string::iterator it = mapping.begin(); it != mapping.end(); ++it) {
-    if (*it == 'D')
-      data_chunk_count++;
-  }
+  data_chunk_count = count(begin(mapping), end(mapping), 'D');
   chunk_count = mapping.length();
 
   r = layers_sanity_checks(description_string, ss);
@@ -661,8 +657,7 @@ int ErasureCodeLrc::_minimum_to_decode(const set<int> &want_to_read,
 	       j != erasures.end();
 	       ++j) {
 	    erasures_not_recovered.erase(*j);
-	    if (erasures_want.count(*j))
-	      erasures_want.erase(*j);
+	    erasures_want.erase(*j);
 	  }
 	}
       }
@@ -843,8 +838,7 @@ int ErasureCodeLrc::decode_chunks(const set<int> &want_to_read,
 	   ++c) {
 	(*decoded)[*c] = layer_decoded[j];
 	++j;
-	if (erasures.count(*c) != 0)
-	  erasures.erase(*c);
+	erasures.erase(*c);
       }
       want_to_read_erasures.clear();
       set_intersection(erasures.begin(), erasures.end(),

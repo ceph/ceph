@@ -24,7 +24,7 @@ Ceph Block Device APIs
 
 See `librbdpy`_.
 
-.. _librbdpy: ../rbd/librbdpy
+.. _librbdpy: ../rbd/api/librbdpy
 
 Ceph RADOS Gateway APIs
 =======================

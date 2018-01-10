@@ -296,8 +296,9 @@ def parse_cmdargs(args=None, target=''):
                         help='watch error events')
 
     parser.add_argument('--watch-channel', dest="watch_channel",
+                        choices=['cluster', 'audit', '*'],
                         help="which log channel to follow " \
-                        "when using -w/--watch.  One of ['cluster', 'audit', '*'",
+                        "when using -w/--watch.  One of ['cluster', 'audit', '*']",
                         default='cluster')
 
     parser.add_argument('--version', '-v', action="store_true", help="display version")

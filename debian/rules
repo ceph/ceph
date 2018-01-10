@@ -17,10 +17,10 @@ ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
 endif
 
 ifneq (,$(filter $(DEB_HOST_ARCH), arm armel armhf arm64 i386 amd64 mips mipsel powerpc ppc64))
-  # beast depends on libboost_context which only support the archs above
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=ON
+  # libboost_context only support the archs above
+  extraopts += -DWITH_BOOST_CONTEXT=ON
 else
-  extraopts += -DWITH_RADOSGW_BEAST_FRONTEND=OFF
+  extraopts += -DWITH_BOOST_CONTEXT=OFF
 endif
 
 %:

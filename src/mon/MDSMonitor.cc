@@ -12,9 +12,9 @@
  * 
  */
 
+#include <regex>
 #include <sstream>
 #include <boost/utility.hpp>
-#include <boost/regex.hpp>
 
 #include "MDSMonitor.h"
 #include "FSCommands.h"
@@ -232,21 +232,21 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   }
   pending_fsmap.get_health_checks(&new_checks);
   for (auto& p : new_checks.checks) {
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%num%"),
+      std::regex("%num%"),
       stringify(p.second.detail.size()));
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%plurals%"),
+      std::regex("%plurals%"),
       p.second.detail.size() > 1 ? "s" : "");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%isorare%"),
+      std::regex("%isorare%"),
       p.second.detail.size() > 1 ? "are" : "is");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%hasorhave%"),
+      std::regex("%hasorhave%"),
       p.second.detail.size() > 1 ? "have" : "has");
   }
   encode_health(new_checks, t);

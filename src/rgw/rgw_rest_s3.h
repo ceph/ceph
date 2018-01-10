@@ -11,7 +11,6 @@
 #include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
 
-#include "common/backport_std.h"
 #include "common/sstring.hh"
 #include "rgw_op.h"
 #include "rgw_rest.h"

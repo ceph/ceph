@@ -9,6 +9,7 @@
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Policy.h"
+#include "tools/rbd_mirror/image_deleter/Types.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -19,23 +20,6 @@
 namespace rbd {
 namespace mirror {
 namespace image_deleter {
-
-namespace {
-
-struct DeleteJournalPolicy : public librbd::journal::Policy {
-  bool append_disabled() const override {
-    return true;
-  }
-  bool journal_disabled() const override {
-    return false;
-  }
-
-  void allocate_tag_on_lock(Context *on_finish) override {
-    on_finish->complete(0);
-  }
-};
-
-} // anonymous namespace
 
 using librbd::util::create_context_callback;
 
@@ -51,7 +35,7 @@ void SnapshotPurgeRequest<I>::open_image() {
 
   {
     RWLock::WLocker snap_locker(m_image_ctx->snap_lock);
-    m_image_ctx->set_journal_policy(new DeleteJournalPolicy());
+    m_image_ctx->set_journal_policy(new JournalPolicy());
   }
 
   Context *ctx = create_context_callback<
@@ -67,6 +51,9 @@ void SnapshotPurgeRequest<I>::handle_open_image(int r) {
   if (r < 0) {
     derr << "failed to open image '" << m_image_id << "': " << cpp_strerror(r)
          << dendl;
+    m_image_ctx->destroy();
+    m_image_ctx = nullptr;
+
     finish(r);
     return;
   }

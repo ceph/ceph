@@ -21,7 +21,7 @@ if command -v dpkg >/dev/null; then
     fi
 elif command -v yum >/dev/null; then
     for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
-	if ! rpm -q $package >/dev/null ; then
+	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
     done

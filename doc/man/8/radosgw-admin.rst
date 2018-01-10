@@ -290,6 +290,12 @@ which are as follows:
 :command:`data sync run`
   Run data sync for the specified source zone.
 
+:command:`sync error list`
+  list sync error.
+
+:command:`sync error trim`
+  trim sync error.
+
 :command:`zone rename`
   Rename a zone.
 
@@ -507,6 +513,11 @@ Options
 
 	Temporary url key.
 
+.. option:: --max-buckets
+
+	max number of buckets for a user (0 for no limit, negative value to disable bucket creation).
+	Default is 1000.
+
 .. option:: --access=<access>
 
    Set the access permissions for the sub-user.
@@ -515,10 +526,6 @@ Options
 .. option:: --display-name=<name>
 
    The display name of the user.
-
-.. option:: --max-buckets
-
-   Maximum number of buckets for a user.
 
 .. option:: --admin
 

@@ -466,7 +466,11 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
+    if (r == -ENOENT) {
+      dout(10) << ": parent image does not exist" << dendl;
+    } else {
+      derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
+    }
     m_ret_val = r;
     close_remote_image();
     return;

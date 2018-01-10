@@ -54,7 +54,8 @@ class Module(MgrModule):
         'zabbix_sender': '/usr/bin/zabbix_sender',
         'zabbix_host': None,
         'zabbix_port': 10051,
-        'identifier': None, 'interval': 60
+        'identifier': "",
+        'interval': 60
     }
 
     COMMANDS = [
@@ -71,7 +72,7 @@ class Module(MgrModule):
         },
         {
             "cmd": "zabbix send",
-            "desc": "Force sending data to Zabbux",
+            "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
         {
@@ -86,14 +87,11 @@ class Module(MgrModule):
         self.event = Event()
 
     def init_module_config(self):
-        for key, default in self.config_keys.items():
-            value = self.get_localized_config(key, default)
-            if value is None:
-                raise RuntimeError('Configuration key {0} not set; "ceph '
-                                   'config-key set mgr/zabbix/{0} '
-                                   '<value>"'.format(key))
+        self.fsid = self.get('mon_map')['fsid']
+        self.log.debug('Found Ceph fsid %s', self.fsid)
 
-            self.set_config_option(key, value)
+        for key, default in self.config_keys.items():
+            self.set_config_option(key, self.get_config(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -110,7 +108,10 @@ class Module(MgrModule):
         if option == 'interval' and value < 10:
             raise RuntimeError('interval should be set to at least 10 seconds')
 
+        self.log.debug('Setting in-memory config option %s to: %s', option,
+                       value)
         self.config[option] = value
+        return True
 
     def get_data(self):
         data = dict()
@@ -210,17 +211,31 @@ class Module(MgrModule):
     def send(self):
         data = self.get_data()
 
-        self.log.debug('Sending data to Zabbix server %s',
-                       self.config['zabbix_host'])
-        self.log.debug(data)
+        identifier = self.config['identifier']
+        if identifier is None or len(identifier) == 0:
+            identifier = 'ceph-{0}'.format(self.fsid)
+
+        if not self.config['zabbix_host']:
+            self.log.error('Zabbix server not set, please configure using: '
+                           'ceph zabbix config-set zabbix_host <zabbix_host>')
+            return
 
         try:
+            self.log.info(
+                'Sending data to Zabbix server %s as host/identifier %s',
+                self.config['zabbix_host'], identifier)
+            self.log.debug(data)
+
             zabbix = ZabbixSender(self.config['zabbix_sender'],
                                   self.config['zabbix_host'],
                                   self.config['zabbix_port'], self.log)
-            zabbix.send(self.config['identifier'], data)
+
+            zabbix.send(identifier, data)
+            return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+
+        return False
 
     def handle_command(self, command):
         if command['prefix'] == 'zabbix config-show':
@@ -232,12 +247,18 @@ class Module(MgrModule):
                 return -errno.EINVAL, '', 'Value should not be empty or None'
 
             self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_localized_config(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
+            if self.set_config_option(key, value):
+                self.set_config(key, value)
+                return 0, 'Configuration option {0} updated'.format(key), ''
+
+            return 1,\
+                'Failed to update configuration option {0}'.format(key), ''
+
         elif command['prefix'] == 'zabbix send':
-            self.send()
-            return 0, 'Sending data to Zabbix', ''
+            if self.send():
+                return 0, 'Sending data to Zabbix', ''
+
+            return 1, 'Failed to send data to Zabbix', ''
         elif command['prefix'] == 'zabbix self-test':
             self.self_test()
             return 0, 'Self-test succeeded', ''
@@ -251,13 +272,10 @@ class Module(MgrModule):
         self.event.set()
 
     def serve(self):
-        self.log.debug('Zabbix module starting up')
+        self.log.info('Zabbix module starting up')
         self.run = True
 
         self.init_module_config()
-
-        for key, value in self.config.items():
-            self.log.debug('%s: %s', key, value)
 
         while self.run:
             self.log.debug('Waking up for new iteration')

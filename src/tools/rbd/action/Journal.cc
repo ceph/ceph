@@ -1000,7 +1000,7 @@ int execute_export(const po::variables_map &vm) {
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -1032,12 +1032,12 @@ void get_import_arguments(po::options_description *positional,
 
 int execute_import(const po::variables_map &vm) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
 
-  size_t arg_index = 1;
   std::string pool_name;
   std::string journal_name;
   r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_DEST,

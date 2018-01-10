@@ -560,10 +560,14 @@ class Thrasher:
         backfill = random.random() >= 0.5
         j = self.ceph_manager.get_pgids_to_force(backfill)
         if j:
-            if backfill:
-                self.ceph_manager.raw_cluster_cmd('pg', 'force-backfill', *j)
-            else:
-                self.ceph_manager.raw_cluster_cmd('pg', 'force-recovery', *j)
+            try:
+                if backfill:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'force-backfill', *j)
+                else:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'force-recovery', *j)
+            except CommandFailedError:
+                self.log('Failed to force backfill|recovery, ignoring')
+
 
     def cancel_force_recovery(self):
         """
@@ -572,10 +576,13 @@ class Thrasher:
         backfill = random.random() >= 0.5
         j = self.ceph_manager.get_pgids_to_cancel_force(backfill)
         if j:
-            if backfill:
-                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-backfill', *j)
-            else:
-                self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-recovery', *j)
+            try:
+                if backfill:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-backfill', *j)
+                else:
+                    self.ceph_manager.raw_cluster_cmd('pg', 'cancel-force-recovery', *j)
+            except CommandFailedError:
+                self.log('Failed to force backfill|recovery, ignoring')
 
     def force_cancel_recovery(self):
         """

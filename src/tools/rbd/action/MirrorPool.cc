@@ -16,8 +16,8 @@
 #include "global/global_context.h"
 #include <functional>
 #include <iostream>
+#include <regex>
 #include <boost/program_options.hpp>
-#include <boost/regex.hpp>
 #include "include/assert.h"
 
 #include <atomic>
@@ -54,10 +54,10 @@ int validate_mirroring_enabled(librados::IoCtx& io_ctx) {
 }
 
 int validate_uuid(const std::string &uuid) {
-  boost::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
-                       boost::regex::icase);
-  boost::smatch match;
-  if (!boost::regex_match(uuid, match, pattern)) {
+  std::regex pattern("^[A-F0-9]{8}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{4}-[A-F0-9]{12}$",
+                       std::regex::icase);
+  std::smatch match;
+  if (!std::regex_match(uuid, match, pattern)) {
     std::cerr << "rbd: invalid uuid '" << uuid << "'" << std::endl;
     return -EINVAL;
   }
@@ -91,9 +91,9 @@ int get_remote_cluster_spec(const po::variables_map &vm,
   }
 
   if (!spec.empty()) {
-    boost::regex pattern("^(?:(client\\.[^@]+)@)?([^/@]+)$");
-    boost::smatch match;
-    if (!boost::regex_match(spec, match, pattern)) {
+    std::regex pattern("^(?:(client\\.[^@]+)@)?([^/@]+)$");
+    std::smatch match;
+    if (!std::regex_match(spec, match, pattern)) {
       std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
       return -EINVAL;
     }
@@ -231,7 +231,7 @@ private:
   const std::string m_image_name;
 
   librbd::Image m_image;
-  Context *m_finalize_ctx;
+  Context *m_finalize_ctx = nullptr;
 
   librbd::mirror_image_info_t m_mirror_image_info;
 
@@ -521,7 +521,7 @@ void get_peer_add_arguments(po::options_description *positional,
   at::add_pool_options(positional, options);
   positional->add_options()
     ("remote-cluster-spec", "remote cluster spec\n"
-     "(example: [<client name>@]<cluster name>");
+     "(example: [<client name>@]<cluster name>)");
   options->add_options()
     ("remote-client-name", po::value<std::string>(), "remote client name")
     ("remote-cluster", po::value<std::string>(), "remote cluster name");

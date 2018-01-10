@@ -41,7 +41,7 @@ using std::ostringstream;
 using std::pair;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)
     ", /usr/local/etc/ceph/$cluster.conf"
 #endif
@@ -89,7 +89,9 @@ md_config_t::md_config_t(bool is_daemon)
                 << std::endl;
       ceph_abort();
     }
-    schema.insert({i.name, i});
+    schema.emplace(std::piecewise_construct,
+		   std::forward_as_tuple(i.name),
+		   std::forward_as_tuple(i));
   }
 
   // Populate list of legacy_values according to the OPTION() definitions

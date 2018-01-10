@@ -76,7 +76,7 @@ Throttle::~Throttle()
 void Throttle::_reset_max(int64_t m)
 {
   // lock must be held.
-  if (static_cast<int64_t>(max) == m)
+  if (max == m)
     return;
   if (!conds.empty())
     conds.front().notify_one();
@@ -222,7 +222,7 @@ int64_t Throttle::put(int64_t c)
     if (!conds.empty())
       conds.front().notify_one();
     // if count goes negative, we failed somewhere!
-    assert(static_cast<int64_t>(count) >= c);
+    assert(count >= c);
     count -= c;
     if (logger) {
       logger->inc(l_throttle_put);

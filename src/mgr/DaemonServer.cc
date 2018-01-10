@@ -1219,7 +1219,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	  } else {
 	    auto workit = pg_map.pg_stat.find(parsed_pg);
 	    if (workit == pg_map.pg_stat.end()) {
-	      ss << "pg " << pstr << " not exists; ";
+	      ss << "pg " << pstr << " does not exist; ";
 	      r = -ENOENT;
 	    } else {
 	      pg_stat_t workpg = workit->second;

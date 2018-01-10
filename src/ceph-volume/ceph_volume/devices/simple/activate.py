@@ -77,12 +77,11 @@ class Activate(object):
         # start the OSD
         systemctl.start_osd(osd_id)
 
-        if not self.systemd:
-            terminal.success('Successfully activated OSD %s with FSID %s' % (osd_id, osd_fsid))
-            terminal.warning(
-                ('All ceph-disk systemd units have been disabled to '
-                 'prevent OSDs getting triggered by UDEV events')
-            )
+        terminal.success('Successfully activated OSD %s with FSID %s' % (osd_id, osd_fsid))
+        terminal.warning(
+            ('All ceph-disk systemd units have been disabled to '
+             'prevent OSDs getting triggered by UDEV events')
+        )
 
     def main(self):
         sub_command_help = dedent("""

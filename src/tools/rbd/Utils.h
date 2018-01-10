@@ -161,7 +161,7 @@ int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path);
+             size_t *arg_index, std::string *path);
 
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);

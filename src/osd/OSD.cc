@@ -4595,7 +4595,7 @@ void OSD::maybe_update_heartbeat_peers()
 
   // include next and previous up osds to ensure we have a fully-connected set
   set<int> want, extras;
-  int next = osdmap->get_next_up_osd_after(whoami);
+  const int next = osdmap->get_next_up_osd_after(whoami);
   if (next >= 0)
     want.insert(next);
   int prev = osdmap->get_previous_up_osd_before(whoami);
@@ -4624,8 +4624,7 @@ void OSD::maybe_update_heartbeat_peers()
   }
 
   // too few?
-  int start = osdmap->get_next_up_osd_after(whoami);
-  for (int n = start; n >= 0; ) {
+  for (int n = next; n >= 0; ) {
     if ((int)heartbeat_peers.size() >= cct->_conf->osd_heartbeat_min_peers)
       break;
     if (!extras.count(n) && !want.count(n) && n != whoami) {
@@ -4634,7 +4633,7 @@ void OSD::maybe_update_heartbeat_peers()
       _add_heartbeat_peer(n);
     }
     n = osdmap->get_next_up_osd_after(n);
-    if (n == start)
+    if (n == next)
       break;  // came full circle; stop
   }
 
@@ -9676,7 +9675,8 @@ int OSD::init_op_flags(OpRequestRef& op)
 	  op->set_class_write();
         if (is_promote)
           op->set_promote();
-        op->add_class(cname, is_read, is_write, cls->whitelisted);
+        op->add_class(std::move(cname), std::move(mname), is_read, is_write,
+                      cls->whitelisted);
 	break;
       }
 

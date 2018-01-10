@@ -13,9 +13,13 @@
 #include <assert.h>
 
 #include <iostream>
-#include <boost/regex.hpp>
+#include <memory>
+#include <boost/algorithm/string/predicate.hpp>
+#include <regex>
 
+#include "common/Formatter.h"
 #include "common/Preforker.h"
+#include "common/TextTable.h"
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -25,6 +29,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
+#include "include/stringify.h"
 
 #include "Driver.h"
 #include "Server.h"
@@ -39,15 +44,20 @@ static void usage() {
   std::cout << "Usage: rbd-ggate [options] map <image-or-snap-spec>  Map an image to ggate device\n"
             << "                           unmap <device path>       Unmap ggate device\n"
             << "                           list                      List mapped ggate devices\n"
-            << "Options:\n"
+            << "\n"
+            << "Map options:\n"
             << "  --device <device path>  Specify ggate device path\n"
             << "  --read-only             Map readonly\n"
             << "  --exclusive             Forbid writes by other clients\n"
+            << "\n"
+            << "List options:\n"
+            << "  --format plain|json|xml Output format (default: plain)\n"
+            << "  --pretty-format         Pretty formatting (json and xml)\n"
             << std::endl;
   generic_server_usage();
 }
 
-static std::string devpath, poolname("rbd"), imgname, snapname;
+static std::string devpath, poolname, imgname, snapname;
 static bool readonly = false;
 static bool exclusive = false;
 
@@ -90,7 +100,7 @@ static int do_map(int argc, const char *argv[])
     std::string err;
     r = forker.prefork(err);
     if (r < 0) {
-      cerr << err << std::endl;
+      std::cerr << err << std::endl;
       return r;
     }
 
@@ -106,7 +116,11 @@ static int do_map(int argc, const char *argv[])
   common_init_finish(g_ceph_context);
   global_init_chdir(g_ceph_context);
 
-  std::string devname = (devpath.compare(0, 5, "/dev/") == 0) ?
+  if (poolname.empty()) {
+    poolname = g_ceph_context->_conf->get_val<std::string>("rbd_default_pool");
+  }
+
+  std::string devname = boost::starts_with(devpath, "/dev/") ?
     devpath.substr(5) : devpath;
   std::unique_ptr<rbd::ggate::Watcher> watcher;
   uint64_t handle;
@@ -118,24 +132,30 @@ static int do_map(int argc, const char *argv[])
 
   r = rados.connect();
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to connect to cluster: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
   r = rados.ioctx_create(poolname.c_str(), io_ctx);
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to acces pool " << poolname << ": "
+              << cpp_strerror(r) << std::endl;
     goto done;
   }
 
   r = rbd.open(io_ctx, image, imgname.c_str());
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to open image " << imgname << ": "
+              << cpp_strerror(r) << std::endl;
     goto done;
   }
 
   if (exclusive) {
     r = image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE);
     if (r < 0) {
-      cerr << "rbd-ggate: failed to acquire exclusive lock: " << cpp_strerror(r)
-           << std::endl;
+      std::cerr << "rbd-ggate: failed to acquire exclusive lock: "
+                << cpp_strerror(r) << std::endl;
       goto done;
     }
   }
@@ -145,6 +165,8 @@ static int do_map(int argc, const char *argv[])
   if (!snapname.empty()) {
     r = image.snap_set(snapname.c_str());
     if (r < 0) {
+      std::cerr << "rbd-ggate: failed to set snapshot " << snapname << ": "
+                << cpp_strerror(r) << std::endl;
       goto done;
     }
     readonly = true;
@@ -153,6 +175,8 @@ static int do_map(int argc, const char *argv[])
 
   r = image.stat(info, sizeof(info));
   if (r < 0) {
+    std::cerr << "rbd-ggate: image stat failed: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
@@ -161,12 +185,16 @@ static int do_map(int argc, const char *argv[])
   r = drv->init();
   if (r < 0) {
     r = -errno;
+    std::cerr << "rbd-ggate: failed to create ggate device: " << cpp_strerror(r)
+              << std::endl;
     goto done;
   }
 
   watcher.reset(new rbd::ggate::Watcher(drv.get(), io_ctx, image, info.size));
   r = image.update_watch(watcher.get(), &handle);
   if (r < 0) {
+    std::cerr << "rbd-ggate: failed to set watcher: " << cpp_strerror(r)
+              << std::endl;
     drv->shut_down();
     goto done;
   }
@@ -199,6 +227,10 @@ done:
   io_ctx.close();
   rados.shutdown();
 
+  if (r < 0) {
+    std::cerr << "rbd-ggate: failed to map: " << cpp_strerror(r) << std::endl;
+  }
+
   forker.exit(r < 0 ? EXIT_FAILURE : 0);
   // Unreachable;
   return r;
@@ -206,7 +238,7 @@ done:
 
 static int do_unmap()
 {
-  std::string devname = (devpath.compare(0, 5, "/dev/") == 0) ?
+  std::string devname = boost::starts_with(devpath, "/dev/") ?
     devpath.substr(5) : devpath;
 
   int r = rbd::ggate::Driver::kill(devname);
@@ -219,41 +251,138 @@ static int do_unmap()
   return 0;
 }
 
-static int parse_imgpath(const std::string &imgpath)
+static int parse_imgpath(const std::string &imgpath, std::string *poolname,
+                         std::string *imgname, std::string *snapname) {
 {
-  boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
-  boost::smatch match;
-  if (!boost::regex_match(imgpath, match, pattern)) {
+  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::smatch match;
+  if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-ggate: invalid spec '" << imgpath << "'" << std::endl;
     return -EINVAL;
   }
 
   if (match[1].matched) {
-    poolname = match[1];
+    *poolname = match[1];
   }
 
-  imgname = match[2];
+  *imgname = match[2];
 
   if (match[3].matched) {
-    snapname = match[3];
+    *snapname = match[3];
   }
 
   return 0;
 }
 
-static int do_list()
+static bool find_mapped_dev_by_spec(const std::string &spec,
+                                    std::string *devname) {
+  std::string poolname, imgname, snapname;
+  int r = parse_imgpath(spec, &poolname, &imgname, &snapname);
+  if (r < 0) {
+    return false;
+  }
+  if (poolname.empty()) {
+    // We could use rbd_default_pool config to set pool name but then
+    // we would need to initialize the global context. So right now it
+    // is mandatory for the user to specify a pool. Fortunately the
+    // preferred way for users to call rbd-ggate is via rbd, which
+    // cares to set the pool name.
+    return false;
+  }
+
+  std::map<std::string, rbd::ggate::Driver::DevInfo> devs;
+  r = rbd::ggate::Driver::list(&devs);
+  if (r < 0) {
+    return false;
+  }
+
+  for (auto &it : devs) {
+    auto &name = it.second.first;
+    auto &info = it.second.second;
+    if (!boost::starts_with(info, "RBD ")) {
+      continue;
+    }
+
+    std::string p, i, s;
+    parse_imgpath(info.substr(4), &p, &i, &s);
+    if (p == poolname && i == imgname && s == snapname) {
+      *devname = name;
+      return true;
+    }
+  }
+
+  return false;
+}
+
+static int do_list(const std::string &format, bool pretty_format)
 {
   rbd::ggate::Driver::load();
 
-  std::list<std::string> devs;
-  int r = rbd::ggate::Driver::list(devs);
+  std::map<std::string, rbd::ggate::Driver::DevInfo> devs;
+  int r = rbd::ggate::Driver::list(&devs);
   if (r < 0) {
     return -r;
   }
 
-  for (auto &devname : devs) {
-    cout << "/dev/" << devname << std::endl;
+  std::unique_ptr<ceph::Formatter> f;
+  TextTable tbl;
+
+  if (format == "json") {
+    f.reset(new JSONFormatter(pretty_format));
+  } else if (format == "xml") {
+    f.reset(new XMLFormatter(pretty_format));
+  } else if (!format.empty() && format != "plain") {
+    std::cerr << "rbd-ggate: invalid output format: " << format << std::endl;
+    return -EINVAL;
   }
+
+  if (f) {
+    f->open_array_section("devices");
+  } else {
+    tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
+  }
+
+  int count = 0;
+
+  for (auto &it : devs) {
+    auto &id = it.first;
+    auto &name = it.second.first;
+    auto &info = it.second.second;
+    if (!boost::starts_with(info, "RBD ")) {
+      continue;
+    }
+
+    std::string poolname;
+    std::string imgname;
+    std::string snapname(f ? "" : "-");
+    parse_imgpath(info.substr(4), &poolname, &imgname, &snapname);
+
+    if (f) {
+      f->open_object_section("device");
+      f->dump_string("id", id);
+      f->dump_string("pool", poolname);
+      f->dump_string("image", imgname);
+      f->dump_string("snap", snapname);
+      f->dump_string("device", "/dev/" + name);
+      f->close_section();
+    } else {
+      tbl << id << poolname << imgname << snapname << "/dev/" + name
+          << TextTable::endrow;
+    }
+    count++;
+  }
+
+  if (f) {
+    f->close_section(); // devices
+    f->flush(std::cout);
+  } else if (count > 0) {
+    std::cout << tbl;
+  }
+
   return 0;
 }
 
@@ -271,6 +400,8 @@ int main(int argc, const char *argv[]) {
   argv_to_vec(argc, argv, args);
   md_config_t().parse_argv(args);
 
+  std::string format;
+  bool pretty_format = false;
   std::vector<const char*>::iterator i;
 
   for (i = args.begin(); i != args.end(); ) {
@@ -283,6 +414,10 @@ int main(int argc, const char *argv[]) {
       readonly = true;
     } else if (ceph_argparse_flag(args, i, "--exclusive", (char *)NULL)) {
       exclusive = true;
+    } else if (ceph_argparse_witharg(args, i, &format, "--format",
+                                     (char *)NULL)) {
+    } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
+      pretty_format = true;
     } else {
       ++i;
     }
@@ -313,16 +448,21 @@ int main(int argc, const char *argv[]) {
         cerr << "rbd-ggate: must specify image-or-snap-spec" << std::endl;
         return EXIT_FAILURE;
       }
-      if (parse_imgpath(string(*args.begin())) < 0)
+      if (parse_imgpath(*args.begin(), &poolname, &imgname, &snapname) < 0) {
         return EXIT_FAILURE;
+      }
       args.erase(args.begin());
       break;
     case Disconnect:
       if (args.begin() == args.end()) {
-        cerr << "rbd-ggate: must specify ggate device path" << std::endl;
+        std::cerr << "rbd-ggate: must specify ggate device or image-or-snap-spec"
+                  << std::endl;
         return EXIT_FAILURE;
       }
-      devpath = *args.begin();
+      if (boost::starts_with(*args.begin(), "/dev/") ||
+          !find_mapped_dev_by_spec(*args.begin(), &devpath)) {
+        devpath = *args.begin();
+      }
       args.erase(args.begin());
       break;
     default:
@@ -351,7 +491,7 @@ int main(int argc, const char *argv[]) {
         return EXIT_FAILURE;
       break;
     case List:
-      r = do_list();
+      r = do_list(format, pretty_format);
       if (r < 0)
         return EXIT_FAILURE;
       break;

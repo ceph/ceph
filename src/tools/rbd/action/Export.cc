@@ -262,7 +262,7 @@ int execute_diff(const po::variables_map &vm) {
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -601,7 +601,7 @@ int execute(const po::variables_map &vm) {
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }

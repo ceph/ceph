@@ -413,6 +413,13 @@ Failed to load data from server <a href="javascript:window.location.reload(true)
             <li class="ceph-none-found" rv-hide="filesystems | length">None found</li>
           </ul>
         </li>
+
+        <li class="{%if path_info.startswith('/rgw')%}active{%endif%}">          
+            <a href="{{ url_prefix }}/rgw">                                                        
+ <i class="fa fa-cloud-download" aria-hidden="true"></i>
+            <span>RGW</span></a>                                                           
+        </li>  
+
       </ul>
       <!-- /.sidebar-menu -->
     </section>

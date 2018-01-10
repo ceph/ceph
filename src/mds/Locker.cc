@@ -1915,7 +1915,7 @@ Capability* Locker::issue_new_caps(CInode *in,
 
   // my needs
   assert(session->info.inst.name.is_client());
-  client_t my_client = session->info.inst.name.num();
+  client_t my_client = session->get_client();
   int my_want = ceph_caps_for_mode(mode);
 
   // register a capability
@@ -2298,7 +2298,7 @@ uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
   uint64_t new_max = (size + 1) << 1;
   uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
   if (max_inc > 0) {
-    max_inc *= pi->get_layout_size_increment();
+    max_inc *= pi->layout.object_size;
     new_max = std::min(new_max, size + max_inc);
   }
   return ROUND_UP_TO(new_max, pi->get_layout_size_increment());
@@ -3643,7 +3643,7 @@ void Locker::caps_tick()
     Capability *cap = *p;
 
     utime_t age = now - cap->get_last_revoke_stamp();
-    dout(20) << __func__ << " age = " << age << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+    dout(20) << __func__ << " age = " << age << " client." << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
     if (age <= mds->mdsmap->get_session_timeout()) {
       dout(20) << __func__ << " age below timeout " << mds->mdsmap->get_session_timeout() << dendl;
       break;
@@ -3665,7 +3665,7 @@ void Locker::caps_tick()
       mds->clog->warn() << ss.str();
       dout(20) << __func__ << " " << ss.str() << dendl;
     } else {
-      dout(20) << __func__ << " silencing log message (backoff) for " << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
+      dout(20) << __func__ << " silencing log message (backoff) for " << "client." << cap->get_client() << "." << cap->get_inode()->ino() << dendl;
     }
   }
 }

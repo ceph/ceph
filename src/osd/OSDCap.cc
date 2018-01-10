@@ -49,8 +49,12 @@ ostream& operator<<(ostream& out, const OSDCapSpec& s)
 {
   if (s.allow)
     return out << s.allow;
-  if (s.class_name.length())
-    return out << "class '" << s.class_name << "' '" << s.class_allow << "'";
+  if (s.class_name.length()) {
+    out << "class '" << s.class_name << "'";
+    if (!s.method_name.empty()) {
+      out << " '" << s.method_name << "'";
+    }
+  }
   return out;
 }
 
@@ -271,8 +275,11 @@ bool OSDCapGrant::is_capable(const string& pool_name, const string& ns,
 
         // compare this grant to each class in the operation
         for (size_t i = 0; i < classes.size(); ++i) {
-          // check 'allow class foo'
-          if (!spec.class_name.empty() && classes[i].name == spec.class_name) {
+          // check 'allow class foo [method_name]'
+          if (!spec.class_name.empty() &&
+              classes[i].class_name == spec.class_name &&
+              (spec.method_name.empty() ||
+               classes[i].method_name == spec.method_name)) {
             (*class_allowed)[i] = true;
             continue;
           }
@@ -433,12 +440,12 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
 	( (spaces >> lit("class-read")[_val |= OSD_CAP_CLS_R]) ||
 	  (spaces >> lit("class-write")[_val |= OSD_CAP_CLS_W]) ));
 
-    // capspec := * | rwx | class <name> [classcap]
+    // capspec := * | rwx | class <name> [<method name>]
     class_name %= (spaces >> lit("class") >> spaces >> str);
-    class_cap %= -(spaces >> str);
+    method_name %= -(spaces >> str);
     capspec = (
-      (rwxa)                    [_val = phoenix::construct<OSDCapSpec>(_1)] |
-      (class_name >> class_cap) [_val = phoenix::construct<OSDCapSpec>(_1, _2)]);
+      (rwxa)                      [_val = phoenix::construct<OSDCapSpec>(_1)] |
+      (class_name >> method_name) [_val = phoenix::construct<OSDCapSpec>(_1, _2)]);
 
     // profile := profile <name> [pool[=]<pool> [namespace[=]<namespace>]]
     profile_name %= (lit("profile") >> (lit('=') | spaces) >> str);
@@ -464,7 +471,7 @@ struct OSDCapParser : qi::grammar<Iterator, OSDCap()>
   qi::rule<Iterator, string()> wildcard;
   qi::rule<Iterator, int()> auid;
   qi::rule<Iterator, string()> class_name;
-  qi::rule<Iterator, string()> class_cap;
+  qi::rule<Iterator, string()> method_name;
   qi::rule<Iterator, OSDCapSpec()> capspec;
   qi::rule<Iterator, string()> pool_name;
   qi::rule<Iterator, string()> nspace;

@@ -286,6 +286,7 @@ OPTION(mon_inject_sync_get_chunk_delay, OPT_DOUBLE)  // inject N second delay on
 OPTION(mon_osd_force_trim_to, OPT_INT)   // force mon to trim maps to this point, regardless of min_last_epoch_clean (dangerous)
 OPTION(mon_mds_force_trim_to, OPT_INT)   // force mon to trim mdsmaps to this point (dangerous)
 OPTION(mon_mds_skip_sanity, OPT_BOOL)  // skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
+OPTION(mon_osd_snap_trim_queue_warn_on, OPT_INT)
 
 // monitor debug options
 OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated commands as obsolete
@@ -655,6 +656,7 @@ OPTION(osd_op_queue_mclock_scrub_lim, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_res, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_wgt, OPT_DOUBLE)
 OPTION(osd_op_queue_mclock_peering_event_lim, OPT_DOUBLE)
+OPTION(osd_op_queue_mclock_anticipation_timeout, OPT_DOUBLE)
 
 OPTION(osd_ignore_stale_divergent_priors, OPT_BOOL) // do not assert on divergent_prior entries which aren't in the log and whose on-disk objects are newer
 
