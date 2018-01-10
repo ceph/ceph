@@ -2863,7 +2863,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
   case pg_pool_t::CACHEMODE_TEMPTRACK:
   {
     if (must_promote ||
-        agent_state->promote_mode == TierAgentState::PROMOTE_MODE_WARMING) {
+        (agent_state->promote_mode == TierAgentState::PROMOTE_MODE_WARMING &&
+	 !op->need_skip_promote())) {
       if (agent_state &&
           agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL) {
         dout(20) << __func__ << " cache pool full, waiting" << dendl;
@@ -2875,19 +2876,24 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
       return cache_result_t::BLOCKED_PROMOTE;
     }
     auto ob = agent_state->promote_queue.find(missing_oid);
-    if (agent_state->promote_mode == TierAgentState::PROMOTE_MODE_SOME &&
+    if (op->may_write() || op->may_cache() || write_ordered) {
+      do_proxy_write(op);
+    } else {
+      do_proxy_read(op);
+      if (obc.get() && obc->is_blocked()) {
+	if (promote_obc)
+	  *promote_obc = obc;
+	return cache_result_t::BLOCKED_PROMOTE;
+      }
+    }
+    if (!op->need_skip_promote() &&
+	agent_state->promote_mode == TierAgentState::PROMOTE_MODE_SOME &&
         ob != agent_state->promote_queue.end()) {
       agent_state->promote_queue.erase(missing_oid);
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
-    if (op->may_write() || op->may_cache() || write_ordered) {
-      do_proxy_write(op);
-      return cache_result_t::HANDLED_PROXY;
-    } else {
-      do_proxy_read(op);
-      return cache_result_t::HANDLED_PROXY;
-    }
+    return cache_result_t::HANDLED_PROXY;
   }
 
   default:
@@ -13567,7 +13573,7 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
       agent_state->promote_queue.lower_bound(agent_state->promote_q_trim_pos);
     while (pos != agent_state->promote_queue.end() &&
            promote_q_ls < promote_q_ls_max) {
-      // TODO: add promote_queue out time to osd conf
+      // TODO: add promote_queue time out to osd conf
       if (pos->second + utime_t(60, 0) < ceph_clock_now()) {
         pos = agent_state->promote_queue.erase(pos);
       } else
