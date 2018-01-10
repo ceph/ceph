@@ -35,7 +35,7 @@
 #include <fstream>
 #include <iostream>
 #include <memory>
-#include <boost/regex.hpp>
+#include <regex>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "common/Formatter.h"
@@ -923,10 +923,10 @@ static int do_unmap(const std::string &devpath)
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,
                          std::ostream *err_msg) {
-  boost::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
-  boost::smatch match;
-  if (!boost::regex_match(imgpath, match, pattern)) {
-    *err_msg << "rbd-nbd: invalid spec '" << imgpath << "'";
+  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::smatch match;
+  if (!std::regex_match(imgpath, match, pattern)) {
+    std::cerr << "rbd-nbd: invalid spec '" << imgpath << "'" << std::endl;
     return -EINVAL;
   }
 

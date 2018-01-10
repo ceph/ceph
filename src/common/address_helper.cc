@@ -8,20 +8,17 @@
  */
 
 #include <netdb.h>
+#include <regex>
 
 #include "common/address_helper.h"
-#include "boost/regex.hpp"
-
 
 // decode strings like "tcp://<host>:<port>"
 int entity_addr_from_url(entity_addr_t *addr /* out */, const char *url)
 {
-	using namespace boost;
+	std::regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
+	std::cmatch m;
 
-	regex expr("(tcp|rdma)://([^:]*):([\\d]+)");
-	cmatch m;
-
-	if (regex_match(url, m, expr)) {
+	if (std::regex_match(url, m, expr)) {
 		string host(m[2].first, m[2].second);
 		string port(m[3].first, m[3].second);
 		addrinfo hints;

@@ -1,7 +1,6 @@
 #include <errno.h>
 #include <ctime>
-
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
@@ -377,14 +376,14 @@ bool RGWRole::validate_input()
     return false;
   }
 
-  boost::regex regex_name("[A-Za-z0-9:=,.@-]+");
-  if (! boost::regex_match(name, regex_name)) {
+  std::regex regex_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_name)) {
     ldout(cct, 0) << "ERROR: Invalid chars in name " << dendl;
     return false;
   }
 
-  boost::regex regex_path("(/[!-~]+/)|(/)");
-  if (! boost::regex_match(path,regex_path)) {
+  std::regex regex_path("(/[!-~]+/)|(/)");
+  if (! std::regex_match(path,regex_path)) {
     ldout(cct, 0) << "ERROR: Invalid chars in path " << dendl;
     return false;
   }

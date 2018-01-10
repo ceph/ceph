@@ -22,7 +22,6 @@
 #include "global/global_context.h"
 #include <iostream>
 #include <boost/program_options.hpp>
-#include <boost/regex.hpp>
 
 namespace rbd {
 namespace action {

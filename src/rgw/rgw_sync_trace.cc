@@ -1,7 +1,7 @@
 #ifndef CEPH_RGW_SYNC_TRACE_H
 #define CEPH_RGW_SYNC_TRACE_H
 
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "common/debug.h"
 #include "common/ceph_json.h"
@@ -92,8 +92,8 @@ RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
 {
   try {
-    boost::regex expr(search_term);
-    boost::smatch m;
+    std::regex expr(search_term);
+    std::smatch m;
 
     if (regex_search(prefix, m, expr)) {
       return true;
@@ -110,10 +110,8 @@ bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
         return true;
       }
     }
-  } catch (boost::bad_expression const& e) {
+  } catch (const std::regex_error& e) {
     ldout(cct, 5) << "NOTICE: sync trace: bad expression: bad regex search term" << dendl;
-  } catch (...) {
-    ldout(cct, 5) << "NOTICE: sync trace: regex_search() threw exception" << dendl;
   }
 
   return false;
