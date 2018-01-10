@@ -229,5 +229,45 @@ auto maybe_do_or(const std::optional<T>& t, F&& f, U&& u) ->
   else
     return std::forward<U>(u);
 }
+
+namespace _convenience {
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(const std::tuple<Ts...>& t, const F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(std::tuple<Ts...>& t, const F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(const std::tuple<Ts...>& t, F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(std::tuple<Ts...>& t, F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+}
+
+template<typename... Ts, typename F>
+inline void for_each(const std::tuple<Ts...>& t, const F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(std::tuple<Ts...>& t, const F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(const std::tuple<Ts...>& t, F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(std::tuple<Ts...>& t, F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
 }
 #endif // CEPH_COMMON_CONVENIENCE_H
