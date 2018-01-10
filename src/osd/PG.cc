@@ -7093,6 +7093,7 @@ PG::RecoveryState::Recovering::Recovering(my_context ctx)
   pg->state_clear(PG_STATE_RECOVERY_WAIT);
   pg->state_clear(PG_STATE_RECOVERY_TOOFULL);
   pg->state_set(PG_STATE_RECOVERING);
+  assert(!pg->state_test(PG_STATE_ACTIVATING));
   pg->publish_stats_to_osd();
   pg->queue_recovery();
 }
@@ -7549,7 +7550,8 @@ boost::statechart::result PG::RecoveryState::Active::react(const MLogRec& logevt
     pg->peer_missing[logevt.from],
     logevt.from,
     context< RecoveryMachine >().get_recovery_ctx());
-  if (got_missing) {
+  // If there are missing AND we are "fully" active then start recovery now
+  if (got_missing && pg->state_test(PG_STATE_ACTIVE)) {
     post_event(DoRecovery());
   }
   return discard_event();
