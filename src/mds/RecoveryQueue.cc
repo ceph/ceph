@@ -47,9 +47,11 @@ public:
 };
 
 
-RecoveryQueue::RecoveryQueue(MDSRank *mds_)
-  : mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
-{}
+RecoveryQueue::RecoveryQueue(MDSRank *mds_) :
+  file_recover_queue(member_offset(CInode, item_dirty_dirfrag_dir)),
+  file_recover_queue_front(member_offset(CInode, item_dirty_dirfrag_nest)),
+  mds(mds_), logger(NULL), filer(mds_->objecter, mds_->finisher)
+{ }
 
 
 /**
@@ -58,19 +60,20 @@ RecoveryQueue::RecoveryQueue(MDSRank *mds_)
  */
 void RecoveryQueue::advance()
 {
-  dout(10) << file_recover_queue.size() << " queued, "
-	   << file_recover_queue_front.size() << " prioritized, "
+  dout(10) << file_recover_queue_size << " queued, "
+	   << file_recover_queue_front_size << " prioritized, "
 	   << file_recovering.size() << " recovering" << dendl;
 
   while (file_recovering.size() < g_conf->mds_max_file_recover) {
     if (!file_recover_queue_front.empty()) {
-      CInode *in = *file_recover_queue_front.begin();
-      file_recover_queue_front.erase(file_recover_queue_front.begin());
-      file_recover_queue.erase(in);
+      CInode *in = file_recover_queue_front.front();
+      in->item_recover_queue_front.remove_myself();
+      file_recover_queue_front_size--;
       _start(in);
     } else if (!file_recover_queue.empty()) {
-      CInode *in = *file_recover_queue.begin();
-      file_recover_queue.erase(file_recover_queue.begin());
+      CInode *in = file_recover_queue.front();
+      in->item_recover_queue.remove_myself();
+      file_recover_queue_size--;
       _start(in);
     } else {
       break;
@@ -78,8 +81,8 @@ void RecoveryQueue::advance()
   }
 
   logger->set(l_mdc_num_recovering_processing, file_recovering.size());
-  logger->set(l_mdc_num_recovering_enqueued, file_recover_queue.size());
-  logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front.size());
+  logger->set(l_mdc_num_recovering_enqueued, file_recover_queue_size + file_recover_queue_front_size);
+  logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front_size);
 }
 
 void RecoveryQueue::_start(CInode *in)
@@ -116,10 +119,17 @@ void RecoveryQueue::prioritize(CInode *in)
     return;
   }
 
-  if (file_recover_queue.count(in)) {
+  if (!in->item_recover_queue_front.is_on_list()) {
     dout(20) << *in << dendl;
-    file_recover_queue_front.insert(in);
-    logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front.size());
+
+    assert(in->item_recover_queue.is_on_list());
+    in->item_recover_queue.remove_myself();
+    file_recover_queue_size--;
+
+    file_recover_queue_front.push_back(&in->item_recover_queue_front);
+
+    file_recover_queue_front_size++;
+    logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front_size);
     return;
   }
 
@@ -143,8 +153,13 @@ void RecoveryQueue::enqueue(CInode *in)
     in->auth_pin(this);
     logger->inc(l_mdc_recovery_started);
   }
-  file_recover_queue.insert(in);
-  logger->set(l_mdc_num_recovering_enqueued, file_recover_queue.size());
+
+  if (!in->item_recover_queue.is_on_list() &&
+      !in->item_recover_queue_front.is_on_list()) {
+    file_recover_queue.push_back(&in->item_recover_queue);
+    file_recover_queue_size++;
+    logger->set(l_mdc_num_recovering_enqueued, file_recover_queue_size + file_recover_queue_front_size);
+  }
 }
 
 
