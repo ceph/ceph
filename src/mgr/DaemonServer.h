@@ -129,7 +129,7 @@ public:
       ceph::bufferlist& authorizer,
       ceph::bufferlist& authorizer_reply,
       bool& isvalid,
-      CryptoKey& session_key) override;
+      ceph::crypto::Key& session_key) override;
 
   bool handle_open(MMgrOpen *m);
   bool handle_report(MMgrReport *m);

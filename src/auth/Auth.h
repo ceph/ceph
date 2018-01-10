@@ -22,7 +22,7 @@ class Cond;
 
 struct EntityAuth {
   uint64_t auid;
-  CryptoKey key;
+  ceph::crypto::Key key;
   map<string, bufferlist> caps;
 
   EntityAuth() : auid(CEPH_AUTH_UID_DEFAULT) {}
@@ -137,7 +137,7 @@ WRITE_CLASS_ENCODER(AuthTicket)
 struct AuthAuthorizer {
   __u32 protocol;
   bufferlist bl;
-  CryptoKey session_key;
+  ceph::crypto::Key session_key;
 
   explicit AuthAuthorizer(__u32 p) : protocol(p) {}
   virtual ~AuthAuthorizer() {}
@@ -151,7 +151,7 @@ struct AuthAuthorizer {
 #define KEY_ROTATE_NUM 3   /* prev, current, next */
 
 struct ExpiringCryptoKey {
-  CryptoKey key;
+  ceph::crypto::Key key;
   utime_t expiration;
 
   void encode(bufferlist& bl) const {
@@ -240,9 +240,9 @@ WRITE_CLASS_ENCODER(RotatingSecrets)
 class KeyStore {
 public:
   virtual ~KeyStore() {}
-  virtual bool get_secret(const EntityName& name, CryptoKey& secret) const = 0;
+  virtual bool get_secret(const EntityName& name, ceph::crypto::Key& secret) const = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-				  CryptoKey& secret) const = 0;
+				  ceph::crypto::Key& secret) const = 0;
 };
 
 inline bool auth_principal_needs_rotating_keys(EntityName& name)

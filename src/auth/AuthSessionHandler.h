@@ -31,12 +31,12 @@ struct AuthSessionHandler {
 protected:
   CephContext *cct;
   int protocol;
-  CryptoKey key;
+  ceph::crypto::Key key;
 
 public:
   explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
 
-  AuthSessionHandler(CephContext *cct_, int protocol_, CryptoKey key_) : cct(cct_), 
+  AuthSessionHandler(CephContext *cct_, int protocol_, ceph::crypto::Key key_) : cct(cct_), 
     protocol(protocol_), key(key_) {}
   virtual ~AuthSessionHandler() { }
 
@@ -47,11 +47,11 @@ public:
   virtual int decrypt_message(Message *message) = 0;
 
   int get_protocol() {return protocol;}
-  CryptoKey get_key() {return key;}
+  ceph::crypto::Key get_key() {return key;}
 
 };
 
-extern AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key,
+extern AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, ceph::crypto::Key key,
 						    uint64_t features);
 
 #endif

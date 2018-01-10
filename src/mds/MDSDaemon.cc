@@ -1264,7 +1264,7 @@ bool MDSDaemon::ms_handle_refused(Connection *con)
 
 bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& is_valid, CryptoKey& session_key)
+			       bool& is_valid, ceph::crypto::Key& session_key)
 {
   Mutex::Locker l(mds_lock);
   if (stopping) {

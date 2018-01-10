@@ -45,7 +45,7 @@ public:
     a = k->second;
     return true;
   }
-  bool get_secret(const EntityName& name, CryptoKey& secret) const override {
+  bool get_secret(const EntityName& name, ceph::crypto::Key& secret) const override {
     map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
       return false;
@@ -53,7 +53,7 @@ public:
     return true;
   }
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const override {
+			  ceph::crypto::Key& secret) const override {
     return false;
   }
   bool get_caps(const EntityName& name,
@@ -72,7 +72,7 @@ public:
   void add(const EntityName& name, EntityAuth &a) {
     keys[name] = a;
   }
-  void add(const EntityName& name, CryptoKey &k) {
+  void add(const EntityName& name, ceph::crypto::Key &k) {
     EntityAuth a;
     a.key = k;
     keys[name] = a;
@@ -86,7 +86,7 @@ public:
   void set_uid(EntityName& ename, uint64_t auid) {
     keys[ename].auid = auid;
   }
-  void set_key(EntityName& ename, CryptoKey& key) {
+  void set_key(EntityName& ename, ceph::crypto::Key& key) {
     keys[ename].key = key;
   }
   void import(CephContext *cct, KeyRing& other);

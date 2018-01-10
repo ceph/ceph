@@ -37,14 +37,14 @@ void RotatingKeyRing::dump_rotating() const
     ldout(cct, 10) << " id " << iter->first << " " << iter->second << dendl;
 }
 
-bool RotatingKeyRing::get_secret(const EntityName& name, CryptoKey& secret) const
+bool RotatingKeyRing::get_secret(const EntityName& name, ceph::crypto::Key& secret) const
 {
   Mutex::Locker l(lock);
   return keyring->get_secret(name, secret);
 }
 
 bool RotatingKeyRing::get_service_secret(uint32_t service_id_, uint64_t secret_id,
-					 CryptoKey& secret) const
+					 ceph::crypto::Key& secret) const
 {
   Mutex::Locker l(lock);
 

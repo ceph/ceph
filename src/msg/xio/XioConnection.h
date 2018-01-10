@@ -131,7 +131,7 @@ private:
     uint64_t features;
     Messenger::Policy policy;
 
-    CryptoKey session_key;
+    ceph::crypto::Key session_key;
     ceph::shared_ptr<AuthSessionHandler> session_security;
     AuthAuthorizer *authorizer;
     XioConnection *xcon;

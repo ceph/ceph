@@ -50,7 +50,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 }
 
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
-				CryptoKey& secret, uint64_t& secret_id) const
+				ceph::crypto::Key& secret, uint64_t& secret_id) const
 {
   ExpiringCryptoKey e;
 
@@ -62,7 +62,7 @@ bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
 }
 
 bool KeyServerData::get_service_secret(CephContext *cct, uint32_t service_id,
-				uint64_t secret_id, CryptoKey& secret) const
+				uint64_t secret_id, ceph::crypto::Key& secret) const
 {
   map<uint32_t, RotatingSecrets>::const_iterator iter =
       rotating_secrets.find(service_id);
@@ -98,7 +98,7 @@ bool KeyServerData::get_auth(const EntityName& name, EntityAuth& auth) const {
   return extra_secrets->get_auth(name, auth);
 }
 
-bool KeyServerData::get_secret(const EntityName& name, CryptoKey& secret) const {
+bool KeyServerData::get_secret(const EntityName& name, ceph::crypto::Key& secret) const {
   map<EntityName, EntityAuth>::const_iterator iter = secrets.find(name);
   if (iter != secrets.end()) {
     secret = iter->second.key;
@@ -213,7 +213,7 @@ int KeyServer::_rotate_secret(uint32_t service_id)
   return added;
 }
 
-bool KeyServer::get_secret(const EntityName& name, CryptoKey& secret) const
+bool KeyServer::get_secret(const EntityName& name, ceph::crypto::Key& secret) const
 {
   Mutex::Locker l(lock);
   return data.get_secret(name, secret);
@@ -242,7 +242,7 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 }
 
 bool KeyServer::get_service_secret(uint32_t service_id,
-		CryptoKey& secret, uint64_t& secret_id) const
+		ceph::crypto::Key& secret, uint64_t& secret_id) const
 {
   Mutex::Locker l(lock);
 
@@ -250,17 +250,17 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 }
 
 bool KeyServer::get_service_secret(uint32_t service_id,
-		uint64_t secret_id, CryptoKey& secret) const
+		uint64_t secret_id, ceph::crypto::Key& secret) const
 {
   Mutex::Locker l(lock);
 
   return data.get_service_secret(cct, service_id, secret_id, secret);
 }
 
-bool KeyServer::generate_secret(CryptoKey& secret)
+bool KeyServer::generate_secret(ceph::crypto::Key& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES128);
+  auto crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES128);
   if (!crypto)
     return false;
 
@@ -272,7 +272,7 @@ bool KeyServer::generate_secret(CryptoKey& secret)
   return true;
 }
 
-bool KeyServer::generate_secret(EntityName& name, CryptoKey& secret)
+bool KeyServer::generate_secret(EntityName& name, ceph::crypto::Key& secret)
 {
   if (!generate_secret(secret))
     return false;
@@ -390,7 +390,7 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
   if (mapiter == data.secrets_end())
     return false;
 
-  const CryptoKey& specific_key = mapiter->second.key;
+  const ceph::crypto::Key& specific_key = mapiter->second.key;
 
   map<uint32_t, RotatingSecrets>::const_iterator rotate_iter =
     data.rotating_secrets.find(name.get_type());
@@ -454,7 +454,7 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
 }
 
 int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info,
-                                        CryptoKey& service_secret, uint64_t secret_id)
+                                        ceph::crypto::Key& service_secret, uint64_t secret_id)
 {
   info.service_secret = service_secret;
   info.secret_id = secret_id;

@@ -40,7 +40,7 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     header.request_type = CEPHX_GET_AUTH_SESSION_KEY;
     encode(header, bl);
 
-    CryptoKey secret;
+    ceph::crypto::Key secret;
     const bool got = keyring->get_secret(cct->_conf->name, secret);
     if (!got) {
       ldout(cct, 20) << "no secret found for entity: " << cct->_conf->name << dendl;
@@ -134,7 +134,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
       ldout(cct, 10) << " get_auth_session_key" << dendl;
-      CryptoKey secret;
+      ceph::crypto::Key secret;
       const bool got = keyring->get_secret(cct->_conf->name, secret);
       if (!got) {
 	ldout(cct, 0) << "key not found for " << cct->_conf->name << dendl;
@@ -175,7 +175,7 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
       ldout(cct, 10) << " get_rotating_key" << dendl;
       if (rotating_secrets) {
 	RotatingSecrets secrets;
-	CryptoKey secret_key;
+	ceph::crypto::Key secret_key;
 	const bool got = keyring->get_secret(cct->_conf->name, secret_key);
         if (!got) {
           ldout(cct, 0) << "key not found for " << cct->_conf->name << dendl;

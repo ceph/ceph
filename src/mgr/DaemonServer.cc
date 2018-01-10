@@ -148,7 +148,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     ceph::bufferlist& authorizer_data,
     ceph::bufferlist& authorizer_reply,
     bool& is_valid,
-    CryptoKey& session_key)
+    ceph::crypto::Key& session_key)
 {
   AuthAuthorizeHandler *handler = nullptr;
   if (peer_type == CEPH_ENTITY_TYPE_OSD ||

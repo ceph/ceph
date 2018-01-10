@@ -19,7 +19,7 @@ class CephContext;
 
 class AuthNoneSessionHandler  : public AuthSessionHandler {
 public:
-  AuthNoneSessionHandler(CephContext *cct_, CryptoKey session_key)
+  AuthNoneSessionHandler(CephContext *cct_, ceph::crypto::Key session_key)
     : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key) {}
   ~AuthNoneSessionHandler() override {}
   

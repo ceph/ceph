@@ -31,16 +31,20 @@
 #include "common/debug.h"
 #include <errno.h>
 
+#ifdef HAVE_GETENTROPY
+#include <unistd.h>
+#endif
+
+namespace ceph::crypto {
+
 // use getentropy() if available. it uses the same source of randomness
 // as /dev/urandom without the filesystem overhead
 #ifdef HAVE_GETENTROPY
 
-#include <unistd.h>
+Random::Random() : fd(0) {}
+Random::~Random() = default;
 
-CryptoRandom::CryptoRandom() : fd(0) {}
-CryptoRandom::~CryptoRandom() = default;
-
-void CryptoRandom::get_bytes(char *buf, int len)
+void Random::get_bytes(char *buf, int len)
 {
   auto ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
   if (ret < 0) {
@@ -51,7 +55,7 @@ void CryptoRandom::get_bytes(char *buf, int len)
 #else // !HAVE_GETENTROPY
 
 // open /dev/urandom once on construction and reuse the fd for all reads
-CryptoRandom::CryptoRandom()
+Random::Random()
   : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY)))
 {
   if (fd < 0) {
@@ -59,12 +63,12 @@ CryptoRandom::CryptoRandom()
   }
 }
 
-CryptoRandom::~CryptoRandom()
+Random::~Random()
 {
   VOID_TEMP_FAILURE_RETRY(::close(fd));
 }
 
-void CryptoRandom::get_bytes(char *buf, int len)
+void Random::get_bytes(char *buf, int len)
 {
   auto ret = safe_read_exact(fd, buf, len);
   if (ret < 0) {
@@ -75,9 +79,10 @@ void CryptoRandom::get_bytes(char *buf, int len)
 #endif
 
 
-// ---------------------------------------------------
+// CEPH_CRYPTO_NONE
+namespace none {
 
-class CryptoNoneKeyHandler : public CryptoKeyHandler {
+class KeyHandlerImpl : public KeyHandler {
 public:
   int encrypt(const bufferlist& in,
 	       bufferlist& out, std::string *error) const override {
@@ -91,38 +96,36 @@ public:
   }
 };
 
-class CryptoNone : public CryptoHandler {
+class HandlerImpl : public Handler {
 public:
-  CryptoNone() { }
-  ~CryptoNone() override {}
   int get_type() const override {
     return CEPH_CRYPTO_NONE;
   }
-  int create(CryptoRandom *random, bufferptr& secret) override {
+  int create(Random *random, bufferptr& secret) override {
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
-    return new CryptoNoneKeyHandler;
+  KeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
+    return new KeyHandlerImpl;
   }
 };
 
+} // namespace none
 
-// ---------------------------------------------------
 
+// CEPH_CRYPTO_AES128
+namespace aes128 {
 
-class CryptoAES : public CryptoHandler {
+class HandlerImpl : public Handler {
 public:
-  CryptoAES() { }
-  ~CryptoAES() override {}
   int get_type() const override {
     return CEPH_CRYPTO_AES128;
   }
-  int create(CryptoRandom *random, bufferptr& secret) override;
+  int create(Random *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  KeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
 #ifdef USE_NSS
@@ -184,19 +187,19 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   return 0;
 }
 
-class CryptoAESKeyHandler : public CryptoKeyHandler {
+class KeyHandlerImpl : public KeyHandler {
   CK_MECHANISM_TYPE mechanism;
   PK11SlotInfo *slot;
   PK11SymKey *key;
   SECItem *param;
 
 public:
-  CryptoAESKeyHandler()
+  KeyHandlerImpl()
     : mechanism(CKM_AES_CBC_PAD),
       slot(NULL),
       key(NULL),
       param(NULL) {}
-  ~CryptoAESKeyHandler() override {
+  ~KeyHandlerImpl() override {
     SECITEM_FreeItem(param, PR_TRUE);
     if (key)
       PK11_FreeSymKey(key);
@@ -258,7 +261,7 @@ public:
 
 // ------------------------------------------------------------
 
-int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
+int HandlerImpl::create(Random *random, bufferptr& secret)
 {
   bufferptr buf(AES_KEY_LEN);
   random->get_bytes(buf.c_str(), buf.length());
@@ -266,7 +269,7 @@ int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
   return 0;
 }
 
-int CryptoAES::validate_secret(const bufferptr& secret)
+int HandlerImpl::validate_secret(const bufferptr& secret)
 {
   if (secret.length() < (size_t)AES_KEY_LEN) {
     return -EINVAL;
@@ -275,10 +278,9 @@ int CryptoAES::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
-					     string& error)
+KeyHandler *HandlerImpl::get_key_handler(const bufferptr& secret, string& error)
 {
-  CryptoAESKeyHandler *ckh = new CryptoAESKeyHandler;
+  KeyHandlerImpl *ckh = new KeyHandlerImpl;
   ostringstream oss;
   if (ckh->init(secret, oss) < 0) {
     error = oss.str();
@@ -288,16 +290,13 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
   return ckh;
 }
 
-
-
-
-// --
+} // namespace aes128
 
 
 // ---------------------------------------------------
 
 
-void CryptoKey::encode(bufferlist& bl) const
+void Key::encode(bufferlist& bl) const
 {
   using ceph::encode;
   encode(type, bl);
@@ -307,7 +306,7 @@ void CryptoKey::encode(bufferlist& bl) const
   bl.append(secret);
 }
 
-void CryptoKey::decode(bufferlist::iterator& bl)
+void Key::decode(bufferlist::iterator& bl)
 {
   using ceph::decode;
   decode(type, bl);
@@ -320,7 +319,7 @@ void CryptoKey::decode(bufferlist::iterator& bl)
     throw buffer::malformed_input("malformed secret");
 }
 
-int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
+int Key::set_secret(int type, const bufferptr& s, utime_t c)
 {
   int r = _set_secret(type, s);
   if (r < 0)
@@ -329,7 +328,7 @@ int CryptoKey::set_secret(int type, const bufferptr& s, utime_t c)
   return 0;
 }
 
-int CryptoKey::_set_secret(int t, const bufferptr& s)
+int Key::_set_secret(int t, const bufferptr& s)
 {
   if (s.length() == 0) {
     secret = s;
@@ -337,7 +336,7 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
     return 0;
   }
 
-  CryptoHandler *ch = CryptoHandler::create(t);
+  Handler *ch = Handler::create(t);
   if (ch) {
     int ret = ch->validate_secret(s);
     if (ret < 0) {
@@ -358,9 +357,9 @@ int CryptoKey::_set_secret(int t, const bufferptr& s)
   return 0;
 }
 
-int CryptoKey::create(CephContext *cct, int t)
+int Key::create(CephContext *cct, int t)
 {
-  CryptoHandler *ch = CryptoHandler::create(t);
+  Handler *ch = Handler::create(t);
   if (!ch) {
     if (cct)
       lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << t << ") returned NULL" << dendl;
@@ -379,12 +378,12 @@ int CryptoKey::create(CephContext *cct, int t)
   return r;
 }
 
-void CryptoKey::print(std::ostream &out) const
+void Key::print(std::ostream &out) const
 {
   out << encode_base64();
 }
 
-void CryptoKey::to_str(std::string& s) const
+void Key::to_str(std::string& s) const
 {
   int len = secret.length() * 4;
   char buf[len];
@@ -392,7 +391,7 @@ void CryptoKey::to_str(std::string& s) const
   s = buf;
 }
 
-void CryptoKey::encode_formatted(string label, Formatter *f, bufferlist &bl)
+void Key::encode_formatted(string label, Formatter *f, bufferlist &bl)
 {
   f->open_object_section(label.c_str());
   f->dump_string("key", encode_base64());
@@ -400,7 +399,7 @@ void CryptoKey::encode_formatted(string label, Formatter *f, bufferlist &bl)
   f->flush(bl);
 }
 
-void CryptoKey::encode_plaintext(bufferlist &bl)
+void Key::encode_plaintext(bufferlist &bl)
 {
   bl.append(encode_base64());
 }
@@ -408,14 +407,16 @@ void CryptoKey::encode_plaintext(bufferlist &bl)
 
 // ------------------
 
-CryptoHandler *CryptoHandler::create(int type)
+Handler* Handler::create(int type)
 {
   switch (type) {
   case CEPH_CRYPTO_NONE:
-    return new CryptoNone;
+    return new none::HandlerImpl;
   case CEPH_CRYPTO_AES128:
-    return new CryptoAES;
+    return new aes128::HandlerImpl;
   default:
     return NULL;
   }
 }
+
+} // namespace ceph::crypto

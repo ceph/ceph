@@ -95,11 +95,11 @@ struct KeyServerData {
   bool get_service_secret(CephContext *cct, uint32_t service_id,
 			  ExpiringCryptoKey& secret, uint64_t& secret_id) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  CryptoKey& secret, uint64_t& secret_id) const;
+			  ceph::crypto::Key& secret, uint64_t& secret_id) const;
   bool get_service_secret(CephContext *cct, uint32_t service_id,
-			  uint64_t secret_id, CryptoKey& secret) const;
+			  uint64_t secret_id, ceph::crypto::Key& secret) const;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
-  bool get_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_secret(const EntityName& name, ceph::crypto::Key& secret) const;
   bool get_caps(CephContext *cct, const EntityName& name,
 		const std::string& type, AuthCapsInfo& caps) const;
 
@@ -204,28 +204,28 @@ class KeyServer : public KeyStore {
 	AuthCapsInfo& caps) const;
 public:
   KeyServer(CephContext *cct_, KeyRing *extra_secrets);
-  bool generate_secret(CryptoKey& secret);
+  bool generate_secret(ceph::crypto::Key& secret);
 
-  bool get_secret(const EntityName& name, CryptoKey& secret) const override;
+  bool get_secret(const EntityName& name, ceph::crypto::Key& secret) const override;
   bool get_auth(const EntityName& name, EntityAuth& auth) const;
   bool get_caps(const EntityName& name, const string& type, AuthCapsInfo& caps) const;
-  bool get_active_rotating_secret(const EntityName& name, CryptoKey& secret) const;
+  bool get_active_rotating_secret(const EntityName& name, ceph::crypto::Key& secret) const;
   int start_server();
   void rotate_timeout(double timeout);
 
   int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
   int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info,
-                                        CryptoKey& service_secret, uint64_t secret_id);
+                                        ceph::crypto::Key& service_secret, uint64_t secret_id);
 
   /* get current secret for specific service type */
   bool get_service_secret(uint32_t service_id, ExpiringCryptoKey& service_key,
 			  uint64_t& secret_id) const;
-  bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 
+  bool get_service_secret(uint32_t service_id, ceph::crypto::Key& service_key, 
 			  uint64_t& secret_id) const;
   bool get_service_secret(uint32_t service_id, uint64_t secret_id,
-			  CryptoKey& secret) const override;
+			  ceph::crypto::Key& secret) const override;
 
-  bool generate_secret(EntityName& name, CryptoKey& secret);
+  bool generate_secret(EntityName& name, ceph::crypto::Key& secret);
 
   void encode(bufferlist& bl) const {
     using ceph::encode;

@@ -413,7 +413,7 @@ AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
 
 bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
 					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-					bool& isvalid,CryptoKey& session_key)
+					bool& isvalid, ceph::crypto::Key& session_key)
 {
   return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply, isvalid,session_key);
 }

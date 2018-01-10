@@ -37,10 +37,12 @@ class md_config_obs_t;
 struct md_config_t;
 class CephContextHook;
 class CephContextObs;
-class CryptoHandler;
-class CryptoRandom;
 
 namespace ceph {
+namespace crypto {
+class Handler;
+class Random;
+}
   class PluginRegistry;
   class HeartbeatMap;
   namespace logging {
@@ -146,9 +148,9 @@ public:
   /**
    * get a crypto handler
    */
-  CryptoHandler *get_crypto_handler(int type);
+  ceph::crypto::Handler* get_crypto_handler(int type);
 
-  CryptoRandom* random() const { return _crypto_random.get(); }
+  ceph::crypto::Random* random() const { return _crypto_random.get(); }
 
   /// check if experimental feature is enable, and emit appropriate warnings
   bool check_experimental_feature_enabled(const std::string& feature);
@@ -267,9 +269,9 @@ private:
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
-  CryptoHandler *_crypto_none;
-  CryptoHandler *_crypto_aes;
-  std::unique_ptr<CryptoRandom> _crypto_random;
+  ceph::crypto::Handler *_crypto_none;
+  ceph::crypto::Handler *_crypto_aes;
+  std::unique_ptr<ceph::crypto::Random> _crypto_random;
 
   // experimental
   CephContextObs *_cct_obs;

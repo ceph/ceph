@@ -92,7 +92,7 @@ int KeyRing::set_modifier(const char *type, const char *val, EntityName& name, m
     return -EINVAL;
 
   if (strcmp(type, "key") == 0) {
-    CryptoKey key;
+    ceph::crypto::Key key;
     string l(val);
     try {
       key.decode_base64(l);

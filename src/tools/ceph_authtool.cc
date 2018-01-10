@@ -160,7 +160,7 @@ int main(int argc, const char **argv)
   }
 
   if (gen_print_key) {
-    CryptoKey key;
+    ceph::crypto::Key key;
     key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     cout << key << std::endl;
     return 0;
@@ -195,7 +195,7 @@ int main(int argc, const char **argv)
   // Validate that "name" actually has an existing key in this keyring if we
   // have not given gen-key or add-key options
   if (!gen_key && add_key.empty() && !caps.empty()) {
-    CryptoKey key;
+    ceph::crypto::Key key;
     if (!keyring.get_secret(ename, key)) {
       cerr << "can't find existing key for " << ename 
            << " and neither gen-key nor add-key specified" << std::endl;
@@ -286,7 +286,7 @@ int main(int argc, const char **argv)
     }
   }
   if (print_key) {
-    CryptoKey key;
+    ceph::crypto::Key key;
     if (keyring.get_secret(ename, key)) {
       cout << key << std::endl;
     } else {

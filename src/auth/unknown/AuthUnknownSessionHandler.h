@@ -21,7 +21,7 @@ class CephContext;
 
 class AuthUnknownSessionHandler  : public AuthSessionHandler {
 public:
-  AuthUnknownSessionHandler(CephContext *cct_, CryptoKey session_key)
+  AuthUnknownSessionHandler(CephContext *cct_, ceph::crypto::Key session_key)
     : AuthSessionHandler(cct_, CEPH_AUTH_UNKNOWN, session_key) {}
   ~AuthUnknownSessionHandler() override {}
   

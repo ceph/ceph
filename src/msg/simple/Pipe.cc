@@ -340,7 +340,7 @@ int Pipe::accept()
   // reset or not, it is true if there is an existing connection and the
   // connection sequence from peer is equal to zero
   bool is_reset_from_peer = false;
-  CryptoKey session_key;
+  ceph::crypto::Key session_key;
   int removed; // single-use down below
 
   // this should roughly mirror pseudocode at

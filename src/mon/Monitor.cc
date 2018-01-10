@@ -5605,7 +5605,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
   if (service_id == CEPH_ENTITY_TYPE_MON) {
     // mon to mon authentication uses the private monitor shared key and not the
     // rotating key
-    CryptoKey secret;
+    ceph::crypto::Key secret;
     if (!keyring.get_secret(name, secret) &&
 	!key_server.get_secret(name, secret)) {
       dout(0) << " couldn't get secret for mon service from keyring or keyserver"
@@ -5661,7 +5661,7 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
 bool Monitor::ms_verify_authorizer(Connection *con, int peer_type,
 				   int protocol, bufferlist& authorizer_data,
 				   bufferlist& authorizer_reply,
-				   bool& isvalid, CryptoKey& session_key)
+				   bool& isvalid, ceph::crypto::Key& session_key)
 {
   dout(10) << "ms_verify_authorizer " << con->get_peer_addr()
 	   << " " << ceph_entity_type_name(peer_type)

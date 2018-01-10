@@ -24,7 +24,7 @@
 
 
 
-void cephx_calc_client_server_challenge(CephContext *cct, CryptoKey& secret, uint64_t server_challenge, 
+void cephx_calc_client_server_challenge(CephContext *cct, ceph::crypto::Key& secret, uint64_t server_challenge, 
 		  uint64_t client_challenge, uint64_t *key, std::string &error)
 {
   CephXChallengeBlob b;
@@ -81,10 +81,10 @@ bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& inf
  * {principal_ticket, session key}^service_secret  ... "enc_ticket"
  */
 bool cephx_build_service_ticket_reply(CephContext *cct,
-                     CryptoKey& principal_secret,
+                     ceph::crypto::Key& principal_secret,
                      vector<CephXSessionAuthInfo> ticket_info_vec,
                      bool should_encrypt_ticket,
-                     CryptoKey& ticket_enc_key,
+                     ceph::crypto::Key& ticket_enc_key,
                      bufferlist& reply)
 {
   __u8 service_ticket_reply_v = 1;
@@ -141,7 +141,7 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
-bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
+bool CephXTicketHandler::verify_service_ticket_reply(ceph::crypto::Key& secret,
 						     bufferlist::iterator& indata)
 {
   __u8 service_ticket_v;
@@ -260,7 +260,7 @@ void CephXTicketManager::invalidate_ticket(uint32_t service_id)
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
-bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
+bool CephXTicketManager::verify_service_ticket_reply(ceph::crypto::Key& secret,
 						     bufferlist::iterator& indata)
 {
   __u8 service_ticket_reply_v;
@@ -352,7 +352,7 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
 	      CephXTicketBlob& ticket_blob, CephXServiceTicketInfo& ticket_info)
 {
   uint64_t secret_id = ticket_blob.secret_id;
-  CryptoKey service_secret;
+  ceph::crypto::Key service_secret;
 
   if (!ticket_blob.blob.length()) {
     return false;
@@ -395,7 +395,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   __u8 authorizer_v;
   uint32_t service_id;
   uint64_t global_id;
-  CryptoKey service_secret;
+  ceph::crypto::Key service_secret;
   // ticket blob
   CephXTicketBlob ticket;
 

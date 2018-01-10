@@ -58,7 +58,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
       CephXAuthenticate req;
       decode(req, indata);
 
-      CryptoKey secret;
+      ceph::crypto::Key secret;
       if (!key_server->get_secret(entity_name, secret)) {
         ldout(cct, 0) << "couldn't find entity name: " << entity_name << dendl;
 	ret = -EPERM;
@@ -89,7 +89,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	break;
       }
 
-      CryptoKey session_key;
+      ceph::crypto::Key session_key;
       CephXSessionAuthInfo info;
       bool should_enc_ticket = false;
 
@@ -190,7 +190,7 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	ldout(cct, 10) << __func__ << " did not find any service keys" << dendl;
 	ret = service_err;
       }
-      CryptoKey no_key;
+      ceph::crypto::Key no_key;
       build_cephx_response_header(cephx_header.request_type, ret, result_bl);
       cephx_build_service_ticket_reply(cct, auth_ticket_info.session_key, info_vec, false, no_key, result_bl);
     }

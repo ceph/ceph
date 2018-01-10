@@ -23,8 +23,12 @@ class Messenger;
 class Message;
 class Connection;
 class AuthAuthorizer;
-class CryptoKey;
 class CephContext;
+namespace ceph {
+namespace crypto {
+class Key;
+} // namespace crypto
+} // namespace ceph
 
 class Dispatcher {
 public:
@@ -203,7 +207,7 @@ public:
 				    ceph::bufferlist& authorizer,
 				    ceph::bufferlist& authorizer_reply,
 				    bool& isvalid,
-				    CryptoKey& session_key) { return false; }
+				    ceph::crypto::Key& session_key) { return false; }
   /**
    * @} //Authentication
    */

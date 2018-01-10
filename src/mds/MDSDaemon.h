@@ -97,7 +97,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
   bool ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key) override;
+			       bool& isvalid, ceph::crypto::Key& session_key) override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;

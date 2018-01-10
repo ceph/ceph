@@ -212,7 +212,7 @@ struct CephXChallengeBlob {
 WRITE_CLASS_ENCODER(CephXChallengeBlob)
 
 void cephx_calc_client_server_challenge(CephContext *cct, 
-					CryptoKey& secret, uint64_t server_challenge, uint64_t client_challenge,
+					ceph::crypto::Key& secret, uint64_t server_challenge, uint64_t client_challenge,
 					uint64_t *key, std::string &error);
 
 
@@ -223,8 +223,8 @@ struct CephXSessionAuthInfo {
   uint32_t service_id;
   uint64_t secret_id;
   AuthTicket ticket;
-  CryptoKey session_key;
-  CryptoKey service_secret;
+  ceph::crypto::Key session_key;
+  ceph::crypto::Key service_secret;
   utime_t validity;
 };
 
@@ -237,10 +237,10 @@ extern void cephx_build_service_ticket_request(CephContext *cct,
 					       bufferlist& request);
 
 extern bool cephx_build_service_ticket_reply(CephContext *cct,
-					     CryptoKey& principal_secret,
+					     ceph::crypto::Key& principal_secret,
 					     vector<CephXSessionAuthInfo> ticket_info,
                                              bool should_encrypt_ticket,
-                                             CryptoKey& ticket_enc_key,
+                                             ceph::crypto::Key& ticket_enc_key,
 					     bufferlist& reply);
 
 struct CephXServiceTicketRequest {
@@ -304,7 +304,7 @@ public:
  */
 struct CephXTicketHandler {
   uint32_t service_id;
-  CryptoKey session_key;
+  ceph::crypto::Key session_key;
   CephXTicketBlob ticket;        // opaque to us
   utime_t renew_after, expires;
   bool have_key_flag;
@@ -313,7 +313,7 @@ struct CephXTicketHandler {
     : service_id(service_id_), have_key_flag(false), cct(cct_) { }
 
   // to build our ServiceTicket
-  bool verify_service_ticket_reply(CryptoKey& principal_secret,
+  bool verify_service_ticket_reply(ceph::crypto::Key& principal_secret,
 				 bufferlist::iterator& indata);
   // to access the service
   CephXAuthorizer *build_authorizer(uint64_t global_id) const;
@@ -335,7 +335,7 @@ struct CephXTicketManager {
 
   explicit CephXTicketManager(CephContext *cct_) : global_id(0), cct(cct_) {}
 
-  bool verify_service_ticket_reply(CryptoKey& principal_secret,
+  bool verify_service_ticket_reply(ceph::crypto::Key& principal_secret,
 				 bufferlist::iterator& indata);
 
   CephXTicketHandler& get_handler(uint32_t type) {
@@ -362,7 +362,7 @@ private:
 
 /* A */
 struct CephXServiceTicket {
-  CryptoKey session_key;
+  ceph::crypto::Key session_key;
   utime_t validity;
 
   void encode(bufferlist& bl) const {
@@ -385,7 +385,7 @@ WRITE_CLASS_ENCODER(CephXServiceTicket)
 /* B */
 struct CephXServiceTicketInfo {
   AuthTicket ticket;
-  CryptoKey session_key;
+  ceph::crypto::Key session_key;
 
   void encode(bufferlist& bl) const {
     using ceph::encode;
@@ -446,7 +446,7 @@ extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
-void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl_enc, 
+void decode_decrypt_enc_bl(CephContext *cct, T& t, ceph::crypto::Key key, bufferlist& bl_enc, 
 			   std::string &error)
 {
   uint64_t magic;
@@ -470,7 +470,7 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl
 }
 
 template <typename T>
-void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
+void encode_encrypt_enc_bl(CephContext *cct, const T& t, const ceph::crypto::Key& key,
 			   bufferlist& out, std::string &error)
 {
   bufferlist bl;
@@ -484,7 +484,7 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
 }
 
 template <typename T>
-int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
+int decode_decrypt(CephContext *cct, T& t, const ceph::crypto::Key& key,
 		    bufferlist::iterator& iter, std::string &error)
 {
   bufferlist bl_enc;
@@ -501,7 +501,7 @@ int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
 }
 
 template <typename T>
-int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
+int encode_encrypt(CephContext *cct, const T& t, const ceph::crypto::Key& key,
 		    bufferlist& out, std::string &error)
 {
   bufferlist bl_enc;

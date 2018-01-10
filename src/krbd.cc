@@ -146,7 +146,7 @@ static int build_map_buf(CephContext *cct, const char *pool, const char *image,
     }
   }
 
-  CryptoKey secret;
+  ceph::crypto::Key secret;
   string key_name = string("client.") + cct->_conf->name.get_id();
   if (keyring.get_secret(cct->_conf->name, secret)) {
     string secret_str;

@@ -1938,9 +1938,9 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
       string err;
       if (keyfile == "-") {
 	static_assert(1024 * 1024 >
-		      (sizeof(CryptoKey) - sizeof(bufferptr) +
+		      (sizeof(ceph::crypto::Key) - sizeof(bufferptr) +
 		       sizeof(__u16) + 16 /* AES_KEY_LEN */ + 3 - 1) / 3. * 4.,
-		      "1MB should be enough for a base64 encoded CryptoKey");
+		      "1MB should be enough for a base64 encoded ceph::crypto::Key");
 	r = keybl.read_fd(STDIN_FILENO, 1024 * 1024);
       } else {
 	r = keybl.read_file(keyfile.c_str(), &err);
@@ -6517,7 +6517,7 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
 
 bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
 			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			       bool& isvalid, CryptoKey& session_key)
+			       bool& isvalid, ceph::crypto::Key& session_key)
 {
   AuthAuthorizeHandler *authorize_handler = 0;
   switch (peer_type) {

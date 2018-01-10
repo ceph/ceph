@@ -635,9 +635,9 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
 
-  _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
-  _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES128);
-  _crypto_random.reset(new CryptoRandom());
+  _crypto_none = ceph::crypto::Handler::create(CEPH_CRYPTO_NONE);
+  _crypto_aes = ceph::crypto::Handler::create(CEPH_CRYPTO_AES128);
+  _crypto_random.reset(new ceph::crypto::Random());
 
   MempoolObs *mempool_obs = 0;
   lookup_or_create_singleton_object(mempool_obs, "mempool_obs");
@@ -839,7 +839,7 @@ AdminSocket *CephContext::get_admin_socket()
   return _admin_socket;
 }
 
-CryptoHandler *CephContext::get_crypto_handler(int type)
+ceph::crypto::Handler *CephContext::get_crypto_handler(int type)
 {
   switch (type) {
   case CEPH_CRYPTO_NONE:

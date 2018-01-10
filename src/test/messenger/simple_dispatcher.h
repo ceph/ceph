@@ -115,7 +115,7 @@ public:
   bool ms_verify_authorizer(Connection *con, int peer_type,
 				    int protocol, bufferlist& authorizer,
 				    bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key) override {
+				    bool& isvalid, ceph::crypto::Key& session_key) override {
     /* always succeed */
     isvalid = true;
     return true;

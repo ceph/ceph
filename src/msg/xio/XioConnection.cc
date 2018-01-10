@@ -218,7 +218,7 @@ int XioConnection::passive_setup()
   /* XXX passive setup is a placeholder for (potentially active-side
      initiated) feature and auth* negotiation */
   static bufferlist authorizer_reply; /* static because fake */
-  static CryptoKey session_key; /* ditto */
+  static ceph::crypto::Key session_key; /* ditto */
   bool authorizer_valid;
 
   XioMessenger *msgr = static_cast<XioMessenger*>(get_messenger());

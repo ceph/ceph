@@ -23,17 +23,21 @@
 #include <string>
 
 class CephContext;
-class CryptoKeyContext;
-namespace ceph { class Formatter; }
+
+namespace ceph {
+
+class Formatter;
+
+namespace crypto {
 
 /*
  * Random byte stream generator suitable for cryptographic use
  */
-class CryptoRandom {
+class Random {
   const int fd;
  public:
-  CryptoRandom(); // throws on failure
-  ~CryptoRandom();
+  Random(); // throws on failure
+  ~Random();
 
   /// copy up to 256 random bytes into the given buffer. throws on failure
   void get_bytes(char *buf, int len);
@@ -42,11 +46,11 @@ class CryptoRandom {
 /*
  * some per-key context that is specific to a particular crypto backend
  */
-class CryptoKeyHandler {
+class KeyHandler {
 public:
   bufferptr secret;
 
-  virtual ~CryptoKeyHandler() {}
+  virtual ~KeyHandler() {}
 
   virtual int encrypt(const bufferlist& in,
 		       bufferlist& out, std::string *error) const = 0;
@@ -57,7 +61,7 @@ public:
 /*
  * match encoding of struct ceph_secret
  */
-class CryptoKey {
+class Key {
 protected:
   __u16 type;
   utime_t created;
@@ -65,17 +69,17 @@ protected:
 
   // cache a pointer to the implementation-specific key handler, so we
   // don't have to create it for every crypto operation.
-  mutable ceph::shared_ptr<CryptoKeyHandler> ckh;
+  mutable ceph::shared_ptr<KeyHandler> ckh;
 
   int _set_secret(int type, const bufferptr& s);
 
 public:
-  CryptoKey() : type(0) { }
-  CryptoKey(int t, utime_t c, bufferptr& s)
+  Key() : type(0) { }
+  Key(int t, utime_t c, bufferptr& s)
     : created(c) {
     _set_secret(t, s);
   }
-  ~CryptoKey() {
+  ~Key() {
   }
 
   void encode(bufferlist& bl) const;
@@ -129,9 +133,9 @@ public:
 
   void to_str(std::string& s) const;
 };
-WRITE_CLASS_ENCODER(CryptoKey)
+WRITE_CLASS_ENCODER(Key)
 
-static inline ostream& operator<<(ostream& out, const CryptoKey& k)
+static inline std::ostream& operator<<(std::ostream& out, const Key& k)
 {
   k.print(out);
   return out;
@@ -144,17 +148,19 @@ static inline ostream& operator<<(ostream& out, const CryptoKey& k)
  * To use these functions, you need to call ceph::crypto::init(), see
  * common/ceph_crypto.h. common_init_finish does this for you.
  */
-class CryptoHandler {
+class Handler {
 public:
-  virtual ~CryptoHandler() {}
+  virtual ~Handler() {}
   virtual int get_type() const = 0;
-  virtual int create(CryptoRandom *random, bufferptr& secret) = 0;
+  virtual int create(Random *random, bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
-  virtual CryptoKeyHandler *get_key_handler(const bufferptr& secret,
-					    string& error) = 0;
+  virtual KeyHandler *get_key_handler(const bufferptr& secret,
+                                      string& error) = 0;
 
-  static CryptoHandler *create(int type);
+  static Handler *create(int type);
 };
 
+} // namespace crypto
+} // namespace ceph
 
 #endif

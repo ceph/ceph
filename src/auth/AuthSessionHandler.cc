@@ -21,7 +21,7 @@
 #define dout_subsys ceph_subsys_auth
 
 
-AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key, uint64_t features)
+AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, ceph::crypto::Key key, uint64_t features)
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
