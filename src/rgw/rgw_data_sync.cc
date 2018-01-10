@@ -2692,6 +2692,9 @@ int RGWBucketShardIncrementalSyncCR::operate()
           syncstopped = false;
           continue;
         }
+        if (e.op == CLS_RGW_OP_CANCEL) {
+          continue;
+        }
         if (e.state != CLS_RGW_STATE_COMPLETE) {
           continue;
         }
