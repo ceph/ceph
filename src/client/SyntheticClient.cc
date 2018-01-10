@@ -3366,7 +3366,7 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
-    int get = MIN(size-pos, 1048576);
+    int get = std::min(size - pos, 1048576UL);
 
     Mutex flock("synclient chunk_file lock");
     Cond cond;

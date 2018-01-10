@@ -309,7 +309,7 @@ void BitVector<_b>::encode_data(bufferlist& bl, uint64_t byte_offset,
 
   uint64_t end_offset = byte_offset + byte_length;
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min(static_cast<uint64_t>(BLOCK_SIZE), end_offset - byte_offset);
 
     bufferlist bit;
     bit.substr_of(m_data, byte_offset, len);
@@ -338,7 +338,7 @@ void BitVector<_b>::decode_data(bufferlist::iterator& it, uint64_t byte_offset) 
   }
 
   while (byte_offset < end_offset) {
-    uint64_t len = MIN(BLOCK_SIZE, end_offset - byte_offset);
+    uint64_t len = std::min(static_cast<uint64_t>(BLOCK_SIZE), end_offset - byte_offset);
 
     bufferptr ptr;
     it.copy_deep(len, ptr);
