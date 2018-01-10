@@ -104,7 +104,10 @@ public:
    */
   std::map<std::string, map<int32_t,Option::value_t>> values;
 
-  /// encoded, cached copy of of values
+  /// values from mon that we failed to set
+  std::map<std::string,std::string> ignored_mon_values;
+
+  /// encoded, cached copy of of values + ignored_mon_values
   bufferlist values_bl;
 
   /// encoded copy of defaults (map<string,string>)

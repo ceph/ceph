@@ -267,6 +267,7 @@ void md_config_t::set_val_default(const string& name, const std::string& val)
 int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
 {
   Mutex::Locker l(lock);
+  ignored_mon_values.clear();
   for (auto& i : kv) {
     const Option *o = find_option(i.first);
     if (!o) {
@@ -275,6 +276,7 @@ int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
       continue;
     }
     if (o->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+      ignored_mon_values.emplace(i);
       continue;
     }
     std::string err;
@@ -282,6 +284,7 @@ int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
     if (r < 0) {
       lderr(cct) << __func__ << " failed to set " << i.first << " = "
 		 << i.second << ": " << err << dendl;
+      ignored_mon_values.emplace(i);
     } else if (r == 0) {
       ldout(cct,20) << __func__ << " " << i.first << " = " << i.second
 		    << " (no change)" << dendl;
@@ -933,8 +936,30 @@ void md_config_t::get_config_bl(bufferlist *bl)
 	::encode(stringify(j.second), bl);
       }
     }
+    // make sure overridden items appear, and include the default value
+    for (auto& i : ignored_mon_values) {
+      if (values.count(i.first)) {
+	continue;
+      }
+      if (i.first == "fsid" ||
+	  i.first == "host") {
+	continue;
+      }
+      const Option *opt = find_option(i.first);
+      if (!opt) {
+	continue;
+      }
+      ++n;
+      ::encode(i.first, bl);
+      ::encode((uint32_t)1, bl);
+      ::encode((int32_t)CONF_DEFAULT, bl);
+      string val;
+      conf_stringify(_get_val_default(*opt), &val);
+      ::encode(val, bl);
+    }
     ::encode(n, values_bl);
     values_bl.claim_append(bl);
+    ::encode(ignored_mon_values, values_bl);
   }
   *bl = values_bl;
 }
