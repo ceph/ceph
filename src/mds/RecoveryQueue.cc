@@ -95,20 +95,28 @@ void RecoveryQueue::_start(CInode *in)
 		      << " on ino " << pi->ino;
   }
 
+  auto p = file_recovering.find(in);
   if (pi->client_ranges.size() && pi->get_max_size()) {
     dout(10) << "starting " << in->inode.size << " " << pi->client_ranges
 	     << " " << *in << dendl;
-    file_recovering.insert(in);
+    if (p == file_recovering.end()) {
+      file_recovering.insert(make_pair(in, false));
 
-    C_MDC_Recover *fin = new C_MDC_Recover(this, in);
-    filer.probe(in->inode.ino, &in->inode.layout, in->last,
-		pi->get_max_size(), &fin->size, &fin->mtime, false,
-		0, fin);
+      C_MDC_Recover *fin = new C_MDC_Recover(this, in);
+      filer.probe(in->inode.ino, &in->inode.layout, in->last,
+		  pi->get_max_size(), &fin->size, &fin->mtime, false,
+		  0, fin);
+    } else {
+      p->second = true;
+      dout(10) << "already working on " << *in << ", set need_restart flag" << dendl;
+    }
   } else {
     dout(10) << "skipping " << in->inode.size << " " << *in << dendl;
-    in->state_clear(CInode::STATE_RECOVERING);
-    mds->locker->eval(in, CEPH_LOCK_IFILE);
-    in->auth_unpin(this);
+    if (p == file_recovering.end()) {
+      in->state_clear(CInode::STATE_RECOVERING);
+      mds->locker->eval(in, CEPH_LOCK_IFILE);
+      in->auth_unpin(this);
+    }
   }
 }
 
@@ -136,6 +144,11 @@ void RecoveryQueue::prioritize(CInode *in)
   dout(10) << "not queued " << *in << dendl;
 }
 
+static bool _is_in_any_recover_queue(CInode *in)
+{
+  return in->item_recover_queue.is_on_list() ||
+	 in->item_recover_queue_front.is_on_list();
+}
 
 /**
  * Given an authoritative inode which is in the cache,
@@ -154,8 +167,7 @@ void RecoveryQueue::enqueue(CInode *in)
     logger->inc(l_mdc_recovery_started);
   }
 
-  if (!in->item_recover_queue.is_on_list() &&
-      !in->item_recover_queue_front.is_on_list()) {
+  if (!_is_in_any_recover_queue(in)) {
     file_recover_queue.push_back(&in->item_recover_queue);
     file_recover_queue_size++;
     logger->set(l_mdc_num_recovering_enqueued, file_recover_queue_size + file_recover_queue_front_size);
@@ -188,16 +200,28 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     }
   }
 
-  file_recovering.erase(in);
+  auto p = file_recovering.find(in);
+  assert(p != file_recovering.end());
+  bool restart = p->second;
+  file_recovering.erase(p);
+
   logger->set(l_mdc_num_recovering_processing, file_recovering.size());
   logger->inc(l_mdc_recovery_completed);
   in->state_clear(CInode::STATE_RECOVERING);
 
-  if (!in->get_parent_dn() && !in->get_projected_parent_dn()) {
-    dout(10) << " inode has no parents, killing it off" << dendl;
-    in->auth_unpin(this);
-    mds->mdcache->remove_inode(in);
-  } else {
+  if (restart) {
+    if (in->item_recover_queue.is_on_list()) {
+      in->item_recover_queue.remove_myself();
+      file_recover_queue_size--;
+    }
+    if (in->item_recover_queue_front.is_on_list()) {
+      in->item_recover_queue_front.remove_myself();
+      file_recover_queue_front_size--;
+    }
+    logger->set(l_mdc_num_recovering_enqueued, file_recover_queue_size + file_recover_queue_front_size);
+    logger->set(l_mdc_num_recovering_prioritized, file_recover_queue_front_size);
+    _start(in);
+  } else if (!_is_in_any_recover_queue(in)) {
     // journal
     mds->locker->check_inode_max_size(in, true, 0,  size, mtime);
     mds->locker->eval(in, CEPH_LOCK_IFILE);
