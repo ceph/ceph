@@ -198,7 +198,7 @@ struct Inode {
   int shared_gen, cache_gen;
   int snap_caps, snap_cap_refs;
   utime_t hold_caps_until;
-  xlist<Inode*>::item cap_item, flushing_cap_item;
+  xlist<Inode*>::item delay_cap_item, dirty_cap_item, flushing_cap_item;
 
   SnapRealm *snaprealm;
   xlist<Inode*>::item snaprealm_item;
@@ -268,7 +268,7 @@ struct Inode {
       cap_dirtier_uid(-1), cap_dirtier_gid(-1),
       dirty_caps(0), flushing_caps(0), shared_gen(0), cache_gen(0),
       snap_caps(0), snap_cap_refs(0),
-      cap_item(this), flushing_cap_item(this),
+      delay_cap_item(this), dirty_cap_item(this), flushing_cap_item(this),
       snaprealm(0), snaprealm_item(this),
       oset((void *)this, newlayout->pool_id, this->ino),
       reported_size(0), wanted_max_size(0), requested_max_size(0),
@@ -325,6 +325,8 @@ struct Inode {
   int set_deleg(Fh *fh, unsigned type, ceph_deleg_cb_t cb, void *priv);
   void unset_deleg(Fh *fh);
 
+  void mark_caps_dirty(int caps);
+  void mark_caps_clean();
 private:
   // how many opens for write on this Inode?
   long open_count_for_write()
