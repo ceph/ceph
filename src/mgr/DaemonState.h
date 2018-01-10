@@ -109,6 +109,9 @@ class DaemonState
   // running config
   std::map<std::string,std::map<int32_t,std::string>> config;
 
+  // mon config values we failed to set
+  std::map<std::string,std::string> ignored_mon_config;
+
   // compiled-in config defaults (rarely used, so we leave them encoded!)
   bufferlist config_defaults_bl;
   std::map<std::string,std::string> config_defaults;
