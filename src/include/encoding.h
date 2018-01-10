@@ -19,6 +19,7 @@
 #include <deque>
 #include <vector>
 #include <string>
+#include <tuple>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 
@@ -29,6 +30,8 @@
 #include "include/int_types.h"
 
 #include "include/memory.h"
+
+#include "common/convenience.h"
 
 #include "byteorder.h"
 #include "buffer.h"
@@ -492,9 +495,6 @@ inline void decode(T &o, bufferlist& bl)
   assert(p.end());
 }
 
-
-
-
 // boost optional
 template<typename T>
 inline void encode(const boost::optional<T> &p, bufferlist &bl)
@@ -523,7 +523,23 @@ inline void decode(boost::optional<T> &p, bufferlist::iterator &bp)
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
 
-//triple tuple
+// std::tuple
+template<typename... Ts>
+inline void encode(const std::tuple<Ts...> &t, bufferlist& bl)
+{
+  ceph::for_each(t, [&bl](const auto& e) {
+      encode(e, bl);
+    });
+}
+template<typename... Ts>
+inline void decode(std::tuple<Ts...> &t, bufferlist::iterator &bp)
+{
+  ceph::for_each(t, [&bp](auto& e) {
+      decode(e, bp);
+    });
+}
+
+//triple boost::tuple
 template<class A, class B, class C>
 inline void encode(const boost::tuple<A, B, C> &t, bufferlist& bl)
 {
