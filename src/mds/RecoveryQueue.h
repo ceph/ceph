@@ -43,7 +43,7 @@ private:
 
   elist<CInode*> file_recover_queue;   ///< the queue
   elist<CInode*> file_recover_queue_front;  ///< elevated priority items
-  std::set<CInode*> file_recovering;
+  std::map<CInode*, bool> file_recovering; // inode -> need_restart
 
   MDSRank *mds;
   PerfCounters *logger;
