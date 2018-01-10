@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous or later storage cluster
 
--  RHEL/CentOS 7.4; or Linux kernel v4.14 or newer
+-  RHEL/CentOS 7.5; Linux kernel v4.17 or newer; or the `Ceph iSCSI client kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-stable>`_
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
