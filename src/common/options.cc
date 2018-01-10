@@ -1334,6 +1334,11 @@ std::vector<Option> get_global_options() {
     .set_safe()
     .set_description("in which level of parent bucket the reporters are counted"),
 
+    Option("mon_osd_snap_trim_queue_warn_on", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(32768)
+    .set_description("Warn when snap trim queue is that large (or larger).")
+    .set_long_description("Warn when snap trim queue length for at least one PG crosses this value, as this is indicator of snap trimmer not keeping up, wasting disk space"),
+
     Option("mon_osd_force_trim_to", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
