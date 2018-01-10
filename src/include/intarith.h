@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,13 +7,15 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
+
+#include <type_traits>
 
 #ifndef MIN
 #define MIN(a,b) ((a) < (b) ? (a):(b))
@@ -27,18 +29,39 @@
 #define DIV_ROUND_UP(n, d)  (((n) + (d) - 1) / (d))
 #endif
 
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> div_round_up(T n, U d) {
+  return (n + d - 1) / d;
+}
+
+
 #ifndef ROUND_UP_TO
 #define ROUND_UP_TO(n, d) ((n)%(d) ? ((n)+(d)-(n)%(d)) : (n))
 #endif
+
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> round_up_to(T n, U d) {
+  return (n % d ? (n + d - n % d) : n);
+}
 
 #ifndef SHIFT_ROUND_UP
 #define SHIFT_ROUND_UP(x,y) (((x)+(1<<(y))-1) >> (y))
 #endif
 
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> shift_round_up(T x, U y) {
+  return (x + (1 << y) - 1) >> y;
+}
+
 /*
  * Macro to determine if value is a power of 2
  */
 #define ISP2(x)		(((x) & ((x) - 1)) == 0)
+
+template<typename T>
+constexpr inline bool isp2(T x) {
+  return (x & (x - 1)) == 0;
+}
 
 /*
  * Macros for various sorts of alignment and rounding.  The "align" must
@@ -54,12 +77,22 @@
  */
 #define P2ALIGN(x, align)		((x) & -(align))
 
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2align(T x, U align) {
+  return x & -align;
+}
+
 /*
  * return x % (mod) align
  * eg, P2PHASE(0x1234, 0x100) == 0x34 (x-0x12*align)
  * eg, P2PHASE(0x5600, 0x100) == 0x00 (x-0x56*align)
  */
 #define P2PHASE(x, align)		((x) & ((align) - 1))
+
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2phase(T x, U align) {
+  return x & (align - 1);
+}
 
 /*
  * return how much space is left in this block (but if it's perfectly
@@ -69,12 +102,22 @@
  */
 #define P2NPHASE(x, align)		(-(x) & ((align) - 1))
 
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2nphase(T x, U align) {
+  return -x & (align - 1);
+}
+
 /*
  * return x rounded up to an align boundary
  * eg, P2ROUNDUP(0x1234, 0x100) == 0x1300 (0x13*align)
  * eg, P2ROUNDUP(0x5600, 0x100) == 0x5600 (0x56*align)
  */
 #define P2ROUNDUP(x, align)		(-(-(x) & -(align)))
+
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> p2roundup(T x, U align) {
+  return (-(-(x) & -(align)));
+}
 
 // count trailing zeros.
 // NOTE: the builtin is nondeterministic on 0 input
