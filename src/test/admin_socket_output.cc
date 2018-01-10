@@ -13,8 +13,8 @@
  */
 
 #include <iostream>
+#include <regex>                 // For regex, regex_search
 #include <boost/filesystem/convenience.hpp> // For extension
-#include <boost/regex.hpp>                 // For regex, regex_search
 
 #include "common/admin_socket_client.h"     // For AdminSocketClient
 #include "common/ceph_json.h"               // For JSONParser, JSONObjIter
@@ -78,8 +78,8 @@ bool AdminSocketOutput::init_sockets() {
     std::cout << x.path() << std::endl;
     if (bfs::extension(x.path()) == ".asok") {
       for (auto &target : targets) {
-        if (boost::regex_search(x.path().filename().string(),
-            boost::regex(prefix + target + R"(\..*\.asok)"))) {
+        if (std::regex_search(x.path().filename().string(),
+            std::regex(prefix + target + R"(\..*\.asok)"))) {
           std::cout << "Found " << target << " socket " << x.path()
                     << std::endl;
           sockets.insert(std::make_pair(target, x.path().string()));

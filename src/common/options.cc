@@ -9,7 +9,7 @@
 #include "include/stringify.h"
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
-#include <boost/regex.hpp>
+#include <regex>
 
 // Definitions for enums
 #include "common/perf_counters.h"
@@ -5684,8 +5684,8 @@ static std::vector<Option> get_rbd_options() {
     .set_default("rbd")
     .set_description("default pool for storing new images")
     .set_validator([](std::string *value, std::string *error_message){
-      boost::regex pattern("^[^@/]+$");
-      if (!boost::regex_match (*value, pattern)) {
+      std::regex pattern("^[^@/]+$");
+      if (!std::regex_match (*value, pattern)) {
         *value = "rbd";
         *error_message = "invalid RBD default pool, resetting to 'rbd'";
       }
@@ -5696,8 +5696,8 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("default pool for storing data blocks for new images")
     .set_validator([](std::string *value, std::string *error_message){
-      boost::regex pattern("^[^@/]*$");
-      if (!boost::regex_match (*value, pattern)) {
+      std::regex pattern("^[^@/]*$");
+      if (!std::regex_match (*value, pattern)) {
         *value = "";
         *error_message = "ignoring invalid RBD data pool";
       }
