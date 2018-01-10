@@ -5449,13 +5449,17 @@ void RGWCompleteMultipart::execute()
         manifest.append(obj_part.manifest, store);
       }
 
-      if (obj_part.cs_info.compression_type != "none") {
-        if (compressed && cs_info.compression_type != obj_part.cs_info.compression_type) {
+      bool part_compressed = (obj_part.cs_info.compression_type != "none");
+      if ((obj_iter != obj_parts.begin()) &&
+          ((part_compressed != compressed) ||
+            (cs_info.compression_type != obj_part.cs_info.compression_type))) {
           ldout(s->cct, 0) << "ERROR: compression type was changed during multipart upload ("
                            << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
           op_ret = -ERR_INVALID_PART;
-          return;
-        }
+          return; 
+      }
+      
+      if (part_compressed) {
         int64_t new_ofs; // offset in compression data for new part
         if (cs_info.blocks.size() > 0)
           new_ofs = cs_info.blocks.back().new_ofs + cs_info.blocks.back().len;
