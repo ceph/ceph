@@ -1709,12 +1709,17 @@ void ECBackend::do_read_op(ReadOp &op)
     }
   }
 
+  ECSubRead *local_read_op = nullptr;
   for (map<pg_shard_t, ECSubRead>::iterator i = messages.begin();
        i != messages.end();
        ++i) {
     op.in_progress.insert(i->first);
     shard_to_read_map[i->first].insert(op.tid);
     i->second.tid = tid;
+    if (i->first == get_parent()->whoami_shard()) {
+      local_read_op = &(i->second);
+      continue;
+    } 
     MOSDECSubOpRead *msg = new MOSDECSubOpRead;
     msg->set_priority(priority);
     msg->pgid = spg_t(
@@ -1735,7 +1740,16 @@ void ECBackend::do_read_op(ReadOp &op)
       msg,
       get_parent()->get_epoch());
   }
+  
   dout(10) << __func__ << ": started " << op << dendl;
+  if (local_read_op) {
+    dout(10) << __func__ << ": starting local read " << op << dendl;
+    ECSubReadReply reply;
+    RecoveryMessages rm;
+    handle_sub_read(get_parent()->whoami_shard(), *local_read_op, &reply, op.trace);    
+    handle_sub_read_reply(get_parent()->whoami_shard(), reply, &rm, op.trace);
+    dispatch_recovery_messages(rm, priority);
+  }
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
