@@ -436,7 +436,8 @@ Requires:	gdisk
 %if 0%{?suse_version}
 Requires:	gptfdisk
 %endif
-Requires:       parted
+Requires:	parted
+Requires:	lvm2
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
@@ -955,8 +956,6 @@ rm -rf %{buildroot}
 %{_libexecdir}/systemd/system-preset/50-ceph.preset
 %{_sbindir}/ceph-create-keys
 %{_sbindir}/ceph-disk
-%{_sbindir}/ceph-volume
-%{_sbindir}/ceph-volume-systemd
 %{_sbindir}/rcceph
 %dir %{_libexecdir}/ceph
 %{_libexecdir}/ceph/ceph_common.sh
@@ -985,7 +984,6 @@ rm -rf %{buildroot}
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
 %{_unitdir}/ceph-disk@.service
-%{_unitdir}/ceph-volume@.service
 %{_unitdir}/ceph.target
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
@@ -996,8 +994,6 @@ rm -rf %{buildroot}
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-create-keys.8*
 %{_mandir}/man8/ceph-disk.8*
-%{_mandir}/man8/ceph-volume.8*
-%{_mandir}/man8/ceph-volume-systemd.8*
 %{_mandir}/man8/ceph-run.8*
 %{_mandir}/man8/crushtool.8*
 %{_mandir}/man8/osdmaptool.8*
@@ -1016,11 +1012,11 @@ rm -rf %{buildroot}
 %if 0%{?suse_version}
 %fillup_only
 if [ $1 -eq 1 ] ; then
-/usr/bin/systemctl preset ceph-disk@\*.service ceph-volume@\*.service ceph.target >/dev/null 2>&1 || :
+/usr/bin/systemctl preset ceph-disk@\*.service ceph.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_post ceph-disk@\*.service ceph-volume@\*.service ceph.target
+%systemd_post ceph-disk@\*.service ceph.target
 %endif
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph.target >/dev/null 2>&1 || :
@@ -1028,10 +1024,10 @@ fi
 
 %preun base
 %if 0%{?suse_version}
-%service_del_preun ceph-disk@\*.service ceph-volume@\*.service ceph.target
+%service_del_preun ceph-disk@\*.service ceph.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_preun ceph-disk@\*.service ceph-volume@\*.service ceph.target
+%systemd_preun ceph-disk@\*.service ceph.target
 %endif
 
 %postun base
@@ -1039,10 +1035,10 @@ fi
 test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-disk@\*.service ceph-volume@\*.service ceph.target
+%service_del_postun ceph-disk@\*.service ceph.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_postun ceph-disk@\*.service ceph-volume@\*.service ceph.target
+%systemd_postun ceph-disk@\*.service ceph.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
@@ -1052,7 +1048,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
     source $SYSCONF_CEPH
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-    /usr/bin/systemctl try-restart ceph-disk@\*.service ceph-volume@\*.service > /dev/null 2>&1 || :
+    /usr/bin/systemctl try-restart ceph-disk@\*.service > /dev/null 2>&1 || :
   fi
 fi
 
@@ -1428,28 +1424,33 @@ fi
 %{_bindir}/ceph-osdomap-tool
 %{_bindir}/ceph-osd
 %{_libexecdir}/ceph/ceph-osd-prestart.sh
+%{_sbindir}/ceph-volume
+%{_sbindir}/ceph-volume-systemd
 %dir %{_udevrulesdir}
 %{_udevrulesdir}/60-ceph-by-parttypeuuid.rules
 %{_udevrulesdir}/95-ceph-osd.rules
 %{_mandir}/man8/ceph-clsinfo.8*
 %{_mandir}/man8/ceph-osd.8*
 %{_mandir}/man8/ceph-bluestore-tool.8*
+%{_mandir}/man8/ceph-volume.8*
+%{_mandir}/man8/ceph-volume-systemd.8*
 %if 0%{?rhel} && ! 0%{?centos}
 %attr(0755,-,-) %{_sysconfdir}/cron.hourly/subman
 %endif
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
+%{_unitdir}/ceph-volume@.service
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/osd
 %config(noreplace) %{_sysctldir}/90-ceph-osd.conf
 
 %post osd
 %if 0%{?suse_version}
 if [ $1 -eq 1 ] ; then
-  /usr/bin/systemctl preset ceph-osd@\*.service ceph-osd.target >/dev/null 2>&1 || :
+  /usr/bin/systemctl preset ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target >/dev/null 2>&1 || :
 fi
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_post ceph-osd@\*.service ceph-osd.target
+%systemd_post ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 if [ $1 -eq 1 ] ; then
 /usr/bin/systemctl start ceph-osd.target >/dev/null 2>&1 || :
@@ -1462,20 +1463,20 @@ fi
 
 %preun osd
 %if 0%{?suse_version}
-%service_del_preun ceph-osd@\*.service ceph-osd.target
+%service_del_preun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_preun ceph-osd@\*.service ceph-osd.target
+%systemd_preun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 
 %postun osd
 test -n "$FIRST_ARG" || FIRST_ARG=$1
 %if 0%{?suse_version}
 DISABLE_RESTART_ON_UPDATE="yes"
-%service_del_postun ceph-osd@\*.service ceph-osd.target
+%service_del_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 %if 0%{?fedora} || 0%{?rhel}
-%systemd_postun ceph-osd@\*.service ceph-osd.target
+%systemd_postun ceph-osd@\*.service ceph-volume@\*.service ceph-osd.target
 %endif
 if [ $FIRST_ARG -ge 1 ] ; then
   # Restart on upgrade, but only if "CEPH_AUTO_RESTART_ON_UPGRADE" is set to
@@ -1485,7 +1486,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
     source $SYSCONF_CEPH
   fi
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
-    /usr/bin/systemctl try-restart ceph-osd@\*.service > /dev/null 2>&1 || :
+    /usr/bin/systemctl try-restart ceph-osd@\*.service ceph-volume@\*.service > /dev/null 2>&1 || :
   fi
 fi
 
