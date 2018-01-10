@@ -293,24 +293,30 @@ struct MDRequestImpl : public MutationImpl {
     // keep these default values synced to MutationImpl's
     Params() : attempt(0), client_req(NULL),
         triggering_slave_req(NULL), slave_to(MDS_RANK_NONE), internal_op(-1) {}
+    const utime_t& get_recv_stamp() const {
+      return initiated;
+    }
+    const utime_t& get_throttle_stamp() const {
+      return throttled;
+    }
+    const utime_t& get_recv_complete_stamp() const {
+      return all_read;
+    }
+    const utime_t& get_dispatch_stamp() const {
+      return dispatched;
+    }
   };
-  MDRequestImpl(const Params& params, OpTracker *tracker) :
-    MutationImpl(tracker, params.initiated,
-		 params.reqid, params.attempt, params.slave_to),
+  MDRequestImpl(const Params* params, OpTracker *tracker) :
+    MutationImpl(tracker, params->initiated,
+		 params->reqid, params->attempt, params->slave_to),
     session(NULL), item_session_request(this),
-    client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
+    client_request(params->client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
-    slave_request(NULL), internal_op(params.internal_op), internal_op_finish(NULL),
+    slave_request(NULL), internal_op(params->internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
     waited_for_osdmap(false), _more(NULL) {
     in[0] = in[1] = NULL;
-    if (!params.throttled.is_zero())
-      mark_event("throttled", params.throttled);
-    if (!params.all_read.is_zero())
-      mark_event("all_read", params.all_read);
-    if (!params.dispatched.is_zero())
-      mark_event("dispatched", params.dispatched);
   }
   ~MDRequestImpl() override;
   
