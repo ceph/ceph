@@ -230,7 +230,7 @@ uint64_t PerfCounters::get(int idx) const
   return data.u64;
 }
 
-void PerfCounters::tinc(int idx, utime_t amt, uint32_t avgcount)
+void PerfCounters::tinc(int idx, utime_t amt)
 {
   if (!m_cct->_conf->perf)
     return;
@@ -249,7 +249,7 @@ void PerfCounters::tinc(int idx, utime_t amt, uint32_t avgcount)
   }
 }
 
-void PerfCounters::tinc(int idx, ceph::timespan amt, uint32_t avgcount)
+void PerfCounters::tinc(int idx, ceph::timespan amt)
 {
   if (!m_cct->_conf->perf)
     return;
