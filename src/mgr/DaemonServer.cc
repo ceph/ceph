@@ -1387,6 +1387,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("SOURCE", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("OVERRIDES", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("IGNORES", TextTable::LEFT, TextTable::LEFT);
       }
       if (prefix == "config show") {
 	// show
@@ -1412,6 +1413,9 @@ bool DaemonServer::handle_command(MCommand *m)
 	      }
 	      f->close_section();
 	    }
+	    if (daemon->ignored_mon_config.count(i.first)) {
+	      f->dump_string("ignores", "mon");
+	    }
 	    f->close_section();
 	  } else {
 	    tbl << i.first;
@@ -1429,7 +1433,10 @@ bool DaemonServer::handle_command(MCommand *m)
 		}
 	      }
 	      tbl << ov;
+	    } else {
+	      tbl << "";
 	    }
+	    tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
 	    tbl << TextTable::endrow;
 	  }
 	}
@@ -1461,6 +1468,9 @@ bool DaemonServer::handle_command(MCommand *m)
 		}
 		f->close_section();
 	      }
+	      if (daemon->ignored_mon_config.count(i.first)) {
+		f->dump_string("ignores", "mon");
+	      }
 	      f->close_section();
 	    } else {
 	      tbl << j->second.rbegin()->second;
@@ -1477,7 +1487,10 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		}
 		tbl << ov;
+	      } else {
+		tbl << "";
 	      }
+	      tbl << (daemon->ignored_mon_config.count(i.first) ? "mon" : "");
 	      tbl << TextTable::endrow;
 	    }
 	  } else {
@@ -1489,6 +1502,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	    } else {
 	      tbl << i.second;
 	      tbl << ceph_conf_level_name(CONF_DEFAULT);
+	      tbl << "";
 	      tbl << "";
 	      tbl << TextTable::endrow;
 	    }
