@@ -61,7 +61,11 @@ Build instructions:
 
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
-correct path to the checkout.
+correct path to the checkout. Any additional CMake args can be specified
+setting ARGS before invoking do_cmake. See [cmake options](#cmake-options) 
+for more details. Eg.
+
+    ARGS="-DCMAKE_C_COMPILER=gcc-7" ./do_cmake.sh
 
 To build only certain targets use:
 
