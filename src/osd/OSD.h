@@ -1631,10 +1631,9 @@ private:
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
     struct ShardData {
-      Mutex sdata_lock;
       Cond sdata_cond;
 
-      Mutex sdata_op_ordering_lock;   ///< protects all members below
+      Mutex sdata_lock;   ///< protects all members below
 
       OSDMapRef waiting_for_pg_osdmap;
       struct pg_slot {
@@ -1675,12 +1674,10 @@ private:
       }
 
       ShardData(
-	string lock_name, string ordering_lock,
+	string lock_name,
 	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
 	io_queue opqueue)
-	: sdata_lock(lock_name.c_str(), false, true, false, cct),
-	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
-				 false, cct) {
+	: sdata_lock(lock_name, false, true, false, cct) {
 	if (opqueue == io_queue::weightedpriority) {
 	  pqueue = std::make_unique<
 	    WeightedPriorityQueue<OpQueueItem,uint64_t>>(
@@ -1713,11 +1710,8 @@ private:
       for (uint32_t i = 0; i < num_shards; i++) {
 	char lock_name[32] = {0};
 	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
-	char order_lock[32] = {0};
-	snprintf(order_lock, sizeof(order_lock), "%s.%d",
-		 "OSD:ShardedOpWQ:order:", i);
 	ShardData* one_shard = new ShardData(
-	  lock_name, order_lock,
+	  lock_name,
 	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
 	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
 	shard_list.push_back(one_shard);
@@ -1755,10 +1749,9 @@ private:
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata); 
-	sdata->sdata_lock.Lock();
+	Mutex::Locker l(sdata->sdata_lock);
 	sdata->stop_waiting = true;
 	sdata->sdata_cond.Signal();
-	sdata->sdata_lock.Unlock();
       }
     }
 
@@ -1766,9 +1759,8 @@ private:
       for(uint32_t i = 0; i < num_shards; i++) {
 	ShardData* sdata = shard_list[i];
 	assert (NULL != sdata);
-	sdata->sdata_lock.Lock();
+	Mutex::Locker l(sdata->sdata_lock);
 	sdata->stop_waiting = false;
-	sdata->sdata_lock.Unlock();
       }
     }
 
@@ -1780,11 +1772,10 @@ private:
 	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
 	assert(NULL != sdata);
 
-	sdata->sdata_op_ordering_lock.Lock();
+	sdata->sdata_lock.Lock();
 	f->open_object_section(queue_name);
 	sdata->pqueue->dump(f);
 	f->close_section();
-	sdata->sdata_op_ordering_lock.Unlock();
       }
     }
 
@@ -1820,7 +1811,7 @@ private:
       uint32_t shard_index = thread_index % num_shards; 
       auto &&sdata = shard_list[shard_index];
       assert(sdata);
-      Mutex::Locker l(sdata->sdata_op_ordering_lock);
+      Mutex::Locker l(sdata->sdata_lock);
       return sdata->pqueue->empty();
     }
   } op_shardedwq;
