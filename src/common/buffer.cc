@@ -173,8 +173,10 @@ using namespace ceph;
     std::atomic<unsigned> nref { 0 };
     int mempool;
 
+    std::pair<size_t, size_t> last_crc_offset {std::numeric_limits<size_t>::max(), std::numeric_limits<size_t>::max()};
+    std::pair<uint32_t, uint32_t> last_crc_val;
+
     mutable ceph::spinlock crc_spinlock;
-    map<pair<size_t, size_t>, pair<uint32_t, uint32_t> > crc_map;
 
     explicit raw(unsigned l, int mempool=mempool::mempool_buffer_anon)
       : data(NULL), len(l), nref(0), mempool(mempool) {
@@ -248,24 +250,22 @@ public:
     bool get_crc(const pair<size_t, size_t> &fromto,
          pair<uint32_t, uint32_t> *crc) const {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      map<pair<size_t, size_t>, pair<uint32_t, uint32_t> >::const_iterator i =
-      crc_map.find(fromto);
-      if (i == crc_map.end()) {
-          return false;
+      if (last_crc_offset == fromto) {
+        *crc = last_crc_val;
+        return true;
       }
-      *crc = i->second;
-      return true;
+      return false;
     }
     void set_crc(const pair<size_t, size_t> &fromto,
          const pair<uint32_t, uint32_t> &crc) {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      crc_map[fromto] = crc;
+      last_crc_offset = fromto;
+      last_crc_val = crc;
     }
     void invalidate_crc() {
       std::lock_guard<decltype(crc_spinlock)> lg(crc_spinlock);
-      if (crc_map.size() != 0) {
-        crc_map.clear();
-      }
+      last_crc_offset.first = std::numeric_limits<size_t>::max();
+      last_crc_offset.second = std::numeric_limits<size_t>::max();
     }
   };
 
@@ -2502,6 +2502,10 @@ int buffer::list::write_fd_zero_copy(int fd) const
 
 __u32 buffer::list::crc32c(__u32 crc) const
 {
+  int cache_misses = 0;
+  int cache_hits = 0;
+  int cache_adjusts = 0;
+
   for (std::list<ptr>::const_iterator it = _buffers.begin();
        it != _buffers.end();
        ++it) {
@@ -2513,8 +2517,7 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	if (ccrc.first == crc) {
 	  // got it already
 	  crc = ccrc.second;
-	  if (buffer_track_crc)
-	    buffer_cached_crc++;
+	  cache_hits++;
 	} else {
 	  /* If we have cached crc32c(buf, v) for initial value v,
 	   * we can convert this to a different initial value v' by:
@@ -2525,18 +2528,26 @@ __u32 buffer::list::crc32c(__u32 crc) const
 	   * note, u for our crc32c implementation is 0
 	   */
 	  crc = ccrc.second ^ ceph_crc32c(ccrc.first ^ crc, NULL, it->length());
-	  if (buffer_track_crc)
-	    buffer_cached_crc_adjusted++;
+	  cache_adjusts++;
 	}
       } else {
-	if (buffer_track_crc)
-	  buffer_missed_crc++;
+	cache_misses++;
 	uint32_t base = crc;
 	crc = ceph_crc32c(crc, (unsigned char*)it->c_str(), it->length());
 	r->set_crc(ofs, make_pair(base, crc));
       }
     }
   }
+
+  if (buffer_track_crc) {
+    if (cache_adjusts)
+      buffer_cached_crc_adjusted += cache_adjusts;
+    if (cache_hits)
+      buffer_cached_crc += cache_hits;
+    if (cache_misses)
+      buffer_missed_crc += cache_misses;
+  }
+
   return crc;
 }
 
