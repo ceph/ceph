@@ -1125,7 +1125,7 @@ void Server::recall_client_state(void)
 	     << ", leases " << session->leases.size()
 	     << dendl;
 
-    uint64_t newlim = MAX(MIN((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
+    uint64_t newlim = std::max(std::min<uint64_t>((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
     if (session->caps.size() > newlim) {
       MClientSession *m = new MClientSession(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
@@ -4139,7 +4139,7 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   // trunc from bigger -> smaller?
   inode_t *pi = cur->get_projected_inode();
 
-  uint64_t old_size = MAX(pi->size, req->head.args.setattr.old_size);
+  uint64_t old_size = std::max<uint64_t>(pi->size, req->head.args.setattr.old_size);
 
   // ENOSPC on growing file while full, but allow shrinks
   if (is_full && req->head.args.setattr.size > old_size) {
@@ -4252,7 +4252,7 @@ void Server::do_open_truncate(MDRequestRef& mdr, int cmode)
   pi->mtime = pi->ctime = mdr->get_op_stamp();
   pi->change_attr++;
 
-  uint64_t old_size = MAX(pi->size, mdr->client_request->head.args.open.old_size);
+  uint64_t old_size = std::max<uint64_t>(pi->size, mdr->client_request->head.args.open.old_size);
   if (old_size > 0) {
     pi->truncate(old_size, 0);
     le->metablob.add_truncate_start(in->ino());
@@ -5977,7 +5977,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   SnapRealm *realm = in->find_snaprealm();
   snapid_t follows = realm->get_newest_seq();
   if (straydn)
-    straydn->first = MAX((uint64_t)in->first, follows + 1);
+    straydn->first = std::max<uint64_t>(in->first, follows + 1);
 
   // yay!
   if (in->is_dir() && in->has_subtree_root_dirfrag()) {
@@ -7297,7 +7297,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 
   SnapRealm *src_realm = srci->find_snaprealm();
   SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-  snapid_t next_dest_snap = MAX(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
+  snapid_t next_dest_snap = std::max(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
 
   // add it all to the metablob
   // target inode
@@ -7308,7 +7308,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	// project snaprealm, too
 	if (oldin->snaprealm || dest_realm->get_newest_seq() + 1 > oldin->get_oldest_snap())
 	  oldin->project_past_snaprealm_parent(straydn->get_dir()->inode->find_snaprealm());
-	straydn->first = MAX((uint64_t)oldin->first, dest_realm->get_newest_seq() + 1);
+	straydn->first = std::max<uint64_t>(oldin->first, dest_realm->get_newest_seq() + 1);
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
@@ -7346,7 +7346,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
       else
 	// FIXME: stray reintegration, do we need to update destdn->first?
-	destdn->first = MAX(destdn->first, next_dest_snap);
+	destdn->first = std::max(destdn->first, next_dest_snap);
 
       if (destdn->is_auth())
         metablob->add_primary_dentry(destdn, destdnl->get_inode(), true, true);
@@ -7360,7 +7360,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
 
-    destdn->first = MAX(srci->first, next_dest_snap);
+    destdn->first = std::max(srci->first, next_dest_snap);
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);
