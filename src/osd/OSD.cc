@@ -5958,30 +5958,7 @@ struct OSDCommand {
 #define COMMAND(parsesig, helptext, module, perm, availability) \
   {parsesig, helptext, module, perm, availability},
 
-// yes, these are really pg commands, but there's a limit to how
-// much work it's worth.  The OSD returns all of them.  Make this
-// form (pg <pgid> <cmd>) valid only for the cli.
-// Rest uses "tell <pgid> <cmd>"
-
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=query", \
-	"show details of a specific pg", "osd", "r", "cli")
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=mark_unfound_lost " \
-	"name=mulcmd,type=CephChoices,strings=revert|delete", \
-	"mark all unfound objects in this pg as lost, either removing or reverting to a prior version if one is available",
-	"osd", "rw", "cli")
-COMMAND("pg " \
-	"name=pgid,type=CephPgid " \
-	"name=cmd,type=CephChoices,strings=list_missing " \
-	"name=offset,type=CephString,req=false",
-	"list missing objects on this pg, perhaps starting at an offset given in JSON",
-	"osd", "r", "cli")
-
-// new form: tell <pgid> <cmd> for both cli and rest
-
+// tell <pgid> <cmd> for both cli and rest
 COMMAND("query",
 	"show details of a specific pg", "osd", "r", "cli,rest")
 COMMAND("mark_unfound_lost " \
@@ -6157,16 +6134,12 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     clog->do_log(level, message);
   }
 
-  // either 'pg <pgid> <command>' or
-  // 'tell <pgid>' (which comes in without any of that prefix)?
-
-  else if (prefix == "pg" ||
-	    prefix == "query" ||
-	    prefix == "mark_unfound_lost" ||
-	    prefix == "list_missing"
+  // 'tell <pgid>'
+  else if (prefix == "query" ||
+	   prefix == "mark_unfound_lost" ||
+	   prefix == "list_missing"
 	   ) {
     pg_t pgid;
-
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "no pgid specified";
       r = -EINVAL;
@@ -6179,9 +6152,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       if (osdmap->get_primary_shard(pgid, &pcand) &&
 	  (pg = _lookup_lock_pg(pcand))) {
 	if (pg->is_primary()) {
-	  // simulate pg <pgid> cmd= for pg->do-command
-	  if (prefix != "pg")
-	    cmd_putval(cct, cmdmap, "cmd", prefix);
+	  cmd_putval(cct, cmdmap, "cmd", prefix);
 	  r = pg->do_command(cmdmap, ss, data, odata, con, tid);
 	  if (r == -EAGAIN) {
 	    pg->unlock();
