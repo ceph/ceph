@@ -162,7 +162,7 @@ bool KeyServer::_check_rotating_secrets()
     ldout(cct, 10) << __func__ << " added " << added << dendl;
     data.rotating_ver++;
     //data.next_rotating_time = ceph_clock_now(cct);
-    //data.next_rotating_time += MIN(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
+    //data.next_rotating_time += std::min(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
     _dump_rotating_secrets();
     return true;
   }

@@ -617,7 +617,8 @@ public:
   /// return chunk (i.e. min readable block) size for the blob
   uint64_t get_chunk_size(uint64_t dev_block_size) const {
     return has_csum() ?
-      MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+      std::max(dev_block_size, static_cast<uint64_t>(get_csum_chunk_size())) :
+      dev_block_size;
   }
   uint32_t get_csum_chunk_size() const {
     return 1 << csum_chunk_order;
@@ -741,7 +742,7 @@ public:
     }
     while (x_len > 0) {
       assert(p != extents.end());
-      uint64_t l = MIN(p->length - x_off, x_len);
+      uint64_t l = std::min(p->length - x_off, x_len);
       int r = f(p->offset + x_off, l);
       if (r < 0)
         return r;
@@ -765,7 +766,7 @@ public:
     uint64_t x_len = bl.length();
     while (x_len > 0) {
       assert(p != extents.end());
-      uint64_t l = MIN(p->length - x_off, x_len);
+      uint64_t l = std::min(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
       f(p->offset + x_off, t);
