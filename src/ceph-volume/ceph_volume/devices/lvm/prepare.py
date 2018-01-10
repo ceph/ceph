@@ -178,6 +178,7 @@ class Prepare(object):
             logger.info('will rollback OSD ID creation')
             rollback_osd(args, self.osd_id)
             raise
+        terminal.success("ceph-volume lvm prepare successful for: %s" % args.data)
 
     @decorators.needs_root
     def prepare(self, args):
