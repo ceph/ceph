@@ -46,6 +46,8 @@
 #include "buffer.h"
 #include "byteorder.h"
 
+#include "common/convenience.h"
+
 template<typename T, typename=void>
 struct denc_traits {
   static constexpr bool supported = false;
@@ -1120,46 +1122,6 @@ private:
 		"Zero-length tuples are not supported.");
   using container = std::tuple<Ts...>;
 
-  template<typename U = container, size_t... Is>
-  static std::enable_if_t<denc_traits<U>::featured>
-  bound_encode_helper(const U& s, size_t& p,
-		      std::uint64_t f,
-		      std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p, f), ..., void());
-  }
-  template<typename U = container, size_t... Is>
-  static std::enable_if_t<!denc_traits<U>::featured>
-  bound_encode_helper(const U& s, size_t& p,
-		      std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p), ..., void());
-  }
-
-  template<typename U = container, size_t... Is>
-  static std::enable_if_t<denc_traits<U>::featured>
-  encode_helper(const U& s, buffer::list::contiguous_appender& p,
-		      std::uint64_t f,
-		      std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p, f), ..., void());
-  }
-  template<typename U = container, size_t... Is>
-  static std::enable_if_t<!denc_traits<U>::featured>
-  encode_helper(const U& s, buffer::list::contiguous_appender& p,
-		std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p), ..., void());
-  }
-
-  template<size_t... Is>
-  static void decode_helper(container& s, buffer::ptr::iterator& p,
-			    std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p), ..., void());
-  }
-
-  template<typename U = container, size_t... Is>
-  static std::enable_if_t<!denc_traits<U>::need_contiguous>
-  decode_helper(U& s, buffer::list::iterator& p, std::index_sequence<Is...>) {
-    (denc(std::get<Is>(s), p), ..., void());
-  }
-
 public:
 
   static constexpr bool supported = true;
@@ -1171,33 +1133,53 @@ public:
   template<typename U = container>
   static std::enable_if_t<denc_traits<U>::featured>
   bound_encode(const container& s, size_t& p, uint64_t f) {
-    bound_encode_helper(s, p, f, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p, f] (const auto& e) {
+	if constexpr (denc_traits<std::decay_t<decltype(p)>>::featured) {
+	  denc(e, p, f);
+	} else {
+	  denc(e, p);
+	}
+      });
   }
   template<typename U = container>
   static std::enable_if_t<!denc_traits<U>::featured>
   bound_encode(const container& s, size_t& p) {
-    bound_encode_helper(s, p, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p] (const auto& e) {
+	denc(e, p);
+      });
   }
 
   template<typename U = container>
   static std::enable_if_t<denc_traits<U>::featured>
   encode(const container& s, buffer::list::contiguous_appender& p, uint64_t f) {
-    encode_helper(s, p, f, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p, f] (const auto& e) {
+	if constexpr (denc_traits<std::decay_t<decltype(p)>>::featured) {
+	  denc(e, p, f);
+	} else {
+	  denc(e, p);
+	}
+      });
   }
   template<typename U = container>
   static std::enable_if_t<!denc_traits<U>::featured>
   encode(const container& s, buffer::list::contiguous_appender& p) {
-    encode_helper(s, p, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p] (const auto& e) {
+	denc(e, p);
+      });
   }
 
   static void decode(container& s, buffer::ptr::iterator& p, uint64_t f = 0) {
-    decode_helper(s, p, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p] (auto& e) {
+	denc(e, p);
+      });
   }
 
   template<typename U = container>
   static std::enable_if_t<!denc_traits<U>::need_contiguous>
   decode(container& s, buffer::list::iterator& p, uint64_t f = 0) {
-    decode_helper(s, p, std::index_sequence_for<Ts...>{});
+    ceph::for_each(s, [&p] (auto& e) {
+	denc(e, p);
+      });
   }
 };
 
