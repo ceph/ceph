@@ -672,11 +672,6 @@ int md_config_t::parse_option(std::vector<const char*>& args,
 	ret = -EINVAL;
 	break;
       }
-      if (oss && ((!opt.is_safe()) &&
-		  (observers.find(opt.name) == observers.end()))) {
-	*oss << "You cannot change " << opt.name << " using injectargs.\n";
-        return -ENOSYS;
-      }
       ret = _set_val(val, opt, level, &error_message);
       break;
     }
@@ -871,17 +866,6 @@ int md_config_t::set_val(const std::string &key, const char *val,
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
-    if ((!opt.is_safe()) && safe_to_start_threads) {
-      // If threads have been started and the option is not thread safe
-      if (observers.find(opt.name) == observers.end()) {
-        // And there is no observer to safely change it...
-        // You lose.
-        if (err_ss) *err_ss << "Configuration option '" << key << "' may "
-                    "not be modified at runtime";
-        return -ENOSYS;
-      }
-    }
-
     std::string error_message;
     int r = _set_val(v, opt, CONF_OVERRIDE, &error_message);
     if (r >= 0) {
@@ -1284,6 +1268,18 @@ int md_config_t::_set_val(
   int r = opt.parse_value(raw_val, &new_value, error_message);
   if (r < 0) {
     return r;
+  }
+
+  // unsafe runtime change?
+  if (!opt.is_safe() &&
+      safe_to_start_threads &&
+      observers.count(opt.name) == 0) {
+    // accept value if it is not actually a change
+    if (new_value != _get_val(opt)) {
+      *error_message = string("Configuration option '") + opt.name +
+	"' may not be modified at runtime";
+      return -ENOSYS;
+    }
   }
 
   // Apply the value to its entry in the `values` map
