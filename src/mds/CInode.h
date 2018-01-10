@@ -492,19 +492,6 @@ public:
     else
       return NULL;
   }
-  sr_t *get_projected_srnode() {
-    if (num_projected_srnodes > 0) {
-      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-	   p != projected_nodes.rend();
-	   ++p)
-	if ((*p)->snapnode)
-	  return (*p)->snapnode;
-    }
-    if (snaprealm)
-      return &snaprealm->srnode;
-    else
-      return NULL;
-  }
   void project_past_snaprealm_parent(SnapRealm *newparent);
 
 private:

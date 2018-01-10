@@ -13517,73 +13517,24 @@ bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool 
 
 Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
-  Inode *cur = in;
-  utime_t now = ceph_clock_now();
+  Inode *quota_in = root_ancestor;
+  SnapRealm *realm = in->snaprealm;
+  while (realm) {
+    ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
+    if (realm->ino != in->ino) {
+      auto p = inode_map.find(vinodeno_t(realm->ino, CEPH_NOSNAP));
+      if (p == inode_map.end())
+	break;
 
-  while (cur) {
-    if (cur != in && cur->quota.is_enable())
-      break;
-
-    Inode *parent_in = NULL;
-    if (!cur->dentries.empty()) {
-      for (auto dn : cur->dentries) {
-	if (dn->lease_mds >= 0 &&
-	    dn->lease_ttl > now &&
-	    mds_sessions.count(dn->lease_mds)) {
-	  parent_in = dn->dir->parent_inode;
-	} else {
-	  Inode *diri = dn->dir->parent_inode;
-	  if (diri->caps_issued_mask(CEPH_CAP_FILE_SHARED) &&
-	      diri->shared_gen == dn->cap_shared_gen) {
-	    parent_in = dn->dir->parent_inode;
-	  }
-	}
-	if (parent_in)
-	  break;
+      if (p->second->quota.is_enable()) {
+	quota_in = p->second;
+	break;
       }
-    } else if (root_parents.count(cur)) {
-      parent_in = root_parents[cur].get();
     }
-
-    if (parent_in) {
-      cur = parent_in;
-      continue;
-    }
-
-    if (cur == root_ancestor)
-      break;
-
-    // deleted inode
-    if (cur->nlink == 0) {
-      cur = root_ancestor;
-      break;
-    }
-
-    MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPNAME);
-    filepath path(cur->ino);
-    req->set_filepath(path);
-    req->set_inode(cur);
-
-    InodeRef parent_ref;
-    int ret = make_request(req, perms, &parent_ref);
-    if (ret < 0) {
-      ldout(cct, 1) << __func__ << " " << in->vino()
-		    << " failed to find parent of " << cur->vino()
-		    << " err " << ret <<  dendl;
-      // FIXME: what to do?
-      cur = root_ancestor;
-      break;
-    }
-
-    now = ceph_clock_now();
-    if (cur == in)
-      cur = parent_ref.get();
-    else
-      cur = in; // start over
+    realm = realm->pparent;
   }
-
-  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << cur->vino() << dendl;
-  return cur;
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << quota_in->vino() << dendl;
+  return quota_in;
 }
 
 /**

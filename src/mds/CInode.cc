@@ -424,7 +424,7 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
 
 sr_t *CInode::project_snaprealm(snapid_t snapid)
 {
-  sr_t *cur_srnode = get_projected_srnode();
+  const sr_t *cur_srnode = get_projected_srnode();
   sr_t *new_srnode;
 
   if (cur_srnode) {

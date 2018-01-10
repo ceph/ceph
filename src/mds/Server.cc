@@ -3916,11 +3916,12 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
  */
 class C_MDS_inode_update_finish : public ServerLogContext {
   CInode *in;
-  bool truncating_smaller, changed_ranges;
+  bool truncating_smaller, changed_ranges, new_realm;
 public:
   C_MDS_inode_update_finish(Server *s, MDRequestRef& r, CInode *i,
-			    bool sm=false, bool cr=false) :
-    ServerLogContext(s, r), in(i), truncating_smaller(sm), changed_ranges(cr) { }
+			    bool sm=false, bool cr=false, bool nr=false) :
+    ServerLogContext(s, r), in(i),
+    truncating_smaller(sm), changed_ranges(cr), new_realm(nr) { }
   void finish(int r) override {
     assert(r == 0);
 
@@ -3928,13 +3929,20 @@ public:
     in->pop_and_dirty_projected_inode(mdr->ls);
     mdr->apply();
 
+    MDSRank *mds = get_mds();
+
     // notify any clients
     if (truncating_smaller && in->inode.is_truncating()) {
-      get_mds()->locker->issue_truncate(in);
-      get_mds()->mdcache->truncate_inode(in, mdr->ls);
+      mds->locker->issue_truncate(in);
+      mds->mdcache->truncate_inode(in, mdr->ls);
     }
 
-    get_mds()->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
+    if (new_realm) {
+      int op = CEPH_SNAP_OP_SPLIT;
+      mds->mdcache->do_realm_invalidate_and_update_notify(in, op);
+    }
+
+    mds->balancer->hit_inode(mdr->get_mds_stamp(), in, META_POP_IWR);
 
     server->respond_to_request(mdr, 0);
 
@@ -4671,6 +4679,7 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     return;
   }
 
+  bool new_realm = false;
   if (name.compare(0, 15, "ceph.dir.layout") == 0) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -EINVAL);
@@ -4736,11 +4745,22 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     }
 
     xlocks.insert(&cur->policylock);
+    if (quota.is_enable() && !cur->get_projected_srnode()) {
+      xlocks.insert(&cur->snaplock);
+      new_realm = true;
+    }
+
     if (!mds->locker->acquire_locks(mdr, rdlocks, wrlocks, xlocks))
       return;
 
     pi = cur->project_inode();
     pi->quota = quota;
+
+    if (new_realm) {
+      SnapRealm *realm = cur->find_snaprealm();
+      sr_t *newsnap = cur->project_snaprealm(realm->get_newest_seq());
+      newsnap->seq = realm->get_newest_seq();
+    }
     mdr->no_early_reply = true;
   } else if (name.find("ceph.dir.pin") == 0) {
     if (!cur->is_dir() || cur->is_root()) {
@@ -4784,7 +4804,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
   mdcache->predirty_journal_parents(mdr, &le->metablob, cur, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, cur);
 
-  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur));
+  journal_and_reply(mdr, cur, 0, le, new C_MDS_inode_update_finish(this, mdr, cur,
+								   false, false, new_realm));
   return;
 }
 
