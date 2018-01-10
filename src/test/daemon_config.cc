@@ -40,6 +40,7 @@ TEST(DaemonConfig, SimpleSet) {
   ret = g_ceph_context->_conf->get_val("log_graylog_port", &tmp, sizeof(buf));
   ASSERT_EQ(0, ret);
   ASSERT_EQ(string("21"), string(buf));
+  g_ceph_context->_conf->rm_val("log_graylog_port");
 }
 
 TEST(DaemonConfig, Substitution) {
@@ -348,6 +349,8 @@ TEST(DaemonConfig, InvalidIntegers) {
     int ret = g_ceph_context->_conf->set_val("log_graylog_port", str);
     ASSERT_EQ(-EINVAL, ret);
   }
+
+  g_ceph_context->_conf->rm_val("log_graylog_port");
 }
 
 TEST(DaemonConfig, InvalidFloats) {
