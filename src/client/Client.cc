@@ -4822,8 +4822,13 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
   int cleaned = 0;
   int flushed = 0;
 
-  for (map<ceph_tid_t, int>::iterator it = in->flushing_cap_tids.begin();
-       it != in->flushing_cap_tids.end(); ) {
+  auto it = in->flushing_cap_tids.begin();
+  if (it->first < flush_ack_tid) {
+       ldout(cct, 0) << __func__ << " mds." << session->mds_num
+                   << " got unexpected flush ack tid " << flush_ack_tid
+                   << " expected is " << it->first << dendl;
+  }
+  for (; it != in->flushing_cap_tids.end(); ) {
     if (it->first == flush_ack_tid)
       cleaned = it->second;
     if (it->first <= flush_ack_tid) {
