@@ -530,6 +530,23 @@ extern void dump_owner(struct req_state *s, rgw_user& id, string& name,
 		       const char *section = NULL);
 extern void dump_string_header(struct req_state *s, const char *name,
 			       const char *val);
+
+static inline std::string compute_domain_uri(const struct req_state *s) {
+  std::string uri = (!s->info.domain.empty()) ? s->info.domain :
+    [&s]() -> std::string {
+    auto env = *(s->info.env);
+    std::string uri =
+    env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
+    if (env.exists("SERVER_NAME")) {
+      uri.append(env.get("SERVER_NAME", "<SERVER_NAME>"));
+    } else {
+      uri.append(env.get("HTTP_HOST", "<HTTP_HOST>"));
+    }
+    return uri;
+  }();
+  return uri;
+}
+
 extern void dump_content_length(struct req_state *s, uint64_t len);
 extern void dump_etag(struct req_state *s, const char *etag);
 extern void dump_epoch_header(struct req_state *s, const char *name, real_time t);
