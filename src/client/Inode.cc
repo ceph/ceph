@@ -14,7 +14,8 @@
 
 Inode::~Inode()
 {
-  cap_item.remove_myself();
+  delay_cap_item.remove_myself();
+  dirty_cap_item.remove_myself(); 
   snaprealm_item.remove_myself();
 
   if (snapdir_parent) {
@@ -713,3 +714,32 @@ void Inode::unset_deleg(Fh *fh)
     }
   }
 }
+
+/**
+* mark_caps_dirty - mark some caps dirty
+* @caps: the dirty caps
+*
+* note that if there is no dirty and flushing caps before, we need to pin this inode.
+* it will be unpined by handle_cap_flush_ack when there are no dirty and flushing caps.
+*/
+void Inode::mark_caps_dirty(int caps)
+{
+  lsubdout(client->cct, client, 10) << __func__ << " " << *this << " " << ccap_string(dirty_caps) << " -> "
+           << ccap_string(dirty_caps | caps) << dendl;
+  if (caps && !caps_dirty())
+    get();
+  dirty_caps |= caps;
+  client->get_dirty_list().push_back(&dirty_cap_item);
+}
+
+/**
+* mark_caps_clean - only clean the dirty_caps and caller should start flushing the dirty caps.
+*/
+void Inode::mark_caps_clean()
+{
+  lsubdout(client->cct, client, 10) << __func__ << " " << *this << dendl;
+  dirty_caps = 0;
+  dirty_cap_item.remove_myself();
+}
+
+
