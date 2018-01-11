@@ -33,6 +33,17 @@ namespace api {
 
 namespace {
 
+template <typename I>
+snap_t get_group_snap_id(I* ictx,
+                         const cls::rbd::SnapshotNamespace& in_snap_namespace) {
+  assert(ictx->snap_lock.is_locked());
+  auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
+  if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
+    return it->second;
+  }
+  return CEPH_NOSNAP;
+}
+
 string generate_uuid(librados::IoCtx& io_ctx)
 {
   Rados rados(io_ctx);
@@ -204,7 +215,8 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   std::vector<librbd::IoCtx*> io_ctxs;
   std::vector<librbd::ImageCtx*> ictxs;
 
-  cls::rbd::SnapshotNamespace ne;
+  cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
+				      group_snap.id};
 
   ldout(cct, 20) << "Removing snapshots" << dendl;
   int snap_count = group_snap.snaps.size();
@@ -241,10 +253,6 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     goto finish;
   }
 
-  ne = cls::rbd::GroupSnapshotNamespace(group_ioctx.get_id(),
-					group_id,
-					group_snap.id);
-
   ldout(cct, 20) << "Opened participating images. " <<
 		    "Deleting snapshots themselves." << dendl;
 
@@ -254,7 +262,7 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 
     std::string snap_name;
     ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->get_snap_id(ne, "");
+    snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
     ictx->snap_lock.put_read();
 
@@ -666,8 +674,6 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   std::vector<librbd::ImageCtx*> ictxs;
   std::vector<C_SaferCond*> on_finishes;
 
-  cls::rbd::SnapshotNamespace ne;
-
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
   if (r < 0) {
@@ -700,6 +706,9 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   group_snap.name = string(snap_name);
   group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE;
   group_snap.snaps = image_snaps;
+
+  cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
+                                      group_snap.id};
 
   r = cls_client::group_snap_add(&group_ioctx, group_header_oid, group_snap);
   if (r == -EEXIST) {
@@ -786,8 +795,6 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 
   ind_snap_name = calc_ind_image_snap_name(group_ioctx.get_id(), group_id,
 					    group_snap.id);
-  ne = cls::rbd::GroupSnapshotNamespace(group_ioctx.get_id(), group_id,
-					group_snap.id);
 
   for (int i = 0; i < image_count; ++i) {
     ImageCtx *ictx = ictxs[i];
@@ -808,12 +815,11 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     } else {
       ImageCtx *ictx = ictxs[i];
       ictx->snap_lock.get_read();
-      snap_t snap_id = ictx->get_snap_id(ne, "");
+      snap_t snap_id = get_group_snap_id(ictx, ne);
       ictx->snap_lock.put_read();
       if (snap_id == CEPH_NOSNAP) {
-	ldout(cct, 20) <<
-	  "Couldn't find supposedly created snapshot with namespace: " <<
-	  ne << dendl;
+	ldout(cct, 20) << "Couldn't find created snapshot with namespace: "
+                       << ne << dendl;
 	ret_code = -ENOENT;
       } else {
 	image_snaps[i].snap_id = snapid_t(snap_id);
@@ -847,7 +853,7 @@ remove_image_snaps:
     on_finishes[i] = new C_SaferCond;
     std::string snap_name;
     ictx->snap_lock.get_read();
-    snap_t snap_id = ictx->get_snap_id(ne, "");
+    snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
     ictx->snap_lock.put_read();
     if (r >= 0) {
