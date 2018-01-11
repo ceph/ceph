@@ -200,7 +200,7 @@ void Option::dump(Formatter *f) const
   dump_value("min", min, f);
   dump_value("max", max, f);
 
-  f->dump_bool("can_update_at_runtime", is_safe());
+  f->dump_bool("can_update_at_runtime", can_update_at_runtime());
 }
 
 ostream& operator<<(ostream& out, const Option::value_t& v)
@@ -255,7 +255,8 @@ void Option::print(ostream *out) const
     *out << "  Minimum: " << stringify(min) << "\n"
 	 << "  Maximum: " << stringify(max) << "\n";
   }
-  *out << "  Can update at runtime: " << (is_safe() ? "true" : "false") << "\n";
+  *out << "  Can update at runtime: "
+       << (can_update_at_runtime() ? "true" : "false") << "\n";
   if (!services.empty()) {
     *out << "  Services: " << services << "\n";
   }
@@ -6206,7 +6207,7 @@ static std::vector<Option> get_rbd_options() {
                           "setting of 'auto' will use the v2 format if the "
                           "cluster is configured to require mimic or later "
                           "clients.")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_min(12)
