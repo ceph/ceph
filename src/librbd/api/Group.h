@@ -42,13 +42,7 @@ struct Group {
 			       const char *group_name, const char *snap_name);
   static int snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 			     std::vector<group_snap_spec_t> *snaps);
-  static int snap_get_group(ImageCtxT *ictx,
-			    uint64_t snap_id,
-			    group_snap_t *group_snap);
 
-  static int snap_get_namespace_type(ImageCtxT *ictx,
-				     uint64_t snap_id,
-				     snap_namespace_type_t *namespace_type);
 };
 
 } // namespace api
