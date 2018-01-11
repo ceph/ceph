@@ -30,7 +30,7 @@ static bool is_not_user_snap_namespace(librbd::Image* image,
   if (r < 0) {
     return false;
   }
-  return namespace_type != SNAP_NAMESPACE_TYPE_USER;
+  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
 }
 
 int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)

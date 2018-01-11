@@ -1756,7 +1756,7 @@ class TestGroups(object):
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
 
         for snap in self.image.list_snaps():
-            eq(rbd.SNAP_NAMESPACE_TYPE_GROUP,
+            eq(rbd.RBD_SNAP_NAMESPACE_TYPE_GROUP,
                self.image.snap_get_namespace_type(snap['id']))
 
             info = self.image.snap_get_group_namespace(snap['id'])
