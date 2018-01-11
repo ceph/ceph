@@ -52,7 +52,7 @@ ostream& operator<<(ostream &out, const Inode &in)
     out << "(";
     bool first = true;
     for (const auto &pair : in.caps) {
-      if (first)
+      if (!first)
         out << ',';
       out << pair.first << '=' << ccap_string(pair.second.issued);
       first = false;
@@ -200,6 +200,12 @@ int Inode::caps_issued(int *implemented) const
       i |= cap.implemented;
     }
   }
+  // exclude caps issued by non-auth MDS, but are been revoking by
+  // the auth MDS. The non-auth MDS should be revoking/exporting
+  // these caps, but the message is delayed.
+  if (auth_cap)
+    c &= ~auth_cap->implemented | auth_cap->issued;
+
   if (implemented)
     *implemented = i;
   return c;
