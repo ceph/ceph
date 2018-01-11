@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -20,7 +20,7 @@ static string log_index_prefix = "1_";
 static int write_log_entry(cls_method_context_t hctx, string& index, cls_log_entry& entry)
 {
   bufferlist bl;
-  ::encode(entry, bl);
+  encode(entry, bl);
 
   int ret = cls_cxx_map_set_val(hctx, index, &bl);
   if (ret < 0)
@@ -52,7 +52,7 @@ static int read_header(cls_method_context_t hctx, cls_log_header& header)
 
   bufferlist::iterator iter = header_bl.begin();
   try {
-    ::decode(header, iter);
+    decode(header, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: read_header(): failed to decode header");
   }
@@ -63,7 +63,7 @@ static int read_header(cls_method_context_t hctx, cls_log_header& header)
 static int write_header(cls_method_context_t hctx, cls_log_header& header)
 {
   bufferlist header_bl;
-  ::encode(header, header_bl);
+  encode(header, header_bl);
 
   int ret = cls_cxx_map_write_header(hctx, &header_bl);
   if (ret < 0)
@@ -89,7 +89,7 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
   cls_log_add_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
     return -EINVAL;
@@ -144,7 +144,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   cls_log_list_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_list_op(): failed to decode op");
     return -EINVAL;
@@ -193,7 +193,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
     bufferlist::iterator biter = bl.begin();
     try {
       cls_log_entry e;
-      ::decode(e, biter);
+      decode(e, biter);
       entries.push_back(e);
     } catch (buffer::error& err) {
       CLS_LOG(0, "ERROR: cls_log_list: could not decode entry, index=%s", index.c_str());
@@ -202,7 +202,7 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   ret.marker = marker;
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -214,7 +214,7 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   cls_log_trim_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: cls_log_list_op(): failed to decode entry");
     return -EINVAL;
@@ -277,7 +277,7 @@ static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   cls_log_info_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_log_add_op(): failed to decode op");
     return -EINVAL;
@@ -289,7 +289,7 @@ static int cls_log_info(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (rc < 0)
     return rc;
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }

@@ -1374,7 +1374,7 @@ static void dump_shard(const shard_info_t& shard,
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
     bufferlist::iterator bliter = k->second.begin();
-    ::decode(oi, bliter);  // Can't be corrupted
+    decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
@@ -1450,7 +1450,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       auto k = shard.attrs.find(OI_ATTR);
       assert(k != shard.attrs.end()); // Can't be missing
       bufferlist::iterator bliter = k->second.begin();
-      ::decode(oi, bliter);  // Can't be corrupted
+      decode(oi, bliter);  // Can't be corrupted
       f.dump_stream("selected_object_info") << oi;
       break;
     }
@@ -2742,8 +2742,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       bufferlist header;
       map<string, bufferlist> kv;
       try {
-	::decode(header, p);
-	::decode(kv, p);
+	decode(header, p);
+	decode(kv, p);
       }
       catch (buffer::error& e) {
 	cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
@@ -2769,9 +2769,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       string v(nargs[4]);
       bufferlist bl;
       char c = (strcmp(nargs[1], "set") == 0) ? CEPH_OSD_TMAP_SET : CEPH_OSD_TMAP_CREATE;
-      ::encode(c, bl);
-      ::encode(k, bl);
-      ::encode(v, bl);
+      encode(c, bl);
+      encode(k, bl);
+      encode(v, bl);
       ret = io_ctx.tmap_update(oid, bl);
     }
   }
@@ -2793,8 +2793,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     map<string, bufferlist> kv;
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(hdr, p);
-      ::decode(kv, p);
+      decode(hdr, p);
+      decode(kv, p);
     }
     catch (buffer::error& e) {
       cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
@@ -3115,7 +3115,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     string msg(nargs[2]);
     bufferlist bl, replybl;
-    ::encode(msg, bl);
+    encode(msg, bl);
     ret = io_ctx.notify2(oid, bl, 10000, &replybl);
     if (ret != 0)
       cerr << "error calling notify: " << cpp_strerror(ret) << std::endl;
@@ -3123,8 +3123,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;
       bufferlist::iterator p = replybl.begin();
-      ::decode(rm, p);
-      ::decode(missed, p);
+      decode(rm, p);
+      decode(missed, p);
       for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();
 	   p != rm.end();
 	   ++p) {

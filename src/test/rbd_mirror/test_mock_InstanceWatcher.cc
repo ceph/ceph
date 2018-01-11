@@ -505,7 +505,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });
@@ -526,7 +526,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });
@@ -571,7 +571,7 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
                     auto ctx = new FunctionContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
-                        ::encode(librbd::watcher::NotifyResponse(), *pbl);
+                        encode(librbd::watcher::NotifyResponse(), *pbl);
                         mock_io_ctx.get_mock_rados_client()->
                             finish_aio_completion(c, -ETIMEDOUT);
                       });

@@ -19,10 +19,12 @@ struct inodeno_t {
   operator _inodeno_t() const { return val; }
 
   void encode(bufferlist& bl) const {
-    ::encode(val, bl);
+    using ceph::encode;
+    encode(val, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(val, p);
+    using ceph::decode;
+    decode(val, p);
   }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
@@ -62,7 +64,7 @@ namespace std {
 
 // file modes
 
-static inline bool file_mode_is_readonly(int mode) {
+inline bool file_mode_is_readonly(int mode) {
   return (mode & CEPH_FILE_MODE_WR) == 0;
 }
 

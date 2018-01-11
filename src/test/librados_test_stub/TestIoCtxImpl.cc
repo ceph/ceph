@@ -284,20 +284,20 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
       return r;
     }
     bufferlist::iterator iter = inbl.begin();
-    ::decode(tmap_header, iter);
-    ::decode(tmap, iter);
+    decode(tmap_header, iter);
+    decode(tmap, iter);
   }
 
   __u8 c;
   std::string key;
   bufferlist value;
   bufferlist::iterator iter = cmdbl.begin();
-  ::decode(c, iter);
-  ::decode(key, iter);
+  decode(c, iter);
+  decode(key, iter);
 
   switch (c) {
     case CEPH_OSD_TMAP_SET:
-      ::decode(value, iter);
+      decode(value, iter);
       tmap[key] = value;
       break;
     case CEPH_OSD_TMAP_RM:
@@ -311,8 +311,8 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   }
 
   bufferlist out;
-  ::encode(tmap_header, out);
-  ::encode(tmap, out);
+  encode(tmap_header, out);
+  encode(tmap, out);
   r = write_full(oid, out, m_snapc);
   return r;
 }

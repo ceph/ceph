@@ -54,14 +54,16 @@ struct LeaseStat {
   LeaseStat() : mask(0), duration_ms(0), seq(0) {}
 
   void encode(bufferlist &bl) const {
-    ::encode(mask, bl);
-    ::encode(duration_ms, bl);
-    ::encode(seq, bl);
+    using ceph::encode;
+    encode(mask, bl);
+    encode(duration_ms, bl);
+    encode(seq, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(mask, bl);
-    ::decode(duration_ms, bl);
-    ::decode(seq, bl);
+    using ceph::decode;
+    decode(mask, bl);
+    decode(duration_ms, bl);
+    decode(seq, bl);
   }
 };
 WRITE_CLASS_ENCODER(LeaseStat)
@@ -82,14 +84,16 @@ struct DirStat {
   }
 
   void encode(bufferlist& bl) {
-    ::encode(frag, bl);
-    ::encode(auth, bl);
-    ::encode(dist, bl);
+    using ceph::encode;
+    encode(frag, bl);
+    encode(auth, bl);
+    encode(dist, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(frag, p);
-    ::decode(auth, p);
-    ::decode(dist, p);
+    using ceph::decode;
+    decode(frag, p);
+    decode(auth, p);
+    decode(dist, p);
   }
 
   // see CDir::encode_dirstat for encoder.
@@ -131,64 +135,65 @@ struct InodeStat {
   }
 
   void decode(bufferlist::iterator &p, uint64_t features) {
-    ::decode(vino.ino, p);
-    ::decode(vino.snapid, p);
-    ::decode(rdev, p);
-    ::decode(version, p);
-    ::decode(xattr_version, p);
-    ::decode(cap, p);
+    using ceph::decode;
+    decode(vino.ino, p);
+    decode(vino.snapid, p);
+    decode(rdev, p);
+    decode(version, p);
+    decode(xattr_version, p);
+    decode(cap, p);
     {
       ceph_file_layout legacy_layout;
-      ::decode(legacy_layout, p);
+      decode(legacy_layout, p);
       layout.from_legacy(legacy_layout);
     }
-    ::decode(ctime, p);
-    ::decode(mtime, p);
-    ::decode(atime, p);
-    ::decode(time_warp_seq, p);
-    ::decode(size, p);
-    ::decode(max_size, p);
-    ::decode(truncate_size, p);
-    ::decode(truncate_seq, p);
-    ::decode(mode, p);
-    ::decode(uid, p);
-    ::decode(gid, p);
-    ::decode(nlink, p);
-    ::decode(dirstat.nfiles, p);
-    ::decode(dirstat.nsubdirs, p);
-    ::decode(rstat.rbytes, p);
-    ::decode(rstat.rfiles, p);
-    ::decode(rstat.rsubdirs, p);
-    ::decode(rstat.rctime, p);
+    decode(ctime, p);
+    decode(mtime, p);
+    decode(atime, p);
+    decode(time_warp_seq, p);
+    decode(size, p);
+    decode(max_size, p);
+    decode(truncate_size, p);
+    decode(truncate_seq, p);
+    decode(mode, p);
+    decode(uid, p);
+    decode(gid, p);
+    decode(nlink, p);
+    decode(dirstat.nfiles, p);
+    decode(dirstat.nsubdirs, p);
+    decode(rstat.rbytes, p);
+    decode(rstat.rfiles, p);
+    decode(rstat.rsubdirs, p);
+    decode(rstat.rctime, p);
 
-    ::decode(dirfragtree, p);
+    decode(dirfragtree, p);
 
-    ::decode(symlink, p);
+    decode(symlink, p);
     
     if (features & CEPH_FEATURE_DIRLAYOUTHASH)
-      ::decode(dir_layout, p);
+      decode(dir_layout, p);
     else
       memset(&dir_layout, 0, sizeof(dir_layout));
 
-    ::decode(xattrbl, p);
+    decode(xattrbl, p);
 
     if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
-      ::decode(inline_version, p);
-      ::decode(inline_data, p);
+      decode(inline_version, p);
+      decode(inline_data, p);
     } else {
       inline_version = CEPH_INLINE_NONE;
     }
 
     if (features & CEPH_FEATURE_MDS_QUOTA)
-      ::decode(quota, p);
+      decode(quota, p);
     else
       memset(&quota, 0, sizeof(quota));
 
     if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2))
-      ::decode(layout.pool_ns, p);
+      decode(layout.pool_ns, p);
     if ((features & CEPH_FEATURE_FS_BTIME)) {
-      ::decode(btime, p);
-      ::decode(change_attr, p);
+      decode(btime, p);
+      decode(change_attr, p);
     } else {
       btime = utime_t();
       change_attr = 0;
@@ -255,17 +260,18 @@ public:
   // serialization
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
-    ::decode(trace_bl, p);
-    ::decode(extra_bl, p);
-    ::decode(snapbl, p);
+    decode(head, p);
+    decode(trace_bl, p);
+    decode(extra_bl, p);
+    decode(snapbl, p);
     assert(p.end());
   }
   void encode_payload(uint64_t features) override {
-    ::encode(head, payload);
-    ::encode(trace_bl, payload);
-    ::encode(extra_bl, payload);
-    ::encode(snapbl, payload);
+    using ceph::encode;
+    encode(head, payload);
+    encode(trace_bl, payload);
+    encode(extra_bl, payload);
+    encode(snapbl, payload);
   }
 
 

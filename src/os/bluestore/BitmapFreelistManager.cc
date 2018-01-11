@@ -85,22 +85,22 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
 	   << std::dec << dendl;
   {
     bufferlist bl;
-    ::encode(bytes_per_block, bl);
+    encode(bytes_per_block, bl);
     txn->set(meta_prefix, "bytes_per_block", bl);
   }
   {
     bufferlist bl;
-    ::encode(blocks_per_key, bl);
+    encode(blocks_per_key, bl);
     txn->set(meta_prefix, "blocks_per_key", bl);
   }
   {
     bufferlist bl;
-    ::encode(blocks, bl);
+    encode(blocks, bl);
     txn->set(meta_prefix, "blocks", bl);
   }
   {
     bufferlist bl;
-    ::encode(size, bl);
+    encode(size, bl);
     txn->set(meta_prefix, "size", bl);
   }
   return 0;
@@ -119,25 +119,25 @@ int BitmapFreelistManager::init()
     if (k == "bytes_per_block") {
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(bytes_per_block, p);
+      decode(bytes_per_block, p);
       dout(10) << __func__ << " bytes_per_block 0x" << std::hex
 	       << bytes_per_block << std::dec << dendl;
     } else if (k == "blocks") {
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(blocks, p);
+      decode(blocks, p);
       dout(10) << __func__ << " blocks 0x" << std::hex << blocks << std::dec
 	       << dendl;
     } else if (k == "size") {
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(size, p);
+      decode(size, p);
       dout(10) << __func__ << " size 0x" << std::hex << size << std::dec
 	       << dendl;
     } else if (k == "blocks_per_key") {
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
-      ::decode(blocks_per_key, p);
+      decode(blocks_per_key, p);
       dout(10) << __func__ << " blocks_per_key 0x" << std::hex << blocks_per_key
 	       << std::dec << dendl;
     } else {

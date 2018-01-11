@@ -289,12 +289,14 @@ struct vinodeno_t {
   vinodeno_t(inodeno_t i, snapid_t s) : ino(i), snapid(s) {}
 
   void encode(bufferlist& bl) const {
-    ::encode(ino, bl);
-    ::encode(snapid, bl);
+    using ceph::encode;
+    encode(ino, bl);
+    encode(snapid, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(ino, p);
-    ::decode(snapid, p);
+    using ceph::decode;
+    decode(ino, p);
+    decode(snapid, p);
   }
 };
 WRITE_CLASS_ENCODER(vinodeno_t)
@@ -320,14 +322,14 @@ struct quota_info_t
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(max_bytes, bl);
-    ::encode(max_files, bl);
+    encode(max_bytes, bl);
+    encode(max_files, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
-    ::decode(max_bytes, p);
-    ::decode(max_files, p);
+    decode(max_bytes, p);
+    decode(max_files, p);
     DECODE_FINISH(p);
   }
 
@@ -393,8 +395,8 @@ struct client_writeable_range_t {
 };
 
 inline void decode(client_writeable_range_t::byte_range_t& range, bufferlist::iterator& bl) {
-  ::decode(range.first, bl);
-  ::decode(range.last, bl);
+  decode(range.first, bl);
+  decode(range.last, bl);
 }
 
 WRITE_CLASS_ENCODER(client_writeable_range_t)
@@ -742,7 +744,8 @@ struct dentry_key_t {
   void encode(bufferlist& bl) const {
     string key;
     encode(key);
-    ::encode(key, bl);
+    using ceph::encode;
+    encode(key, bl);
   }
   void encode(string& key) const {
     char b[20];
@@ -758,7 +761,7 @@ struct dentry_key_t {
   }
   static void decode_helper(bufferlist::iterator& bl, string& nm, snapid_t& sn) {
     string key;
-    ::decode(key, bl);
+    decode(key, bl);
     decode_helper(key, nm, sn);
   }
   static void decode_helper(const string& key, string& nm, snapid_t& sn) {
@@ -852,12 +855,14 @@ struct metareqid_t {
   metareqid_t() : tid(0) {}
   metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
   void encode(bufferlist& bl) const {
-    ::encode(name, bl);
-    ::encode(tid, bl);
+    using ceph::encode;
+    encode(name, bl);
+    encode(tid, bl);
   }
   void decode(bufferlist::iterator &p) {
-    ::decode(name, p);
-    ::decode(tid, p);
+    using ceph::decode;
+    decode(name, p);
+    decode(tid, p);
   }
 };
 WRITE_CLASS_ENCODER(metareqid_t)
@@ -964,12 +969,14 @@ struct old_cap_reconnect_t {
   }
 
   void encode(bufferlist& bl) const {
-    ::encode(path, bl);
-    ::encode(capinfo, bl);
+    using ceph::encode;
+    encode(path, bl);
+    encode(capinfo, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(path, bl);
-    ::decode(capinfo, bl);
+    using ceph::decode;
+    decode(path, bl);
+    decode(capinfo, bl);
   }
 };
 WRITE_CLASS_ENCODER(old_cap_reconnect_t)
@@ -986,12 +993,14 @@ struct dirfrag_t {
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 
   void encode(bufferlist& bl) const {
-    ::encode(ino, bl);
-    ::encode(frag, bl);
+    using ceph::encode;
+    encode(ino, bl);
+    encode(frag, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(ino, bl);
-    ::decode(frag, bl);
+    using ceph::decode;
+    decode(ino, bl);
+    decode(frag, bl);
   }
 };
 WRITE_CLASS_ENCODER(dirfrag_t)
@@ -1082,13 +1091,13 @@ public:
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);
     for (int i=0; i<NUM; i++)
-      ::encode(vec[i], bl);
+      encode(vec[i], bl);
     ENCODE_FINISH(bl);
   }
   void decode(const utime_t &t, bufferlist::iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
     for (int i=0; i<NUM; i++)
-      ::decode(vec[i], t, p);
+      decode(vec[i], t, p);
     DECODE_FINISH(p);
   }
   // for dencoder infrastructure

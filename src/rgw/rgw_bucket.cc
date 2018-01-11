@@ -420,7 +420,7 @@ int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
   string key = bucket.get_key();
   bufferlist bl;
 
-  ::encode(bucket_info, bl);
+  encode(bucket_info, bl);
 
   return rgw_bucket_instance_store_info(store, key, bl, false, &attrs, objv_tracker, real_time());
 }
@@ -842,7 +842,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     ACLOwner owner;
     try {
      bufferlist::iterator iter = aclbl.begin();
-     ::decode(policy, iter);
+     decode(policy, iter);
      owner = policy.get_owner();
     } catch (buffer::error& err) {
       set_err_msg(err_msg, "couldn't decode policy");
@@ -1732,7 +1732,7 @@ int RGWDataChangesLog::renew_entries()
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = ut;
-    ::encode(change, bl);
+    encode(change, bl);
 
     store->time_log_prepare_entry(entry, ut, section, change.key, bl);
 
@@ -1867,7 +1867,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
     change.entity_type = ENTITY_TYPE_BUCKET;
     change.key = bs.get_key();
     change.timestamp = now;
-    ::encode(change, bl);
+    encode(change, bl);
     string section;
 
     ldout(cct, 20) << "RGWDataChangesLog::add_entry() sending update with now=" << now << " cur_expiration=" << expiration << dendl;
@@ -1918,7 +1918,7 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
     log_entry.log_timestamp = rt;
     bufferlist::iterator liter = iter->data.begin();
     try {
-      ::decode(log_entry.entry, liter);
+      decode(log_entry.entry, liter);
     } catch (buffer::error& err) {
       lderr(cct) << "ERROR: failed to decode data changes log entry" << dendl;
       return -EIO;

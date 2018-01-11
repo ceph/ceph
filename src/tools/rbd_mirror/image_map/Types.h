@@ -92,10 +92,11 @@ struct PolicyData {
   static void generate_test_instances(std::list<PolicyData *> &o);
 };
 
+WRITE_CLASS_ENCODER(PolicyData);
+
 } // namespace image_map
 } // namespace mirror
 } // namespace rbd
 
-WRITE_CLASS_ENCODER(rbd::mirror::image_map::PolicyData);
 
 #endif // CEPH_RBD_MIRROR_IMAGE_MAP_TYPES_H

@@ -3155,7 +3155,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 	    << " len " << m->xattrbl.length() << dendl;
     pi->xattr_version = m->head.xattr_version;
     bufferlist::iterator p = m->xattrbl.begin();
-    ::decode(*px, p);
+    decode(*px, p);
   }
 
   if (pi->client_ranges.count(client)) {
@@ -3359,18 +3359,18 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (m->flockbl.length()) {
     int32_t num_locks;
     bufferlist::iterator bli = m->flockbl.begin();
-    ::decode(num_locks, bli);
+    decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
-      ::decode(decoded_lock, bli);
+      decode(decoded_lock, bli);
       in->get_fcntl_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
       ++in->get_fcntl_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
     }
-    ::decode(num_locks, bli);
+    decode(num_locks, bli);
     for ( int i=0; i < num_locks; ++i) {
       ceph_filelock decoded_lock;
-      ::decode(decoded_lock, bli);
+      decode(decoded_lock, bli);
       in->get_flock_lock_state()->held_locks.
 	insert(pair<uint64_t, ceph_filelock>(decoded_lock.start, decoded_lock));
       ++in->get_flock_lock_state()->client_held_lock_counts[(client_t)(decoded_lock.client)];
@@ -3431,7 +3431,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
     dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version << dendl;
     pi->xattr_version = m->head.xattr_version;
     bufferlist::iterator p = m->xattrbl.begin();
-    ::decode(*px, p);
+    decode(*px, p);
 
     wrlock_force(&in->xattrlock, mut);
   }
@@ -3764,7 +3764,7 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     e.mask = 1 | CEPH_LOCK_DN;  // old and new bit values
     e.seq = ++l->seq;
     e.duration_ms = (int)(1000 * mdcache->client_lease_durations[pool]);
-    ::encode(e, bl);
+    encode(e, bl);
     dout(20) << "issue_client_lease seq " << e.seq << " dur " << e.duration_ms << "ms "
 	     << " on " << *dn << dendl;
   } else {
@@ -3773,7 +3773,7 @@ void Locker::issue_client_lease(CDentry *dn, client_t client,
     e.mask = 0;
     e.seq = 0;
     e.duration_ms = 0;
-    ::encode(e, bl);
+    encode(e, bl);
     dout(20) << "issue_client_lease no/null lease on " << *dn << dendl;
   }
 }

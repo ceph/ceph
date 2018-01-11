@@ -33,27 +33,27 @@ public:
 		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
-    ::encode(op, bl);
-    ::encode(dirino, bl);
-    ::encode(name, bl);
-    ::encode(stamp, bl);
+    encode(op, bl);
+    encode(dirino, bl);
+    encode(name, bl);
+    encode(stamp, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
   void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
-    ::encode(op, bl);
-    ::encode(ino, bl);
+    encode(op, bl);
+    encode(ino, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
   void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_DESTROY;
-    ::encode(op, bl);
-    ::encode(ino, bl);
-    ::encode(snapid, bl);
+    encode(op, bl);
+    encode(ino, bl);
+    encode(snapid, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
@@ -61,11 +61,11 @@ public:
 		      version_t *pstid, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_UPDATE;
-    ::encode(op, bl);
-    ::encode(ino, bl);
-    ::encode(snapid, bl);
-    ::encode(name, bl);
-    ::encode(stamp, bl);
+    encode(op, bl);
+    encode(ino, bl);
+    encode(snapid, bl);
+    encode(name, bl);
+    encode(stamp, bl);
     _prepare(bl, pstid, NULL, onfinish);
   }
 };

@@ -178,7 +178,7 @@ public:
 
   void expect_mirror_image_get_image_id(const std::string& image_id, int r) {
     bufferlist bl;
-    ::encode(image_id, bl);
+    encode(image_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get_image_id"), _, _, _))
@@ -243,8 +243,8 @@ public:
     mirror_image.state = mirror_image_state;
 
     bufferlist bl;
-    ::encode(image_id, bl);
-    ::encode(mirror_image, bl);
+    encode(image_id, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"),

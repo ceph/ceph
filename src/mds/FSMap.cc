@@ -374,20 +374,20 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
 {
   if (features & CEPH_FEATURE_SERVER_JEWEL) {
     ENCODE_START(7, 6, bl);
-    ::encode(epoch, bl);
-    ::encode(next_filesystem_id, bl);
-    ::encode(legacy_client_fscid, bl);
-    ::encode(compat, bl);
-    ::encode(enable_multiple, bl);
+    encode(epoch, bl);
+    encode(next_filesystem_id, bl);
+    encode(legacy_client_fscid, bl);
+    encode(compat, bl);
+    encode(enable_multiple, bl);
     std::vector<Filesystem> fs_list;
     for (auto i : filesystems) {
       fs_list.push_back(*(i.second));
     }
-    ::encode(fs_list, bl, features);
-    ::encode(mds_roles, bl);
-    ::encode(standby_daemons, bl, features);
-    ::encode(standby_epochs, bl);
-    ::encode(ever_enabled_multiple, bl);
+    encode(fs_list, bl, features);
+    encode(mds_roles, bl);
+    encode(standby_daemons, bl, features);
+    encode(standby_epochs, bl);
+    encode(ever_enabled_multiple, bl);
     ENCODE_FINISH(bl);
   } else {
     if (filesystems.empty()) {
@@ -435,73 +435,73 @@ void FSMap::decode(bufferlist::iterator& p)
     MDSMap legacy_mds_map;
 
     // Decoding an MDSMap (upgrade)
-    ::decode(epoch, p);
-    ::decode(legacy_mds_map.flags, p);
-    ::decode(legacy_mds_map.last_failure, p);
-    ::decode(legacy_mds_map.root, p);
-    ::decode(legacy_mds_map.session_timeout, p);
-    ::decode(legacy_mds_map.session_autoclose, p);
-    ::decode(legacy_mds_map.max_file_size, p);
-    ::decode(legacy_mds_map.max_mds, p);
-    ::decode(legacy_mds_map.mds_info, p);
+    decode(epoch, p);
+    decode(legacy_mds_map.flags, p);
+    decode(legacy_mds_map.last_failure, p);
+    decode(legacy_mds_map.root, p);
+    decode(legacy_mds_map.session_timeout, p);
+    decode(legacy_mds_map.session_autoclose, p);
+    decode(legacy_mds_map.max_file_size, p);
+    decode(legacy_mds_map.max_mds, p);
+    decode(legacy_mds_map.mds_info, p);
     if (struct_v < 3) {
       __u32 n;
-      ::decode(n, p);
+      decode(n, p);
       while (n--) {
         __u32 m;
-        ::decode(m, p);
+        decode(m, p);
         legacy_mds_map.data_pools.push_back(m);
       }
       __s32 s;
-      ::decode(s, p);
+      decode(s, p);
       legacy_mds_map.cas_pool = s;
     } else {
-      ::decode(legacy_mds_map.data_pools, p);
-      ::decode(legacy_mds_map.cas_pool, p);
+      decode(legacy_mds_map.data_pools, p);
+      decode(legacy_mds_map.cas_pool, p);
     }
 
     // kclient ignores everything from here
     __u16 ev = 1;
     if (struct_v >= 2)
-      ::decode(ev, p);
+      decode(ev, p);
     if (ev >= 3)
-      ::decode(legacy_mds_map.compat, p);
+      decode(legacy_mds_map.compat, p);
     else
       legacy_mds_map.compat = get_mdsmap_compat_set_base();
     if (ev < 5) {
       __u32 n;
-      ::decode(n, p);
+      decode(n, p);
       legacy_mds_map.metadata_pool = n;
     } else {
-      ::decode(legacy_mds_map.metadata_pool, p);
+      decode(legacy_mds_map.metadata_pool, p);
     }
-    ::decode(legacy_mds_map.created, p);
-    ::decode(legacy_mds_map.modified, p);
-    ::decode(legacy_mds_map.tableserver, p);
-    ::decode(legacy_mds_map.in, p);
+    decode(legacy_mds_map.created, p);
+    decode(legacy_mds_map.modified, p);
+    decode(legacy_mds_map.tableserver, p);
+    decode(legacy_mds_map.in, p);
     std::map<mds_rank_t,int32_t> inc;  // Legacy field, parse and drop
-    ::decode(inc, p);
-    ::decode(legacy_mds_map.up, p);
-    ::decode(legacy_mds_map.failed, p);
-    ::decode(legacy_mds_map.stopped, p);
+    decode(inc, p);
+    decode(legacy_mds_map.up, p);
+    decode(legacy_mds_map.failed, p);
+    decode(legacy_mds_map.stopped, p);
     if (ev >= 4)
-      ::decode(legacy_mds_map.last_failure_osd_epoch, p);
+      decode(legacy_mds_map.last_failure_osd_epoch, p);
     if (ev >= 6) {
       if (ev < 10) {
 	// previously this was a bool about snaps, not a flag map
 	bool flag;
-	::decode(flag, p);
+	decode(flag, p);
 	legacy_mds_map.ever_allowed_features = flag ?
 	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
-	::decode(flag, p);
+	decode(flag, p);
 	legacy_mds_map.explicitly_allowed_features = flag ?
 	  CEPH_MDSMAP_ALLOW_SNAPS : 0;
 	if (legacy_mds_map.max_mds > 1) {
 	  legacy_mds_map.set_multimds_allowed();
 	}
       } else {
-	::decode(legacy_mds_map.ever_allowed_features, p);
-	::decode(legacy_mds_map.explicitly_allowed_features, p);
+	decode(legacy_mds_map.ever_allowed_features, p);
+	decode(legacy_mds_map.explicitly_allowed_features, p);
       }
     } else {
       legacy_mds_map.ever_allowed_features = CEPH_MDSMAP_ALLOW_CLASSICS;
@@ -511,12 +511,12 @@ void FSMap::decode(bufferlist::iterator& p)
       }
     }
     if (ev >= 7)
-      ::decode(legacy_mds_map.inline_data_enabled, p);
+      decode(legacy_mds_map.inline_data_enabled, p);
 
     if (ev >= 8) {
       assert(struct_v >= 5);
-      ::decode(legacy_mds_map.enabled, p);
-      ::decode(legacy_mds_map.fs_name, p);
+      decode(legacy_mds_map.enabled, p);
+      decode(legacy_mds_map.fs_name, p);
     } else {
       legacy_mds_map.fs_name = "default";
       if (epoch > 1) {
@@ -531,7 +531,7 @@ void FSMap::decode(bufferlist::iterator& p)
     }
 
     if (ev >= 9) {
-      ::decode(legacy_mds_map.damaged, p);
+      decode(legacy_mds_map.damaged, p);
     }
 
     // We're upgrading, populate filesystems from the legacy fields
@@ -590,23 +590,23 @@ void FSMap::decode(bufferlist::iterator& p)
       legacy_client_fscid = FS_CLUSTER_ID_NONE;
     }
   } else {
-    ::decode(epoch, p);
-    ::decode(next_filesystem_id, p);
-    ::decode(legacy_client_fscid, p);
-    ::decode(compat, p);
-    ::decode(enable_multiple, p);
+    decode(epoch, p);
+    decode(next_filesystem_id, p);
+    decode(legacy_client_fscid, p);
+    decode(compat, p);
+    decode(enable_multiple, p);
     std::vector<Filesystem> fs_list;
-    ::decode(fs_list, p);
+    decode(fs_list, p);
     filesystems.clear();
     for (std::vector<Filesystem>::const_iterator fs = fs_list.begin(); fs != fs_list.end(); ++fs) {
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
     }
 
-    ::decode(mds_roles, p);
-    ::decode(standby_daemons, p);
-    ::decode(standby_epochs, p);
+    decode(mds_roles, p);
+    decode(standby_daemons, p);
+    decode(standby_epochs, p);
     if (struct_v >= 7) {
-      ::decode(ever_enabled_multiple, p);
+      decode(ever_enabled_multiple, p);
     }
   }
 
@@ -623,19 +623,19 @@ void FSMap::sanitize(const std::function<bool(int64_t pool)>& pool_exists)
 void Filesystem::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(fscid, bl);
+  encode(fscid, bl);
   bufferlist mdsmap_bl;
   mds_map.encode(mdsmap_bl, features);
-  ::encode(mdsmap_bl, bl);
+  encode(mdsmap_bl, bl);
   ENCODE_FINISH(bl);
 }
 
 void Filesystem::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(fscid, p);
+  decode(fscid, p);
   bufferlist mdsmap_bl;
-  ::decode(mdsmap_bl, p);
+  decode(mdsmap_bl, p);
   bufferlist::iterator mdsmap_bl_iter = mdsmap_bl.begin();
   mds_map.decode(mdsmap_bl_iter);
   DECODE_FINISH(p);

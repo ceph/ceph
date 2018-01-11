@@ -25,18 +25,18 @@ struct cls_rbd_parent {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(pool, bl);
-    ::encode(id, bl);
-    ::encode(snapid, bl);
-    ::encode(overlap, bl);
+    encode(pool, bl);
+    encode(id, bl);
+    encode(snapid, bl);
+    encode(overlap, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(pool, bl);
-    ::decode(id, bl);
-    ::decode(snapid, bl);
-    ::decode(overlap, bl);
+    decode(pool, bl);
+    decode(id, bl);
+    decode(snapid, bl);
+    decode(overlap, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -80,37 +80,37 @@ struct cls_rbd_snap {
     {}
   void encode(bufferlist& bl) const {
     ENCODE_START(6, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
-    ::encode(image_size, bl);
-    ::encode(features, bl);
-    ::encode(parent, bl);
-    ::encode(protection_status, bl);
-    ::encode(flags, bl);
-    ::encode(snapshot_namespace, bl);
-    ::encode(timestamp, bl);
+    encode(id, bl);
+    encode(name, bl);
+    encode(image_size, bl);
+    encode(features, bl);
+    encode(parent, bl);
+    encode(protection_status, bl);
+    encode(flags, bl);
+    encode(snapshot_namespace, bl);
+    encode(timestamp, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(6, p);
-    ::decode(id, p);
-    ::decode(name, p);
-    ::decode(image_size, p);
-    ::decode(features, p);
+    decode(id, p);
+    decode(name, p);
+    decode(image_size, p);
+    decode(features, p);
     if (struct_v >= 2) {
-      ::decode(parent, p);
+      decode(parent, p);
     }
     if (struct_v >= 3) {
-      ::decode(protection_status, p);
+      decode(protection_status, p);
     }
     if (struct_v >= 4) {
-      ::decode(flags, p);
+      decode(flags, p);
     }
     if (struct_v >= 5) {
-      ::decode(snapshot_namespace, p);
+      decode(snapshot_namespace, p);
     }
     if (struct_v >= 6) {
-      ::decode(timestamp, p);
+      decode(timestamp, p);
     }
     DECODE_FINISH(p);
   }

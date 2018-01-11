@@ -44,7 +44,7 @@ public:
                                 const std::map<std::string, std::string> &ids,
                                 int r) {
     bufferlist bl;
-    ::encode(ids, bl);
+    encode(ids, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_list"), _, _, _))

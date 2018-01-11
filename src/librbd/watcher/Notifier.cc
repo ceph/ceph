@@ -27,7 +27,7 @@ void Notifier::C_AioNotify::finish(int r) {
     if (r == 0 || r == -ETIMEDOUT) {
       try {
         bufferlist::iterator it = out_bl.begin();
-        ::decode(*response, it);
+        decode(*response, it);
       } catch (const buffer::error &err) {
         r = -EBADMSG;
       }

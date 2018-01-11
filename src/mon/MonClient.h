@@ -33,7 +33,7 @@ class MMonCommandAck;
 struct MAuthReply;
 class MAuthRotating;
 class LogClient;
-struct AuthAuthorizer;
+class AuthAuthorizer;
 class AuthMethodList;
 class AuthClientHandler;
 class KeyRing;
@@ -75,7 +75,7 @@ struct MonClientPinger : public Dispatcher {
     bufferlist &payload = m->get_payload();
     if (result && payload.length() > 0) {
       bufferlist::iterator p = payload.begin();
-      ::decode(*result, p);
+      decode(*result, p);
     }
     done = true;
     ping_recvd_cond.SignalAll();

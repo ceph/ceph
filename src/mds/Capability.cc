@@ -24,28 +24,28 @@
 void Capability::Export::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(cap_id, bl);
-  ::encode(wanted, bl);
-  ::encode(issued, bl);
-  ::encode(pending, bl);
-  ::encode(client_follows, bl);
-  ::encode(seq, bl);
-  ::encode(mseq, bl);
-  ::encode(last_issue_stamp, bl);
+  encode(cap_id, bl);
+  encode(wanted, bl);
+  encode(issued, bl);
+  encode(pending, bl);
+  encode(client_follows, bl);
+  encode(seq, bl);
+  encode(mseq, bl);
+  encode(last_issue_stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void Capability::Export::decode(bufferlist::iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, p);
-  ::decode(cap_id, p);
-  ::decode(wanted, p);
-  ::decode(issued, p);
-  ::decode(pending, p);
-  ::decode(client_follows, p);
-  ::decode(seq, p);
-  ::decode(mseq, p);
-  ::decode(last_issue_stamp, p);
+  decode(cap_id, p);
+  decode(wanted, p);
+  decode(issued, p);
+  decode(pending, p);
+  decode(client_follows, p);
+  decode(seq, p);
+  decode(mseq, p);
+  decode(last_issue_stamp, p);
   DECODE_FINISH(p);
 }
 
@@ -76,18 +76,18 @@ void Capability::Export::generate_test_instances(list<Capability::Export*>& ls)
 void Capability::Import::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(cap_id, bl);
-  ::encode(issue_seq, bl);
-  ::encode(mseq, bl);
+  encode(cap_id, bl);
+  encode(issue_seq, bl);
+  encode(mseq, bl);
   ENCODE_FINISH(bl);
 }
 
 void Capability::Import::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(cap_id, bl);
-  ::decode(issue_seq, bl);
-  ::decode(mseq, bl);
+  decode(cap_id, bl);
+  decode(issue_seq, bl);
+  decode(mseq, bl);
   DECODE_FINISH(bl);
 }
 
@@ -105,18 +105,18 @@ void Capability::Import::dump(Formatter *f) const
 void Capability::revoke_info::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl)
-  ::encode(before, bl);
-  ::encode(seq, bl);
-  ::encode(last_issue, bl);
+  encode(before, bl);
+  encode(seq, bl);
+  encode(last_issue, bl);
   ENCODE_FINISH(bl);
 }
 
 void Capability::revoke_info::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(before, bl);
-  ::decode(seq, bl);
-  ::decode(last_issue, bl);
+  decode(before, bl);
+  decode(seq, bl);
+  decode(last_issue, bl);
   DECODE_FINISH(bl);
 }
 
@@ -144,24 +144,24 @@ void Capability::revoke_info::generate_test_instances(list<Capability::revoke_in
 void Capability::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl)
-  ::encode(last_sent, bl);
-  ::encode(last_issue_stamp, bl);
+  encode(last_sent, bl);
+  encode(last_issue_stamp, bl);
 
-  ::encode(_wanted, bl);
-  ::encode(_pending, bl);
-  ::encode(_revokes, bl);
+  encode(_wanted, bl);
+  encode(_pending, bl);
+  encode(_revokes, bl);
   ENCODE_FINISH(bl);
 }
 
 void Capability::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
-  ::decode(last_sent, bl);
-  ::decode(last_issue_stamp, bl);
+  decode(last_sent, bl);
+  decode(last_issue_stamp, bl);
 
-  ::decode(_wanted, bl);
-  ::decode(_pending, bl);
-  ::decode(_revokes, bl);
+  decode(_wanted, bl);
+  decode(_pending, bl);
+  decode(_revokes, bl);
   DECODE_FINISH(bl);
   
   _calc_issued();

@@ -51,19 +51,20 @@ public:
   const char *get_type_name() const override { return "HB"; }
 
   void encode_payload(uint64_t features) override {
-    ::encode(load, payload);
-    ::encode(beat, payload);
-    ::encode(import_map, payload);
-    ::encode(last_epoch_under, payload);
+    using ceph::encode;
+    encode(load, payload);
+    encode(beat, payload);
+    encode(import_map, payload);
+    encode(last_epoch_under, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     utime_t now(ceph_clock_now());
-    ::decode(load, now, p);
-    ::decode(beat, p);
-    ::decode(import_map, p);
+    decode(load, now, p);
+    decode(beat, p);
+    decode(import_map, p);
     if (header.version >= 2) {
-      ::decode(last_epoch_under, p);
+      decode(last_epoch_under, p);
     } else {
       last_epoch_under = 0;
     }

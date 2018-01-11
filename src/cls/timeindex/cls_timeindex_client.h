@@ -38,7 +38,7 @@ public:
       cls_timeindex_list_ret ret;
       try {
         bufferlist::iterator iter = bl.begin();
-        ::decode(ret, iter);
+        decode(ret, iter);
         if (entries)
           *entries = ret.entries;
         if (truncated)

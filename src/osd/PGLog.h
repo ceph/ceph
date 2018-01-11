@@ -1310,29 +1310,29 @@ public:
 	bufferlist bl = p->value();//Copy bufferlist before creating iterator
 	bufferlist::iterator bp = bl.begin();
 	if (p->key() == "divergent_priors") {
-	  ::decode(divergent_priors, bp);
+	  decode(divergent_priors, bp);
 	  ldpp_dout(dpp, 20) << "read_log_and_missing " << divergent_priors.size()
 			     << " divergent_priors" << dendl;
 	  must_rebuild = true;
 	  debug_verify_stored_missing = false;
 	} else if (p->key() == "can_rollback_to") {
-	  ::decode(on_disk_can_rollback_to, bp);
+	  decode(on_disk_can_rollback_to, bp);
 	} else if (p->key() == "rollback_info_trimmed_to") {
-	  ::decode(on_disk_rollback_info_trimmed_to, bp);
+	  decode(on_disk_rollback_info_trimmed_to, bp);
 	} else if (p->key() == "may_include_deletes_in_missing") {
 	  missing.may_include_deletes = true;
 	} else if (p->key().substr(0, 7) == string("missing")) {
 	  hobject_t oid;
 	  pg_missing_item item;
-	  ::decode(oid, bp);
-	  ::decode(item, bp);
+	  decode(oid, bp);
+	  decode(item, bp);
 	  if (item.is_delete()) {
 	    assert(missing.may_include_deletes);
 	  }
 	  missing.add(oid, item.need, item.have, item.is_delete());
 	} else if (p->key().substr(0, 4) == string("dup_")) {
 	  pg_log_dup_t dup;
-	  ::decode(dup, bp);
+	  decode(dup, bp);
 	  if (!dups.empty()) {
 	    assert(dups.back().version < dup.version);
 	  }

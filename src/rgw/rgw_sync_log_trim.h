@@ -90,12 +90,12 @@ struct BucketTrimStatus {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(marker, bl);
+    encode(marker, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(1, p);
-    ::decode(marker, p);
+    decode(marker, p);
     DECODE_FINISH(p);
   }
 

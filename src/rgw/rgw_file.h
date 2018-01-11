@@ -123,18 +123,18 @@ namespace rgw {
 
     void encode(buffer::list& bl) const {
       ENCODE_START(2, 1, bl);
-      ::encode(fh_hk.bucket, bl);
-      ::encode(fh_hk.object, bl);
-      ::encode((uint32_t)2, bl);
+      encode(fh_hk.bucket, bl);
+      encode(fh_hk.object, bl);
+      encode((uint32_t)2, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
       DECODE_START(2, bl);
-      ::decode(fh_hk.bucket, bl);
-      ::decode(fh_hk.object, bl);
+      decode(fh_hk.bucket, bl);
+      decode(fh_hk.object, bl);
       if (struct_v >= 2) {
-	::decode(version, bl);
+	decode(version, bl);
       }
       DECODE_FINISH(bl);
     }
@@ -619,38 +619,38 @@ namespace rgw {
 
     void encode(buffer::list& bl) const {
       ENCODE_START(2, 1, bl);
-      ::encode(uint32_t(fh.fh_type), bl);
-      ::encode(state.dev, bl);
-      ::encode(state.size, bl);
-      ::encode(state.nlink, bl);
-      ::encode(state.owner_uid, bl);
-      ::encode(state.owner_gid, bl);
-      ::encode(state.unix_mode, bl);
+      encode(uint32_t(fh.fh_type), bl);
+      encode(state.dev, bl);
+      encode(state.size, bl);
+      encode(state.nlink, bl);
+      encode(state.owner_uid, bl);
+      encode(state.owner_gid, bl);
+      encode(state.unix_mode, bl);
       for (const auto& t : { state.ctime, state.mtime, state.atime }) {
-	::encode(real_clock::from_timespec(t), bl);
+	encode(real_clock::from_timespec(t), bl);
       }
-      ::encode((uint32_t)2, bl);
+      encode((uint32_t)2, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
       DECODE_START(2, bl);
       uint32_t fh_type;
-      ::decode(fh_type, bl);
+      decode(fh_type, bl);
       assert(fh.fh_type == fh_type);
-      ::decode(state.dev, bl);
-      ::decode(state.size, bl);
-      ::decode(state.nlink, bl);
-      ::decode(state.owner_uid, bl);
-      ::decode(state.owner_gid, bl);
-      ::decode(state.unix_mode, bl);
+      decode(state.dev, bl);
+      decode(state.size, bl);
+      decode(state.nlink, bl);
+      decode(state.owner_uid, bl);
+      decode(state.owner_gid, bl);
+      decode(state.unix_mode, bl);
       ceph::real_time enc_time;
       for (auto t : { &(state.ctime), &(state.mtime), &(state.atime) }) {
-	::decode(enc_time, bl);
+	decode(enc_time, bl);
 	*t = real_clock::to_timespec(enc_time);
       }
       if (struct_v >= 2) {
-        ::decode(state.version, bl);
+        decode(state.version, bl);
       }
       DECODE_FINISH(bl);
     }

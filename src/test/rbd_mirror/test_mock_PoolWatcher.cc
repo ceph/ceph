@@ -226,7 +226,7 @@ public:
   void expect_mirror_uuid_get(librados::IoCtx &io_ctx,
                               const std::string &uuid, int r) {
     bufferlist out_bl;
-    ::encode(uuid, out_bl);
+    encode(uuid, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),

@@ -44,14 +44,16 @@ public:
     }
 
     void encode(bufferlist &bl) const {
-      ::encode(inodes, bl);
-      ::encode(dirs, bl);
-      ::encode(dentries, bl);
+      using ceph::encode;
+      encode(inodes, bl);
+      encode(dirs, bl);
+      encode(dentries, bl);
     }
     void decode(bufferlist::iterator &bl) {
-      ::decode(inodes, bl);
-      ::decode(dirs, bl);
-      ::decode(dentries, bl);
+      using ceph::decode;
+      decode(inodes, bl);
+      decode(dirs, bl);
+      decode(dentries, bl);
     }
   };
   WRITE_CLASS_ENCODER(realm)
@@ -88,14 +90,16 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
-    ::decode(realms, p);
+    decode(from, p);
+    decode(realms, p);
   }
     
   void encode_payload(uint64_t features) override {
-    ::encode(from, payload);
-    ::encode(realms, payload);
+    using ceph::encode;
+    encode(from, payload);
+    encode(realms, payload);
   }
 };
 

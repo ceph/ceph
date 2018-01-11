@@ -63,25 +63,26 @@ public:
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(sb, payload);
-    ::encode(hb_back_addr, payload, features);
-    ::encode(cluster_addr, payload, features);
-    ::encode(boot_epoch, payload);
-    ::encode(hb_front_addr, payload, features);
-    ::encode(metadata, payload);
-    ::encode(osd_features, payload);
+    encode(sb, payload);
+    encode(hb_back_addr, payload, features);
+    encode(cluster_addr, payload, features);
+    encode(boot_epoch, payload);
+    encode(hb_front_addr, payload, features);
+    encode(metadata, payload);
+    encode(osd_features, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(sb, p);
-    ::decode(hb_back_addr, p);
-    ::decode(cluster_addr, p);
-    ::decode(boot_epoch, p);
-    ::decode(hb_front_addr, p);
-    ::decode(metadata, p);
-    ::decode(osd_features, p);
+    decode(sb, p);
+    decode(hb_back_addr, p);
+    decode(cluster_addr, p);
+    decode(boot_epoch, p);
+    decode(hb_front_addr, p);
+    decode(metadata, p);
+    decode(osd_features, p);
   }
 };
 

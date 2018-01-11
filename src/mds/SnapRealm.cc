@@ -516,7 +516,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl) const
     info.my_snaps.push_back(p->first);
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-  ::encode(info, snapbl);
+  encode(info, snapbl);
 
   if (parent)
     parent->build_snap_trace(snapbl);

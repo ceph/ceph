@@ -165,12 +165,12 @@ public:
 
   friend void decode(ConstructorCounter &s, bufferlist::iterator& p)
   {
-    ::decode(s.data, p);
+    decode(s.data, p);
   }
 
   friend void encode(const ConstructorCounter &s, bufferlist& p)
   {
-    ::encode(s.data, p);
+    encode(s.data, p);
   }
 
   friend ostream& operator<<(ostream &oss, const ConstructorCounter &cc)
@@ -234,6 +234,7 @@ TEST(EncodingRoundTrip, MultimapConstructorCounter) {
   EXPECT_EQ(my_val_t::get_assigns(), 0);
 }
 
+namespace ceph {
 // make sure that the legacy encode/decode methods are selected
 // over the ones defined using templates. the later is likely to
 // be slower, see also the definition of "WRITE_INT_DENC" in
@@ -262,6 +263,7 @@ void encode<ceph_le64, denc_traits<ceph_le64>>(const ceph_le64&,
   ASSERT_EQ(0UL, f);
   // make sure the test fails if i get called
   ASSERT_TRUE(false);
+}
 }
 
 namespace {

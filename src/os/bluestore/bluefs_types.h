@@ -153,55 +153,66 @@ struct bluefs_transaction_t {
   }
 
   void op_init() {
-    ::encode((__u8)OP_INIT, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_INIT, op_bl);
   }
   void op_alloc_add(uint8_t id, uint64_t offset, uint64_t length) {
-    ::encode((__u8)OP_ALLOC_ADD, op_bl);
-    ::encode(id, op_bl);
-    ::encode(offset, op_bl);
-    ::encode(length, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_ALLOC_ADD, op_bl);
+    encode(id, op_bl);
+    encode(offset, op_bl);
+    encode(length, op_bl);
   }
   void op_alloc_rm(uint8_t id, uint64_t offset, uint64_t length) {
-    ::encode((__u8)OP_ALLOC_RM, op_bl);
-    ::encode(id, op_bl);
-    ::encode(offset, op_bl);
-    ::encode(length, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_ALLOC_RM, op_bl);
+    encode(id, op_bl);
+    encode(offset, op_bl);
+    encode(length, op_bl);
   }
   void op_dir_create(const string& dir) {
-    ::encode((__u8)OP_DIR_CREATE, op_bl);
-    ::encode(dir, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_DIR_CREATE, op_bl);
+    encode(dir, op_bl);
   }
   void op_dir_remove(const string& dir) {
-    ::encode((__u8)OP_DIR_REMOVE, op_bl);
-    ::encode(dir, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_DIR_REMOVE, op_bl);
+    encode(dir, op_bl);
   }
   void op_dir_link(const string& dir, const string& file, uint64_t ino) {
-    ::encode((__u8)OP_DIR_LINK, op_bl);
-    ::encode(dir, op_bl);
-    ::encode(file, op_bl);
-    ::encode(ino, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_DIR_LINK, op_bl);
+    encode(dir, op_bl);
+    encode(file, op_bl);
+    encode(ino, op_bl);
   }
   void op_dir_unlink(const string& dir, const string& file) {
-    ::encode((__u8)OP_DIR_UNLINK, op_bl);
-    ::encode(dir, op_bl);
-    ::encode(file, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_DIR_UNLINK, op_bl);
+    encode(dir, op_bl);
+    encode(file, op_bl);
   }
   void op_file_update(const bluefs_fnode_t& file) {
-    ::encode((__u8)OP_FILE_UPDATE, op_bl);
-    ::encode(file, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_FILE_UPDATE, op_bl);
+    encode(file, op_bl);
   }
   void op_file_remove(uint64_t ino) {
-    ::encode((__u8)OP_FILE_REMOVE, op_bl);
-    ::encode(ino, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_FILE_REMOVE, op_bl);
+    encode(ino, op_bl);
   }
   void op_jump(uint64_t next_seq, uint64_t offset) {
-    ::encode((__u8)OP_JUMP, op_bl);
-    ::encode(next_seq, op_bl);
-    ::encode(offset, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_JUMP, op_bl);
+    encode(next_seq, op_bl);
+    encode(offset, op_bl);
   }
   void op_jump_seq(uint64_t next_seq) {
-    ::encode((__u8)OP_JUMP_SEQ, op_bl);
-    ::encode(next_seq, op_bl);
+    using ceph::encode;
+    encode((__u8)OP_JUMP_SEQ, op_bl);
+    encode(next_seq, op_bl);
   }
 
   void encode(bufferlist& bl) const;

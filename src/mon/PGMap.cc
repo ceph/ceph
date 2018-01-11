@@ -32,33 +32,33 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
     v = 1;
   }
   ENCODE_START(v, 1, bl);
-  ::encode(num_pg, bl);
-  ::encode(num_pg_active, bl);
-  ::encode(num_pg_unknown, bl);
-  ::encode(num_osd, bl);
-  ::encode(pg_pool_sum, bl, features);
-  ::encode(pg_sum, bl, features);
-  ::encode(osd_sum, bl);
+  encode(num_pg, bl);
+  encode(num_pg_active, bl);
+  encode(num_pg_unknown, bl);
+  encode(num_osd, bl);
+  encode(pg_pool_sum, bl, features);
+  encode(pg_sum, bl, features);
+  encode(osd_sum, bl);
   if (v >= 2) {
-    ::encode(num_pg_by_state, bl);
+    encode(num_pg_by_state, bl);
   } else {
     uint32_t n = num_pg_by_state.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (auto p : num_pg_by_state) {
-      ::encode((uint32_t)p.first, bl);
-      ::encode(p.second, bl);
+      encode((uint32_t)p.first, bl);
+      encode(p.second, bl);
     }
   }
-  ::encode(num_pg_by_osd, bl);
-  ::encode(num_pg_by_pool, bl);
-  ::encode(osd_last_seq, bl);
-  ::encode(per_pool_sum_delta, bl, features);
-  ::encode(per_pool_sum_deltas_stamps, bl);
-  ::encode(pg_sum_delta, bl, features);
-  ::encode(stamp_delta, bl);
-  ::encode(avail_space_by_rule, bl);
+  encode(num_pg_by_osd, bl);
+  encode(num_pg_by_pool, bl);
+  encode(osd_last_seq, bl);
+  encode(per_pool_sum_delta, bl, features);
+  encode(per_pool_sum_deltas_stamps, bl);
+  encode(pg_sum_delta, bl, features);
+  encode(stamp_delta, bl);
+  encode(avail_space_by_rule, bl);
   if (struct_v >= 3) {
-    ::encode(purged_snaps, bl);
+    encode(purged_snaps, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -66,32 +66,32 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 void PGMapDigest::decode(bufferlist::iterator& p)
 {
   DECODE_START(3, p);
-  ::decode(num_pg, p);
-  ::decode(num_pg_active, p);
-  ::decode(num_pg_unknown, p);
-  ::decode(num_osd, p);
-  ::decode(pg_pool_sum, p);
-  ::decode(pg_sum, p);
-  ::decode(osd_sum, p);
+  decode(num_pg, p);
+  decode(num_pg_active, p);
+  decode(num_pg_unknown, p);
+  decode(num_osd, p);
+  decode(pg_pool_sum, p);
+  decode(pg_sum, p);
+  decode(osd_sum, p);
   if (struct_v >= 2) {
-    ::decode(num_pg_by_state, p);
+    decode(num_pg_by_state, p);
   } else {
     map<int32_t, int32_t> nps;
-    ::decode(nps, p);
+    decode(nps, p);
     for (auto i : nps) {
       num_pg_by_state[i.first] = i.second;
     }
   }
-  ::decode(num_pg_by_osd, p);
-  ::decode(num_pg_by_pool, p);
-  ::decode(osd_last_seq, p);
-  ::decode(per_pool_sum_delta, p);
-  ::decode(per_pool_sum_deltas_stamps, p);
-  ::decode(pg_sum_delta, p);
-  ::decode(stamp_delta, p);
-  ::decode(avail_space_by_rule, p);
+  decode(num_pg_by_osd, p);
+  decode(num_pg_by_pool, p);
+  decode(osd_last_seq, p);
+  decode(per_pool_sum_delta, p);
+  decode(per_pool_sum_deltas_stamps, p);
+  decode(pg_sum_delta, p);
+  decode(stamp_delta, p);
+  decode(avail_space_by_rule, p);
   if (struct_v >= 3) {
-    ::decode(purged_snaps, p);
+    decode(purged_snaps, p);
   }
   DECODE_FINISH(p);
 }
@@ -1338,24 +1338,24 @@ void PGMap::encode_digest(const OSDMap& osdmap,
 void PGMap::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(7, 7, bl);
-  ::encode(version, bl);
-  ::encode(pg_stat, bl);
-  ::encode(osd_stat, bl);
-  ::encode(last_osdmap_epoch, bl);
-  ::encode(last_pg_scan, bl);
-  ::encode(stamp, bl);
+  encode(version, bl);
+  encode(pg_stat, bl);
+  encode(osd_stat, bl);
+  encode(last_osdmap_epoch, bl);
+  encode(last_pg_scan, bl);
+  encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMap::decode(bufferlist::iterator &bl)
 {
   DECODE_START(7, bl);
-  ::decode(version, bl);
-  ::decode(pg_stat, bl);
-  ::decode(osd_stat, bl);
-  ::decode(last_osdmap_epoch, bl);
-  ::decode(last_pg_scan, bl);
-  ::decode(stamp, bl);
+  decode(version, bl);
+  decode(pg_stat, bl);
+  decode(osd_stat, bl);
+  decode(last_osdmap_epoch, bl);
+  decode(last_pg_scan, bl);
+  decode(stamp, bl);
   DECODE_FINISH(bl);
 
   calc_stats();

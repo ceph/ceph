@@ -110,18 +110,20 @@ struct PGTempMap {
   map_t map;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     uint32_t n = map.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (auto &p : map) {
-      ::encode(p.first, bl);
+      encode(p.first, bl);
       bl.append((char*)p.second, (*p.second + 1) * sizeof(int32_t));
     }
   }
   void decode(bufferlist::iterator& p) {
+    using ceph::decode;
     data.clear();
     map.clear();
     uint32_t n;
-    ::decode(n, p);
+    decode(n, p);
     if (!n)
       return;
     bufferlist::iterator pstart = p;
@@ -130,11 +132,11 @@ struct PGTempMap {
     offsets.resize(n);
     for (unsigned i=0; i<n; ++i) {
       pg_t pgid;
-      ::decode(pgid, p);
+      decode(pgid, p);
       offsets[i].first = pgid;
       offsets[i].second = p.get_off() - start_off;
       uint32_t vn;
-      ::decode(vn, p);
+      decode(vn, p);
       p.advance(vn * sizeof(int32_t));
     }
     size_t len = p.get_off() - start_off;
@@ -231,13 +233,14 @@ struct PGTempMap {
     data.clear();
   }
   void set(pg_t pgid, const mempool::osdmap::vector<int32_t>& v) {
+    using ceph::encode;
     size_t need = sizeof(int32_t) * (1 + v.size());
     if (need < data.get_append_buffer_unused_tail_length()) {
       bufferptr z(data.get_append_buffer_unused_tail_length());
       z.zero();
       data.append(z.c_str(), z.length());
     }
-    ::encode(v, data);
+    encode(v, data);
     map[pgid] = (int32_t*)(data.back().end_c_str()) - (1 + v.size());
   }
   mempool::osdmap::vector<int32_t> get(pg_t pgid) {
@@ -255,10 +258,10 @@ struct PGTempMap {
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > pg_temp;
 
   void encode(bufferlist& bl) const {
-    ::encode(pg_temp, bl);
+    encode(pg_temp, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(pg_temp, p);
+    decode(pg_temp, p);
   }
   friend bool operator==(const PGTempMap& l, const PGTempMap& r) {
     return

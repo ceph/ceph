@@ -738,7 +738,7 @@ void PGLog::_write_log_and_missing_wo_missing(
     if (entry.version > dirty_to_dups)
       break;
     bufferlist bl;
-    ::encode(entry, bl);
+    encode(entry, bl);
     (*km)[entry.get_key_name()].claim(bl);
   }
 
@@ -748,19 +748,19 @@ void PGLog::_write_log_and_missing_wo_missing(
 	 p->version >= dirty_to_dups;
        ++p) {
     bufferlist bl;
-    ::encode(*p, bl);
+    encode(*p, bl);
     (*km)[p->get_key_name()].claim(bl);
   }
 
   if (dirty_divergent_priors) {
     //dout(10) << "write_log_and_missing: writing divergent_priors" << dendl;
-    ::encode(divergent_priors, (*km)["divergent_priors"]);
+    encode(divergent_priors, (*km)["divergent_priors"]);
   }
   if (require_rollback) {
-    ::encode(
+    encode(
       log.get_can_rollback_to(),
       (*km)["can_rollback_to"]);
-    ::encode(
+    encode(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);
   }
@@ -867,7 +867,7 @@ void PGLog::_write_log_and_missing(
     if (entry.version > dirty_to_dups)
       break;
     bufferlist bl;
-    ::encode(entry, bl);
+    encode(entry, bl);
     (*km)[entry.get_key_name()].claim(bl);
   }
 
@@ -877,7 +877,7 @@ void PGLog::_write_log_and_missing(
 	 p->version >= dirty_to_dups;
        ++p) {
     bufferlist bl;
-    ::encode(*p, bl);
+    encode(*p, bl);
     (*km)[p->get_key_name()].claim(bl);
   }
 
@@ -899,14 +899,14 @@ void PGLog::_write_log_and_missing(
 	to_remove.insert(key);
       } else {
 	uint64_t features = missing.may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0;
-	::encode(make_pair(obj, item), (*km)[key], features);
+	encode(make_pair(obj, item), (*km)[key], features);
       }
     });
   if (require_rollback) {
-    ::encode(
+    encode(
       log.get_can_rollback_to(),
       (*km)["can_rollback_to"]);
-    ::encode(
+    encode(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);
   }

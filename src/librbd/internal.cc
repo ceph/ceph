@@ -271,9 +271,9 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   {
     bufferlist cmdbl, emptybl;
     __u8 c = CEPH_OSD_TMAP_SET;
-    ::encode(c, cmdbl);
-    ::encode(imgname, cmdbl);
-    ::encode(emptybl, cmdbl);
+    encode(c, cmdbl);
+    encode(imgname, cmdbl);
+    encode(emptybl, cmdbl);
     return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   }
 
@@ -281,8 +281,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
   {
     bufferlist cmdbl;
     __u8 c = CEPH_OSD_TMAP_RM;
-    ::encode(c, cmdbl);
-    ::encode(imgname, cmdbl);
+    encode(c, cmdbl);
+    encode(imgname, cmdbl);
     return io_ctx.tmap_update(RBD_DIRECTORY, cmdbl);
   }
 
@@ -528,8 +528,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       bufferlist::iterator p = bl.begin();
       bufferlist header;
       map<string,bufferlist> m;
-      ::decode(header, p);
-      ::decode(m, p);
+      decode(header, p);
+      decode(m, p);
       for (map<string,bufferlist>::iterator q = m.begin(); q != m.end(); ++q) {
 	names.push_back(q->first);
       }

@@ -40,7 +40,7 @@ public:
     {
       bl.append(p);
       buffer::list::iterator bl_iter = bl.begin();
-      ::decode(msg_cnt, bl_iter);
+      decode(msg_cnt, bl_iter);
     }
 };
 
@@ -74,31 +74,33 @@ public:
   const buffer::list& get_bl() { encode(bl); return bl; };
 
   inline void encode_hdr(ceph::buffer::list& bl) const {
-    ::encode(tag, bl);
-    ::encode(msg_cnt, bl);
-    ::encode(peer_type, bl);
-    ::encode(addr, bl, features);
-    ::encode(hdr->seq, bl);
-    ::encode(hdr->tid, bl);
-    ::encode(hdr->type, bl);
-    ::encode(hdr->priority, bl);
-    ::encode(hdr->version, bl);
-    ::encode(hdr->front_len, bl);
-    ::encode(hdr->middle_len, bl);
-    ::encode(hdr->data_len, bl);
-    ::encode(hdr->data_off, bl);
-    ::encode(hdr->src.type, bl);
-    ::encode(hdr->src.num, bl);
-    ::encode(hdr->compat_version, bl);
-    ::encode(hdr->crc, bl);
+    using ceph::encode;
+    encode(tag, bl);
+    encode(msg_cnt, bl);
+    encode(peer_type, bl);
+    encode(addr, bl, features);
+    encode(hdr->seq, bl);
+    encode(hdr->tid, bl);
+    encode(hdr->type, bl);
+    encode(hdr->priority, bl);
+    encode(hdr->version, bl);
+    encode(hdr->front_len, bl);
+    encode(hdr->middle_len, bl);
+    encode(hdr->data_len, bl);
+    encode(hdr->data_off, bl);
+    encode(hdr->src.type, bl);
+    encode(hdr->src.num, bl);
+    encode(hdr->compat_version, bl);
+    encode(hdr->crc, bl);
   }
 
   inline void encode_ftr(buffer::list& bl) const {
-    ::encode(ftr->front_crc, bl);
-    ::encode(ftr->middle_crc, bl);
-    ::encode(ftr->data_crc, bl);
-    ::encode(ftr->sig, bl);
-    ::encode(ftr->flags, bl);
+    using ceph::encode;
+    encode(ftr->front_crc, bl);
+    encode(ftr->middle_crc, bl);
+    encode(ftr->data_crc, bl);
+    encode(ftr->sig, bl);
+    encode(ftr->flags, bl);
   }
 
   inline void encode(buffer::list& bl) const {
@@ -107,31 +109,33 @@ public:
   }
 
   inline void decode_hdr(buffer::list::iterator& bl) {
-    ::decode(tag, bl);
-    ::decode(msg_cnt, bl);
-    ::decode(peer_type, bl);
-    ::decode(addr, bl);
-    ::decode(hdr->seq, bl);
-    ::decode(hdr->tid, bl);
-    ::decode(hdr->type, bl);
-    ::decode(hdr->priority, bl);
-    ::decode(hdr->version, bl);
-    ::decode(hdr->front_len, bl);
-    ::decode(hdr->middle_len, bl);
-    ::decode(hdr->data_len, bl);
-    ::decode(hdr->data_off, bl);
-    ::decode(hdr->src.type, bl);
-    ::decode(hdr->src.num, bl);
-    ::decode(hdr->compat_version, bl);
-    ::decode(hdr->crc, bl);
+    using ceph::decode;
+    decode(tag, bl);
+    decode(msg_cnt, bl);
+    decode(peer_type, bl);
+    decode(addr, bl);
+    decode(hdr->seq, bl);
+    decode(hdr->tid, bl);
+    decode(hdr->type, bl);
+    decode(hdr->priority, bl);
+    decode(hdr->version, bl);
+    decode(hdr->front_len, bl);
+    decode(hdr->middle_len, bl);
+    decode(hdr->data_len, bl);
+    decode(hdr->data_off, bl);
+    decode(hdr->src.type, bl);
+    decode(hdr->src.num, bl);
+    decode(hdr->compat_version, bl);
+    decode(hdr->crc, bl);
   }
 
   inline void decode_ftr(buffer::list::iterator& bl) {
-    ::decode(ftr->front_crc, bl);
-    ::decode(ftr->middle_crc, bl);
-    ::decode(ftr->data_crc, bl);
-    ::decode(ftr->sig, bl);
-    ::decode(ftr->flags, bl);
+    using ceph::decode;
+    decode(ftr->front_crc, bl);
+    decode(ftr->middle_crc, bl);
+    decode(ftr->data_crc, bl);
+    decode(ftr->sig, bl);
+    decode(ftr->flags, bl);
   }
 
   inline void decode(buffer::list::iterator& bl) {
