@@ -122,18 +122,20 @@ class ProvisionOpenStack(OpenStack):
         else:
             net = ''
         flavor = self.flavor(resources_hint['machine'], arch)
+        keypair = config['openstack']['keypair'] or 'teuthology'
+        worker_group = config['openstack']['worker_group'] or 'teuthology-worker'
         cmd = ("flock --close --timeout 28800 /tmp/teuthology-server-create.lock" +
                " openstack server create" +
                " " + config['openstack'].get('server-create', '') +
                " -f json " +
                " --image '" + str(image) + "'" +
                " --flavor '" + str(flavor) + "'" +
-               " --key-name teuthology " +
+               " --key-name %s " % keypair +
                " --user-data " + str(self.user_data) +
                " " + net +
                " --min " + str(num) +
                " --max " + str(num) +
-               " --security-group teuthology" +
+               " --security-group %s" % worker_group +
                " --property teuthology=" + self.property +
                " --property ownedby=" + config.openstack['ip'] +
                " --wait " +

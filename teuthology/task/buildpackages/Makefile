@@ -3,6 +3,9 @@ D=/tmp/stampsdir
 VPATH=${D}
 TIMEOUT_SERVER_CREATE = 30m
 TIMEOUT_BUILD = 220m # 20 minutes short of 4 hours
+SEC_GROUP=teuthology
+KEY_NAME=teuthology
+SELFNAME=teuthology
 PKG_REPO=packages-repository
 PKG_REPO_OS_TYPE=ubuntu
 PKG_REPO_OS_VERSION=14.04
@@ -32,7 +35,7 @@ ${HOME}/.ssh_agent:
 	grep -q ssh_agent ~/.bashrc_teuthology || echo 'source ${HOME}/.ssh_agent' >> ~/.bashrc_teuthology
 
 flock-${PKG_REPO}:
-	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'teuthology-ubuntu-14.04-${HTTP_ARCH}' ${OPENSTACK_NETWORK} --flavor ${HTTP_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${PKG_REPO_USER_DATA} --wait ${PKG_REPO}
+	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'teuthology-ubuntu-14.04-${HTTP_ARCH}' ${OPENSTACK_NETWORK} --flavor ${HTTP_FLAVOR} --key-name ${KEY_NAME} --security-group ${SEC_GROUP} --property ownedby=${MY_IP} --user-data ${PKG_REPO_USER_DATA} --wait ${PKG_REPO}
 	sleep 30
 	set -ex ; \
 	ip=$(call get_ip,${PKG_REPO}) ; \
@@ -55,8 +58,8 @@ ${PKG_REPO}:
 # Check the server status before we proceed.
 # If it's a weird status, bail out and let the delete fire
 # eg: ERROR status can happen if there is no VM host without enough capacity for the request.
-ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${PKG_REPO}
-	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name teuthology --security-group teuthology --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
+${SELFNAME}-ceph-${CEPH_PKG_TYPE}-${CEPH_DIST}-${CEPH_ARCH}-${CEPH_FLAVOR}-${CEPH_SHA1}: ${PKG_REPO}
+	timeout $(TIMEOUT_SERVER_CREATE) openstack server create --image 'teuthology-${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-${CEPH_ARCH}' ${OPENSTACK_NETWORK} --flavor ${BUILD_FLAVOR} --key-name ${KEY_NAME} --security-group ${SEC_GROUP} --property ownedby=${MY_IP} --user-data ${CEPH_OS_TYPE}-${CEPH_OS_VERSION}-user-data.txt --wait $@
 	set -ex ; \
 	trap "openstack server delete --wait $@" EXIT ; \
 	for delay in 30 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 10 ; do \

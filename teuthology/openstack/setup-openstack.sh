@@ -35,6 +35,12 @@ function create_config() {
     local ip="$5"
     local archive_upload="$6"
     local canonical_tags="$7"
+    local selfname="$8"
+    local keypair="$9"
+    local server_name="${10}"
+    local server_group="${11}"
+    local worker_group="${12}"
+    local package_repo="${13}"
 
     if test "$network" ; then
         network="network: $network"
@@ -65,6 +71,12 @@ openstack:
   user-data: teuthology/openstack/openstack-{os_type}-{os_version}-user-data.txt
   ip: $ip
   nameserver: $nameserver
+  keypair: $keypair
+  selfname: $selfname
+  server_name: $server_name
+  server_group: $server_group
+  worker_group: $worker_group
+  package_repo: $package_repo
   #
   # OpenStack has predefined machine sizes (called flavors)
   # For a given job requiring N machines, the following will select
@@ -248,6 +260,8 @@ function setup_pulpito() {
 
     sudo apt-get -qq install -y --force-yes nginx
     local nginx_conf=/etc/nginx/sites-available/default
+    sudo sed -i '/text\/plain/a\    text\/plain                            log;' \
+        /etc/nginx/mime.types
     sudo perl -pi -e 's|root /var/www/html|root /usr/share/nginx/html|' $nginx_conf
     if ! grep -qq 'autoindex on' $nginx_conf ; then
         sudo perl -pi -e 's|location / {|location / { autoindex on;|' $nginx_conf
@@ -525,6 +539,11 @@ function main() {
     local labdomain=teuthology
     local nworkers=2
     local keypair=teuthology
+    local selfname=teuthology
+    local server_name=teuthology
+    local server_group=teuthology
+    local worker_group=teuthology
+    local package_repo=packages-repository
     local archive_upload
     local ceph_workbench_git_url
     local ceph_workbench_branch
@@ -592,6 +611,30 @@ function main() {
             --setup-salt-master)
                 do_apt_get_update=true
                 do_setup_salt_master=true
+                ;;
+            --server-name)
+                shift
+                server_name=$1
+                ;;
+            --server-group)
+                shift
+                server_group=$1
+                ;;
+            --worker-group)
+                shift
+                worker_group=$1
+                ;;
+            --package-repo)
+                shift
+                package_repo=$1
+                ;;
+            --selfname)
+                shift
+                selfname=$1
+                ;;
+            --keypair)
+                shift
+                keypair=$1
                 ;;
             --setup-keypair)
                 do_setup_keypair=true
@@ -677,7 +720,9 @@ function main() {
     : ${nameserver:=$ip}
 
     if $do_create_config ; then
-        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" "$archive_upload" "$canonical_tags" || return 1
+        create_config "$network" "$subnets" "$nameserver" "$labdomain" "$ip" \
+            "$archive_upload" "$canonical_tags" "$selfname" "$keypair" \
+            "$server_name" "$server_group" "$worker_group" "$package_repo" || return 1
         setup_ansible "$subnets" $labdomain || return 1
         setup_ssh_config || return 1
         setup_authorized_keys || return 1

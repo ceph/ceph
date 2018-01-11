@@ -173,7 +173,19 @@ def task(ctx, config):
                  " tag = " + tag + "," +
                  " branch = " + branch + "," +
                  " sha1 = " + sha1)
-        target = ('ceph-' +
+        self_name = 'teuthology'
+        key_name = 'teuthology'
+        pkg_repo = 'packages-repository'
+        security_group = 'teuthology'
+        if teuth_config.openstack.has_key('selfname'):
+            self_name = teuth_config.openstack['selfname']
+        if teuth_config.openstack.has_key('keypair'):
+            key_name = teuth_config.openstack['keypair']
+        if teuth_config.openstack.has_key('package_repo'):
+            pkg_repo = teuth_config.openstack['package_repo']
+        if teuth_config.openstack.has_key('server_group'):
+            security_group = teuth_config.openstack['server_group']
+        target = (self_name + '-ceph-' +
                   pkg_type + '-' +
                   dist + '-' +
                   arch + '-' +
@@ -193,11 +205,16 @@ def task(ctx, config):
             'ram': 1024, # MB
             'cpus': 1,
         }, default_arch)
+
         lock = "/tmp/buildpackages-" + sha1 + "-" + os_type + "-" + os_version
         cmd = (". " + os.environ['HOME'] + "/.ssh_agent ; " +
                " flock --close " + lock +
                " make -C " + d +
                network +
+               " SELFNAME=" + self_name +
+               " KEY_NAME=" + key_name +
+               " PKG_REPO=" + pkg_repo +
+               " SEC_GROUP=" + security_group +
                " CEPH_GIT_URL=" + teuth_config.get_ceph_git_url() +
                " CEPH_PKG_TYPE=" + pkg_type +
                " CEPH_OS_TYPE=" + os_type +
@@ -224,5 +241,5 @@ def task(ctx, config):
                  "instance and start again from scratch.".format(pkg_type))
         log.info("buildpackages make command: " + cmd)
         misc.sh(cmd)
-    teuth_config.gitbuilder_host = openstack.get_ip('packages-repository', '')
+    teuth_config.gitbuilder_host = openstack.get_ip(pkg_repo, '')
     log.info('Finished buildpackages')
