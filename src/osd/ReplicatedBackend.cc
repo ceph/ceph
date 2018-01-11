@@ -20,6 +20,7 @@
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
+#include "include/random.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -1363,9 +1364,10 @@ void ReplicatedBackend::prepare_pull(
   assert(!q->second.empty());
 
   // pick a pullee
-  vector<pg_shard_t> shuffle(q->second.begin(), q->second.end());
-  random_shuffle(shuffle.begin(), shuffle.end());
-  vector<pg_shard_t>::iterator p = shuffle.begin();
+  auto p = q->second.begin();
+  std::advance(p,
+               util::generate_random_number<int>(0,
+                                                 q->second.size() - 1));
   assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;
 
