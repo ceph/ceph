@@ -70,7 +70,7 @@ void PGLog::IndexedLog::trim(
       break;
     generic_dout(20) << "trim " << e << dendl;
     if (trimmed)
-      trimmed->insert(e.version);
+      trimmed->emplace(e.version);
 
     unindex(e);         // remove from index,
 
@@ -591,8 +591,8 @@ void PGLog::write_log_and_missing(
       dirty_to,
       dirty_from,
       writeout_from,
-      trimmed,
-      trimmed_dups,
+      std::move(trimmed),
+      std::move(trimmed_dups),
       missing,
       !touched_log,
       require_rollback,
@@ -621,8 +621,6 @@ void PGLog::write_log_and_missing_wo_missing(
   _write_log_and_missing_wo_missing(
     t, km, log, coll, log_oid,
     divergent_priors, eversion_t::max(), eversion_t(), eversion_t(),
-    set<eversion_t>(),
-    set<string>(),
     true, true, require_rollback,
     eversion_t::max(), eversion_t(), eversion_t(), nullptr);
 }
@@ -663,8 +661,6 @@ void PGLog::_write_log_and_missing_wo_missing(
   eversion_t dirty_to,
   eversion_t dirty_from,
   eversion_t writeout_from,
-  const set<eversion_t> &trimmed,
-  const set<string> &trimmed_dups,
   bool dirty_divergent_priors,
   bool touch_log,
   bool require_rollback,
@@ -674,17 +670,6 @@ void PGLog::_write_log_and_missing_wo_missing(
   set<string> *log_keys_debug
   )
 {
-  set<string> to_remove(trimmed_dups);
-  for (set<eversion_t>::const_iterator i = trimmed.begin();
-       i != trimmed.end();
-       ++i) {
-    to_remove.insert(i->get_key_name());
-    if (log_keys_debug) {
-      assert(log_keys_debug->count(i->get_key_name()));
-      log_keys_debug->erase(i->get_key_name());
-    }
-  }
-
   // dout(10) << "write_log_and_missing, clearing up to " << dirty_to << dendl;
   if (touch_log)
     t.touch(coll, log_oid);
@@ -779,9 +764,6 @@ void PGLog::_write_log_and_missing_wo_missing(
       log.get_rollback_info_trimmed_to(),
       (*km)["rollback_info_trimmed_to"]);
   }
-
-  if (!to_remove.empty())
-    t.omap_rmkeys(coll, log_oid, to_remove);
 }
 
 // static
@@ -793,8 +775,8 @@ void PGLog::_write_log_and_missing(
   eversion_t dirty_to,
   eversion_t dirty_from,
   eversion_t writeout_from,
-  const set<eversion_t> &trimmed,
-  const set<string> &trimmed_dups,
+  set<eversion_t> &&trimmed,
+  set<string> &&trimmed_dups,
   const pg_missing_tracker_t &missing,
   bool touch_log,
   bool require_rollback,
@@ -805,16 +787,18 @@ void PGLog::_write_log_and_missing(
   bool *rebuilt_missing_with_deletes, // in/out param
   set<string> *log_keys_debug
   ) {
-  set<string> to_remove(trimmed_dups);
-  for (set<eversion_t>::const_iterator i = trimmed.begin();
-       i != trimmed.end();
-       ++i) {
-    to_remove.insert(i->get_key_name());
+  set<string> to_remove;
+  to_remove.swap(trimmed_dups);
+  for (auto& t : trimmed) {
+    string key = t.get_key_name();
     if (log_keys_debug) {
-      assert(log_keys_debug->count(i->get_key_name()));
-      log_keys_debug->erase(i->get_key_name());
+      auto it = log_keys_debug->find(key);
+      assert(it != log_keys_debug->end());
+      log_keys_debug->erase(it);
     }
+    to_remove.emplace(std::move(key));
   }
+  trimmed.clear();
 
   if (touch_log)
     t.touch(coll, log_oid);
