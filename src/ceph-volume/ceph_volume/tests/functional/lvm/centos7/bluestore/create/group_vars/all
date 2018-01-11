@@ -14,6 +14,7 @@ copy_admin_key: true
 lvm_volumes:
   - data: data-lv1
     data_vg: test_group
+    crush_device_class: test
   - data: data-lv2
     data_vg: test_group
     db: journal1
