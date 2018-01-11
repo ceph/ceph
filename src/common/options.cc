@@ -1923,11 +1923,13 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("the number of copies of an object")
     .add_service("mon"),
 
     Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("the minimal number of copies allowed to write to a degraded pool")
     .set_long_description("0 means no specific default; ceph will use size-size/2")
     .add_see_also("osd_pool_default_size")
@@ -1936,22 +1938,26 @@ std::vector<Option> get_global_options() {
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
     .set_description("number of PGs for new pools. Configure in global or mon section of ceph.conf")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
 
     Option("osd_pool_default_pgp_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
     .set_description("number of PGs for placement purposes. Should be equal to pg_num")
     .add_see_also("osd_pool_default_pg_num")
+    .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
 
     Option("osd_pool_default_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("replicated")
     .set_enum_allowed({"replicated", "erasure"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("")
     .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("default properties of osd pool create"),
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -1960,6 +1966,7 @@ std::vector<Option> get_global_options() {
          " isa"
   #endif
         )
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2039,6 +2046,7 @@ std::vector<Option> get_global_options() {
     .set_default("writeback")
     .set_enum_allowed({"none", "writeback", "forward",
 	               "readonly", "readforward", "readproxy", "proxy"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("osd_tier_default_cache_hit_set_count", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -2052,6 +2060,7 @@ std::vector<Option> get_global_options() {
     Option("osd_tier_default_cache_hit_set_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("bloom")
     .set_enum_allowed({"bloom", "explicit_hash", "explicit_object"})
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("osd_tier_default_cache_min_read_recency_for_promote", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
