@@ -287,6 +287,7 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 {
   assert(inflightreads > 0);
   --inflightreads;
+  auto dpp = pg->get_dpp();
   if (async_reads_complete()) {
     assert(pg->in_progress_async_reads.size());
     assert(pg->in_progress_async_reads.front().second == this);
@@ -294,6 +295,8 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher
+    ldpp_dout(dpp, 10) << "async read dropping ondisk_read_lock" << dendl;
+    this->obc->ondisk_read_unlock();   
     pg->execute_ctx(this);
   }
 }
@@ -3712,12 +3715,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     tracepoint(osd, prepare_tx_exit, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
   }
-
-  if (op->may_read()) {
-    dout(10) << " dropping ondisk_read_lock" << dendl;
-    obc->ondisk_read_unlock();
-  }
-
+  // ondisk_read_unlock in async read finish
   bool pending_async_reads = !ctx->pending_async_reads.empty();
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
@@ -3727,6 +3725,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
       ctx->start_async_reads(this);
     }
     return;
+  }
+  
+  if (op->may_read()) {
+    dout(10) << "read dropping ondisk_read_lock" << dendl;
+    obc->ondisk_read_unlock();
   }
 
   if (result == -EAGAIN) {
