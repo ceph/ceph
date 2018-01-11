@@ -447,14 +447,16 @@ public:
     void unindex(const pg_log_entry_t& e) {
       // NOTE: this only works if we remove from the _tail_ of the log!
       if (indexed_data & PGLOG_INDEXED_OBJECTS) {
-        if (objects.count(e.soid) && objects[e.soid]->version == e.version)
-          objects.erase(e.soid);
+	auto it = objects.find(e.soid);
+        if (it != objects.end() && it->second->version == e.version)
+          objects.erase(it);
       }
       if (e.reqid_is_indexed()) {
         if (indexed_data & PGLOG_INDEXED_CALLER_OPS) {
+	  auto it = caller_ops.find(e.reqid);
 	  // divergent merge_log indexes new before unindexing old
-          if (caller_ops.count(e.reqid) && caller_ops[e.reqid] == &e)
-            caller_ops.erase(e.reqid);
+          if (it != caller_ops.end() && it->second == &e)
+            caller_ops.erase(it);
         }
       }
       if (indexed_data & PGLOG_INDEXED_EXTRA_CALLER_OPS) {
@@ -1217,8 +1219,6 @@ public:
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
-    const set<eversion_t> &trimmed,
-    const set<string> &trimmed_dups,
     bool dirty_divergent_priors,
     bool touch_log,
     bool require_rollback,
@@ -1236,8 +1236,8 @@ public:
     eversion_t dirty_to,
     eversion_t dirty_from,
     eversion_t writeout_from,
-    const set<eversion_t> &trimmed,
-    const set<string> &trimmed_dups,
+    set<eversion_t> &&trimmed,
+    set<string> &&trimmed_dups,
     const pg_missing_tracker_t &missing,
     bool touch_log,
     bool require_rollback,

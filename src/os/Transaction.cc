@@ -337,6 +337,11 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
 	f->dump_string("op_name", "omap_rmkeys");
 	f->dump_stream("collection") << cid;
 	f->dump_stream("oid") << oid;
+	f->open_array_section("attrs");
+	for (auto& k : keys) {
+	  f->dump_string("", k.c_str());
+	}
+	f->close_section();
       }
       break;
 

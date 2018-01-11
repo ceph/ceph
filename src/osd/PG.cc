@@ -5083,22 +5083,23 @@ void PG::share_pg_info()
        i != actingbackfill.end();
        ++i) {
     if (*i == pg_whoami) continue;
-    pg_shard_t peer = *i;
-    if (peer_info.count(peer)) {
-      peer_info[peer].last_epoch_started = info.last_epoch_started;
-      peer_info[peer].last_interval_started = info.last_interval_started;
-      peer_info[peer].history.merge(info.history);
+    auto pg_shard = *i;
+    auto peer = peer_info.find(pg_shard);
+    if (peer != peer_info.end()) {
+      peer->second.last_epoch_started = info.last_epoch_started;
+      peer->second.last_interval_started = info.last_interval_started;
+      peer->second.history.merge(info.history);
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
     m->pg_list.push_back(
       make_pair(
 	pg_notify_t(
-	  peer.shard, pg_whoami.shard,
+	  pg_shard.shard, pg_whoami.shard,
 	  get_osdmap()->get_epoch(),
 	  get_osdmap()->get_epoch(),
 	  info),
 	past_intervals));
-    osd->send_message_osd_cluster(peer.osd, m, get_osdmap()->get_epoch());
+    osd->send_message_osd_cluster(pg_shard.osd, m, get_osdmap()->get_epoch());
   }
 }
 

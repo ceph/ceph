@@ -9934,16 +9934,17 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
       (*p)();
     }
     // send dup commits, in order
-    if (waiting_for_ondisk.count(repop->v)) {
+    auto it = waiting_for_ondisk.find(repop->v);
+    if (it != waiting_for_ondisk.end()) {
       assert(waiting_for_ondisk.begin()->first == repop->v);
       for (list<pair<OpRequestRef, version_t> >::iterator i =
-	     waiting_for_ondisk[repop->v].begin();
-	   i != waiting_for_ondisk[repop->v].end();
+	     it->second.begin();
+	   i != it->second.end();
 	   ++i) {
 	osd->reply_op_error(i->first, repop->r, repop->v,
 			    i->second);
       }
-      waiting_for_ondisk.erase(repop->v);
+      waiting_for_ondisk.erase(it);
     }
   }
 

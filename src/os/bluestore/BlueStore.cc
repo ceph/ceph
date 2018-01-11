@@ -11680,6 +11680,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
   uint64_t num_super = 0;
   uint64_t num_coll = 0;
   uint64_t num_omap = 0;
+  uint64_t num_pgmeta_omap = 0;
   uint64_t num_deferred = 0;
   uint64_t num_alloc = 0;
   uint64_t num_stat = 0;
@@ -11723,10 +11724,12 @@ void BlueStore::generate_db_histogram(Formatter *f)
 	hist.update_hist_entry(hist.key_hist, prefix_onode_shard, key_size, value_size);
 	num_shards++;
       }
-    } else if (key.first == PREFIX_OMAP ||
-	       key.first == PREFIX_PGMETA_OMAP) {
+    } else if (key.first == PREFIX_OMAP) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
 	num_omap++;
+    } else if (key.first == PREFIX_PGMETA_OMAP) {
+	hist.update_hist_entry(hist.key_hist, PREFIX_PGMETA_OMAP, key_size, value_size);
+	num_pgmeta_omap++;
     } else if (key.first == PREFIX_DEFERRED) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
 	num_deferred++;
@@ -11750,6 +11753,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
   f->dump_unsigned("num_super", num_super);
   f->dump_unsigned("num_coll", num_coll);
   f->dump_unsigned("num_omap", num_omap);
+  f->dump_unsigned("num_pgmeta_omap", num_pgmeta_omap);
   f->dump_unsigned("num_deferred", num_deferred);
   f->dump_unsigned("num_alloc", num_alloc);
   f->dump_unsigned("num_stat", num_stat);
