@@ -107,8 +107,9 @@ public:
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  KeyHandler *get_key_handler(const bufferptr& secret, string& error) override {
-    return new KeyHandlerImpl;
+  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
+                                              string& error) override {
+    return std::make_unique<KeyHandlerImpl>();
   }
 };
 
@@ -125,7 +126,8 @@ public:
   }
   int create(Random *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  KeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
+  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
+                                              string& error) override;
 };
 
 #ifdef USE_NSS
@@ -278,14 +280,14 @@ int HandlerImpl::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-KeyHandler *HandlerImpl::get_key_handler(const bufferptr& secret, string& error)
+std::unique_ptr<KeyHandler> HandlerImpl::get_key_handler(const bufferptr& secret,
+                                                         string& error)
 {
-  KeyHandlerImpl *ckh = new KeyHandlerImpl;
+  auto ckh = std::make_unique<KeyHandlerImpl>();
   ostringstream oss;
   if (ckh->init(secret, oss) < 0) {
     error = oss.str();
-    delete ckh;
-    return NULL;
+    ckh.reset();
   }
   return ckh;
 }
@@ -336,21 +338,19 @@ int Key::_set_secret(int t, const bufferptr& s)
     return 0;
   }
 
-  Handler *ch = Handler::create(t);
+  auto ch = Handler::create(t);
   if (ch) {
     int ret = ch->validate_secret(s);
     if (ret < 0) {
-      delete ch;
       return ret;
     }
     string error;
-    ckh.reset(ch->get_key_handler(s, error));
-    delete ch;
+    ckh = ch->get_key_handler(s, error);
     if (error.length()) {
       return -EIO;
     }
   } else {
-      return -EOPNOTSUPP;
+    return -EOPNOTSUPP;
   }
   type = t;
   secret = s;
@@ -359,7 +359,7 @@ int Key::_set_secret(int t, const bufferptr& s)
 
 int Key::create(CephContext *cct, int t)
 {
-  Handler *ch = Handler::create(t);
+  auto ch = Handler::create(t);
   if (!ch) {
     if (cct)
       lderr(cct) << "ERROR: cct->get_crypto_handler(type=" << t << ") returned NULL" << dendl;
@@ -367,7 +367,6 @@ int Key::create(CephContext *cct, int t)
   }
   bufferptr s;
   int r = ch->create(cct->random(), s);
-  delete ch;
   if (r < 0)
     return r;
 
@@ -407,13 +406,13 @@ void Key::encode_plaintext(bufferlist &bl)
 
 // ------------------
 
-Handler* Handler::create(int type)
+std::unique_ptr<Handler> Handler::create(int type)
 {
   switch (type) {
   case CEPH_CRYPTO_NONE:
-    return new none::HandlerImpl;
+    return std::make_unique<none::HandlerImpl>();
   case CEPH_CRYPTO_AES128:
-    return new aes128::HandlerImpl;
+    return std::make_unique<aes128::HandlerImpl>();
   default:
     return NULL;
   }

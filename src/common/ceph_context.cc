@@ -585,8 +585,6 @@ CephContext::CephContext(uint32_t module_type_,
     _perf_counters_collection(NULL),
     _perf_counters_conf_obs(NULL),
     _heartbeat_map(NULL),
-    _crypto_none(NULL),
-    _crypto_aes(NULL),
     _plugin_registry(NULL),
     _lockdep_obs(NULL),
     crush_location(this),
@@ -706,8 +704,8 @@ CephContext::~CephContext()
 
   delete _conf;
   
-  delete _crypto_none;
-  delete _crypto_aes;
+  _crypto_none.reset();
+  _crypto_aes.reset();
   if (_crypto_inited)
     ceph::crypto::shutdown(g_code_env == CODE_ENVIRONMENT_LIBRARY);
 }
@@ -843,9 +841,9 @@ ceph::crypto::Handler *CephContext::get_crypto_handler(int type)
 {
   switch (type) {
   case CEPH_CRYPTO_NONE:
-    return _crypto_none;
+    return _crypto_none.get();
   case CEPH_CRYPTO_AES128:
-    return _crypto_aes;
+    return _crypto_aes.get();
   default:
     return NULL;
   }

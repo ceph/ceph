@@ -71,8 +71,6 @@ TEST(AES, Encrypt) {
   int err;
   err = memcmp(cipher_s, want_cipher, sizeof(want_cipher));
   ASSERT_EQ(0, err);
-
-  delete kh;
 }
 
 TEST(AES, Decrypt) {
@@ -111,8 +109,6 @@ TEST(AES, Decrypt) {
   int err;
   err = memcmp(plaintext_s, want_plaintext, sizeof(want_plaintext));
   ASSERT_EQ(0, err);
-
-  delete kh;
 }
 
 TEST(AES, Loop) {
@@ -137,8 +133,6 @@ TEST(AES, Loop) {
       int r = kh->encrypt(plaintext, cipher, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
-
-      delete kh;
     }
     plaintext.clear();
 
@@ -149,8 +143,6 @@ TEST(AES, Loop) {
       int r = ckh->decrypt(cipher, plaintext, &error);
       ASSERT_EQ(r, 0);
       ASSERT_EQ(error, "");
-
-      delete ckh;
     }
   }
 

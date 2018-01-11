@@ -269,8 +269,8 @@ private:
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
-  ceph::crypto::Handler *_crypto_none;
-  ceph::crypto::Handler *_crypto_aes;
+  std::unique_ptr<ceph::crypto::Handler> _crypto_none;
+  std::unique_ptr<ceph::crypto::Handler> _crypto_aes;
   std::unique_ptr<ceph::crypto::Random> _crypto_random;
 
   // experimental

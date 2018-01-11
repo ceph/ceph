@@ -15,12 +15,12 @@
 #ifndef CEPH_AUTH_CRYPTO_H
 #define CEPH_AUTH_CRYPTO_H
 
+#include <memory>
+#include <string>
+
 #include "include/types.h"
 #include "include/utime.h"
-#include "include/memory.h"
 #include "include/buffer.h"
-
-#include <string>
 
 class CephContext;
 
@@ -154,10 +154,10 @@ public:
   virtual int get_type() const = 0;
   virtual int create(Random *random, bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
-  virtual KeyHandler *get_key_handler(const bufferptr& secret,
-                                      string& error) = 0;
+  virtual std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
+                                                      string& error) = 0;
 
-  static Handler *create(int type);
+  static std::unique_ptr<Handler> create(int type);
 };
 
 } // namespace crypto
