@@ -1041,8 +1041,7 @@ PG::Scrubber::Scrubber()
    auto_repair(false),
    num_digest_updates_pending(0),
    state(INACTIVE),
-   deep(false),
-   seed(0)
+   deep(false)
 {}
 
 PG::Scrubber::~Scrubber() {}
@@ -3919,17 +3918,17 @@ void PG::do_replica_scrub_map(OpRequestRef op)
 void PG::_request_scrub_map(
   pg_shard_t replica, eversion_t version,
   hobject_t start, hobject_t end,
-  bool deep, uint32_t seed,
+  bool deep,
   bool allow_preemption)
 {
   assert(replica != pg_whoami);
   dout(10) << "scrub  requesting scrubmap from osd." << replica
-	   << " deep " << (int)deep << " seed " << seed << dendl;
+	   << " deep " << (int)deep << dendl;
   MOSDRepScrub *repscrubop = new MOSDRepScrub(
     spg_t(info.pgid.pgid, replica.shard), version,
     get_osdmap()->get_epoch(),
     get_last_peering_reset(),
-    start, end, deep, seed,
+    start, end, deep,
     allow_preemption);
   // default priority, we want the rep scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
@@ -4244,7 +4243,6 @@ int PG::build_scrub_map_chunk(
   hobject_t start,
   hobject_t end,
   bool deep,
-  uint32_t seed,
   ThreadPool::TPHandle &handle)
 {
   dout(10) << __func__ << " [" << start << "," << end << ") "
@@ -4254,7 +4252,6 @@ int PG::build_scrub_map_chunk(
   // start
   while (pos.empty()) {
     pos.deep = deep;
-    pos.seed = seed;
     map.valid_through = info.last_update;
     osr->flush();
 
@@ -4620,7 +4617,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  osd->clog->debug(oss);
 	}
 
-	scrubber.seed = -1;
 	scrubber.preempt_left = cct->_conf->get_val<uint64_t>(
 	  "osd_scrub_max_preemptions");
 	scrubber.preempt_divisor = 1;
@@ -4740,7 +4736,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  if (*i == pg_whoami) continue;
           _request_scrub_map(*i, scrubber.subset_last_update,
                              scrubber.start, scrubber.end, scrubber.deep,
-			     scrubber.seed,
 			     scrubber.preempt_left > 0);
           scrubber.waiting_on_whom.insert(*i);
         }
@@ -4784,7 +4779,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  scrubber.primary_scrubmap,
 	  scrubber.primary_scrubmap_pos,
 	  scrubber.start, scrubber.end,
-	  scrubber.deep, scrubber.seed,
+	  scrubber.deep,
 	  handle);
 	if (ret == -EINPROGRESS) {
 	  requeue_scrub();
@@ -4887,7 +4882,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	    scrubber.replica_scrubmap,
 	    scrubber.replica_scrubmap_pos,
 	    scrubber.start, scrubber.end,
-	    scrubber.deep, scrubber.seed,
+	    scrubber.deep,
 	    handle);
 	}
 	if (ret == -EINPROGRESS) {
@@ -7848,7 +7843,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const QueryState& q)
     q.f->dump_stream("scrubber.end") << pg->scrubber.end;
     q.f->dump_stream("scrubber.subset_last_update") << pg->scrubber.subset_last_update;
     q.f->dump_bool("scrubber.deep", pg->scrubber.deep);
-    q.f->dump_unsigned("scrubber.seed", pg->scrubber.seed);
     {
       q.f->open_array_section("scrubber.waiting_on_whom");
       for (set<pg_shard_t>::iterator p = pg->scrubber.waiting_on_whom.begin();
