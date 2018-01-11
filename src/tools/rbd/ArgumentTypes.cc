@@ -214,13 +214,22 @@ void add_image_spec_options(po::options_description *pos,
 
 void add_group_spec_options(po::options_description *pos,
 			    po::options_description *opt,
-			    ArgumentModifier modifier) {
-  pos->add_options()
-    ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
-     (get_description_prefix(modifier) + "group specification\n" +
-      "(example: [<pool-name>/]<group-name>)").c_str());
+			    ArgumentModifier modifier,
+                            bool snap) {
   add_pool_option(opt, modifier);
   add_group_option(opt, modifier);
+  if (!snap) {
+    pos->add_options()
+      ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+       (get_description_prefix(modifier) + "group specification\n" +
+         "(example: [<pool-name>/]<group-name>)").c_str());
+  } else {
+    add_snap_option(opt, modifier);
+    pos->add_options()
+      ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+       (get_description_prefix(modifier) + "group specification\n" +
+         "(example: [<pool-name>/]<group-name>@<snap-name>)").c_str());
+  }
 }
 
 void add_snap_spec_options(po::options_description *pos,

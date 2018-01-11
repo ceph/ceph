@@ -31,6 +31,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -165,6 +166,12 @@ void group_spec_cpp_to_c(const librbd::group_spec_t &cpp_spec,
 			 rbd_group_spec_t *c_spec) {
   c_spec->name = strdup(cpp_spec.name.c_str());
   c_spec->pool = cpp_spec.pool;
+}
+
+void group_snap_spec_cpp_to_c(const librbd::group_snap_spec_t &cpp_spec,
+			      rbd_group_snap_spec_t *c_spec) {
+  c_spec->name = strdup(cpp_spec.name.c_str());
+  c_spec->state = cpp_spec.state;
 }
 
 void mirror_image_info_cpp_to_c(const librbd::mirror_image_info_t &cpp_info,
@@ -761,6 +768,37 @@ namespace librbd {
 	       group_ioctx.get_id(), group_name);
     int r = librbd::api::Group<>::image_list(group_ioctx, group_name, images);
     tracepoint(librbd, group_image_list_exit, r);
+    return r;
+  }
+
+  int RBD::group_snap_create(IoCtx& group_ioctx, const char *group_name,
+			     const char *snap_name) {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_create_enter, group_ioctx.get_pool_name().c_str(),
+	       group_ioctx.get_id(), group_name, snap_name);
+    int r = librbd::api::Group<>::snap_create(group_ioctx, group_name, snap_name);
+    tracepoint(librbd, group_snap_create_exit, r);
+    return r;
+  }
+
+  int RBD::group_snap_remove(IoCtx& group_ioctx, const char *group_name,
+			     const char *snap_name) {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_remove_enter, group_ioctx.get_pool_name().c_str(),
+	       group_ioctx.get_id(), group_name, snap_name);
+    int r = librbd::api::Group<>::snap_remove(group_ioctx, group_name, snap_name);
+    tracepoint(librbd, group_snap_remove_exit, r);
+    return r;
+  }
+
+  int RBD::group_snap_list(IoCtx& group_ioctx, const char *group_name,
+			   std::vector<group_snap_spec_t> *snaps)
+  {
+    TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+    tracepoint(librbd, group_snap_list_enter, group_ioctx.get_pool_name().c_str(),
+	       group_ioctx.get_id(), group_name);
+    int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, snaps);
+    tracepoint(librbd, group_snap_list_exit, r);
     return r;
   }
 
@@ -1520,6 +1558,26 @@ namespace librbd {
     tracepoint(librbd, snap_get_limit_enter, ictx, ictx->name.c_str());
     int r = librbd::snap_get_limit(ictx, limit);
     tracepoint(librbd, snap_get_limit_exit, r, *limit);
+    return r;
+  }
+
+  int Image::snap_get_namespace_type(uint64_t snap_id,
+				     snap_namespace_type_t *namespace_type) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
+    int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id, namespace_type);
+    tracepoint(librbd, snap_get_namespace_type_exit, r);
+    return r;
+  }
+
+  int Image::snap_get_group_namespace(uint64_t snap_id,
+			              snap_group_namespace_t *group_snap) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, snap_get_group_namespace_enter, ictx,
+               ictx->name.c_str());
+    int r = librbd::api::Snapshot<>::get_group_namespace(ictx, snap_id,
+                                                         group_snap);
+    tracepoint(librbd, snap_get_group_namespace_exit, r);
     return r;
   }
 
@@ -4331,7 +4389,8 @@ extern "C" int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
              io_ctx.get_id());
 
   vector<string> cpp_names;
-  int r = librbd::list(io_ctx, cpp_names);
+  int r = librbd::api::Group<>::list(io_ctx, &cpp_names);
+
   if (r < 0) {
     tracepoint(librbd, group_list_exit, r);
     return r;
@@ -4458,6 +4517,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
   }
 
   if (*image_size < cpp_images.size()) {
+    *image_size = cpp_images.size();
     tracepoint(librbd, group_image_list_exit, -ERANGE);
     return -ERANGE;
   }
@@ -4466,6 +4526,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
     group_image_status_cpp_to_c(cpp_images[i], &images[i]);
   }
 
+  r = cpp_images.size();
   tracepoint(librbd, group_image_list_exit, r);
   return r;
 }
@@ -4508,6 +4569,122 @@ extern "C" void rbd_group_image_status_list_cleanup(
   for (size_t i = 0; i < len; ++i) {
     rbd_group_image_status_cleanup(&images[i]);
   }
+}
+
+extern "C" int rbd_group_snap_create(rados_ioctx_t group_p, const char *group_name,
+				      const char *snap_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_create_enter, group_ioctx.get_pool_name().c_str(),
+	     group_ioctx.get_id(), group_name, snap_name);
+
+  int r = librbd::api::Group<>::snap_create(group_ioctx, group_name, snap_name);
+
+  tracepoint(librbd, group_snap_create_exit, r);
+
+  return r;
+}
+
+extern "C" int rbd_group_snap_remove(rados_ioctx_t group_p, const char *group_name,
+				      const char *snap_name)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_remove_enter, group_ioctx.get_pool_name().c_str(),
+	     group_ioctx.get_id(), group_name, snap_name);
+
+  int r = librbd::api::Group<>::snap_remove(group_ioctx, group_name, snap_name);
+
+  tracepoint(librbd, group_snap_remove_exit, r);
+
+  return r;
+}
+
+extern "C" int rbd_group_snap_list(rados_ioctx_t group_p, const char *group_name,
+				   rbd_group_snap_spec_t *snaps, size_t *snaps_size)
+{
+  librados::IoCtx group_ioctx;
+  librados::IoCtx::from_rados_ioctx_t(group_p, group_ioctx);
+
+  TracepointProvider::initialize<tracepoint_traits>(get_cct(group_ioctx));
+  tracepoint(librbd, group_snap_list_enter, group_ioctx.get_pool_name().c_str(),
+	     group_ioctx.get_id(), group_name);
+
+  std::vector<librbd::group_snap_spec_t> cpp_snaps;
+  int r = librbd::api::Group<>::snap_list(group_ioctx, group_name, &cpp_snaps);
+
+  if (r == -ENOENT) {
+    *snaps_size = 0;
+    tracepoint(librbd, group_snap_list_exit, 0);
+    return 0;
+  }
+
+  if (r < 0) {
+    tracepoint(librbd, group_snap_list_exit, r);
+    return r;
+  }
+
+  if (*snaps_size < cpp_snaps.size()) {
+    *snaps_size = cpp_snaps.size();
+    tracepoint(librbd, group_snap_list_exit, -ERANGE);
+    return -ERANGE;
+  }
+
+  for (size_t i = 0; i < cpp_snaps.size(); ++i) {
+    group_snap_spec_cpp_to_c(cpp_snaps[i], &snaps[i]);
+  }
+
+  *snaps_size = cpp_snaps.size();
+  tracepoint(librbd, group_snap_list_exit, 0);
+  return 0;
+}
+
+extern "C" void rbd_group_snap_list_cleanup(rbd_group_snap_spec_t *snaps,
+                                            size_t len) {
+  for (size_t i = 0; i < len; ++i) {
+    free(snaps[i].name);
+  }
+}
+
+extern "C" int rbd_snap_get_namespace_type(rbd_image_t image,
+					   uint64_t snap_id,
+					   rbd_snap_namespace_type_t *namespace_type) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
+  int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id,
+                                                      namespace_type);
+  tracepoint(librbd, snap_get_namespace_type_exit, r);
+  return r;
+}
+
+extern "C" int rbd_snap_get_group_namespace(rbd_image_t image, uint64_t snap_id,
+                                            rbd_snap_group_namespace_t *group_snap) {
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, snap_get_group_namespace_enter, ictx,
+             ictx->name.c_str());
+
+  librbd::snap_group_namespace_t group_namespace;
+  int r = librbd::api::Snapshot<>::get_group_namespace(ictx, snap_id,
+                                                       &group_namespace);
+  if (r >= 0) {
+    group_snap->group_pool = group_namespace.group_pool;
+    group_snap->group_name = strdup(group_namespace.group_name.c_str());
+    group_snap->group_snap_name =
+      strdup(group_namespace.group_snap_name.c_str());
+  }
+
+  tracepoint(librbd, snap_get_group_namespace_exit, r);
+  return r;
+}
+
+extern "C" void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_snap) {
+  free(group_snap->group_name);
+  free(group_snap->group_snap_name);
 }
 
 extern "C" int rbd_watchers_list(rbd_image_t image,

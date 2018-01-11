@@ -101,6 +101,8 @@
 #define RBD_HEADER_SIGNATURE	"RBD"
 #define RBD_HEADER_VERSION	"001.005"
 
+#define RBD_GROUP_INVALID_POOL (-1)
+
 #define RBD_GROUP_HEADER_PREFIX "rbd_group_header."
 
 #define RBD_GROUP_DIRECTORY "rbd_group_directory"
