@@ -96,6 +96,11 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t size
         char *name
 
+    ctypedef struct rbd_snap_group_namespace_t:
+        int64_t group_pool
+        char *group_name
+        char *group_snap_name
+
     ctypedef struct rbd_child_info_t:
         char *pool_name
         char *image_name
@@ -306,6 +311,14 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
     int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
+    int rbd_snap_get_namespace_type(rbd_image_t image,
+                                    uint64_t snap_id,
+                                    rbd_snap_namespace_type_t *namespace_type)
+    int rbd_snap_get_group_namespace(rbd_image_t image, uint64_t snap_id,
+                                     rbd_snap_group_namespace_t *group_spec)
+    void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec)
+
+
     int rbd_flatten(rbd_image_t image)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
                                void *cbdata)
@@ -414,10 +427,6 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_group_snap_list_cleanup(rbd_group_snap_spec_t *snaps,
                                           size_t len)
 
-    int rbd_snap_get_namespace_type(rbd_image_t image,
-                                    uint64_t snap_id,
-                                    rbd_snap_namespace_type_t *namespace_type)
-
     int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
                           size_t *max_watchers)
     void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
@@ -465,6 +474,10 @@ RBD_IMAGE_OPTION_ORDER = _RBD_IMAGE_OPTION_ORDER
 RBD_IMAGE_OPTION_STRIPE_UNIT = _RBD_IMAGE_OPTION_STRIPE_UNIT
 RBD_IMAGE_OPTION_STRIPE_COUNT = _RBD_IMAGE_OPTION_STRIPE_COUNT
 RBD_IMAGE_OPTION_DATA_POOL = _RBD_IMAGE_OPTION_DATA_POOL
+
+SNAP_NAMESPACE_TYPE_USER = _SNAP_NAMESPACE_TYPE_USER
+SNAP_NAMESPACE_TYPE_GROUP = _SNAP_NAMESPACE_TYPE_GROUP
+SNAP_NAMESPACE_TYPE_UNKNOWN = _SNAP_NAMESPACE_TYPE_UNKNOWN
 
 class Error(Exception):
     pass
@@ -3144,6 +3157,28 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error getting snapshot namespace type for image: %s, snap_id: %d' % (self.name, snap_id))
 
         return namespace_type
+
+    def snap_get_group_namespace(self, snap_id):
+        """
+        get the group namespace details.
+        :param snap_id: the snapshot id of the group snapshot
+        """
+        cdef:
+            rbd_snap_group_namespace_t group_namespace
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_group_namespace(self.image, _snap_id,
+                                               &group_namespace)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot group namespace for image: %s, snap_id: %d' % (self.name, snap_id))
+
+        info = {
+                'pool' : group_namespace.group_pool,
+                'name' : decode_cstr(group_namespace.group_name),
+                'snap_name' : decode_cstr(group_namespace.group_snap_name)
+            }
+        rbd_snap_group_namespace_cleanup(&group_namespace)
+        return info
 
 cdef class LockOwnerIterator(object):
     """
