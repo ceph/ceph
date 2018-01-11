@@ -1158,7 +1158,7 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   parent.pool = pool;
   parent.id = id;
   parent.snapid = snapid;
-  parent.overlap = MIN(our_size, size);
+  parent.overlap = std::min(our_size, size);
   encode(parent, parentbl);
   r = cls_cxx_map_set_val(hctx, "parent", &parentbl);
   if (r < 0) {
@@ -2772,7 +2772,7 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   while (more && data.size() < max_return) {
     map<string, bufferlist> raw_data;
-    int max_read = MIN(RBD_MAX_KEYS_READ, max_return - data.size());
+    int max_read = std::min<uint64_t>(RBD_MAX_KEYS_READ, max_return - data.size());
     int r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
                                  max_read, &raw_data, &more);
     if (r < 0) {
@@ -3853,7 +3853,7 @@ int mirror_image_map_list(cls_method_context_t hctx,
     std::map<std::string, bufferlist> vals;
     CLS_LOG(20, "last read: '%s'", last_read.c_str());
 
-    int max_read = MIN(RBD_MAX_KEYS_READ, max_return - image_mapping->size());
+    int max_read = std::min<uint64_t>(RBD_MAX_KEYS_READ, max_return - image_mapping->size());
     int r = cls_cxx_map_get_vals(hctx, last_read, MIRROR_IMAGE_MAP_KEY_PREFIX,
                                  max_read, &vals, &more);
     if (r < 0) {

@@ -38,7 +38,7 @@ void UpdateRequest<I>::update_object_map() {
   CephContext *cct = m_image_ctx.cct;
 
   // break very large requests into manageable batches
-  m_update_end_object_no = MIN(
+  m_update_end_object_no = std::min(
     m_end_object_no, m_update_start_object_no + MAX_OBJECTS_PER_UPDATE);
 
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
@@ -98,9 +98,9 @@ void UpdateRequest<I>::update_in_memory_object_map() {
     ldout(m_image_ctx.cct, 20) << dendl;
 
     auto it = m_object_map.begin() +
-                    MIN(m_update_start_object_no, m_object_map.size());
+      std::min(m_update_start_object_no, m_object_map.size());
     auto end_it = m_object_map.begin() +
-                    MIN(m_update_end_object_no, m_object_map.size());
+      std::min(m_update_end_object_no, m_object_map.size());
     for (; it != end_it; ++it) {
       auto state_ref = *it;
       uint8_t state = state_ref;

@@ -308,7 +308,10 @@ struct C_InvalidateCache : public Context {
       // size object cache appropriately
       uint64_t obj = cache_max_dirty_object;
       if (!obj) {
-	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+	obj = std::min<uint64_t>(2000,
+				 std::max<uint64_t>(
+				   10, cache_size / 100 /
+				   sizeof(ObjectCacher::Object)));
       }
       ldout(cct, 10) << " cache bytes " << cache_size
 	<< " -> about " << obj << " objects" << dendl;
@@ -969,7 +972,7 @@ struct C_InvalidateCache : public Context {
     size_t conf_prefix_len = prefix.size();
 
     for (auto it : pairs) {
-      if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
+      if (it.first.compare(0, std::min(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;
 
       if (it.first.size() <= conf_prefix_len)
