@@ -1524,6 +1524,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_no_require_mimic", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_debug_no_require_bluestore_for_ec_overwrites", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -1532,6 +1533,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_debug_no_initial_persistent_features", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
@@ -1556,6 +1558,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_keyvaluedb", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("rocksdb")
+    .set_flag(Option::FLAG_CREATE)
     .set_description(""),
 
     Option("mon_debug_unsafe_allow_tier_with_nonempty_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
