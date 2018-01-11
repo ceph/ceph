@@ -1704,7 +1704,9 @@ class TestGroups(object):
         global snap_name
         self.rbd = RBD()
         create_image()
+        self.image_names = [image_name]
         self.image = Image(ioctx, image_name)
+
         create_group()
         snap_name = get_temp_snap_name()
         self.group = Group(ioctx, group_name)
@@ -1712,7 +1714,8 @@ class TestGroups(object):
     def tearDown(self):
         remove_group()
         self.image = None
-        remove_image()
+        for name in self.image_names:
+            RBD().remove(ioctx, name)
 
     def test_group_image_add(self):
         self.group.add_image(ioctx, image_name)
@@ -1725,17 +1728,19 @@ class TestGroups(object):
         self.group.add_image(ioctx, image_name)
         eq([image_name], [img['name'] for img in self.group.list_images()])
 
-    def test_group_image_15_images(self):
+    def test_group_image_many_images(self):
         eq([], list(self.group.list_images()))
-        names = []
+        self.group.add_image(ioctx, image_name)
+
         for x in range(0, 20):
-            names.append(image_name)
-            self.group.add_image(ioctx, image_name)
             create_image()
-        names.sort()
+            self.image_names.append(image_name)
+            self.group.add_image(ioctx, image_name)
+
+        self.image_names.sort()
         answer = [img['name'] for img in self.group.list_images()]
         answer.sort()
-        eq(names, answer)
+        eq(self.image_names, answer)
 
     def test_group_image_remove(self):
         eq([], list(self.group.list_images()))
@@ -1761,7 +1766,7 @@ class TestGroups(object):
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
 
-    def test_group_snap_list_15(self):
+    def test_group_snap_list_many(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
         snap_names = []
