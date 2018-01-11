@@ -26,7 +26,8 @@ int execute_create(const po::variables_map &vm) {
   std::string pool_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
   if (r < 0) {
     return r;
   }
@@ -96,7 +97,8 @@ int execute_remove(const po::variables_map &vm) {
   std::string pool_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
   if (r < 0) {
     return r;
   }
@@ -249,7 +251,8 @@ int execute_list_images(const po::variables_map &vm) {
   std::string pool_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
   if (r < 0) {
     return r;
   }
@@ -331,23 +334,10 @@ int execute_group_snap_create(const po::variables_map &vm) {
   std::string snap_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      &snap_name);
   if (r < 0) {
     return r;
-  }
-
-  if (vm.count(at::SNAPSHOT_NAME)) {
-    snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
-  }
-
-  if (snap_name.empty()) {
-    snap_name = utils::get_positional_argument(vm, arg_index++);
-  }
-
-  if (snap_name.empty()) {
-    std::cerr << "rbd: "
-	      << "snapshot name was not specified" << std::endl;
-    return -EINVAL;
   }
 
   librados::IoCtx io_ctx;
@@ -375,23 +365,10 @@ int execute_group_snap_remove(const po::variables_map &vm) {
   std::string snap_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      &snap_name);
   if (r < 0) {
     return r;
-  }
-
-  if (vm.count(at::SNAPSHOT_NAME)) {
-    snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
-  }
-
-  if (snap_name.empty()) {
-    snap_name = utils::get_positional_argument(vm, arg_index++);
-  }
-
-  if (snap_name.empty()) {
-    std::cerr << "rbd: "
-	      << "snapshot name was not specified" << std::endl;
-    return -EINVAL;
   }
 
   librados::IoCtx io_ctx;
@@ -414,7 +391,8 @@ int execute_group_snap_list(const po::variables_map &vm) {
   std::string pool_name;
 
   int r = utils::get_pool_group_names(vm, at::ARGUMENT_MODIFIER_NONE,
-                                      &arg_index, &pool_name, &group_name);
+                                      &arg_index, &pool_name, &group_name,
+                                      nullptr);
   if (r < 0) {
     return r;
   }
@@ -493,12 +471,14 @@ int execute_group_snap_list(const po::variables_map &vm) {
 
 void get_create_arguments(po::options_description *positional,
                           po::options_description *options) {
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             false);
 }
 
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             false);
 }
 
 void get_list_arguments(po::options_description *positional,
@@ -555,33 +535,27 @@ void get_remove_image_arguments(po::options_description *positional,
 void get_list_images_arguments(po::options_description *positional,
                                po::options_description *options) {
   at::add_format_options(options);
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             false);
 }
 
 void get_group_snap_create_arguments(po::options_description *positional,
 				  po::options_description *options) {
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
-
-  positional->add_options()
-    (at::SNAPSHOT_NAME.c_str(), "snapshot name\n(example: <snapshot-name>)");
-
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             true);
 }
 
 void get_group_snap_remove_arguments(po::options_description *positional,
 				  po::options_description *options) {
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
-
-  positional->add_options()
-    (at::SNAPSHOT_NAME.c_str(), "snapshot name\n(example: <snapshot-name>)");
-
-  at::add_snap_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             true);
 }
 
 void get_group_snap_list_arguments(po::options_description *positional,
                              po::options_description *options) {
   at::add_format_options(options);
-  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_group_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE,
+                             false);
 }
 
 Shell::Action action_create(
