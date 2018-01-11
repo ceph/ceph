@@ -50,8 +50,8 @@ public:
       }
     }
     if (header.version >= 3) {
-      ::decode(config_bl, p);
-      ::decode(config_defaults_bl, p);
+      decode(config_bl, p);
+      decode(config_defaults_bl, p);
     }
   }
 
@@ -64,8 +64,8 @@ public:
       encode(daemon_metadata, payload);
       encode(daemon_status, payload);
     }
-    ::encode(config_bl, payload);
-    ::encode(config_defaults_bl, payload);
+    encode(config_bl, payload);
+    encode(config_defaults_bl, payload);
   }
 
   const char *get_type_name() const override { return "mgropen"; }
