@@ -101,6 +101,13 @@ to the *Installing* section:
           # api_port = 5001
           # trusted_ip_list = 192.168.0.10,192.168.0.11
 
+      ..note::
+        trusted_ip_list is a list of IP addresses on each iscsi gateway that
+        will be used for management operations like target creation, lun
+        exporting, etc. The IP can be the same that will be used for iSCSI
+        data, like READ/WRITE commands to/from the RBD image, but using
+        separate IPs is recommended.
+
       .. important::
         The ``iscsi-gateway.cfg`` file must be identical on all iSCSI gateway nodes.
 
