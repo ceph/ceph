@@ -763,7 +763,7 @@ std::vector<Option> get_global_options() {
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("async+posix")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),  // why?
 
     Option("ms_public_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -882,7 +882,7 @@ std::vector<Option> get_global_options() {
     Option("ms_inject_delay_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
@@ -980,7 +980,7 @@ std::vector<Option> get_global_options() {
     Option("ms_dpdk_coremask", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("0xF")         //begin with 0x for the string
     .set_description("")
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("ms_async_op_threads"),
 
     Option("ms_dpdk_memory_channel", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -998,17 +998,17 @@ std::vector<Option> get_global_options() {
     Option("ms_dpdk_host_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_dpdk_gateway_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_dpdk_netmask_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("")
-    .set_safe(),
+    .set_flag(Option::FLAG_RUNTIME),
 
     Option("ms_dpdk_lro", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -1491,7 +1491,7 @@ std::vector<Option> get_global_options() {
     Option("mon_osd_reporter_subtree_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("host")
     .add_service("mon")
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("in which level of parent bucket the reporters are counted"),
 
     Option("mon_osd_snap_trim_queue_warn_on", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -3722,7 +3722,7 @@ std::vector<Option> get_global_options() {
     Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crc32c")
     .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default checksum algorithm to use")
     .set_long_description("crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants use only a subset of the bits for more compact (but less reliable) checksumming."),
 
@@ -3749,91 +3749,91 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_prefer_deferred_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Writes smaller than this size will be written to the journal and then asynchronously written to the device.  This can be beneficial when using rotational media where seeks are expensive, and is helpful both with and without solid state journal/wal devices."),
 
     Option("bluestore_prefer_deferred_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32768)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for rotational media"),
 
     Option("bluestore_prefer_deferred_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_prefer_deferred_size for non-rotational (solid state) media"),
 
     Option("bluestore_compression_mode", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("none")
     .set_enum_allowed({"none", "passive", "aggressive", "force"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default policy for using compression when pool does not specify")
     .set_long_description("'none' means never use compression.  'passive' means use compression when clients hint that data is compressible.  'aggressive' means use compression unless clients hint that data is not compressible.  This option is used when the per-pool property for the compression mode is not present."),
 
     Option("bluestore_compression_algorithm", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("snappy")
     .set_enum_allowed({"", "snappy", "zlib", "zstd", "lz4"})
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default compression algorithm to use when writing object data")
     .set_long_description("This controls the default compressor to use (if any) if the per-pool property is not set.  Note that zstd is *not* recommended for bluestore due to high CPU overhead when compressing small amounts of data."),
 
     Option("bluestore_compression_min_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Chunks smaller than this are never compressed"),
 
     Option("bluestore_compression_min_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for rotational media"),
 
     Option("bluestore_compression_min_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_min_blob_size for non-rotational (solid state) media"),
 
     Option("bluestore_compression_max_blob_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Chunks larger than this are broken into smaller chunks before being compressed"),
 
     Option("bluestore_compression_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(512_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_max_blob_size for rotational media"),
 
     Option("bluestore_compression_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default value of bluestore_compression_max_blob_size for non-rotational (solid state) media"),
 
     Option("bluestore_gc_enable_blob_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_gc_enable_total_threshold", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size_hdd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_max_blob_size_ssd", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(64_K)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("bluestore_compression_required_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.875)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Compression ratio required to store compressed data")
     .set_long_description("If we compress data and get less than this we discard the result and store the original uncompressed data."),
 
@@ -3979,43 +3979,43 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_M)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes in flight before we throttle IO submission"),
 
     Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128_M)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes for deferred writes before we throttle IO submission"),
 
     Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Overhead added to transaction cost (in bytes) for each IO"),
 
   Option("bluestore_throttle_cost_per_io_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(670000)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_throttle_cost_per_io for rotational media"),
 
     Option("bluestore_throttle_cost_per_io_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(4000)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_throttle_cost_per_io for non-rotation (solid state) media"),
 
 
     Option("bluestore_deferred_batch_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Max number of deferred writes before we flush the deferred write queue"),
 
     Option("bluestore_deferred_batch_ops_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_deferred_batch_ops for rotational media"),
 
     Option("bluestore_deferred_batch_ops_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Default bluestore_deferred_batch_ops for non-rotational (solid state) media"),
 
     Option("bluestore_nid_prealloc", Option::TYPE_INT, Option::LEVEL_DEV)
@@ -4028,17 +4028,17 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_clone_cow", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Use copy-on-write when cloning objects (versus reading and rewriting them at clone time)"),
 
     Option("bluestore_default_buffered_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Cache read results by default (unless hinted NOCACHE or WONTNEED)"),
 
     Option("bluestore_default_buffered_write", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description("Cache writes by default (unless hinted NOCACHE or WONTNEED)"),
 
     Option("bluestore_debug_misc", Option::TYPE_BOOL, Option::LEVEL_DEV)
@@ -6013,7 +6013,7 @@ static std::vector<Option> get_rbd_options() {
         "name is as follows: +1 -> layering, +2 -> striping, "
         "+4 -> exclusive-lock, +8 -> object-map, +16 -> fast-diff, "
         "+32 -> deep-flatten, +64 -> journaling, +128 -> data-pool")
-    .set_safe()
+    .set_flag(Option::FLAG_RUNTIME)
     .set_validator([](std::string *value, std::string *error_message) {
 	ostringstream ss;
 	uint64_t features = librbd::rbd_features_from_string(*value, &ss);
