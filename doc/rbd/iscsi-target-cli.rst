@@ -61,6 +61,8 @@ to the *Installing* section:
 
        # yum install tcmu-runner
 
+**Setup:**
+
 #. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
 
