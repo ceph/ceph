@@ -253,7 +253,6 @@ static int do_unmap()
 
 static int parse_imgpath(const std::string &imgpath, std::string *poolname,
                          std::string *imgname, std::string *snapname) {
-{
   std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
   std::smatch match;
   if (!std::regex_match(imgpath, match, pattern)) {
