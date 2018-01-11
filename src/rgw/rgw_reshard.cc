@@ -474,7 +474,6 @@ int RGWBucketReshard::do_reshard(
   bucket_op.set_bucket_name(new_bucket_info.bucket.name);
   bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
   bucket_op.set_user_id(new_bucket_info.owner);
-  bucket_op.set_update_stats(false);
   string err;
   ret = RGWBucketAdminOp::link(store, bucket_op, &err);
   if (ret < 0) {
