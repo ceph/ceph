@@ -2435,7 +2435,7 @@ TRACEPOINT_EVENT(librbd, snap_get_namespace_type_exit,
     )
 )
 
-TRACEPOINT_EVENT(librbd, snap_get_group_enter,
+TRACEPOINT_EVENT(librbd, snap_get_group_namespace_enter,
     TP_ARGS(
         void*, imagectx,
         const char*, name),
@@ -2445,7 +2445,7 @@ TRACEPOINT_EVENT(librbd, snap_get_group_enter,
     )
 )
 
-TRACEPOINT_EVENT(librbd, snap_get_group_exit,
+TRACEPOINT_EVENT(librbd, snap_get_group_namespace_exit,
     TP_ARGS(
         int, retval),
 	TP_FIELDS(
