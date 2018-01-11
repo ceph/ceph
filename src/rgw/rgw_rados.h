@@ -3364,8 +3364,8 @@ public:
 
   int omap_get_vals(rgw_raw_obj& obj, bufferlist& header, const std::string& marker, uint64_t count, std::map<string, bufferlist>& m);
   int omap_get_all(rgw_raw_obj& obj, bufferlist& header, std::map<string, bufferlist>& m);
-  int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl);
-  int omap_set(rgw_raw_obj& obj, map<std::string, bufferlist>& m);
+  int omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl, bool must_exist = false);
+  int omap_set(rgw_raw_obj& obj, map<std::string, bufferlist>& m, bool must_exist = false);
   int omap_del(rgw_raw_obj& obj, const std::string& key);
   int update_containers_stats(map<string, RGWBucketEnt>& m);
   int append_async(rgw_raw_obj& obj, size_t size, bufferlist& bl);
