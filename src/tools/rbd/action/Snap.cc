@@ -11,15 +11,29 @@
 #include "common/TextTable.h"
 #include <iostream>
 #include <boost/program_options.hpp>
+#include <boost/bind.hpp>
 
 namespace rbd {
 namespace action {
 namespace snap {
 
+static const std::string ALL_NAME("all");
+
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int do_list_snaps(librbd::Image& image, Formatter *f)
+static bool is_not_user_snap_namespace(librbd::Image* image,
+				       const librbd::snap_info_t &snap_info)
+{
+  librbd::snap_namespace_type_t namespace_type;
+  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
+  if (r < 0) {
+    return false;
+  }
+  return namespace_type != RBD_SNAP_NAMESPACE_TYPE_USER;
+}
+
+int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::Rados& rados)
 {
   std::vector<librbd::snap_info_t> snaps;
   TextTable t;
@@ -29,6 +43,13 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
   if (r < 0)
     return r;
 
+  if (!all_snaps) {
+    snaps.erase(remove_if(snaps.begin(),
+			  snaps.end(),
+			  boost::bind(is_not_user_snap_namespace, &image, _1)),
+		snaps.end());
+  }
+
   if (f) {
     f->open_array_section("snapshots");
   } else {
@@ -36,7 +57,14 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
     t.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
     t.define_column("SIZE", TextTable::RIGHT, TextTable::RIGHT);
     t.define_column("TIMESTAMP", TextTable::LEFT, TextTable::LEFT);
+    if (all_snaps) {
+      t.define_column("NAMESPACE", TextTable::LEFT, TextTable::LEFT);
+    }
   }
+
+  std::list<std::pair<int64_t, std::string>> pool_list;
+  rados.pool_list2(pool_list);
+  std::map<int64_t, std::string> pool_map(pool_list.begin(), pool_list.end());
 
   for (std::vector<librbd::snap_info_t>::iterator s = snaps.begin();
        s != snaps.end(); ++s) {
@@ -46,8 +74,10 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
     if(timestamp.tv_sec != 0) {
       time_t tt = timestamp.tv_sec;
       tt_str = ctime(&tt);
-      tt_str = tt_str.substr(0, tt_str.length() - 1);  
+      tt_str = tt_str.substr(0, tt_str.length() - 1);
     }
+    librbd::snap_group_namespace_t group_snap;
+    int get_group_res = image.snap_get_group_namespace(s->id, &group_snap);
 
     if (f) {
       f->open_object_section("snapshot");
@@ -55,10 +85,33 @@ int do_list_snaps(librbd::Image& image, Formatter *f)
       f->dump_string("name", s->name);
       f->dump_unsigned("size", s->size);
       f->dump_string("timestamp", tt_str);
+      if (all_snaps) {
+	f->open_object_section("namespace");
+	if (get_group_res == 0) {
+	  std::string pool_name = pool_map[group_snap.group_pool];
+	  f->dump_string("pool", pool_name);
+	  f->dump_string("group", group_snap.group_name);
+	  f->dump_string("group snap", group_snap.group_snap_name);
+	}
+	f->close_section();
+      }
       f->close_section();
     } else {
-      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str
-        << TextTable::endrow;
+      std::string namespace_string;
+      if (all_snaps && (get_group_res == 0)) {
+	ostringstream oss;
+	std::string pool_name = pool_map[group_snap.group_pool];
+	oss << "group snapshot (" << pool_name << "/" <<
+					     group_snap.group_name << "@" <<
+					     group_snap.group_snap_name << ")";
+
+	namespace_string = oss.str();
+      }
+      t << s->id << s->name << stringify(prettybyte_t(s->size)) << tt_str;
+      if (all_snaps) {
+	t << namespace_string;
+      }
+      t << TextTable::endrow;
     }
   }
 
@@ -87,7 +140,7 @@ int do_remove_snap(librbd::Image& image, const char *snapname, bool force,
   uint32_t flags = force? RBD_SNAP_REMOVE_FORCE : 0;
   int r = 0;
   utils::ProgressContext pc("Removing snap", no_progress);
-  
+
   r = image.snap_remove2(snapname, flags, pc);
   if (r < 0) {
     pc.fail();
@@ -182,6 +235,11 @@ void get_list_arguments(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
   at::add_format_options(options);
+
+  std::string name = ALL_NAME + ",a";
+
+  options->add_options()
+    (name.c_str(), po::bool_switch(), "list snapshots from all namespaces");
 }
 
 int execute_list(const po::variables_map &vm) {
@@ -236,7 +294,8 @@ int execute_list(const po::variables_map &vm) {
     return r;
   }
 
-  r = do_list_snaps(image, formatter.get());
+  bool all_snaps = vm[ALL_NAME].as<bool>();
+  r = do_list_snaps(image, formatter.get(), all_snaps, rados);
   if (r < 0) {
     cerr << "rbd: failed to list snapshots: " << cpp_strerror(r)
          << std::endl;

@@ -128,9 +128,14 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 
 int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
-		       std::string *group_name) {
+		       std::string *group_name,
+                       std::string *snap_name) {
   std::regex pattern;
-  pattern = "^(?:([^/]+)/)?(.+)?$";
+  if (snap_name == nullptr) {
+    pattern = "^(?:([^/@]+)/)?([^/@]+)?$";
+  } else {
+    pattern = "^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$";
+  }
 
   std::smatch match;
   if (!std::regex_match(spec, match, pattern)) {
@@ -143,6 +148,9 @@ int extract_group_spec(const std::string &spec,
   }
   if (group_name != nullptr) {
     *group_name = match[2];
+  }
+  if (snap_name != nullptr && match[3].matched) {
+    *snap_name = match[3];
   }
 
   return 0;
@@ -227,7 +235,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
   if (group_name->empty()) {
     std::string spec = utils::get_positional_argument(vm, (*arg_index)++);
     if (!spec.empty()) {
-      r = utils::extract_group_spec(spec, group_pool_name, group_name);
+      r = extract_group_spec(spec, group_pool_name, group_name, nullptr);
       if (r < 0) {
         return r;
       }
@@ -338,7 +346,8 @@ int get_pool_group_names(const po::variables_map &vm,
 			 at::ArgumentModifier mod,
 			 size_t *spec_arg_index,
 			 std::string *pool_name,
-			 std::string *group_name) {
+			 std::string *group_name,
+                         std::string *snap_name) {
   std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_POOL_NAME : at::POOL_NAME);
   std::string group_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
@@ -351,12 +360,16 @@ int get_pool_group_names(const po::variables_map &vm,
     *group_name = vm[group_key].as<std::string>();
   }
 
+  if (vm.count(at::SNAPSHOT_NAME) && snap_name != nullptr) {
+    *snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
   int r;
   if (group_name != nullptr && spec_arg_index != nullptr &&
       group_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
     if (!spec.empty()) {
-      r = extract_group_spec(spec, pool_name, group_name);
+      r = extract_group_spec(spec, pool_name, group_name, snap_name);
       if (r < 0) {
         return r;
       }
@@ -372,6 +385,11 @@ int get_pool_group_names(const po::variables_map &vm,
     std::cerr << "rbd: "
               << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
               << "group name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  if (snap_name != nullptr && snap_name->empty()) {
+    std::cerr << "rbd: snapshot name was not specified" << std::endl;
     return -EINVAL;
   }
 

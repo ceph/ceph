@@ -1932,13 +1932,6 @@ namespace librbd {
     }
 
     // Consistency groups functions
-    int group_create(librados::IoCtx *ioctx, const std::string &oid)
-    {
-      bufferlist bl, bl2;
-
-      return ioctx->exec(oid, "rbd", "group_create", bl, bl2);
-    }
-
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
 	             const std::string &start, uint64_t max_return,
 		     map<string, string> *cgs)
@@ -2069,6 +2062,70 @@ namespace librbd {
 
       bufferlist::iterator iter = out_bl.begin();
       return image_get_group_finish(&iter, group_spec);
+    }
+
+    int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
+		       const cls::rbd::GroupSnapshot &snapshot)
+    {
+
+      bufferlist inbl, outbl;
+
+      ::encode(snapshot, inbl);
+      int r = ioctx->exec(oid, "rbd", "group_snap_set", inbl, outbl);
+      return r;
+    }
+
+    int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
+			  const std::string &snap_id)
+    {
+      bufferlist inbl, outbl;
+      ::encode(snap_id, inbl);
+
+      return ioctx->exec(oid, "rbd", "group_snap_remove", inbl, outbl);
+    }
+
+    int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
+			     const std::string &snap_id,
+			     cls::rbd::GroupSnapshot *snapshot)
+    {
+      bufferlist inbl, outbl;
+      ::encode(snap_id, inbl);
+
+      int r = ioctx->exec(oid, "rbd", "group_snap_get_by_id", inbl, outbl);
+      if (r < 0) {
+	return r;
+      }
+
+      bufferlist::iterator iter = outbl.begin();
+      try {
+	::decode(*snapshot, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
+    }
+    int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
+			const cls::rbd::GroupSnapshot &start,
+			uint64_t max_return,
+			std::vector<cls::rbd::GroupSnapshot> *snapshots)
+    {
+      bufferlist inbl, outbl;
+      ::encode(start, inbl);
+      ::encode(max_return, inbl);
+
+      int r = ioctx->exec(oid, "rbd", "group_snap_list", inbl, outbl);
+      if (r < 0) {
+	return r;
+      }
+      bufferlist::iterator iter = outbl.begin();
+      try {
+	::decode(*snapshots, iter);
+      } catch (const buffer::error &err) {
+	return -EBADMSG;
+      }
+
+      return 0;
     }
 
     // rbd_trash functions

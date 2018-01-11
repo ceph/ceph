@@ -38,11 +38,11 @@ using namespace librbd::watch_notify;
 void register_test_groups() {
 }
 
-class TestLibCG : public TestFixture {
+class TestGroup : public TestFixture {
 
 };
 
-TEST_F(TestLibCG, group_create)
+TEST_F(TestGroup, group_create)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -62,7 +62,7 @@ TEST_F(TestLibCG, group_create)
   ASSERT_EQ(0U, groups.size());
 }
 
-TEST_F(TestLibCG, add_image)
+TEST_F(TestGroup, add_image)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -88,4 +88,37 @@ TEST_F(TestLibCG, add_image)
   images.clear();
   ASSERT_EQ(0, rbd.group_image_list(ioctx, group_name, &images));
   ASSERT_EQ(0U, images.size());
+}
+
+TEST_F(TestGroup, add_snapshot)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  const char *group_name = "snap_group";
+  const char *image_name = "snap_image";
+  const char *snap_name = "snap_snapshot";
+
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.group_create(ioctx, group_name));
+
+  int order = 14;
+  ASSERT_EQ(0, rbd.create2(ioctx, image_name, 65535,
+	                   RBD_FEATURE_LAYERING, &order)); // Specified features make image of new format.
+
+  ASSERT_EQ(0, rbd.group_image_add(ioctx, group_name, ioctx, image_name));
+
+  ASSERT_EQ(0, rbd.group_snap_create(ioctx, group_name, snap_name));
+
+  std::vector<librbd::group_snap_spec_t> snaps;
+  ASSERT_EQ(0, rbd.group_snap_list(ioctx, group_name, &snaps));
+  ASSERT_EQ(1U, snaps.size());
+
+  ASSERT_EQ(snap_name, snaps[0].name);
+
+  ASSERT_EQ(0, rbd.group_snap_remove(ioctx, group_name, snap_name));
+
+  snaps.clear();
+  ASSERT_EQ(0, rbd.group_snap_list(ioctx, group_name, &snaps));
+  ASSERT_EQ(0U, snaps.size());
 }
