@@ -439,31 +439,6 @@ void dump_bucket_from_state(struct req_state *s)
   }
 }
 
-void dump_uri_from_state(struct req_state *s)
-{
-  if (strcmp(s->info.request_uri.c_str(), "/") == 0) {
-
-    string location = "http://";
-    string server = s->info.env->get("SERVER_NAME", "<SERVER_NAME>");
-    location.append(server);
-    location += "/";
-    if (!s->bucket_name.empty()) {
-      if (!s->bucket_tenant.empty()) {
-        location += s->bucket_tenant;
-        location += ":";
-      }
-      location += s->bucket_name;
-      location += "/";
-      if (!s->object.empty()) {
-	location += s->object.name;
-	dump_header(s, "Location", location);
-      }
-    }
-  } else {
-    dump_header_quoted(s, "Location", s->info.request_uri);
-  }
-}
-
 void dump_redirect(struct req_state * const s, const std::string& redirect)
 {
   return dump_header_if_nonempty(s, "Location", redirect);
