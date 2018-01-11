@@ -190,6 +190,9 @@ class Prepare(object):
 
         cluster_fsid = conf.ceph.get('global', 'fsid')
         osd_fsid = args.osd_fsid or system.generate_uuid()
+        crush_device_class = args.crush_device_class
+        if crush_device_class:
+            secrets['crush_device_class'] = crush_device_class
         # allow re-using an id, in case a prepare failed
         self.osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
         tags = {
@@ -197,7 +200,7 @@ class Prepare(object):
             'ceph.osd_id': self.osd_id,
             'ceph.cluster_fsid': cluster_fsid,
             'ceph.cluster_name': conf.cluster,
-            'ceph.crush_device_class': args.crush_device_class,
+            'ceph.crush_device_class': crush_device_class,
         }
         if args.filestore:
             if not args.journal:
