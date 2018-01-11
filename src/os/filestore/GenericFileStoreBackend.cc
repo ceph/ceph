@@ -14,6 +14,7 @@
 
 #include "include/int_types.h"
 #include "include/types.h"
+#include "include/os_types.hpp"
 
 #include <unistd.h>
 #include <fcntl.h>
@@ -186,29 +187,24 @@ int GenericFileStoreBackend::detect_features()
     dout(0) << "detect_features: SEEK_DATA/SEEK_HOLE is disabled via 'filestore seek data hole' config option" << dendl;
     seek_data_hole = false;
   } else {
-#if defined(__linux__) && defined(SEEK_HOLE) && defined(SEEK_DATA)
-    // If compiled on an OS with SEEK_HOLE/SEEK_DATA support, but running
-    // on an OS that doesn't support SEEK_HOLE/SEEK_DATA, EINVAL is returned.
-    // Fall back to use fiemap.
-    off_t hole_pos;
+    if constexpr (os == os_types::linux) {
+#if defined(SEEK_HOLE) && defined(SEEK_DATA)
+      off_t hole_pos;
 
-    hole_pos = lseek(fd, 0, SEEK_HOLE);
-    if (hole_pos < 0) {
-      if (errno == EINVAL) {
-        dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
-        seek_data_hole = false;
-      } else {
-        derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(-errno) << dendl;
-        VOID_TEMP_FAILURE_RETRY(::close(fd));
-        return -errno;
-      }
-    } else {
-      dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is supported" << dendl;
-      seek_data_hole = true;
-    }
+      hole_pos = lseek(fd, 0, SEEK_HOLE);
+      if (hole_pos < 0) {
+        if (errno == EINVAL) {
+          dout(0) << "detect_features: lseek SEEK_DATA/SEEK_HOLE is NOT supported" << dendl;
+          seek_data_hole = false;
+        } else {
+           derr << "detect_features: failed to lseek " << fn << ": " << cpp_strerror(-errno) << dendl;
+           VOID_TEMP_FAILURE_RETRY(::close(fd));
+           return -errno;
+        }
+      } 
 #endif
+    }
   }
-
   //splice detection
 #ifdef CEPH_HAVE_SPLICE
   if (!m_filestore_splice) {
