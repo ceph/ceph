@@ -466,12 +466,11 @@ struct C_InvalidateCache : public Context {
     data_ctx.snap_set_read(snap_id);
   }
 
-  snap_t ImageCtx::get_snap_id(cls::rbd::SnapshotNamespace in_snap_namespace,
-			       string in_snap_name) const
+  snap_t ImageCtx::get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
+                               const string& in_snap_name) const
   {
     assert(snap_lock.is_locked());
-    map<pair<cls::rbd::SnapshotNamespace, std::string>, snap_t>::const_iterator it =
-      snap_ids.lower_bound({in_snap_namespace, in_snap_name});
+    auto it = snap_ids.find({in_snap_namespace, in_snap_name});
     if (it != snap_ids.end()) {
       return it->second;
     }
