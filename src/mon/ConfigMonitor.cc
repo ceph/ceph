@@ -160,7 +160,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
 	  tbl << i.second.raw_value;
-	  tbl << (i.second.opt->is_safe() ? "*" : "");
+	  tbl << (i.second.opt->can_update_at_runtime() ? "*" : "");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section("option");
@@ -254,7 +254,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << Option::level_to_str(q->second.second->opt->level);
 	  tbl << p->first;
 	  tbl << p->second;
-	  tbl << (q->second.second->opt->is_safe() ? "*" : "");
+	  tbl << (q->second.second->opt->can_update_at_runtime() ? "*" : "");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
@@ -262,7 +262,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_string("section", q->second.first);
 	  f->dump_object("mask", q->second.second->mask);
 	  f->dump_bool("can_update_at_runtime",
-		       q->second.second->opt->is_safe());
+		       q->second.second->opt->can_update_at_runtime());
 	  f->close_section();
 	}
       }

@@ -56,8 +56,12 @@ struct Option {
   }
 
   enum flag_t {
-    FLAG_SAFE = 1,
-    FLAG_NO_MON_UPDATE = 2,
+    FLAG_SAFE = 0x1,            ///< option is observed and can update at runtime
+    FLAG_RUNTIME = 0x1,         ///< option can change changed at runtime
+    FLAG_NO_MON_UPDATE = 0x2,   ///< option cannot be changed via mon config
+    FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
+    FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
+    FLAG_DAEMON_CREATE = 0x10,  ///< option only has effect at daemon creation
   };
 
   using value_t = boost::variant<
@@ -259,6 +263,10 @@ struct Option {
     flags |= f;
     return *this;
   }
+  Option &set_flags(flag_t f) {
+    flags |= f;
+    return *this;
+  }
 
   Option &set_safe() {
     flags |= FLAG_SAFE;
@@ -288,7 +296,7 @@ struct Option {
    * modified safely at runtime -- should be replaced
    * with proper locking!
    */
-  bool is_safe() const
+  bool can_update_at_runtime() const
   {
     return has_flag(FLAG_SAFE)
       || type == TYPE_BOOL || type == TYPE_INT

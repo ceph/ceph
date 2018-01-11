@@ -1296,7 +1296,7 @@ int md_config_t::_set_val(
   }
 
   // unsafe runtime change?
-  if (!opt.is_safe() &&
+  if (!opt.can_update_at_runtime() &&
       safe_to_start_threads &&
       observers.count(opt.name) == 0) {
     // accept value if it is not actually a change
