@@ -45,19 +45,19 @@ void LogStatusDump::dump(Formatter *f) const {
 
 void RGWMetadataLogData::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
-  ::encode(read_version, bl);
-  ::encode(write_version, bl);
+  encode(read_version, bl);
+  encode(write_version, bl);
   uint32_t s = (uint32_t)status;
-  ::encode(s, bl);
+  encode(s, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWMetadataLogData::decode(bufferlist::iterator& bl) {
    DECODE_START(1, bl);
-   ::decode(read_version, bl);
-   ::decode(write_version, bl);
+   decode(read_version, bl);
+   decode(write_version, bl);
    uint32_t s;
-   ::decode(s, bl);
+   decode(s, bl);
    status = (RGWMDLogStatus)s;
    DECODE_FINISH(bl);
 }
@@ -912,7 +912,7 @@ void RGWMetadataManager::dump_log_entry(cls_log_entry& entry, Formatter *f)
   try {
     RGWMetadataLogData log_data;
     bufferlist::iterator iter = entry.data.begin();
-    ::decode(log_data, iter);
+    decode(log_data, iter);
 
     encode_json("data", log_data, f);
   } catch (buffer::error& err) {
@@ -949,7 +949,7 @@ int RGWMetadataManager::pre_modify(RGWMetadataHandler *handler, string& section,
   log_data.status = op_type;
 
   bufferlist logbl;
-  ::encode(log_data, logbl);
+  encode(log_data, logbl);
 
   assert(current_log); // must have called init()
   int ret = current_log->add_entry(handler, section, key, logbl);
@@ -968,7 +968,7 @@ int RGWMetadataManager::post_modify(RGWMetadataHandler *handler, const string& s
     log_data.status = MDLOG_STATUS_ABORT;
 
   bufferlist logbl;
-  ::encode(log_data, logbl);
+  encode(log_data, logbl);
 
   assert(current_log); // must have called init()
   int r = current_log->add_entry(handler, section, key, logbl);

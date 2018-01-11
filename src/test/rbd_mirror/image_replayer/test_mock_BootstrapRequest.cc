@@ -329,7 +329,7 @@ public:
                                         const librbd::journal::ClientData &client_data,
                                         int r) {
     bufferlist bl;
-    ::encode(client_data, bl);
+    encode(client_data, bl);
 
     EXPECT_CALL(mock_journaler, register_client(ContentsEqual(bl), _))
       .WillOnce(WithArg<1>(Invoke([this, r](Context *on_finish) {
@@ -349,7 +349,7 @@ public:
                                       const librbd::journal::ClientData &client_data,
                                       int r) {
     bufferlist bl;
-    ::encode(client_data, bl);
+    encode(client_data, bl);
 
     EXPECT_CALL(mock_journaler, update_client(ContentsEqual(bl), _))
       .WillOnce(WithArg<1>(Invoke([this, r](Context *on_finish) {
@@ -437,7 +437,7 @@ public:
 
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
     bufferlist bl;
-    ::encode(tag_data, bl);
+    encode(tag_data, bl);
     return bl;
   }
 
@@ -483,7 +483,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, NonPrimaryRemoteSyncingState) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -532,7 +532,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, RemoteDemotePromote) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -602,7 +602,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, MultipleRemoteDemotePromotes) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -682,7 +682,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, LocalDemoteRemotePromote) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -750,7 +750,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, SplitBrainForcePromote) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -818,7 +818,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, ResyncRequested) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -874,7 +874,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -901,7 +901,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemote) {
   mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
   client_data.client_meta = mirror_peer_client_meta;
   client.data.clear();
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   expect_journaler_update_client(mock_journaler, client_data, 0);
 
   // create the local image
@@ -943,7 +943,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   cls::journal::Client client;
   librbd::journal::ClientData client_data{
     librbd::journal::ImageClientMeta{123}};
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   ::journal::MockJournaler mock_journaler;
   expect_journaler_get_client(mock_journaler,
                               librbd::Journal<>::IMAGE_CLIENT_ID,
@@ -985,7 +985,7 @@ TEST_F(TestMockImageReplayerBootstrapRequest, PrimaryRemoteLocalDeleted) {
   mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_SYNCING;
   client_data.client_meta = mirror_peer_client_meta;
   client.data.clear();
-  ::encode(client_data, client.data);
+  encode(client_data, client.data);
   expect_journaler_update_client(mock_journaler, client_data, 0);
 
   // create the missing local image

@@ -151,7 +151,4 @@ std::ostream &operator<<(std::ostream &os, const Tag &tag);
 } // namespace journal
 } // namespace cls
 
-using cls::journal::encode;
-using cls::journal::decode;
-
 #endif // CEPH_CLS_JOURNAL_TYPES_H

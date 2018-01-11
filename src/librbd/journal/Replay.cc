@@ -189,7 +189,8 @@ Replay<I>::~Replay() {
 template <typename I>
 int Replay<I>::decode(bufferlist::iterator *it, EventEntry *event_entry) {
   try {
-    ::decode(*event_entry, *it);
+    using ceph::decode;
+    decode(*event_entry, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }

@@ -888,7 +888,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       st->xattrbl.length() &&
       st->xattr_version > in->xattr_version) {
     bufferlist::iterator p = st->xattrbl.begin();
-    ::decode(in->xattrs, p);
+    decode(in->xattrs, p);
     in->xattr_version = st->xattr_version;
   }
 
@@ -1085,8 +1085,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     DirStat dst(p);
     __u32 numdn;
     __u16 flags;
-    ::decode(numdn, p);
-    ::decode(flags, p);
+    decode(numdn, p);
+    decode(flags, p);
 
     bool end = ((unsigned)flags & CEPH_READDIR_FRAG_END);
     bool hash_order = ((unsigned)flags & CEPH_READDIR_HASH_ORDER);
@@ -1139,8 +1139,8 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
     string dname;
     LeaseStat dlease;
     for (unsigned i=0; i<numdn; i++) {
-      ::decode(dname, p);
-      ::decode(dlease, p);
+      decode(dname, p);
+      decode(dlease, p);
       InodeStat ist(p, features);
 
       ldout(cct, 15) << "" << i << ": '" << dname << "'" << dendl;
@@ -1283,8 +1283,8 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
   if (reply->head.is_dentry) {
     dirst.decode(p, features);
     dst.decode(p);
-    ::decode(dname, p);
-    ::decode(dlease, p);
+    decode(dname, p);
+    decode(dlease, p);
   }
 
   Inode *in = 0;
@@ -1540,7 +1540,7 @@ int Client::verify_reply_trace(int r,
     // if the extra bufferlist has a buffer, we assume its the created inode
     // and that this request to create succeeded in actually creating
     // the inode (won the race with other create requests)
-    ::decode(created_ino, extra_bl);
+    decode(created_ino, extra_bl);
     got_created_ino = true;
     ldout(cct, 10) << "make_request created ino " << created_ino << dendl;
   }
@@ -3280,7 +3280,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   m->head.nlink = in->nlink;
   
   if (flush & CEPH_CAP_XATTR_EXCL) {
-    ::encode(in->xattrs, m->xattrbl);
+    encode(in->xattrs, m->xattrbl);
     m->head.xattr_version = in->xattr_version;
   }
   
@@ -3603,7 +3603,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
     m->size = capsnap.size;
 
     m->head.xattr_version = capsnap.xattr_version;
-    ::encode(capsnap.xattrs, m->xattrbl);
+    encode(capsnap.xattrs, m->xattrbl);
 
     m->ctime = capsnap.ctime;
     m->btime = capsnap.btime;
@@ -4445,7 +4445,7 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
   bufferlist::iterator p = bl.begin();
   while (!p.end()) {
     SnapRealmInfo info;
-    ::decode(info, p);
+    decode(info, p);
     SnapRealm *realm = get_snap_realm(info.ino());
 
     bool invalidate = false;
@@ -4547,7 +4547,7 @@ void Client::handle_snap(MClientSnap *m)
     assert(m->head.split);
     SnapRealmInfo info;
     bufferlist::iterator p = m->bl.begin();    
-    ::decode(info, p);
+    decode(info, p);
     assert(info.ino() == m->head.split);
     
     // flush, then move, ino's.
@@ -5036,7 +5036,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
       m->xattrbl.length() &&
       m->head.xattr_version > in->xattr_version) {
     bufferlist::iterator p = m->xattrbl.begin();
-    ::decode(in->xattrs, p);
+    decode(in->xattrs, p);
     in->xattr_version = m->head.xattr_version;
   }
   update_inode_file_bits(in, m->get_truncate_seq(), m->get_truncate_size(), m->get_size(),
@@ -8649,7 +8649,7 @@ int Client::uninline_data(Inode *in, Context *onfinish)
 		   NULL);
 
   bufferlist inline_version_bl;
-  ::encode(in->inline_version, inline_version_bl);
+  encode(in->inline_version, inline_version_bl);
 
   ObjectOperation uninline_ops;
   uninline_ops.cmpxattr("inline_version",
@@ -9774,7 +9774,7 @@ int Client::_do_filelock(Inode *in, Fh *fh, int lock_type, int op, int sleep,
     if (op == CEPH_MDS_OP_GETFILELOCK) {
       ceph_filelock filelock;
       bufferlist::iterator p = bl.begin();
-      ::decode(filelock, p);
+      decode(filelock, p);
 
       if (CEPH_LOCK_SHARED == filelock.type)
 	fl->l_type = F_RDLCK;
@@ -9860,23 +9860,23 @@ void Client::_encode_filelocks(Inode *in, bufferlist& bl)
     return;
 
   unsigned nr_fcntl_locks = in->fcntl_locks ? in->fcntl_locks->held_locks.size() : 0;
-  ::encode(nr_fcntl_locks, bl);
+  encode(nr_fcntl_locks, bl);
   if (nr_fcntl_locks) {
     auto &lock_state = in->fcntl_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
-      ::encode(p->second, bl);
+      encode(p->second, bl);
   }
 
   unsigned nr_flock_locks = in->flock_locks ? in->flock_locks->held_locks.size() : 0;
-  ::encode(nr_flock_locks, bl);
+  encode(nr_flock_locks, bl);
   if (nr_flock_locks) {
     auto &lock_state = in->flock_locks;
     for(multimap<uint64_t, ceph_filelock>::iterator p = lock_state->held_locks.begin();
 	p != lock_state->held_locks.end();
 	++p)
-      ::encode(p->second, bl);
+      encode(p->second, bl);
   }
 
   ldout(cct, 10) << "_encode_filelocks ino " << in->ino << ", " << nr_fcntl_locks
@@ -13783,7 +13783,7 @@ int Client::_posix_acl_create(Inode *dir, mode_t *mode, bufferlist& xattrs_bl,
 
       r = xattrs.size();
       if (r > 0)
-	::encode(xattrs, xattrs_bl);
+	encode(xattrs, xattrs_bl);
     } else {
       if (umask_cb)
 	*mode &= ~umask_cb(callback_handle);

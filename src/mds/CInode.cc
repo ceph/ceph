@@ -992,7 +992,8 @@ void CInode::store(MDSInternalContextBase *fin)
   // encode
   bufferlist bl;
   string magic = CEPH_FS_ONDISK_MAGIC;
-  ::encode(magic, bl);
+  using ceph::encode;
+  encode(magic, bl);
   encode_store(bl, mdcache->mds->mdsmap->get_up_features());
 
   // write it.
@@ -1101,10 +1102,11 @@ void CInode::_fetched(bufferlist& bl, bufferlist& bl2, Context *fin)
     return;
   }
 
+  using ceph::decode;
   // Attempt decode
   try {
     string magic;
-    ::decode(magic, p);
+    decode(magic, p);
     dout(10) << " magic is '" << magic << "' (expecting '"
              << CEPH_FS_ONDISK_MAGIC << "')" << dendl;
     if (magic != CEPH_FS_ONDISK_MAGIC) {
@@ -1169,7 +1171,8 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   inode_backtrace_t bt;
   build_backtrace(pool, bt);
   bufferlist parent_bl;
-  ::encode(bt, parent_bl);
+  using ceph::encode;
+  encode(bt, parent_bl);
 
   ObjectOperation op;
   op.priority = op_prio;
@@ -1177,7 +1180,7 @@ void CInode::store_backtrace(MDSInternalContextBase *fin, int op_prio)
   op.setxattr("parent", parent_bl);
 
   bufferlist layout_bl;
-  ::encode(inode.layout, layout_bl, mdcache->mds->mdsmap->get_up_features());
+  encode(inode.layout, layout_bl, mdcache->mds->mdsmap->get_up_features());
   op.setxattr("layout", layout_bl);
 
   SnapContext snapc;
@@ -1303,7 +1306,8 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 
   if (err == 0) {
     inode_backtrace_t backtrace;
-    ::decode(backtrace, bl);
+    using ceph::decode;
+    decode(backtrace, bl);
     CDentry *pdn = get_parent_dn();
     if (backtrace.ancestors.empty() ||
 	backtrace.ancestors[0].dname != pdn->name ||
@@ -1328,18 +1332,19 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
 void InodeStoreBase::encode_bare(bufferlist &bl, uint64_t features,
 				 const bufferlist *snap_blob) const
 {
-  ::encode(inode, bl, features);
+  using ceph::encode;
+  encode(inode, bl, features);
   if (is_symlink())
-    ::encode(symlink, bl);
-  ::encode(dirfragtree, bl);
-  ::encode(xattrs, bl);
+    encode(symlink, bl);
+  encode(dirfragtree, bl);
+  encode(xattrs, bl);
   if (snap_blob)
-    ::encode(*snap_blob, bl);
+    encode(*snap_blob, bl);
   else
-    ::encode(bufferlist(), bl);
-  ::encode(old_inodes, bl, features);
-  ::encode(oldest_snap, bl);
-  ::encode(damage_flags, bl);
+    encode(bufferlist(), bl);
+  encode(old_inodes, bl, features);
+  encode(oldest_snap, bl);
+  encode(damage_flags, bl);
 }
 
 void InodeStoreBase::encode(bufferlist &bl, uint64_t features,
@@ -1361,20 +1366,21 @@ void CInode::encode_store(bufferlist& bl, uint64_t features)
 void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
 			      bufferlist& snap_blob, __u8 struct_v)
 {
-  ::decode(inode, bl);
+  using ceph::decode;
+  decode(inode, bl);
   if (is_symlink())
-    ::decode(symlink, bl);
-  ::decode(dirfragtree, bl);
-  ::decode(xattrs, bl);
-  ::decode(snap_blob, bl);
+    decode(symlink, bl);
+  decode(dirfragtree, bl);
+  decode(xattrs, bl);
+  decode(snap_blob, bl);
 
-  ::decode(old_inodes, bl);
+  decode(old_inodes, bl);
   if (struct_v == 2 && inode.is_dir()) {
     bool default_layout_exists;
-    ::decode(default_layout_exists, bl);
+    decode(default_layout_exists, bl);
     if (default_layout_exists) {
-      ::decode(struct_v, bl); // this was a default_file_layout
-      ::decode(inode.layout, bl); // but we only care about the layout portion
+      decode(struct_v, bl); // this was a default_file_layout
+      decode(inode.layout, bl); // but we only care about the layout portion
     }
   }
 
@@ -1382,11 +1388,11 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
     // InodeStore is embedded in dentries without proper versioning, so
     // we consume up to the end of the buffer
     if (!bl.end()) {
-      ::decode(oldest_snap, bl);
+      decode(oldest_snap, bl);
     }
 
     if (!bl.end()) {
-      ::decode(damage_flags, bl);
+      decode(damage_flags, bl);
     }
   }
 }
@@ -1417,36 +1423,37 @@ void CInode::set_object_info(MDSCacheObjectInfo &info)
 
 void CInode::encode_lock_state(int type, bufferlist& bl)
 {
-  ::encode(first, bl);
+  using ceph::encode;
+  encode(first, bl);
   if (!is_base())
-    ::encode(parent->first, bl);
+    encode(parent->first, bl);
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    ::encode(inode.version, bl);
-    ::encode(inode.ctime, bl);
-    ::encode(inode.mode, bl);
-    ::encode(inode.uid, bl);
-    ::encode(inode.gid, bl);  
+    encode(inode.version, bl);
+    encode(inode.ctime, bl);
+    encode(inode.mode, bl);
+    encode(inode.uid, bl);
+    encode(inode.gid, bl);  
     break;
     
   case CEPH_LOCK_ILINK:
-    ::encode(inode.version, bl);
-    ::encode(inode.ctime, bl);
-    ::encode(inode.nlink, bl);
+    encode(inode.version, bl);
+    encode(inode.ctime, bl);
+    encode(inode.nlink, bl);
     break;
     
   case CEPH_LOCK_IDFT:
     if (is_auth()) {
-      ::encode(inode.version, bl);
+      encode(inode.version, bl);
     } else {
       // treat flushing as dirty when rejoining cache
       bool dirty = dirfragtreelock.is_dirty_or_flushing();
-      ::encode(dirty, bl);
+      encode(dirty, bl);
     }
     {
       // encode the raw tree
-      ::encode(dirfragtree, bl);
+      encode(dirfragtree, bl);
 
       // also specify which frags are mine
       set<frag_t> myfrags;
@@ -1457,34 +1464,34 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  frag_t fg = (*p)->get_frag();
 	  myfrags.insert(fg);
 	}
-      ::encode(myfrags, bl);
+      encode(myfrags, bl);
     }
     break;
     
   case CEPH_LOCK_IFILE:
     if (is_auth()) {
-      ::encode(inode.version, bl);
-      ::encode(inode.ctime, bl);
-      ::encode(inode.mtime, bl);
-      ::encode(inode.atime, bl);
-      ::encode(inode.time_warp_seq, bl);
+      encode(inode.version, bl);
+      encode(inode.ctime, bl);
+      encode(inode.mtime, bl);
+      encode(inode.atime, bl);
+      encode(inode.time_warp_seq, bl);
       if (!is_dir()) {
-	::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
-	::encode(inode.size, bl);
-	::encode(inode.truncate_seq, bl);
-	::encode(inode.truncate_size, bl);
-	::encode(inode.client_ranges, bl);
-	::encode(inode.inline_data, bl);
+	encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
+	encode(inode.size, bl);
+	encode(inode.truncate_seq, bl);
+	encode(inode.truncate_size, bl);
+	encode(inode.client_ranges, bl);
+	encode(inode.inline_data, bl);
       }
     } else {
       // treat flushing as dirty when rejoining cache
       bool dirty = filelock.is_dirty_or_flushing();
-      ::encode(dirty, bl);
+      encode(dirty, bl);
     }
 
     {
       dout(15) << __func__ << " inode.dirstat is " << inode.dirstat << dendl;
-      ::encode(inode.dirstat, bl);  // only meaningful if i am auth.
+      encode(inode.dirstat, bl);  // only meaningful if i am auth.
       bufferlist tmp;
       __u32 n = 0;
       for (compact_map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -1497,29 +1504,29 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(15) << fg << " " << *dir << dendl;
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
 	  dout(20) << fg << " accounted_fragstat " << pf->accounted_fragstat << dendl;
-	  ::encode(fg, tmp);
-	  ::encode(dir->first, tmp);
-	  ::encode(pf->fragstat, tmp);
-	  ::encode(pf->accounted_fragstat, tmp);
+	  encode(fg, tmp);
+	  encode(dir->first, tmp);
+	  encode(pf->fragstat, tmp);
+	  encode(pf->accounted_fragstat, tmp);
 	  n++;
 	}
       }
-      ::encode(n, bl);
+      encode(n, bl);
       bl.claim_append(tmp);
     }
     break;
 
   case CEPH_LOCK_INEST:
     if (is_auth()) {
-      ::encode(inode.version, bl);
+      encode(inode.version, bl);
     } else {
       // treat flushing as dirty when rejoining cache
       bool dirty = nestlock.is_dirty_or_flushing();
-      ::encode(dirty, bl);
+      encode(dirty, bl);
     }
     {
       dout(15) << __func__ << " inode.rstat is " << inode.rstat << dendl;
-      ::encode(inode.rstat, bl);  // only meaningful if i am auth.
+      encode(inode.rstat, bl);  // only meaningful if i am auth.
       bufferlist tmp;
       __u32 n = 0;
       for (compact_map<frag_t,CDir*>::iterator p = dirfrags.begin();
@@ -1533,43 +1540,43 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
 	  dout(10) << fg << " " << pf->rstat << dendl;
 	  dout(10) << fg << " " << pf->rstat << dendl;
 	  dout(10) << fg << " " << dir->dirty_old_rstat << dendl;
-	  ::encode(fg, tmp);
-	  ::encode(dir->first, tmp);
-	  ::encode(pf->rstat, tmp);
-	  ::encode(pf->accounted_rstat, tmp);
-	  ::encode(dir->dirty_old_rstat, tmp);
+	  encode(fg, tmp);
+	  encode(dir->first, tmp);
+	  encode(pf->rstat, tmp);
+	  encode(pf->accounted_rstat, tmp);
+	  encode(dir->dirty_old_rstat, tmp);
 	  n++;
 	}
       }
-      ::encode(n, bl);
+      encode(n, bl);
       bl.claim_append(tmp);
     }
     break;
     
   case CEPH_LOCK_IXATTR:
-    ::encode(inode.version, bl);
-    ::encode(inode.ctime, bl);
-    ::encode(xattrs, bl);
+    encode(inode.version, bl);
+    encode(inode.ctime, bl);
+    encode(xattrs, bl);
     break;
 
   case CEPH_LOCK_ISNAP:
-    ::encode(inode.version, bl);
-    ::encode(inode.ctime, bl);
+    encode(inode.version, bl);
+    encode(inode.ctime, bl);
     encode_snap(bl);
     break;
 
   case CEPH_LOCK_IFLOCK:
-    ::encode(inode.version, bl);
+    encode(inode.version, bl);
     _encode_file_locks(bl);
     break;
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
-      ::encode(inode.version, bl);
-      ::encode(inode.ctime, bl);
-      ::encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
-      ::encode(inode.quota, bl);
-      ::encode(inode.export_pin, bl);
+      encode(inode.version, bl);
+      encode(inode.ctime, bl);
+      encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
+      encode(inode.quota, bl);
+      encode(inode.export_pin, bl);
     }
     break;
   
@@ -1587,13 +1594,14 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   utime_t tm;
 
   snapid_t newfirst;
-  ::decode(newfirst, p);
+  using ceph::decode;
+  decode(newfirst, p);
   if (!is_auth() && newfirst != first) {
     dout(10) << __func__ << " first " << first << " -> " << newfirst << dendl;
     first = newfirst;
   }
   if (!is_base()) {
-    ::decode(newfirst, p);
+    decode(newfirst, p);
     if (!parent->is_auth() && newfirst != parent->first) {
       dout(10) << __func__ << " parent first " << first << " -> " << newfirst << dendl;
       parent->first = newfirst;
@@ -1602,37 +1610,37 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   switch (type) {
   case CEPH_LOCK_IAUTH:
-    ::decode(inode.version, p);
-    ::decode(tm, p);
+    decode(inode.version, p);
+    decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::decode(inode.mode, p);
-    ::decode(inode.uid, p);
-    ::decode(inode.gid, p);
+    decode(inode.mode, p);
+    decode(inode.uid, p);
+    decode(inode.gid, p);
     break;
 
   case CEPH_LOCK_ILINK:
-    ::decode(inode.version, p);
-    ::decode(tm, p);
+    decode(inode.version, p);
+    decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::decode(inode.nlink, p);
+    decode(inode.nlink, p);
     break;
 
   case CEPH_LOCK_IDFT:
     if (is_auth()) {
       bool replica_dirty;
-      ::decode(replica_dirty, p);
+      decode(replica_dirty, p);
       if (replica_dirty) {
 	dout(10) << __func__ << " setting dftlock dirty flag" << dendl;
 	dirfragtreelock.mark_dirty();  // ok bc we're auth and caller will handle
       }
     } else {
-      ::decode(inode.version, p);
+      decode(inode.version, p);
     }
     {
       fragtree_t temp;
-      ::decode(temp, p);
+      decode(temp, p);
       set<frag_t> authfrags;
-      ::decode(authfrags, p);
+      decode(authfrags, p);
       if (is_auth()) {
 	// auth.  believe replica's auth frags only.
 	for (set<frag_t>::iterator p = authfrags.begin(); p != authfrags.end(); ++p)
@@ -1665,23 +1673,23 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 
   case CEPH_LOCK_IFILE:
     if (!is_auth()) {
-      ::decode(inode.version, p);
-      ::decode(tm, p);
+      decode(inode.version, p);
+      decode(tm, p);
       if (inode.ctime < tm) inode.ctime = tm;
-      ::decode(inode.mtime, p);
-      ::decode(inode.atime, p);
-      ::decode(inode.time_warp_seq, p);
+      decode(inode.mtime, p);
+      decode(inode.atime, p);
+      decode(inode.time_warp_seq, p);
       if (!is_dir()) {
-	::decode(inode.layout, p);
-	::decode(inode.size, p);
-	::decode(inode.truncate_seq, p);
-	::decode(inode.truncate_size, p);
-	::decode(inode.client_ranges, p);
-	::decode(inode.inline_data, p);
+	decode(inode.layout, p);
+	decode(inode.size, p);
+	decode(inode.truncate_seq, p);
+	decode(inode.truncate_size, p);
+	decode(inode.client_ranges, p);
+	decode(inode.inline_data, p);
       }
     } else {
       bool replica_dirty;
-      ::decode(replica_dirty, p);
+      decode(replica_dirty, p);
       if (replica_dirty) {
 	dout(10) << __func__ << " setting filelock dirty flag" << dendl;
 	filelock.mark_dirty();  // ok bc we're auth and caller will handle
@@ -1689,23 +1697,23 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     }
     {
       frag_info_t dirstat;
-      ::decode(dirstat, p);
+      decode(dirstat, p);
       if (!is_auth()) {
 	dout(10) << " taking inode dirstat " << dirstat << " for " << *this << dendl;
 	inode.dirstat = dirstat;    // take inode summation if replica
       }
       __u32 n;
-      ::decode(n, p);
+      decode(n, p);
       dout(10) << " ...got " << n << " fragstats on " << *this << dendl;
       while (n--) {
 	frag_t fg;
 	snapid_t fgfirst;
 	frag_info_t fragstat;
 	frag_info_t accounted_fragstat;
-	::decode(fg, p);
-	::decode(fgfirst, p);
-	::decode(fragstat, p);
-	::decode(accounted_fragstat, p);
+	decode(fg, p);
+	decode(fgfirst, p);
+	decode(fragstat, p);
+	decode(accounted_fragstat, p);
 	dout(10) << fg << " [" << fgfirst << ",head] " << dendl;
 	dout(10) << fg << "           fragstat " << fragstat << dendl;
 	dout(20) << fg << " accounted_fragstat " << accounted_fragstat << dendl;
@@ -1740,34 +1748,34 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_INEST:
     if (is_auth()) {
       bool replica_dirty;
-      ::decode(replica_dirty, p);
+      decode(replica_dirty, p);
       if (replica_dirty) {
 	dout(10) << __func__ << " setting nestlock dirty flag" << dendl;
 	nestlock.mark_dirty();  // ok bc we're auth and caller will handle
       }
     } else {
-      ::decode(inode.version, p);
+      decode(inode.version, p);
     }
     {
       nest_info_t rstat;
-      ::decode(rstat, p);
+      decode(rstat, p);
       if (!is_auth()) {
 	dout(10) << " taking inode rstat " << rstat << " for " << *this << dendl;
 	inode.rstat = rstat;    // take inode summation if replica
       }
       __u32 n;
-      ::decode(n, p);
+      decode(n, p);
       while (n--) {
 	frag_t fg;
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
 	compact_map<snapid_t,old_rstat_t> dirty_old_rstat;
-	::decode(fg, p);
-	::decode(fgfirst, p);
-	::decode(rstat, p);
-	::decode(accounted_rstat, p);
-	::decode(dirty_old_rstat, p);
+	decode(fg, p);
+	decode(fgfirst, p);
+	decode(rstat, p);
+	decode(accounted_rstat, p);
+	decode(dirty_old_rstat, p);
 	dout(10) << fg << " [" << fgfirst << ",head]" << dendl;
 	dout(10) << fg << "               rstat " << rstat << dendl;
 	dout(10) << fg << "     accounted_rstat " << accounted_rstat << dendl;
@@ -1801,16 +1809,16 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IXATTR:
-    ::decode(inode.version, p);
-    ::decode(tm, p);
+    decode(inode.version, p);
+    decode(tm, p);
     if (inode.ctime < tm) inode.ctime = tm;
-    ::decode(xattrs, p);
+    decode(xattrs, p);
     break;
 
   case CEPH_LOCK_ISNAP:
     {
-      ::decode(inode.version, p);
-      ::decode(tm, p);
+      decode(inode.version, p);
+      decode(tm, p);
       if (inode.ctime < tm) inode.ctime = tm;
       snapid_t seq = 0;
       if (snaprealm)
@@ -1822,19 +1830,19 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
     break;
 
   case CEPH_LOCK_IFLOCK:
-    ::decode(inode.version, p);
+    decode(inode.version, p);
     _decode_file_locks(p);
     break;
 
   case CEPH_LOCK_IPOLICY:
     if (inode.is_dir()) {
-      ::decode(inode.version, p);
-      ::decode(tm, p);
+      decode(inode.version, p);
+      decode(tm, p);
       if (inode.ctime < tm) inode.ctime = tm;
-      ::decode(inode.layout, p);
-      ::decode(inode.quota, p);
+      decode(inode.layout, p);
+      decode(inode.quota, p);
       mds_rank_t old_pin = inode.export_pin;
-      ::decode(inode.export_pin, p);
+      decode(inode.export_pin, p);
       maybe_export_pin(old_pin != inode.export_pin);
     }
     break;
@@ -2711,16 +2719,18 @@ SnapRealm *CInode::find_snaprealm() const
 void CInode::encode_snap_blob(bufferlist &snapbl)
 {
   if (snaprealm) {
-    ::encode(snaprealm->srnode, snapbl);
+    using ceph::encode;
+    encode(snaprealm->srnode, snapbl);
     dout(20) << __func__ << " " << *snaprealm << dendl;
   }
 }
 void CInode::decode_snap_blob(bufferlist& snapbl)
 {
+  using ceph::decode;
   if (snapbl.length()) {
     open_snaprealm();
     bufferlist::iterator p = snapbl.begin();
-    ::decode(snaprealm->srnode, p);
+    decode(snaprealm->srnode, p);
     if (is_base()) {
       bool ok = snaprealm->_open_parents(NULL);
       assert(ok);
@@ -2731,17 +2741,19 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
 
 void CInode::encode_snap(bufferlist& bl)
 {
+  using ceph::encode;
   bufferlist snapbl;
   encode_snap_blob(snapbl);
-  ::encode(snapbl, bl);
-  ::encode(oldest_snap, bl);
-}    
+  encode(snapbl, bl);
+  encode(oldest_snap, bl);
+}
 
 void CInode::decode_snap(bufferlist::iterator& p)
 {
+  using ceph::decode;
   bufferlist snapbl;
-  ::decode(snapbl, p);
-  ::decode(oldest_snap, p);
+  decode(snapbl, p);
+  decode(oldest_snap, p);
   decode_snap_blob(snapbl);
 }
 
@@ -3288,6 +3300,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   // xattr
   inode_t *xattr_i = pxattr ? pi:oi;
 
+  using ceph::encode;
   // xattr
   bufferlist xbl;
   version_t xattr_version;
@@ -3296,7 +3309,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       (getattr_caps & CEPH_CAP_XATTR_SHARED)) { // client requests xattrs
     if (!pxattrs)
       pxattrs = pxattr ? get_projected_xattrs() : &xattrs;
-    ::encode(*pxattrs, xbl);
+    encode(*pxattrs, xbl);
     xattr_version = xattr_i->xattr_version;
   } else {
     xattr_version = 0;
@@ -3421,62 +3434,62 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
   /*
    * note: encoding matches MClientReply::InodeStat
    */
-  ::encode(oi->ino, bl);
-  ::encode(snapid, bl);
-  ::encode(oi->rdev, bl);
-  ::encode(version, bl);
+  encode(oi->ino, bl);
+  encode(snapid, bl);
+  encode(oi->rdev, bl);
+  encode(version, bl);
 
-  ::encode(xattr_version, bl);
+  encode(xattr_version, bl);
 
-  ::encode(ecap, bl);
+  encode(ecap, bl);
   {
     ceph_file_layout legacy_layout;
     layout.to_legacy(&legacy_layout);
-    ::encode(legacy_layout, bl);
+    encode(legacy_layout, bl);
   }
-  ::encode(any_i->ctime, bl);
-  ::encode(file_i->mtime, bl);
-  ::encode(file_i->atime, bl);
-  ::encode(file_i->time_warp_seq, bl);
-  ::encode(file_i->size, bl);
-  ::encode(max_size, bl);
-  ::encode(file_i->truncate_size, bl);
-  ::encode(file_i->truncate_seq, bl);
+  encode(any_i->ctime, bl);
+  encode(file_i->mtime, bl);
+  encode(file_i->atime, bl);
+  encode(file_i->time_warp_seq, bl);
+  encode(file_i->size, bl);
+  encode(max_size, bl);
+  encode(file_i->truncate_size, bl);
+  encode(file_i->truncate_seq, bl);
 
-  ::encode(auth_i->mode, bl);
-  ::encode((uint32_t)auth_i->uid, bl);
-  ::encode((uint32_t)auth_i->gid, bl);
+  encode(auth_i->mode, bl);
+  encode((uint32_t)auth_i->uid, bl);
+  encode((uint32_t)auth_i->gid, bl);
 
-  ::encode(link_i->nlink, bl);
+  encode(link_i->nlink, bl);
 
-  ::encode(file_i->dirstat.nfiles, bl);
-  ::encode(file_i->dirstat.nsubdirs, bl);
-  ::encode(file_i->rstat.rbytes, bl);
-  ::encode(file_i->rstat.rfiles, bl);
-  ::encode(file_i->rstat.rsubdirs, bl);
-  ::encode(file_i->rstat.rctime, bl);
+  encode(file_i->dirstat.nfiles, bl);
+  encode(file_i->dirstat.nsubdirs, bl);
+  encode(file_i->rstat.rbytes, bl);
+  encode(file_i->rstat.rfiles, bl);
+  encode(file_i->rstat.rsubdirs, bl);
+  encode(file_i->rstat.rctime, bl);
 
   dirfragtree.encode(bl);
 
-  ::encode(symlink, bl);
+  encode(symlink, bl);
   if (session->connection->has_feature(CEPH_FEATURE_DIRLAYOUTHASH)) {
-    ::encode(file_i->dir_layout, bl);
+    encode(file_i->dir_layout, bl);
   }
-  ::encode(xbl, bl);
+  encode(xbl, bl);
   if (session->connection->has_feature(CEPH_FEATURE_MDS_INLINE_DATA)) {
-    ::encode(inline_version, bl);
-    ::encode(inline_data, bl);
+    encode(inline_version, bl);
+    encode(inline_data, bl);
   }
   if (session->connection->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
     inode_t *policy_i = ppolicy ? pi : oi;
-    ::encode(policy_i->quota, bl);
+    encode(policy_i->quota, bl);
   }
   if (session->connection->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
-    ::encode(layout.pool_ns, bl);
+    encode(layout.pool_ns, bl);
   }
   if (session->connection->has_feature(CEPH_FEATURE_FS_BTIME)) {
-    ::encode(any_i->btime, bl);
-    ::encode(any_i->change_attr, bl);
+    encode(any_i->btime, bl);
+    encode(any_i->change_attr, bl);
   }
 
   return valid;
@@ -3533,12 +3546,13 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
   i = plink ? pi:oi;
   m->head.nlink = i->nlink;
 
+  using ceph::encode;
   i = pxattr ? pi:oi;
   map<string,bufferptr> *ix = pxattr ? get_projected_xattrs() : &xattrs;
   if ((cap->pending() & CEPH_CAP_XATTR_SHARED) &&
       i->xattr_version > cap->client_xattr_version) {
     dout(10) << "    including xattrs v " << i->xattr_version << dendl;
-    ::encode(*ix, m->xattrbl);
+    encode(*ix, m->xattrbl);
     m->head.xattr_version = i->xattr_version;
     cap->client_xattr_version = i->xattr_version;
   }
@@ -3548,54 +3562,58 @@ void CInode::encode_cap_message(MClientCaps *m, Capability *cap)
 
 void CInode::_encode_base(bufferlist& bl, uint64_t features)
 {
-  ::encode(first, bl);
-  ::encode(inode, bl, features);
-  ::encode(symlink, bl);
-  ::encode(dirfragtree, bl);
-  ::encode(xattrs, bl);
-  ::encode(old_inodes, bl, features);
-  ::encode(damage_flags, bl);
+  using ceph::encode;
+  encode(first, bl);
+  encode(inode, bl, features);
+  encode(symlink, bl);
+  encode(dirfragtree, bl);
+  encode(xattrs, bl);
+  encode(old_inodes, bl, features);
+  encode(damage_flags, bl);
   encode_snap(bl);
 }
 void CInode::_decode_base(bufferlist::iterator& p)
 {
-  ::decode(first, p);
-  ::decode(inode, p);
-  ::decode(symlink, p);
-  ::decode(dirfragtree, p);
-  ::decode(xattrs, p);
-  ::decode(old_inodes, p);
-  ::decode(damage_flags, p);
+  using ceph::decode;
+  decode(first, p);
+  decode(inode, p);
+  decode(symlink, p);
+  decode(dirfragtree, p);
+  decode(xattrs, p);
+  decode(old_inodes, p);
+  decode(damage_flags, p);
   decode_snap(p);
 }
 
 void CInode::_encode_locks_full(bufferlist& bl)
 {
-  ::encode(authlock, bl);
-  ::encode(linklock, bl);
-  ::encode(dirfragtreelock, bl);
-  ::encode(filelock, bl);
-  ::encode(xattrlock, bl);
-  ::encode(snaplock, bl);
-  ::encode(nestlock, bl);
-  ::encode(flocklock, bl);
-  ::encode(policylock, bl);
+  using ceph::encode;
+  encode(authlock, bl);
+  encode(linklock, bl);
+  encode(dirfragtreelock, bl);
+  encode(filelock, bl);
+  encode(xattrlock, bl);
+  encode(snaplock, bl);
+  encode(nestlock, bl);
+  encode(flocklock, bl);
+  encode(policylock, bl);
 
-  ::encode(loner_cap, bl);
+  encode(loner_cap, bl);
 }
 void CInode::_decode_locks_full(bufferlist::iterator& p)
 {
-  ::decode(authlock, p);
-  ::decode(linklock, p);
-  ::decode(dirfragtreelock, p);
-  ::decode(filelock, p);
-  ::decode(xattrlock, p);
-  ::decode(snaplock, p);
-  ::decode(nestlock, p);
-  ::decode(flocklock, p);
-  ::decode(policylock, p);
+  using ceph::decode;
+  decode(authlock, p);
+  decode(linklock, p);
+  decode(dirfragtreelock, p);
+  decode(filelock, p);
+  decode(xattrlock, p);
+  decode(snaplock, p);
+  decode(nestlock, p);
+  decode(flocklock, p);
+  decode(policylock, p);
 
-  ::decode(loner_cap, p);
+  decode(loner_cap, p);
   set_loner_cap(loner_cap);
   want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
 }
@@ -3611,7 +3629,8 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
-  ::encode(need_recover, bl);
+  using ceph::encode;
+  encode(need_recover, bl);
 }
 
 void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
@@ -3639,8 +3658,9 @@ void CInode::_decode_locks_state(bufferlist::iterator& p, bool is_new)
   flocklock.decode_state(p, is_new);
   policylock.decode_state(p, is_new);
 
+  using ceph::decode;
   bool need_recover;
-  ::decode(need_recover, p);
+  decode(need_recover, p);
   if (need_recover && is_new) {
     // Auth mds replicated this inode while it's recovering. Auth mds may take xlock on the lock
     // and change the object when replaying unsafe requests.
@@ -3684,11 +3704,11 @@ void CInode::encode_export(bufferlist& bl)
   ENCODE_START(5, 4, bl);
   _encode_base(bl, mdcache->mds->mdsmap->get_up_features());
 
-  ::encode(state, bl);
+  encode(state, bl);
 
-  ::encode(pop, bl);
+  encode(pop, bl);
 
-  ::encode(get_replicas(), bl);
+  encode(get_replicas(), bl);
 
   // include scatterlock info for any bounding CDirs
   bufferlist bounding;
@@ -3698,15 +3718,15 @@ void CInode::encode_export(bufferlist& bl)
 	 ++p) {
       CDir *dir = p->second;
       if (dir->state_test(CDir::STATE_EXPORTBOUND)) {
-	::encode(p->first, bounding);
-	::encode(dir->fnode.fragstat, bounding);
-	::encode(dir->fnode.accounted_fragstat, bounding);
-	::encode(dir->fnode.rstat, bounding);
-	::encode(dir->fnode.accounted_rstat, bounding);
+	encode(p->first, bounding);
+	encode(dir->fnode.fragstat, bounding);
+	encode(dir->fnode.accounted_fragstat, bounding);
+	encode(dir->fnode.rstat, bounding);
+	encode(dir->fnode.accounted_rstat, bounding);
 	dout(10) << " encoded fragstat/rstat info for " << *dir << dendl;
       }
     }
-  ::encode(bounding, bl);
+  encode(bounding, bl);
 
   _encode_locks_full(bl);
 
@@ -3739,7 +3759,7 @@ void CInode::decode_import(bufferlist::iterator& p,
   _decode_base(p);
 
   unsigned s;
-  ::decode(s, p);
+  decode(s, p);
   state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
 
   if (is_dirty()) {
@@ -3751,20 +3771,20 @@ void CInode::decode_import(bufferlist::iterator& p,
     _mark_dirty_parent(ls);
   }
 
-  ::decode(pop, ceph_clock_now(), p);
+  decode(pop, ceph_clock_now(), p);
 
-  ::decode(get_replicas(), p);
+  decode(get_replicas(), p);
   if (is_replicated())
     get(PIN_REPLICATED);
   replica_nonce = 0;
 
   // decode fragstat info on bounding cdirs
   bufferlist bounding;
-  ::decode(bounding, p);
+  decode(bounding, p);
   bufferlist::iterator q = bounding.begin();
   while (!q.end()) {
     frag_t fg;
-    ::decode(fg, q);
+    decode(fg, q);
     CDir *dir = get_dirfrag(fg);
     assert(dir);  // we should have all bounds open
 
@@ -3782,22 +3802,22 @@ void CInode::decode_import(bufferlist::iterator& p,
         filelock.get_state() == LOCK_MIX) {
       dout(10) << " skipped fragstat info for " << *dir << dendl;
       frag_info_t f;
-      ::decode(f, q);
-      ::decode(f, q);
+      decode(f, q);
+      decode(f, q);
     } else {
-      ::decode(dir->fnode.fragstat, q);
-      ::decode(dir->fnode.accounted_fragstat, q);
+      decode(dir->fnode.fragstat, q);
+      decode(dir->fnode.accounted_fragstat, q);
       dout(10) << " took fragstat info for " << *dir << dendl;
     }
     if (dir->is_auth() ||
         nestlock.get_state() == LOCK_MIX) {
       dout(10) << " skipped rstat info for " << *dir << dendl;
       nest_info_t n;
-      ::decode(n, q);
-      ::decode(n, q);
+      decode(n, q);
+      decode(n, q);
     } else {
-      ::decode(dir->fnode.rstat, q);
-      ::decode(dir->fnode.accounted_rstat, q);
+      decode(dir->fnode.rstat, q);
+      decode(dir->fnode.accounted_rstat, q);
       dout(10) << " took rstat info for " << *dir << dendl;
     }
   }
@@ -3901,10 +3921,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       fetch.getxattr("parent", bt, bt_r);
       in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
 				       NULL, 0, fin);
+      using ceph::encode;
       if (!tag.empty()) {
 	ObjectOperation scrub_tag;
         bufferlist tag_bl;
-        ::encode(tag, tag_bl);
+        encode(tag, tag_bl);
         scrub_tag.setxattr("scrub_tag", tag_bl);
         SnapContext snapc;
         in->mdcache->mds->objecter->mutate(oid, object_locator_t(pool), scrub_tag, snapc,
@@ -3973,7 +3994,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // extract the backtrace, and compare it to a newly-constructed one
       try {
         bufferlist::iterator p = bl.begin();
-        ::decode(results->backtrace.ondisk_value, p);
+	using ceph::decode;
+        decode(results->backtrace.ondisk_value, p);
         dout(10) << "decoded " << bl.length() << " bytes of backtrace successfully" << dendl;
       } catch (buffer::error&) {
         if (results->backtrace.ondisk_read_retval == 0 && rval != 0) {

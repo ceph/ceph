@@ -66,10 +66,12 @@ class ObjectACLs {
 public:
 
   void encode(bufferlist& bl) const {
-    ::encode(acls_map, bl);
+    using ceph::encode;
+    encode(acls_map, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(acls_map, bl);
+    using ceph::decode;
+    decode(acls_map, bl);
   }
 
   int read_acl(ACLID& id, ACLFlags *flags);

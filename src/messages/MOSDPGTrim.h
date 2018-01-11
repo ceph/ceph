@@ -43,17 +43,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(pgid.pgid, payload);
-    ::encode(trim_to, payload);
-    ::encode(pgid.shard, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pgid.pgid, payload);
+    encode(trim_to, payload);
+    encode(pgid.shard, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(pgid.pgid, p);
-    ::decode(trim_to, p);
-    ::decode(pgid.shard, p);
+    decode(epoch, p);
+    decode(pgid.pgid, p);
+    decode(trim_to, p);
+    decode(pgid.shard, p);
   }
 };
 

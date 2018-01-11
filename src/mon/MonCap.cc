@@ -426,7 +426,7 @@ bool MonCap::is_capable(CephContext *cct,
 void MonCap::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);   // legacy MonCaps was 3, 3
-  ::encode(text, bl);
+  encode(text, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -434,7 +434,7 @@ void MonCap::decode(bufferlist::iterator& bl)
 {
   string s;
   DECODE_START(4, bl);
-  ::decode(s, bl);
+  decode(s, bl);
   DECODE_FINISH(bl);
   parse(s, NULL);
 }

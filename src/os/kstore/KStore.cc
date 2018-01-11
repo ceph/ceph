@@ -611,7 +611,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
     on = new Onode(store->cct, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
-    ::decode(on->onode, p);
+    decode(on->onode, p);
   }
   o.reset(on);
   onode_map.add(oid, o);
@@ -884,7 +884,7 @@ int KStore::_open_collections(int *errors)
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
       try {
-        ::decode(c->cnode, p);
+        decode(c->cnode, p);
       } catch (buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
@@ -1281,7 +1281,7 @@ int KStore::fiemap(
   map<uint64_t, uint64_t> m;
   int r = fiemap(cid, oid, offset, len, m);
   if (r >= 0) {
-    ::encode(m, bl);
+    encode(m, bl);
   }
 
   return r;
@@ -1887,7 +1887,7 @@ int KStore::_open_super_meta()
     db->get(PREFIX_SUPER, "nid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, p);
+      decode(nid_max, p);
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
@@ -1906,7 +1906,7 @@ void KStore::_assign_nid(TransContext *txc, OnodeRef o)
   if (nid_last > nid_max) {
     nid_max += cct->_conf->kstore_nid_prealloc;
     bufferlist bl;
-    ::encode(nid_max, bl);
+    encode(nid_max, bl);
     txc->t->set(PREFIX_SUPER, "nid_max", bl);
     dout(10) << __func__ << " nid_max now " << nid_max << dendl;
   }
@@ -1981,7 +1981,7 @@ void KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        p != txc->onodes.end();
        ++p) {
     bufferlist bl;
-    ::encode((*p)->onode, bl);
+    encode((*p)->onode, bl);
     dout(20) << " onode size is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
@@ -2257,8 +2257,8 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           dout(10) << __func__ << " collection hint objects is a no-op, "
 		   << " pg_num " << pg_num << " num_objects " << num_objs
 		   << dendl;
@@ -2989,12 +2989,12 @@ int KStore::_omap_setkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
     bufferlist value;
-    ::decode(key, p);
-    ::decode(value, p);
+    decode(key, p);
+    decode(value, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
     dout(30) << __func__ << "  " << pretty_binary_string(final_key)
@@ -3039,10 +3039,10 @@ int KStore::_omap_rmkeys(TransContext *txc,
     r = 0;
     goto out;
   }
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
+    decode(key, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
     dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
@@ -3279,7 +3279,7 @@ int KStore::_create_collection(
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
   }
-  ::encode((*c)->cnode, bl);
+  encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);
   r = 0;
 
@@ -3363,7 +3363,7 @@ int KStore::_split_collection(TransContext *txc,
   r = 0;
 
   bufferlist bl;
-  ::encode(c->cnode, bl);
+  encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "

@@ -18,13 +18,13 @@ class RGWObjTags
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(tag_map, bl);
+    encode(tag_map, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(tag_map,bl);
+    decode(tag_map,bl);
     DECODE_FINISH(bl);
   }
 

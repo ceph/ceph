@@ -48,17 +48,18 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(table, p);
-    ::decode(op, p);
-    ::decode(reqid, p);
-    ::decode(bl, p);
+    decode(table, p);
+    decode(op, p);
+    decode(reqid, p);
+    decode(bl, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(table, payload);
-    ::encode(op, payload);
-    ::encode(reqid, payload);
-    ::encode(bl, payload);
+    using ceph::encode;
+    encode(table, payload);
+    encode(op, payload);
+    encode(reqid, payload);
+    encode(bl, payload);
   }
 };
 

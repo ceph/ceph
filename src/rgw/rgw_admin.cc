@@ -990,14 +990,14 @@ void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
     case InstanceIdx:
       {
         rgw_bucket_dir_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
     case OLHIdx:
       {
         rgw_bucket_olh_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
@@ -1192,7 +1192,7 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
   bufferlist::iterator iter = bl.begin();
 
   try {
-    ::decode(t, iter);
+    decode(t, iter);
   } catch (buffer::error& err) {
     return false;
   }
@@ -1344,7 +1344,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   try {
     bufferlist& bl = iter->second;
     bufferlist::iterator biter = bl.begin();
-    ::decode(manifest, biter);
+    decode(manifest, biter);
   } catch (buffer::error& err) {
     ldout(store->ctx(), 0) << "ERROR: failed to decode manifest" << dendl;
     return -EIO;
@@ -6731,7 +6731,7 @@ next:
 
           auto iter = cls_entry.data.begin();
           try {
-            ::decode(log_entry, iter);
+            decode(log_entry, iter);
           } catch (buffer::error& err) {
             cerr << "ERROR: failed to decode log entry" << std::endl;
             continue;

@@ -428,7 +428,7 @@ public:
   void encode_health(const health_check_map_t& next,
 		     MonitorDBStore::TransactionRef t) {
     bufferlist bl;
-    ::encode(next, bl);
+    encode(next, bl);
     t->put("health", service_name, bl);
     mon->log_health(next, health_checks, t);
   }

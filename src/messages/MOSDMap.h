@@ -74,24 +74,25 @@ public:
   // marshalling
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(incremental_maps, p);
-    ::decode(maps, p);
+    decode(fsid, p);
+    decode(incremental_maps, p);
+    decode(maps, p);
     if (header.version >= 2) {
-      ::decode(oldest_map, p);
-      ::decode(newest_map, p);
+      decode(oldest_map, p);
+      decode(newest_map, p);
     } else {
       oldest_map = 0;
       newest_map = 0;
     }
     if (header.version >= 4) {
-      ::decode(gap_removed_snaps, p);
+      decode(gap_removed_snaps, p);
     }
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     header.version = HEAD_VERSION;
     header.compat_version = COMPAT_VERSION;
-    ::encode(fsid, payload);
+    encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
 	(features & CEPH_FEATURE_OSDENC) == 0 ||
@@ -143,14 +144,14 @@ public:
 	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
     }
-    ::encode(incremental_maps, payload);
-    ::encode(maps, payload);
+    encode(incremental_maps, payload);
+    encode(maps, payload);
     if (header.version >= 2) {
-      ::encode(oldest_map, payload);
-      ::encode(newest_map, payload);
+      encode(oldest_map, payload);
+      encode(newest_map, payload);
     }
     if (header.version >= 4) {
-      ::encode(gap_removed_snaps, payload);
+      encode(gap_removed_snaps, payload);
     }
   }
 

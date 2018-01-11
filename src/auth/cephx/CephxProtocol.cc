@@ -88,10 +88,10 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
                      bufferlist& reply)
 {
   __u8 service_ticket_reply_v = 1;
-  ::encode(service_ticket_reply_v, reply);
+  encode(service_ticket_reply_v, reply);
 
   uint32_t num = ticket_info_vec.size();
-  ::encode(num, reply);
+  encode(num, reply);
   ldout(cct, 10) << "build_service_ticket_reply encoding " << num
 	   << " tickets with secret " << principal_secret << dendl;
 
@@ -99,10 +99,10 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
        ticket_iter != ticket_info_vec.end();
        ++ticket_iter) {
     CephXSessionAuthInfo& info = *ticket_iter;
-    ::encode(info.service_id, reply);
+    encode(info.service_id, reply);
 
     __u8 service_ticket_v = 1;
-    ::encode(service_ticket_v, reply);
+    encode(service_ticket_v, reply);
 
     CephXServiceTicket msg_a;
     msg_a.session_key = info.session_key;
@@ -118,20 +118,20 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
     if (!cephx_build_service_ticket_blob(cct, info, blob)) {
       return false;
     }
-    ::encode(blob, service_ticket_bl);
+    encode(blob, service_ticket_bl);
 
     ldout(cct, 30) << "service_ticket_blob is ";
     service_ticket_bl.hexdump(*_dout);
     *_dout << dendl;
 
-    ::encode((__u8)should_encrypt_ticket, reply);
+    encode((__u8)should_encrypt_ticket, reply);
     if (should_encrypt_ticket) {
       if (encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply, error)) {
 	ldout(cct, -1) << "error encoding encrypted ticket: " << error << dendl;
         return false;
       }
     } else {
-      ::encode(service_ticket_bl, reply);
+      encode(service_ticket_bl, reply);
     }
   }
   return true;
@@ -145,7 +145,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
 						     bufferlist::iterator& indata)
 {
   __u8 service_ticket_v;
-  ::decode(service_ticket_v, indata);
+  decode(service_ticket_v, indata);
 
   CephXServiceTicket msg_a;
   std::string error;
@@ -155,7 +155,7 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
   }
   
   __u8 ticket_enc;
-  ::decode(ticket_enc, indata);
+  decode(ticket_enc, indata);
 
   bufferlist service_ticket_bl;
   if (ticket_enc) {
@@ -167,10 +167,10 @@ bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
       return false;
     }
   } else {
-    ::decode(service_ticket_bl, indata);
+    decode(service_ticket_bl, indata);
   }
   bufferlist::iterator iter = service_ticket_bl.begin();
-  ::decode(ticket, iter);
+  decode(ticket, iter);
   ldout(cct, 10) << " ticket.secret_id=" <<  ticket.secret_id << dendl;
 
   ldout(cct, 10) << "verify_service_ticket_reply service " << ceph_entity_type_name(service_id)
@@ -264,15 +264,15 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
 						     bufferlist::iterator& indata)
 {
   __u8 service_ticket_reply_v;
-  ::decode(service_ticket_reply_v, indata);
+  decode(service_ticket_reply_v, indata);
 
   uint32_t num;
-  ::decode(num, indata);
+  decode(num, indata);
   ldout(cct, 10) << "verify_service_ticket_reply got " << num << " keys" << dendl;
 
   for (int i=0; i<(int)num; i++) {
     uint32_t type;
-    ::decode(type, indata);
+    decode(type, indata);
     ldout(cct, 10) << "got key for service_id " << ceph_entity_type_name(type) << dendl;
     CephXTicketHandler& handler = get_handler(type);
     if (!handler.verify_service_ticket_reply(secret, indata)) {
@@ -299,11 +299,11 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
   a->nonce = ((uint64_t)rand() << 32) + rand();
 
   __u8 authorizer_v = 1;
-  ::encode(authorizer_v, a->bl);
-  ::encode(global_id, a->bl);
-  ::encode(service_id, a->bl);
+  encode(authorizer_v, a->bl);
+  encode(global_id, a->bl);
+  encode(service_id, a->bl);
 
-  ::encode(ticket, a->bl);
+  encode(ticket, a->bl);
 
   CephXAuthorize msg;
   msg.nonce = a->nonce;
@@ -401,10 +401,10 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 
 
   try {
-    ::decode(authorizer_v, indata);
-    ::decode(global_id, indata);
-    ::decode(service_id, indata);
-    ::decode(ticket, indata);
+    decode(authorizer_v, indata);
+    decode(global_id, indata);
+    decode(service_id, indata);
+    decode(ticket, indata);
   } catch (buffer::end_of_buffer &e) {
     // Unable to decode!
     return false;

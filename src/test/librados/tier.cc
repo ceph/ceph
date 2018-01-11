@@ -2368,7 +2368,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetRead) {
     if (hbl.length()) {
       bufferlist::iterator p = hbl.begin();
       HitSet hs;
-      ::decode(hs, p);
+      decode(hs, p);
       if (hs.contains(oid)) {
 	cout << "ok, hit_set contains " << oid << std::endl;
 	break;
@@ -2466,7 +2466,7 @@ TEST_F(LibRadosTwoPoolsPP, HitSetWrite) {
 
     try {
       bufferlist::iterator p = bl.begin();
-      ::decode(hitsets[i], p);
+      decode(hitsets[i], p);
     }
     catch (buffer::error& e) {
       std::cout << "failed to decode hit set; bl len is " << bl.length() << "\n";
@@ -5185,7 +5185,7 @@ TEST_F(LibRadosTwoPoolsECPP, HitSetRead) {
     if (hbl.length()) {
       bufferlist::iterator p = hbl.begin();
       HitSet hs;
-      ::decode(hs, p);
+      decode(hs, p);
       if (hs.contains(oid)) {
 	cout << "ok, hit_set contains " << oid << std::endl;
 	break;
@@ -5250,7 +5250,7 @@ TEST_F(LibRadosTierECPP, HitSetWrite) {
     //std::cout << std::endl;
 
     bufferlist::iterator p = bl.begin();
-    ::decode(hitsets[i], p);
+    decode(hitsets[i], p);
 
     // cope with racing splits by refreshing pg_num
     if (i == num_pg - 1)

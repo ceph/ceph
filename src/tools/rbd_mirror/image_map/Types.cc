@@ -28,7 +28,8 @@ public:
 
   template <typename T>
   inline void operator()(const T& t) const {
-    ::encode(static_cast<uint32_t>(T::TYPE), m_bl);
+    using ceph::encode;
+    encode(static_cast<uint32_t>(T::TYPE), m_bl);
     t.encode(m_bl);
   }
 private:
@@ -82,7 +83,7 @@ void PolicyData::decode(bufferlist::iterator& it) {
   DECODE_START(1, it);
 
   uint32_t policy_meta_type;
-  ::decode(policy_meta_type, it);
+  decode(policy_meta_type, it);
 
   switch (policy_meta_type) {
   case POLICY_META_TYPE_NONE:

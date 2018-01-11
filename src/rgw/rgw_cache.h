@@ -34,14 +34,14 @@ struct ObjectMetaInfo {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(size, bl);
-    ::encode(mtime, bl);
+    encode(size, bl);
+    encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(size, bl);
-    ::decode(mtime, bl);
+    decode(size, bl);
+    decode(mtime, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -64,29 +64,29 @@ struct ObjectCacheInfo {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
-    ::encode(status, bl);
-    ::encode(flags, bl);
-    ::encode(data, bl);
-    ::encode(xattrs, bl);
-    ::encode(meta, bl);
-    ::encode(rm_xattrs, bl);
-    ::encode(epoch, bl);
-    ::encode(version, bl);
+    encode(status, bl);
+    encode(flags, bl);
+    encode(data, bl);
+    encode(xattrs, bl);
+    encode(meta, bl);
+    encode(rm_xattrs, bl);
+    encode(epoch, bl);
+    encode(version, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    ::decode(status, bl);
-    ::decode(flags, bl);
-    ::decode(data, bl);
-    ::decode(xattrs, bl);
-    ::decode(meta, bl);
+    decode(status, bl);
+    decode(flags, bl);
+    decode(data, bl);
+    decode(xattrs, bl);
+    decode(meta, bl);
     if (struct_v >= 2)
-      ::decode(rm_xattrs, bl);
+      decode(rm_xattrs, bl);
     if (struct_v >= 4)
-      ::decode(epoch, bl);
+      decode(epoch, bl);
     if (struct_v >= 5)
-      ::decode(version, bl);
+      decode(version, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
@@ -105,20 +105,20 @@ struct RGWCacheNotifyInfo {
 
   void encode(bufferlist& obl) const {
     ENCODE_START(2, 2, obl);
-    ::encode(op, obl);
-    ::encode(obj, obl);
-    ::encode(obj_info, obl);
-    ::encode(ofs, obl);
-    ::encode(ns, obl);
+    encode(op, obl);
+    encode(obj, obl);
+    encode(obj_info, obl);
+    encode(ofs, obl);
+    encode(ns, obl);
     ENCODE_FINISH(obl);
   }
   void decode(bufferlist::iterator& ibl) {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, ibl);
-    ::decode(op, ibl);
-    ::decode(obj, ibl);
-    ::decode(obj_info, ibl);
-    ::decode(ofs, ibl);
-    ::decode(ns, ibl);
+    decode(op, ibl);
+    decode(obj, ibl);
+    decode(obj_info, ibl);
+    decode(ofs, ibl);
+    decode(ns, ibl);
     DECODE_FINISH(ibl);
   }
   void dump(Formatter *f) const;
@@ -537,7 +537,7 @@ int RGWCache<T>::distribute_cache(const string& normal_name, rgw_raw_obj& obj, O
   info.obj_info = obj_info;
   info.obj = obj;
   bufferlist bl;
-  ::encode(info, bl);
+  encode(info, bl);
   return T::distribute(normal_name, bl);
 }
 
@@ -551,7 +551,7 @@ int RGWCache<T>::watch_cb(uint64_t notify_id,
 
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(info, iter);
+    decode(info, iter);
   } catch (buffer::end_of_buffer& err) {
     mydout(0) << "ERROR: got bad notification" << dendl;
     return -EIO;

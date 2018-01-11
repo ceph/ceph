@@ -29,10 +29,10 @@ public:
                      uint8_t new_state,
                      const boost::optional<uint8_t>& current_state, int r) {
     bufferlist bl;
-    ::encode(start_object_no, bl);
-    ::encode(end_object_no, bl);
-    ::encode(new_state, bl);
-    ::encode(current_state, bl);
+    encode(start_object_no, bl);
+    encode(end_object_no, bl);
+    encode(new_state, bl);
+    encode(current_state, bl);
 
     std::string oid(ObjectMap<>::object_map_name(ictx->id, snap_id));
     if (snap_id == CEPH_NOSNAP) {

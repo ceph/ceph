@@ -34,22 +34,22 @@ ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 void bluefs_super_t::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(uuid, bl);
-  ::encode(osd_uuid, bl);
-  ::encode(version, bl);
-  ::encode(block_size, bl);
-  ::encode(log_fnode, bl);
+  encode(uuid, bl);
+  encode(osd_uuid, bl);
+  encode(version, bl);
+  encode(block_size, bl);
+  encode(log_fnode, bl);
   ENCODE_FINISH(bl);
 }
 
 void bluefs_super_t::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(uuid, p);
-  ::decode(osd_uuid, p);
-  ::decode(version, p);
-  ::decode(block_size, p);
-  ::decode(log_fnode, p);
+  decode(uuid, p);
+  decode(osd_uuid, p);
+  decode(version, p);
+  decode(block_size, p);
+  decode(log_fnode, p);
   DECODE_FINISH(p);
 }
 
@@ -139,10 +139,10 @@ void bluefs_transaction_t::encode(bufferlist& bl) const
 {
   uint32_t crc = op_bl.crc32c(-1);
   ENCODE_START(1, 1, bl);
-  ::encode(uuid, bl);
-  ::encode(seq, bl);
-  ::encode(op_bl, bl);
-  ::encode(crc, bl);
+  encode(uuid, bl);
+  encode(seq, bl);
+  encode(op_bl, bl);
+  encode(crc, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -150,10 +150,10 @@ void bluefs_transaction_t::decode(bufferlist::iterator& p)
 {
   uint32_t crc;
   DECODE_START(1, p);
-  ::decode(uuid, p);
-  ::decode(seq, p);
-  ::decode(op_bl, p);
-  ::decode(crc, p);
+  decode(uuid, p);
+  decode(seq, p);
+  decode(op_bl, p);
+  decode(crc, p);
   DECODE_FINISH(p);
   uint32_t actual = op_bl.crc32c(-1);
   if (actual != crc)

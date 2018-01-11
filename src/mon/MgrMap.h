@@ -39,19 +39,19 @@ public:
   void encode(bufferlist& bl) const
   {
     ENCODE_START(2, 1, bl);
-    ::encode(gid, bl);
-    ::encode(name, bl);
-    ::encode(available_modules, bl);
+    encode(gid, bl);
+    encode(name, bl);
+    encode(available_modules, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& p)
   {
     DECODE_START(2, p);
-    ::decode(gid, p);
-    ::decode(name, p);
+    decode(gid, p);
+    decode(name, p);
     if (struct_v >= 2) {
-      ::decode(available_modules, p);
+      decode(available_modules, p);
     }
     DECODE_FINISH(p);
   }
@@ -125,33 +125,33 @@ public:
   void encode(bufferlist& bl, uint64_t features) const
   {
     ENCODE_START(3, 1, bl);
-    ::encode(epoch, bl);
-    ::encode(active_addr, bl, features);
-    ::encode(active_gid, bl);
-    ::encode(available, bl);
-    ::encode(active_name, bl);
-    ::encode(standbys, bl);
-    ::encode(modules, bl);
-    ::encode(available_modules, bl);
-    ::encode(services, bl);
+    encode(epoch, bl);
+    encode(active_addr, bl, features);
+    encode(active_gid, bl);
+    encode(available, bl);
+    encode(active_name, bl);
+    encode(standbys, bl);
+    encode(modules, bl);
+    encode(available_modules, bl);
+    encode(services, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& p)
   {
     DECODE_START(2, p);
-    ::decode(epoch, p);
-    ::decode(active_addr, p);
-    ::decode(active_gid, p);
-    ::decode(available, p);
-    ::decode(active_name, p);
-    ::decode(standbys, p);
+    decode(epoch, p);
+    decode(active_addr, p);
+    decode(active_gid, p);
+    decode(available, p);
+    decode(active_name, p);
+    decode(standbys, p);
     if (struct_v >= 2) {
-      ::decode(modules, p);
-      ::decode(available_modules, p);
+      decode(modules, p);
+      decode(available_modules, p);
     }
     if (struct_v >= 3) {
-      ::decode(services, p);
+      decode(services, p);
     }
     DECODE_FINISH(p);
   }

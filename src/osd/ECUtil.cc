@@ -179,16 +179,16 @@ void ECUtil::HashInfo::append(uint64_t old_size,
 void ECUtil::HashInfo::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(total_chunk_size, bl);
-  ::encode(cumulative_shard_hashes, bl);
+  encode(total_chunk_size, bl);
+  encode(cumulative_shard_hashes, bl);
   ENCODE_FINISH(bl);
 }
 
 void ECUtil::HashInfo::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(total_chunk_size, bl);
-  ::decode(cumulative_shard_hashes, bl);
+  decode(total_chunk_size, bl);
+  decode(cumulative_shard_hashes, bl);
   projected_total_chunk_size = total_chunk_size;
   DECODE_FINISH(bl);
 }

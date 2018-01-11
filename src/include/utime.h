@@ -124,16 +124,18 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
 #else
-    ::encode(tv.tv_sec, bl);
-    ::encode(tv.tv_nsec, bl);
+    using ceph::encode;
+    encode(tv.tv_sec, bl);
+    encode(tv.tv_nsec, bl);
 #endif
   }
   void decode(bufferlist::iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
-    ::decode(tv.tv_sec, p);
-    ::decode(tv.tv_nsec, p);
+    using ceph::decode;
+    decode(tv.tv_sec, p);
+    decode(tv.tv_nsec, p);
 #endif
   }
 

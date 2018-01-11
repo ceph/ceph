@@ -62,9 +62,10 @@ public:
   }
 
   void add_orig_frag(frag_t df, dirfrag_rollback *drb=NULL) {
+    using ceph::encode;
     orig_frags.push_back(df);
     if (drb)
-      ::encode(*drb, rollback);
+      encode(*drb, rollback);
   }
 
   EMetaBlob *get_metablob() override { return &metablob; }

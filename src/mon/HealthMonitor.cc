@@ -61,7 +61,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon->store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
     auto p = qbl.begin();
-    ::decode(quorum_checks, p);
+    decode(quorum_checks, p);
   } else {
     quorum_checks.clear();
   }
@@ -70,7 +70,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon->store->get(service_name, "leader", lbl);
   if (lbl.length()) {
     auto p = lbl.begin();
-    ::decode(leader_checks, p);
+    decode(leader_checks, p);
   } else {
     leader_checks.clear();
   }
@@ -102,10 +102,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, version);
 
   bufferlist qbl;
-  ::encode(quorum_checks, qbl);
+  encode(quorum_checks, qbl);
   t->put(service_name, "quorum", qbl);
   bufferlist lbl;
-  ::encode(leader_checks, lbl);
+  encode(leader_checks, lbl);
   t->put(service_name, "leader", lbl);
 
   health_check_map_t pending_health;

@@ -367,7 +367,7 @@ int MetadataDriver::inject_unlinked_inode(
 
   // Serialize
   bufferlist inode_bl;
-  ::encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
+  encode(std::string(CEPH_FS_ONDISK_MAGIC), inode_bl);
   inode.encode(inode_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write
@@ -609,7 +609,7 @@ int DataScan::forall_objects(
           std::string read_tag;
           bufferlist::iterator q = scrub_tag_bl.begin();
           try {
-            ::decode(read_tag, q);
+            decode(read_tag, q);
             if (read_tag == filter_tag) {
               dout(20) << "skipping " << oid << " because it has the filter_tag"
                        << dendl;
@@ -965,9 +965,9 @@ int DataScan::scan_links()
 
 	try {
 	  snapid_t dnfirst;
-	  ::decode(dnfirst, q);
+	  decode(dnfirst, q);
 	  char dentry_type;
-	  ::decode(dentry_type, q);
+	  decode(dentry_type, q);
 	  if (dentry_type == 'I') {
 	    InodeStore inode;
 	    inode.decode_bare(q);
@@ -1001,8 +1001,8 @@ int DataScan::scan_links()
 	  } else if (dentry_type == 'L') {
 	    inodeno_t ino;
 	    unsigned char d_type;
-	    ::decode(ino, q);
-	    ::decode(d_type, q);
+	    decode(ino, q);
+	    decode(d_type, q);
 
 	    if (step == SCAN_INOS) {
 	      remote_links[ino]++;
@@ -1183,7 +1183,7 @@ int DataScan::scan_frags()
     if (layout_r != -ENODATA) {
       try {
         bufferlist::iterator q = layout_bl.begin();
-        ::decode(loaded_layout, q);
+        decode(loaded_layout, q);
       } catch (buffer::error &e) {
         dout(4) << "Corrupt layout on '" << oid << "': " << e << dendl;
         if (!force_corrupt) {
@@ -1322,9 +1322,9 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
   try {
     bufferlist::iterator q = vals[key].begin();
     snapid_t dnfirst;
-    ::decode(dnfirst, q);
+    decode(dnfirst, q);
     char dentry_type;
-    ::decode(dentry_type, q);
+    decode(dentry_type, q);
     if (dentry_type == 'I') {
       inode->decode_bare(q);
       return 0;
@@ -1766,8 +1766,8 @@ int MetadataDriver::inject_linkage(
   dn_key.encode(key);
 
   bufferlist dentry_bl;
-  ::encode(snap, dentry_bl);
-  ::encode('I', dentry_bl);
+  encode(snap, dentry_bl);
+  encode('I', dentry_bl);
   inode.encode_bare(dentry_bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
   // Write out

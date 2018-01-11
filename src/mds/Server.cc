@@ -1070,16 +1070,16 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   int numlocks;
   ceph_filelock lock;
   bufferlist::iterator p = locks.begin();
-  ::decode(numlocks, p);
+  decode(numlocks, p);
   for (int i = 0; i < numlocks; ++i) {
-    ::decode(lock, p);
+    decode(lock, p);
     lock.client = client;
     in->get_fcntl_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock>(lock.start, lock));
     ++in->get_fcntl_lock_state()->client_held_lock_counts[client];
   }
-  ::decode(numlocks, p);
+  decode(numlocks, p);
   for (int i = 0; i < numlocks; ++i) {
-    ::decode(lock, p);
+    decode(lock, p);
     lock.client = client;
     in->get_flock_lock_state()->held_locks.insert(pair<uint64_t, ceph_filelock> (lock.start, lock));
     ++in->get_flock_lock_state()->client_held_lock_counts[client];
@@ -1501,7 +1501,7 @@ void Server::encode_infinite_lease(bufferlist& bl)
   e.seq = 0;
   e.mask = -1;
   e.duration_ms = -1;
-  ::encode(e, bl);
+  encode(e, bl);
   dout(20) << "encode_infinite_lease " << e << dendl;
 }
 
@@ -1511,7 +1511,7 @@ void Server::encode_null_lease(bufferlist& bl)
   e.seq = 0;
   e.mask = 0;
   e.duration_ms = 0;
-  ::encode(e, bl);
+  encode(e, bl);
   dout(20) << "encode_null_lease " << e << dendl;
 }
 
@@ -1572,7 +1572,7 @@ void Server::set_trace_dist(Session *session, MClientReply *reply,
     dir->encode_dirstat(bl, whoami);
     dout(20) << "set_trace_dist added dir  " << *dir << dendl;
 
-    ::encode(dn->get_name(), bl);
+    encode(dn->get_name(), bl);
     if (snapid == CEPH_NOSNAP)
       mds->locker->issue_client_lease(dn, client, bl, now, session);
     else
@@ -1657,7 +1657,7 @@ void Server::handle_client_request(MClientRequest *req)
 	MClientReply *reply = new MClientReply(req, 0);
 	if (created != inodeno_t()) {
 	  bufferlist extra;
-	  ::encode(created, extra);
+	  encode(created, extra);
 	  reply->set_extra_bl(extra);
 	}
 	req->get_connection()->send_message(reply);
@@ -2665,7 +2665,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
     // xattrs on new inode?
     map<string,bufferptr> xattrs;
-    ::decode(xattrs, p);
+    decode(xattrs, p);
     for (map<string,bufferptr>::iterator p = xattrs.begin(); p != xattrs.end(); ++p) {
       dout(10) << "prepare_new_inode setting xattr " << p->first << dendl;
       in->xattrs[p->first] = p->second;
@@ -3654,7 +3654,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
     // add the file created flag onto the reply if create_flags features is supported
-    ::encode(in->inode.ino, mdr->reply_extra_bl);
+    encode(in->inode.ino, mdr->reply_extra_bl);
   }
 
   journal_and_reply(mdr, in, dn, le, fin);
@@ -3852,7 +3852,7 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
 
     // dentry
     dout(12) << "including    dn " << *dn << dendl;
-    ::encode(dn->name, dnbl);
+    encode(dn->name, dnbl);
     mds->locker->issue_client_lease(dn, client, dnbl, now, mdr->session);
 
     // inode
@@ -3885,8 +3885,8 @@ void Server::handle_client_readdir(MDRequestRef& mdr)
   }
   
   // finish final blob
-  ::encode(numfiles, dirbl);
-  ::encode(flags, dirbl);
+  encode(numfiles, dirbl);
+  encode(flags, dirbl);
   dirbl.claim_append(dnbl);
   
   // yay, reply
@@ -4099,7 +4099,7 @@ void Server::handle_client_file_readlock(MDRequestRef& mdr)
   lock_state->look_for_lock(checking_lock);
 
   bufferlist lock_bl;
-  ::encode(checking_lock, lock_bl);
+  encode(checking_lock, lock_bl);
 
   mdr->reply_extra_bl = lock_bl;
   respond_to_request(mdr, 0);
@@ -5666,7 +5666,7 @@ void Server::handle_slave_link_prep(MDRequestRef& mdr)
   rollback.old_dir_mtime = pf->fragstat.mtime;
   rollback.old_dir_rctime = pf->rstat.rctime;
   rollback.was_inc = inc;
-  ::encode(rollback, le->rollback);
+  encode(rollback, le->rollback);
   mdr->more()->rollback_bl = le->rollback;
 
   pi->ctime = mdr->get_op_stamp();
@@ -5771,7 +5771,7 @@ void Server::do_link_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef& 
 {
   link_rollback rollback;
   bufferlist::iterator p = rbl.begin();
-  ::decode(rollback, p);
+  decode(rollback, p);
 
   dout(10) << "do_link_rollback on " << rollback.reqid 
 	   << (rollback.was_inc ? " inc":" dec") 
@@ -6263,7 +6263,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   rollback.src_dname = dn->name;
   rollback.dest_dir = straydn->get_dir()->dirfrag();
   rollback.dest_dname = straydn->name;
-  ::encode(rollback, mdr->more()->rollback_bl);
+  encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // set up commit waiter
@@ -6418,7 +6418,7 @@ void Server::do_rmdir_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef&
 
   rmdir_rollback rollback;
   bufferlist::iterator p = rbl.begin();
-  ::decode(rollback, p);
+  decode(rollback, p);
   
   dout(10) << "do_rmdir_rollback on " << rollback.reqid << dendl;
   mdcache->add_rollback(rollback.reqid, master); // need to finish this update before resolve finishes
@@ -7083,8 +7083,8 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
   bufferlist::iterator blp = mdr->more()->inode_import.begin();
 	  
   // imported caps
-  ::decode(mdr->more()->imported_client_map, blp);
-  ::encode(mdr->more()->imported_client_map, *client_map_bl,
+  decode(mdr->more()->imported_client_map, blp);
+  encode(mdr->more()->imported_client_map, *client_map_bl,
            mds->mdsmap->get_up_features());
   prepare_force_open_sessions(mdr->more()->imported_client_map, mdr->more()->sseq_map);
 
@@ -7530,7 +7530,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
       }
 
       mdr->more()->inode_import.clear();
-      ::encode(imported_caps, mdr->more()->inode_import);
+      encode(imported_caps, mdr->more()->inode_import);
 
       /* hack: add an auth pin for each xlock we hold. These were
        * remote xlocks previously but now they're local and
@@ -7811,7 +7811,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     rollback.stray.dirfrag_old_rctime = straydn->get_dir()->get_projected_fnode()->rstat.rctime;
     rollback.stray.dname = straydn->name;
   }
-  ::encode(rollback, mdr->more()->rollback_bl);
+  encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
   // journal.
@@ -7873,7 +7873,7 @@ void Server::_logged_slave_rename(MDRequestRef& mdr,
       (*p)->state_clear(CDir::STATE_EXPORTBOUND);
 
     if (reply) {
-      ::encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
+      encode(exported_client_map, reply->inode_export, mds->mdsmap->get_up_features());
       reply->inode_export.claim_append(inodebl);
       reply->inode_export_v = srcdnl->get_inode()->inode.version;
     }
@@ -7942,7 +7942,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
 
       map<client_t,Capability::Import> peer_imported;
       bufferlist::iterator bp = mdr->more()->inode_import.begin();
-      ::decode(peer_imported, bp);
+      decode(peer_imported, bp);
 
       dout(10) << " finishing inode export on " << *destdnl->get_inode() << dendl;
       mdcache->migrator->finish_export_inode(destdnl->get_inode(),
@@ -8065,7 +8065,7 @@ void Server::do_rename_rollback(bufferlist &rbl, mds_rank_t master, MDRequestRef
 {
   rename_rollback rollback;
   bufferlist::iterator p = rbl.begin();
-  ::decode(rollback, p);
+  decode(rollback, p);
 
   dout(10) << "do_rename_rollback on " << rollback.reqid << dendl;
   // need to finish this update before sending resolve to claim the subtree
@@ -8528,7 +8528,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     if (int(start_len + snap_name.length() + sizeof(__u32) + sizeof(LeaseStat)) > max_bytes)
       break;
 
-    ::encode(snap_name, dnbl);
+    encode(snap_name, dnbl);
     encode_infinite_lease(dnbl);
 
     int r = diri->encode_inodestat(dnbl, mdr->session, realm, p->first, max_bytes - (int)dnbl.length());
@@ -8541,14 +8541,14 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     ++num;
   }
 
-  ::encode(num, dirbl);
+  encode(num, dirbl);
   __u16 flags = 0;
   if (p == infomap.end()) {
     flags = CEPH_READDIR_FRAG_END;
     if (last_snapid == 0)
       flags |= CEPH_READDIR_FRAG_COMPLETE;
   }
-  ::encode(flags, dirbl);
+  encode(flags, dirbl);
   dirbl.claim_append(dnbl);
   
   mdr->reply_extra_bl = dirbl;
@@ -8649,7 +8649,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   version_t stid = mdr->more()->stid;
   snapid_t snapid;
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  ::decode(snapid, p);
+  decode(snapid, p);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
   // journal
@@ -8783,7 +8783,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   version_t stid = mdr->more()->stid;
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
   snapid_t seq;
-  ::decode(seq, p);  
+  decode(seq, p);  
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
   // journal
@@ -8817,7 +8817,7 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   snapid_t stid = mdr->more()->stid;
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
   snapid_t seq;
-  ::decode(seq, p);  
+  decode(seq, p);  
 
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();

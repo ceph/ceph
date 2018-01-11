@@ -55,7 +55,7 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
   }
 
   bufferlist::iterator ci = bl_ciphertext.begin();
-  ::decode(*psig, ci);
+  decode(*psig, ci);
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
 		 << " front_crc_ = " << footer.front_crc
