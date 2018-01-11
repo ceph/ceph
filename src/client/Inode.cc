@@ -193,6 +193,13 @@ int Inode::caps_issued(int *implemented) const
       c |= it->second->issued;
       i |= it->second->implemented;
     }
+  }
+  // exclude caps issued by non-auth MDS, but are been revoking by
+  // the auth MDS. The non-auth MDS should be revoking/exporting
+  // these caps, but the message is delayed.
+  if (auth_cap)
+    c &= ~auth_cap->implemented | auth_cap->issued;
+
   if (implemented)
     *implemented = i;
   return c;
