@@ -2223,7 +2223,7 @@ TEST_F(TestClsRbd, image_get_group) {
   ASSERT_EQ(pool_id, spec.pool_id);
 }
 
-TEST_F(TestClsRbd, group_snap_add_empty_name) {
+TEST_F(TestClsRbd, group_snap_set_empty_name) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2234,10 +2234,10 @@ TEST_F(TestClsRbd, group_snap_add_empty_name) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id, "", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(-EINVAL, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
 }
 
-TEST_F(TestClsRbd, group_snap_add_empty_id) {
+TEST_F(TestClsRbd, group_snap_set_empty_id) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2248,10 +2248,10 @@ TEST_F(TestClsRbd, group_snap_add_empty_id) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {"", "snap_name", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(-EINVAL, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(-EINVAL, group_snap_set(&ioctx, group_id, snap));
 }
 
-TEST_F(TestClsRbd, group_snap_add_duplicate_id) {
+TEST_F(TestClsRbd, group_snap_set_duplicate_id) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2262,13 +2262,13 @@ TEST_F(TestClsRbd, group_snap_add_duplicate_id) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id, "snap_name", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   cls::rbd::GroupSnapshot snap1 = {snap_id, "snap_name1", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(-EEXIST, group_snap_add(&ioctx, group_id, snap1));
+  ASSERT_EQ(-EEXIST, group_snap_set(&ioctx, group_id, snap1));
 }
 
-TEST_F(TestClsRbd, group_snap_add_duplicate_name) {
+TEST_F(TestClsRbd, group_snap_set_duplicate_name) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2279,14 +2279,14 @@ TEST_F(TestClsRbd, group_snap_add_duplicate_name) {
 
   string snap_id1 = "snap_id1";
   cls::rbd::GroupSnapshot snap = {snap_id1, "snap_name", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   string snap_id2 = "snap_id2";
   cls::rbd::GroupSnapshot snap1 = {snap_id2, "snap_name", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(-EEXIST, group_snap_add(&ioctx, group_id, snap1));
+  ASSERT_EQ(-EEXIST, group_snap_set(&ioctx, group_id, snap1));
 }
 
-TEST_F(TestClsRbd, group_snap_add) {
+TEST_F(TestClsRbd, group_snap_set) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2297,7 +2297,7 @@ TEST_F(TestClsRbd, group_snap_add) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
@@ -2320,11 +2320,11 @@ TEST_F(TestClsRbd, group_snap_list) {
 
   string snap_id1 = "snap_id1";
   cls::rbd::GroupSnapshot snap1 = {snap_id1, "test_snapshot1", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap1));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap1));
 
   string snap_id2 = "snap_id2";
   cls::rbd::GroupSnapshot snap2 = {snap_id2, "test_snapshot2", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap2));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap2));
 
   std::vector<cls::rbd::GroupSnapshot> snapshots;
   ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(), 10, &snapshots));
@@ -2354,7 +2354,7 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
     cls::rbd::GroupSnapshot snap = {snap_id,
 				    "test_snapshot" + hexify(i),
 				    cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-    ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+    ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
   }
 
   std::vector<cls::rbd::GroupSnapshot> snapshots;
@@ -2376,68 +2376,6 @@ TEST_F(TestClsRbd, group_snap_list_max_return) {
   }
 }
 
-TEST_F(TestClsRbd, group_snap_update) {
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_update";
-
-  string group_id = "group_id_snap_update";
-  ASSERT_EQ(0, ioctx.create(group_id, true));
-
-  string snap_id = "snap_id";
-  cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
-
-  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-
-  ASSERT_EQ(0, group_snap_update(&ioctx, group_id, snap));
-
-  std::vector<cls::rbd::GroupSnapshot> snapshots;
-  ASSERT_EQ(0, group_snap_list(&ioctx, group_id, cls::rbd::GroupSnapshot(), 10, &snapshots));
-  ASSERT_EQ(1U, snapshots.size());
-  ASSERT_EQ(snap_id, snapshots[0].id);
-  ASSERT_EQ(cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE, snapshots[0].state);
-}
-
-TEST_F(TestClsRbd, group_snap_update_empty_name) {
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_update_empty_name";
-
-  string group_id = "group_id_snap_update_empty_name";
-  ASSERT_EQ(0, ioctx.create(group_id, true));
-
-  string snap_id = "snap_id";
-  cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
-
-  snap.name = "";
-  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-
-  ASSERT_EQ(-EINVAL, group_snap_update(&ioctx, group_id, snap));
-}
-
-TEST_F(TestClsRbd, group_snap_update_empty_id) {
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string image_id = "image_id_snap_update_empty_id";
-
-  string group_id = "group_id_snap_update_empty_id";
-  ASSERT_EQ(0, ioctx.create(group_id, true));
-
-  string snap_id = "snap_id";
-  cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
-
-  snap.id = "";
-  snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
-
-  ASSERT_EQ(-EINVAL, group_snap_update(&ioctx, group_id, snap));
-}
-
 TEST_F(TestClsRbd, group_snap_remove) {
   librados::IoCtx ioctx;
 
@@ -2450,7 +2388,7 @@ TEST_F(TestClsRbd, group_snap_remove) {
 
   string snap_id = "snap_id";
   cls::rbd::GroupSnapshot snap = {snap_id, "test_snapshot", cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   set<string> keys;
   ASSERT_EQ(0, ioctx.omap_get_keys(group_id, "", 10, &keys));
@@ -2484,7 +2422,7 @@ TEST_F(TestClsRbd, group_snap_get_by_id) {
   cls::rbd::GroupSnapshot snap = {snap_id,
                                   "test_snapshot",
                                   cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE};
-  ASSERT_EQ(0, group_snap_add(&ioctx, group_id, snap));
+  ASSERT_EQ(0, group_snap_set(&ioctx, group_id, snap));
 
   cls::rbd::GroupSnapshot received_snap;
   ASSERT_EQ(0, group_snap_get_by_id(&ioctx, group_id, snap_id, &received_snap));

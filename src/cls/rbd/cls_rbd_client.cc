@@ -2064,25 +2064,14 @@ namespace librbd {
       return image_get_group_finish(&iter, group_spec);
     }
 
-    int group_snap_add(librados::IoCtx *ioctx, const std::string &oid,
+    int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
 		       const cls::rbd::GroupSnapshot &snapshot)
     {
 
       bufferlist inbl, outbl;
 
       ::encode(snapshot, inbl);
-      int r = ioctx->exec(oid, "rbd", "group_snap_add", inbl, outbl);
-      return r;
-    }
-
-    int group_snap_update(librados::IoCtx *ioctx, const std::string &oid,
-			  const cls::rbd::GroupSnapshot &snapshot)
-    {
-
-      bufferlist inbl, outbl;
-
-      ::encode(snapshot, inbl);
-      int r = ioctx->exec(oid, "rbd", "group_snap_update", inbl, outbl);
+      int r = ioctx->exec(oid, "rbd", "group_snap_set", inbl, outbl);
       return r;
     }
 

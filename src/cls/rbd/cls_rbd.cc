@@ -5148,19 +5148,6 @@ static int check_duplicate_snap_name(cls_method_context_t hctx,
   return 0;
 }
 
-static int check_duplicate_snap_id(cls_method_context_t hctx,
-				   std::string snap_key)
-{
-  bufferlist bl;
-  int r = cls_cxx_map_get_val(hctx, snap_key, &bl);
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
-    return r;
-  }
-  return -EEXIST;
-}
-
 }
 
 /**
@@ -5172,10 +5159,10 @@ static int check_duplicate_snap_id(cls_method_context_t hctx,
  * Output:
  * @return 0 on success, negative error code on failure
  */
-int group_snap_add(cls_method_context_t hctx,
+int group_snap_set(cls_method_context_t hctx,
 		   bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(20, "group_snap_add");
+  CLS_LOG(20, "group_snap_set");
   cls::rbd::GroupSnapshot group_snap;
   try {
     bufferlist::iterator iter = in->begin();
@@ -5183,6 +5170,7 @@ int group_snap_add(cls_method_context_t hctx,
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
+
   if (group_snap.name.empty()) {
     CLS_ERR("group snapshot name is empty");
     return -EINVAL;
@@ -5192,65 +5180,26 @@ int group_snap_add(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  int r = group::check_duplicate_snap_name(hctx, group_snap.name, group_snap.id);
-  if (r < 0) {
-    return r;
-  }
-
-  r = group::check_duplicate_snap_id(hctx, group::snap_key(group_snap.id));
+  int r = group::check_duplicate_snap_name(hctx, group_snap.name,
+                                           group_snap.id);
   if (r < 0) {
     return r;
   }
 
   std::string key = group::snap_key(group_snap.id);
+  if (group_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_INCOMPLETE) {
+    bufferlist snap_bl;
+    r = cls_cxx_map_get_val(hctx, key, &snap_bl);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    } else if (r >= 0) {
+      return -EEXIST;
+    }
+  }
 
   bufferlist obl;
   ::encode(group_snap, obl);
   r = cls_cxx_map_set_val(hctx, key, &obl);
-  return r;
-}
-
-/**
- * Update snapshot record.
- *
- * Input:
- * @param GroupSnapshot
- *
- * Output:
- * @return 0 on success, negative error code on failure
- */
-int group_snap_update(cls_method_context_t hctx,
-		      bufferlist *in, bufferlist *out)
-{
-  CLS_LOG(20, "group_snap_update");
-  cls::rbd::GroupSnapshot group_snap;
-  try {
-    bufferlist::iterator iter = in->begin();
-    ::decode(group_snap, iter);
-  } catch (const buffer::error &err) {
-    return -EINVAL;
-  }
-  if (group_snap.name.empty()) {
-    CLS_ERR("group snapshot name is empty");
-    return -EINVAL;
-  }
-
-  int r = group::check_duplicate_snap_name(hctx, group_snap.name, group_snap.id);
-  if (r < 0) {
-    return r;
-  }
-
-  if (group_snap.id.empty()) {
-    CLS_ERR("group snapshot id is empty");
-    return -EINVAL;
-  }
-
-  std::string key = group::snap_key(group_snap.id);
-
-  bufferlist obl;
-  ::encode(group_snap, obl);
-  r = cls_cxx_map_set_val(hctx, key, &obl);
-
   return r;
 }
 
@@ -5661,8 +5610,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_image_add_group;
   cls_method_handle_t h_image_remove_group;
   cls_method_handle_t h_image_get_group;
-  cls_method_handle_t h_group_snap_add;
-  cls_method_handle_t h_group_snap_update;
+  cls_method_handle_t h_group_snap_set;
   cls_method_handle_t h_group_snap_remove;
   cls_method_handle_t h_group_snap_get_by_id;
   cls_method_handle_t h_group_snap_list;
@@ -5944,12 +5892,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "image_get_group",
 			  CLS_METHOD_RD,
 			  image_get_group, &h_image_get_group);
-  cls_register_cxx_method(h_class, "group_snap_add",
+  cls_register_cxx_method(h_class, "group_snap_set",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_snap_add, &h_group_snap_add);
-  cls_register_cxx_method(h_class, "group_snap_update",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  group_snap_update, &h_group_snap_update);
+			  group_snap_set, &h_group_snap_set);
   cls_register_cxx_method(h_class, "group_snap_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_snap_remove, &h_group_snap_remove);

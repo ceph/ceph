@@ -710,7 +710,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   cls::rbd::GroupSnapshotNamespace ne{group_ioctx.get_id(), group_id,
                                       group_snap.id};
 
-  r = cls_client::group_snap_add(&group_ioctx, group_header_oid, group_snap);
+  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r == -EEXIST) {
     lderr(cct) << "snapshot with this name already exists: "
 	       << cpp_strerror(r)
@@ -835,7 +835,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   group_snap.snaps = image_snaps;
   group_snap.state = cls::rbd::GROUP_SNAPSHOT_STATE_COMPLETE;
 
-  r = cls_client::group_snap_update(&group_ioctx, group_header_oid, group_snap);
+  r = cls_client::group_snap_set(&group_ioctx, group_header_oid, group_snap);
   if (r < 0) {
     ret_code = r;
     goto remove_image_snaps;
