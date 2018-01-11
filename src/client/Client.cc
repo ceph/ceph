@@ -3384,8 +3384,10 @@ void Client::check_caps(Inode *in, unsigned flags)
     return;   // guard if at end of func
 
   if ((revoking & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO)) &&
-      (used & CEPH_CAP_FILE_CACHE) && !(used & CEPH_CAP_FILE_BUFFER))
-    _release(in);
+      (used & CEPH_CAP_FILE_CACHE) && !(used & CEPH_CAP_FILE_BUFFER)) {
+    if (_release(in))
+      used &= ~CEPH_CAP_FILE_CACHE;
+  }
 
   if (!in->cap_snaps.empty())
     flush_snaps(in);
@@ -3710,8 +3712,11 @@ void Client::_invalidate_inode_cache(Inode *in)
   ldout(cct, 10) << "_invalidate_inode_cache " << *in << dendl;
 
   // invalidate our userspace inode cache
-  if (cct->_conf->client_oc)
+  if (cct->_conf->client_oc) {
     objectcacher->release_set(&in->oset);
+    if (!objectcacher->set_is_empty(&in->oset))
+      lderr(cct) << "failed to invalidate cache for " << *in << dendl;
+  }
 
   _schedule_invalidate_callback(in, 0, 0);
 }
