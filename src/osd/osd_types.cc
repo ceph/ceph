@@ -190,7 +190,7 @@ void object_locator_t::encode(bufferlist& bl) const
   encode(nspace, bl);
   encode(hash, bl);
   if (hash != -1)
-    encode_compat = MAX(encode_compat, 6); // need to interpret the hash
+    encode_compat = std::max<std::uint8_t>(encode_compat, 6); // need to interpret the hash
   ENCODE_FINISH_NEW_COMPAT(bl, encode_compat);
 }
 

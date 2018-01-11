@@ -1235,7 +1235,7 @@ int KStore::_do_read(
     _do_read_stripe(o, offset - stripe_off, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
-    unsigned swant = MIN(stripe_size - stripe_off, length);
+    unsigned swant = std::min(stripe_size - stripe_off, length);
     if (stripe.length()) {
       if (swant == stripe.length()) {
 	bl.claim_append(stripe);
@@ -1243,7 +1243,7 @@ int KStore::_do_read(
       } else {
 	unsigned l = 0;
 	if (stripe_off < stripe.length()) {
-	  l = MIN(stripe.length() - stripe_off, swant);
+	  l = std::min<uint64_t>(stripe.length() - stripe_off, swant);
 	  bufferlist t;
 	  t.substr_of(stripe, stripe_off, l);
 	  bl.claim_append(t);
@@ -2656,7 +2656,7 @@ int KStore::_do_write(TransContext *txc,
 	     << ", got " << prev.length() << dendl;
     bufferlist bl;
     if (offset_rem) {
-      unsigned p = MIN(prev.length(), offset_rem);
+      unsigned p = std::min<uint64_t>(prev.length(), offset_rem);
       if (p) {
 	dout(20) << __func__ << " reuse leading " << p << " bytes" << dendl;
 	bl.substr_of(prev, 0, p);
@@ -2746,7 +2746,7 @@ int KStore::_zero(TransContext *txc,
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist bl;
-	bl.substr_of(stripe, 0, MIN(stripe.length(), stripe_off));
+	bl.substr_of(stripe, 0, std::min<uint64_t>(stripe.length(), stripe_off));
 	if (end >= pos - stripe_off + stripe_size ||
 	    end >= o->onode.size) {
 	  dout(20) << __func__ << " truncated stripe " << pos - stripe_off
@@ -2803,7 +2803,7 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist t;
-	t.substr_of(stripe, 0, MIN(stripe_off, stripe.length()));
+	t.substr_of(stripe, 0, std::min<uint64_t>(stripe_off, stripe.length()));
 	_do_write_stripe(txc, o, pos - stripe_off, t);
 	dout(20) << __func__ << " truncated stripe " << pos - stripe_off
 		 << " to " << t.length() << dendl;

@@ -230,12 +230,12 @@ void PGLog::proc_replica_log(
    * Furthermore, the event represented by a log tail was necessarily trimmed,
    * thus neither olog.tail nor log.tail can be divergent. It's
    * possible that olog/log contain no actual events between olog.head and
-   * MAX(log.tail, olog.tail), however, since they might have been split out.
+   * max(log.tail, olog.tail), however, since they might have been split out.
    * Thus, if we cannot find an event e such that
    * log.tail <= e.version <= log.head, the last_update must actually be
-   * MAX(log.tail, olog.tail).
+   * max(log.tail, olog.tail).
    */
-  eversion_t limit = MAX(olog.tail, log.tail);
+  eversion_t limit = std::max(olog.tail, log.tail);
   eversion_t lu =
     (first_non_divergent == log.log.rend() ||
      first_non_divergent->version < limit) ?
@@ -390,14 +390,14 @@ void PGLog::merge_log(pg_info_t &oinfo, pg_log_t &olog, pg_shard_t fromosd,
     // find start point in olog
     list<pg_log_entry_t>::iterator to = olog.log.end();
     list<pg_log_entry_t>::iterator from = olog.log.end();
-    eversion_t lower_bound = MAX(olog.tail, orig_tail);
+    eversion_t lower_bound = std::max(olog.tail, orig_tail);
     while (1) {
       if (from == olog.log.begin())
 	break;
       --from;
       dout(20) << "  ? " << *from << dendl;
       if (from->version <= log.head) {
-	lower_bound = MAX(lower_bound, from->version);
+	lower_bound = std::max(lower_bound, from->version);
 	++from;
 	break;
       }

@@ -2683,9 +2683,9 @@ void PG::_update_calc_stats()
   // computed using target and eventual used to get degraded total.
 
   unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
-  unsigned nrep = MAX(actingset.size(), upset.size());
+  unsigned nrep = std::max(actingset.size(), upset.size());
   // calc num_object_copies
-  info.stats.stats.calc_copies(MAX(target, nrep));
+  info.stats.stats.calc_copies(std::max(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
@@ -2753,7 +2753,7 @@ void PG::_update_calc_stats()
           osd_missing = peer_missing[p].num_missing();
         }
 
-        osd_objects = MAX(0, num_objects - osd_missing);
+        osd_objects = std::max<int64_t>(0, num_objects - osd_missing);
         object_copies += osd_objects;
         // Count non-missing objects not in up as misplaced
 	if (!in_up) {
@@ -2762,8 +2762,8 @@ void PG::_update_calc_stats()
 	}
       } else {
         // If this peer has more objects then it should, ignore them
-        int64_t osd_backfilled = MIN(num_objects,
-				     peer_info[p].stats.stats.sum.num_objects);
+        int64_t osd_backfilled = std::min(num_objects,
+					  peer_info[p].stats.stats.sum.num_objects);
 	backfill_target_objects.insert(make_pair(osd_backfilled, p));
 	backfilled += osd_backfilled;
       }
@@ -2792,11 +2792,11 @@ void PG::_update_calc_stats()
 	 ++i, --num_misplaced) {
       adjust_misplaced += i->first;
     }
-    misplaced = MAX(0, misplaced - adjust_misplaced);
+    misplaced = std::max<int64_t>(0, misplaced - adjust_misplaced);
 
     // a degraded objects has fewer replicas or EC shards than the
     // pool specifies.  num_object_copies will never be smaller than target * num_objects.
-    int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
+    int64_t degraded = std::max<int64_t>(0, info.stats.stats.sum.num_object_copies - object_copies);
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
@@ -2808,7 +2808,7 @@ void PG::_update_blocked_by()
 {
   // set a max on the number of blocking peers we report. if we go
   // over, report a random subset.  keep the result sorted.
-  unsigned keep = MIN(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
+  unsigned keep = std::min(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
   unsigned skip = blocked_by.size() - keep;
   info.stats.blocked_by.clear();
   info.stats.blocked_by.resize(keep);
@@ -4575,7 +4575,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   * left end of the range if we are a tier because they may legitimately
 	   * not exist (see _scrub).
 	   */
-	  int min = MAX(3, cct->_conf->osd_scrub_chunk_min);
+	  int min = std::max<int64_t>(3, cct->_conf->osd_scrub_chunk_min);
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
@@ -4583,7 +4583,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
-	    MAX(min, cct->_conf->osd_scrub_chunk_max),
+	    std::max<int64_t>(min, cct->_conf->osd_scrub_chunk_max),
 	    &objects,
 	    &candidate_end);
 	  assert(ret >= 0);
