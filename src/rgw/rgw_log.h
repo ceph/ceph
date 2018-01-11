@@ -37,76 +37,76 @@ struct rgw_log_entry {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(9, 5, bl);
-    ::encode(object_owner.id, bl);
-    ::encode(bucket_owner.id, bl);
-    ::encode(bucket, bl);
-    ::encode(time, bl);
-    ::encode(remote_addr, bl);
-    ::encode(user, bl);
-    ::encode(obj.name, bl);
-    ::encode(op, bl);
-    ::encode(uri, bl);
-    ::encode(http_status, bl);
-    ::encode(error_code, bl);
-    ::encode(bytes_sent, bl);
-    ::encode(obj_size, bl);
-    ::encode(total_time, bl);
-    ::encode(user_agent, bl);
-    ::encode(referrer, bl);
-    ::encode(bytes_received, bl);
-    ::encode(bucket_id, bl);
-    ::encode(obj, bl);
-    ::encode(object_owner, bl);
-    ::encode(bucket_owner, bl);
-    ::encode(x_headers, bl);
+    encode(object_owner.id, bl);
+    encode(bucket_owner.id, bl);
+    encode(bucket, bl);
+    encode(time, bl);
+    encode(remote_addr, bl);
+    encode(user, bl);
+    encode(obj.name, bl);
+    encode(op, bl);
+    encode(uri, bl);
+    encode(http_status, bl);
+    encode(error_code, bl);
+    encode(bytes_sent, bl);
+    encode(obj_size, bl);
+    encode(total_time, bl);
+    encode(user_agent, bl);
+    encode(referrer, bl);
+    encode(bytes_received, bl);
+    encode(bucket_id, bl);
+    encode(obj, bl);
+    encode(object_owner, bl);
+    encode(bucket_owner, bl);
+    encode(x_headers, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, p);
-    ::decode(object_owner.id, p);
+    decode(object_owner.id, p);
     if (struct_v > 3)
-      ::decode(bucket_owner.id, p);
-    ::decode(bucket, p);
-    ::decode(time, p);
-    ::decode(remote_addr, p);
-    ::decode(user, p);
-    ::decode(obj.name, p);
-    ::decode(op, p);
-    ::decode(uri, p);
-    ::decode(http_status, p);
-    ::decode(error_code, p);
-    ::decode(bytes_sent, p);
-    ::decode(obj_size, p);
-    ::decode(total_time, p);
-    ::decode(user_agent, p);
-    ::decode(referrer, p);
+      decode(bucket_owner.id, p);
+    decode(bucket, p);
+    decode(time, p);
+    decode(remote_addr, p);
+    decode(user, p);
+    decode(obj.name, p);
+    decode(op, p);
+    decode(uri, p);
+    decode(http_status, p);
+    decode(error_code, p);
+    decode(bytes_sent, p);
+    decode(obj_size, p);
+    decode(total_time, p);
+    decode(user_agent, p);
+    decode(referrer, p);
     if (struct_v >= 2)
-      ::decode(bytes_received, p);
+      decode(bytes_received, p);
     else
       bytes_received = 0;
 
     if (struct_v >= 3) {
       if (struct_v <= 5) {
         uint64_t id;
-        ::decode(id, p);
+        decode(id, p);
         char buf[32];
         snprintf(buf, sizeof(buf), "%llu", (long long)id);
         bucket_id = buf;
       } else {
-        ::decode(bucket_id, p);
+        decode(bucket_id, p);
       }
     } else {
       bucket_id = "";
     }
     if (struct_v >= 7) {
-      ::decode(obj, p);
+      decode(obj, p);
     }
     if (struct_v >= 8) {
-      ::decode(object_owner, p);
-      ::decode(bucket_owner, p);
+      decode(object_owner, p);
+      decode(bucket_owner, p);
     }
     if (struct_v >= 9) {
-      ::decode(x_headers, p);
+      decode(x_headers, p);
     }
     DECODE_FINISH(p);
   }

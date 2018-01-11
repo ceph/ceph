@@ -571,8 +571,8 @@ int main(int argc, const char **argv)
     bufferlist mapbl;
     tmp.encode(mapbl, CEPH_FEATURES_ALL);
     bufferlist final;
-    ::encode(v, final);
-    ::encode(mapbl, final);
+    encode(v, final);
+    encode(mapbl, final);
 
     auto t(std::make_shared<MonitorDBStore::Transaction>());
     // save it

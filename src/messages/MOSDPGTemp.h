@@ -37,18 +37,19 @@ private:
 
 public:
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(map_epoch, payload);
-    ::encode(pg_temp, payload);
-    ::encode(forced, payload);
+    encode(map_epoch, payload);
+    encode(pg_temp, payload);
+    encode(forced, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(map_epoch, p);
-    ::decode(pg_temp, p);
+    decode(map_epoch, p);
+    decode(pg_temp, p);
     if (header.version >= 2) {
-      ::decode(forced, p);
+      decode(forced, p);
     }
   }
 

@@ -1419,7 +1419,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   RGWSLOInfo slo_info;
   bufferlist::iterator bliter = bl.begin();
   try {
-    ::decode(slo_info, bliter);
+    decode(slo_info, bliter);
   } catch (buffer::error& err) {
     ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
     return -EIO;
@@ -1598,7 +1598,7 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
   if (iter != attrs.end()) {
     utime_t delete_at;
     try {
-      ::decode(delete_at, iter->second);
+      decode(delete_at, iter->second);
     } catch (buffer::error& err) {
       dout(0) << "ERROR: " << __func__ << ": failed to decode " RGW_ATTR_DELETE_AT " attr" << dendl;
       return false;
@@ -3112,7 +3112,7 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
     return r;
   }
 
-  ::encode(info, bl);
+  encode(info, bl);
 
   string multipart_meta_obj = mp.get_meta();
 
@@ -3540,7 +3540,7 @@ void RGWPutObj::execute()
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.blocks = move(compressor->get_compression_blocks());
-    ::encode(cs_info, tmp);
+    encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
     ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
         << " with type=" << cs_info.compression_type
@@ -3572,7 +3572,7 @@ void RGWPutObj::execute()
 
   if (slo_info) {
     bufferlist manifest_bl;
-    ::encode(*slo_info, manifest_bl);
+    encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
     hash.Update((::byte *)slo_info->raw_data, slo_info->raw_data_len);
@@ -3829,7 +3829,7 @@ void RGWPostObj::execute()
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.blocks = move(compressor->get_compression_blocks());
-      ::encode(cs_info, tmp);
+      encode(cs_info, tmp);
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
@@ -4125,7 +4125,7 @@ int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
   RGWSLOInfo slo_info;
   bufferlist::iterator bliter = bl.begin();
   try {
-    ::decode(slo_info, bliter);
+    decode(slo_info, bliter);
   } catch (buffer::error& err) {
     ldout(s->cct, 0) << "ERROR: failed to decode slo manifest" << dendl;
     return -EIO;
@@ -5236,7 +5236,7 @@ static int get_multipart_info(RGWRados *store, struct req_state *s,
         bufferlist& bl = iter->second;
         bufferlist::iterator bli = bl.begin();
         try {
-          ::decode(*policy, bli);
+          decode(*policy, bli);
         } catch (buffer::error& err) {
           ldout(s->cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
           return -EIO;
@@ -5497,7 +5497,7 @@ void RGWCompleteMultipart::execute()
   if (compressed) {
     // write compression attribute to full object
     bufferlist tmp;
-    ::encode(cs_info, tmp);
+    encode(cs_info, tmp);
     attrs[RGW_ATTR_COMPRESSION] = tmp;
   }
 
@@ -6466,7 +6466,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     cs_info.compression_type = plugin->get_type_name();
     cs_info.orig_size = s->obj_size;
     cs_info.blocks = std::move(compressor->get_compression_blocks());
-    ::encode(cs_info, tmp);
+    encode(cs_info, tmp);
     attrs.emplace(RGW_ATTR_COMPRESSION, std::move(tmp));
   }
 

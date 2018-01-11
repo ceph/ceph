@@ -38,14 +38,14 @@ struct MonCommand {
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode_bare(bl);
-    ::encode(flags, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
     decode_bare(bl);
-    ::decode(flags, bl);
+    decode(flags, bl);
     DECODE_FINISH(bl);
   }
 
@@ -53,18 +53,20 @@ struct MonCommand {
    * Unversioned encoding for use within encode_array.
    */
   void encode_bare(bufferlist &bl) const {
-    ::encode(cmdstring, bl);
-    ::encode(helpstring, bl);
-    ::encode(module, bl);
-    ::encode(req_perms, bl);
-    ::encode(availability, bl);
+    using ceph::encode;
+    encode(cmdstring, bl);
+    encode(helpstring, bl);
+    encode(module, bl);
+    encode(req_perms, bl);
+    encode(availability, bl);
   }
   void decode_bare(bufferlist::iterator &bl) {
-    ::decode(cmdstring, bl);
-    ::decode(helpstring, bl);
-    ::decode(module, bl);
-    ::decode(req_perms, bl);
-    ::decode(availability, bl);
+    using ceph::decode;
+    decode(cmdstring, bl);
+    decode(helpstring, bl);
+    decode(module, bl);
+    decode(req_perms, bl);
+    decode(availability, bl);
   }
   bool is_compat(const MonCommand* o) const {
     return cmdstring == o->cmdstring &&
@@ -91,12 +93,12 @@ struct MonCommand {
   static void encode_array(const MonCommand *cmds, int size, bufferlist &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = size;
-    ::encode(s, bl);
+    encode(s, bl);
     for (int i = 0; i < size; ++i) {
       cmds[i].encode_bare(bl);
     }
     for (int i = 0; i < size; i++) {
-      ::encode(cmds[i].flags, bl);
+      encode(cmds[i].flags, bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -104,7 +106,7 @@ struct MonCommand {
                            bufferlist::iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
-    ::decode(s, bl);
+    decode(s, bl);
     *size = s;
     *cmds = new MonCommand[*size];
     for (int i = 0; i < *size; ++i) {
@@ -112,7 +114,7 @@ struct MonCommand {
     }
     if (struct_v >= 2) {
       for (int i = 0; i < *size; i++)
-        ::decode((*cmds)[i].flags, bl);
+        decode((*cmds)[i].flags, bl);
     } else {
       for (int i = 0; i < *size; i++)
         (*cmds)[i].flags = 0;
@@ -125,12 +127,12 @@ struct MonCommand {
 			    bufferlist &bl) {
     ENCODE_START(2, 1, bl);
     uint16_t s = cmds.size();
-    ::encode(s, bl);
+    encode(s, bl);
     for (unsigned i = 0; i < s; ++i) {
       cmds[i].encode_bare(bl);
     }
     for (unsigned i = 0; i < s; i++) {
-      ::encode(cmds[i].flags, bl);
+      encode(cmds[i].flags, bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -138,14 +140,14 @@ struct MonCommand {
 			    bufferlist::iterator &bl) {
     DECODE_START(2, bl);
     uint16_t s = 0;
-    ::decode(s, bl);
+    decode(s, bl);
     cmds.resize(s);
     for (unsigned i = 0; i < s; ++i) {
       cmds[i].decode_bare(bl);
     }
     if (struct_v >= 2) {
       for (unsigned i = 0; i < s; i++)
-        ::decode(cmds[i].flags, bl);
+        decode(cmds[i].flags, bl);
     } else {
       for (unsigned i = 0; i < s; i++)
         cmds[i].flags = 0;

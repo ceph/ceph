@@ -247,7 +247,8 @@ Context *DisableRequest<I>::handle_get_clients(int *result) {
     journal::ClientData client_data;
     bufferlist::iterator bl_it = client.data.begin();
     try {
-      ::decode(client_data, bl_it);
+      using ceph::decode;
+      decode(client_data, bl_it);
     } catch (const buffer::error &err) {
       lderr(cct) << "failed to decode client data" << dendl;
       m_error_result = -EBADMSG;

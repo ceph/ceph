@@ -86,11 +86,11 @@ public:
 
   void encode_state(bufferlist& bl) const override {
     encode_server_state(bl);
-    ::encode(pending_for_mds, bl);
+    encode(pending_for_mds, bl);
   }
   void decode_state(bufferlist::iterator& bl) override {
     decode_server_state(bl);
-    ::decode(pending_for_mds, bl);
+    decode(pending_for_mds, bl);
   }
 
   // recovery

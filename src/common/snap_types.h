@@ -54,12 +54,14 @@ struct SnapContext {
   bool empty() { return seq == 0; }
 
   void encode(bufferlist& bl) const {
-    ::encode(seq, bl);
-    ::encode(snaps, bl);
+    using ceph::encode;
+    encode(seq, bl);
+    encode(snaps, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(seq, bl);
-    ::decode(snaps, bl);
+    using ceph::decode;
+    decode(seq, bl);
+    decode(snaps, bl);
   }
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapContext*>& o);

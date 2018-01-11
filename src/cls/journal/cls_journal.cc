@@ -64,7 +64,7 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
 
   try {
     bufferlist::iterator iter = bl.begin();
-    ::decode(*t, iter);
+    decode(*t, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -75,7 +75,7 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
 template <typename T>
 int write_key(cls_method_context_t hctx, const string &key, const T &t) {
   bufferlist bl;
-  ::encode(t, bl);
+  encode(t, bl);
 
   int r = cls_cxx_map_set_val(hctx, key, &bl);
   if (r < 0) {
@@ -123,7 +123,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       cls::journal::Client client;
       bufferlist::iterator iter = val.second.begin();
       try {
-        ::decode(client, iter);
+        decode(client, iter);
       } catch (const buffer::error &err) {
         CLS_ERR("error decoding registered client: %s",
                 val.first.c_str());
@@ -172,7 +172,7 @@ int expire_tags(cls_method_context_t hctx, const std::string *skip_client_id) {
       cls::journal::Tag tag;
       bufferlist::iterator iter = val.second.begin();
       try {
-        ::decode(tag, iter);
+        decode(tag, iter);
       } catch (const buffer::error &err) {
         CLS_ERR("error decoding tag: %s", val.first.c_str());
         return -EIO;
@@ -234,7 +234,7 @@ int get_client_list_range(cls_method_context_t hctx,
       bufferlist::iterator iter = it->second.begin();
 
       cls::journal::Client client;
-      ::decode(client, iter);
+      decode(client, iter);
       clients->insert(client);
     } catch (const buffer::error &err) {
       CLS_ERR("could not decode client '%s': %s", it->first.c_str(),
@@ -307,9 +307,9 @@ int journal_create(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   int64_t pool_id;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(order, iter);
-    ::decode(splay_width, iter);
-    ::decode(pool_id, iter);
+    decode(order, iter);
+    decode(splay_width, iter);
+    decode(pool_id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -379,7 +379,7 @@ int journal_get_order(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(order, *out);
+  encode(order, *out);
   return 0;
 }
 
@@ -399,7 +399,7 @@ int journal_get_splay_width(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(splay_width, *out);
+  encode(splay_width, *out);
   return 0;
 }
 
@@ -419,7 +419,7 @@ int journal_get_pool_id(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(pool_id, *out);
+  encode(pool_id, *out);
   return 0;
 }
 
@@ -439,7 +439,7 @@ int journal_get_minimum_set(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(minimum_set, *out);
+  encode(minimum_set, *out);
   return 0;
 }
 
@@ -455,7 +455,7 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
   uint64_t object_set;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(object_set, iter);
+    decode(object_set, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -510,7 +510,7 @@ int journal_get_active_set(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(active_set, *out);
+  encode(active_set, *out);
   return 0;
 }
 
@@ -526,7 +526,7 @@ int journal_set_active_set(cls_method_context_t hctx, bufferlist *in,
   uint64_t object_set;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(object_set, iter);
+    decode(object_set, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -578,7 +578,7 @@ int journal_get_client(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
+    decode(id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -591,7 +591,7 @@ int journal_get_client(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(client, *out);
+  encode(client, *out);
   return 0;
 }
 
@@ -609,8 +609,8 @@ int journal_client_register(cls_method_context_t hctx, bufferlist *in,
   bufferlist data;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(data, iter);
+    decode(id, iter);
+    decode(data, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -659,8 +659,8 @@ int journal_client_update_data(cls_method_context_t hctx, bufferlist *in,
   bufferlist data;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(data, iter);
+    decode(id, iter);
+    decode(data, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -696,9 +696,9 @@ int journal_client_update_state(cls_method_context_t hctx, bufferlist *in,
   bufferlist data;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
+    decode(id, iter);
     uint8_t state_raw;
-    ::decode(state_raw, iter);
+    decode(state_raw, iter);
     state = static_cast<cls::journal::ClientState>(state_raw);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
@@ -732,7 +732,7 @@ int journal_client_unregister(cls_method_context_t hctx, bufferlist *in,
   std::string id;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
+    decode(id, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -774,8 +774,8 @@ int journal_client_commit(cls_method_context_t hctx, bufferlist *in,
   cls::journal::ObjectSetPosition commit_position;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(id, iter);
-    ::decode(commit_position, iter);
+    decode(id, iter);
+    decode(commit_position, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -825,8 +825,8 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   uint64_t max_return;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(start_after, iter);
-    ::decode(max_return, iter);
+    decode(start_after, iter);
+    decode(max_return, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -837,7 +837,7 @@ int journal_client_list(cls_method_context_t hctx, bufferlist *in,
   if (r < 0)
     return r;
 
-  ::encode(clients, *out);
+  encode(clients, *out);
   return 0;
 }
 
@@ -856,7 +856,7 @@ int journal_get_next_tag_tid(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(tag_tid, *out);
+  encode(tag_tid, *out);
   return 0;
 }
 
@@ -873,7 +873,7 @@ int journal_get_tag(cls_method_context_t hctx, bufferlist *in,
   uint64_t tag_tid;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(tag_tid, iter);
+    decode(tag_tid, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -886,7 +886,7 @@ int journal_get_tag(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  ::encode(tag, *out);
+  encode(tag, *out);
   return 0;
 }
 
@@ -906,9 +906,9 @@ int journal_tag_create(cls_method_context_t hctx, bufferlist *in,
   bufferlist data;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(tag_tid, iter);
-    ::decode(tag_class, iter);
-    ::decode(data, iter);
+    decode(tag_tid, iter);
+    decode(tag_class, iter);
+    decode(data, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -1000,10 +1000,10 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
   tag_class = boost::none;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(start_after_tag_tid, iter);
-    ::decode(max_return, iter);
-    ::decode(client_id, iter);
-    ::decode(tag_class, iter);
+    decode(start_after_tag_tid, iter);
+    decode(max_return, iter);
+    decode(client_id, iter);
+    decode(tag_class, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;
@@ -1044,7 +1044,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
       cls::journal::Tag tag;
       bufferlist::iterator iter = val.second.begin();
       try {
-        ::decode(tag, iter);
+        decode(tag, iter);
       } catch (const buffer::error &err) {
         CLS_ERR("error decoding tag: %s", val.first.c_str());
         return -EIO;
@@ -1082,7 +1082,7 @@ int journal_tag_list(cls_method_context_t hctx, bufferlist *in,
     }
   } while (tag_pass != TAG_PASS_DONE);
 
-  ::encode(tags, *out);
+  encode(tags, *out);
   return 0;
 }
 
@@ -1098,7 +1098,7 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
   uint64_t soft_max_size;
   try {
     bufferlist::iterator iter = in->begin();
-    ::decode(soft_max_size, iter);
+    decode(soft_max_size, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode input parameters: %s", err.what());
     return -EINVAL;

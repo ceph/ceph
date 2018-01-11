@@ -935,9 +935,9 @@ TEST_F(LibRadosListPP, ListObjectsFilterPP) {
 
   bufferlist filter_bl;
   std::string filter_name = "plain";
-  ::encode(filter_name, filter_bl);
-  ::encode("_theattr", filter_bl);
-  ::encode(target_str, filter_bl);
+  encode(filter_name, filter_bl);
+  encode("_theattr", filter_bl);
+  encode(target_str, filter_bl);
 
   NObjectIterator iter(ioctx.nobjects_begin(filter_bl));
   bool foundit = false;
@@ -1230,9 +1230,9 @@ TEST_F(LibRadosListPP, EnumerateObjectsFilterPP) {
 
   bufferlist filter_bl;
   std::string filter_name = "plain";
-  ::encode(filter_name, filter_bl);
-  ::encode("_theattr", filter_bl);
-  ::encode(target_str, filter_bl);
+  encode(filter_name, filter_bl);
+  encode("_theattr", filter_bl);
+  encode(target_str, filter_bl);
 
   ObjectCursor c = ioctx.object_list_begin();
   ObjectCursor end = ioctx.object_list_end();

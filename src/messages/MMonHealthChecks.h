@@ -34,12 +34,13 @@ public:
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(health_checks, p);
+    decode(health_checks, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(health_checks, payload);
+    encode(health_checks, payload);
   }
 
 };

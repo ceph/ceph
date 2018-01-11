@@ -149,25 +149,25 @@ public:
 
     void encode(bufferlist &bl) const {
       ENCODE_START(2, 2, bl);
-      ::encode(magic, bl);
-      ::encode(trimmed_pos, bl);
-      ::encode(expire_pos, bl);
-      ::encode(unused_field, bl);
-      ::encode(write_pos, bl);
-      ::encode(layout, bl, 0);  // encode in legacy format
-      ::encode(stream_format, bl);
+      encode(magic, bl);
+      encode(trimmed_pos, bl);
+      encode(expire_pos, bl);
+      encode(unused_field, bl);
+      encode(write_pos, bl);
+      encode(layout, bl, 0);  // encode in legacy format
+      encode(stream_format, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator &bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-      ::decode(magic, bl);
-      ::decode(trimmed_pos, bl);
-      ::decode(expire_pos, bl);
-      ::decode(unused_field, bl);
-      ::decode(write_pos, bl);
-      ::decode(layout, bl);
+      decode(magic, bl);
+      decode(trimmed_pos, bl);
+      decode(expire_pos, bl);
+      decode(unused_field, bl);
+      decode(write_pos, bl);
+      decode(layout, bl);
       if (struct_v > 1) {
-	::decode(stream_format, bl);
+	decode(stream_format, bl);
       } else {
 	stream_format = JOURNAL_FORMAT_LEGACY;
       }

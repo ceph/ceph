@@ -41,7 +41,7 @@ namespace rados {
         op.duration = duration;
         op.flags = flags;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "lock", in);
       }
 
@@ -64,7 +64,7 @@ namespace rados {
         op.name = name;
         op.cookie = cookie;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
 
         rados_op->exec("lock", "unlock", in);
       }
@@ -95,7 +95,7 @@ namespace rados {
         op.cookie = cookie;
         op.locker = locker;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "break_lock", in);
       }
 
@@ -118,7 +118,7 @@ namespace rados {
         cls_lock_list_locks_reply ret;
         bufferlist::iterator iter = out.begin();
         try {
-          ::decode(ret, iter);
+          decode(ret, iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }
@@ -134,7 +134,7 @@ namespace rados {
         bufferlist in;
         cls_lock_get_info_op op;
         op.name = name;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "get_info", in);
       }
 
@@ -144,7 +144,7 @@ namespace rados {
       {
         cls_lock_get_info_reply ret;
         try {
-          ::decode(ret, *iter);
+          decode(ret, *iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }
@@ -188,7 +188,7 @@ namespace rados {
         op.cookie = cookie;
         op.tag = tag;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "assert_locked", in);
       }
 
@@ -204,7 +204,7 @@ namespace rados {
         op.tag = tag;
         op.new_cookie = new_cookie;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("lock", "set_cookie", in);
       }
 

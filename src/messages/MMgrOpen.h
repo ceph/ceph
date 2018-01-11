@@ -34,24 +34,25 @@ public:
   void decode_payload() override
   {
     bufferlist::iterator p = payload.begin();
-    ::decode(daemon_name, p);
+    decode(daemon_name, p);
     if (header.version >= 2) {
-      ::decode(service_name, p);
-      ::decode(service_daemon, p);
+      decode(service_name, p);
+      decode(service_daemon, p);
       if (service_daemon) {
-	::decode(daemon_metadata, p);
-	::decode(daemon_status, p);
+	decode(daemon_metadata, p);
+	decode(daemon_status, p);
       }
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(daemon_name, payload);
-    ::encode(service_name, payload);
-    ::encode(service_daemon, payload);
+    using ceph::encode;
+    encode(daemon_name, payload);
+    encode(service_name, payload);
+    encode(service_daemon, payload);
     if (service_daemon) {
-      ::encode(daemon_metadata, payload);
-      ::encode(daemon_status, payload);
+      encode(daemon_metadata, payload);
+      encode(daemon_status, payload);
     }
   }
 

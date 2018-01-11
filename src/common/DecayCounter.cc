@@ -18,9 +18,9 @@
 void DecayCounter::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);
-  ::encode(val, bl);
-  ::encode(delta, bl);
-  ::encode(vel, bl);
+  encode(val, bl);
+  encode(delta, bl);
+  encode(vel, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -29,15 +29,15 @@ void DecayCounter::decode(const utime_t &t, bufferlist::iterator &p)
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
   if (struct_v < 2) {
     double half_life;
-    ::decode(half_life, p);
+    decode(half_life, p);
   }
   if (struct_v < 3) {
     double k;
-    ::decode(k, p);
+    decode(k, p);
   }
-  ::decode(val, p);
-  ::decode(delta, p);
-  ::decode(vel, p);
+  decode(val, p);
+  decode(delta, p);
+  decode(vel, p);
   DECODE_FINISH(p);
 }
 

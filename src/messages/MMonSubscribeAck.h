@@ -38,12 +38,13 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(interval, p);
-    ::decode(fsid, p);
+    decode(interval, p);
+    decode(fsid, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(interval, payload);
-    ::encode(fsid, payload);
+    using ceph::encode;
+    encode(interval, payload);
+    encode(fsid, payload);
   }
 };
 

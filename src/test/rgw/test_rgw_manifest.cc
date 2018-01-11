@@ -40,17 +40,17 @@ struct OldObjManifestPart {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(loc, bl);
-    ::encode(loc_ofs, bl);
-    ::encode(size, bl);
+    encode(loc, bl);
+    encode(loc_ofs, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
      DECODE_START_LEGACY_COMPAT_LEN_32(2, 2, 2, bl);
-     ::decode(loc, bl);
-     ::decode(loc_ofs, bl);
-     ::decode(size, bl);
+     decode(loc, bl);
+     decode(loc_ofs, bl);
+     decode(size, bl);
      DECODE_FINISH(bl);
   }
 
@@ -87,15 +87,15 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
-    ::encode(obj_size, bl);
-    ::encode(objs, bl);
+    encode(obj_size, bl);
+    encode(objs, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN_32(6, 2, 2, bl);
-    ::decode(obj_size, bl);
-    ::decode(objs, bl);
+    decode(obj_size, bl);
+    decode(objs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -357,13 +357,13 @@ TEST(TestRGWManifest, old_obj_manifest) {
 
 
   bufferlist bl;
-  ::encode(old_manifest , bl);
+  encode(old_manifest , bl);
 
   RGWObjManifest manifest;
 
   try {
     auto iter = bl.begin();
-    ::decode(manifest, iter);
+    decode(manifest, iter);
   } catch (buffer::error& err) {
     ASSERT_TRUE(false);
   }

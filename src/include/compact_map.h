@@ -14,6 +14,8 @@
 
 #include <map>
 
+#include "include/encoding.h"
+
 template <class Key, class T, class Map>
 class compact_map_base {
 protected:
@@ -285,23 +287,27 @@ public:
     return const_iterator(this, map->upper_bound(k));
   }
   void encode(bufferlist &bl) const {
+    using ceph::encode;
     if (map)
-      ::encode(*map, bl);
+      encode(*map, bl);
     else
-      ::encode((uint32_t)0, bl);
+      encode((uint32_t)0, bl);
   }
   void encode(bufferlist &bl, uint64_t features) const {
+    using ceph::encode;
     if (map)
-      ::encode(*map, bl, features);
+      encode(*map, bl, features);
     else
-      ::encode((uint32_t)0, bl);
+      encode((uint32_t)0, bl);
   }
   void decode(bufferlist::iterator& p) {
+    using ceph::decode;
+    using ceph::decode_nohead;
     uint32_t n;
-    ::decode(n, p);
+    decode(n, p);
     if (n > 0) {
       alloc_internal();
-      ::decode_nohead(n, *map, p);
+      decode_nohead(n, *map, p);
     } else
       free_internal();
   }

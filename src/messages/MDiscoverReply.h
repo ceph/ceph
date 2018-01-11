@@ -176,34 +176,35 @@ public:
   // ...
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(base_ino, p);
-    ::decode(base_dir_frag, p);
-    ::decode(wanted_base_dir, p);
-    ::decode(wanted_xlocked, p);
-    ::decode(wanted_snapid, p);
-    ::decode(flag_error_dn, p);
-    ::decode(flag_error_dir, p);
-    ::decode(error_dentry, p);
-    ::decode(dir_auth_hint, p);
-    ::decode(unsolicited, p);
+    decode(base_ino, p);
+    decode(base_dir_frag, p);
+    decode(wanted_base_dir, p);
+    decode(wanted_xlocked, p);
+    decode(wanted_snapid, p);
+    decode(flag_error_dn, p);
+    decode(flag_error_dir, p);
+    decode(error_dentry, p);
+    decode(dir_auth_hint, p);
+    decode(unsolicited, p);
 
-    ::decode(starts_with, p);
-    ::decode(trace, p);
+    decode(starts_with, p);
+    decode(trace, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(base_ino, payload);
-    ::encode(base_dir_frag, payload);
-    ::encode(wanted_base_dir, payload);
-    ::encode(wanted_xlocked, payload);
-    ::encode(wanted_snapid, payload);
-    ::encode(flag_error_dn, payload);
-    ::encode(flag_error_dir, payload);
-    ::encode(error_dentry, payload);
-    ::encode(dir_auth_hint, payload);
-    ::encode(unsolicited, payload);
+    using ceph::encode;
+    encode(base_ino, payload);
+    encode(base_dir_frag, payload);
+    encode(wanted_base_dir, payload);
+    encode(wanted_xlocked, payload);
+    encode(wanted_snapid, payload);
+    encode(flag_error_dn, payload);
+    encode(flag_error_dir, payload);
+    encode(error_dentry, payload);
+    encode(dir_auth_hint, payload);
+    encode(unsolicited, payload);
 
-    ::encode(starts_with, payload);
-    ::encode(trace, payload);
+    encode(starts_with, payload);
+    encode(trace, payload);
   }
 };
 

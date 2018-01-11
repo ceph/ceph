@@ -90,10 +90,11 @@ public:
   virtual void dump(Formatter *f) const = 0;
 
   void encode_with_header(bufferlist& bl, uint64_t features) {
-    ::encode(EVENT_NEW_ENCODING, bl);
+    using ceph::encode;
+    encode(EVENT_NEW_ENCODING, bl);
     ENCODE_START(1, 1, bl)
-    ::encode(_type, bl);
-    encode(bl, features);
+    encode(_type, bl);
+    this->encode(bl, features);
     ENCODE_FINISH(bl);
   }
 

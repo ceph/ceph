@@ -62,7 +62,7 @@ TEST(BloomFilter, Sweep) {
       double actual = (double)hit / (double)test;
 
       bufferlist bl;
-      ::encode(bf, bl);
+      encode(bf, bl);
 
       double byte_per_insert = (double)bl.length() / (double)max;
 
@@ -102,7 +102,7 @@ TEST(BloomFilter, SweepInt) {
       double actual = (double)hit / (double)test;
 
       bufferlist bl;
-      ::encode(bf, bl);
+      encode(bf, bl);
 
       double byte_per_insert = (double)bl.length() / (double)max;
 
@@ -145,7 +145,7 @@ TEST(BloomFilter, CompressibleSweep) {
     double actual = (double)hit / (double)test;
 
     bufferlist bl;
-    ::encode(bf, bl);
+    encode(bf, bl);
 
     double byte_per_insert = (double)bl.length() / (double)max;
     unsigned est_after = bf.approx_unique_element_count();
@@ -184,7 +184,7 @@ TEST(BloomFilter, BinSweep) {
       for (int j=0; j<max; j++) {
 	ls.back()->insert(10000 * (i+1) + j);
       }
-      ::encode(*ls.front(), bl);
+      encode(*ls.front(), bl);
     }
 
     int hit = 0;

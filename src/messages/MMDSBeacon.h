@@ -43,7 +43,7 @@ enum mds_metric_t {
   MDS_HEALTH_CACHE_OVERSIZED
 };
 
-static inline const char *mds_metric_name(mds_metric_t m)
+inline const char *mds_metric_name(mds_metric_t m)
 {
   switch (m) {
   case MDS_HEALTH_TRIM: return "MDS_TRIM";
@@ -62,7 +62,7 @@ static inline const char *mds_metric_name(mds_metric_t m)
   }
 }
 
-static inline const char *mds_metric_summary(mds_metric_t m)
+inline const char *mds_metric_summary(mds_metric_t m)
 {
   switch (m) {
   case MDS_HEALTH_TRIM:
@@ -115,20 +115,20 @@ struct MDSHealthMetric
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     assert(type != MDS_HEALTH_NULL);
-    ::encode((uint16_t)type, bl);
-    ::encode((uint8_t)sev, bl);
-    ::encode(message, bl);
-    ::encode(metadata, bl);
+    encode((uint16_t)type, bl);
+    encode((uint8_t)sev, bl);
+    encode(message, bl);
+    encode(metadata, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode((uint16_t&)type, bl);
+    decode((uint16_t&)type, bl);
     assert(type != MDS_HEALTH_NULL);
-    ::decode((uint8_t&)sev, bl);
-    ::decode(message, bl);
-    ::decode(metadata, bl);
+    decode((uint8_t&)sev, bl);
+    decode(message, bl);
+    decode(metadata, bl);
     DECODE_FINISH(bl);
   }
 
@@ -154,13 +154,13 @@ struct MDSHealth
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(metrics, bl);
+    encode(metrics, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(metrics, bl);
+    decode(metrics, bl);
     DECODE_FINISH(bl);
   }
 
@@ -248,42 +248,44 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(global_id, payload);
-    ::encode((__u32)state, payload);
-    ::encode(seq, payload);
-    ::encode(name, payload);
-    ::encode(standby_for_rank, payload);
-    ::encode(standby_for_name, payload);
-    ::encode(compat, payload);
-    ::encode(health, payload);
+    encode(fsid, payload);
+    encode(global_id, payload);
+    encode((__u32)state, payload);
+    encode(seq, payload);
+    encode(name, payload);
+    encode(standby_for_rank, payload);
+    encode(standby_for_name, payload);
+    encode(compat, payload);
+    encode(health, payload);
     if (state == MDSMap::STATE_BOOT) {
-      ::encode(sys_info, payload);
+      encode(sys_info, payload);
     }
-    ::encode(mds_features, payload);
-    ::encode(standby_for_fscid, payload);
-    ::encode(standby_replay, payload);
+    encode(mds_features, payload);
+    encode(standby_for_fscid, payload);
+    encode(standby_replay, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(global_id, p);
-    ::decode((__u32&)state, p);
-    ::decode(seq, p);
-    ::decode(name, p);
-    ::decode(standby_for_rank, p);
-    ::decode(standby_for_name, p);
-    ::decode(compat, p);
-    ::decode(health, p);
+    decode(fsid, p);
+    decode(global_id, p);
+    decode((__u32&)state, p);
+    decode(seq, p);
+    decode(name, p);
+    decode(standby_for_rank, p);
+    decode(standby_for_name, p);
+    decode(compat, p);
+    decode(health, p);
     if (state == MDSMap::STATE_BOOT) {
-      ::decode(sys_info, p);
+      decode(sys_info, p);
     }
-    ::decode(mds_features, p);
-    ::decode(standby_for_fscid, p);
+    decode(mds_features, p);
+    decode(standby_for_fscid, p);
     if (header.version >= 7) {
-      ::decode(standby_replay, p);
+      decode(standby_replay, p);
     }
 
     if (header.version < 7  && state == MDSMap::STATE_STANDBY_REPLAY) {

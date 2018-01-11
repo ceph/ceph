@@ -189,12 +189,12 @@ static inline void encode(const sockaddr_storage& a, bufferlist& bl) {
   const auto copy_size = std::min((unsigned char*)(&a + 1) - src,
 				  (unsigned char*)(&ss + 1) - dst);
   ::memcpy(dst, src, copy_size);
-  ::encode(ss, bl);
+  encode(ss, bl);
 #else
   ceph_sockaddr_storage ss{};
   ::memset(&ss, '\0', sizeof(ss));
   ::memcpy(&wireaddr, &ss, std::min(sizeof(ss), sizeof(a)));
-  ::encode(ss, bl);
+  encode(ss, bl);
 #endif
 }
 static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
@@ -203,7 +203,7 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   a.ss_family = ntohs(a.ss_family);
 #elif defined(__FreeBSD__) || defined(__APPLE__)
   ceph_sockaddr_storage ss{};
-  ::decode(ss, bl);
+  decode(ss, bl);
   auto src = (unsigned char const *)&ss;
   auto dst = (unsigned char *)&a;
   a.ss_len = 0;
@@ -216,7 +216,7 @@ static inline void decode(sockaddr_storage& a, bufferlist::iterator& bl) {
   ::memcpy(dst, src, copy_size);
 #else
   ceph_sockaddr_storage ss{};
-  ::decode(ss, bl);
+  decode(ss, bl);
   ::memcpy(&a, &ss, std::min(sizeof(ss), sizeof(a)));
 #endif
 }
@@ -416,14 +416,15 @@ struct entity_addr_t {
 
   void decode_legacy_addr_after_marker(bufferlist::iterator& bl)
   {
+    using ceph::decode;
     __u8 marker;
     __u16 rest;
-    ::decode(marker, bl);
-    ::decode(rest, bl);
+    decode(marker, bl);
+    decode(rest, bl);
     type = TYPE_LEGACY;
-    ::decode(nonce, bl);
+    decode(nonce, bl);
     sockaddr_storage ss;
-    ::decode(ss, bl);
+    decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
   }
 
@@ -432,23 +433,24 @@ struct entity_addr_t {
   // broader study
 
   void encode(bufferlist& bl, uint64_t features) const {
+    using ceph::encode;
     if ((features & CEPH_FEATURE_MSG_ADDR2) == 0) {
-      ::encode((__u32)0, bl);
-      ::encode(nonce, bl);
+      encode((__u32)0, bl);
+      encode(nonce, bl);
       sockaddr_storage ss = get_sockaddr_storage();
-      ::encode(ss, bl);
+      encode(ss, bl);
       return;
     }
-    ::encode((__u8)1, bl);
+    encode((__u8)1, bl);
     ENCODE_START(1, 1, bl);
-    ::encode(type, bl);
-    ::encode(nonce, bl);
+    encode(type, bl);
+    encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
-    ::encode(elen, bl);
+    encode(elen, bl);
     if (elen) {
 #if (__FreeBSD__) || defined(__APPLE__)
       __le16 ss_family = u.sa.sa_family;
-      ::encode(ss_family, bl);
+      encode(ss_family, bl);
       bl.append(u.sa.sa_data,
 		elen - sizeof(u.sa.sa_len) - sizeof(u.sa.sa_family));
 #else
@@ -458,8 +460,9 @@ struct entity_addr_t {
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 marker;
-    ::decode(marker, bl);
+    decode(marker, bl);
     if (marker == 0) {
       decode_legacy_addr_after_marker(bl);
       return;
@@ -467,10 +470,10 @@ struct entity_addr_t {
     if (marker != 1)
       throw buffer::malformed_input("entity_addr_t marker != 1");
     DECODE_START(1, bl);
-    ::decode(type, bl);
-    ::decode(nonce, bl);
+    decode(type, bl);
+    decode(nonce, bl);
     __u32 elen;
-    ::decode(elen, bl);
+    decode(elen, bl);
     if (elen) {
 #if defined(__FreeBSD__) || defined(__APPLE__)
       u.sa.sa_len = 0;
@@ -478,7 +481,7 @@ struct entity_addr_t {
       if (elen < sizeof(ss_family)) {
 	throw buffer::malformed_input("elen smaller than family len");
       }
-      ::decode(ss_family, bl);
+      decode(ss_family, bl);
       u.sa.sa_family = ss_family;
       elen -= sizeof(ss_family);
       if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
@@ -556,12 +559,14 @@ struct entity_inst_t {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
-    ::encode(name, bl);
-    ::encode(addr, bl, features);
+    using ceph::encode;
+    encode(name, bl);
+    encode(addr, bl, features);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(name, bl);
-    ::decode(addr, bl);
+    using ceph::decode;
+    decode(name, bl);
+    decode(addr, bl);
   }
 
   void dump(Formatter *f) const;

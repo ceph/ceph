@@ -2328,7 +2328,7 @@ public:
     object_info_t existing_info;
     existing_info.version = eversion_t(6, 2);
     bufferlist enc_oi;
-    ::encode(existing_info, enc_oi, 0);
+    encode(existing_info, enc_oi, 0);
     ObjectStore::Transaction t2;
     t2.touch(test_coll, ghobject_t(existing_oid));
     t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);

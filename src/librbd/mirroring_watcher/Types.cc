@@ -30,12 +30,14 @@ private:
 } // anonymous namespace
 
 void ModeUpdatedPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(mirror_mode), bl);
+  using ceph::encode;
+  encode(static_cast<uint32_t>(mirror_mode), bl);
 }
 
 void ModeUpdatedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  using ceph::decode;
   uint32_t mirror_mode_decode;
-  ::decode(mirror_mode_decode, iter);
+  decode(mirror_mode_decode, iter);
   mirror_mode = static_cast<cls::rbd::MirrorMode>(mirror_mode_decode);
 }
 
@@ -44,18 +46,20 @@ void ModeUpdatedPayload::dump(Formatter *f) const {
 }
 
 void ImageUpdatedPayload::encode(bufferlist &bl) const {
-  ::encode(static_cast<uint32_t>(mirror_image_state), bl);
-  ::encode(image_id, bl);
-  ::encode(global_image_id, bl);
+  using ceph::encode;
+  encode(static_cast<uint32_t>(mirror_image_state), bl);
+  encode(image_id, bl);
+  encode(global_image_id, bl);
 }
 
 void ImageUpdatedPayload::decode(__u8 version, bufferlist::iterator &iter) {
+  using ceph::decode;
   uint32_t mirror_image_state_decode;
-  ::decode(mirror_image_state_decode, iter);
+  decode(mirror_image_state_decode, iter);
   mirror_image_state = static_cast<cls::rbd::MirrorImageState>(
     mirror_image_state_decode);
-  ::decode(image_id, iter);
-  ::decode(global_image_id, iter);
+  decode(image_id, iter);
+  decode(global_image_id, iter);
 }
 
 void ImageUpdatedPayload::dump(Formatter *f) const {
@@ -84,7 +88,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;
-  ::decode(notify_op, iter);
+  decode(notify_op, iter);
 
   // select the correct payload variant based upon the encoded op
   switch (notify_op) {

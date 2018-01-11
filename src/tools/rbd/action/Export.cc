@@ -101,16 +101,16 @@ private:
     bufferlist bl;
     __u8 tag = exists ? RBD_DIFF_WRITE : RBD_DIFF_ZERO;
     uint64_t len = 0;
-    ::encode(tag, bl);
+    encode(tag, bl);
     if (export_format == 2) {
       if (tag == RBD_DIFF_WRITE)
 	len = 8 + 8 + length;
       else
 	len = 8 + 8;
-      ::encode(len, bl);
+      encode(len, bl);
     }
-    ::encode(offset, bl);
-    ::encode(length, bl);
+    encode(offset, bl);
+    encode(length, bl);
     int r = bl.write_fd(edc->fd);
 
     edc->pc.update_progress(offset, edc->totalsize);
@@ -142,34 +142,34 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
     uint64_t len = 0;
     if (fromsnapname) {
       tag = RBD_DIFF_FROM_SNAP;
-      ::encode(tag, bl);
+      encode(tag, bl);
       std::string from(fromsnapname);
       if (export_format == 2) {
 	len = from.length() + 4;
-	::encode(len, bl);
+	encode(len, bl);
       }
-      ::encode(from, bl);
+      encode(from, bl);
     }
 
     if (endsnapname) {
       tag = RBD_DIFF_TO_SNAP;
-      ::encode(tag, bl);
+      encode(tag, bl);
       std::string to(endsnapname);
       if (export_format == 2) {
 	len = to.length() + 4;
-	::encode(len, bl);
+	encode(len, bl);
       }
-      ::encode(to, bl);
+      encode(to, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
-    ::encode(tag, bl);
+    encode(tag, bl);
     uint64_t endsize = info.size;
     if (export_format == 2) {
       len = 8;
-      ::encode(len, bl);
+      encode(len, bl);
     }
-    ::encode(endsize, bl);
+    encode(endsize, bl);
 
     r = bl.write_fd(fd);
     if (r < 0) {
@@ -193,7 +193,7 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   {
     __u8 tag = RBD_DIFF_END;
     bufferlist bl;
-    ::encode(tag, bl);
+    encode(tag, bl);
     r = bl.write_fd(fd);
   }
 
@@ -386,35 +386,35 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   // encode order
   tag = RBD_EXPORT_IMAGE_ORDER;
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(uint64_t(info.order), bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(uint64_t(info.order), bl);
 
   // encode features
   tag = RBD_EXPORT_IMAGE_FEATURES;
   uint64_t features;
   image.features(&features);
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(features, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(features, bl);
 
   // encode stripe_unit and stripe_count
   tag = RBD_EXPORT_IMAGE_STRIPE_UNIT;
   uint64_t stripe_unit;
   stripe_unit = image.get_stripe_unit();
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(stripe_unit, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(stripe_unit, bl);
 
   tag = RBD_EXPORT_IMAGE_STRIPE_COUNT;
   uint64_t stripe_count;
   stripe_count = image.get_stripe_count();
   length = 8;
-  ::encode(tag, bl);
-  ::encode(length, bl);
-  ::encode(stripe_count, bl);
+  encode(tag, bl);
+  encode(length, bl);
+  encode(stripe_count, bl);
 
   //retrieve metadata of image
   std::map<std::string, string> imagemetas;
@@ -449,15 +449,15 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
 
     tag = RBD_EXPORT_IMAGE_META;
     length = key.length() + value.length() + 4 * 2;
-    ::encode(tag, bl);
-    ::encode(length, bl);
-    ::encode(key, bl);
-    ::encode(value, bl);
+    encode(tag, bl);
+    encode(length, bl);
+    encode(key, bl);
+    encode(value, bl);
   }
 
   // encode end tag
   tag = RBD_EXPORT_IMAGE_END;
-  ::encode(tag, bl);
+  encode(tag, bl);
 
   // write bl to fd.
   r = bl.write_fd(fd);
@@ -476,7 +476,7 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   }
 
   uint64_t diff_num = snaps.size() + 1;
-  ::encode(diff_num, bl);
+  encode(diff_num, bl);
 
   r = bl.write_fd(fd);
   if (r < 0) {

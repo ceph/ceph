@@ -848,7 +848,7 @@ public:
     }
 
     bufferlist contbl;
-    ::encode(cont, contbl);
+    encode(cont, contbl);
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
@@ -1027,7 +1027,7 @@ public:
     }
 
     bufferlist contbl;
-    ::encode(cont, contbl);
+    encode(cont, contbl);
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(
 	this,
@@ -1249,7 +1249,7 @@ public:
 		   &results[index],
 		   &retvals[index]);
       bufferlist init_value_bl;
-      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      encode(static_cast<uint32_t>(-1), init_value_bl);
       read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, 0, len,
 		       0, &checksums[index], &checksum_retvals[index]);
     } else {
@@ -1408,7 +1408,7 @@ public:
       if (old_value.has_contents()) {
 	ContDesc to_check;
 	bufferlist::iterator p = headerbl.begin();
-	::decode(to_check, p);
+	decode(to_check, p);
 	if (to_check != old_value.most_recent()) {
 	  cerr << num << ": oid " << oid << " found incorrect object contents " << to_check
 	       << ", expected " << old_value.most_recent() << std::endl;
@@ -1431,8 +1431,8 @@ public:
 	      try {
 	        auto bl_it = checksums[i].begin();
 	        uint32_t csum_count;
-	        ::decode(csum_count, bl_it);
-	        ::decode(checksum, bl_it);
+	        decode(csum_count, bl_it);
+	        decode(checksum, bl_it);
 	      } catch (const buffer::error &err) {
 	        checksum_retvals[i] = -EBADMSG;
 	      }
@@ -2024,7 +2024,7 @@ public:
 		 &retvals[index]);
     if (index != 0) {
       bufferlist init_value_bl;
-      ::encode(static_cast<uint32_t>(-1), init_value_bl);
+      encode(static_cast<uint32_t>(-1), init_value_bl);
       read_op.checksum(LIBRADOS_CHECKSUM_TYPE_CRC32C, init_value_bl, offset, length,
 		       0, &checksums[index], &checksum_retvals[index]);
     }
@@ -2161,8 +2161,8 @@ public:
 	  try {
 	    auto bl_it = checksums[1].begin();
 	    uint32_t csum_count;
-	    ::decode(csum_count, bl_it);
-	    ::decode(checksum[1], bl_it);
+	    decode(csum_count, bl_it);
+	    decode(checksum[1], bl_it);
 	  } catch (const buffer::error &err) {
 	    checksum_retvals[1] = -EBADMSG;
 	  }
@@ -2585,7 +2585,7 @@ public:
       if (r == 0) {
 	HitSet hitset;
 	bufferlist::iterator p = bl.begin();
-	::decode(hitset, p);
+	decode(hitset, p);
 	cout << num << ": got hitset of type " << hitset.get_type_name()
 	     << " size " << bl.length()
 	     << std::endl;

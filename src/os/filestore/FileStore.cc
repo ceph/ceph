@@ -1316,7 +1316,7 @@ int FileStore::_sanity_check_fs()
 int FileStore::write_superblock()
 {
   bufferlist bl;
-  ::encode(superblock, bl);
+  encode(superblock, bl);
   return safe_write_file(basedir.c_str(), "superblock",
       bl.c_str(), bl.length());
 }
@@ -1337,7 +1337,7 @@ int FileStore::read_superblock()
   bufferlist bl;
   bl.push_back(std::move(bp));
   bufferlist::iterator i = bl.begin();
-  ::decode(superblock, i);
+  decode(superblock, i);
   return 0;
 }
 
@@ -1357,7 +1357,7 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
   bufferlist bl;
   bl.push_back(std::move(bp));
   bufferlist::iterator i = bl.begin();
-  ::decode(*version, i);
+  decode(*version, i);
   dout(10) << __FUNC__ << ": was " << *version << " vs target "
 	   << target_version << dendl;
   if (*version == target_version)
@@ -1370,7 +1370,7 @@ int FileStore::write_version_stamp()
 {
   dout(1) << __FUNC__ << ": " << target_version << dendl;
   bufferlist bl;
-  ::encode(target_version, bl);
+  encode(target_version, bl);
 
   return safe_write_file(basedir.c_str(), "store_version",
       bl.c_str(), bl.length());
@@ -2399,7 +2399,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
 
   // then record that we did it
   bufferlist v;
-  ::encode(spos, v);
+  encode(spos, v);
   int r = chain_fsetxattr<true, true>(
     fd, GLOBAL_REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
@@ -2441,7 +2441,7 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
 
   SequencerPosition opos;
   bufferlist::iterator p = bl.begin();
-  ::decode(opos, p);
+  decode(opos, p);
 
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   return spos >= opos ? 1 : -1;
@@ -2491,8 +2491,8 @@ void FileStore::_set_replay_guard(int fd,
 
   // then record that we did it
   bufferlist v(40);
-  ::encode(spos, v);
-  ::encode(in_progress, v);
+  encode(spos, v);
+  encode(in_progress, v);
   int r = chain_fsetxattr<true, true>(
     fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
@@ -2540,9 +2540,9 @@ void FileStore::_close_replay_guard(int fd, const SequencerPosition& spos,
 
   // then record that we are done with this operation
   bufferlist v(40);
-  ::encode(spos, v);
+  encode(spos, v);
   bool in_progress = false;
-  ::encode(in_progress, v);
+  encode(in_progress, v);
   int r = chain_fsetxattr<true, true>(
     fd, REPLAY_GUARD_XATTR, v.c_str(), v.length());
   if (r < 0) {
@@ -2613,10 +2613,10 @@ int FileStore::_check_replay_guard(int fd, const SequencerPosition& spos)
 
   SequencerPosition opos;
   bufferlist::iterator p = bl.begin();
-  ::decode(opos, p);
+  decode(opos, p);
   bool in_progress = false;
   if (!p.end())   // older journals don't have this
-    ::decode(in_progress, p);
+    decode(in_progress, p);
   if (opos > spos) {
     dout(10) << __FUNC__ << ": object has " << opos << " > current pos " << spos
 	     << ", now or in future, SKIPPING REPLAY" << dendl;
@@ -2884,8 +2884,8 @@ void FileStore::_do_transaction(
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           if (_check_replay_guard(cid, spos) > 0) {
             r = _collection_hint_expected_num_objs(cid, pg_num, num_objs, spos);
           }
@@ -3437,7 +3437,7 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
   map<uint64_t, uint64_t> exomap;
   int r = fiemap(_cid, oid, offset, len, exomap);
   if (r >= 0) {
-    ::encode(exomap, bl);
+    encode(exomap, bl);
   }
   return r;
 }
@@ -5998,7 +5998,7 @@ void FSSuperblock::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 1, bl);
   compat_features.encode(bl);
-  ::encode(omap_backend, bl);
+  encode(omap_backend, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -6007,7 +6007,7 @@ void FSSuperblock::decode(bufferlist::iterator &bl)
   DECODE_START(2, bl);
   compat_features.decode(bl);
   if (struct_v >= 2)
-    ::decode(omap_backend, bl);
+    decode(omap_backend, bl);
   else
     omap_backend = "leveldb";
   DECODE_FINISH(bl);

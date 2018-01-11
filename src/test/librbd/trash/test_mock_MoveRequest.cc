@@ -68,8 +68,8 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                              cls::rbd::TrashImageSpec trash_image_spec;
 
                              bufferlist::iterator bl_it = in_bl.begin();
-                             ::decode(id, bl_it);
-                             ::decode(trash_image_spec, bl_it);
+                             decode(id, bl_it);
+                             decode(trash_image_spec, bl_it);
 
                              EXPECT_EQ(id, image_id);
                              EXPECT_EQ(trash_image_spec.source,
@@ -91,8 +91,8 @@ struct TestMockTrashMoveRequest : public TestMockFixture {
                          const std::string& name, const std::string& id,
                          int r) {
     bufferlist in_bl;
-    ::encode(name, in_bl);
-    ::encode(id, in_bl);
+    encode(name, in_bl);
+    encode(id, in_bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(StrEq("rbd_directory"), _, StrEq("rbd"), StrEq("dir_remove_image"),

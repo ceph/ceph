@@ -32,7 +32,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
-  ::encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
+  encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
@@ -46,8 +46,8 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
     assert(bl.length());
     try {
       auto p = bl.begin();
-      ::decode(digest, p);
-      ::decode(service_map, p);
+      decode(digest, p);
+      decode(service_map, p);
       dout(10) << __func__ << " v" << version
 	       << " service_map e" << service_map.epoch << dendl;
     }
@@ -106,7 +106,7 @@ void MgrStatMonitor::create_pending()
   pending_digest = digest;
   pending_health_checks = get_health_checks();
   pending_service_map_bl.clear();
-  ::encode(service_map, pending_service_map_bl, mon->get_quorum_con_features());
+  encode(service_map, pending_service_map_bl, mon->get_quorum_con_features());
 }
 
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -114,7 +114,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ++version;
   dout(10) << " " << version << dendl;
   bufferlist bl;
-  ::encode(pending_digest, bl, mon->get_quorum_con_features());
+  encode(pending_digest, bl, mon->get_quorum_con_features());
   assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   put_version(t, version, bl);
@@ -181,7 +181,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   auto m = static_cast<MMonMgrReport*>(op->get_req());
   bufferlist bl = m->get_data();
   auto p = bl.begin();
-  ::decode(pending_digest, p);
+  decode(pending_digest, p);
   pending_health_checks.swap(m->health_checks);
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);

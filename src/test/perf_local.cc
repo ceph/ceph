@@ -188,18 +188,18 @@ struct DummyBlock {
   int a = 1, b = 2, c = 3, d = 4;
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(a, bl);
-    ::encode(b, bl);
-    ::encode(c, bl);
-    ::encode(d, bl);
+    encode(a, bl);
+    encode(b, bl);
+    encode(c, bl);
+    encode(d, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(a, bl);
-    ::decode(b, bl);
-    ::decode(c, bl);
-    ::decode(d, bl);
+    decode(a, bl);
+    decode(b, bl);
+    decode(c, bl);
+    decode(d, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -214,9 +214,9 @@ double buffer_encode_decode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
     bufferlist::iterator iter = b.begin();
-    ::decode(dummy_block, iter);
+    decode(dummy_block, iter);
   }
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
@@ -261,18 +261,18 @@ double buffer_encode()
   for (int i = 0; i < count; i++) {
     bufferlist b;
     DummyBlock dummy_block;
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
     uint64_t start = Cycles::rdtsc();
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
-    ::encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
+    encode(dummy_block, b);
     total += Cycles::rdtsc() - start;
   }
   return Cycles::to_seconds(total)/(count*10);

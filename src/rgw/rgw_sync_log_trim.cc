@@ -113,27 +113,29 @@ std::ostream& operator<<(std::ostream& out, const TrimCounters::BucketCounter& r
 
 void TrimCounters::BucketCounter::encode(bufferlist& bl) const
 {
+  using ceph::encode;
   // no versioning to save space
-  ::encode(bucket, bl);
-  ::encode(count, bl);
+  encode(bucket, bl);
+  encode(count, bl);
 }
 void TrimCounters::BucketCounter::decode(bufferlist::iterator& p)
 {
-  ::decode(bucket, p);
-  ::decode(count, p);
+  using ceph::decode;
+  decode(bucket, p);
+  decode(count, p);
 }
 WRITE_CLASS_ENCODER(TrimCounters::BucketCounter);
 
 void TrimCounters::Request::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(max_buckets, bl);
+  encode(max_buckets, bl);
   ENCODE_FINISH(bl);
 }
 void TrimCounters::Request::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(max_buckets, p);
+  decode(max_buckets, p);
   DECODE_FINISH(p);
 }
 WRITE_CLASS_ENCODER(TrimCounters::Request);
@@ -141,13 +143,13 @@ WRITE_CLASS_ENCODER(TrimCounters::Request);
 void TrimCounters::Response::encode(bufferlist& bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(bucket_counters, bl);
+  encode(bucket_counters, bl);
   ENCODE_FINISH(bl);
 }
 void TrimCounters::Response::decode(bufferlist::iterator& p)
 {
   DECODE_START(1, p);
-  ::decode(bucket_counters, p);
+  decode(bucket_counters, p);
   DECODE_FINISH(p);
 }
 WRITE_CLASS_ENCODER(TrimCounters::Response);
@@ -156,12 +158,12 @@ void TrimCounters::Handler::handle(bufferlist::iterator& input,
                                    bufferlist& output)
 {
   Request request;
-  ::decode(request, input);
+  decode(request, input);
   auto count = std::min<uint16_t>(request.max_buckets, 128);
 
   Response response;
   server->get_bucket_counters(count, response.bucket_counters);
-  ::encode(response, output);
+  encode(response, output);
 }
 
 /// api to notify peer gateways that trim has completed and their bucket change
@@ -217,12 +219,12 @@ void TrimComplete::Handler::handle(bufferlist::iterator& input,
                                    bufferlist& output)
 {
   Request request;
-  ::decode(request, input);
+  decode(request, input);
 
   server->reset_bucket_counters();
 
   Response response;
-  ::encode(response, output);
+  encode(response, output);
 }
 
 
@@ -306,7 +308,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     try {
       auto p = bl.begin();
       TrimNotifyType type;
-      ::decode(type, p);
+      decode(type, p);
 
       auto handler = handlers.find(type);
       if (handler != handlers.end()) {
@@ -546,13 +548,13 @@ int accumulate_peer_counters(bufferlist& bl, BucketChangeCounter& counter)
     auto p = bl.begin();
     std::map<std::pair<uint64_t, uint64_t>, bufferlist> replies;
     std::set<std::pair<uint64_t, uint64_t>> timeouts;
-    ::decode(replies, p);
-    ::decode(timeouts, p);
+    decode(replies, p);
+    decode(timeouts, p);
 
     for (auto& peer : replies) {
       auto q = peer.second.begin();
       TrimCounters::Response response;
-      ::decode(response, q);
+      decode(response, q);
       for (const auto& b : response.bucket_counters) {
         counter.insert(b.bucket, b.count);
       }
@@ -749,8 +751,8 @@ int BucketTrimCR::operate()
         const TrimNotifyType type = NotifyTrimCounters;
         TrimCounters::Request request{32};
         bufferlist bl;
-        ::encode(type, bl);
-        ::encode(request, bl);
+        encode(type, bl);
+        encode(request, bl);
         call(new RGWRadosNotifyCR(store, obj, bl, config.notify_timeout_ms,
                                   &notify_replies));
       }
@@ -852,8 +854,8 @@ int BucketTrimCR::operate()
       const TrimNotifyType type = NotifyTrimComplete;
       TrimComplete::Request request;
       bufferlist bl;
-      ::encode(type, bl);
-      ::encode(request, bl);
+      encode(type, bl);
+      encode(request, bl);
       call(new RGWRadosNotifyCR(store, obj, bl, config.notify_timeout_ms,
                                 nullptr));
     }

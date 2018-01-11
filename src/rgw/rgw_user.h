@@ -37,11 +37,13 @@ struct RGWUID
   void encode(bufferlist& bl) const {
     string s;
     user_id.to_str(s);
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
   void decode(bufferlist::iterator& bl) {
     string s;
-    ::decode(s, bl);
+    using ceph::decode;
+    decode(s, bl);
     user_id.from_str(s);
   }
 };

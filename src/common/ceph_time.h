@@ -16,9 +16,9 @@
 #define COMMON_CEPH_TIME_H
 
 #include <chrono>
+#include <iostream>
 
 #include "include/assert.h"
-#include "include/encoding.h"
 
 #if defined(__APPLE__)
 #include <sys/_types/_timespec.h>
@@ -445,66 +445,16 @@ namespace ceph {
   // time_point + duration to assert on overflow, but I don't think we
   // should.
 
+
+inline timespan abs(signedspan z) {
+  return z > signedspan::zero() ?
+    std::chrono::duration_cast<timespan>(z) :
+    timespan(-z.count());
+}
+inline timespan to_timespan(signedspan z) {
+  ceph_assert(z >= signedspan::zero());
+  return std::chrono::duration_cast<timespan>(z);
+}
 } // namespace ceph
-
-// We need these definitions to be able to hande ::encode/::decode on
-// time points.
-
-template<typename Clock, typename Duration>
-void encode(const std::chrono::time_point<Clock, Duration>& t,
-	    ceph::bufferlist &bl) {
-  auto ts = Clock::to_timespec(t);
-  // A 32 bit count of seconds causes me vast unhappiness.
-  uint32_t s = ts.tv_sec;
-  uint32_t ns = ts.tv_nsec;
-  ::encode(s, bl);
-  ::encode(ns, bl);
-}
-
-template<typename Clock, typename Duration>
-void decode(std::chrono::time_point<Clock, Duration>& t,
-	    bufferlist::iterator& p) {
-  uint32_t s;
-  uint32_t ns;
-  ::decode(s, p);
-  ::decode(ns, p);
-  struct timespec ts = {
-    static_cast<time_t>(s),
-    static_cast<long int>(ns)};
-
-  t = Clock::from_timespec(ts);
-}
-
-// C++ Overload Resolution requires that our encode/decode functions
-// be defined in the same namespace as the type. So we need this
-// to handle things like ::encode(std::vector<ceph::real_time // > >)
-
-namespace std {
-  namespace chrono {
-    template<typename Clock, typename Duration>
-    void encode(const time_point<Clock, Duration>& t,
-		ceph::bufferlist &bl) {
-      ::encode(t, bl);
-    }
-
-    template<typename Clock, typename Duration>
-    void decode(time_point<Clock, Duration>& t, bufferlist::iterator &p) {
-      ::decode(t, p);
-    }
-  } // namespace chrono
-
-  // An overload of our own
-  namespace {
-    inline timespan abs(signedspan z) {
-      return z > signedspan::zero() ?
-	std::chrono::duration_cast<timespan>(z) :
-	timespan(-z.count());
-    }
-    inline timespan to_timespan(signedspan z) {
-      ceph_assert(z >= signedspan::zero());
-      return std::chrono::duration_cast<timespan>(z);
-    }
-  }
-} // namespace std
 
 #endif // COMMON_CEPH_TIME_H

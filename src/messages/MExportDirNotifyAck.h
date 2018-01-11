@@ -40,13 +40,15 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(new_auth, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(new_auth, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(new_auth, p);
+    decode(dirfrag, p);
+    decode(new_auth, p);
   }
   
 };

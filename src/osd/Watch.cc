@@ -185,13 +185,13 @@ void Notify::maybe_complete_notify()
   if (watchers.empty() || timed_out) {
     // prepare reply
     bufferlist bl;
-    ::encode(notify_replies, bl);
+    encode(notify_replies, bl);
     list<pair<uint64_t,uint64_t> > missed;
     for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
       missed.push_back(make_pair((*p)->get_watcher_gid(),
 				 (*p)->get_cookie()));
     }
-    ::encode(missed, bl);
+    encode(missed, bl);
 
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,

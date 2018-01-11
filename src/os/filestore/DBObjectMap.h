@@ -275,21 +275,21 @@ public:
 
     void encode(bufferlist &bl) const {
       ENCODE_START(3, 1, bl);
-      ::encode(v, bl);
-      ::encode(seq, bl);
-      ::encode(legacy, bl);
+      encode(v, bl);
+      encode(seq, bl);
+      encode(legacy, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
       DECODE_START(3, bl);
       if (struct_v >= 2)
-	::decode(v, bl);
+	decode(v, bl);
       else
 	v = 0;
-      ::decode(seq, bl);
+      decode(seq, bl);
       if (struct_v >= 3)
-	::decode(legacy, bl);
+	decode(legacy, bl);
       else
 	legacy = false;
       DECODE_FINISH(bl);
@@ -319,25 +319,25 @@ public:
     void encode(bufferlist &bl) const {
       coll_t unused;
       ENCODE_START(2, 1, bl);
-      ::encode(seq, bl);
-      ::encode(parent, bl);
-      ::encode(num_children, bl);
-      ::encode(unused, bl);
-      ::encode(oid, bl);
-      ::encode(spos, bl);
+      encode(seq, bl);
+      encode(parent, bl);
+      encode(num_children, bl);
+      encode(unused, bl);
+      encode(oid, bl);
+      encode(spos, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator &bl) {
       coll_t unused;
       DECODE_START(2, bl);
-      ::decode(seq, bl);
-      ::decode(parent, bl);
-      ::decode(num_children, bl);
-      ::decode(unused, bl);
-      ::decode(oid, bl);
+      decode(seq, bl);
+      decode(parent, bl);
+      decode(num_children, bl);
+      decode(unused, bl);
+      decode(oid, bl);
       if (struct_v >= 2)
-	::decode(spos, bl);
+	decode(spos, bl);
       DECODE_FINISH(bl);
     }
 

@@ -1037,7 +1037,7 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
   if (r == 0) {
     try {
       bufferlist::iterator it = m_replay_tag.data.begin();
-      ::decode(m_replay_tag_data, it);
+      decode(m_replay_tag_data, it);
     } catch (const buffer::error &err) {
       r = -EBADMSG;
     }

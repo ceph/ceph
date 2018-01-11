@@ -24,17 +24,17 @@ struct cls_timeindex_entry {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(key_ts, bl);
-    ::encode(key_ext, bl);
-    ::encode(value, bl);
+    encode(key_ts, bl);
+    encode(key_ext, bl);
+    encode(value, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(key_ts, bl);
-    ::decode(key_ext, bl);
-    ::decode(value, bl);
+    decode(key_ts, bl);
+    decode(key_ext, bl);
+    decode(value, bl);
     DECODE_FINISH(bl);
   }
 };

@@ -223,14 +223,14 @@ public:
   }
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(count, bl);
-    ::encode(hits, bl);
+    encode(count, bl);
+    encode(hits, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) override {
     DECODE_START(1, bl);
-    ::decode(count, bl);
-    ::decode(hits, bl);
+    decode(count, bl);
+    decode(hits, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const override;
@@ -294,14 +294,14 @@ public:
   }
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(count, bl);
-    ::encode(hits, bl);
+    encode(count, bl);
+    encode(hits, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) override {
     DECODE_START(1, bl);
-    ::decode(count, bl);
-    ::decode(hits, bl);
+    decode(count, bl);
+    decode(hits, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const override;
@@ -358,16 +358,16 @@ public:
 
     void encode(bufferlist& bl) const override {
       ENCODE_START(1, 1, bl);
-      ::encode(fpp_micro, bl);
-      ::encode(target_size, bl);
-      ::encode(seed, bl);
+      encode(fpp_micro, bl);
+      encode(target_size, bl);
+      encode(seed, bl);
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) override {
       DECODE_START(1, bl);
-      ::decode(fpp_micro, bl);
-      ::decode(target_size, bl);
-      ::decode(seed, bl);
+      decode(fpp_micro, bl);
+      decode(target_size, bl);
+      decode(seed, bl);
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const override;
@@ -431,12 +431,12 @@ public:
 
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(bloom, bl);
+    encode(bloom, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) override {
     DECODE_START(1, bl);
-    ::decode(bloom, bl);
+    decode(bloom, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const override;

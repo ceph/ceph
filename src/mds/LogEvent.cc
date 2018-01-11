@@ -47,12 +47,13 @@ LogEvent *LogEvent::decode(bufferlist& bl)
   bufferlist::iterator p = bl.begin();
   EventType type;
   LogEvent *event = NULL;
-  ::decode(type, p);
+  using ceph::decode;
+  decode(type, p);
 
   if (EVENT_NEW_ENCODING == type) {
     try {
       DECODE_START(1, p);
-      ::decode(type, p);
+      decode(type, p);
       event = decode_event(bl, p, type);
       DECODE_FINISH(p);
     }

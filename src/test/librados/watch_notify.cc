@@ -345,8 +345,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2) {
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
-  ::decode(reply_map, reply_p);
-  ::decode(missed_map, reply_p);
+  decode(reply_map, reply_p);
+  decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
@@ -396,8 +396,8 @@ TEST_F(LibRadosWatchNotify, AioWatchNotify2) {
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
-  ::decode(reply_map, reply_p);
-  ::decode(missed_map, reply_p);
+  decode(reply_map, reply_p);
+  decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
@@ -450,8 +450,8 @@ TEST_F(LibRadosWatchNotify, AioNotify) {
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
-  ::decode(reply_map, reply_p);
-  ::decode(missed_map, reply_p);
+  decode(reply_map, reply_p);
+  decode(missed_map, reply_p);
   ASSERT_EQ(1u, reply_map.size());
   ASSERT_EQ(0u, missed_map.size());
   ASSERT_EQ(1u, notify_cookies.size());
@@ -497,8 +497,8 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify2) {
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  ::decode(reply_map, p);
-  ::decode(missed_map, p);
+  decode(reply_map, p);
+  decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
@@ -536,8 +536,8 @@ TEST_P(LibRadosWatchNotifyPP, AioWatchNotify2) {
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  ::decode(reply_map, p);
-  ::decode(missed_map, p);
+  decode(reply_map, p);
+  decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
@@ -578,8 +578,8 @@ TEST_P(LibRadosWatchNotifyPP, AioNotify) {
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  ::decode(reply_map, p);
-  ::decode(missed_map, p);
+  decode(reply_map, p);
+  decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
@@ -622,8 +622,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Multi) {
   std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
   bufferlist::iterator reply_p = reply.begin();
-  ::decode(reply_map, reply_p);
-  ::decode(missed_map, reply_p);
+  decode(reply_map, reply_p);
+  decode(missed_map, reply_p);
   ASSERT_EQ(2u, reply_map.size());
   ASSERT_EQ(5u, reply_map.begin()->second.length());
   ASSERT_EQ(0u, missed_map.size());
@@ -667,8 +667,8 @@ TEST_F(LibRadosWatchNotify, WatchNotify2Timeout) {
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
-    ::decode(reply_map, reply_p);
-    ::decode(missed_map, reply_p);
+    decode(reply_map, reply_p);
+    decode(missed_map, reply_p);
     ASSERT_EQ(0u, reply_map.size());
     ASSERT_EQ(1u, missed_map.size());
   }
@@ -759,8 +759,8 @@ TEST_P(LibRadosWatchNotifyPP, WatchNotify3) {
   bufferlist::iterator p = bl_reply.begin();
   std::map<std::pair<uint64_t,uint64_t>,bufferlist> reply_map;
   std::set<std::pair<uint64_t,uint64_t> > missed_map;
-  ::decode(reply_map, p);
-  ::decode(missed_map, p);
+  decode(reply_map, p);
+  decode(missed_map, p);
   ASSERT_EQ(1u, notify_cookies.size());
   ASSERT_EQ(1u, notify_cookies.count(handle));
   ASSERT_EQ(1u, reply_map.size());
@@ -833,8 +833,8 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
-    ::decode(reply_map, reply_p);
-    ::decode(missed_map, reply_p);
+    decode(reply_map, reply_p);
+    decode(missed_map, reply_p);
     ASSERT_EQ(0u, reply_map.size());
     ASSERT_EQ(0u, missed_map.size());
   }
@@ -863,8 +863,8 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     std::map<std::pair<uint64_t,uint64_t>, bufferlist> reply_map;
     std::set<std::pair<uint64_t,uint64_t> > missed_map;
     bufferlist::iterator reply_p = reply.begin();
-    ::decode(reply_map, reply_p);
-    ::decode(missed_map, reply_p);
+    decode(reply_map, reply_p);
+    decode(missed_map, reply_p);
     ASSERT_EQ(1u, reply_map.size());
     ASSERT_EQ(0u, missed_map.size());
     ASSERT_EQ(1u, notify_cookies.count(handle));

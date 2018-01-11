@@ -116,7 +116,7 @@ public:
   void expect_get_snapcontext(const std::string& image_id,
                               const ::SnapContext &snapc, int r) {
     bufferlist bl;
-    ::encode(snapc, bl);
+    encode(snapc, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(librbd::util::header_name(image_id), _, StrEq("rbd"),
@@ -249,4 +249,3 @@ TEST_F(TestMockImageDeleterRemoveRequest, RemoveError) {
 } // namespace image_deleter
 } // namespace mirror
 } // namespace rbd
-

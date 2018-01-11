@@ -29,19 +29,21 @@ struct EntityAuth {
 
   void encode(bufferlist& bl) const {
     __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(auid, bl);
-    ::encode(key, bl);
-    ::encode(caps, bl);
+    using ceph::encode;
+    encode(struct_v, bl);
+    encode(auid, bl);
+    encode(key, bl);
+    encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
+    decode(struct_v, bl);
     if (struct_v >= 2)
-      ::decode(auid, bl);
+      decode(auid, bl);
     else auid = CEPH_AUTH_UID_DEFAULT;
-    ::decode(key, bl);
-    ::decode(caps, bl);
+    decode(key, bl);
+    decode(caps, bl);
   }
 };
 WRITE_CLASS_ENCODER(EntityAuth)
@@ -57,19 +59,21 @@ struct AuthCapsInfo {
   AuthCapsInfo() : allow_all(false) {}
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 struct_v = 1;
-    ::encode(struct_v, bl);
+    encode(struct_v, bl);
     __u8 a = (__u8)allow_all;
-    ::encode(a, bl);
-    ::encode(caps, bl);
+    encode(a, bl);
+    encode(caps, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
+    decode(struct_v, bl);
     __u8 a;
-    ::decode(a, bl);
+    decode(a, bl);
     allow_all = (bool)a;
-    ::decode(caps, bl);
+    decode(caps, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthCapsInfo)
@@ -98,28 +102,30 @@ struct AuthTicket {
   }
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 struct_v = 2;
-    ::encode(struct_v, bl);
-    ::encode(name, bl);
-    ::encode(global_id, bl);
-    ::encode(auid, bl);
-    ::encode(created, bl);
-    ::encode(expires, bl);
-    ::encode(caps, bl);
-    ::encode(flags, bl);
+    encode(struct_v, bl);
+    encode(name, bl);
+    encode(global_id, bl);
+    encode(auid, bl);
+    encode(created, bl);
+    encode(expires, bl);
+    encode(caps, bl);
+    encode(flags, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(name, bl);
-    ::decode(global_id, bl);
+    decode(struct_v, bl);
+    decode(name, bl);
+    decode(global_id, bl);
     if (struct_v >= 2)
-      ::decode(auid, bl);
+      decode(auid, bl);
     else auid = CEPH_AUTH_UID_DEFAULT;
-    ::decode(created, bl);
-    ::decode(expires, bl);
-    ::decode(caps, bl);
-    ::decode(flags, bl);
+    decode(created, bl);
+    decode(expires, bl);
+    decode(caps, bl);
+    decode(flags, bl);
   }
 };
 WRITE_CLASS_ENCODER(AuthTicket)
@@ -149,16 +155,18 @@ struct ExpiringCryptoKey {
   utime_t expiration;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(key, bl);
-    ::encode(expiration, bl);
+    encode(struct_v, bl);
+    encode(key, bl);
+    encode(expiration, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(key, bl);
-    ::decode(expiration, bl);
+    decode(struct_v, bl);
+    decode(key, bl);
+    decode(expiration, bl);
   }
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey)
@@ -175,16 +183,18 @@ struct RotatingSecrets {
   RotatingSecrets() : max_ver(0) {}
   
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(secrets, bl);
-    ::encode(max_ver, bl);
+    encode(struct_v, bl);
+    encode(secrets, bl);
+    encode(max_ver, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 struct_v;
-    ::decode(struct_v, bl);
-    ::decode(secrets, bl);
-    ::decode(max_ver, bl);
+    decode(struct_v, bl);
+    decode(secrets, bl);
+    decode(max_ver, bl);
   }
   
   uint64_t add(ExpiringCryptoKey& key) {
@@ -235,7 +245,7 @@ public:
 				  CryptoKey& secret) const = 0;
 };
 
-static inline bool auth_principal_needs_rotating_keys(EntityName& name)
+inline bool auth_principal_needs_rotating_keys(EntityName& name)
 {
   uint32_t ty(name.get_type());
   return ((ty == CEPH_ENTITY_TYPE_OSD)

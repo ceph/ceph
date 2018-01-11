@@ -209,7 +209,7 @@ int main(int argc, const char **argv)
       while (!p.end()) {
 	uint64_t pos = p.get_off();
 	try {
-	  ::decode(e, p);
+	  decode(e, p);
 	}
 	catch (const buffer::error &e) {
 	  derr << "failed to decode LogEntry at offset " << pos << dendl;

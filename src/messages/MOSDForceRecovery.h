@@ -68,15 +68,16 @@ public:
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(fsid, payload);
-    ::encode(forced_pgs, payload);
-    ::encode(options, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(forced_pgs, payload);
+    encode(options, payload);
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(forced_pgs, p);
-    ::decode(options, p);
+    decode(fsid, p);
+    decode(forced_pgs, p);
+    decode(options, p);
   }
 };
 

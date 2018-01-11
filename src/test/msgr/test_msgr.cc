@@ -868,7 +868,7 @@ class SyntheticDispatcher : public Dispatcher {
 
     Payload pl;
     auto p = m->get_data().begin();
-    ::decode(pl, p);
+    decode(pl, p);
     if (pl.who == Payload::PING) {
       lderr(g_ceph_context) << __func__ << " conn=" << m->get_connection() << pl << dendl;
       reply_message(m, pl);
@@ -901,7 +901,7 @@ class SyntheticDispatcher : public Dispatcher {
   void reply_message(const Message *m, Payload& pl) {
     pl.who = Payload::PONG;
     bufferlist bl;
-    ::encode(pl, bl);
+    encode(pl, bl);
     MPing *rm = new MPing();
     rm->set_data(bl);
     m->get_connection()->send_message(rm);
@@ -912,7 +912,7 @@ class SyntheticDispatcher : public Dispatcher {
     Message *m = new MPing();
     Payload pl{Payload::PING, index++, data};
     bufferlist bl;
-    ::encode(pl, bl);
+    encode(pl, bl);
     m->set_data(bl);
     if (!con->get_messenger()->get_default_policy().lossy) {
       Mutex::Locker l(lock);

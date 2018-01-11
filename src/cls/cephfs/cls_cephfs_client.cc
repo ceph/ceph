@@ -120,7 +120,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Load scan_max_size
   try {
     bufferlist::iterator scan_max_size_bl_iter = scan_max_size_bl.begin();
-    ::decode(result->max_obj_size, scan_max_size_bl_iter);
+    decode(result->max_obj_size, scan_max_size_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
@@ -129,7 +129,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   // Load scan_max_mtime
   try {
     bufferlist::iterator scan_max_mtime_bl_iter = scan_max_mtime_bl.begin();
-    ::decode(result->max_mtime, scan_max_mtime_bl_iter);
+    decode(result->max_mtime, scan_max_mtime_bl_iter);
   } catch (const buffer::error &err) {
     //dout(4) << "Invalid size attr on '" << oid << "'" << dendl;
     return -EINVAL;
@@ -150,7 +150,7 @@ int ClsCephFSClient::fetch_inode_accumulate_result(
   if (layout_bl.length()) {
     try {
       bufferlist::iterator q = layout_bl.begin();
-      ::decode(*layout, q);
+      decode(*layout, q);
     } catch (buffer::error &e) {
       return -EINVAL;
     }
@@ -166,11 +166,10 @@ void ClsCephFSClient::build_tag_filter(
   assert(out_bl != NULL);
 
   // Leading part of bl is un-versioned string naming the filter
-  ::encode(std::string("cephfs.inode_tag"), *out_bl);
+  encode(std::string("cephfs.inode_tag"), *out_bl);
 
   // Filter-specific part of the bl: in our case this is a versioned structure
   InodeTagFilterArgs args;
   args.scrub_tag = scrub_tag;
   args.encode(*out_bl);
 }
-

@@ -160,14 +160,14 @@ static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *form
     case InstanceIdx:
       {
         rgw_bucket_dir_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
     case OLHIdx:
       {
         rgw_bucket_olh_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
@@ -189,13 +189,14 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
   } else {
     type = InvalidIdx;
   }
+  using ceph::encode;
   switch (type) {
     case PlainIdx:
     case InstanceIdx:
       {
         rgw_bucket_dir_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
-        ::encode(entry, data);
+        encode(entry, data);
 
         if (effective_key) {
           *effective_key = entry.key;
@@ -206,7 +207,7 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
       {
         rgw_bucket_olh_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
-        ::encode(entry, data);
+        encode(entry, data);
 
         if (effective_key) {
           *effective_key = entry.key;
@@ -243,12 +244,13 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
 {
   bool account = false;
   bufferlist::iterator iter = data.begin();
+  using ceph::decode;
   switch (type) {
     case PlainIdx:
     case InstanceIdx:
       {
         rgw_bucket_dir_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         *key = entry.key;
         *category = entry.meta.category;
         accounted_stats->num_entries++;
@@ -260,7 +262,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
     case OLHIdx:
       {
         rgw_bucket_olh_entry entry;
-        ::decode(entry, iter);
+        decode(entry, iter);
         *key = entry.key;
       }
       break;
@@ -469,7 +471,7 @@ void rgw_bi_log_entry::generate_test_instances(list<rgw_bi_log_entry*>& ls)
   ls.push_back(new rgw_bi_log_entry);
   ls.back()->id = "midf";
   ls.back()->object = "obj";
-  ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({2, 3});
+  ls.back()->timestamp = ceph::real_clock::from_ceph_timespec({{2}, {3}});
   ls.back()->index_ver = 4323;
   ls.back()->tag = "tagasdfds";
   ls.back()->op = CLS_RGW_OP_DEL;
@@ -603,7 +605,7 @@ void cls_rgw_reshard_entry::generate_test_instances(list<cls_rgw_reshard_entry*>
 {
   ls.push_back(new cls_rgw_reshard_entry);
   ls.push_back(new cls_rgw_reshard_entry);
-  ls.back()->time = ceph::real_clock::from_ceph_timespec({2, 3});
+  ls.back()->time = ceph::real_clock::from_ceph_timespec({{2}, {3}});
   ls.back()->tenant = "tenant";
   ls.back()->bucket_name = "bucket1""";
   ls.back()->bucket_id = "bucket_id";

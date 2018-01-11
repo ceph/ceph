@@ -21,9 +21,9 @@ struct AuthUnknownAuthorizer : public AuthAuthorizer {
   AuthUnknownAuthorizer() : AuthAuthorizer(CEPH_AUTH_UNKNOWN) { }
   bool build_authorizer(const EntityName &ename, uint64_t global_id) {
     __u8 struct_v = 1;
-    ::encode(struct_v, bl);
-    ::encode(ename, bl);
-    ::encode(global_id, bl);
+    encode(struct_v, bl);
+    encode(ename, bl);
+    encode(global_id, bl);
     return 0;
   }
   bool verify_reply(bufferlist::iterator& reply) { return true; }

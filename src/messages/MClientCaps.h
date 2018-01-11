@@ -223,9 +223,9 @@ public:
   
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
+    decode(head, p);
     ceph_mds_caps_body_legacy body;
-    ::decode(body, p);
+    decode(body, p);
     if (head.op == CEPH_CAP_OP_EXPORT) {
       peer = body.peer;
     } else {
@@ -239,7 +239,7 @@ public:
       layout.from_legacy(body.layout);
       time_warp_seq = body.time_warp_seq;
     }
-    ::decode_nohead(head.snap_trace_len, snapbl, p);
+    decode_nohead(head.snap_trace_len, snapbl, p);
 
     assert(middle.length() == head.xattr_len);
     if (head.xattr_len)
@@ -247,47 +247,48 @@ public:
 
     // conditionally decode flock metadata
     if (header.version >= 2)
-      ::decode(flockbl, p);
+      decode(flockbl, p);
 
     if (header.version >= 3) {
       if (head.op == CEPH_CAP_OP_IMPORT)
-	::decode(peer, p);
+	decode(peer, p);
     }
 
     if (header.version >= 4) {
-      ::decode(inline_version, p);
-      ::decode(inline_data, p);
+      decode(inline_version, p);
+      decode(inline_data, p);
     } else {
       inline_version = CEPH_INLINE_NONE;
     }
 
     if (header.version >= 5) {
-      ::decode(osd_epoch_barrier, p);
+      decode(osd_epoch_barrier, p);
     }
     if (header.version >= 6) {
-      ::decode(oldest_flush_tid, p);
+      decode(oldest_flush_tid, p);
     }
     if (header.version >= 7) {
-      ::decode(caller_uid, p);
-      ::decode(caller_gid, p);
+      decode(caller_uid, p);
+      decode(caller_gid, p);
     }
     if (header.version >= 8) {
-      ::decode(layout.pool_ns, p);
+      decode(layout.pool_ns, p);
     }
     if (header.version >= 9) {
-      ::decode(btime, p);
-      ::decode(change_attr, p);
+      decode(btime, p);
+      decode(change_attr, p);
     }
     if (header.version >= 10) {
-      ::decode(flags, p);
+      decode(flags, p);
     }
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     header.version = HEAD_VERSION;
     head.snap_trace_len = snapbl.length();
     head.xattr_len = xattrbl.length();
 
-    ::encode(head, payload);
+    encode(head, payload);
     ceph_mds_caps_body_legacy body;
     if (head.op == CEPH_CAP_OP_EXPORT) {
       memset(&body, 0, sizeof(body));
@@ -303,14 +304,14 @@ public:
       layout.to_legacy(&body.layout);
       body.time_warp_seq = time_warp_seq;
     }
-    ::encode(body, payload);
-    ::encode_nohead(snapbl, payload);
+    encode(body, payload);
+    encode_nohead(snapbl, payload);
 
     middle = xattrbl;
 
     // conditionally include flock metadata
     if (features & CEPH_FEATURE_FLOCK) {
-      ::encode(flockbl, payload);
+      encode(flockbl, payload);
     } else {
       header.version = 1;
       return;
@@ -318,29 +319,29 @@ public:
 
     if (features & CEPH_FEATURE_EXPORT_PEER) {
       if (head.op == CEPH_CAP_OP_IMPORT)
-	::encode(peer, payload);
+	encode(peer, payload);
     } else {
       header.version = 2;
       return;
     }
 
     if (features & CEPH_FEATURE_MDS_INLINE_DATA) {
-      ::encode(inline_version, payload);
-      ::encode(inline_data, payload);
+      encode(inline_version, payload);
+      encode(inline_data, payload);
     } else {
-      ::encode(inline_version, payload);
-      ::encode(bufferlist(), payload);
+      encode(inline_version, payload);
+      encode(bufferlist(), payload);
     }
 
-    ::encode(osd_epoch_barrier, payload);
-    ::encode(oldest_flush_tid, payload);
-    ::encode(caller_uid, payload);
-    ::encode(caller_gid, payload);
+    encode(osd_epoch_barrier, payload);
+    encode(oldest_flush_tid, payload);
+    encode(caller_uid, payload);
+    encode(caller_gid, payload);
 
-    ::encode(layout.pool_ns, payload);
-    ::encode(btime, payload);
-    ::encode(change_attr, payload);
-    ::encode(flags, payload);
+    encode(layout.pool_ns, payload);
+    encode(btime, payload);
+    encode(change_attr, payload);
+    encode(flags, payload);
   }
 };
 

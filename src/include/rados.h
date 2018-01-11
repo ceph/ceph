@@ -6,6 +6,7 @@
  * (Reliable Autonomic Distributed Object Store).
  */
 
+#include <string.h>
 #include "msgr.h"
 
 /*

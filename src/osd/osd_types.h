@@ -425,22 +425,25 @@ struct pg_t {
   hobject_t get_hobj_end(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(m_pool, bl);
-    ::encode(m_seed, bl);
-    ::encode(m_preferred, bl);
+    encode(v, bl);
+    encode(m_pool, bl);
+    encode(m_seed, bl);
+    encode(m_preferred, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 v;
-    ::decode(v, bl);
-    ::decode(m_pool, bl);
-    ::decode(m_seed, bl);
-    ::decode(m_preferred, bl);
+    decode(v, bl);
+    decode(m_pool, bl);
+    decode(m_seed, bl);
+    decode(m_preferred, bl);
   }
   void decode_old(bufferlist::iterator& bl) {
+    using ceph::decode;
     old_pg_t opg;
-    ::decode(opg, bl);
+    decode(opg, bl);
     *this = opg;
   }
   void dump(Formatter *f) const;
@@ -545,14 +548,14 @@ struct spg_t {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(pgid, bl);
-    ::encode(shard, bl);
+    encode(pgid, bl);
+    encode(shard, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(pgid, bl);
-    ::decode(shard, bl);
+    decode(pgid, bl);
+    decode(shard, bl);
     DECODE_FINISH(bl);
   }
 
@@ -822,16 +825,16 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
 #else
-    ::encode(version, bl);
-    ::encode(epoch, bl);
+    encode(version, bl);
+    encode(epoch, bl);
 #endif
   }
   void decode(bufferlist::iterator &bl) {
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
 #else
-    ::decode(version, bl);
-    ::decode(epoch, bl);
+    decode(version, bl);
+    decode(epoch, bl);
 #endif
   }
   void decode(bufferlist& bl) {
@@ -2516,52 +2519,52 @@ struct pg_fast_info_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(last_update, bl);
-    ::encode(last_complete, bl);
-    ::encode(last_user_version, bl);
-    ::encode(stats.version, bl);
-    ::encode(stats.reported_seq, bl);
-    ::encode(stats.last_fresh, bl);
-    ::encode(stats.last_active, bl);
-    ::encode(stats.last_peered, bl);
-    ::encode(stats.last_clean, bl);
-    ::encode(stats.last_unstale, bl);
-    ::encode(stats.last_undegraded, bl);
-    ::encode(stats.last_fullsized, bl);
-    ::encode(stats.log_size, bl);
-    ::encode(stats.stats.sum.num_bytes, bl);
-    ::encode(stats.stats.sum.num_objects, bl);
-    ::encode(stats.stats.sum.num_object_copies, bl);
-    ::encode(stats.stats.sum.num_rd, bl);
-    ::encode(stats.stats.sum.num_rd_kb, bl);
-    ::encode(stats.stats.sum.num_wr, bl);
-    ::encode(stats.stats.sum.num_wr_kb, bl);
-    ::encode(stats.stats.sum.num_objects_dirty, bl);
+    encode(last_update, bl);
+    encode(last_complete, bl);
+    encode(last_user_version, bl);
+    encode(stats.version, bl);
+    encode(stats.reported_seq, bl);
+    encode(stats.last_fresh, bl);
+    encode(stats.last_active, bl);
+    encode(stats.last_peered, bl);
+    encode(stats.last_clean, bl);
+    encode(stats.last_unstale, bl);
+    encode(stats.last_undegraded, bl);
+    encode(stats.last_fullsized, bl);
+    encode(stats.log_size, bl);
+    encode(stats.stats.sum.num_bytes, bl);
+    encode(stats.stats.sum.num_objects, bl);
+    encode(stats.stats.sum.num_object_copies, bl);
+    encode(stats.stats.sum.num_rd, bl);
+    encode(stats.stats.sum.num_rd_kb, bl);
+    encode(stats.stats.sum.num_wr, bl);
+    encode(stats.stats.sum.num_wr_kb, bl);
+    encode(stats.stats.sum.num_objects_dirty, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(1, p);
-    ::decode(last_update, p);
-    ::decode(last_complete, p);
-    ::decode(last_user_version, p);
-    ::decode(stats.version, p);
-    ::decode(stats.reported_seq, p);
-    ::decode(stats.last_fresh, p);
-    ::decode(stats.last_active, p);
-    ::decode(stats.last_peered, p);
-    ::decode(stats.last_clean, p);
-    ::decode(stats.last_unstale, p);
-    ::decode(stats.last_undegraded, p);
-    ::decode(stats.last_fullsized, p);
-    ::decode(stats.log_size, p);
-    ::decode(stats.stats.sum.num_bytes, p);
-    ::decode(stats.stats.sum.num_objects, p);
-    ::decode(stats.stats.sum.num_object_copies, p);
-    ::decode(stats.stats.sum.num_rd, p);
-    ::decode(stats.stats.sum.num_rd_kb, p);
-    ::decode(stats.stats.sum.num_wr, p);
-    ::decode(stats.stats.sum.num_wr_kb, p);
-    ::decode(stats.stats.sum.num_objects_dirty, p);
+    decode(last_update, p);
+    decode(last_complete, p);
+    decode(last_user_version, p);
+    decode(stats.version, p);
+    decode(stats.reported_seq, p);
+    decode(stats.last_fresh, p);
+    decode(stats.last_active, p);
+    decode(stats.last_peered, p);
+    decode(stats.last_clean, p);
+    decode(stats.last_unstale, p);
+    decode(stats.last_undegraded, p);
+    decode(stats.last_fullsized, p);
+    decode(stats.log_size, p);
+    decode(stats.stats.sum.num_bytes, p);
+    decode(stats.stats.sum.num_objects, p);
+    decode(stats.stats.sum.num_object_copies, p);
+    decode(stats.stats.sum.num_rd, p);
+    decode(stats.stats.sum.num_rd_kb, p);
+    decode(stats.stats.sum.num_wr, p);
+    decode(stats.stats.sum.num_wr_kb, p);
+    decode(stats.stats.sum.num_objects_dirty, p);
     DECODE_FINISH(p);
   }
 };
@@ -2688,10 +2691,10 @@ public:
     ENCODE_START(1, 1, bl);
     if (past_intervals) {
       __u8 type = 2;
-      ::encode(type, bl);
+      encode(type, bl);
       past_intervals->encode(bl);
     } else {
-      ::encode((__u8)0, bl);
+      encode((__u8)0, bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -3197,15 +3200,16 @@ public:
     swap(other.max_required_version, max_required_version);
   }
   void append_id(ModID id) {
+    using ceph::encode;
     uint8_t _id(id);
-    ::encode(_id, bl);
+    encode(_id, bl);
   }
   void append(uint64_t old_size) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(APPEND);
-    ::encode(old_size, bl);
+    encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
   void setattrs(map<string, boost::optional<bufferlist> > &old_attrs) {
@@ -3213,7 +3217,7 @@ public:
       return;
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
-    ::encode(old_attrs, bl);
+    encode(old_attrs, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
@@ -3221,7 +3225,7 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
-    ::encode(deletion_version, bl);
+    encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
     return true;
@@ -3231,7 +3235,7 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(TRY_DELETE);
-    ::encode(deletion_version, bl);
+    encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
     return true;
@@ -3249,7 +3253,7 @@ public:
       return;
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
-    ::encode(old_snaps, bl);
+    encode(old_snaps, bl);
     ENCODE_FINISH(bl);
   }
   void rollback_extents(
@@ -3260,8 +3264,8 @@ public:
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
     append_id(ROLLBACK_EXTENTS);
-    ::encode(gen, bl);
-    ::encode(extents, bl);
+    encode(gen, bl);
+    encode(extents, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -3689,34 +3693,36 @@ struct pg_missing_item {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
+    using ceph::encode;
     if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
       // encoding a zeroed eversion_t to differentiate between this and
       // legacy unversioned encoding - a need value of 0'0 is not
       // possible. This can be replaced with the legacy encoding
       // macros post-luminous.
       eversion_t e;
-      ::encode(e, bl);
-      ::encode(need, bl);
-      ::encode(have, bl);
-      ::encode(static_cast<uint8_t>(flags), bl);
+      encode(e, bl);
+      encode(need, bl);
+      encode(have, bl);
+      encode(static_cast<uint8_t>(flags), bl);
     } else {
       // legacy unversioned encoding
-      ::encode(need, bl);
-      ::encode(have, bl);
+      encode(need, bl);
+      encode(have, bl);
     }
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     eversion_t e;
-    ::decode(e, bl);
+    decode(e, bl);
     if (e != eversion_t()) {
       // legacy encoding, this is the need value
       need = e;
-      ::decode(have, bl);
+      decode(have, bl);
     } else {
-      ::decode(need, bl);
-      ::decode(have, bl);
+      decode(need, bl);
+      decode(have, bl);
       uint8_t f;
-      ::decode(f, bl);
+      decode(f, bl);
       flags = static_cast<missing_flags_t>(f);
     }
   }
@@ -3989,17 +3995,17 @@ public:
 
   void encode(bufferlist &bl) const {
     ENCODE_START(4, 2, bl);
-    ::encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
-    ::encode(may_include_deletes, bl);
+    encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
+    encode(may_include_deletes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-    ::decode(missing, bl);
+    decode(missing, bl);
     if (struct_v >= 4) {
-      ::decode(may_include_deletes, bl);
+      decode(may_include_deletes, bl);
     }
     DECODE_FINISH(bl);
 
@@ -4152,27 +4158,27 @@ struct pg_nls_response_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(handle, bl);
+    encode(handle, bl);
     __u32 n = (__u32)entries.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (list<librados::ListObjectImpl>::const_iterator i = entries.begin(); i != entries.end(); ++i) {
-      ::encode(i->nspace, bl);
-      ::encode(i->oid, bl);
-      ::encode(i->locator, bl);
+      encode(i->nspace, bl);
+      encode(i->oid, bl);
+      encode(i->locator, bl);
     }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(handle, bl);
+    decode(handle, bl);
     __u32 n;
-    ::decode(n, bl);
+    decode(n, bl);
     entries.clear();
     while (n--) {
       librados::ListObjectImpl i;
-      ::decode(i.nspace, bl);
-      ::decode(i.oid, bl);
-      ::decode(i.locator, bl);
+      decode(i.nspace, bl);
+      decode(i.oid, bl);
+      decode(i.locator, bl);
       entries.push_back(i);
     }
     DECODE_FINISH(bl);
@@ -4220,17 +4226,19 @@ struct pg_ls_response_t {
   list<pair<object_t, string> > entries;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(handle, bl);
-    ::encode(entries, bl);
+    encode(v, bl);
+    encode(handle, bl);
+    encode(entries, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 v;
-    ::decode(v, bl);
+    decode(v, bl);
     assert(v == 1);
-    ::decode(handle, bl);
-    ::decode(entries, bl);
+    decode(handle, bl);
+    decode(entries, bl);
   }
   void dump(Formatter *f) const {
     f->dump_stream("handle") << handle;
@@ -5022,19 +5030,19 @@ struct watch_item_t {
 
   void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(2, 1, bl);
-    ::encode(name, bl);
-    ::encode(cookie, bl);
-    ::encode(timeout_seconds, bl);
-    ::encode(addr, bl, features);
+    encode(name, bl);
+    encode(cookie, bl);
+    encode(timeout_seconds, bl);
+    encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(2, bl);
-    ::decode(name, bl);
-    ::decode(cookie, bl);
-    ::decode(timeout_seconds, bl);
+    decode(name, bl);
+    decode(cookie, bl);
+    decode(timeout_seconds, bl);
     if (struct_v >= 2) {
-      ::decode(addr, bl);
+      decode(addr, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -5055,12 +5063,12 @@ struct obj_list_watch_response_t {
 
   void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl, features);
+    encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entries, bl);
+    decode(entries, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -5108,18 +5116,18 @@ struct clone_info {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(cloneid, bl);
-    ::encode(snaps, bl);
-    ::encode(overlap, bl);
-    ::encode(size, bl);
+    encode(cloneid, bl);
+    encode(snaps, bl);
+    encode(overlap, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(cloneid, bl);
-    ::decode(snaps, bl);
-    ::decode(overlap, bl);
-    ::decode(size, bl);
+    decode(cloneid, bl);
+    decode(snaps, bl);
+    decode(overlap, bl);
+    decode(size, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -5170,15 +5178,15 @@ struct obj_list_snap_response_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(clones, bl);
-    ::encode(seq, bl);
+    encode(clones, bl);
+    encode(seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(clones, bl);
+    decode(clones, bl);
     if (struct_v >= 2)
-      ::decode(seq, bl);
+      decode(seq, bl);
     else
       seq = CEPH_NOSNAP;
     DECODE_FINISH(bl);

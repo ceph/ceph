@@ -251,17 +251,19 @@ public:
     return const_iterator(this, set->upper_bound(t));
   }
   void encode(bufferlist &bl) const {
+    using ceph::encode;
     if (set)
-      ::encode(*set, bl);
+      encode(*set, bl);
     else
-      ::encode((uint32_t)0, bl);
+      encode((uint32_t)0, bl);
   }
   void decode(bufferlist::iterator& p) {
+    using ceph::decode;
     uint32_t n;
-    ::decode(n, p);
+    decode(n, p);
     if (n > 0) {
       alloc_internal();
-      ::decode_nohead(n, *set, p);
+      decode_nohead(n, *set, p);
     } else
       free_internal();
   }

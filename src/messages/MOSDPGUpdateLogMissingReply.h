@@ -82,20 +82,21 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(map_epoch, payload);
-    ::encode(pgid, payload);
-    ::encode(from, payload);
-    ::encode(rep_tid, payload);
-    ::encode(min_epoch, payload);
+    using ceph::encode;
+    encode(map_epoch, payload);
+    encode(pgid, payload);
+    encode(from, payload);
+    encode(rep_tid, payload);
+    encode(min_epoch, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(map_epoch, p);
-    ::decode(pgid, p);
-    ::decode(from, p);
-    ::decode(rep_tid, p);
+    decode(map_epoch, p);
+    decode(pgid, p);
+    decode(from, p);
+    decode(rep_tid, p);
     if (header.version >= 2) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
     } else {
       min_epoch = map_epoch;
     }

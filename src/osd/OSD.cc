@@ -1814,7 +1814,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     dout(0) << " have superblock" << dendl;
     bufferlist::iterator p;
     p = sbbl.begin();
-    ::decode(sb, p);
+    decode(sb, p);
     if (whoami != sb.whoami) {
       derr << "provided osd id " << whoami << " != superblock's " << sb.whoami
 	   << dendl;
@@ -1835,7 +1835,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     sb.compat_features = get_osd_initial_compat_set();
 
     bufferlist bl;
-    ::encode(sb, bl);
+    encode(sb, bl);
 
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
@@ -3615,7 +3615,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
   bufferlist bl;
-  ::encode(superblock, bl);
+  encode(superblock, bl);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
 }
 
@@ -3627,7 +3627,7 @@ int OSD::read_superblock()
     return r;
 
   bufferlist::iterator p = bl.begin();
-  ::decode(superblock, p);
+  decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
 
@@ -6743,7 +6743,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
       bufferlist::iterator p = caps_info.caps.begin();
       string str;
       try {
-	::decode(str, p);
+	decode(str, p);
       }
       catch (buffer::error& e) {
         isvalid = false;

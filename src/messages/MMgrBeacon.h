@@ -101,38 +101,39 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(server_addr, payload, features);
-    ::encode(gid, payload);
-    ::encode(available, payload);
-    ::encode(name, payload);
-    ::encode(fsid, payload);
-    ::encode(available_modules, payload);
-    ::encode(command_descs, payload);
-    ::encode(metadata, payload);
-    ::encode(services, payload);
+    encode(server_addr, payload, features);
+    encode(gid, payload);
+    encode(available, payload);
+    encode(name, payload);
+    encode(fsid, payload);
+    encode(available_modules, payload);
+    encode(command_descs, payload);
+    encode(metadata, payload);
+    encode(services, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(server_addr, p);
-    ::decode(gid, p);
-    ::decode(available, p);
-    ::decode(name, p);
+    decode(server_addr, p);
+    decode(gid, p);
+    decode(available, p);
+    decode(name, p);
     if (header.version >= 2) {
-      ::decode(fsid, p);
+      decode(fsid, p);
     }
     if (header.version >= 3) {
-      ::decode(available_modules, p);
+      decode(available_modules, p);
     }
     if (header.version >= 4) {
-      ::decode(command_descs, p);
+      decode(command_descs, p);
     }
     if (header.version >= 5) {
-      ::decode(metadata, p);
+      decode(metadata, p);
     }
     if (header.version >= 6) {
-      ::decode(services, p);
+      decode(services, p);
     }
   }
 };

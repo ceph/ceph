@@ -1657,11 +1657,11 @@ CDentry *CDir::_load_dentry(
   bufferlist::iterator q = bl.begin();
 
   snapid_t first;
-  ::decode(first, q);
+  decode(first, q);
 
   // marker
   char type;
-  ::decode(type, q);
+  decode(type, q);
 
   dout(20) << "_fetched pos " << pos << " marker '" << type << "' dname '" << dname
            << " [" << first << "," << last << "]"
@@ -1692,8 +1692,8 @@ CDentry *CDir::_load_dentry(
     // hard link
     inodeno_t ino;
     unsigned char d_type;
-    ::decode(ino, q);
-    ::decode(d_type, q);
+    decode(ino, q);
+    decode(d_type, q);
 
     if (stale) {
       if (!dn) {
@@ -1840,7 +1840,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
   {
     bufferlist::iterator p = hdrbl.begin();
     try {
-      ::decode(got_fnode, p);
+      decode(got_fnode, p);
     } catch (const buffer::error &err) {
       derr << "Corrupt fnode in dirfrag " << dirfrag()
         << ": " << err << dendl;
@@ -2204,7 +2204,7 @@ void CDir::_omap_commit(int op_prio)
    * off last, we cannot get our header into an incorrect state.
    */
   bufferlist header;
-  ::encode(fnode, header);
+  encode(fnode, header);
   op.omap_set_header(header);
 
   if (!to_set.empty())
@@ -2225,7 +2225,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
   // clear dentry NEW flag, if any.  we can no longer silently drop it.
   dn->clear_new();
 
-  ::encode(dn->first, bl);
+  encode(dn->first, bl);
 
   // primary or remote?
   if (dn->linkage.is_remote()) {
@@ -2235,8 +2235,8 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     
     // marker, name, ino
     bl.append('L');         // remote link
-    ::encode(ino, bl);
-    ::encode(d_type, bl);
+    encode(ino, bl);
+    encode(d_type, bl);
   } else if (dn->linkage.is_primary()) {
     // primary link
     CInode *in = dn->linkage.get_inode();
@@ -2428,19 +2428,19 @@ void CDir::_committed(int r, version_t v)
 void CDir::encode_export(bufferlist& bl)
 {
   assert(!is_projected());
-  ::encode(first, bl);
-  ::encode(fnode, bl);
-  ::encode(dirty_old_rstat, bl);
-  ::encode(committed_version, bl);
+  encode(first, bl);
+  encode(fnode, bl);
+  encode(dirty_old_rstat, bl);
+  encode(committed_version, bl);
 
-  ::encode(state, bl);
-  ::encode(dir_rep, bl);
+  encode(state, bl);
+  encode(dir_rep, bl);
 
-  ::encode(pop_me, bl);
-  ::encode(pop_auth_subtree, bl);
+  encode(pop_me, bl);
+  encode(pop_auth_subtree, bl);
 
-  ::encode(dir_rep_by, bl);  
-  ::encode(get_replicas(), bl);
+  encode(dir_rep_by, bl);  
+  encode(get_replicas(), bl);
 
   get(PIN_TEMPEXPORTING);
 }
@@ -2457,15 +2457,15 @@ void CDir::finish_export(utime_t now)
 
 void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
 {
-  ::decode(first, blp);
-  ::decode(fnode, blp);
-  ::decode(dirty_old_rstat, blp);
+  decode(first, blp);
+  decode(fnode, blp);
+  decode(dirty_old_rstat, blp);
   projected_version = fnode.version;
-  ::decode(committed_version, blp);
+  decode(committed_version, blp);
   committing_version = committed_version;
 
   unsigned s;
-  ::decode(s, blp);
+  decode(s, blp);
   state &= MASK_STATE_IMPORT_KEPT;
   state_set(STATE_AUTH | (s & MASK_STATE_EXPORTED));
 
@@ -2474,14 +2474,14 @@ void CDir::decode_import(bufferlist::iterator& blp, utime_t now, LogSegment *ls)
     _mark_dirty(ls);
   }
 
-  ::decode(dir_rep, blp);
+  decode(dir_rep, blp);
 
-  ::decode(pop_me, now, blp);
-  ::decode(pop_auth_subtree, now, blp);
+  decode(pop_me, now, blp);
+  decode(pop_auth_subtree, now, blp);
   pop_auth_subtree_nested.add(now, cache->decayrate, pop_auth_subtree);
 
-  ::decode(dir_rep_by, blp);
-  ::decode(get_replicas(), blp);
+  decode(dir_rep_by, blp);
+  decode(get_replicas(), blp);
   if (is_replicated()) get(PIN_REPLICATED);
 
   replica_nonce = 0;  // no longer defined

@@ -1517,9 +1517,9 @@ struct denc_traits<boost::none_t> {
 // These glue the new-style denc world into old-style calls to encode
 // and decode by calling into denc_traits<> methods (when present).
 
+namespace ceph {
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       !traits::featured>::type encode(
+inline std::enable_if_t<traits::supported && !traits::featured> encode(
   const T& o,
   bufferlist& bl,
   uint64_t features_unused=0)
@@ -1531,8 +1531,7 @@ inline typename std::enable_if<traits::supported &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       traits::featured>::type encode(
+inline std::enable_if_t<traits::supported && traits::featured> encode(
   const T& o, bufferlist& bl,
   uint64_t features)
 {
@@ -1544,8 +1543,7 @@ inline typename std::enable_if<traits::supported &&
 
 template<typename T,
 	 typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       !traits::need_contiguous>::type decode(
+inline std::enable_if_t<traits::supported && !traits::need_contiguous> decode(
   T& o,
   bufferlist::iterator& p)
 {
@@ -1573,8 +1571,7 @@ inline typename std::enable_if<traits::supported &&
 
 template<typename T,
 	 typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       traits::need_contiguous>::type decode(
+inline std::enable_if_t<traits::supported && traits::need_contiguous> decode(
   T& o,
   bufferlist::iterator& p)
 {
@@ -1594,8 +1591,8 @@ inline typename std::enable_if<traits::supported &&
 
 // nohead variants
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       !traits::featured>::type encode_nohead(
+inline std::enable_if_t<traits::supported &&
+			!traits::featured> encode_nohead(
   const T& o,
   bufferlist& bl)
 {
@@ -1606,8 +1603,7 @@ inline typename std::enable_if<traits::supported &&
 }
 
 template<typename T, typename traits=denc_traits<T>>
-inline typename std::enable_if<traits::supported &&
-			       !traits::featured>::type decode_nohead(
+inline std::enable_if_t<traits::supported && !traits::featured> decode_nohead(
   size_t num,
   T& o,
   bufferlist::iterator& p)
@@ -1623,7 +1619,7 @@ inline typename std::enable_if<traits::supported &&
   traits::decode_nohead(num, o, cp);
   p.advance((ssize_t)cp.get_offset());
 }
-
+}
 
 
 // ----------------------------------------------------------------

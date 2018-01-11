@@ -20,23 +20,23 @@ struct cls_statelog_entry {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(client_id, bl);
-    ::encode(op_id, bl);
-    ::encode(object, bl);
-    ::encode(timestamp, bl);
-    ::encode(data, bl);
-    ::encode(state, bl);
+    encode(client_id, bl);
+    encode(op_id, bl);
+    encode(object, bl);
+    encode(timestamp, bl);
+    encode(data, bl);
+    encode(state, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(client_id, bl);
-    ::decode(op_id, bl);
-    ::decode(object, bl);
-    ::decode(timestamp, bl);
-    ::decode(data, bl);
-    ::decode(state, bl);
+    decode(client_id, bl);
+    decode(op_id, bl);
+    decode(object, bl);
+    decode(timestamp, bl);
+    decode(data, bl);
+    decode(state, bl);
     DECODE_FINISH(bl);
   }
 
@@ -47,5 +47,3 @@ WRITE_CLASS_ENCODER(cls_statelog_entry)
 
 
 #endif
-
-

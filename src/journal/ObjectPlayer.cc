@@ -160,7 +160,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
     }
 
     Entry entry;
-    ::decode(entry, iter);
+    decode(entry, iter);
     ldout(m_cct, 20) << ": " << entry << " decoded" << dendl;
 
     uint32_t entry_len = iter.get_off() - bl_off;

@@ -76,25 +76,26 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(info, payload);
-    ::encode(log, payload);
-    ::encode(missing, payload);
-    ::encode(query_epoch, payload);
-    ::encode(past_intervals, payload);
-    ::encode(to, payload);
-    ::encode(from, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(info, payload);
+    encode(log, payload);
+    encode(missing, payload);
+    encode(query_epoch, payload);
+    encode(past_intervals, payload);
+    encode(to, payload);
+    encode(from, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(info, p);
+    decode(epoch, p);
+    decode(info, p);
     log.decode(p, info.pgid.pool());
     missing.decode(p, info.pgid.pool());
-    ::decode(query_epoch, p);
-    ::decode(past_intervals, p);
-    ::decode(to, p);
-    ::decode(from, p);
+    decode(query_epoch, p);
+    decode(past_intervals, p);
+    decode(to, p);
+    decode(from, p);
   }
 };
 

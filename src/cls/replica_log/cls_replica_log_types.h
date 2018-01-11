@@ -29,15 +29,15 @@ struct cls_replica_log_item_marker {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(item_name, bl);
-    ::encode(item_timestamp, bl);
+    encode(item_name, bl);
+    encode(item_timestamp, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(item_name, bl);
-    ::decode(item_timestamp, bl);
+    decode(item_name, bl);
+    decode(item_timestamp, bl);
     DECODE_FINISH(bl);
   }
 
@@ -68,19 +68,19 @@ struct cls_replica_log_progress_marker {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entity_id, bl);
-    ::encode(position_marker, bl);
-    ::encode(position_time, bl);
-    ::encode(items, bl);
+    encode(entity_id, bl);
+    encode(position_marker, bl);
+    encode(position_time, bl);
+    encode(items, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entity_id, bl);
-    ::decode(position_marker, bl);
-    ::decode(position_time, bl);
-    ::decode(items, bl);
+    decode(entity_id, bl);
+    decode(position_marker, bl);
+    decode(position_time, bl);
+    decode(items, bl);
     DECODE_FINISH(bl);
   }
 
@@ -166,21 +166,21 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(position_marker, bl);
-    ::encode(position_time, bl);
-    ::encode(marker_exists, bl);
+    encode(position_marker, bl);
+    encode(position_time, bl);
+    encode(marker_exists, bl);
     if (marker_exists) {
-      ::encode(marker, bl);
+      encode(marker, bl);
     }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(position_marker, bl);
-    ::decode(position_time, bl);
-    ::decode(marker_exists, bl);
+    decode(position_marker, bl);
+    decode(position_time, bl);
+    decode(marker_exists, bl);
     if (marker_exists) {
-      ::decode(marker, bl);
+      decode(marker, bl);
     }
     DECODE_FINISH(bl);
   }
