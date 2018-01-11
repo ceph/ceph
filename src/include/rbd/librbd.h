@@ -150,8 +150,8 @@ typedef struct {
 } rbd_mirror_image_status_t;
 
 typedef enum {
-  GROUP_IMAGE_STATE_ATTACHED,
-  GROUP_IMAGE_STATE_INCOMPLETE
+  RBD_GROUP_IMAGE_STATE_ATTACHED,
+  RBD_GROUP_IMAGE_STATE_INCOMPLETE
 } rbd_group_image_state_t;
 
 typedef struct {
@@ -170,8 +170,8 @@ typedef struct {
 } rbd_group_spec_t;
 
 typedef enum {
-  GROUP_SNAP_STATE_INCOMPLETE,
-  GROUP_SNAP_STATE_COMPLETE
+  RBD_GROUP_SNAP_STATE_INCOMPLETE,
+  RBD_GROUP_SNAP_STATE_COMPLETE
 } rbd_group_snap_state_t;
 
 typedef struct {
@@ -180,8 +180,8 @@ typedef struct {
 } rbd_group_snap_spec_t;
 
 typedef enum {
-  SNAP_NAMESPACE_TYPE_USER = 0,
-  SNAP_NAMESPACE_TYPE_GROUP = 1
+  RBD_SNAP_NAMESPACE_TYPE_USER = 0,
+  RBD_SNAP_NAMESPACE_TYPE_GROUP = 1
 } rbd_snap_namespace_type_t;
 
 typedef struct {

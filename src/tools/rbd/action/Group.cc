@@ -295,7 +295,7 @@ int execute_list_images(const po::variables_map &vm) {
     std::string image_name = image.name;
     int state = image.state;
     std::string state_string;
-    if (GROUP_IMAGE_STATE_INCOMPLETE == state) {
+    if (RBD_GROUP_IMAGE_STATE_INCOMPLETE == state) {
       state_string = "incomplete";
     }
 
@@ -441,7 +441,7 @@ int execute_group_snap_list(const po::variables_map &vm) {
     std::string snap_name = i.name;
     int state = i.state;
     std::string state_string;
-    if (GROUP_SNAP_STATE_INCOMPLETE == state) {
+    if (RBD_GROUP_SNAP_STATE_INCOMPLETE == state) {
       state_string = "incomplete";
     } else {
       state_string = "ok";
