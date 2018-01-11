@@ -12,23 +12,24 @@
 #ifndef CEPH_COMPACT_MAP_H
 #define CEPH_COMPACT_MAP_H
 
+#include "buffer.h"
+#include "encoding.h"
+
 #include <map>
+#include <memory>
 
 #include "include/encoding.h"
 
 template <class Key, class T, class Map>
 class compact_map_base {
 protected:
-  Map *map;
+  std::unique_ptr<Map> map;
   void alloc_internal() {
     if (!map)
-      map = new Map;
+      map.reset(new Map);
   }
   void free_internal() {
-    if (map) {
-      delete map;
-      map = 0;
-    }
+    map.reset();
   }
   template <class It>
   class const_iterator_base {
@@ -156,14 +157,14 @@ public:
       const_reverse_iterator(const compact_map_base* m, const typename Map::const_reverse_iterator& i)
 	: const_iterator_base<typename Map::const_reverse_iterator>(m, i) { }
   };
-  compact_map_base() : map(0) {}
-  compact_map_base(const compact_map_base& o) : map(0) {
+  compact_map_base(const compact_map_base& o) {
     if (o.map) {
       alloc_internal();
       *map = *o.map;
     }
   }
-  ~compact_map_base() { delete map; }
+  compact_map_base() {}
+  ~compact_map_base() {}
 
   bool empty() const {
     return !map || map->empty();
@@ -184,8 +185,9 @@ public:
     if (map) {
       assert(this == p.map);
       map->erase(p.it);
-      if (map->empty())
-	free_internal();
+      if (map->empty()) {
+        free_internal();
+      }
     }
   }
   size_t erase (const Key& k) {
@@ -200,9 +202,7 @@ public:
     free_internal();
   }
   void swap(compact_map_base& o) {
-    Map *tmp = map;
-    map = o.map;
-    o.map = tmp;
+    map.swap(o.map);
   }
   compact_map_base& operator=(const compact_map_base& o) {
     if (o.map) {
@@ -327,8 +327,8 @@ inline void decode(compact_map_base<Key, T, Map>& m, bufferlist::iterator& p) {
   m.decode(p);
 }
 
-template <class Key, class T>
-class compact_map : public compact_map_base<Key, T, std::map<Key,T> > {
+template <class Key, class T, class Compare = std::less<Key>, class Alloc = std::allocator< std::pair<const Key, T> > >
+class compact_map : public compact_map_base<Key, T, std::map<Key,T,Compare,Alloc> > {
 public:
   T& operator[](const Key& k) {
     this->alloc_internal();
@@ -336,33 +336,35 @@ public:
   }
 };
 
-template <class Key, class T>
-inline std::ostream& operator<<(std::ostream& out, const compact_map<Key, T>& m)
+template <class Key, class T, class Compare = std::less<Key>, class Alloc = std::allocator< std::pair<const Key, T> > >
+inline std::ostream& operator<<(std::ostream& out, const compact_map<Key, T, Compare, Alloc>& m)
 {
   out << "{";
-  for (typename compact_map<Key, T>::const_iterator it = m.begin();
-       it != m.end();
-       ++it) {
-    if (it != m.begin())
+  bool first = true;
+  for (const auto &p : m) {
+    if (!first)
       out << ",";
-    out << it->first << "=" << it->second;
+    out << p.first << "=" << p.second;
+    first = false;
   }
   out << "}";
   return out;
 }
 
-template <class Key, class T>
-class compact_multimap : public compact_map_base<Key, T, std::multimap<Key,T> > {
+template <class Key, class T, class Compare = std::less<Key>, class Alloc = std::allocator< std::pair<const Key, T> > >
+class compact_multimap : public compact_map_base<Key, T, std::multimap<Key,T,Compare,Alloc> > {
 };
 
-template <class Key, class T>
-inline std::ostream& operator<<(std::ostream& out, const compact_multimap<Key, T>& m)
+template <class Key, class T, class Compare = std::less<Key>, class Alloc = std::allocator< std::pair<const Key, T> > >
+inline std::ostream& operator<<(std::ostream& out, const compact_multimap<Key, T, Compare, Alloc>& m)
 {
   out << "{{";
-  for (typename compact_map<Key, T>::const_iterator it = m.begin(); !it.end(); ++it) {
-    if (it != m.begin())
+  bool first = true;
+  for (const auto &p : m) {
+    if (!first)
       out << ",";
-    out << it->first << "=" << it->second;
+    out << p.first << "=" << p.second;
+    first = false;
   }
   out << "}}";
   return out;
