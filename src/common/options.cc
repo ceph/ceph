@@ -2080,6 +2080,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_objecter_finishers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_map_dedup", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2145,26 +2146,32 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_num_threads_per_shard", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_threads_per_shard_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_threads_per_shard_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards_hdd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_op_num_shards_ssd", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(8)
+    .set_flag(Option::FLAG_STARTUP)
     .set_description(""),
 
     Option("osd_skip_data_digest", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -2176,6 +2183,7 @@ std::vector<Option> get_global_options() {
     .set_enum_allowed( { "wpq", "prioritized", "mclock_opclass", "mclock_client", "debug_random" } )
     .set_description("which operation queue algorithm to use")
     .set_long_description("which operation queue algorithm to use; mclock_opclass and mclock_client are currently experimental")
+    .set_flag(Option::FLAG_STARTUP)
     .add_see_also("osd_op_queue_cut_off"),
 
     Option("osd_op_queue_cut_off", Option::TYPE_STR, Option::LEVEL_ADVANCED)
