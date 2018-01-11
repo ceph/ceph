@@ -1397,6 +1397,7 @@ function wait_for_clean() {
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
     local -i loop=0
 
+    flush_pg_stats
     while test $(get_num_pgs) == 0 ; do
 	sleep 1
     done
