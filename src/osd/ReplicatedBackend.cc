@@ -965,7 +965,7 @@ Message * ReplicatedBackend::generate_subop(
   if (!parent->should_send_op(peer, soid)) {
     dout(10) << "issue_repop shipping empty opt to osd." << peer
 	     <<", object " << soid
-	     << " beyond MAX(last_backfill_started "
+	     << " beyond std::max(last_backfill_started "
 	     << ", pinfo.last_backfill "
 	     << pinfo.last_backfill << ")" << dendl;
     ObjectStore::Transaction t;

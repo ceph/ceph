@@ -107,7 +107,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   if (off & ~CEPH_PAGE_MASK) {
     // head
     alloc_len += CEPH_PAGE_SIZE;
-    head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
+    head = std::min<uint64_t>(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
     left -= head;
   }
   alloc_len += left;
@@ -124,7 +124,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     state(STATE_NONE), state_after_send(STATE_NONE), port(-1),
     dispatch_queue(q), can_write(WriteStatus::NOWRITE),
     keepalive(false), recv_buf(NULL),
-    recv_max_prefetch(MAX(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
+    recv_max_prefetch(std::max<int64_t>(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
     inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
@@ -255,7 +255,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
   ssize_t r = 0;
   uint64_t left = len - state_offset;
   if (recv_end > recv_start) {
-    uint64_t to_read = MIN(recv_end - recv_start, left);
+    uint64_t to_read = std::min<uint64_t>(recv_end - recv_start, left);
     memcpy(p, recv_buf+recv_start, to_read);
     recv_start += to_read;
     left -= to_read;
@@ -619,7 +619,7 @@ void AsyncConnection::process()
         {
           while (msg_left > 0) {
             bufferptr bp = data_blp.get_current_ptr();
-            unsigned read = MIN(bp.length(), msg_left);
+            unsigned read = std::min(bp.length(), msg_left);
             r = read_until(read, bp.c_str());
             if (r < 0) {
               ldout(async_msgr->cct, 1) << __func__ << " read data error " << dendl;
