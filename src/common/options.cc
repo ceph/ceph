@@ -348,7 +348,7 @@ std::vector<Option> get_global_options() {
   			"be used to identify which monitors to connect to.")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
     .add_service("mon")
-    .add_tag("mkfs"),
+    .set_flag(Option::FLAG_CREATE),
 
     Option("mon_host", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_description("list of hosts or addresses to search for a monitor")
@@ -1037,7 +1037,7 @@ std::vector<Option> get_global_options() {
     Option("mon_initial_members", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_compact_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -1247,31 +1247,31 @@ std::vector<Option> get_global_options() {
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.95)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_backfillfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.90)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_nearfull_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.85)
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_osd_initial_require_min_compat_client", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jewel")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description(""),
 
     Option("mon_allow_pool_delete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3437,6 +3437,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_objectstore", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("filestore")
+    .set_flag(Option::FLAG_CREATE)
     .set_description(""),
 
     Option("osd_objectstore_tracing", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -3600,13 +3601,13 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Use BlueFS to back rocksdb")
     .set_long_description("BlueFS allows rocksdb to share the same physical device(s) as the rest of BlueStore.  It should be used in all cases unless testing/developing an alternative metadata database for BlueStore."),
 
     Option("bluestore_bluefs_env_mirror", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Mirror bluefs data to file system for testing/validation"),
 
     Option("bluestore_bluefs_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3661,57 +3662,57 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_block_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path to block device/file"),
 
     Option("bluestore_block_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(10_G)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for backing bluestore"),
 
     Option("bluestore_block_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_path if it doesn't exist")
     .add_see_also("bluestore_block_path").add_see_also("bluestore_block_size"),
 
     Option("bluestore_block_db_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path for db block device"),
 
     Option("bluestore_block_db_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for bluestore_block_db_path"),
 
     Option("bluestore_block_db_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_db_path if it doesn't exist")
     .add_see_also("bluestore_block_db_path")
     .add_see_also("bluestore_block_db_size"),
 
     Option("bluestore_block_wal_path", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Path to block device/file backing bluefs wal"),
 
     Option("bluestore_block_wal_size", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(96_M)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for bluestore_block_wal_path"),
 
     Option("bluestore_block_wal_create", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Create bluestore_block_wal_path if it doesn't exist")
     .add_see_also("bluestore_block_wal_path")
     .add_see_also("bluestore_block_wal_size"),
 
     Option("bluestore_block_preallocate_file", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Preallocate file created via bluestore_block*_create"),
 
     Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -3723,23 +3724,23 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Minimum allocation size to allocate for an object")
     .set_long_description("A smaller allocation size generally means less data is read and then rewritten when a copy-on-write operation is triggered (e.g., when writing to something that was recently snapshotted).  Similarly, less data is journaled before performing an overwrite (writes smaller than min_alloc_size must first pass through the BlueStore journal).  Larger values of min_alloc_size reduce the amount of metadata required to describe the on-disk layout and reduce overall fragmentation."),
 
     Option("bluestore_min_alloc_size_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64_K)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for rotational media"),
 
     Option("bluestore_min_alloc_size_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(16_K)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Default min_alloc_size value for non-rotational (solid state)  media"),
 
     Option("bluestore_max_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Maximum size of a single allocation (0 for no max)"),
 
     Option("bluestore_prefer_deferred_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -3908,7 +3909,7 @@ std::vector<Option> get_global_options() {
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CREATE)
     .set_description("Key value database to use for bluestore"),
 
     Option("bluestore_allocator", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -4577,7 +4578,7 @@ std::vector<Option> get_global_options() {
     Option("mgr_initial_modules", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("restful status balancer")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .add_tag("mkfs")
+    .set_flag(Option::FLAG_CLUSTER_CREATE)
     .add_service("mon")
     .set_description("List of manager modules to enable when the cluster is "
                      "first started")
