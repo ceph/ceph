@@ -3129,9 +3129,8 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   rgw_raw_obj raw_meta_obj;
 
   store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-
-  r = store->omap_set(raw_meta_obj, p, bl);
-
+  const bool must_exist = true;// detect races with abort
+  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
   return r;
 }
 
