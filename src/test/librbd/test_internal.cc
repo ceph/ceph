@@ -398,7 +398,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
     C_SaferCond ctx;
     librbd::NoOpProgressContext prog_ctx;
 
-    size -= MIN(size, 1<<18);
+    size -= std::min<uint64_t>(size, 1 << 18);
     {
       RWLock::RLocker l(ictx->owner_lock);
       ictx->operations->execute_resize(size, true, prog_ctx, &ctx, 0);
@@ -443,7 +443,7 @@ TEST_F(TestInternal, MultipleResize) {
   while (size > 0) {
     uint64_t new_size = original_size;
     if (attempts++ % 2 == 0) {
-      size -= MIN(size, 1<<18);
+      size -= std::min<uint64_t>(size, 1 << 18);
       new_size = size;
     }
 
