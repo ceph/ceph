@@ -35,18 +35,18 @@ namespace librbd {
   typedef void (*callback_t)(completion_t cb, void *arg);
 
   typedef struct {
-    int64_t group_pool;
-    std::string group_name;
-    std::string group_snap_name;
-  } group_snap_t;
-
-  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
-
-  typedef struct {
     uint64_t id;
     uint64_t size;
     std::string name;
   } snap_info_t;
+
+  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
+
+  typedef struct {
+    int64_t group_pool;
+    std::string group_name;
+    std::string group_snap_name;
+  } snap_group_namespace_t;
 
   typedef struct {
     std::string client;
@@ -380,7 +380,8 @@ public:
   int snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp);
   int snap_get_namespace_type(uint64_t snap_id,
                               snap_namespace_type_t *namespace_type);
-  int snap_get_group(uint64_t snap_id, group_snap_t *group_snap);
+  int snap_get_group_namespace(uint64_t snap_id,
+                               snap_group_namespace_t *group_namespace);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

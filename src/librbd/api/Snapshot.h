@@ -15,8 +15,8 @@ namespace api {
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Snapshot {
 
-  static int get_group(ImageCtxT *ictx, uint64_t snap_id,
-		       group_snap_t *group_snap);
+  static int get_group_namespace(ImageCtxT *ictx, uint64_t snap_id,
+                                 snap_group_namespace_t *group_snap);
 
   static int get_namespace_type(ImageCtxT *ictx, uint64_t snap_id,
 			        snap_namespace_type_t *namespace_type);

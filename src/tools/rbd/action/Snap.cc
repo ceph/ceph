@@ -74,10 +74,10 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
     if(timestamp.tv_sec != 0) {
       time_t tt = timestamp.tv_sec;
       tt_str = ctime(&tt);
-      tt_str = tt_str.substr(0, tt_str.length() - 1);  
+      tt_str = tt_str.substr(0, tt_str.length() - 1);
     }
-    librbd::group_snap_t group_snap;
-    int get_group_res = image.snap_get_group(s->id, &group_snap);
+    librbd::snap_group_namespace_t group_snap;
+    int get_group_res = image.snap_get_group_namespace(s->id, &group_snap);
 
     if (f) {
       f->open_object_section("snapshot");

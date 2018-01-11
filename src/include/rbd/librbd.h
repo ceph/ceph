@@ -185,6 +185,12 @@ typedef enum {
   SNAP_NAMESPACE_TYPE_UNKNOWN = -1,
 } rbd_snap_namespace_type_t;
 
+typedef struct {
+  int64_t group_pool;
+  char *group_name;
+  char *group_snap_name;
+} rbd_snap_group_namespace_t;
+
 typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
   RBD_LOCK_MODE_SHARED = 1,
@@ -542,6 +548,13 @@ CEPH_RBD_API int rbd_snap_set(rbd_image_t image, const char *snapname);
 CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
 					     uint64_t snap_id,
 					     rbd_snap_namespace_type_t *namespace_type);
+CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
+					     uint64_t snap_id,
+					     rbd_snap_namespace_type_t *namespace_type);
+CEPH_RBD_API int rbd_snap_get_group_namespace(rbd_image_t image,
+                                              uint64_t snap_id,
+                                              rbd_snap_group_namespace_t *group_snap);
+CEPH_RBD_API void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_snap);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
 
@@ -952,9 +965,6 @@ CEPH_RBD_API int rbd_group_snap_list(rados_ioctx_t group_p,
                                      size_t *snaps_size);
 CEPH_RBD_API void rbd_group_snap_list_cleanup(rbd_group_snap_spec_t *snaps,
                                               size_t len);
-CEPH_RBD_API int rbd_snap_get_namespace_type(rbd_image_t image,
-					     uint64_t snap_id,
-					     rbd_snap_namespace_type_t *namespace_type);
 
 #ifdef __cplusplus
 }
