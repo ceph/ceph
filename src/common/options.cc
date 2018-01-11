@@ -762,8 +762,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("async+posix")
-    .set_description("")
-    .set_flag(Option::FLAG_RUNTIME),  // why?
+    .set_description(""),
 
     Option("ms_public_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -980,7 +979,6 @@ std::vector<Option> get_global_options() {
     Option("ms_dpdk_coremask", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("0xF")         //begin with 0x for the string
     .set_description("")
-    .set_flag(Option::FLAG_RUNTIME)
     .add_see_also("ms_async_op_threads"),
 
     Option("ms_dpdk_memory_channel", Option::TYPE_STR, Option::LEVEL_ADVANCED)
@@ -997,18 +995,15 @@ std::vector<Option> get_global_options() {
 
     Option("ms_dpdk_host_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_flag(Option::FLAG_RUNTIME),
+    .set_description(""),
 
     Option("ms_dpdk_gateway_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_flag(Option::FLAG_RUNTIME),
+    .set_description(""),
 
     Option("ms_dpdk_netmask_ipv4_addr", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description("")
-    .set_flag(Option::FLAG_RUNTIME),
+    .set_description(""),
 
     Option("ms_dpdk_lro", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
