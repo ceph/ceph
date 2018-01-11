@@ -49,24 +49,14 @@ function(do_build_boost version)
     list(APPEND b2 -d0)
   endif()
 
-  if(NOT CMAKE_HOST_SYSTEM_PROCESSOR STREQUAL CMAKE_SYSTEM_PROCESSOR)
-    # we are crosscompiling
-    if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
-      set(b2_cc gcc)
-    elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
-      set(b2_cc clang)
-    else()
-      message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
-    endif()
-    # edit the config.jam so, b2 will be able to use the specified toolset
-    execute_process(
-      COMMAND
-      sed -i
-      "s|using ${b2_cc} ;|using ${b2_cc} : ${CMAKE_SYSTEM_PROCESSOR} : ${CMAKE_CXX_COMPILER} ;|"
-      ${PROJECT_SOURCE_DIR}/src/boost/project-config.jam)
-    # use ${CMAKE_SYSTEM_PROCESSOR} as the version identifier of compiler
-    list(APPEND b2 toolset=${b2_cc}-${CMAKE_SYSTEM_PROCESSOR})
+  if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+    set(toolset gcc)
+  elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+    set(toolset clang)
+  else()
+    message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
+  list(APPEND b2 toolset=${toolset})
 
   set(build_command
     ${b2} headers stage
@@ -112,6 +102,11 @@ function(do_build_boost version)
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND ${install_command}
     PREFIX "${boost_root_dir}")
+  ExternalProject_Get_Property(Boost source_dir)
+  # edit the user-config.jam so, so b2 will be able to use the specified
+  # toolset
+  file(WRITE ${source_dir}/user-config.jam
+    "using ${toolset} : : ${CMAKE_CXX_COMPILER} ;")
 endfunction()
 
 macro(build_boost version)
