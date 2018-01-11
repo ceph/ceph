@@ -31,6 +31,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -1564,7 +1565,7 @@ namespace librbd {
 				     snap_namespace_type_t *namespace_type) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
-    int r = librbd::api::Group<>::snap_get_namespace_type(ictx, snap_id, namespace_type);
+    int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id, namespace_type);
     tracepoint(librbd, snap_get_namespace_type_exit, r);
     return r;
   }
@@ -1573,7 +1574,7 @@ namespace librbd {
 			    group_snap_t *group_snap) {
     ImageCtx *ictx = (ImageCtx *)ctx;
     tracepoint(librbd, snap_get_group_enter, ictx, ictx->name.c_str());
-    int r = librbd::api::Group<>::snap_get_group(ictx, snap_id, group_snap);
+    int r = librbd::api::Snapshot<>::get_group(ictx, snap_id, group_snap);
     tracepoint(librbd, snap_get_group_exit, r);
     return r;
   }
@@ -4652,10 +4653,12 @@ extern "C" int rbd_snap_get_namespace_type(rbd_image_t image,
 					   rbd_snap_namespace_type_t *namespace_type) {
   librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
   tracepoint(librbd, snap_get_namespace_type_enter, ictx, ictx->name.c_str());
-  int r = librbd::api::Group<>::snap_get_namespace_type(ictx, snap_id, namespace_type);
+  int r = librbd::api::Snapshot<>::get_namespace_type(ictx, snap_id,
+                                                      namespace_type);
   tracepoint(librbd, snap_get_namespace_type_exit, r);
   return r;
 }
+
 extern "C" int rbd_watchers_list(rbd_image_t image,
 				 rbd_image_watcher_t *watchers,
 				 size_t *max_watchers) {
