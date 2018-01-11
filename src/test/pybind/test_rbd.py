@@ -1747,12 +1747,19 @@ class TestGroups(object):
     def test_group_snap(self):
         global snap_name
         eq([], list(self.group.list_snaps()))
-        """
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+
+        for snap in self.image.list_snaps():
+            eq(rbd.SNAP_NAMESPACE_TYPE_GROUP,
+               self.image.snap_get_namespace_type(snap['id']))
+
+            info = self.image.snap_get_group_namespace(snap['id'])
+            eq(group_name, info['group_name'])
+            eq(snap_name, info['group_snap_name'])
+
         self.group.remove_snap(snap_name)
         eq([], list(self.group.list_snaps()))
-        """
 
     def test_group_snap_list_15(self):
         global snap_name
