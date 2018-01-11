@@ -196,7 +196,7 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
     return -1;
   }
 
-  size_t remaining = MIN(p.get_remaining(), compressed_size);
+  size_t remaining = std::min<size_t>(p.get_remaining(), compressed_size);
 
   while(remaining) {
     long unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
