@@ -314,8 +314,9 @@ int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<strin
           RGWObjectCtx rctx(store);
           ret = abort_multipart_upload(store, cct, &rctx, bucket_info, mp_obj);
           if (ret < 0 && ret != -ERR_NO_SUCH_UPLOAD) {
-            ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret <<dendl;
-            return ret;
+            ldout(cct, 0) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << obj_iter->key << dendl;
+          } else if (ret == -ERR_NO_SUCH_UPLOAD) {
+            ldout(cct, 5) << "ERROR: abort_multipart_upload failed, ret=" << ret << ", meta:" << obj_iter->key << dendl;
           }
           if (going_down())
             return 0;
