@@ -148,6 +148,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
       tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+      tbl.define_column("RW", TextTable::LEFT, TextTable::LEFT);
     } else {
       f->open_array_section("config");
     }
@@ -159,6 +160,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << Option::level_to_str(i.second.opt->level);
           tbl << i.first;
 	  tbl << i.second.raw_value;
+	  tbl << (i.second.opt->is_safe() ? "*" : "");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section("option");
@@ -236,6 +238,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	tbl.define_column("LEVEL", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("OPTION", TextTable::LEFT, TextTable::LEFT);
 	tbl.define_column("VALUE", TextTable::LEFT, TextTable::LEFT);
+	tbl.define_column("RW", TextTable::LEFT, TextTable::LEFT);
       } else {
 	f->open_object_section("config");
       }
@@ -251,12 +254,15 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  tbl << Option::level_to_str(q->second.second->opt->level);
 	  tbl << p->first;
 	  tbl << p->second;
+	  tbl << (q->second.second->opt->is_safe() ? "*" : "");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
 	  f->dump_string("value", p->second);
 	  f->dump_string("section", q->second.first);
 	  f->dump_object("mask", q->second.second->mask);
+	  f->dump_bool("can_update_at_runtime",
+		       q->second.second->opt->is_safe());
 	  f->close_section();
 	}
       }
