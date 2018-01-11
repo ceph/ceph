@@ -1516,7 +1516,6 @@ public:
     std::unique_ptr<Scrub::Store> store;
     // deep scrub
     bool deep;
-    uint32_t seed;
     int preempt_left;
     int preempt_divisor;
 
@@ -1578,7 +1577,6 @@ public:
       large_omap_objects = 0;
       fixed = 0;
       deep = false;
-      seed = 0;
       run_callbacks();
       inconsistent.clear();
       missing.clear();
@@ -1631,11 +1629,11 @@ protected:
     ThreadPool::TPHandle &handle);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep,
-			  uint32_t seed, bool allow_preemption);
+			  bool allow_preemption);
   int build_scrub_map_chunk(
     ScrubMap &map,
     ScrubMapBuilder &pos,
-    hobject_t start, hobject_t end, bool deep, uint32_t seed,
+    hobject_t start, hobject_t end, bool deep,
     ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
