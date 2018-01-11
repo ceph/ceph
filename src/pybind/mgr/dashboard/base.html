@@ -346,7 +346,7 @@ Failed to load data from server <a href="javascript:window.location.reload(true)
             <i class="fa fa-heartbeat" rv-style="health_status | health_color"></i>
             <span>Cluster health</span></a>
         </li>
-        <li class="treeview{%if path_info.startswith(('/server', '/osd'))%} active{%endif%}">
+        <li class="treeview{%if path_info.startswith(('/server', '/osd', '/monitor'))%} active{%endif%}">
           <a href="#"><i class="fa fa-server"></i> <span>Cluster</span>
             <span class="pull-right-container">
               <i class="fa fa-angle-left pull-right"></i>
@@ -358,6 +358,9 @@ Failed to load data from server <a href="javascript:window.location.reload(true)
             </li>
             <li>
                 <a href="{{ url_prefix }}/osd">OSDs</a>
+            </li>
+	    <li>
+                <a href="{{ url_prefix }}/monitors">Monitors</a>
             </li>
           </ul>
         </li>
