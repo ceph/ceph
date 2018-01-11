@@ -406,9 +406,10 @@ public:
   }
 };
 
-SnapshotNamespaceType get_namespace_type(const SnapshotNamespace& snapshot_namespace) {
-  return static_cast<SnapshotNamespaceType>(boost::apply_visitor(GetTypeVisitor(),
-								 snapshot_namespace));
+SnapshotNamespaceType get_snap_namespace_type(
+    const SnapshotNamespace& snapshot_namespace) {
+  return static_cast<SnapshotNamespaceType>(boost::apply_visitor(
+    GetTypeVisitor(), snapshot_namespace));
 }
 
 void SnapshotNamespaceOnDisk::encode(bufferlist& bl) const {

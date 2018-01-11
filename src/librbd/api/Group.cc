@@ -299,54 +299,6 @@ finish:
   return ret_code;
 }
 
-class GetGroupVisitor : public boost::static_visitor<int> {
-public:
-  librados::IoCtx *image_ioctx;
-  group_snap_t group_snap;
-
-  explicit GetGroupVisitor(librados::IoCtx *_image_ioctx) : image_ioctx(_image_ioctx) {};
-
-  template <typename T>
-  inline int operator()(const T&) const {
-    // ignore other than GroupSnapshotNamespace types.
-    return -1;
-  }
-
-  inline int operator()(const cls::rbd::GroupSnapshotNamespace& snap_namespace) {
-    librados::Rados rados(*image_ioctx);
-    IoCtx group_ioctx;
-    int r = rados.ioctx_create2(snap_namespace.group_pool, group_ioctx);
-    if (r < 0) {
-      return r;
-    }
-
-    cls::rbd::GroupSnapshot group_snapshot;
-
-    std::string group_name;
-    r = cls_client::dir_get_name(&group_ioctx, RBD_GROUP_DIRECTORY,
-				 snap_namespace.group_id, &group_name);
-    if (r < 0) {
-      return r;
-    }
-
-    string group_header_oid = util::group_header_name(snap_namespace.group_id);
-
-    r = cls_client::group_snap_get_by_id(&group_ioctx,
-					 group_header_oid,
-					 snap_namespace.group_snapshot_id,
-					 &group_snapshot);
-    if (r < 0) {
-      return r;
-    }
-
-    group_snap.group_pool = group_ioctx.get_id();
-    group_snap.group_name = group_name;
-    group_snap.group_snap_name = group_snapshot.name;
-
-    return 0;
-  }
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -989,43 +941,6 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
   }
   return 0;
 }
-
-template <typename I>
-int Group<I>::snap_get_group(I *ictx,
-			     uint64_t snap_id,
-			     group_snap_t *group_snap) {
-    const SnapInfo *snap_info;
-    {
-      RWLock::RLocker l(ictx->snap_lock);
-      snap_info = ictx->get_snap_info(snap_id);
-      if (snap_info) {
-	GetGroupVisitor ggv = GetGroupVisitor(&ictx->data_ctx);
-	int r = boost::apply_visitor(ggv, snap_info->snap_namespace);
-	if (r < 0) {
-	  return r;
-	}
-	*group_snap = ggv.group_snap;
-      }
-    }
-    return 0;
-}
-
-template <typename I>
-int Group<I>::snap_get_namespace_type(I *ictx,
-				      uint64_t snap_id,
-				      snap_namespace_type_t *namespace_type) {
-  const SnapInfo *snap_info;
-  {
-    RWLock::RLocker l(ictx->snap_lock);
-    snap_info = ictx->get_snap_info(snap_id);
-    if (snap_info) {
-      *namespace_type = static_cast<snap_namespace_type_t>(
-			      get_namespace_type(snap_info->snap_namespace));
-    }
-  }
-  return 0;
-}
-
 
 } // namespace api
 } // namespace librbd

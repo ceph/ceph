@@ -336,7 +336,7 @@ struct SnapshotNamespaceOnDisk {
 };
 WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
 
-SnapshotNamespaceType get_namespace_type(const SnapshotNamespace& snapshot_namespace);
+SnapshotNamespaceType get_snap_namespace_type(const SnapshotNamespace& snapshot_namespace);
 
 enum GroupSnapshotState {
   GROUP_SNAPSHOT_STATE_INCOMPLETE = 0,
