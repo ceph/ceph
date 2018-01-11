@@ -423,10 +423,8 @@ namespace librbd {
                                cls::rbd::GroupSpec *group_spec);
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
-    int group_snap_add(librados::IoCtx *ioctx, const std::string &oid,
+    int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
 		       const cls::rbd::GroupSnapshot &snapshot);
-    int group_snap_update(librados::IoCtx *ioctx, const std::string &oid,
-			  const cls::rbd::GroupSnapshot &snapshot);
     int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
 			  const std::string &snap_id);
     int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
