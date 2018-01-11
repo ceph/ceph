@@ -545,15 +545,13 @@ Skip test on FreeBSD as it generates different output there.
   
   rbd help group snap create
   usage: rbd group snap create [--pool <pool>] [--group <group>] [--snap <snap>] 
-                               <group-spec> <snap> 
+                               <group-spec> 
   
   Make a snapshot of a group.
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/]<group-name>)
-    <snap>               snapshot name
-                         (example: <snapshot-name>)
+                         (example: [<pool-name>/]<group-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -579,15 +577,13 @@ Skip test on FreeBSD as it generates different output there.
   
   rbd help group snap remove
   usage: rbd group snap remove [--pool <pool>] [--group <group>] [--snap <snap>] 
-                               <group-spec> <snap> 
+                               <group-spec> 
   
   Remove a snapshot from a group.
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/]<group-name>)
-    <snap>               snapshot name
-                         (example: <snapshot-name>)
+                         (example: [<pool-name>/]<group-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name

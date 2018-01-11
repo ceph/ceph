@@ -163,7 +163,7 @@ void add_image_spec_options(boost::program_options::options_description *pos,
 
 void add_group_spec_options(boost::program_options::options_description *pos,
 			    boost::program_options::options_description *opt,
-			    ArgumentModifier modifier);
+			    ArgumentModifier modifier, bool snap);
 
 void add_snap_spec_options(boost::program_options::options_description *pos,
                            boost::program_options::options_description *opt,

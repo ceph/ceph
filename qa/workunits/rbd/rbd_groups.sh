@@ -100,14 +100,14 @@ create_snapshot()
 {
     local group_name=$1
     local snap_name=$2
-    rbd group snap create $group_name $snap_name
+    rbd group snap create $group_name@$snap_name
 }
 
 remove_snapshot()
 {
     local group_name=$1
     local snap_name=$2
-    rbd group snap remove $group_name $snap_name
+    rbd group snap remove $group_name@$snap_name
 }
 
 list_snapshots()
