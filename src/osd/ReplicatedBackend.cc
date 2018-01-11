@@ -675,7 +675,7 @@ int ReplicatedBackend::be_deep_scrub(
   assert(poid == pos.ls[pos.pos]);
   if (!pos.data_done()) {
     if (pos.data_pos == 0) {
-      pos.data_hash = bufferhash(pos.seed);
+      pos.data_hash = bufferhash(-1);
     }
 
     bufferlist bl;
@@ -713,7 +713,7 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap header
   if (pos.omap_pos.empty()) {
-    pos.omap_hash = bufferhash(pos.seed);
+    pos.omap_hash = bufferhash(-1);
 
     bufferlist hdrbl;
     r = store->omap_get_header(

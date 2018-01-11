@@ -4962,7 +4962,6 @@ WRITE_CLASS_ENCODER(ScrubMap)
 
 struct ScrubMapBuilder {
   bool deep = false;
-  uint32_t seed = 0;
   vector<hobject_t> ls;
   size_t pos = 0;
   int64_t data_pos = 0;
