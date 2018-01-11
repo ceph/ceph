@@ -105,8 +105,8 @@ int main(int argc, const char **argv)
   bool createpool = false;
   bool create_from_conf = false;
   int num_osd = 0;
-  int pg_bits = g_conf->osd_pg_bits;
-  int pgp_bits = g_conf->osd_pgp_bits;
+  int pg_bits = 6;
+  int pgp_bits = 6;
   bool clobber = false;
   bool modified = false;
   std::string export_crush, import_crush, test_map_pg, test_map_object;
@@ -150,6 +150,8 @@ int main(int argc, const char **argv)
       if (!val.empty() && val != "plain") {
 	tree_formatter.reset(Formatter::create(val, "", "json"));
       }
+    } else if (ceph_argparse_witharg(args, i, &pg_bits, err, "--osd-pg-bits", (char*)NULL)) {
+    } else if (ceph_argparse_witharg(args, i, &pgp_bits, err, "--osd-pgp-bits", (char*)NULL)) {
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-cleanup", (char*)NULL)) {
       upmap_cleanup = true;
     } else if (ceph_argparse_witharg(args, i, &upmap_file, "--upmap-save", (char*)NULL)) {
