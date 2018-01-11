@@ -135,7 +135,7 @@ int Dumper::dump(const char *dump_file)
       bufferlist bl;
       dout(10) << "Reading at pos=0x" << std::hex << pos << std::dec << dendl;
 
-      const uint32_t read_size = MIN(chunk_size, end - pos);
+      const uint32_t read_size = std::min<uint64_t>(chunk_size, end - pos);
 
       C_SaferCond cond;
       lock.Lock();
@@ -298,7 +298,7 @@ int Dumper::undump(const char *dump_file)
     // Read
     bufferlist j;
     lseek64(fd, pos, SEEK_SET);
-    uint64_t l = MIN(left, 1024*1024);
+    uint64_t l = std::min<uint64_t>(left, 1024*1024);
     j.read_fd(fd, l);
 
     // Write

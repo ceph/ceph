@@ -7110,7 +7110,7 @@ int Client::fill_stat(Inode *in, struct stat *st, frag_info_t *dirstat, nest_inf
     st->st_size = in->size;
     st->st_blocks = (in->size + 511) >> 9;
   }
-  st->st_blksize = MAX(in->layout.stripe_unit, 4096);
+  st->st_blksize = std::max<uint32_t>(in->layout.stripe_unit, 4096);
 
   if (dirstat)
     *dirstat = in->dirstat;
@@ -7136,7 +7136,7 @@ void Client::fill_statx(Inode *in, unsigned int mask, struct ceph_statx *stx)
 
   /* These are always considered to be available */
   stx->stx_dev = in->snapid;
-  stx->stx_blksize = MAX(in->layout.stripe_unit, 4096);
+  stx->stx_blksize = std::max<uint32_t>(in->layout.stripe_unit, 4096);
 
   /* Type bits are always set, even when CEPH_STATX_MODE is not */
   stx->stx_mode = S_IFMT & in->mode;
@@ -8351,10 +8351,10 @@ Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
   f->readahead.set_min_readahead_size(conf->client_readahead_min);
   uint64_t max_readahead = Readahead::NO_LIMIT;
   if (conf->client_readahead_max_bytes) {
-    max_readahead = MIN(max_readahead, (uint64_t)conf->client_readahead_max_bytes);
+    max_readahead = std::min(max_readahead, (uint64_t)conf->client_readahead_max_bytes);
   }
   if (conf->client_readahead_max_periods) {
-    max_readahead = MIN(max_readahead, in->layout.get_period()*(uint64_t)conf->client_readahead_max_periods);
+    max_readahead = std::min(max_readahead, in->layout.get_period()*(uint64_t)conf->client_readahead_max_periods);
   }
   f->readahead.set_max_readahead_size(max_readahead);
   vector<uint64_t> alignments;
