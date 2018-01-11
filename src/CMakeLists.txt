@@ -925,9 +925,6 @@ endif()
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph @ONLY)
 
-configure_file(${CMAKE_SOURCE_DIR}/src/ceph-crush-location.in
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location @ONLY)
-
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
@@ -943,7 +940,6 @@ endif()
 
 install(PROGRAMS
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-crush-location
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph-post-file
   ${CMAKE_SOURCE_DIR}/src/ceph-run
   ${CMAKE_SOURCE_DIR}/src/ceph-rest-api
