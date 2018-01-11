@@ -241,9 +241,9 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount++;
+    data.avgcount += avgcount;
     data.u64 += amt.to_nsec();
-    data.avgcount2++;
+    data.avgcount2 += avgcount;
   } else {
     data.u64 += amt.to_nsec();
   }
@@ -260,9 +260,9 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
-    data.avgcount++;
+    data.avgcount += avgcount;
     data.u64 += amt.count();
-    data.avgcount2++;
+    data.avgcount2 += avgcount;
   } else {
     data.u64 += amt.count();
   }
