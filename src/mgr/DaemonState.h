@@ -129,7 +129,7 @@ class DaemonState
 	config_defaults_bl.length()) {
       auto p = config_defaults_bl.begin();
       try {
-	::decode(config_defaults, p);
+	decode(config_defaults, p);
       } catch (buffer::error e) {
       }
     }
