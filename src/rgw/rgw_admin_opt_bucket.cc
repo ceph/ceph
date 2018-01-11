@@ -1,7 +1,7 @@
 #include "rgw_admin_opt_bucket.h"
-#include "rgw_bucket.h"
 
-#include "cls/rgw/cls_rgw_client.h"
+#include "rgw_orphan.h"
+#include "rgw_data_sync.h"
 
 static bool bucket_object_check_filter(const string& name)
 {
@@ -136,8 +136,8 @@ static int do_check_object_locator(RGWRados *store, const string& tenant_name, c
 
     count += result.size();
 
-    for (auto iter = result.begin(); iter != result.end(); ++iter) {
-      rgw_obj_key key = iter->key;
+    for (auto &iter : result) {
+      rgw_obj_key key = iter.key;
       rgw_obj obj(bucket, key);
 
       if (key.name[0] == '_') {

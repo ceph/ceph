@@ -4,6 +4,7 @@
 #ifndef CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
 #define CEPH_RGW_ADMIN_ARGUMENT_PARSING_H
 
+#include "rgw_admin_common.h"
 #include "rgw_user.h"
 
 void usage();
