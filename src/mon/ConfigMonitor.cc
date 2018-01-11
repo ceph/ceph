@@ -338,8 +338,26 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "value", value);
 
-    OptionMask mask;
+    if (prefix == "config set") {
+      const Option *opt = g_conf->find_option(name);
+      if (!opt) {
+	ss << "unrecognized config option '" << name << "'";
+	err = -EINVAL;
+	goto reply;
+      }
+
+      Option::value_t real_value;
+      string str;
+      err = opt->parse_value(value, &real_value, &str);
+      if (err < 0) {
+	ss << "error parsing value: " << str;
+	goto reply;
+      }
+      value = stringify(real_value);
+    }
+
     string section;
+    OptionMask mask;
     if (!ConfigMap::parse_mask(who, &section, &mask)) {
       ss << "unrecognized config target '" << who << "'";
       err = -EINVAL;
