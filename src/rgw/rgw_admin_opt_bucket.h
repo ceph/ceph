@@ -1,8 +1,6 @@
 #ifndef CEPH_RGW_ADMIN_BUCKET_H
 #define CEPH_RGW_ADMIN_BUCKET_H
 
-#include <iostream>
-
 #include "common/ceph_json.h"
 #include "common/errno.h"
 
@@ -11,15 +9,6 @@
 #include "rgw_bucket.h"
 #include "rgw_reshard.h"
 
-#include <cerrno>
-#include <sstream>
-
-#include <boost/optional.hpp>
-
-#include "auth/Crypto.h"
-#include "compressor/Compressor.h"
-
-#include "common/config.h"
 #include "common/ceph_argparse.h"
 
 template <class T, class K>
