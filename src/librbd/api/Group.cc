@@ -823,7 +823,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
 	ret_code = -ENOENT;
       } else {
 	image_snaps[i].snap_id = snapid_t(snap_id);
-	image_snaps[i].pool = ictx->data_ctx.get_id();
+	image_snaps[i].pool = ictx->md_ctx.get_id();
 	image_snaps[i].image_id = ictx->id;
       }
     }

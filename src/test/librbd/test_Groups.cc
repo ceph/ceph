@@ -38,11 +38,11 @@ using namespace librbd::watch_notify;
 void register_test_groups() {
 }
 
-class TestLibCG : public TestFixture {
+class TestGroup : public TestFixture {
 
 };
 
-TEST_F(TestLibCG, group_create)
+TEST_F(TestGroup, group_create)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -62,7 +62,7 @@ TEST_F(TestLibCG, group_create)
   ASSERT_EQ(0U, groups.size());
 }
 
-TEST_F(TestLibCG, add_image)
+TEST_F(TestGroup, add_image)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
@@ -90,12 +90,12 @@ TEST_F(TestLibCG, add_image)
   ASSERT_EQ(0U, images.size());
 }
 
-TEST_F(TestLibCG, add_snapshot)
+TEST_F(TestGroup, add_snapshot)
 {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
-  const char *group_name = "snap_consistency_group";
+  const char *group_name = "snap_group";
   const char *image_name = "snap_image";
   const char *snap_name = "snap_snapshot";
 
