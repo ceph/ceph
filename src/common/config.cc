@@ -136,7 +136,7 @@ md_config_t::md_config_t(bool is_daemon)
 		    stringify(subsys.get_gather_level(i)));
     string desc = string("Debug level for ") + subsys.get_name(i);
     opt.set_description(desc.c_str());
-    opt.set_safe();
+    opt.set_flag(Option::FLAG_RUNTIME);
     opt.set_long_description("The value takes the form 'N' or 'N/M' where N and M are values between 0 and 99.  N is the debug level to log (all values below this are included), and M is the level to gather and buffer in memory.  In the event of a crash, the most recent items <= M are dumped to the log file.");
     opt.set_subsys(i);
     opt.set_validator([](std::string *value, std::string *error_message) {
