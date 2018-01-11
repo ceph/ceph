@@ -21,10 +21,11 @@ class GetGroupVisitor : public boost::static_visitor<int> {
 public:
   CephContext* cct;
   librados::IoCtx *image_ioctx;
-  group_snap_t group_snap;
+  snap_group_namespace_t *group_snap;
 
-  explicit GetGroupVisitor(CephContext* cct, librados::IoCtx *_image_ioctx)
-    : cct(cct), image_ioctx(_image_ioctx) {};
+  explicit GetGroupVisitor(CephContext* cct, librados::IoCtx *_image_ioctx,
+                           snap_group_namespace_t *group_snap)
+    : cct(cct), image_ioctx(_image_ioctx), group_snap(group_snap) {};
 
   template <typename T>
   inline int operator()(const T&) const {
@@ -64,9 +65,9 @@ public:
       return r;
     }
 
-    group_snap.group_pool = group_ioctx.get_id();
-    group_snap.group_name = group_name;
-    group_snap.group_snap_name = group_snapshot.name;
+    group_snap->group_pool = group_ioctx.get_id();
+    group_snap->group_name = group_name;
+    group_snap->group_snap_name = group_snapshot.name;
     return 0;
   }
 };
@@ -74,19 +75,19 @@ public:
 } // anonymous namespace
 
 template <typename I>
-int Snapshot<I>::get_group(I *ictx, uint64_t snap_id,
-                           group_snap_t *group_snap) {
+int Snapshot<I>::get_group_namespace(I *ictx, uint64_t snap_id,
+                                     snap_group_namespace_t *group_snap) {
   const SnapInfo *snap_info;
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     snap_info = ictx->get_snap_info(snap_id);
     if (snap_info) {
-      GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->data_ctx);
+      GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->data_ctx,
+                                            group_snap);
       int r = boost::apply_visitor(ggv, snap_info->snap_namespace);
       if (r < 0) {
 	return r;
       }
-      *group_snap = ggv.group_snap;
     }
   }
   return 0;
