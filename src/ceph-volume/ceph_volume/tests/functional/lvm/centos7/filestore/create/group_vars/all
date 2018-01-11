@@ -16,6 +16,7 @@ lvm_volumes:
   - data: data-lv1
     journal: /dev/sdc1
     data_vg: test_group
+    crush_device_class: test
   - data: data-lv2
     journal: journal1
     data_vg: test_group
