@@ -392,8 +392,8 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 
     auto p = m->config_bl.begin();
     if (p != m->config_bl.end()) {
-      ::decode(daemon->config, p);
-      ::decode(daemon->ignored_mon_config, p);
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
       dout(20) << " got config " << daemon->config
 	       << " ignored " << daemon->ignored_mon_config << dendl;
     }
@@ -506,8 +506,8 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
     auto p = m->config_bl.begin();
     if (p != m->config_bl.end()) {
-      ::decode(daemon->config, p);
-      ::decode(daemon->ignored_mon_config, p);
+      decode(daemon->config, p);
+      decode(daemon->ignored_mon_config, p);
       dout(20) << " got config " << daemon->config
 	       << " ignored " << daemon->ignored_mon_config << dendl;
     }

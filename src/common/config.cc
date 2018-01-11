@@ -898,20 +898,20 @@ void md_config_t::get_defaults_bl(bufferlist *bl)
     bufferlist bl;
     for (const auto &i : schema) {
       ++n;
-      ::encode(i.second.name, bl);
+      encode(i.second.name, bl);
       auto j = values.find(i.second.name);
       if (j != values.end()) {
 	auto k = j->second.find(CONF_DEFAULT);
 	if (k != j->second.end()) {
-	  ::encode(stringify(k->second), bl);
+	  encode(stringify(k->second), bl);
 	  continue;
 	}
       }
       string val;
       conf_stringify(_get_val_default(i.second), &val);
-      ::encode(val, bl);
+      encode(val, bl);
     }
-    ::encode(n, defaults_bl);
+    encode(n, defaults_bl);
     defaults_bl.claim_append(bl);
   }
   *bl = defaults_bl;
@@ -929,11 +929,11 @@ void md_config_t::get_config_bl(bufferlist *bl)
 	continue;
       }
       ++n;
-      ::encode(i.first, bl);
-      ::encode((uint32_t)i.second.size(), bl);
+      encode(i.first, bl);
+      encode((uint32_t)i.second.size(), bl);
       for (auto& j : i.second) {
-	::encode(j.first, bl);
-	::encode(stringify(j.second), bl);
+	encode(j.first, bl);
+	encode(stringify(j.second), bl);
       }
     }
     // make sure overridden items appear, and include the default value
@@ -950,16 +950,16 @@ void md_config_t::get_config_bl(bufferlist *bl)
 	continue;
       }
       ++n;
-      ::encode(i.first, bl);
-      ::encode((uint32_t)1, bl);
-      ::encode((int32_t)CONF_DEFAULT, bl);
+      encode(i.first, bl);
+      encode((uint32_t)1, bl);
+      encode((int32_t)CONF_DEFAULT, bl);
       string val;
       conf_stringify(_get_val_default(*opt), &val);
-      ::encode(val, bl);
+      encode(val, bl);
     }
-    ::encode(n, values_bl);
+    encode(n, values_bl);
     values_bl.claim_append(bl);
-    ::encode(ignored_mon_values, values_bl);
+    encode(ignored_mon_values, values_bl);
   }
   *bl = values_bl;
 }
