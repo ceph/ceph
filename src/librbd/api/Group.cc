@@ -204,8 +204,6 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
   std::vector<librbd::IoCtx*> io_ctxs;
   std::vector<librbd::ImageCtx*> ictxs;
 
-  std::string image_snap_name;
-
   cls::rbd::SnapshotNamespace ne;
 
   ldout(cct, 20) << "Removing snapshots" << dendl;
@@ -252,8 +250,6 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
 
   for (int i = 0; i < snap_count; ++i) {
     ImageCtx *ictx = ictxs[i];
-    ldout(cct, 20) << "Removing individual snapshot with name: " <<
-      image_snap_name << dendl;
     on_finishes[i] = new C_SaferCond;
 
     std::string snap_name;
@@ -261,16 +257,24 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     snap_t snap_id = ictx->get_snap_id(ne, "");
     r = ictx->get_snap_name(snap_id, &snap_name);
     ictx->snap_lock.put_read();
+
     if (r >= 0) {
-      ictx->operations->snap_remove(ne, snap_name.c_str(), on_finishes[i]);
+      ldout(cct, 20) << "removing individual snapshot from image " << ictx->name
+                     << dendl;
+      ictx->operations->snap_remove(ne, snap_name, on_finishes[i]);
+    } else {
+      // We are ok to ignore missing image snapshots. The snapshot could have
+      // been inconsistent in the first place.
+      on_finishes[i]->complete(0);
     }
-    // We are ok to ignore missing image snapshots. The snapshot could have been inconsistent in the first place.
   }
 
   for (int i = 0; i < snap_count; ++i) {
     r = on_finishes[i]->wait();
     delete on_finishes[i];
-    if (r < 0 && r != -ENOENT) { // if previous attempts to remove this snapshot failed then the image's snapshot may not exist
+    if (r < 0 && r != -ENOENT) {
+      // if previous attempts to remove this snapshot failed then the image's
+      // snapshot may not exist
       lderr(cct) << "Failed deleting image snapshot. Ret code: " << r << dendl;
       ret_code = r;
     }
@@ -280,8 +284,8 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     goto finish;
   }
 
-  ldout(cct, 20) << "Removed images snapshots removing snapshot record." <<
-    dendl;
+  ldout(cct, 20) << "Removed images snapshots removing snapshot record."
+                 << dendl;
 
   r = cls_client::group_snap_remove(&group_ioctx, group_header_oid,
       group_snap.id);
@@ -710,9 +714,8 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   }
 
   for (auto image: images) {
-    librbd::IoCtx* image_io_ctx = new librbd::IoCtx;
-
-    r = rados.ioctx_create2(image.spec.pool_id, *image_io_ctx);
+    librbd::IoCtx image_io_ctx;
+    r = rados.ioctx_create2(image.spec.pool_id, image_io_ctx);
     if (r < 0) {
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
@@ -720,7 +723,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
     ldout(cct, 20) << "Openning image with id" << image.spec.image_id << dendl;
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", image.spec.image_id.c_str(),
-					       nullptr, *image_io_ctx, false);
+					       nullptr, image_io_ctx, false);
 
     C_SaferCond* on_finish = new C_SaferCond;
 
@@ -886,9 +889,6 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
   CephContext *cct = (CephContext *)group_ioctx.cct();
   librados::Rados rados(group_ioctx);
 
-  std::vector<cls::rbd::GroupSnapshot> snaps;
-  std::vector<C_SaferCond*> on_finishes;
-
   string group_id;
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
 				 group_name, &group_id);
@@ -898,12 +898,12 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
 	       << dendl;
     return r;
   }
-  string group_header_oid = util::group_header_name(group_id);
-
+  std::vector<cls::rbd::GroupSnapshot> snaps;
   r = group_snap_list(group_ioctx, group_name, &snaps);
   if (r < 0) {
     return r;
   }
+
   cls::rbd::GroupSnapshot *group_snap = nullptr;
   for (auto &snap : snaps) {
     if (snap.name == string(snap_name)) {
@@ -915,9 +915,9 @@ int Group<I>::snap_remove(librados::IoCtx& group_ioctx, const char *group_name,
     return -ENOENT;
   }
 
+  string group_header_oid = util::group_header_name(group_id);
   r = group_snap_remove_by_record(group_ioctx, *group_snap, group_id,
-      group_header_oid);
-
+                                  group_header_oid);
   return r;
 }
 
