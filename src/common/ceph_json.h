@@ -586,6 +586,8 @@ struct JSONFormattable {
 
   int set(const string& name, const string& val);
   int erase(const string& name);
+
+  void derive_from(const JSONFormattable& jf);
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 
