@@ -177,6 +177,7 @@ class C_SaferCond : public Context {
   int rval;      ///< return value
 public:
   C_SaferCond() : lock("C_SaferCond"), done(false), rval(0) {}
+  C_SaferCond(std::string name) : lock(name), done(false), rval(0) {}
   void finish(int r) override { complete(r); }
 
   /// We overload complete in order to not delete the context
