@@ -13,6 +13,7 @@
  */
 
 #include "SnapMapper.h"
+#include <string_view>
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -289,7 +290,7 @@ int SnapMapper::get_next_objects_to_trim(
 	break; // Done
       }
 
-      if (next.first.substr(0, prefix.size()) !=
+      if (std::string_view{next.first}.substr(0, prefix.size()) !=
 	  prefix) {
 	break; // Done with this prefix
       }

@@ -15,6 +15,8 @@
  *
  */
 
+#include <string_view>
+
 #include "boost/tuple/tuple.hpp"
 #include "boost/intrusive_ptr.hpp"
 #include "PG.h"
@@ -6924,7 +6926,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  if (filter_prefix > start_after) iter->lower_bound(filter_prefix);
 	  for (num = 0;
 	       iter->valid() &&
-		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
+		 std::string_view{iter->key()}.substr(0, filter_prefix.size()) == filter_prefix;
 	       ++num, iter->next(false)) {
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    if (num >= max_return ||

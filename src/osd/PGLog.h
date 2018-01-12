@@ -21,6 +21,7 @@
 #include "osd_types.h"
 #include "os/ObjectStore.h"
 #include <list>
+#include <string_view>
 
 constexpr auto PGLOG_INDEXED_OBJECTS          = 1 << 0;
 constexpr auto PGLOG_INDEXED_CALLER_OPS       = 1 << 1;
@@ -1321,7 +1322,7 @@ public:
 	  decode(on_disk_rollback_info_trimmed_to, bp);
 	} else if (p->key() == "may_include_deletes_in_missing") {
 	  missing.may_include_deletes = true;
-	} else if (p->key().substr(0, 7) == string("missing")) {
+	} else if (std::string_view{p->key()}.substr(0, 7) == string("missing")) {
 	  hobject_t oid;
 	  pg_missing_item item;
 	  decode(oid, bp);
@@ -1330,7 +1331,7 @@ public:
 	    assert(missing.may_include_deletes);
 	  }
 	  missing.add(oid, item.need, item.have, item.is_delete());
-	} else if (p->key().substr(0, 4) == string("dup_")) {
+	} else if (std::string_view{p->key()}.substr(0, 4) == string("dup_")) {
 	  pg_log_dup_t dup;
 	  decode(dup, bp);
 	  if (!dups.empty()) {

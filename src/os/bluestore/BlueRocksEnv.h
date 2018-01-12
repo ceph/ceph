@@ -5,6 +5,7 @@
 
 #include <memory>
 #include <string>
+#include <string_view>
 
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/env_mirror.h"
@@ -16,10 +17,10 @@ class BlueFS;
 class BlueRocksEnv : public rocksdb::EnvWrapper {
   void split(const std::string &fn, std::string *dir, std::string *file) {
     size_t slash = fn.rfind('/');
-    *file = fn.substr(slash + 1);
+    *file = std::string_view{fn}.substr(slash + 1);
     while (slash && fn[slash-1] == '/')
       --slash;
-    *dir = fn.substr(0, slash);
+    *dir = std::string_view{fn}.substr(0, slash);
   }
 
 public:

@@ -18,6 +18,8 @@
 #include <boost/spirit/include/phoenix.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 
+#include <string_view>
+
 #include "OSDCap.h"
 #include "common/config.h"
 #include "common/debug.h"
@@ -119,7 +121,7 @@ bool OSDCapPoolNamespace::is_match(const std::string& pn,
   }
   if (nspace) {
     if ((*nspace)[nspace->length() - 1] == '*' &&
-	boost::starts_with(ns, nspace->substr(0, nspace->length() - 1))) {
+	boost::starts_with(ns, std::string_view{*nspace}.substr(0, nspace->length() - 1))) {
       return true;
     }
 
