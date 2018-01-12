@@ -746,7 +746,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   </images>
   $ rbd lock list foo
   $ rbd lock list foo --format json | python -mjson.tool | sed 's/,$/, /'
-  {}
+  []
   $ rbd lock list foo --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <locks></locks>
   $ rbd lock list quux
@@ -754,18 +754,20 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   Locker*ID*Address* (glob)
   client.* id * (glob)
   $ rbd lock list quux --format json | python -mjson.tool | sed 's/,$/, /'
-  {
-      "id": {
+  [
+      {
           "address": "*",  (glob)
+          "id": "id", 
           "locker": "client.*" (glob)
       }
-  }
+  ]
   $ rbd lock list quux --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <locks>
-    <id>
+    <lock>
+      <id>id</id>
       <locker>client.*</locker> (glob)
       <address>*</address> (glob)
-    </id>
+    </lock>
   </locks>
   $ rbd lock list baz
   There are 3 shared locks on this image.
@@ -775,34 +777,40 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   client.*id[123].* (re)
   client.*id[123].* (re)
   $ rbd lock list baz --format json | python -mjson.tool | sed 's/,$/, /'
-  {
-      "id1": {
+  [
+      {
           "address": "*",  (glob)
+          "id": "id*",  (glob)
           "locker": "client.*" (glob)
       }, 
-      "id2": {
+      {
           "address": "*",  (glob)
+          "id": "id*",  (glob)
           "locker": "client.*" (glob)
       }, 
-      "id3": {
+      {
           "address": "*",  (glob)
+          "id": "id*",  (glob)
           "locker": "client.*" (glob)
       }
-  }
+  ]
   $ rbd lock list baz --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <locks>
-    <id*> (glob)
+    <lock>
+      <id>id*</id> (glob)
       <locker>client.*</locker> (glob)
       <address>*</address> (glob)
-    </id*> (glob)
-    <id*> (glob)
+    </lock>
+    <lock>
+      <id>id*</id> (glob)
       <locker>client.*</locker> (glob)
       <address>*</address> (glob)
-    </id*> (glob)
-    <id*> (glob)
+    </lock>
+    <lock>
+      <id>id*</id> (glob)
       <locker>client.*</locker> (glob)
       <address>*</address> (glob)
-    </id*> (glob)
+    </lock>
   </locks>
   $ rbd snap list foo
   SNAPID NAME    SIZE TIMESTAMP 
