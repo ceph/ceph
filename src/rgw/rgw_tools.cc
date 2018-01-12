@@ -18,7 +18,7 @@
 
 static std::map<std::string, std::string>* ext_mime_map;
 
-int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, const bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
