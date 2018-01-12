@@ -33,6 +33,13 @@
   equivalent to the built-in default behavior, so it has been replaced with an
   example in the CRUSH documentation.
 
+* The "rcceph" script (systemd/ceph in the source code tree, shipped as
+  /usr/sbin/rcceph in the ceph-base package for CentOS and SUSE) has been
+  dropped. This script was used to perform admin operations (start, stop,
+  restart, etc.) on all OSD and/or MON daemons running on a given machine.
+  This functionality is provided by the systemd target units (ceph-osd.target,
+  ceph-mon.target, etc.).
+
 
 >= 12.2.2
 ---------
