@@ -815,6 +815,15 @@ int JSONFormattable::erase(const string& name)
   return 0;
 }
 
+void JSONFormattable::derive_from(const JSONFormattable& parent)
+{
+  for (auto& o : parent.obj) {
+    if (obj.find(o.first) == obj.end()) {
+      obj[o.first] = o.second;
+    }
+  }
+}
+
 void encode_json(const char *name, const JSONFormattable& v, Formatter *f)
 {
   switch (v.type) {
