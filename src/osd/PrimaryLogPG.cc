@@ -51,6 +51,7 @@
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
 #include "include/rados/rados_types.hpp"
+#include "cls/refcount/cls_refcount_ops.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
@@ -3391,6 +3392,35 @@ void PrimaryLogPG::do_proxy_chunked_op(OpRequestRef op, const hobject_t& missing
     }
   } 
 }
+
+void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
+                                     SnapContext snapc, bool get, Context *cb, uint64_t offset)
+{
+  unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
+                   CEPH_OSD_FLAG_RWORDERED;                      
+
+  dout(10) << __func__ << " Start refcount for " << soid << dendl;
+    
+  ObjectOperation obj_op;
+  bufferlist in;
+  if (get) {             
+    cls_chunk_refcount_get_op call;
+    call.source = obc->obs.oi.soid;
+    ::encode(call, in);                             
+    obj_op.call("refcount", "chunk_get", in);         
+  } else {                    
+    cls_chunk_refcount_put_op call;                
+    call.source = obc->obs.oi.soid;
+    ::encode(call, in);          
+    obj_op.call("refcount", "chunk_put", in);         
+  }                                                     
+  
+  unsigned n = info.pgid.hash_to_shard(osd->m_objecter_finishers);
+  osd->objecter->mutate(
+    soid.oid, oloc, obj_op, snapc,
+    ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+    flags, new C_OnFinisher(cb, osd->objecter_finishers[n]));
+}  
 
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
