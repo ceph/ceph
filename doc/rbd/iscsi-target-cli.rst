@@ -117,6 +117,12 @@ to the *Installing* section:
 
 **Configuring:**
 
+gwcli will create and configure the iSCSI target and RBD images and copy the
+configuration across the gateways setup in the last section. Lower level
+tools, like targetcli and rbd, can be used to query the local configuration,
+but should not be used to modify it. This next section will demonstrate how
+to create a iSCSI target and export a RBD image as LUN 0.
+
 #. As ``root``, on a iSCSI gateway node, start the iSCSI gateway
    command-line interface:
 
@@ -124,40 +130,67 @@ to the *Installing* section:
 
        # gwcli
 
-#. Creating the iSCSI gateways:
+#. Go to iscsi-targets and create a target with the name
+   iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw:
 
    ::
 
-       >/iscsi-target create iqn.2003-01.com.redhat.iscsi-gw:<target_name>
-       > goto gateways
-       > create <iscsi_gw_name> <IP_addr_of_gw>
-       > create <iscsi_gw_name> <IP_addr_of_gw>
+       > /> cd /iscsi-target
+       > /iscsi-target>  create iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw
 
-#. Adding a RADOS Block Device (RBD):
-
-   ::
-
-       > cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:<target_name>/disks/
-       >/disks/ create pool=<pool_name> image=<image_name> size=<image_size>m|g|t
-
-#. Creating a client:
+#. Create the iSCSI gateways. The IPs used below are the ones that will be
+   used for iSCSI data like READ and WRITE commands. They can be the
+   same IPs used for management operations listed in trusted_ip_list,
+   but it is recommended that different IPs are used.
 
    ::
 
-       > goto hosts
-       > create iqn.1994-05.com.redhat:<client_name>
-       > auth chap=<user_name>/<password> | nochap
+       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/gateways
+       > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
+       > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22
 
+   If not using RHEL/CentOS or using an upstream or ceph-iscsi-stable kernel,
+   the skipchecks=true argument must be used. This will avoid the Red Hat kernel
+   and rpm checks:
 
-  .. warning::
+   ::
+
+       > /iscsi-target> cd iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/gateways
+       > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21 skipchecks=true
+       > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22 skipchecks=true
+
+#. Add a RBD image with the name disk_1 in the pool rbd:
+
+   ::
+
+       > /iscsi-target...-igw/gateways> cd /disks
+       > /disks> create pool=rbd image=disk_1 size=90G
+
+   .. warning::
+       There can not be any periods (.) in the pool name or in the image name.
+
+#. Create a client with the initiator name iqn.1994-05.com.redhat:rh7-client:
+
+   ::
+
+       > /disks> cd /iscsi-target/iqn.2003-01.com.redhat.iscsi-gw:ceph-igw/hosts
+       > /iscsi-target...eph-igw/hosts>  create iqn.1994-05.com.redhat:rh7-client
+
+#. Set the client's CHAP username to myiscsiusername and password to
+   myiscsipassword:
+
+   ::
+
+       > /iscsi-target...at:rh7-client>  auth chap=myiscsiusername/myiscsipassword
+
+   .. warning::
       CHAP must always be configured. Without CHAP, the target will
       reject any login requests.
 
-#. Adding disks to a client:
+#. Add the disk to the client:
 
    ::
 
-       >/iscsi-target..eph-igw/hosts> cd iqn.1994-05.com.redhat:<client_name>
-       > disk add <pool_name>.<image_name>
+       > /iscsi-target...at:rh7-client> disk add rbd.disk_1
 
 The next step is to configure the iSCSI initiators.
