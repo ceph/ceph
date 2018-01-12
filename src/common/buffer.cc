@@ -1754,17 +1754,24 @@ public:
   {
     return rebuild_aligned_size_and_memory(align, align);
   }
-  
+
+  inline void buffer::list::adjust_align_size(unsigned& align_size,
+                                       const unsigned& max_buffers) {
+    align_size =
+      ROUND_UP_TO(ROUND_UP_TO(_len, max_buffers) / max_buffers, align_size);
+  }
+
   bool buffer::list::rebuild_aligned_size_and_memory(unsigned align_size,
-						    unsigned align_memory,
-						    unsigned max_buffers)
+                                                     unsigned align_memory,
+                                                     const unsigned& max_buffers)
   {
     unsigned old_memcopy_count = _memcopy_count;
 
-    if (max_buffers && _buffers.size() > max_buffers
-	&& _len > (max_buffers * align_size)) {
-      align_size = ROUND_UP_TO(ROUND_UP_TO(_len, max_buffers) / max_buffers, align_size);
-    }
+    if (max_buffers != 0 &&
+        _buffers.size() > max_buffers &&
+        _len > (max_buffers * align_size))
+      adjust_align_size(align_size, max_buffers);
+
     std::list<ptr>::iterator p = _buffers.begin();
     while (p != _buffers.end()) {
       // keep anything that's already align and sized aligned
