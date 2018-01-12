@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <errno.h>
+#include <string_view>
 #include <sys/stat.h>
 #include <signal.h>
 #include <ctype.h>
@@ -5124,8 +5125,8 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     cmd_getval(service->cct, cmdmap, "objname", objname);
     std::size_t found = objname.find_first_of('/');
     if (found != string::npos) {
-      nspace = objname.substr(0, found);
-      objname = objname.substr(found+1);
+      nspace = std::string_view{objname}.substr(0, found);
+      objname = std::string_view{objname}.substr(found+1);
     }
     object_locator_t oloc(pool, nspace);
     r = curmap->object_locator_to_pg(object_t(objname), oloc,  rawpg);

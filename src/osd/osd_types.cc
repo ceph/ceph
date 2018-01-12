@@ -16,6 +16,7 @@
  */
 
 #include <boost/assign/list_of.hpp>
+#include <string_view>
 
 #include "osd_types.h"
 #include "include/ceph_features.h"

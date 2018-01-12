@@ -13,6 +13,7 @@
 
 #include <unistd.h>
 #include <stdlib.h>
+#include <string_view>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -485,7 +486,7 @@ int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
   assert(key.size() > sizeof(uint32_t) + 1);
   assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
   int okey_len = key.size() - sizeof(uint32_t) - 1;
-  *onode_key = key.substr(0, okey_len);
+  *onode_key = std::string_view{key}.substr(0, okey_len);
   const char *p = key.data() + okey_len;
   _key_decode_u32(p, offset);
   return 0;
@@ -520,7 +521,7 @@ static void rewrite_omap_key(uint64_t id, string old, string *out)
 
 static void decode_omap_key(const string& key, string *user_key)
 {
-  *user_key = key.substr(sizeof(uint64_t) + 1);
+  *user_key = std::string_view{key}.substr(sizeof(uint64_t) + 1);
 }
 
 static void get_omap_tail(uint64_t id, string *out)
