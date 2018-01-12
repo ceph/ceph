@@ -1744,11 +1744,6 @@ void RGWGetObj::execute()
 
   start = ofs;
 
-  /* STAT ops don't need data, and do no i/o */
-  if (get_type() == RGW_OP_STAT_OBJ) {
-    return;
-  }
-
   attr_iter = attrs.find(RGW_ATTR_MANIFEST);
   op_ret = this->get_decrypt_filter(&decrypt, filter,
                                     attr_iter != attrs.end() ? &(attr_iter->second) : nullptr);
