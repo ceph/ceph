@@ -6613,6 +6613,7 @@ int32_t OSDMonitor::_allocate_osd_id(int32_t* existing_id)
 void OSDMonitor::do_osd_create(
     const int32_t id,
     const uuid_d& uuid,
+    const string& device_class,
     int32_t* new_id)
 {
   dout(10) << __func__ << " uuid " << uuid << dendl;
@@ -6646,7 +6647,6 @@ void OSDMonitor::do_osd_create(
     assert(allocated_id < 0);
     pending_inc.new_weight[existing_id] = CEPH_OSD_OUT;
     *new_id = existing_id;
-
   } else if (allocated_id >= 0) {
     assert(existing_id < 0);
     // raise max_osd
@@ -6662,6 +6662,33 @@ void OSDMonitor::do_osd_create(
   }
 
 out:
+  if (device_class.size()) {
+    CrushWrapper newcrush;
+    _get_pending_crush(newcrush);
+    if (newcrush.get_max_devices() < *new_id + 1) {
+      newcrush.set_max_devices(*new_id + 1);
+    }
+    string name = string("osd.") + stringify(*new_id);
+    if (!newcrush.item_exists(*new_id)) {
+      newcrush.set_item_name(*new_id, name);
+    }
+    ostringstream ss;
+    int r = newcrush.update_device_class(*new_id, device_class, name, &ss);
+    if (r < 0) {
+      derr << __func__ << " failed to set " << name << " device_class "
+	   << device_class << ": " << cpp_strerror(r) << " - " << ss.str()
+	   << dendl;
+      // non-fatal... this might be a replay and we want to be idempotent.
+    } else {
+      dout(20) << __func__ << " set " << name << " device_class " << device_class
+	       << dendl;
+      pending_inc.crush.clear();
+      newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
+    }
+  } else {
+    dout(20) << __func__ << " no device_class" << dendl;
+  }
+
   dout(10) << __func__ << " using id " << *new_id << dendl;
   if (osdmap.get_max_osd() <= *new_id && pending_inc.new_max_osd <= *new_id) {
     pending_inc.new_max_osd = *new_id + 1;
@@ -6767,7 +6794,7 @@ int OSDMonitor::prepare_command_osd_create(
 int OSDMonitor::prepare_command_osd_new(
     MonOpRequestRef op,
     const map<string,cmd_vartype>& cmdmap,
-    const map<string,string>& secrets,
+    const map<string,string>& params,
     stringstream &ss,
     Formatter *f)
 {
@@ -6876,9 +6903,9 @@ int OSDMonitor::prepare_command_osd_new(
 
   dout(10) << __func__ << " id " << id << " uuid " << uuid << dendl;
 
-  if (may_be_idempotent && secrets.empty()) {
+  if (may_be_idempotent && params.empty()) {
     // nothing to do, really.
-    dout(10) << __func__ << " idempotent and no secrets -- no op." << dendl;
+    dout(10) << __func__ << " idempotent and no params -- no op." << dendl;
     assert(id >= 0);
     if (f) {
       f->open_object_section("created_osd");
@@ -6890,30 +6917,38 @@ int OSDMonitor::prepare_command_osd_new(
     return EEXIST;
   }
 
+  string device_class;
+  auto p = params.find("crush_device_class");
+  if (p != params.end()) {
+    device_class = p->second;
+    dout(20) << __func__ << " device_class will be " << device_class << dendl;
+  }
   string cephx_secret, lockbox_secret, dmcrypt_key;
   bool has_lockbox = false;
-  bool has_secrets = (!secrets.empty());
+  bool has_secrets = params.count("cephx_secret")
+    || params.count("cephx_lockbox_secret")
+    || params.count("dmcrypt_key");
 
   ConfigKeyService *svc = nullptr;
   AuthMonitor::auth_entity_t cephx_entity, lockbox_entity;
 
   if (has_secrets) {
-    if (secrets.count("cephx_secret") == 0) {
+    if (params.count("cephx_secret") == 0) {
       ss << "requires a cephx secret.";
       return -EINVAL;
     }
-    cephx_secret = secrets.at("cephx_secret");
+    cephx_secret = params.at("cephx_secret");
 
-    bool has_lockbox_secret = (secrets.count("cephx_lockbox_secret") > 0);
-    bool has_dmcrypt_key = (secrets.count("dmcrypt_key") > 0);
+    bool has_lockbox_secret = (params.count("cephx_lockbox_secret") > 0);
+    bool has_dmcrypt_key = (params.count("dmcrypt_key") > 0);
 
     dout(10) << __func__ << " has lockbox " << has_lockbox_secret
              << " dmcrypt " << has_dmcrypt_key << dendl;
 
     if (has_lockbox_secret && has_dmcrypt_key) {
       has_lockbox = true;
-      lockbox_secret = secrets.at("cephx_lockbox_secret");
-      dmcrypt_key = secrets.at("dmcrypt_key");
+      lockbox_secret = params.at("cephx_lockbox_secret");
+      dmcrypt_key = params.at("dmcrypt_key");
     } else if (!has_lockbox_secret != !has_dmcrypt_key) {
       ss << "requires both a cephx lockbox secret and a dm-crypt key.";
       return -EINVAL;
@@ -7002,7 +7037,7 @@ int OSDMonitor::prepare_command_osd_new(
   } else {
     assert(id >= 0);
     int32_t new_id = -1;
-    do_osd_create(id, uuid, &new_id);
+    do_osd_create(id, uuid, device_class, &new_id);
     assert(new_id >= 0);
     assert(id == new_id);
   }
@@ -9871,20 +9906,20 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return false;
     }
 
-    map<string,string> secrets_map;
+    map<string,string> param_map;
 
     bufferlist bl = m->get_data();
-    string secrets_json = bl.to_str();
-    dout(20) << __func__ << " osd new json = " << secrets_json << dendl;
+    string param_json = bl.to_str();
+    dout(20) << __func__ << " osd new json = " << param_json << dendl;
 
-    err = get_json_str_map(secrets_json, ss, &secrets_map);
+    err = get_json_str_map(param_json, ss, &param_map);
     if (err < 0)
       goto reply;
 
-    dout(20) << __func__ << " osd new secrets " << secrets_map << dendl;
+    dout(20) << __func__ << " osd new params " << param_map << dendl;
 
     paxos->plug();
-    err = prepare_command_osd_new(op, cmdmap, secrets_map, ss, f.get());
+    err = prepare_command_osd_new(op, cmdmap, param_map, ss, f.get());
     paxos->unplug();
 
     if (err < 0) {
@@ -9960,7 +9995,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
 
-    do_osd_create(id, uuid, &new_id);
+    string empty_device_class;
+    do_osd_create(id, uuid, empty_device_class, &new_id);
 
     if (f) {
       f->open_object_section("created_osd");
