@@ -51,7 +51,6 @@
 #include "json_spirit/json_spirit_reader.h"
 #include "include/assert.h"  // json_spirit clobbers it
 #include "include/rados/rados_types.hpp"
-#include "cls/refcount/cls_refcount_ops.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/osd.h"
@@ -6565,6 +6564,27 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
       {
+	if (oi.has_manifest()) {
+	  if ((oi.flags & object_info_t::FLAG_REDIRECT_HAS_REFERENCE) && oi.manifest.is_redirect()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      object_locator_t target_oloc(oi.manifest.redirect_target);
+	      refcount_manifest(ctx->obc, target_oloc, oi.manifest.redirect_target, 
+				SnapContext(), false, NULL, 0);
+	    });
+	  } else if (oi.manifest.is_chunked()) {
+	    ctx->register_on_commit(
+	      [oi, ctx, this](){
+	      for (auto p : oi.manifest.chunk_map) {
+		if (p.second.flags & chunk_info_t::FLAG_HAS_REFERENCE) {
+		  object_locator_t target_oloc(p.second.oid);
+		  refcount_manifest(ctx->obc, target_oloc, p.second.oid, 
+				    SnapContext(), false, NULL, p.first);
+		}
+	      }
+	    });
+	  } 
+	} 
 	result = _delete_oid(ctx, false, ctx->ignore_cache);
       }
       break;
