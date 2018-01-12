@@ -486,7 +486,7 @@
   dlopen() with -lceph-common https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=700899
   Memcheck:Leak
   match-leak-kinds: reachable
-  fun:calloc
+  fun:*alloc
   ...
   fun:_dlerror_run
   fun:dlopen@@GLIBC_2.2.5
