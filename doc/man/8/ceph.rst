@@ -1515,6 +1515,9 @@ Options
          If this option is used with these commands, it will help not to increase osd weight
          even the osd is under utilized.
 
+.. option:: --block
+
+	 block until completion (scrub and deep-scrub only)
 
 Availability
 ============
