@@ -3040,17 +3040,17 @@ public:
   /** Write/overwrite an object to the bucket storage. */
   virtual int put_system_obj_impl(rgw_raw_obj& obj, uint64_t size, ceph::real_time *mtime,
               map<std::string, bufferlist>& attrs, int flags,
-              bufferlist& data,
+              const bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
               ceph::real_time set_mtime /* 0 for don't set */);
 
-  virtual int put_system_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
-              off_t ofs, bool exclusive,
+  virtual int put_system_obj_data(void *ctx, rgw_raw_obj& obj,
+              const bufferlist& bl, off_t ofs, bool exclusive,
               RGWObjVersionTracker *objv_tracker = nullptr);
   int aio_put_obj_data(void *ctx, rgw_raw_obj& obj, bufferlist& bl,
                         off_t ofs, bool exclusive, void **handle);
 
-  int put_system_obj(void *ctx, rgw_raw_obj& obj, bufferlist& data, bool exclusive,
+  int put_system_obj(void *ctx, rgw_raw_obj& obj, const bufferlist& data, bool exclusive,
               ceph::real_time *mtime, map<std::string, bufferlist>& attrs, RGWObjVersionTracker *objv_tracker,
               ceph::real_time set_mtime) {
     int flags = PUT_OBJ_CREATE;
