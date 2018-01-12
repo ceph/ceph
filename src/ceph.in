@@ -23,6 +23,8 @@ from __future__ import print_function
 import codecs
 import os
 import sys
+import subprocess
+import time
 import platform
 
 try:
@@ -312,6 +314,9 @@ def parse_cmdargs(args=None, target=''):
     parser.add_argument('--connect-timeout', dest='cluster_timeout',
                         type=int,
                         help='set a timeout for connecting to the cluster')
+
+    parser.add_argument('--block', action='store_true',
+                        help='block until completion (scrub and deep-scrub only)')
 
     # returns a Namespace with the parsed args, and a list of all extras
     parsed_args, extras = parser.parse_known_args(args)
@@ -781,6 +786,40 @@ def daemonperf(childargs, sockpath):
 
     return 0
 
+def get_scrub_timestamps(childargs):
+    last_scrub_stamp = "last_" + childargs[1].replace('-', '_') + "_stamp"
+    results = dict()
+    scruball = False
+    if childargs[2] in ['all', 'any', '*']:
+        scruball = True
+    devnull = open(os.devnull, 'w')
+    out = subprocess.check_output(['ceph', 'pg', 'dump', '--format=json-pretty'],
+                                  stderr=devnull)
+    for stat in json.loads(out)['pg_stats']:
+        if scruball or stat['up_primary'] == int(childargs[2]):
+            scrub_tuple = (stat['up_primary'], stat[last_scrub_stamp])
+            results[stat['pgid']] = scrub_tuple
+    return results
+
+def check_scrub_stamps(waitdata, currdata):
+    for pg in waitdata.keys():
+       # Try to handle the case where a pg may not exist in current results
+       if pg in currdata and waitdata[pg][1] == currdata[pg][1]:
+           return False
+    return True
+
+def waitscrub(childargs, waitdata):
+    print(u'Waiting for {0} to complete...'.format(childargs[1]), file=sys.stdout)
+    currdata = get_scrub_timestamps(childargs)
+    while not check_scrub_stamps(waitdata, currdata):
+        time.sleep(3)
+        currdata = get_scrub_timestamps(childargs)
+    print(u'{0} completed'.format(childargs[1]), file=sys.stdout)
+
+def wait(childargs, waitdata):
+    if childargs[1] in ['scrub', 'deep-scrub']:
+        waitscrub(childargs, waitdata)
+
 
 def main():
     ceph_args = os.environ.get('CEPH_ARGS')
@@ -889,6 +928,15 @@ def main():
         print('"{0} tell" is deprecated; try "tell {0}.<id> <command> [options...]" instead (id can be "*") '.format(childargs[0]),
               file=sys.stderr)
         return 1
+
+    block = False
+    waitdata = dict()
+    if parsed_args.block:
+        if (len(childargs) >= 2 and
+                childargs[0] == 'osd' and
+                childargs[1] in ['deep-scrub', 'scrub']):
+            block = True
+            waitdata = get_scrub_timestamps(childargs)
 
     if parsed_args.help:
         # short default timeout for -h
@@ -1113,6 +1161,10 @@ def main():
                         raise e
 
         sys.stdout.flush()
+
+    # Block until command completion (currently scrub and deep_scrub only)
+    if block:
+        wait(childargs, waitdata)
 
     if parsed_args.output_file and parsed_args.output_file != '-':
         outf.close()
