@@ -535,8 +535,7 @@ public:
     bool encode_data_placement_vc = ! data_placement_vc.empty();
     encode(encode_data_placement_vc, bl);
     if (encode_data_placement_vc) {
-      encode((uint32_t)data_placement_vc.data_layout_type, bl);
-      encode(data_placement_vc.tail_data_pool, bl);
+      encode(data_placement_vc, bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -613,10 +612,7 @@ public:
       bool need_to_decode;
       decode(need_to_decode, bl);
       if (need_to_decode) {
-        uint32_t it;
-        decode(it, bl);
-        data_placement_vc.data_layout_type = (RGWBucketDataLayoutType)it;
-        decode(data_placement_vc.tail_data_pool, bl);
+        decode(data_placement_vc, bl);
       }
     }
 

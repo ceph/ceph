@@ -69,6 +69,8 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_TAIL_TAG    	RGW_ATTR_PREFIX "tail_tag"
 #define RGW_ATTR_SHADOW_OBJ    	RGW_ATTR_PREFIX "shadow_name"
 #define RGW_ATTR_MANIFEST    	RGW_ATTR_PREFIX "manifest"
+// dpvc is only used by multi-part meta object to save rgw_data_placment_volatile_config
+#define RGW_ATTR_DPVC    	RGW_ATTR_PREFIX "dpvc"
 #define RGW_ATTR_USER_MANIFEST  RGW_ATTR_PREFIX "user_manifest"
 #define RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION	RGW_ATTR_PREFIX RGW_AMZ_WEBSITE_REDIRECT_LOCATION
 #define RGW_ATTR_SLO_MANIFEST   RGW_ATTR_PREFIX "slo_manifest"
@@ -2158,10 +2160,25 @@ struct rgw_data_placement_volatile_config {
     return (data_layout_type == RGWDLType_SinglePool);
   }
 
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode((uint32_t)data_layout_type, bl);
+    encode(tail_data_pool, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::iterator& bl) {
+    DECODE_START(1, bl);
+    uint32_t it;
+    decode(it, bl);
+    data_layout_type = (RGWBucketDataLayoutType)it;
+    decode(tail_data_pool, bl);
+    DECODE_FINISH(bl);
+  }
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-
+WRITE_CLASS_ENCODER(rgw_data_placement_volatile_config)
 
 inline ostream& operator<<(ostream& out, const rgw_obj &o) {
   return out << o.bucket.name << ":" << o.get_oid();
