@@ -7422,6 +7422,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         oss << "osd." << osd;
         string name = oss.str();
 
+	if (newcrush.get_max_devices() < osd + 1) {
+	  newcrush.set_max_devices(osd + 1);
+	}
         string action;
         if (newcrush.item_exists(osd)) {
           action = "updating";
