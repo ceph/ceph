@@ -1416,6 +1416,11 @@ function test_mon_osd()
   #
   # osd scrub
   #
+
+  # blocking
+  ceph osd scrub 0 --block
+  ceph osd deep-scrub 0 --block
+
   # how do I tell when these are done?
   ceph osd scrub 0
   ceph osd deep-scrub 0
