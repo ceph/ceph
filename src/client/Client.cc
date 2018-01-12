@@ -3775,19 +3775,13 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
     return;
   }
 
-  Mutex flock("Client::_flush_range flock");
-  Cond cond;
-  bool safe = false;
-  Context *onflush = new C_SafeCond(&flock, &cond, &safe);
+  C_SaferCond onflush("Client::_flush_range flock");
   bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-				      offset, size, onflush);
+				      offset, size, &onflush);
   if (!ret) {
     // wait for flush
     client_lock.Unlock();
-    flock.Lock();
-    while (!safe)
-      cond.Wait(flock);
-    flock.Unlock();
+    onflush.wait();
     client_lock.Lock();
   }
 }
