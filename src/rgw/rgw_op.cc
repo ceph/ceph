@@ -3121,6 +3121,17 @@ int RGWPutObjProcessor_Multipart::prepare(RGWRados *store, string *oid_rand)
     mp.init(oid, upload_id, *oid_rand);
   }
 
+  map<string, bufferlist> xattrs;
+  string meta_oid;
+  meta_oid = mp.get_meta();
+  rgw_obj meta_obj;
+  meta_obj.init_ns(s->bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
+  meta_obj.set_in_extra_data(true);
+  get_obj_attrs(store, s, meta_obj, xattrs);
+  if (xattrs.find(RGW_ATTR_DPVC) != xattrs.end()) {
+    decode(data_placement_vc, xattrs[RGW_ATTR_DPVC]);
+  }
+
   part_num = s->info.args.get("partNumber");
   if (part_num.empty()) {
     ldout(s->cct, 10) << "part number is empty" << dendl;
@@ -5364,6 +5375,12 @@ void RGWInitMultipart::execute()
     obj_op.meta.owner = s->owner.get_id();
     obj_op.meta.category = RGW_OBJ_CATEGORY_MULTIMETA;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
+
+    rgw_data_placement_volatile_config dpvc;
+    store->get_zone_params().get_data_placement_volatile_config(s->bucket_info.placement_rule, &dpvc);
+    bufferlist bl;
+    encode(dpvc, bl);
+    attrs[RGW_ATTR_DPVC] = bl;
 
     op_ret = obj_op.write_meta(0, 0, attrs);
   } while (op_ret == -EEXIST);
