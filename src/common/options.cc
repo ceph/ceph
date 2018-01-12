@@ -2594,7 +2594,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_recovery_max_omap_entries_per_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(64000)
+    .set_default(8096)
     .set_description(""),
 
     Option("osd_copyfrom_max_chunk", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
