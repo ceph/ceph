@@ -1412,6 +1412,7 @@ protected:
   friend class PromoteManifestCallback;
   friend class C_CopyChunk;
   friend struct C_ManifestFlush;
+  friend struct RefCountCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
