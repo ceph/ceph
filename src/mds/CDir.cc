@@ -229,7 +229,7 @@ bool CDir::check_rstats(bool scrub)
 
   frag_info_t frag_info;
   nest_info_t nest_info;
-  for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+  for (auto i = items.begin(); i != items.end(); ++i) {
     if (i->second->last != CEPH_NOSNAP)
       continue;
     CDentry::linkage_t *dnl = i->second->get_linkage();
@@ -271,7 +271,7 @@ bool CDir::check_rstats(bool scrub)
 
   if (!good) {
     if (!scrub) {
-      for (map_t::iterator i = items.begin(); i != items.end(); ++i) {
+      for (auto i = items.begin(); i != items.end(); ++i) {
 	CDentry *dn = i->second;
 	if (dn->get_linkage()->is_primary()) {
 	  CInode *in = dn->get_linkage()->inode;
@@ -295,8 +295,7 @@ bool CDir::check_rstats(bool scrub)
 CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
-  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name,
-							inode->hash_dentry_name(name)));
+  auto iter = items.lower_bound(dentry_key_t(snap, name, inode->hash_dentry_name(name)));
   if (iter == items.end())
     return 0;
   if (iter->second->get_name() == name &&
@@ -310,8 +309,7 @@ CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 }
 
 CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
-  map_t::iterator p = items.find(dentry_key_t(last, name,
-					      inode->hash_dentry_name(name)));
+  auto p = items.find(dentry_key_t(last, name, inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
   return p->second;
@@ -692,7 +690,7 @@ bool CDir::is_in_bloom(std::string_view name)
 void CDir::remove_null_dentries() {
   dout(12) << __func__ << " " << *this << dendl;
 
-  CDir::map_t::iterator p = items.begin();
+  auto p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
     ++p;
@@ -720,7 +718,7 @@ void CDir::try_remove_dentries_for_stray()
   // clear dirty only when the directory was not snapshotted
   bool clear_dirty = !inode->snaprealm;
 
-  CDir::map_t::iterator p = items.begin();
+  auto p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
     ++p;
@@ -787,7 +785,7 @@ void CDir::purge_stale_snap_data(const set<snapid_t>& snaps)
 {
   dout(10) << __func__ << " " << snaps << dendl;
 
-  CDir::map_t::iterator p = items.begin();
+  auto p = items.begin();
   while (p != items.end()) {
     CDentry *dn = p->second;
     ++p;
@@ -882,8 +880,12 @@ void CDir::prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextB
     auth_pin(this);
 
   if (!waiting_on_dentry.empty()) {
-    for (auto p = waiting_on_dentry.begin(); p != waiting_on_dentry.end(); ++p)
-      dentry_waiters[p->first].swap(p->second);
+    for (const auto &p : waiting_on_dentry) {
+      auto &e = dentry_waiters[p.first];
+      for (const auto &waiter : p.second) {
+        e.push_back(waiter);
+      }
+    }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
   }
@@ -1007,7 +1009,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
   
   // repartition dentries
   while (!items.empty()) {
-    CDir::map_t::iterator p = items.begin();
+    auto p = items.begin();
     
     CDentry *dn = p->second;
     frag_t subfrag = inode->pick_dirfrag(dn->get_name());
@@ -1017,14 +1019,17 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     f->steal_dentry(dn);
   }
 
-  for (auto& p : dentry_waiters) {
+  for (const auto &p : dentry_waiters) {
     frag_t subfrag = inode->pick_dirfrag(p.first.name);
     int n = (subfrag.value() & (subfrag.mask() ^ frag.mask())) >> subfrag.mask_shift();
     CDir *f = subfrags[n];
 
     if (f->waiting_on_dentry.empty())
       f->get(PIN_DNWAITER);
-    f->waiting_on_dentry[p.first].swap(p.second);
+    auto &e = f->waiting_on_dentry[p.first];
+    for (const auto &waiter : p.second) {
+      e.push_back(waiter);
+    }
   }
 
   // FIXME: handle dirty old rstat
@@ -1109,8 +1114,11 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 
   if (!dentry_waiters.empty()) {
     get(PIN_DNWAITER);
-    for (auto& p : dentry_waiters) {
-      waiting_on_dentry[p.first].swap(p.second);
+    for (const auto &p : dentry_waiters) {
+      auto &e = waiting_on_dentry[p.first];
+      for (const auto &waiter : p.second) {
+        e.push_back(waiter);
+      }
     }
   }
 
@@ -1231,15 +1239,17 @@ void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t 
   
   string_snap_t lb(dname, first);
   string_snap_t ub(dname, last);
-  compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.lower_bound(lb);
-  while (p != waiting_on_dentry.end() &&
-	 !(ub < p->first)) {
+  auto it = waiting_on_dentry.lower_bound(lb);
+  while (it != waiting_on_dentry.end() &&
+	 !(ub < it->first)) {
     dout(10) << __func__ << " " << dname
 	     << " [" << first << "," << last << "] found waiter on snap "
-	     << p->first.snapid
+	     << it->first.snapid
 	     << " on " << *this << dendl;
-    ls.splice(ls.end(), p->second);
-    waiting_on_dentry.erase(p++);
+    for (const auto &waiter : it->second) {
+      ls.push_back(waiter);
+    }
+    waiting_on_dentry.erase(it++);
   }
 
   if (waiting_on_dentry.empty())
@@ -1250,10 +1260,11 @@ void CDir::take_sub_waiting(list<MDSInternalContextBase*>& ls)
 {
   dout(10) << __func__ << dendl;
   if (!waiting_on_dentry.empty()) {
-    for (compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin();
-	 p != waiting_on_dentry.end();
-	 ++p) 
-      ls.splice(ls.end(), p->second);
+    for (const auto &p : waiting_on_dentry) {
+      for (const auto &waiter : p.second) {
+        ls.push_back(waiter);
+      }
+    }
     waiting_on_dentry.clear();
     put(PIN_DNWAITER);
   }
@@ -1298,13 +1309,14 @@ void CDir::take_waiting(uint64_t mask, list<MDSInternalContextBase*>& ls)
 {
   if ((mask & WAIT_DENTRY) && !waiting_on_dentry.empty()) {
     // take all dentry waiters
-    while (!waiting_on_dentry.empty()) {
-      compact_map<string_snap_t, list<MDSInternalContextBase*> >::iterator p = waiting_on_dentry.begin();
-      dout(10) << "take_waiting dentry " << p->first.name
-	       << " snap " << p->first.snapid << " on " << *this << dendl;
-      ls.splice(ls.end(), p->second);
-      waiting_on_dentry.erase(p);
+    for (const auto &p : waiting_on_dentry) {
+      dout(10) << "take_waiting dentry " << p.first.name
+	       << " snap " << p.first.snapid << " on " << *this << dendl;
+      for (const auto &waiter : p.second) {
+        ls.push_back(waiter);
+      }
     }
+    waiting_on_dentry.clear();
     put(PIN_DNWAITER);
   }
   
@@ -1332,31 +1344,28 @@ void CDir::finish_waiting(uint64_t mask, int result)
 fnode_t *CDir::project_fnode()
 {
   assert(get_version() != 0);
-  fnode_t *p = new fnode_t;
-  *p = *get_projected_fnode();
-  projected_fnode.push_back(p);
+  auto &p = projected_fnode.emplace_back(*get_projected_fnode());
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
-    p->localized_scrub_stamp = scrub_infop->last_local.time;
-    p->localized_scrub_version = scrub_infop->last_local.version;
-    p->recursive_scrub_stamp = scrub_infop->last_recursive.time;
-    p->recursive_scrub_version = scrub_infop->last_recursive.version;
+    p.localized_scrub_stamp = scrub_infop->last_local.time;
+    p.localized_scrub_version = scrub_infop->last_local.version;
+    p.recursive_scrub_stamp = scrub_infop->last_recursive.time;
+    p.recursive_scrub_version = scrub_infop->last_recursive.version;
     scrub_infop->last_scrub_dirty = false;
     scrub_maybe_delete_info();
   }
 
-  dout(10) << __func__ <<  " " << p << dendl;
-  return p;
+  dout(10) << __func__ <<  " " << &p << dendl;
+  return &p;
 }
 
 void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
 {
   assert(!projected_fnode.empty());
-  dout(15) << __func__ << " " << projected_fnode.front()
-	   << " v" << projected_fnode.front()->version << dendl;
-  fnode = *projected_fnode.front();
+  auto &front = projected_fnode.front();
+  dout(15) << __func__ << " " << &front << " v" << front.version << dendl;
+  fnode = front;
   _mark_dirty(ls);
-  delete projected_fnode.front();
   projected_fnode.pop_front();
 }
 
@@ -1495,7 +1504,7 @@ void CDir::fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignor
   }
 
   if (c) add_waiter(WAIT_COMPLETE, c);
-  if (!want_dn.empty()) wanted_items.insert(std::string(want_dn));
+  if (!want_dn.empty()) wanted_items.insert(mempool::mds_co::string(want_dn));
   
   // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
@@ -1604,9 +1613,9 @@ void CDir::_omap_fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& 
   } else {
     assert(c);
     std::set<std::string> str_keys;
-    for (auto p = keys.begin(); p != keys.end(); ++p) {
+    for (auto p : keys) {
       string str;
-      p->encode(str);
+      p.encode(str);
       str_keys.insert(str);
     }
     rd.omap_get_vals_by_keys(str_keys, &fin->omap, &fin->ret2);
@@ -1698,7 +1707,7 @@ CDentry *CDir::_load_dentry(
 
     if (stale) {
       if (!dn) {
-        stale_items.insert(std::string(key));
+        stale_items.insert(mempool::mds_co::string(key));
         *force_dirty = true;
       }
       return dn;
@@ -1733,7 +1742,7 @@ CDentry *CDir::_load_dentry(
     
     if (stale) {
       if (!dn) {
-        stale_items.insert(std::string(key));
+        stale_items.insert(mempool::mds_co::string(key));
         *force_dirty = true;
       }
       return dn;
@@ -1927,7 +1936,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
     }
 
-    if (dn && (wanted_items.count(dname) > 0 || !complete)) {
+    if (dn && (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete)) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
     }
@@ -2120,11 +2129,9 @@ void CDir::_omap_commit(int op_prio)
   object_locator_t oloc(cache->mds->mdsmap->get_metadata_pool());
 
   if (!stale_items.empty()) {
-    for (compact_set<string>::iterator p = stale_items.begin();
-	 p != stale_items.end();
-	 ++p) {
-      to_remove.insert(*p);
-      write_size += (*p).length();
+    for (const auto &p : stale_items) {
+      to_remove.insert(std::string(p));
+      write_size += p.length();
     }
     stale_items.clear();
   }
@@ -2399,18 +2406,21 @@ void CDir::_committed(int r, version_t v)
   // finishers?
   bool were_waiters = !waiting_for_commit.empty();
   
-  compact_map<version_t, list<MDSInternalContextBase*> >::iterator p = waiting_for_commit.begin();
-  while (p != waiting_for_commit.end()) {
-    compact_map<version_t, list<MDSInternalContextBase*> >::iterator n = p;
-    ++n;
-    if (p->first > committed_version) {
-      dout(10) << " there are waiters for " << p->first << ", committing again" << dendl;
-      _commit(p->first, -1);
+  auto it = waiting_for_commit.begin();
+  while (it != waiting_for_commit.end()) {
+    auto _it = it;
+    ++_it;
+    if (it->first > committed_version) {
+      dout(10) << " there are waiters for " << it->first << ", committing again" << dendl;
+      _commit(it->first, -1);
       break;
     }
-    cache->mds->queue_waiters(p->second);
-    waiting_for_commit.erase(p);
-    p = n;
+    std::list<MDSInternalContextBase*> t;
+    for (const auto &waiter : it->second)
+      t.push_back(waiter);
+    cache->mds->queue_waiters(t);
+    waiting_for_commit.erase(it);
+    it = _it;
   } 
 
   // try drop dentries in this dirfrag if it's about to be purged
@@ -2722,7 +2732,7 @@ void CDir::verify_fragstat()
   frag_info_t c;
   memset(&c, 0, sizeof(c));
 
-  for (map_t::iterator it = items.begin();
+  for (auto it = items.begin();
        it != items.end();
        ++it) {
     CDentry *dn = it->second;
@@ -3112,7 +3122,7 @@ void CDir::scrub_initialize(const ScrubHeaderRefConst& header)
   scrub_infop->others_scrubbing.clear();
   scrub_infop->others_scrubbed.clear();
 
-  for (map_t::iterator i = items.begin();
+  for (auto i = items.begin();
       i != items.end();
       ++i) {
     // TODO: handle snapshot scrubbing
@@ -3150,7 +3160,7 @@ void CDir::scrub_finished()
   scrub_infop->last_scrub_dirty = true;
 }
 
-int CDir::_next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
+int CDir::_next_dentry_on_set(dentry_key_set &dns, bool missing_okay,
                               MDSInternalContext *cb, CDentry **dnout)
 {
   dentry_key_t dnkey;

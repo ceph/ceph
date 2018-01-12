@@ -24,17 +24,15 @@
 #include <string>
 #include <string_view>
 
-#include "include/counter.h"
-#include "include/types.h"
-#include "include/buffer_fwd.h"
+#include "common/DecayCounter.h"
 #include "common/bloom_filter.hpp"
 #include "common/config.h"
-#include "common/DecayCounter.h"
-
-#include "MDSCacheObject.h"
-
+#include "include/buffer_fwd.h"
+#include "include/counter.h"
+#include "include/types.h"
 
 #include "CInode.h"
+#include "MDSCacheObject.h"
 
 class CDentry;
 class MDCache;
@@ -159,7 +157,7 @@ public:
 
   fnode_t fnode;
   snapid_t first;
-  compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
+  mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
   elist<CInode*> dirty_rstat_inodes;     
@@ -171,7 +169,7 @@ public:
 
 protected:
   version_t projected_version;
-  std::list<fnode_t*> projected_fnode;
+  mempool::mds_co::list<fnode_t> projected_fnode;
 
 public:
   elist<CDentry*> dirty_dentries;
@@ -189,14 +187,14 @@ public:
     if (projected_fnode.empty())
       return &fnode;
     else
-      return projected_fnode.back();
+      return &projected_fnode.back();
   }
 
   fnode_t *get_projected_fnode() {
     if (projected_fnode.empty())
       return &fnode;
     else
-      return projected_fnode.back();
+      return &projected_fnode.back();
   }
   fnode_t *project_fnode();
 
@@ -221,12 +219,13 @@ private:
   void log_mark_dirty();
 
 public:
-  typedef std::map<dentry_key_t, CDentry*> map_t;
+  typedef mempool::mds_co::map<dentry_key_t, CDentry*> dentry_key_map;
+  typedef mempool::mds_co::set<dentry_key_t> dentry_key_set;
 
   class scrub_info_t {
   public:
     /// inodes we contain with dirty scrub stamps
-    map<dentry_key_t,CInode*> dirty_scrub_stamps; // TODO: make use of this!
+    dentry_key_map dirty_scrub_stamps; // TODO: make use of this!
     struct scrub_stamps {
       version_t version;
       utime_t time;
@@ -247,12 +246,12 @@ public:
     bool pending_scrub_error;
 
     /// these are lists of children in each stage of scrubbing
-    set<dentry_key_t> directories_to_scrub;
-    set<dentry_key_t> directories_scrubbing;
-    set<dentry_key_t> directories_scrubbed;
-    set<dentry_key_t> others_to_scrub;
-    set<dentry_key_t> others_scrubbing;
-    set<dentry_key_t> others_scrubbed;
+    dentry_key_set directories_to_scrub;
+    dentry_key_set directories_scrubbing;
+    dentry_key_set directories_scrubbed;
+    dentry_key_set others_to_scrub;
+    dentry_key_set others_scrubbing;
+    dentry_key_set others_scrubbed;
 
     ScrubHeaderRefConst header;
 
@@ -290,7 +289,7 @@ public:
    * list will be filled with all CDentry * which have been returned
    * from scrub_dentry_next() but not sent back via scrub_dentry_finished().
    */
-  void scrub_dentries_scrubbing(list<CDentry*> *out_dentries);
+  void scrub_dentries_scrubbing(std::list<CDentry*> *out_dentries);
   /**
    * Report to the CDir that a CDentry has been scrubbed. Call this
    * for every CDentry returned from scrub_dentry_next().
@@ -321,15 +320,15 @@ private:
    * Check the given set (presumably one of those in scrub_info_t) for the
    * next key to scrub and look it up (or fail!).
    */
-  int _next_dentry_on_set(set<dentry_key_t>& dns, bool missing_okay,
+  int _next_dentry_on_set(dentry_key_set &dns, bool missing_okay,
                           MDSInternalContext *cb, CDentry **dnout);
 
 
 protected:
-  std::unique_ptr<scrub_info_t> scrub_infop;
+  std::unique_ptr<scrub_info_t> scrub_infop; // FIXME not in mempool
 
   // contents of this directory
-  map_t items;       // non-null AND null
+  dentry_key_map items;       // non-null AND null
   unsigned num_head_items;
   unsigned num_head_null;
   unsigned num_snap_items;
@@ -341,7 +340,7 @@ protected:
   version_t committing_version;
   version_t committed_version;
 
-  compact_set<string> stale_items;
+  mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 
   // lock nesting, freeze
   static int num_frozen_trees;
@@ -352,7 +351,7 @@ protected:
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
-  compact_set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
+  mempool::mds_co::compact_set<__s32> dir_rep_by;      // if dir_rep == REP_LIST
 
   // popularity
   dirfrag_load_vec_t pop_me;
@@ -384,7 +383,7 @@ protected:
   friend class C_IO_Dir_OMAP_FetchedMore;
   friend class C_IO_Dir_Committed;
 
-  std::unique_ptr<bloom_filter> bloom;
+  std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
   /* If you set up the bloom filter, you must keep it accurate!
    * It's deleted when you mark_complete() and is deliberately not serialized.*/
 
@@ -408,9 +407,9 @@ protected:
   const CInode *get_inode() const { return inode; }
   CDir *get_parent_dir() { return inode->get_parent_dir(); }
 
-  map_t::iterator begin() { return items.begin(); }
-  map_t::iterator end() { return items.end(); }
-  map_t::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
+  dentry_key_map::iterator begin() { return items.begin(); }
+  dentry_key_map::iterator end() { return items.end(); }
+  dentry_key_map::iterator lower_bound(dentry_key_t key) { return items.lower_bound(key); }
 
   unsigned get_num_head_items() const { return num_head_items; }
   unsigned get_num_head_null() const { return num_head_null; }
@@ -471,8 +470,8 @@ public:
 
 
 public:
-  void split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
-  void merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
+  void split(int bits, std::list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool replay);
+  void merge(std::list<CDir*>& subs, std::list<MDSInternalContextBase*>& waiters, bool replay);
 
   bool should_split() const {
     return (int)get_frag_size() > g_conf->mds_bal_split_size;
@@ -486,7 +485,7 @@ private:
   void prepare_new_fragment(bool replay);
   void prepare_old_fragment(map<string_snap_t, std::list<MDSInternalContextBase*> >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool replay);
+  void finish_old_fragment(std::list<MDSInternalContextBase*>& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -594,7 +593,7 @@ private:
   void fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
-  compact_set<string> wanted_items;
+  mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
 
   void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
@@ -608,7 +607,7 @@ protected:
       int pos,
       const std::set<snapid_t> *snaps,
       bool *force_dirty,
-      list<CInode*> *undef_inodes);
+      std::list<CInode*> *undef_inodes);
 
   /**
    * Mark this fragment as BADFRAG (common part of go_bad and go_bad_dentry)
@@ -629,7 +628,7 @@ protected:
 		     bool complete, int r);
 
   // -- commit --
-  compact_map<version_t, std::list<MDSInternalContextBase*> > waiting_for_commit;
+  mempool::mds_co::compact_map<version_t, mempool::mds_co::list<MDSInternalContextBase*> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
@@ -665,7 +664,7 @@ public:
 
   // -- waiters --
 protected:
-  compact_map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
+  mempool::mds_co::compact_map< string_snap_t, mempool::mds_co::list<MDSInternalContextBase*> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 public:
   bool is_waiting_for_dentry(std::string_view dname, snapid_t snap) {

@@ -680,10 +680,8 @@ void CInode::close_dirfrag(frag_t fg)
   }
   
   // dump any remaining dentries, for debugging purposes
-  for (CDir::map_t::iterator p = dir->items.begin();
-       p != dir->items.end();
-       ++p) 
-    dout(14) << __func__ << " LEFTOVER dn " << *p->second << dendl;
+  for (const auto &p : dir->items)
+    dout(14) << __func__ << " LEFTOVER dn " << *p.second << dendl;
 
   assert(dir->get_num_ref() == 0);
   delete dir;
@@ -1770,7 +1768,7 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
 	snapid_t fgfirst;
 	nest_info_t rstat;
 	nest_info_t accounted_rstat;
-	compact_map<snapid_t,old_rstat_t> dirty_old_rstat;
+	decltype(CDir::dirty_old_rstat) dirty_old_rstat;
 	decode(fg, p);
 	decode(fgfirst, p);
 	decode(rstat, p);
@@ -2211,11 +2209,10 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
 	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
 					       dir->first, CEPH_NOSNAP, this, true);
-	  for (compact_map<snapid_t,old_rstat_t>::iterator q = dir->dirty_old_rstat.begin();
-	       q != dir->dirty_old_rstat.end();
-	       ++q)
-	    mdcache->project_rstat_frag_to_inode(q->second.rstat, q->second.accounted_rstat,
-						 q->second.first, q->first, this, true);
+	  for (auto &p : dir->dirty_old_rstat) {
+	    mdcache->project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat,
+						 p.second.first, p.first, this, true);
+          }
 	  if (update)  // dir contents not valid if frozen or non-auth
 	    dir->check_rstats();
 	} else {
