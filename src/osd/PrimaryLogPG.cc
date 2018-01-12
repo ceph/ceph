@@ -9280,7 +9280,9 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   OpContextUPtr tctx =  simple_opc_create(obc);
   tctx->at_version = get_next_version();
 
-  ++tctx->delta_stats.num_objects;
+  if (!obc->obs.oi.has_manifest()) {
+    ++tctx->delta_stats.num_objects;
+  }
   if (soid.snap < CEPH_NOSNAP)
     ++tctx->delta_stats.num_object_clones;
   tctx->new_obs.exists = true;
