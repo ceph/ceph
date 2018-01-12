@@ -11507,9 +11507,7 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction *t)
   PGLogEntryHandler rollbacker{this, t};
   pg_log.roll_forward(&rollbacker);
 
-  if (!deleting) {
-    on_shutdown();
-  }
+  on_shutdown();
 }
 
 void PrimaryLogPG::clear_async_reads()
