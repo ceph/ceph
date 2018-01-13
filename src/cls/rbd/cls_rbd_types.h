@@ -219,8 +219,7 @@ struct GroupSpec {
 WRITE_CLASS_ENCODER(GroupSpec);
 
 enum SnapshotNamespaceType {
-  SNAPSHOT_NAMESPACE_TYPE_USER = 0,
-  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1
+  SNAPSHOT_NAMESPACE_TYPE_USER = 0
 };
 
 struct UserSnapshotNamespace {
@@ -241,36 +240,6 @@ struct UserSnapshotNamespace {
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 
-struct GroupSnapshotNamespace {
-  static const uint32_t SNAPSHOT_NAMESPACE_TYPE = SNAPSHOT_NAMESPACE_TYPE_GROUP;
-
-  GroupSnapshotNamespace() {}
-
-  GroupSnapshotNamespace(int64_t _group_pool,
-			 const string &_group_id,
-			 const snapid_t &_snapshot_id) :group_pool(_group_pool),
-							group_id(_group_id),
-							snapshot_id(_snapshot_id) {}
-
-  int64_t group_pool;
-  string group_id;
-  snapid_t snapshot_id;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& it);
-
-  void dump(Formatter *f) const;
-
-  inline bool operator==(const GroupSnapshotNamespace& gsn) const {
-    return group_pool == gsn.group_pool &&
-	   group_id == gsn.group_id &&
-	   snapshot_id == gsn.snapshot_id;
-  }
-
-};
-
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
-
 struct UnknownSnapshotNamespace {
   static const uint32_t SNAPSHOT_NAMESPACE_TYPE = static_cast<uint32_t>(-1);
 
@@ -286,7 +255,7 @@ struct UnknownSnapshotNamespace {
 
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
-typedef boost::variant<UserSnapshotNamespace, GroupSnapshotNamespace, UnknownSnapshotNamespace> SnapshotNamespace;
+typedef boost::variant<UserSnapshotNamespace, UnknownSnapshotNamespace> SnapshotNamespace;
 
 
 struct SnapshotNamespaceOnDisk {
