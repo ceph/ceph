@@ -11,6 +11,30 @@
 #  Boost_USE_MULTITHREADED : boolean (default: OFF)
 #  BOOST_J: integer (defanult 1)
 
+function(check_boost_version source_dir expected_version)
+  set(version_hpp "${source_dir}/boost/version.hpp")
+  if(NOT EXISTS ${version_hpp})
+    message(FATAL_ERROR "${version_hpp} not found. Please either \"rm -rf ${source_dir}\" "
+      "so I can download Boost v${expected_version} for you, or make sure ${source_dir} "
+      "contains a full copy of Boost v${expected_version}.")
+  endif()
+  file(STRINGS "${version_hpp}" BOOST_VERSION_LINE
+    REGEX "^#define[ \t]+BOOST_VERSION[ \t]+[0-9]+$")
+  string(REGEX REPLACE "^#define[ \t]+BOOST_VERSION[ \t]+([0-9]+)$"
+    "\\1" BOOST_VERSION "${BOOST_VERSION_LINE}")
+  math(EXPR BOOST_VERSION_PATCH "${BOOST_VERSION} % 100")
+  math(EXPR BOOST_VERSION_MINOR "${BOOST_VERSION} / 100 % 1000")
+  math(EXPR BOOST_VERSION_MAJOR "${BOOST_VERSION} / 100000")
+  set(version "${BOOST_VERSION_MAJOR}.${BOOST_VERSION_MINOR}.${BOOST_VERSION_PATCH}")
+  if(version VERSION_LESS expected_version)
+    message(FATAL_ERROR "Boost v${version} in ${source_dir} is not new enough. "
+      "Please either \"rm -rf ${source_dir}\" so I can download Boost v${expected_version} "
+      "for you, or make sure ${source_dir} contains a copy of Boost v${expected_version}.")
+  else()
+    message(STATUS "boost (${version} >= ${expected_version}) already in ${source_dir}")
+  endif()
+endfunction()
+
 function(do_build_boost version)
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
   set(boost_features "variant=release")
@@ -66,7 +90,7 @@ function(do_build_boost version)
     ${b2} install)
   set(boost_root_dir "${CMAKE_BINARY_DIR}/boost")
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
-    message(STATUS "boost already in src")
+    check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
       SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
   elseif(version VERSION_GREATER 1.66)
@@ -110,7 +134,7 @@ function(do_build_boost version)
 endfunction()
 
 macro(build_boost version)
-  do_build_boost(version ${ARGN})
+  do_build_boost(${version} ${ARGN})
   ExternalProject_Get_Property(Boost install_dir)
   set(Boost_INCLUDE_DIRS ${install_dir}/include)
   set(Boost_INCLUDE_DIR ${install_dir}/include)
