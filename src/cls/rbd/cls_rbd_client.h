@@ -89,6 +89,14 @@ namespace librbd {
 		  vector<uint64_t> *snap_flags);
     void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
                    uint64_t flags, uint64_t mask);
+    void op_features_get_start(librados::ObjectReadOperation *op);
+    int op_features_get_finish(bufferlist::iterator *it, uint64_t *op_features);
+    int op_features_get(librados::IoCtx *ioctx, const std::string &oid,
+		        uint64_t *op_features);
+    void op_features_set(librados::ObjectWriteOperation *op,
+                         uint64_t op_features, uint64_t mask);
+    int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t op_features, uint64_t mask);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,

@@ -26,6 +26,7 @@ const std::map<uint64_t, std::string> ImageFeatures::FEATURE_MAPPING = {
   {RBD_FEATURE_DEEP_FLATTEN, RBD_FEATURE_NAME_DEEP_FLATTEN},
   {RBD_FEATURE_JOURNALING, RBD_FEATURE_NAME_JOURNALING},
   {RBD_FEATURE_DATA_POOL, RBD_FEATURE_NAME_DATA_POOL},
+  {RBD_FEATURE_OPERATIONS, RBD_FEATURE_NAME_OPERATIONS},
 };
 
 Format::Formatter Format::create_formatter(bool pretty) const {
@@ -366,6 +367,14 @@ std::string get_short_features_help(bool append_suffix) {
   bool first_feature = true;
   oss << "[";
   for (auto &pair : ImageFeatures::FEATURE_MAPPING) {
+    if ((pair.first & RBD_FEATURES_IMPLICIT_ENABLE) != 0ULL) {
+      // hide implicitly enabled features from list
+      continue;
+    } else if (!append_suffix && (pair.first & RBD_FEATURES_MUTABLE) == 0ULL) {
+      // hide non-mutable features for the 'rbd feature XYZ' command
+      continue;
+    }
+
     if (!first_feature) {
       oss << ", ";
     }

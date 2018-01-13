@@ -90,6 +90,12 @@ template <typename I>
 void CloneRequest<I>::send_validate_parent() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
+  if (m_p_imctx->operations_disabled) {
+    lderr(m_cct) << "image operations disabled due to unsupported op features" << dendl;
+    complete(-EROFS);
+    return;
+  }
+
   if (m_p_imctx->snap_id == CEPH_NOSNAP) {
     lderr(m_cct) << "image to be cloned must be a snapshot" << dendl;
     complete(-EINVAL);
