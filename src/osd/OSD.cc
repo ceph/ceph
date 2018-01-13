@@ -8229,37 +8229,21 @@ PG::RecoveryCtx OSD::create_context()
   return rctx;
 }
 
-struct C_OpenPGs : public Context {
-  set<PGRef> pgs;
-  ObjectStore *store;
-  OSD *osd;
-  C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
-    pgs.swap(p);
-  }
-  void finish(int r) override {
-    RWLock::RLocker l(osd->pg_map_lock);
-    for (auto p : pgs) {
-      if (osd->pg_map.count(p->get_pgid())) {
-        p->ch = store->open_collection(p->coll);
-        assert(p->ch);
-      }
-    }
-  }
-};
-
 void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
-    if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
-    }
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL,
       TrackedOpRef(), handle);
-    delete (ctx.transaction);
     assert(tr == 0);
+    delete (ctx.transaction);
+    for (auto pg : ctx.created_pgs) {
+      pg->ch = store->open_collection(pg->coll);
+      assert(pg->ch);
+    }
+    ctx.created_pgs.clear();
     ctx.transaction = new ObjectStore::Transaction;
     ctx.on_applied = new C_Contexts(cct);
     ctx.on_safe = new C_Contexts(cct);
@@ -8287,13 +8271,15 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     delete ctx.on_safe;
     assert(ctx.created_pgs.empty());
   } else {
-    if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
-    }
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
       handle);
+    for (auto pg : ctx.created_pgs) {
+      pg->ch = store->open_collection(pg->coll);
+      assert(pg->ch);
+    }
+    ctx.created_pgs.clear();
     delete (ctx.transaction);
     assert(tr == 0);
   }
