@@ -567,7 +567,7 @@ void Mgr::handle_fs_map(MFSMap* m)
       c->set_default("addr", stringify(info.addr));
 
       std::ostringstream cmd;
-      cmd << "{\"prefix\": \"mds metadata\", \"role\": \""
+      cmd << "{\"prefix\": \"mds metadata\", \"who\": \""
           << info.name << "\"}";
       monc->start_mon_command(
           {cmd.str()},
