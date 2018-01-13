@@ -436,7 +436,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
       } else if (key.first == "mds") {
         c->set_default("addr", stringify(m->get_source_addr()));
-        oss << "{\"prefix\": \"mds metadata\", \"role\": \""
+        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
             << key.second << "\"}";
  
       } else {
