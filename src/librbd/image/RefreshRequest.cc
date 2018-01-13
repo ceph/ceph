@@ -403,6 +403,49 @@ Context *RefreshRequest<I>::handle_v2_get_flags(int *result) {
     return m_on_finish;
   }
 
+  send_v2_get_op_features();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_op_features() {
+  if ((m_features & RBD_FEATURE_OPERATIONS) == 0LL) {
+    send_v2_get_group();
+    return;
+  }
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::op_features_get_start(&op);
+
+  librados::AioCompletion *comp = create_rados_callback<
+    RefreshRequest<I>, &RefreshRequest<I>::handle_v2_get_op_features>(this);
+  m_out_bl.clear();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
+                                         &m_out_bl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_op_features(int *result) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": "
+                 << "r=" << *result << dendl;
+
+  // -EOPNOTSUPP handler not required since feature bit implies OSD
+  // supports the method
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
+    cls_client::op_features_get_finish(&it, &m_op_features);
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve op features: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
   send_v2_get_group();
   return nullptr;
 }
@@ -1079,11 +1122,16 @@ void RefreshRequest<I>::apply() {
       m_image_ctx.order = m_order;
       m_image_ctx.features = 0;
       m_image_ctx.flags = 0;
+      m_image_ctx.op_features = 0;
+      m_image_ctx.operations_disabled = false;
       m_image_ctx.object_prefix = std::move(m_object_prefix);
       m_image_ctx.init_layout();
     } else {
       m_image_ctx.features = m_features;
       m_image_ctx.flags = m_flags;
+      m_image_ctx.op_features = m_op_features;
+      m_image_ctx.operations_disabled = (
+        (m_op_features & ~RBD_OPERATION_FEATURES_ALL) != 0ULL);
       m_image_ctx.group_spec = m_group_spec;
       m_image_ctx.parent_md = m_parent_md;
     }

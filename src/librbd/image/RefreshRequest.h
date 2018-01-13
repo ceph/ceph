@@ -57,6 +57,9 @@ private:
    *                v                                         |
    *            V2_GET_FLAGS                                  |
    *                |                                         |
+   *                v (skip if not enabled)                   |
+   *            V2_GET_OP_FEATURES                            |
+   *                |                                         |
    *                v                                         |
    *            V2_GET_GROUP                                  |
    *                |                                         |
@@ -130,6 +133,7 @@ private:
   uint64_t m_features = 0;
   uint64_t m_incompatible_features = 0;
   uint64_t m_flags = 0;
+  uint64_t m_op_features = 0;
 
   std::string m_last_metadata_key;
   std::map<std::string, bufferlist> m_metadata;
@@ -175,6 +179,9 @@ private:
 
   void send_v2_get_flags();
   Context *handle_v2_get_flags(int *result);
+
+  void send_v2_get_op_features();
+  Context *handle_v2_get_op_features(int *result);
 
   void send_v2_get_group();
   Context *handle_v2_get_group(int *result);
