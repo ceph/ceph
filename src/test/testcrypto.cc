@@ -26,10 +26,10 @@ int main(int argc, char *argv[])
   enc_in.append(msg, strlen(msg));
 
   bufferlist enc_out;
-  std::string error;
-  if (key.encrypt(g_ceph_context, enc_in, enc_out, &error) < 0) {
-    assert(!error.empty());
-    dout(0) << "couldn't encode! error " << error << dendl;
+  try {
+    key.encrypt(g_ceph_context, enc_in, enc_out);
+  } catch (const std::exception& e) {
+    dout(0) << "couldn't encode! error " << e.what() << dendl;
     exit(1);
   }
 
@@ -44,9 +44,10 @@ int main(int argc, char *argv[])
 
   dec_in = enc_out;
 
-  if (key.decrypt(g_ceph_context, dec_in, dec_out, &error) < 0) {
-    assert(!error.empty());
-    dout(0) << "couldn't decode! error " << error << dendl;
+  try {
+    key.decrypt(g_ceph_context, dec_in, dec_out);
+  } catch (const std::exception& e) {
+    dout(0) << "couldn't decode! error " << e.what() << dendl;
     exit(1);
   }
 

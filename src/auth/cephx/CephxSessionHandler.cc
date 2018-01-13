@@ -49,7 +49,9 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
   bl_plaintext.append(buffer::create_static(sizeof(sigblock), (char*)&sigblock));
 
   bufferlist bl_ciphertext;
-  if (key.encrypt(cct, bl_plaintext, bl_ciphertext, NULL) < 0) {
+  try {
+    key.encrypt(cct, bl_plaintext, bl_ciphertext);
+  } catch (const std::exception& e) {
     lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
     return -1;
   }

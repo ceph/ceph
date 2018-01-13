@@ -55,11 +55,11 @@ int CephxClientHandler::build_request(bufferlist& bl) const
 
     CephXAuthenticate req;
     req.client_challenge = ceph::util::generate_random_number<uint64_t>();
-    std::string error;
-    cephx_calc_client_server_challenge(cct, secret, server_challenge,
-				       req.client_challenge, &req.key, error);
-    if (!error.empty()) {
-      ldout(cct, 20) << "cephx_calc_client_server_challenge error: " << error << dendl;
+    try {
+      cephx_calc_client_server_challenge(cct, secret, server_challenge,
+                                         req.client_challenge, &req.key);
+    } catch (const std::exception& e) {
+      ldout(cct, 20) << "cephx_calc_client_server_challenge error: " << e.what() << dendl;
       return -EIO;
     }
 
@@ -181,14 +181,14 @@ int CephxClientHandler::handle_response(int ret, bufferlist::iterator& indata)
           ldout(cct, 0) << "key not found for " << cct->_conf->name << dendl;
           return -ENOENT;
         }
-	std::string error;
-	if (decode_decrypt(cct, secrets, secret_key, indata, error)) {
+	try {
+          decode_decrypt(cct, secrets, secret_key, indata);
+        } catch (const std::exception& e) {
 	  ldout(cct, 0) << "could not set rotating key: decode_decrypt failed. error:"
-	    << error << dendl;
+	    << e.what() << dendl;
 	  return -EINVAL;
-	} else {
-	  rotating_secrets->set_secrets(std::move(secrets));
 	}
+	rotating_secrets->set_secrets(std::move(secrets));
       }
     }
     break;

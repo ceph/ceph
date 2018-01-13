@@ -399,10 +399,11 @@ bool KeyServer::get_rotating_encrypted(const EntityName& name,
 
   RotatingSecrets secrets = rotate_iter->second;
 
-  std::string error;
-  if (encode_encrypt(cct, secrets, specific_key, enc_bl, error))
+  try {
+    encode_encrypt(cct, secrets, specific_key, enc_bl);
+  } catch (...) {
     return false;
-
+  }
   return true;
 }
 

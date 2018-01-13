@@ -25,15 +25,14 @@
 
 
 void cephx_calc_client_server_challenge(CephContext *cct, ceph::crypto::Key& secret, uint64_t server_challenge, 
-		  uint64_t client_challenge, uint64_t *key, std::string &error)
+		  uint64_t client_challenge, uint64_t *key)
 {
   CephXChallengeBlob b;
   b.server_challenge = server_challenge;
   b.client_challenge = client_challenge;
 
   bufferlist enc;
-  if (encode_encrypt(cct, b, secret, enc, error))
-    return;
+  encode_encrypt(cct, b, secret, enc); // may throw
 
   uint64_t k = 0;
   const uint64_t *p = (const uint64_t *)enc.c_str();
@@ -59,14 +58,13 @@ bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& inf
 	   << " secret_id " << info.secret_id
 	   << " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
   blob.secret_id = info.secret_id;
-  std::string error;
-  if (!info.service_secret.get_secret().length())
-    error = "invalid key";  // Bad key?
-  else
-    encode_encrypt_enc_bl(cct, ticket_info, info.service_secret, blob.blob, error);
-  if (!error.empty()) {
+  try {
+    if (!info.service_secret.get_secret().length())
+      throw std::invalid_argument("invalid key");
+    encode_encrypt_enc_bl(cct, ticket_info, info.service_secret, blob.blob);
+  } catch (const std::exception& e) {
     ldout(cct, -1) << "cephx_build_service_ticket_blob failed with error "
-	  << error << dendl;
+	  << e.what() << dendl;
     return false;
   }
   return true;
@@ -107,9 +105,10 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
     CephXServiceTicket msg_a;
     msg_a.session_key = info.session_key;
     msg_a.validity = info.validity;
-    std::string error;
-    if (encode_encrypt(cct, msg_a, principal_secret, reply, error)) {
-      ldout(cct, -1) << "error encoding encrypted: " << error << dendl;
+    try {
+      encode_encrypt(cct, msg_a, principal_secret, reply);
+    } catch (const std::exception& e) {
+      ldout(cct, -1) << "error encoding encrypted: " << e.what() << dendl;
       return false;
     }
 
@@ -126,8 +125,10 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
 
     encode((__u8)should_encrypt_ticket, reply);
     if (should_encrypt_ticket) {
-      if (encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply, error)) {
-	ldout(cct, -1) << "error encoding encrypted ticket: " << error << dendl;
+      try {
+        encode_encrypt(cct, service_ticket_bl, ticket_enc_key, reply);
+      } catch (const std::exception& e) {
+	ldout(cct, -1) << "error encoding encrypted ticket: " << e.what() << dendl;
         return false;
       }
     } else {
@@ -148,9 +149,10 @@ bool CephXTicketHandler::verify_service_ticket_reply(ceph::crypto::Key& secret,
   decode(service_ticket_v, indata);
 
   CephXServiceTicket msg_a;
-  std::string error;
-  if (decode_decrypt(cct, msg_a, secret, indata, error)) {
-    ldout(cct, 0) << "verify_service_ticket_reply: failed decode_decrypt, error is: " << error << dendl;
+  try {
+    decode_decrypt(cct, msg_a, secret, indata);
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "verify_service_ticket_reply: failed decode_decrypt, error is: " << e.what() << dendl;
     return false;
   }
   
@@ -160,10 +162,11 @@ bool CephXTicketHandler::verify_service_ticket_reply(ceph::crypto::Key& secret,
   bufferlist service_ticket_bl;
   if (ticket_enc) {
     ldout(cct, 10) << " got encrypted ticket" << dendl;
-    std::string error;
-    if (decode_decrypt(cct, service_ticket_bl, session_key, indata, error)) {
+    try {
+      decode_decrypt(cct, service_ticket_bl, session_key, indata);
+    } catch (const std::exception& e) {
       ldout(cct, 10) << "verify_service_ticket_reply: decode_decrypt failed "
-	    << "with " << error << dendl;
+	    << "with " << e.what() << dendl;
       return false;
     }
   } else {
@@ -294,7 +297,8 @@ bool CephXTicketManager::verify_service_ticket_reply(ceph::crypto::Key& secret,
  */
 CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
 {
-  CephXAuthorizer *a = new CephXAuthorizer(cct);
+  // use unique_ptr for exception safety
+  auto a = std::make_unique<CephXAuthorizer>(cct);
   a->session_key = session_key;
   a->nonce = ((uint64_t)rand() << 32) + rand();
 
@@ -308,13 +312,13 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
   CephXAuthorize msg;
   msg.nonce = a->nonce;
 
-  std::string error;
-  if (encode_encrypt(cct, msg, session_key, a->bl, error)) {
-    ldout(cct, 0) << "failed to encrypt authorizer: " << error << dendl;
-    delete a;
-    return 0;
+  try {
+    encode_encrypt(cct, msg, session_key, a->bl);
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "failed to encrypt authorizer: " << e.what() << dendl;
+    return nullptr;
   }
-  return a;
+  return a.release();
 }
 
 /*
@@ -372,11 +376,11 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
     }
   }
 
-  std::string error;
-  decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket_blob.blob, error);
-  if (!error.empty()) {
+  try {
+    decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket_blob.blob);
+  } catch (const std::exception& e) {
     ldout(cct, 0) << "ceph_decode_ticket could not decrypt ticket info. error:" 
-	<< error << dendl;
+	<< e.what() << dendl;
     return false;
   }
 
@@ -430,14 +434,13 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
       return false;
     }
   }
-  std::string error;
-  if (!service_secret.get_secret().length())
-    error = "invalid key";  // Bad key?
-  else
-    decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket.blob, error);
-  if (!error.empty()) {
+  try {
+    if (!service_secret.get_secret().length())
+      throw std::invalid_argument("invalid key");  // Bad key?
+    decode_decrypt_enc_bl(cct, ticket_info, service_secret, ticket.blob);
+  } catch (const std::exception& e) {
     ldout(cct, 0) << "verify_authorizer could not decrypt ticket info: error: "
-      << error << dendl;
+      << e.what() << dendl;
     return false;
   }
 
@@ -451,9 +454,11 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 
   // CephXAuthorize
   CephXAuthorize auth_msg;
-  if (decode_decrypt(cct, auth_msg, ticket_info.session_key, indata, error)) {
+  try {
+    decode_decrypt(cct, auth_msg, ticket_info.session_key, indata);
+  } catch (const std::exception& e) {
     ldout(cct, 0) << "verify_authorizercould not decrypt authorize request with error: "
-      << error << dendl;
+      << e.what() << dendl;
     return false;
   }
 
@@ -464,8 +469,10 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   CephXAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
   reply.nonce_plus_one = auth_msg.nonce + 1;
-  if (encode_encrypt(cct, reply, ticket_info.session_key, reply_bl, error)) {
-    ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
+  try {
+    encode_encrypt(cct, reply, ticket_info.session_key, reply_bl);
+  } catch (const std::exception& e) {
+    ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << e.what() << dendl;
     return false;
   }
 
@@ -478,10 +485,11 @@ bool CephXAuthorizer::verify_reply(bufferlist::iterator& indata)
 {
   CephXAuthorizeReply reply;
 
-  std::string error;
-  if (decode_decrypt(cct, reply, session_key, indata, error)) {
-      ldout(cct, 0) << "verify_reply couldn't decrypt with error: " << error << dendl;
-      return false;
+  try {
+    decode_decrypt(cct, reply, session_key, indata);
+  } catch (const std::exception& e) {
+    ldout(cct, 0) << "verify_reply couldn't decrypt with error: " << e.what() << dendl;
+    return false;
   }
 
   uint64_t expect = nonce + 1;

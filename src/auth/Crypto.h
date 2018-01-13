@@ -52,10 +52,8 @@ public:
 
   virtual ~KeyHandler() {}
 
-  virtual int encrypt(const bufferlist& in,
-		       bufferlist& out, std::string *error) const = 0;
-  virtual int decrypt(const bufferlist& in,
-		       bufferlist& out, std::string *error) const = 0;
+  virtual void encrypt(const bufferlist& in, bufferlist& out) const = 0;
+  virtual void decrypt(const bufferlist& in, bufferlist& out) const = 0;
 };
 
 /*
@@ -120,15 +118,13 @@ public:
 
   // --
   int create(CephContext *cct, int type);
-  int encrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string *error) const {
+  void encrypt(CephContext *cct, const bufferlist& in, bufferlist& out) const {
     assert(ckh); // Bad key?
-    return ckh->encrypt(in, out, error);
+    ckh->encrypt(in, out);
   }
-  int decrypt(CephContext *cct, const bufferlist& in, bufferlist& out,
-	       std::string *error) const {
+  void decrypt(CephContext *cct, const bufferlist& in, bufferlist& out) const {
     assert(ckh); // Bad key?
-    return ckh->decrypt(in, out, error);
+    ckh->decrypt(in, out);
   }
 
   void to_str(std::string& s) const;
@@ -154,8 +150,7 @@ public:
   virtual int get_type() const = 0;
   virtual int create(Random *random, bufferptr& secret) = 0;
   virtual int validate_secret(const bufferptr& secret) = 0;
-  virtual std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
-                                                      string& error) = 0;
+  virtual std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret) = 0;
 
   static std::unique_ptr<Handler> create(int type);
 };

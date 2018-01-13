@@ -50,12 +50,11 @@ TEST(AES, Encrypt) {
   bufferlist plaintext;
   plaintext.append((char *)plaintext_s, sizeof(plaintext_s));
 
+  std::unique_ptr<ceph::crypto::KeyHandler> kh;
+  ASSERT_NO_THROW(kh = h->get_key_handler(secret));
+
   bufferlist cipher;
-  std::string error;
-  auto kh = h->get_key_handler(secret, error);
-  int r = kh->encrypt(plaintext, cipher, &error);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(error, "");
+  ASSERT_NO_THROW(kh->encrypt(plaintext, cipher));
 
   unsigned char want_cipher[] = {
     0xb3, 0x8f, 0x5b, 0xc9, 0x35, 0x4c, 0xf8, 0xc6,
@@ -96,12 +95,11 @@ TEST(AES, Decrypt) {
   };
   char plaintext_s[sizeof(want_plaintext)];
 
-  std::string error;
+  std::unique_ptr<ceph::crypto::KeyHandler> kh;
+  ASSERT_NO_THROW(kh = h->get_key_handler(secret));
+
   bufferlist plaintext;
-  auto kh = h->get_key_handler(secret, error);
-  int r = kh->decrypt(cipher, plaintext, &error);
-  ASSERT_EQ(r, 0);
-  ASSERT_EQ(error, "");
+  ASSERT_NO_THROW(kh->decrypt(cipher, plaintext));
 
   ASSERT_EQ(sizeof(plaintext_s), plaintext.length());
   plaintext.copy(0, sizeof(plaintext_s), &plaintext_s[0]);
@@ -128,21 +126,20 @@ TEST(AES, Loop) {
     {
       auto h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
 
-      std::string error;
-      auto kh = h->get_key_handler(secret, error);
-      int r = kh->encrypt(plaintext, cipher, &error);
-      ASSERT_EQ(r, 0);
-      ASSERT_EQ(error, "");
+      std::unique_ptr<ceph::crypto::KeyHandler> kh;
+      ASSERT_NO_THROW(kh = h->get_key_handler(secret));
+
+      ASSERT_NO_THROW(kh->encrypt(plaintext, cipher));
     }
     plaintext.clear();
 
     {
       auto h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
-      std::string error;
-      auto ckh = h->get_key_handler(secret, error);
-      int r = ckh->decrypt(cipher, plaintext, &error);
-      ASSERT_EQ(r, 0);
-      ASSERT_EQ(error, "");
+
+      std::unique_ptr<ceph::crypto::KeyHandler> kh;
+      ASSERT_NO_THROW(kh = h->get_key_handler(secret));
+
+      ASSERT_NO_THROW(kh->decrypt(cipher, plaintext));
     }
   }
 
@@ -167,9 +164,7 @@ TEST(AES, LoopKey) {
 
   for (int i=0; i<n; ++i) {
     bufferlist encoded;
-    string error;
-    int r = key.encrypt(g_ceph_context, data, encoded, &error);
-    ASSERT_EQ(r, 0);
+    ASSERT_NO_THROW(key.encrypt(g_ceph_context, data, encoded));
   }
 
   utime_t end = ceph_clock_now();

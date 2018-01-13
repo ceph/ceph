@@ -211,9 +211,10 @@ struct CephXChallengeBlob {
 };
 WRITE_CLASS_ENCODER(CephXChallengeBlob)
 
+// throws on encryption failure
 void cephx_calc_client_server_challenge(CephContext *cct, 
 					ceph::crypto::Key& secret, uint64_t server_challenge, uint64_t client_challenge,
-					uint64_t *key, std::string &error);
+					uint64_t *key);
 
 
 /*
@@ -445,25 +446,34 @@ extern bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
  */
 static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
+class bad_auth_enc_magic : public std::exception {
+  static constexpr size_t buffer_size = 128;
+  char buffer[buffer_size];
+ public:
+  bad_auth_enc_magic(uint64_t magic) noexcept {
+    auto n = snprintf(buffer, buffer_size, "bad magic in decode_decrypt, %"
+                      PRIu64 " != %" PRIu64, magic, AUTH_ENC_MAGIC);
+    buffer[n] = 0;
+  }
+  const char* what() const noexcept {
+    return buffer;
+  }
+};
+
 template <typename T>
-void decode_decrypt_enc_bl(CephContext *cct, T& t, ceph::crypto::Key key, bufferlist& bl_enc, 
-			   std::string &error)
+void decode_decrypt_enc_bl(CephContext *cct, T& t, ceph::crypto::Key key, bufferlist& bl_enc)
 {
   uint64_t magic;
   bufferlist bl;
 
-  if (key.decrypt(cct, bl_enc, bl, &error) < 0)
-    return;
+  key.decrypt(cct, bl_enc, bl); // may throw
 
   bufferlist::iterator iter2 = bl.begin();
   __u8 struct_v;
   decode(struct_v, iter2);
   decode(magic, iter2);
   if (magic != AUTH_ENC_MAGIC) {
-    ostringstream oss;
-    oss << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC;
-    error = oss.str();
-    return;
+    throw bad_auth_enc_magic(magic);
   }
 
   decode(t, iter2);
@@ -471,7 +481,7 @@ void decode_decrypt_enc_bl(CephContext *cct, T& t, ceph::crypto::Key key, buffer
 
 template <typename T>
 void encode_encrypt_enc_bl(CephContext *cct, const T& t, const ceph::crypto::Key& key,
-			   bufferlist& out, std::string &error)
+			   bufferlist& out)
 {
   bufferlist bl;
   __u8 struct_v = 1;
@@ -480,37 +490,25 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const ceph::crypto::Key
   encode(magic, bl);
   encode(t, bl);
 
-  key.encrypt(cct, bl, out, &error);
+  key.encrypt(cct, bl, out); // may throw
 }
 
 template <typename T>
-int decode_decrypt(CephContext *cct, T& t, const ceph::crypto::Key& key,
-		    bufferlist::iterator& iter, std::string &error)
+void decode_decrypt(CephContext *cct, T& t, const ceph::crypto::Key& key,
+                    bufferlist::iterator& iter)
 {
   bufferlist bl_enc;
-  try {
-    decode(bl_enc, iter);
-    decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
-  }
-  catch (buffer::error &e) {
-    error = "error decoding block for decryption";
-  }
-  if (!error.empty())
-    return CEPHX_CRYPT_ERR;
-  return 0;
+  decode(bl_enc, iter);
+  decode_decrypt_enc_bl(cct, t, key, bl_enc);
 }
 
 template <typename T>
-int encode_encrypt(CephContext *cct, const T& t, const ceph::crypto::Key& key,
-		    bufferlist& out, std::string &error)
+void encode_encrypt(CephContext *cct, const T& t, const ceph::crypto::Key& key,
+                    bufferlist& out)
 {
   bufferlist bl_enc;
-  encode_encrypt_enc_bl(cct, t, key, bl_enc, error);
-  if (!error.empty()){
-    return CEPHX_CRYPT_ERR;
-  }
+  encode_encrypt_enc_bl(cct, t, key, bl_enc);
   encode(bl_enc, out);
-  return 0;
 }
 
 #endif

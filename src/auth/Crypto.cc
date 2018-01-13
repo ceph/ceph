@@ -84,15 +84,11 @@ namespace none {
 
 class KeyHandlerImpl : public KeyHandler {
 public:
-  int encrypt(const bufferlist& in,
-	       bufferlist& out, std::string *error) const override {
+  void encrypt(const bufferlist& in, bufferlist& out) const override {
     out = in;
-    return 0;
   }
-  int decrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const override {
+  void decrypt(const bufferlist& in, bufferlist& out) const override {
     out = in;
-    return 0;
   }
 };
 
@@ -107,8 +103,7 @@ public:
   int validate_secret(const bufferptr& secret) override {
     return 0;
   }
-  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
-                                              string& error) override {
+  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret) override {
     return std::make_unique<KeyHandlerImpl>();
   }
 };
@@ -126,8 +121,7 @@ public:
   }
   int create(Random *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
-  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret,
-                                              string& error) override;
+  std::unique_ptr<KeyHandler> get_key_handler(const bufferptr& secret) override;
 };
 
 #ifdef USE_NSS
@@ -135,12 +129,24 @@ public:
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
 
-static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
-			     CK_MECHANISM_TYPE mechanism,
-			     PK11SymKey *key,
-			     SECItem *param,
-			     const bufferlist& in, bufferlist& out,
-			     std::string *error)
+class nss_exception : public std::exception {
+  static constexpr size_t buffer_size = 128;
+  char buffer[buffer_size];
+ public:
+  nss_exception(const char *operation, PRErrorCode code) noexcept {
+    auto n = snprintf(buffer, buffer_size, "%s failed with %d", operation, code);
+    buffer[n] = 0;
+  }
+  const char* what() const noexcept {
+    return buffer;
+  }
+};
+
+static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
+                              CK_MECHANISM_TYPE mechanism,
+                              PK11SymKey *key,
+                              SECItem *param,
+                              const bufferlist& in, bufferlist& out)
 {
   // sample source said this has to be at least size of input + 8,
   // but i see 15 still fail with SEC_ERROR_OUTPUT_LEN
@@ -153,7 +159,9 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 
   PK11Context *ectx;
   ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
-  assert(ectx);
+  if (!ectx) {
+    throw nss_exception("PK11_CreateContextBySymKey", PR_GetError());
+  }
 
   incopy = in;  // it's a shallow copy!
   in_buf = (unsigned char*)incopy.c_str();
@@ -162,12 +170,7 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 		      in_buf, in.length());
   if (ret != SECSuccess) {
     PK11_DestroyContext(ectx, PR_TRUE);
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
+    throw nss_exception("PK11_CipherOp", PR_GetError());
   }
 
   unsigned int written2;
@@ -176,17 +179,11 @@ static int nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 			 out_tmp.length()-written);
   PK11_DestroyContext(ectx, PR_TRUE);
   if (ret != SECSuccess) {
-    if (error) {
-      ostringstream oss;
-      oss << "NSS AES final round failed: " << PR_GetError();
-      *error = oss.str();
-    }
-    return -1;
+    throw nss_exception("PK11_DigestFinal", PR_GetError());
   }
 
   out_tmp.set_length(written + written2);
   out.append(out_tmp);
-  return 0;
 }
 
 class KeyHandlerImpl : public KeyHandler {
@@ -209,13 +206,12 @@ public:
       PK11_FreeSlot(slot);
   }
 
-  int init(const bufferptr& s, ostringstream& err) {
+  void init(const bufferptr& s) {
     secret = s;
 
     slot = PK11_GetBestSlot(mechanism, NULL);
     if (!slot) {
-      err << "cannot find NSS slot to use: " << PR_GetError();
-      return -1;
+      throw nss_exception("PK11_GetBestSlot", PR_GetError());
     }
 
     SECItem keyItem;
@@ -225,8 +221,7 @@ public:
     key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
 			    &keyItem, NULL);
     if (!key) {
-      err << "cannot convert AES key for NSS: " << PR_GetError();
-      return -1;
+      throw nss_exception("PK11_ImportSymKey", PR_GetError());
     }
 
     SECItem ivItem;
@@ -238,20 +233,15 @@ public:
 
     param = PK11_ParamFromIV(mechanism, &ivItem);
     if (!param) {
-      err << "cannot set NSS IV param: " << PR_GetError();
-      return -1;
+      throw nss_exception("PK11_ParamFromIV", PR_GetError());
     }
-
-    return 0;
   }
 
-  int encrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out, error);
+  void encrypt(const bufferlist& in, bufferlist& out) const override {
+    nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out);
   }
-  int decrypt(const bufferlist& in,
-	       bufferlist& out, std::string *error) const override {
-    return nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out, error);
+  void decrypt(const bufferlist& in, bufferlist& out) const override {
+    nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out);
   }
 };
 
@@ -280,15 +270,10 @@ int HandlerImpl::validate_secret(const bufferptr& secret)
   return 0;
 }
 
-std::unique_ptr<KeyHandler> HandlerImpl::get_key_handler(const bufferptr& secret,
-                                                         string& error)
+std::unique_ptr<KeyHandler> HandlerImpl::get_key_handler(const bufferptr& secret)
 {
   auto ckh = std::make_unique<KeyHandlerImpl>();
-  ostringstream oss;
-  if (ckh->init(secret, oss) < 0) {
-    error = oss.str();
-    ckh.reset();
-  }
+  ckh->init(secret);
   return ckh;
 }
 
@@ -344,9 +329,9 @@ int Key::_set_secret(int t, const bufferptr& s)
     if (ret < 0) {
       return ret;
     }
-    string error;
-    ckh = ch->get_key_handler(s, error);
-    if (error.length()) {
+    try {
+      ckh = ch->get_key_handler(s);
+    } catch (const std::exception&) {
       return -EIO;
     }
   } else {
