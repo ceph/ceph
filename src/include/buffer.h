@@ -782,9 +782,11 @@ namespace buffer CEPH_BUFFER_API {
     bool rebuild_aligned(unsigned align);
     // max_buffers = 0 mean don't care _buffers.size(), other
     // must make _buffers.size() <= max_buffers after rebuilding.
+    inline void adjust_align_size(unsigned& align_size,
+                                  const unsigned& max_buffers);
     bool rebuild_aligned_size_and_memory(unsigned align_size,
-					 unsigned align_memory,
-					 unsigned max_buffers = 0);
+                                         unsigned align_memory,
+                                         const unsigned& max_buffers = 0);
     bool rebuild_page_aligned();
 
     void reserve(size_t prealloc);
