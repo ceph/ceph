@@ -1,14 +1,18 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // Tests for the C API coverage of atomic read operations
 
+#include <cstring> // For memcpy
 #include <errno.h>
 #include <string>
 
+#include "include/buffer.h"
+#include "include/denc.h"
 #include "include/err.h"
 #include "include/rados/librados.h"
-#include "test/librados/test.h"
-#include "test/librados/TestCase.h"
+#include "include/rbd/features.h" // For RBD_FEATURES_ALL
 #include "include/scope_guard.h"
+#include "test/librados/TestCase.h"
+#include "test/librados/test.h"
 
 const char *data = "testdata";
 const char *obj = "testobj";
@@ -470,7 +474,11 @@ TEST_F(CReadOpsTest, Exec) {
   uint64_t features;
   EXPECT_EQ(sizeof(features), bytes_read);
   // make sure buffer is at least as long as it claims
-  ASSERT_TRUE(out[bytes_read-1] == out[bytes_read-1]);
+  bufferlist bl;
+  bl.append(out, bytes_read);
+  auto it = bl.begin();
+  ceph::decode(features, it);
+  ASSERT_EQ(RBD_FEATURES_ALL, features);
   rados_buffer_free(out);
 
   remove_object();
