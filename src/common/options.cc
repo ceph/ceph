@@ -764,6 +764,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_async_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
+    .set_min_max(1, 24)
     .set_description(""),
 
     Option("ms_async_max_op_threads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
