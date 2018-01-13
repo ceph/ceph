@@ -754,7 +754,8 @@ TEST_F(LibRadosMiscPP, BigAttrPP) {
   for (int i=0; i<1000; i++) {
     bl.clear();
     got.clear();
-    bl.append(buffer::create(MIN(g_conf->osd_max_attr_size, 1024)));
+    bl.append(buffer::create(std::min<uint64_t>(g_conf->osd_max_attr_size,
+						1024)));
     char n[10];
     snprintf(n, sizeof(n), "a%d", i);
     ASSERT_EQ(0, ioctx.setxattr("foo", n, bl));

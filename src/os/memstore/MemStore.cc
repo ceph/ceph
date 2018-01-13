@@ -226,7 +226,7 @@ int MemStore::statfs(struct store_statfs_t *st)
    dout(10) << __func__ << dendl;
   st->reset();
   st->total = cct->_conf->memstore_device_bytes;
-  st->available = MAX(int64_t(st->total) - int64_t(used_bytes), 0ll);
+  st->available = std::max<int64_t>(st->total - used_bytes, 0);
   dout(10) << __func__ << ": used_bytes: " << used_bytes
 	   << "/" << cct->_conf->memstore_device_bytes << dendl;
   return 0;
@@ -1401,7 +1401,7 @@ int MemStore::_collection_add(const coll_t& cid, const coll_t& ocid, const ghobj
   if (!oc)
     return -ENOENT;
   RWLock::WLocker l1(std::min(&(*c), &(*oc))->lock);
-  RWLock::WLocker l2(MAX(&(*c), &(*oc))->lock);
+  RWLock::WLocker l2(std::max(&(*c), &(*oc))->lock);
 
   if (c->object_hash.count(oid))
     return -EEXIST;
@@ -1460,7 +1460,7 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   if (!dc)
     return -ENOENT;
   RWLock::WLocker l1(std::min(&(*sc), &(*dc))->lock);
-  RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
+  RWLock::WLocker l2(std::max(&(*sc), &(*dc))->lock);
 
   map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
@@ -1727,14 +1727,14 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
     auto dst_iter = dst_pages.begin();
 
     for (auto &src_page : tls_pages) {
-      auto sbegin = MAX(srcoff, src_page->offset);
+      auto sbegin = std::max(srcoff, src_page->offset);
       auto send = std::min(srcoff + count, src_page->offset + src_page_size);
 
       // zero-fill holes before src_page
       if (srcoff < sbegin) {
         while (dst_iter != dst_pages.end()) {
           auto &dst_page = *dst_iter;
-          auto dbegin = MAX(srcoff + delta, dst_page->offset);
+          auto dbegin = std::max(srcoff + delta, dst_page->offset);
           auto dend = std::min(sbegin + delta, dst_page->offset + dst_page_size);
           std::fill(dst_page->data + dbegin - dst_page->offset,
                     dst_page->data + dend - dst_page->offset, 0);
@@ -1750,7 +1750,7 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
       // copy data from src page to dst pages
       while (dst_iter != dst_pages.end()) {
         auto &dst_page = *dst_iter;
-        auto dbegin = MAX(sbegin + delta, dst_page->offset);
+        auto dbegin = std::max(sbegin + delta, dst_page->offset);
         auto dend = std::min(send + delta, dst_page->offset + dst_page_size);
 
         std::copy(src_page->data + (dbegin - delta) - src_page->offset,
@@ -1773,7 +1773,7 @@ int MemStore::PageSetObject::clone(Object *src, uint64_t srcoff,
     if (count > 0) {
       while (dst_iter != dst_pages.end()) {
         auto &dst_page = *dst_iter;
-        auto dbegin = MAX(dstoff, dst_page->offset);
+        auto dbegin = std::max(dstoff, dst_page->offset);
         auto dend = std::min(dstoff + count, dst_page->offset + dst_page_size);
         std::fill(dst_page->data + dbegin - dst_page->offset,
                   dst_page->data + dend - dst_page->offset, 0);

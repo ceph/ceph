@@ -116,7 +116,7 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
     while (left_pbrs) {
       struct msghdr msg;
       struct iovec msgvec[IOV_MAX];
-      uint64_t size = MIN(left_pbrs, IOV_MAX);
+      uint64_t size = std::min<uint64_t>(left_pbrs, IOV_MAX);
       left_pbrs -= size;
       memset(&msg, 0, sizeof(msg));
       msg.msg_iovlen = size;

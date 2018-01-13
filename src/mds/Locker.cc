@@ -2301,7 +2301,7 @@ uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
     max_inc *= pi->layout.object_size;
     new_max = std::min(new_max, size + max_inc);
   }
-  return ROUND_UP_TO(new_max, pi->get_layout_size_increment());
+  return round_up_to(new_max, pi->get_layout_size_increment());
 }
 
 void Locker::calc_new_client_ranges(CInode *in, uint64_t size,

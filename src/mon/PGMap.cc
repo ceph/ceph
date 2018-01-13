@@ -273,7 +273,7 @@ void PGMapDigest::print_summary(Formatter *f, ostream *out) const
     {
       std::stringstream ss;
       ss << p->first;
-      max_width = MAX(ss.str().size(), max_width);
+      max_width = std::max<size_t>(ss.str().size(), max_width);
     }
 
     for (multimap<int,int>::reverse_iterator p = state_by_count.rbegin();
@@ -875,7 +875,7 @@ void PGMapDigest::dump_object_stat_sum(
   }
 
   if (f) {
-    f->dump_int("kb_used", SHIFT_ROUND_UP(sum.num_bytes, 10));
+    f->dump_int("kb_used", shift_round_up(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
     f->dump_format_unquoted("percent_used", "%.2f", (used*100));
     f->dump_unsigned("max_avail", avail / raw_used_rate);
@@ -946,7 +946,7 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
       }
       double unusable = (double)osd_info->second.kb *
 	(1.0 - fratio);
-      double avail = MAX(0.0, (double)osd_info->second.kb_avail - unusable);
+      double avail = std::max(0.0, (double)osd_info->second.kb_avail - unusable);
       avail *= 1024.0;
       int64_t proj = (int64_t)(avail / (double)p->second);
       if (min < 0 || proj < min) {
@@ -3506,7 +3506,7 @@ int reweight::by_utilization(
     average_util = (double)num_pg_copies / weight_sum;
   } else {
     // by osd utilization
-    int num_osd = MAX(1, pgm.osd_stat.size());
+    int num_osd = std::max<size_t>(1, pgm.osd_stat.size());
     if ((uint64_t)pgm.osd_sum.kb * 1024 / num_osd
 	< g_conf->mon_reweight_min_bytes_per_osd) {
       *ss << "Refusing to reweight: we only have " << pgm.osd_sum.kb
@@ -3599,7 +3599,7 @@ int reweight::by_utilization(
       // to represent e.g. differing storage capacities
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
       if (weight > max_change)
-	new_weight = MAX(new_weight, weight - max_change);
+	new_weight = std::max(new_weight, weight - max_change);
       new_weights->insert({p.first, new_weight});
       if (f) {
 	f->open_object_section("osd");
@@ -3618,7 +3618,7 @@ int reweight::by_utilization(
     if (!no_increasing && util <= underload_util) {
       // assign a higher weight.. if we can.
       unsigned new_weight = (unsigned)((average_util / util) * (float)weight);
-      new_weight = MIN(new_weight, weight + max_change);
+      new_weight = std::min(new_weight, weight + max_change);
       if (new_weight > 0x10000)
 	new_weight = 0x10000;
       if (new_weight > weight) {

@@ -1175,9 +1175,11 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
-	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
+	unsigned list_size = std::min<uint64_t>(cct->_conf->osd_max_pgls,
+						p->op.pgls.count);
 
-        dout(10) << " pgnls pg=" << m->get_pg() << " count " << list_size << dendl;
+        dout(10) << " pgnls pg=" << m->get_pg() << " count " << list_size
+		 << dendl;
 	// read into a buffer
         vector<hobject_t> sentries;
         pg_nls_response_t response;
@@ -1345,7 +1347,8 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 		 << " != " << info.pgid << dendl;
 	result = 0; // hmm?
       } else {
-	unsigned list_size = MIN(cct->_conf->osd_max_pgls, p->op.pgls.count);
+	unsigned list_size = std::min<uint64_t>(cct->_conf->osd_max_pgls,
+						p->op.pgls.count);
 
         dout(10) << " pgls pg=" << m->get_pg() << " count " << list_size << dendl;
 	// read into a buffer
@@ -1572,7 +1575,7 @@ void PrimaryLogPG::calc_trim_to()
     target = cct->_conf->osd_max_pg_log_entries;
   }
 
-  eversion_t limit = MIN(
+  eversion_t limit = std::min(
     min_last_complete_ondisk,
     pg_log.get_can_rollback_to());
   size_t log_size = pg_log.get_log().log.size();
@@ -5293,7 +5296,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
 
   // XXX the op.extent.length is the requested length for async read
   // On error this length is changed to 0 after the error comes back.
-  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+  ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
   ctx->delta_stats.num_rd++;
   return result;
 }
@@ -5392,7 +5395,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
     // verify trailing hole?
     if (cct->_conf->osd_verify_sparse_read_holes) {
-      uint64_t end = MIN(op.extent.offset + op.extent.length, oi.size);
+      uint64_t end = std::min<uint64_t>(op.extent.offset + op.extent.length,
+					oi.size);
       if (last < end) {
         bufferlist t;
         uint64_t len = end - last;
@@ -5433,7 +5437,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 	     << soid << dendl;
   }
 
-  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(op.extent.length, 10);
+  ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
   ctx->delta_stats.num_rd++;
   return 0;
 }
@@ -5593,7 +5597,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (r < 0)
 	  result = r;
 	else
-	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(bl.length(), 10);
+	  ctx->delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
 	ctx->delta_stats.num_rd++;
 	dout(10) << " map_extents done on object " << soid << dendl;
       }
@@ -5841,7 +5845,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (r >= 0) {
 	  op.xattr.value_len = osd_op.outdata.length();
 	  result = 0;
-	  ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	  ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	} else
 	  result = r;
 
@@ -5860,7 +5864,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         
         bufferlist bl;
         encode(out, bl);
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(bl.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
         ctx->delta_stats.num_rd++;
         osd_op.outdata.claim_append(bl);
       }
@@ -5884,7 +5888,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	
 	ctx->delta_stats.num_rd++;
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(xattr.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(xattr.length(), 10);
 
 	switch (op.xattr.cmp_mode) {
 	case CEPH_OSD_CMPXATTR_MODE_STRING:
@@ -6692,8 +6696,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EFBIG;
 	  break;
 	}
-	unsigned max_name_len = MIN(osd->store->get_max_attr_name_length(),
-				    cct->_conf->osd_max_attr_name_len);
+	unsigned max_name_len =
+	  std::min<uint64_t>(osd->store->get_max_attr_name_length(),
+			     cct->_conf->osd_max_attr_name_len);
 	if (op.xattr.name_len > max_name_len) {
 	  result = -ENAMETOOLONG;
 	  break;
@@ -6883,7 +6888,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
       break;
@@ -6939,7 +6944,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	encode(num, osd_op.outdata);
 	osd_op.outdata.claim_append(bl);
 	encode(truncated, osd_op.outdata);
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
       break;
@@ -6953,7 +6958,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_read;
       {
 	osd->store->omap_get_header(ch, ghobject_t(soid), &osd_op.outdata);
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
       break;
@@ -6976,7 +6981,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  osd->store->omap_get_values(ch, ghobject_t(soid), keys_to_get, &out);
 	} // else return empty omap entries
 	encode(out, osd_op.outdata);
-	ctx->delta_stats.num_rd_kb += SHIFT_ROUND_UP(osd_op.outdata.length(), 10);
+	ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
 	ctx->delta_stats.num_rd++;
       }
       break;
@@ -7089,7 +7094,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 	t->omap_setkeys(soid, to_set_bl);
 	ctx->delta_stats.num_wr++;
-        ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(to_set_bl.length(), 10);
+        ctx->delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
       }
       obs.oi.set_flag(object_info_t::FLAG_OMAP);
       obs.oi.clear_omap_digest();
@@ -7753,7 +7758,7 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
     }
   }
   delta_stats.num_wr++;
-  delta_stats.num_wr_kb += SHIFT_ROUND_UP(length, 10);
+  delta_stats.num_wr_kb += shift_round_up(length, 10);
 }
 
 void PrimaryLogPG::truncate_update_size_and_usage(
@@ -7977,7 +7982,7 @@ void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type)
   // finish and log the op.
   if (ctx->user_modify) {
     // update the user_version for any modify ops, except for the watch op
-    ctx->user_at_version = MAX(info.last_user_version, ctx->new_obs.oi.user_version) + 1;
+    ctx->user_at_version = std::max(info.last_user_version, ctx->new_obs.oi.user_version) + 1;
     /* In order for new clients and old clients to interoperate properly
      * when exchanging versions, we need to lower bound the user_version
      * (which our new clients pay proper attention to)
@@ -8271,7 +8276,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
   bufferlist& bl = reply_obj.data;
   if (left > 0 && !cursor.data_complete) {
     if (cursor.data_offset < oi.size) {
-      uint64_t max_read = MIN(oi.size - cursor.data_offset, (uint64_t)left);
+      uint64_t max_read = std::min(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
 	async_read_started = true;
 	ctx->pending_async_reads.push_back(
@@ -9027,7 +9032,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ctx->delta_stats.num_bytes += obs.oi.size;
   }
   ctx->delta_stats.num_wr++;
-  ctx->delta_stats.num_wr_kb += SHIFT_ROUND_UP(obs.oi.size, 10);
+  ctx->delta_stats.num_wr_kb += shift_round_up(obs.oi.size, 10);
 
   osd->logger->inc(l_osd_copyfrom);
 }
@@ -9557,7 +9562,7 @@ int PrimaryLogPG::start_flush(
 
   flush_ops[soid] = fop;
   info.stats.stats.sum.num_flush++;
-  info.stats.stats.sum.num_flush_kb += SHIFT_ROUND_UP(oi.size, 10);
+  info.stats.stats.sum.num_flush_kb += shift_round_up(oi.size, 10);
   return -EINPROGRESS;
 }
 
@@ -12463,7 +12468,7 @@ bool PrimaryLogPG::all_peer_done() const
  * All objects in PG in [MIN,backfill_info.begin) have been backfilled to all
  * backfill_targets.  There may be objects on backfill_target(s) yet to be deleted.
  *
- * For a backfill target, all objects < MIN(peer_backfill_info[target].begin,
+ * For a backfill target, all objects < std::min(peer_backfill_info[target].begin,
  *     backfill_info.begin) in PG are backfilled.  No deleted objects in this
  * interval remain on the backfill target.
  *
@@ -12471,7 +12476,7 @@ bool PrimaryLogPG::all_peer_done() const
  * have been backfilled to target
  *
  * There *MAY* be missing/outdated objects between last_backfill_started and
- * MIN(peer_backfill_info[*].begin, backfill_info.begin) in the event that client
+ * std::min(peer_backfill_info[*].begin, backfill_info.begin) in the event that client
  * io created objects since the last scan.  For this reason, we call
  * update_range() again before continuing backfill.
  */
@@ -13792,7 +13797,7 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
   if (obc->obs.oi.is_omap())
     ctx->delta_stats.num_objects_omap--;
   ctx->delta_stats.num_evict++;
-  ctx->delta_stats.num_evict_kb += SHIFT_ROUND_UP(obc->obs.oi.size, 10);
+  ctx->delta_stats.num_evict_kb += shift_round_up(obc->obs.oi.size, 10);
   if (obc->obs.oi.is_dirty())
     --ctx->delta_stats.num_objects_dirty;
   assert(r == 0);
@@ -13913,20 +13918,20 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     uint64_t avg_size = num_user_bytes / num_user_objects;
     dirty_micro =
       num_dirty * avg_size * 1000000 /
-      MAX(pool.info.target_max_bytes / divisor, 1);
+      std::max<uint64_t>(pool.info.target_max_bytes / divisor, 1);
     full_micro =
       num_user_objects * avg_size * 1000000 /
-      MAX(pool.info.target_max_bytes / divisor, 1);
+      std::max<uint64_t>(pool.info.target_max_bytes / divisor, 1);
   }
   if (pool.info.target_max_objects > 0) {
     uint64_t dirty_objects_micro =
       num_dirty * 1000000 /
-      MAX(pool.info.target_max_objects / divisor, 1);
+      std::max<uint64_t>(pool.info.target_max_objects / divisor, 1);
     if (dirty_objects_micro > dirty_micro)
       dirty_micro = dirty_objects_micro;
     uint64_t full_objects_micro =
       num_user_objects * 1000000 /
-      MAX(pool.info.target_max_objects / divisor, 1);
+      std::max<uint64_t>(pool.info.target_max_objects / divisor, 1);
     if (full_objects_micro > full_micro)
       full_micro = full_objects_micro;
   }
@@ -13942,8 +13947,8 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     flush_target += flush_slop;
     flush_high_target += flush_slop;
   } else {
-    flush_target -= MIN(flush_target, flush_slop);
-    flush_high_target -= MIN(flush_high_target, flush_slop);
+    flush_target -= std::min(flush_target, flush_slop);
+    flush_high_target -= std::min(flush_high_target, flush_slop);
   }
 
   if (dirty_micro > flush_high_target) {
@@ -13958,7 +13963,7 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   if (restart || agent_state->evict_mode == TierAgentState::EVICT_MODE_IDLE)
     evict_target += evict_slop;
   else
-    evict_target -= MIN(evict_target, evict_slop);
+    evict_target -= std::min(evict_target, evict_slop);
 
   if (full_micro > 1000000) {
     // evict anything clean
@@ -13969,8 +13974,9 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
     evict_mode = TierAgentState::EVICT_MODE_SOME;
     uint64_t over = full_micro - evict_target;
     uint64_t span  = 1000000 - evict_target;
-    evict_effort = MAX(over * 1000000 / span,
-		       (unsigned)(1000000.0 * cct->_conf->osd_agent_min_evict_effort));
+    evict_effort = std::max(over * 1000000 / span,
+			    uint64_t(1000000.0 *
+				     cct->_conf->osd_agent_min_evict_effort));
 
     // quantize effort to avoid too much reordering in the agent_queue.
     uint64_t inc = cct->_conf->osd_agent_quantize_effort * 1000000;

@@ -3767,9 +3767,9 @@ public:
     uint64_t dstoff = srcoff; //u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
-      srcoff = ROUND_UP_TO(srcoff, write_alignment);
-      dstoff = ROUND_UP_TO(dstoff, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      srcoff = round_up_to(srcoff, write_alignment);
+      dstoff = round_up_to(dstoff, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     if (srcoff > srcdata.length() - 1) {
@@ -3837,8 +3837,8 @@ public:
     uint64_t len = u2(*rng);
     bufferlist bl;
     if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      offset = round_up_to(offset, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     filled_byte_array(bl, len);
@@ -3882,7 +3882,7 @@ public:
     boost::uniform_int<> choose(0, max_object_len);
     size_t len = choose(*rng);
     if (write_alignment) {
-      len = ROUND_UP_TO(len, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     t.truncate(cid, obj, len);
@@ -3918,8 +3918,8 @@ public:
     uint64_t offset = u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      offset = round_up_to(offset, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     if (len > 0) {
