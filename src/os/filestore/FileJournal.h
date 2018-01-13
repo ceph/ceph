@@ -389,7 +389,7 @@ private:
   } write_finish_thread;
 
   off64_t get_top() const {
-    return ROUND_UP_TO(sizeof(header), block_size);
+    return round_up_to(sizeof(header), block_size);
   }
 
   ZTracer::Endpoint trace_endpoint;

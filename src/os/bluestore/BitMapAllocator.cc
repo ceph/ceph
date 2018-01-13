@@ -22,34 +22,34 @@ BitMapAllocator::BitMapAllocator(CephContext* cct, int64_t device_size,
 				 int64_t block_size)
   : cct(cct)
 {
-  if (!ISP2(block_size)) {
+  if (!isp2(block_size)) {
     derr << __func__ << " block_size " << block_size
          << " not power of 2 aligned!"
          << dendl;
-    assert(ISP2(block_size));
+    assert(isp2(block_size));
     return;
   }
 
   int64_t zone_size_blks = cct->_conf->bluestore_bitmapallocator_blocks_per_zone;
-  if (!ISP2(zone_size_blks)) {
+  if (!isp2(zone_size_blks)) {
     derr << __func__ << " zone_size " << zone_size_blks
          << " not power of 2 aligned!"
          << dendl;
-    assert(ISP2(zone_size_blks));
+    assert(isp2(zone_size_blks));
     return;
   }
 
   int64_t span_size = cct->_conf->bluestore_bitmapallocator_span_size;
-  if (!ISP2(span_size)) {
+  if (!isp2(span_size)) {
     derr << __func__ << " span_size " << span_size
          << " not power of 2 aligned!"
          << dendl;
-    assert(ISP2(span_size));
+    assert(isp2(span_size));
     return;
   }
 
   m_block_size = block_size;
-  m_total_size = P2ALIGN(device_size, block_size);
+  m_total_size = p2align(device_size, block_size);
   m_bit_alloc = new BitAllocator(cct, device_size / block_size,
 				 zone_size_blks, CONCURRENT, true);
   if (!m_bit_alloc) {
@@ -182,7 +182,7 @@ void BitMapAllocator::init_add_free(uint64_t offset, uint64_t length)
            << dendl;
   uint64_t size = m_bit_alloc->size() * m_block_size;
 
-  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t offset_adj = round_up_to(offset, m_block_size);
   uint64_t length_adj = ((length - (offset_adj - offset)) /
                          m_block_size) * m_block_size;
 
@@ -203,7 +203,7 @@ void BitMapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 
   // we use the same adjustment/alignment that init_add_free does
   // above so that we can yank back some of the space.
-  uint64_t offset_adj = ROUND_UP_TO(offset, m_block_size);
+  uint64_t offset_adj = round_up_to(offset, m_block_size);
   uint64_t length_adj = ((length - (offset_adj - offset)) /
                          m_block_size) * m_block_size;
 

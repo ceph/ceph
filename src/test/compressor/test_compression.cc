@@ -223,7 +223,7 @@ TEST_P(CompressorTest, sharded_input_decompress)
   size_t left = out.length()-small_prefix_size;
   size_t offs = small_prefix_size;
   while( left > 0 ){
-    size_t shard_size = MIN( 2048, left );
+    size_t shard_size = std::min<size_t>(2048, left);
     tmp.substr_of(out, offs, shard_size );
     out2.append( tmp );
     left -= shard_size;

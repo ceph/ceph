@@ -647,7 +647,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
   // now do the items.
   if (!used_items.empty())
-    size = MAX(size, *used_items.rbegin());
+    size = std::max(size, *used_items.rbegin());
   vector<int> items(size);
   vector<int> weights(size);
 

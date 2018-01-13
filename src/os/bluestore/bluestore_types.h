@@ -353,7 +353,7 @@ struct bluestore_blob_use_tracker_t {
   }
   void prune_tail(uint32_t new_len) {
     if (num_au) {
-      new_len = ROUND_UP_TO(new_len, au_size);
+      new_len = round_up_to(new_len, au_size);
       uint32_t _num_au = new_len / au_size;
       assert(_num_au <= num_au);
       if (_num_au) {
@@ -378,7 +378,7 @@ struct bluestore_blob_use_tracker_t {
       bytes_per_au[0] = old_total;
     } else {
       assert(_au_size == au_size);
-      new_len = ROUND_UP_TO(new_len, au_size);
+      new_len = round_up_to(new_len, au_size);
       uint32_t _num_au = new_len / au_size;
       assert(_num_au >= num_au);
       if (_num_au > num_au) {
@@ -617,7 +617,7 @@ public:
   /// return chunk (i.e. min readable block) size for the blob
   uint64_t get_chunk_size(uint64_t dev_block_size) const {
     return has_csum() ?
-      MAX(dev_block_size, get_csum_chunk_size()) : dev_block_size;
+      std::max<uint64_t>(dev_block_size, get_csum_chunk_size()) : dev_block_size;
   }
   uint32_t get_csum_chunk_size() const {
     return 1 << csum_chunk_order;
@@ -688,7 +688,7 @@ public:
     assert(offset + length <= blob_len);
     uint64_t chunk_size = blob_len / (sizeof(unused)*8);
     uint64_t start = offset / chunk_size;
-    uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+    uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
     auto i = start;
     while (i < end && (unused & (1u << i))) {
       i++;
@@ -702,7 +702,7 @@ public:
     assert((blob_len % (sizeof(unused)*8)) == 0);
     assert(offset + length <= blob_len);
     uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = ROUND_UP_TO(offset, chunk_size) / chunk_size;
+    uint64_t start = round_up_to(offset, chunk_size) / chunk_size;
     uint64_t end = (offset + length) / chunk_size;
     for (auto i = start; i < end; ++i) {
       unused |= (1u << i);
@@ -720,7 +720,7 @@ public:
       assert(offset + length <= blob_len);
       uint64_t chunk_size = blob_len / (sizeof(unused)*8);
       uint64_t start = offset / chunk_size;
-      uint64_t end = ROUND_UP_TO(offset + length, chunk_size) / chunk_size;
+      uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
       for (auto i = start; i < end; ++i) {
         unused &= ~(1u << i);
       }
@@ -741,7 +741,7 @@ public:
     }
     while (x_len > 0) {
       assert(p != extents.end());
-      uint64_t l = MIN(p->length - x_off, x_len);
+      uint64_t l = std::min(p->length - x_off, x_len);
       int r = f(p->offset + x_off, l);
       if (r < 0)
         return r;
@@ -765,7 +765,7 @@ public:
     uint64_t x_len = bl.length();
     while (x_len > 0) {
       assert(p != extents.end());
-      uint64_t l = MIN(p->length - x_off, x_len);
+      uint64_t l = std::min(p->length - x_off, x_len);
       bufferlist t;
       it.copy(l, t);
       f(p->offset + x_off, t);
