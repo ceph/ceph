@@ -15,7 +15,6 @@
 #ifndef __LIBRBD_HPP
 #define __LIBRBD_HPP
 
-#include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
