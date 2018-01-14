@@ -692,7 +692,17 @@ public:
   public:
     hobject_t hoid;
     OpRequestRef op;
-    xlist<RepGather*>::item queue_item;
+  private:
+    boost::intrusive::list_member_hook<> queue_item_;
+  public:
+    typedef boost::intrusive::list<
+      RepGather,
+      boost::intrusive::member_hook<
+        RepGather,
+        boost::intrusive::list_member_hook<>,
+        &RepGather::queue_item_> > queue_item_t;
+    queue_item_t queue_item;
+
     int nref;
 
     eversion_t v;
@@ -716,14 +726,13 @@ public:
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
-    
+
     RepGather(
       OpContext *c, ceph_tid_t rt,
       eversion_t lc,
       bool applies_with_commit) :
       hoid(c->obc->obs.oi.soid),
       op(c->op),
-      queue_item(this),
       nref(1),
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
@@ -745,7 +754,6 @@ public:
       bool applies_with_commit,
       int r) :
       op(o),
-      queue_item(this),
       nref(1),
       r(r),
       rep_tid(rt),
@@ -869,7 +877,7 @@ protected:
 
   // replica ops
   // [primary|tail]
-  xlist<RepGather*> repop_queue;
+  RepGather::queue_item_t repop_queue;
 
   friend class C_OSD_RepopApplied;
   friend class C_OSD_RepopCommit;

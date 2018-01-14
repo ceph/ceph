@@ -9975,17 +9975,17 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
 
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
-    dout(20) << "   q front is " << *repop_queue.front() << dendl; 
-    if (repop_queue.front() != repop) {
+    dout(20) << "   q front is " << repop_queue.front() << dendl; 
+    if (&repop_queue.front() != repop) {
       if (!repop->applies_with_commit) {
 	dout(0) << " removing " << *repop << dendl;
-	dout(0) << "   q front is " << *repop_queue.front() << dendl;
-	assert(repop_queue.front() == repop);
+	dout(0) << "   q front is " << repop_queue.front() << dendl;
+	assert(&repop_queue.front() == repop);
       }
     } else {
       RepGather *to_remove = nullptr;
       while (!repop_queue.empty() &&
-	     (to_remove = repop_queue.front())->rep_done) {
+	     (to_remove = &repop_queue.front())->rep_done) {
 	repop_queue.pop_front();
 	for (auto p = to_remove->on_success.begin();
 	     p != to_remove->on_success.end();
@@ -10076,7 +10076,7 @@ PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
 
   repop->start = ceph_clock_now();
 
-  repop_queue.push_back(&repop->queue_item);
+  repop_queue.push_back(*repop);
   repop->get();
 
   osd->logger->inc(l_osd_op_wip);
@@ -10104,7 +10104,7 @@ boost::intrusive_ptr<PrimaryLogPG::RepGather> PrimaryLogPG::new_repop(
 
   repop->start = ceph_clock_now();
 
-  repop_queue.push_back(&repop->queue_item);
+  repop_queue.push_back(*repop);
 
   osd->logger->inc(l_osd_op_wip);
 
@@ -11426,7 +11426,7 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
 
   // apply all repops
   while (!repop_queue.empty()) {
-    RepGather *repop = repop_queue.front();
+    RepGather *repop = &repop_queue.front();
     repop_queue.pop_front();
     dout(10) << " canceling repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
@@ -14092,23 +14092,21 @@ void PrimaryLogPG::agent_estimate_temp(const hobject_t& oid, int *temp)
 bool PrimaryLogPG::already_complete(eversion_t v)
 {
   dout(20) << __func__ << ": " << v << dendl;
-  for (xlist<RepGather*>::iterator i = repop_queue.begin();
-       !i.end();
-       ++i) {
-    dout(20) << __func__ << ": " << **i << dendl;
+  for (const auto& i : repop_queue) {
+    dout(20) << __func__ << ": " << i << dendl;
     // skip copy from temp object ops
-    if ((*i)->v == eversion_t()) {
-      dout(20) << __func__ << ": " << **i
+    if (i.v == eversion_t()) {
+      dout(20) << __func__ << ": " << i
 	       << " version is empty" << dendl;
       continue;
     }
-    if ((*i)->v > v) {
-      dout(20) << __func__ << ": " << **i
+    if (i.v > v) {
+      dout(20) << __func__ << ": " << i
 	       << " (*i)->v past v" << dendl;
       break;
     }
-    if (!(*i)->all_committed) {
-      dout(20) << __func__ << ": " << **i
+    if (!i.all_committed) {
+      dout(20) << __func__ << ": " << i
 	       << " not committed, returning false"
 	       << dendl;
       return false;
@@ -14121,22 +14119,20 @@ bool PrimaryLogPG::already_complete(eversion_t v)
 bool PrimaryLogPG::already_ack(eversion_t v)
 {
   dout(20) << __func__ << ": " << v << dendl;
-  for (xlist<RepGather*>::iterator i = repop_queue.begin();
-       !i.end();
-       ++i) {
+  for (const auto& i : repop_queue) {
     // skip copy from temp object ops
-    if ((*i)->v == eversion_t()) {
-      dout(20) << __func__ << ": " << **i
+    if (i.v == eversion_t()) {
+      dout(20) << __func__ << ": " << i
 	       << " version is empty" << dendl;
       continue;
     }
-    if ((*i)->v > v) {
-      dout(20) << __func__ << ": " << **i
+    if (i.v > v) {
+      dout(20) << __func__ << ": " << i
 	       << " (*i)->v past v" << dendl;
       break;
     }
-    if (!(*i)->all_applied) {
-      dout(20) << __func__ << ": " << **i
+    if (!i.all_applied) {
+      dout(20) << __func__ << ": " << i
 	       << " not applied, returning false"
 	       << dendl;
       return false;

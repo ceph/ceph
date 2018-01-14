@@ -15,6 +15,7 @@
 #ifndef CEPH_PG_H
 #define CEPH_PG_H
 
+#include <boost/intrusive/list.hpp>
 #include <boost/statechart/custom_reaction.hpp>
 #include <boost/statechart/event.hpp>
 #include <boost/statechart/simple_state.hpp>
@@ -33,7 +34,6 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "osd_types.h"
-#include "include/xlist.h"
 #include "SnapMapper.h"
 #include "Session.h"
 #include "common/Timer.h"
@@ -810,7 +810,14 @@ protected:
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
-  xlist<PG*>::item stat_queue_item;
+  boost::intrusive::list_member_hook<> stat_queue_item_;
+  typedef boost::intrusive::list<
+    PG,
+    boost::intrusive::member_hook<
+      PG,
+      boost::intrusive::list_member_hook<>,
+      &PG::stat_queue_item_> > stat_queue_item_t;
+  stat_queue_item_t stat_queue_item;
   bool scrub_queued;
   bool recovery_queued;
 
