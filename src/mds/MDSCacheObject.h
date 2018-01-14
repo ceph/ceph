@@ -249,7 +249,7 @@ protected:
   // replication (across mds cluster)
  protected:
   unsigned		replica_nonce = 0; // [replica] defined on replica
-  typedef compact_map<mds_rank_t,unsigned> replica_map_type;
+  typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
   replica_map_type replica_map;   // [auth] mds -> nonce
 
  public:
