@@ -1,7 +1,6 @@
 #ifndef __LIBRADOS_HPP
 #define __LIBRADOS_HPP
 
-#include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
