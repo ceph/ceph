@@ -603,11 +603,17 @@ public:
 
     bool sent_reply = false;
 
-    // pending async reads <off, len, op_flags> -> <outbl, outr>
-    using async_read_params_t = ObjectStore::async_read_params_t;
-    std::vector<async_read_params_t> pending_async_reads;
+    std::unique_ptr<ObjectStore::ReadTransaction> read_transaction;
     int inflightreads;
     friend struct OnReadComplete;
+    int read_maybe_async(
+      const hobject_t &hoid,
+      const OSDOp& osd_op,
+      const uint64_t offset,
+      const uint64_t length,
+      ceph::bufferlist* const destbl,
+      Context* const on_complete,
+      const uint32_t flags);
     void start_async_reads(PrimaryLogPG *pg);
     void finish_read(PrimaryLogPG *pg);
     bool async_reads_complete() {
@@ -668,11 +674,6 @@ public:
       assert(!op_t);
       if (reply)
 	reply->put();
-      for (auto i = pending_async_reads.begin();
-	   i != pending_async_reads.end();
-	   pending_async_reads.erase(i++)) {
-	delete i->on_complete;
-      }
     }
     uint64_t get_features() {
       if (op && op->get_req()) {

@@ -2104,20 +2104,39 @@ int ECBackend::objects_read_sync(
   return -EOPNOTSUPP;
 }
 
-void ECBackend::objects_read_async(
-  const hobject_t &hoid,
-  std::vector<async_read_params_t> to_read,
-  Context *on_complete,
-  bool fast_read)
+ECBackend::ECReadTransaction::~ECReadTransaction()
 {
-  map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > >
-    reads;
+  for (auto i = pending_async_reads.begin();
+       i != pending_async_reads.end();
+       pending_async_reads.erase(i++)) {
+    delete i->on_complete;
+  }
+}
 
+int ECBackend::ECReadTransaction::read(
+  uint64_t offset,
+  uint64_t length,
+  uint32_t flags,
+  ceph::bufferlist& destbl,
+  Context* on_complete)
+{
+  pending_async_reads.emplace_back(offset, length, &destbl,
+                                   on_complete, flags);
+  return -EINPROGRESS;
+}
+
+int ECBackend::ECReadTransaction::apply(Context *on_complete)
+{
+  std::vector<ObjectStore::async_read_params_t> to_read;
+  std::swap(to_read, pending_async_reads);
+
+  std::map<hobject_t,
+           std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > reads;
   uint32_t flags = 0;
   extent_set es;
   for (auto i = to_read.begin(); i != to_read.end(); ++i) {
     pair<uint64_t, uint64_t> tmp =
-      sinfo.offset_len_to_stripe_bounds(
+      ec->sinfo.offset_len_to_stripe_bounds(
 	make_pair(i->offset, i->length));
 
     extent_set esnew;
@@ -2142,13 +2161,13 @@ void ECBackend::objects_read_async(
   struct cb {
     ECBackend *ec;
     hobject_t hoid;
-    std::vector<async_read_params_t> to_read;
+    std::vector<ObjectStore::async_read_params_t> to_read;
     unique_ptr<Context> on_complete;
     cb(const cb&) = delete;
     cb(cb &&) = default;
     cb(ECBackend *ec,
        const hobject_t &hoid,
-       std::vector<async_read_params_t> to_read,
+       std::vector<ObjectStore::async_read_params_t> to_read,
        Context *on_complete)
       : ec(ec),
 	hoid(hoid),
@@ -2203,15 +2222,16 @@ void ECBackend::objects_read_async(
       to_read.clear();
     }
   };
-  objects_read_and_reconstruct(
+  ec->objects_read_and_reconstruct(
     reads,
-    fast_read,
+    ec->get_parent()->get_pool().fast_read,
     make_gen_lambda_context<
       map<hobject_t,pair<int, extent_map> > &&, cb>(
-	cb(this,
+	cb(ec,
 	   hoid,
 	   std::move(to_read),
 	   on_complete)));
+  return 0;
 }
 
 struct CallClientContexts :

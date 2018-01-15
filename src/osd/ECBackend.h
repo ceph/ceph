@@ -175,11 +175,39 @@ public:
     }
   };
   list<ClientAsyncReadStatus> in_progress_client_reads;
-  void objects_read_async(
-    const hobject_t &hoid,
-    std::vector<async_read_params_t> to_read,
-    Context *on_complete,
-    bool fast_read = false) override;
+
+  class ECReadTransaction : public ObjectStore::ReadTransaction {
+    ECBackend* const ec;
+    hobject_t hoid;
+    std::vector<ObjectStore::async_read_params_t> pending_async_reads;
+
+  public:
+    // FIXME: make protected/private
+    ECReadTransaction(ECBackend* const ec,
+                      const hobject_t& hoid)
+      : ec(ec),
+        hoid(hoid) {
+    }
+    ~ECReadTransaction() override;
+
+    int read(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete) override;
+
+    bool empty() const override {
+      return pending_async_reads.empty();
+    }
+
+    int apply(Context* on_complete) override;
+  };
+
+  std::unique_ptr<ObjectStore::ReadTransaction>
+  create_read_transaction(const hobject_t &hoid) override {
+    return std::make_unique<ECReadTransaction>(this, hoid);
+  }
 
   template <typename Func>
   void objects_read_async_no_cache(

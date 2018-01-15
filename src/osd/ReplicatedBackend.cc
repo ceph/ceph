@@ -262,53 +262,6 @@ int ReplicatedBackend::objects_read_sync(
   return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
 }
 
-struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
-  boost::optional<int> r;
-  std::unique_ptr<Context> c;
-
-  AsyncReadCallback(Context *c)
-    : c(c) {
-  }
-
-  void finish(ThreadPool::TPHandle&) override {
-    assert(r != boost::none);
-    c.release()->complete(*r);
-  }
-};
-
-struct AsyncReadEnqueuer : public Context {
-  ReplicatedBackend* const pg;
-  AsyncReadCallback* const cb;
-  std::unique_ptr<GenContext<ThreadPool::TPHandle&>> on_complete;
-
-  AsyncReadEnqueuer(ReplicatedBackend* const pg,
-                    Context* const _on_complete)
-    : pg(pg),
-      cb(new AsyncReadCallback(_on_complete)),
-      // I would prefer to bless the context later but holding
-      // the PG::lock is a must due to the get_osdmap() call.
-      on_complete(pg->get_parent()->bless_gencontext(cb)) {
-  }
-  ~AsyncReadEnqueuer() override = default;
-
-  void finish(const int r) override {
-    cb->r = r;
-    pg->get_parent()->schedule_recovery_work(on_complete.release());
-  }
-};
-
-void ReplicatedBackend::objects_read_async(
-  const hobject_t &hoid,
-  std::vector<async_read_params_t> to_read,
-  Context *on_complete,
-  bool fast_read)
-{
-  // There is no fast read implementation for replication backend yet
-  assert(!fast_read);
-  store->async_read(ch, ghobject_t(hoid),
-                    { to_read.data(), to_read.size() },
-                    new AsyncReadEnqueuer(this, on_complete));
-}
 
 class C_OSD_OnOpCommit : public Context {
   ReplicatedBackend *pg;

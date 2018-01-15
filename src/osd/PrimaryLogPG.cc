@@ -198,18 +198,6 @@ class PrimaryLogPG::C_OSD_OndiskWriteUnlock : public Context {
   }
 };
 
-struct OnReadComplete : public Context {
-  PrimaryLogPG *pg;
-  PrimaryLogPG::OpContext *opcontext;
-  OnReadComplete(
-    PrimaryLogPG *pg,
-    PrimaryLogPG::OpContext *ctx) : pg(pg), opcontext(ctx) {}
-  void finish(int r) override {
-    opcontext->finish_read(pg);
-  }
-  ~OnReadComplete() override {}
-};
-
 class PrimaryLogPG::C_OSD_AppliedRecoveredObject : public Context {
   PrimaryLogPGRef pg;
   ObjectContextRef obc;
@@ -246,16 +234,108 @@ class PrimaryLogPG::C_OSD_AppliedRecoveredObjectReplica : public Context {
 };
 
 // OpContext
+int PrimaryLogPG::OpContext::read_maybe_async(
+  const hobject_t &hoid,
+  const OSDOp& osd_op,
+  const uint64_t offset,
+  const uint64_t length,
+  ceph::bufferlist* const destbl,
+  Context* const on_complete,
+  const uint32_t flags)
+{
+  struct ReadFinisher : public PrimaryLogPG::OpFinisher {
+    const OSDOp& osd_op;
+
+    ReadFinisher(const OSDOp& osd_op)
+      : osd_op(osd_op) {
+    }
+
+    int execute() override {
+      return osd_op.rval;
+    }
+  };
+
+  if (!read_transaction) {
+    read_transaction = pg->pgbackend->create_read_transaction(hoid);
+  }
+
+  const int ret = read_transaction->read(offset, length, flags,
+                                         *destbl, on_complete);
+  if (ret == -EINPROGRESS) {
+    // if the underlying implementation decides to go async,
+    // then it returns -EINPROGRESS
+    //dout(10) << " async_read noted for " << soid << dendl;
+
+    op_finishers[current_osd_subop_num] = \
+      std::make_unique<ReadFinisher>(osd_op);
+  } else if (ret < 0) {
+    on_complete->complete(ret);
+  }
+  return ret;
+}
+
 void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 {
+  struct OnReadComplete : public Context {
+    PrimaryLogPG *pg;
+    PrimaryLogPG::OpContext *opcontext;
+    OnReadComplete(
+      PrimaryLogPG *pg,
+      PrimaryLogPG::OpContext *ctx) : pg(pg), opcontext(ctx) {}
+    void finish(int r) override {
+      opcontext->finish_read(pg);
+    }
+    ~OnReadComplete() override {}
+  };
+
+
+  struct BlessedReadCompleter : public Context,
+                                public GenContext<ThreadPool::TPHandle&> {
+    PrimaryLogPGRef pg;
+    PrimaryLogPG::OpContext *opcontext;
+    epoch_t e;
+
+    BlessedReadCompleter(PrimaryLogPG* const pg,
+                         PrimaryLogPG::OpContext* const opcontext)
+      : pg(pg),
+        opcontext(opcontext),
+        // I would prefer to bless the context later but holding
+        // the PG::lock is a must due to the get_osdmap() call.
+        e(pg->get_epoch()) {
+    }
+
+    void finish(const int) override {
+      pg->schedule_recovery_work(this);
+    }
+
+    /* the purpose of this override is to avoid disposing the object on
+     * the complete() call from ReadTransaction::apply(), and thus let
+     * reuse the GenContext<...> subobject in the recovery work queue. */
+    void complete(const int r) override {
+      finish(r);
+      /* DON'T delete this; */
+    }
+
+    // called by recovery workers
+    void finish(ThreadPool::TPHandle&) override {
+      pg->lock();
+      if (!pg->pg_has_reset_since(e)) {
+        opcontext->finish_read(pg.get());
+      }
+      pg->unlock();
+    }
+  };
+
   inflightreads = 1;
-  std::vector<async_read_params_t> in;
-  in.swap(pending_async_reads);
-  pg->pgbackend->objects_read_async(
-    obc->obs.oi.soid,
-    std::move(in),
-    new OnReadComplete(pg, this), pg->get_pool().fast_read);
+
+  if (pg->pool.info.is_erasure()) {
+    // the EC backend handles blessing contexts on its own
+    read_transaction->apply(new OnReadComplete(pg, this));
+  } else {
+    read_transaction->apply(new BlessedReadCompleter(pg, this));
+  }
 }
+
 void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
 {
   // We're called under PG::lock.
@@ -3518,7 +3598,8 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     obc->ondisk_read_unlock();
   }
 
-  bool pending_async_reads = !ctx->pending_async_reads.empty();
+  bool const pending_async_reads = \
+    ctx->read_transaction && !ctx->read_transaction->empty();
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
     if (pending_async_reads) {
@@ -4666,17 +4747,6 @@ void PrimaryLogPG::maybe_create_new_object(
   }
 }
 
-struct ReadFinisher : public PrimaryLogPG::OpFinisher {
-  OSDOp& osd_op;
-
-  ReadFinisher(OSDOp& osd_op) : osd_op(osd_op) {
-  }
-
-  int execute() override {
-    return osd_op.rval;
-  }
-};
-
 struct C_ChecksumRead : public Context {
   PrimaryLogPG *primary_log_pg;
   OSDOp &osd_op;
@@ -4794,17 +4864,14 @@ int PrimaryLogPG::do_checksum(OpContext *ctx, OSDOp& osd_op,
 					   std::move(init_value_bl), maybe_crc,
 					   oi.size, osd, soid, op.flags);
 
-    ctx->pending_async_reads.emplace_back(
+    return ctx->read_maybe_async(
+      soid,
+      osd_op,
       op.checksum.offset,
       op.checksum.length,
       &checksum_ctx->read_bl,
       checksum_ctx,
       op.flags);
-
-    dout(10) << __func__ << ": async_read noted for " << soid << dendl;
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
-    return -EINPROGRESS;
   }
 
   // sync read
@@ -4967,18 +5034,14 @@ int PrimaryLogPG::do_extent_cmp(OpContext *ctx, OSDOp& osd_op)
     auto& soid = oi.soid;
     auto extent_cmp_ctx = new C_ExtentCmpRead(this, osd_op, maybe_crc, oi.size,
 					      osd, soid, op.flags);
-    ctx->pending_async_reads.emplace_back(
+    return ctx->read_maybe_async(
+      soid,
+      osd_op,
       op.extent.offset,
       op.extent.length,
       &extent_cmp_ctx->read_bl,
       extent_cmp_ctx,
       op.flags);
-
-    dout(10) << __func__ << ": async_read noted for " << soid << dendl;
-
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
-    return -EINPROGRESS;
   }
 
   // sync read
@@ -5051,7 +5114,9 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op, bool sync) {
     if (oi.is_data_digest() && op.extent.offset == 0 &&
         op.extent.length >= oi.size)
       maybe_crc = oi.data_digest;
-    ctx->pending_async_reads.emplace_back(
+    ctx->read_maybe_async(
+      soid,
+      osd_op,
       op.extent.offset,
       op.extent.length,
       &osd_op.outdata,
@@ -5059,10 +5124,6 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op, bool sync) {
                              &osd_op.outdata, maybe_crc, oi.size,
                              osd, soid, op.flags),
       op.flags);
-    dout(10) << " async_read noted for " << soid << dendl;
-
-    ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5120,17 +5181,15 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     }
 
     if (length > 0) {
-      ctx->pending_async_reads.emplace_back(
+      ctx->read_maybe_async(
+        soid,
+        osd_op,
         offset,
         length,
         &osd_op.outdata,
         new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
                                &op.extent.length),
         op.flags);
-      dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
-
-      ctx->op_finishers[ctx->current_osd_subop_num].reset(
-        new ReadFinisher(osd_op));
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
@@ -7799,7 +7858,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 
   // read-op?  write-op noop? done?
   if (ctx->op_t->empty() && !ctx->modify) {
-    if (ctx->pending_async_reads.empty())
+    if (!ctx->read_transaction || ctx->read_transaction->empty())
       unstable_stats.add(ctx->delta_stats);
     if (ctx->op->may_write() &&
 	get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
@@ -8148,16 +8207,13 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
     if (cursor.data_offset < oi.size) {
       uint64_t max_read = MIN(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
-	async_read_started = true;
-	ctx->pending_async_reads.emplace_back(cursor.data_offset, max_read,
-                                              &bl, cb, osd_op.op.flags);
+	result =  ctx->read_maybe_async(soid, osd_op, cursor.data_offset,
+                                        max_read, &bl, cb, osd_op.op.flags);
 	cb->len = max_read;
-
-        ctx->op_finishers[ctx->current_osd_subop_num].reset(
-          new ReadFinisher(osd_op));
-	result = -EINPROGRESS;
-
-	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
+	async_read_started = true;
+        if (result < 0) {
+          return result;
+        }
       } else {
 	result = pgbackend->objects_read_sync(
 	  oi.soid, cursor.data_offset, max_read, osd_op.op.flags, &bl);

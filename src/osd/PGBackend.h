@@ -550,11 +550,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      uint32_t op_flags,
      bufferlist *bl) = 0;
 
-   using async_read_params_t = ObjectStore::async_read_params_t;
-   virtual void objects_read_async(
-     const hobject_t &hoid,
-     std::vector<async_read_params_t> to_read,
-     Context *on_complete, bool fast_read = false) = 0;
+   virtual std::unique_ptr<ObjectStore::ReadTransaction>
+   create_read_transaction(const hobject_t &hoid) = 0;
 
    virtual bool auto_repair_supported() const = 0;
    void be_scan_list(
