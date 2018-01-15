@@ -309,7 +309,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
        const PGPool &_pool, spg_t p) :
   pg_id(p),
   coll(p),
-  osr(o->osr_registry.lookup_or_create(p, (stringify(p)))),
   osd(o),
   cct(o->cct),
   osdmap_ref(curmap),
@@ -366,7 +365,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   ss << "PG " << info.pgid;
   trace_endpoint.copy_name(ss.str());
 #endif
-  osr->shard_hint = p;
 }
 
 PG::~PG()
@@ -3052,9 +3050,8 @@ void PG::upgrade(ObjectStore *store)
   dirty_big_info = true;
   write_if_dirty(t);
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr (std::make_shared<
-                                      ObjectStore::Sequencer>("upgrade"));
-  int r = store->apply_transaction(osr.get(), std::move(t));
+  ObjectStore::CollectionHandle ch = store->open_collection(coll);
+  int r = store->apply_transaction(ch, std::move(t));
   if (r != 0) {
     derr << __func__ << ": apply_transaction returned "
 	 << cpp_strerror(r) << dendl;
@@ -3063,7 +3060,7 @@ void PG::upgrade(ObjectStore *store)
   assert(r == 0);
 
   C_SaferCond waiter;
-  if (!osr->flush_commit(&waiter)) {
+  if (!ch->flush_commit(&waiter)) {
     waiter.wait();
   }
 }
@@ -3307,7 +3304,7 @@ void PG::handle_pg_trim(epoch_t epoch, int from, shard_id_t shard, eversion_t tr
     pg_log.trim(trim_to, info);
     dirty_info = true;
     write_if_dirty(t);
-    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
     assert(tr == 0);
   }
 }
@@ -3517,7 +3514,7 @@ void PG::read_state(ObjectStore *store)
   PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
   handle_loaded(&rctx);
   write_if_dirty(*rctx.transaction);
-  store->apply_transaction(osr.get(), std::move(*rctx.transaction));
+  store->apply_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
 }
 
@@ -4102,7 +4099,7 @@ void PG::_scan_rollback_obs(
   if (!t.empty()) {
     derr << __func__ << ": queueing trans to clean up obsolete rollback objs"
 	 << dendl;
-    osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    osd->store->queue_transaction(ch, std::move(t), NULL);
   }
 }
 
@@ -4182,7 +4179,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, obj_snaps, &_t);
-	r = osd->store->apply_transaction(osr.get(), std::move(t));
+	r = osd->store->apply_transaction(ch, std::move(t));
 	if (r != 0) {
 	  derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
 	       << dendl;
@@ -4229,7 +4226,7 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
       o.attrs[OI_ATTR] = bp;
 
       t.setattr(coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = osd->store->apply_transaction(osr.get(), std::move(t));
+      int r = osd->store->apply_transaction(ch, std::move(t));
       if (r != 0) {
 	derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
 	     << dendl;
@@ -4601,7 +4598,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  scrubber.cleanup_store(&t);
 	  scrubber.store.reset(Scrub::Store::create(osd->store, &t,
 						    info.pgid, coll));
-	  osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+	  osd->store->queue_transaction(ch, std::move(t), nullptr);
 	}
 
         // Don't include temporary objects when scrubbing
@@ -4660,7 +4657,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
-	  osr->flush();
+	  ch->flush();
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
@@ -5079,7 +5076,7 @@ void PG::scrub_compare_maps()
       dout(10) << __func__ << ": updating scrub object" << dendl;
       ObjectStore::Transaction t;
       scrubber.store->flush(&t);
-      osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+      osd->store->queue_transaction(ch, std::move(t), nullptr);
     }
   }
 }
@@ -5219,7 +5216,7 @@ void PG::scrub_finish()
     ObjectStore::Transaction t;
     dirty_info = true;
     write_if_dirty(t);
-    int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+    int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
     assert(tr == 0);
   }
 
@@ -5519,7 +5516,7 @@ void PG::reset_interval_flush()
   
   Context *c = new QueuePeeringEvt<IntervalFlush>(
     this, get_osdmap()->get_epoch(), IntervalFlush());
-  if (!osr->flush_commit(c)) {
+  if (!ch->flush_commit(c)) {
     dout(10) << "Beginning to block outgoing recovery messages" << dendl;
     recovery_state.begin_block_outgoing();
   } else {
@@ -6203,7 +6200,7 @@ void PG::update_store_on_load()
       lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
       ObjectStore::Transaction t;
       t.collection_set_bits(coll, bits);
-      osd->store->apply_transaction(osr.get(), std::move(t));
+      osd->store->apply_transaction(ch, std::move(t));
     }
   }
 }

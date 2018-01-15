@@ -17,6 +17,7 @@
 #include "include/Context.h"
 #include "include/buffer.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -117,101 +118,46 @@ public:
   virtual const PerfCounters* get_perf_counters() const = 0;
 
   /**
-   * a sequencer orders transactions
+   * a collection also orders transactions
    *
-   * Any transactions queued under a given sequencer will be applied in
-   * sequence.  Transactions queued under different sequencers may run
+   * Any transactions queued under a given collection will be applied in
+   * sequence.  Transactions queued under different collections may run
    * in parallel.
    *
-   * Clients of ObjectStore create and maintain their own Sequencer objects.
-   * When a list of transactions is queued the caller specifies a Sequencer to be used.
-   *
+   * ObjectStore users my get collection handles with open_collection() (or,
+   * for bootstrapping a new collection, create_new_collection()).
    */
+  struct CollectionImpl : public RefCountedObject {
+    const coll_t cid;
 
-  /**
-   * ABC for Sequencer implementation, private to the ObjectStore derived class.
-   * created in ...::queue_transaction(s)
-   */
-  struct Sequencer_impl : public RefCountedObject {
-    CephContext* cct;
+    CollectionImpl(const coll_t& c)
+      : RefCountedObject(NULL, 0),
+	cid(c) {}
 
+    /// wait for any queued transactions to apply
     // block until any previous transactions are visible.  specifically,
     // collection_list and collection_empty need to reflect prior operations.
     virtual void flush() = 0;
-
-    // called when we are done with the impl.  the impl may have a different
-    // (longer) lifecycle than the Sequencer.
-    virtual void discard() {}
 
     /**
      * Async flush_commit
      *
      * There are two cases:
-     * 1) sequencer is currently idle: the method returns true.  c is
+     * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
-     * 2) sequencer is not idle: the method returns false and c is
+     * 2) collection is not idle: the method returns false and c is
      *    called asyncronously with a value of 0 once all transactions
-     *    queued on this sequencer prior to the call have been applied
+     *    queued on this collection prior to the call have been applied
      *    and committed.
      */
-    virtual bool flush_commit(
-      Context *c ///< [in] context to call upon flush/commit
-      ) = 0; ///< @return true if idle, false otherwise
+    virtual bool flush_commit(Context *c) = 0;
 
-    Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
-    ~Sequencer_impl() override {}
-  };
-  typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
-
-  /**
-   * External (opaque) sequencer implementation
-   */
-  struct Sequencer {
-    string name;
-    spg_t shard_hint;
-    Sequencer_implRef p;
-
-    explicit Sequencer(string n)
-      : name(n), shard_hint(spg_t()), p(NULL) {
-    }
-    ~Sequencer() {
-      if (p)
-	p->discard();  // tell impl we are done with it
-    }
-
-    /// return a unique string identifier for this sequencer
-    const string& get_name() const {
-      return name;
-    }
-    /// wait for any queued transactions on this sequencer to apply
-    void flush() {
-      if (p)
-	p->flush();
-    }
-
-    /// @see Sequencer_impl::flush_commit()
-    bool flush_commit(Context *c) {
-      if (!p) {
-	return true;
-      } else {
-	return p->flush_commit(c);
-      }
-    }
-  };
-
-  struct CollectionImpl : public RefCountedObject {
-    virtual const coll_t &get_cid() = 0;
-    CollectionImpl() : RefCountedObject(NULL, 0) {}
-  };
-  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
-
-  struct CompatCollectionHandle : public CollectionImpl {
-    coll_t cid;
-    explicit CompatCollectionHandle(coll_t c) : cid(c) {}
-    const coll_t &get_cid() override {
+    const coll_t &get_cid() {
       return cid;
     }
   };
+  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+
 
   /*********************************
    *
@@ -1484,24 +1430,24 @@ public:
   };
 
   // synchronous wrappers
-  unsigned apply_transaction(Sequencer *osr, Transaction&& t, Context *ondisk=0) {
+  unsigned apply_transaction(CollectionHandle& ch, Transaction&& t, Context *ondisk=0) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return apply_transactions(osr, tls, ondisk);
+    return apply_transactions(ch, tls, ondisk);
   }
-  unsigned apply_transactions(Sequencer *osr, vector<Transaction>& tls, Context *ondisk=0);
+  unsigned apply_transactions(CollectionHandle& ch, vector<Transaction>& tls, Context *ondisk=0);
 
-  int queue_transaction(Sequencer *osr, Transaction&& t, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(CollectionHandle& ch, Transaction&& t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef(),
 				ThreadPool::TPHandle *handle = NULL) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
+    return queue_transactions(ch, tls, onreadable, ondisk, onreadable_sync,
 	                      op, handle);
   }
 
-  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
+  int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef(),
@@ -1510,17 +1456,17 @@ public:
     tls.back().register_on_applied(onreadable);
     tls.back().register_on_commit(ondisk);
     tls.back().register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    return queue_transactions(ch, tls, op, handle);
   }
 
   virtual int queue_transactions(
-    Sequencer *osr, vector<Transaction>& tls,
+    CollectionHandle& ch, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
 
   int queue_transactions(
-    Sequencer *osr,
+    CollectionHandle& ch,
     vector<Transaction>& tls,
     Context *onreadable,
     Context *oncommit,
@@ -1529,7 +1475,7 @@ public:
     TrackedOpRef op);
 
   int queue_transaction(
-    Sequencer *osr,
+    CollectionHandle& ch,
     Transaction&& t,
     Context *onreadable,
     Context *oncommit,
@@ -1540,7 +1486,7 @@ public:
     vector<Transaction> tls;
     tls.push_back(std::move(t));
     return queue_transactions(
-      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
+      ch, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
   }
 
  public:
@@ -1686,9 +1632,16 @@ public:
    * Provide a trivial handle as a default to avoid converting legacy
    * implementations.
    */
-  virtual CollectionHandle open_collection(const coll_t &cid) {
-    return new CompatCollectionHandle(cid);
-  }
+  virtual CollectionHandle open_collection(const coll_t &cid) = 0;
+
+  /**
+   * get a collection handle for a soon-to-be-created collection
+   *
+   * This handle must be used by queue_transaction that includes a
+   * create_collection call in order to become valid.  It will become the
+   * reference to the created collection.
+   */
+  virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
 
   /**
@@ -2086,14 +2039,6 @@ public:
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
 
-static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
-  s->get();
-}
-static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
-  s->put();
-}
-
-ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx);
 
 #endif
