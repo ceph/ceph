@@ -12,6 +12,7 @@
  * 
  */
 
+#include <string_view>
 
 #include "include/types.h"
 
@@ -291,14 +292,14 @@ bool CDir::check_rstats(bool scrub)
   return good;
 }
 
-CDentry *CDir::lookup(const string& name, snapid_t snap)
+CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
-  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name.c_str(),
+  map_t::iterator iter = items.lower_bound(dentry_key_t(snap, name,
 							inode->hash_dentry_name(name)));
   if (iter == items.end())
     return 0;
-  if (iter->second->name == name &&
+  if (iter->second->get_name() == name &&
       iter->second->first <= snap &&
       iter->second->last >= snap) {
     dout(20) << "  hit -> " << iter->first << dendl;
@@ -308,8 +309,8 @@ CDentry *CDir::lookup(const string& name, snapid_t snap)
   return 0;
 }
 
-CDentry *CDir::lookup_exact_snap(const string& name, snapid_t last) {
-  map_t::iterator p = items.find(dentry_key_t(last, name.c_str(),
+CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
+  map_t::iterator p = items.find(dentry_key_t(last, name,
 					      inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
@@ -320,7 +321,7 @@ CDentry *CDir::lookup_exact_snap(const string& name, snapid_t last) {
  * linking fun
  */
 
-CDentry* CDir::add_null_dentry(const string& dname,
+CDentry* CDir::add_null_dentry(std::string_view dname,
 			       snapid_t first, snapid_t last)
 {
   // foreign
@@ -339,7 +340,7 @@ CDentry* CDir::add_null_dentry(const string& dname,
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->name) == 0);
+  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
   if (last == CEPH_NOSNAP)
@@ -363,7 +364,7 @@ CDentry* CDir::add_null_dentry(const string& dname,
 }
 
 
-CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
+CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
 				  snapid_t first, snapid_t last) 
 {
   // primary
@@ -385,7 +386,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->name) == 0);
+  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
 
@@ -413,7 +414,7 @@ CDentry* CDir::add_primary_dentry(const string& dname, CInode *in,
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned char d_type,
+CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
@@ -430,7 +431,7 @@ CDentry* CDir::add_remote_dentry(const string& dname, inodeno_t ino, unsigned ch
   
   // add to dir
   assert(items.count(dn->key()) == 0);
-  //assert(null_items.count(dn->name) == 0);
+  //assert(null_items.count(dn->get_name()) == 0);
 
   items[dn->key()] = dn;
   if (last == CEPH_NOSNAP)
@@ -678,14 +679,14 @@ void CDir::add_to_bloom(CDentry *dn)
     bloom.reset(new bloom_filter(size, 1.0 / size, 0));
   }
   /* This size and false positive probability is completely random.*/
-  bloom->insert(dn->name.c_str(), dn->name.size());
+  bloom->insert(dn->get_name().data(), dn->get_name().size());
 }
 
-bool CDir::is_in_bloom(const string& name)
+bool CDir::is_in_bloom(std::string_view name)
 {
   if (!bloom)
     return false;
-  return bloom->contains(name.c_str(), name.size());
+  return bloom->contains(name.data(), name.size());
 }
 
 void CDir::remove_null_dentries() {
@@ -1009,7 +1010,7 @@ void CDir::split(int bits, list<CDir*>& subs, list<MDSInternalContextBase*>& wai
     CDir::map_t::iterator p = items.begin();
     
     CDentry *dn = p->second;
-    frag_t subfrag = inode->pick_dirfrag(dn->name);
+    frag_t subfrag = inode->pick_dirfrag(dn->get_name());
     int n = (subfrag.value() & (subfrag.mask() ^ frag.mask())) >> subfrag.mask_shift();
     dout(15) << " subfrag " << subfrag << " n=" << n << " for " << p->first << dendl;
     CDir *f = subfrags[n];
@@ -1212,7 +1213,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blo
  * WAITING
  */
 
-void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, MDSInternalContextBase *c) 
+void CDir::add_dentry_waiter(std::string_view dname, snapid_t snapid, MDSInternalContextBase *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
@@ -1222,7 +1223,7 @@ void CDir::add_dentry_waiter(const string& dname, snapid_t snapid, MDSInternalCo
 	   << " " << c << " on " << *this << dendl;
 }
 
-void CDir::take_dentry_waiting(const string& dname, snapid_t first, snapid_t last,
+void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t last,
 			       list<MDSInternalContextBase*>& ls)
 {
   if (waiting_on_dentry.empty())
@@ -1456,7 +1457,7 @@ void CDir::fetch(MDSInternalContextBase *c, bool ignore_authpinnability)
   return fetch(c, want, ignore_authpinnability);
 }
 
-void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_authpinnability)
+void CDir::fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability)
 {
   dout(10) << "fetch on " << *this << dendl;
   
@@ -1494,7 +1495,7 @@ void CDir::fetch(MDSInternalContextBase *c, const string& want_dn, bool ignore_a
   }
 
   if (c) add_waiter(WAIT_COMPLETE, c);
-  if (!want_dn.empty()) wanted_items.insert(want_dn);
+  if (!want_dn.empty()) wanted_items.insert(std::string(want_dn));
   
   // already fetching?
   if (state_test(CDir::STATE_FETCHING)) {
@@ -1645,8 +1646,8 @@ void CDir::_omap_fetch_more(
 }
 
 CDentry *CDir::_load_dentry(
-    const std::string &key,
-    const std::string &dname,
+    std::string_view key,
+    std::string_view dname,
     const snapid_t last,
     bufferlist &bl,
     const int pos,
@@ -1697,7 +1698,7 @@ CDentry *CDir::_load_dentry(
 
     if (stale) {
       if (!dn) {
-        stale_items.insert(key);
+        stale_items.insert(std::string(key));
         *force_dirty = true;
       }
       return dn;
@@ -1732,7 +1733,7 @@ CDentry *CDir::_load_dentry(
     
     if (stale) {
       if (!dn) {
-        stale_items.insert(key);
+        stale_items.insert(std::string(key));
         *force_dirty = true;
       }
       return dn;
@@ -2006,11 +2007,14 @@ void CDir::_go_bad()
   finish_waiting(WAIT_COMPLETE, -EIO);
 }
 
-void CDir::go_bad_dentry(snapid_t last, const std::string &dname)
+void CDir::go_bad_dentry(snapid_t last, std::string_view dname)
 {
   dout(10) << __func__ << " " << dname << dendl;
+  std::string path(get_path());
+  path += "/";
+  path += dname;
   const bool fatal = cache->mds->damage_table.notify_dentry(
-      inode->ino(), frag, last, dname, get_path() + "/" + dname);
+      inode->ino(), frag, last, dname, path);
   if (fatal) {
     cache->mds->damaged();
     ceph_abort();  // unreachable, damaged() respawns us
@@ -2138,11 +2142,11 @@ void CDir::_omap_commit(int op_prio)
     }
 
     if (dn->get_linkage()->is_null()) {
-      dout(10) << " rm " << dn->name << " " << *dn << dendl;
+      dout(10) << " rm " << dn->get_name() << " " << *dn << dendl;
       write_size += key.length();
       to_remove.insert(key);
     } else {
-      dout(10) << " set " << dn->name << " " << *dn << dendl;
+      dout(10) << " set " << dn->get_name() << " " << *dn << dendl;
       bufferlist dnbl;
       _encode_dentry(dn, dnbl, snaps);
       write_size += key.length() + dnbl.length();
@@ -2231,7 +2235,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
   if (dn->linkage.is_remote()) {
     inodeno_t ino = dn->linkage.get_remote_ino();
     unsigned char d_type = dn->linkage.get_remote_d_type();
-    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' remote ino " << ino << dendl;
+    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' remote ino " << ino << dendl;
     
     // marker, name, ino
     bl.append('L');         // remote link
@@ -2242,7 +2246,7 @@ void CDir::_encode_dentry(CDentry *dn, bufferlist& bl,
     CInode *in = dn->linkage.get_inode();
     assert(in);
     
-    dout(14) << " pos " << bl.length() << " dn '" << dn->name << "' inode " << *in << dendl;
+    dout(14) << " pos " << bl.length() << " dn '" << dn->get_name() << "' inode " << *in << dendl;
     
     // marker, name, inode, [symlink string]
     bl.append('I');         // inode

@@ -972,7 +972,7 @@ int SessionFilter::parse(
        * Strict boolean parser.  Allow true/false/0/1.
        * Anything else is -EINVAL.
        */
-      auto is_true = [](const std::string &bstr, bool *out) -> bool
+      auto is_true = [](std::string_view bstr, bool *out) -> bool
       {
         assert(out != nullptr);
 

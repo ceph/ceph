@@ -499,7 +499,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
 // dirfrags
 
-__u32 InodeStoreBase::hash_dentry_name(const string &dn)
+__u32 InodeStoreBase::hash_dentry_name(std::string_view dn)
 {
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
@@ -508,7 +508,7 @@ __u32 InodeStoreBase::hash_dentry_name(const string &dn)
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
-frag_t InodeStoreBase::pick_dirfrag(const string& dn)
+frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
@@ -1135,7 +1135,7 @@ void CInode::build_backtrace(int64_t pool, inode_backtrace_t& bt)
   CDentry *pdn = get_parent_dn();
   while (pdn) {
     CInode *diri = pdn->get_dir()->get_inode();
-    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name, in->inode.version));
+    bt.ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(), in->inode.version));
     in = diri;
     pdn = in->get_parent_dn();
   }
@@ -1310,7 +1310,7 @@ void CInode::verify_diri_backtrace(bufferlist &bl, int err)
     decode(backtrace, bl);
     CDentry *pdn = get_parent_dn();
     if (backtrace.ancestors.empty() ||
-	backtrace.ancestors[0].dname != pdn->name ||
+	backtrace.ancestors[0].dname != pdn->get_name() ||
 	backtrace.ancestors[0].dirino != pdn->get_dir()->ino())
       err = -EINVAL;
   }
@@ -3912,7 +3912,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     /**
      * Fetch backtrace and set tag if tag is non-empty
      */
-    void fetch_backtrace_and_tag(CInode *in, std::string tag,
+    void fetch_backtrace_and_tag(CInode *in, std::string_view tag,
                                  Context *fin, int *bt_r, bufferlist *bt)
     {
       const int64_t pool = in->get_backtrace_pool();
@@ -3954,7 +3954,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // present)
       if (in->scrub_infop) {
         // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        const std::string &tag = in->scrub_infop->header->get_tag();
+        std::string_view tag = in->scrub_infop->header->get_tag();
         // Rather than using the usual CInode::fetch_backtrace,
         // use a special variant that optionally writes a tag in the same
         // operation.

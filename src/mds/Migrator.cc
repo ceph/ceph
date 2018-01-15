@@ -1607,7 +1607,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
     dout(7) << "encode_export_dir exporting " << *dn << dendl;
     
     // dn name
-    encode(dn->name, exportbl);
+    encode(dn->get_name(), exportbl);
     encode(dn->last, exportbl);
     
     // state

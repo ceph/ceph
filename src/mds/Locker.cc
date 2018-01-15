@@ -12,6 +12,7 @@
  * 
  */
 
+#include <string_view>
 
 #include "MDSRank.h"
 #include "MDCache.h"
@@ -2966,7 +2967,7 @@ public:
 };
 
 void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
-					 const string &dname)
+					 std::string_view dname)
 {
   inodeno_t ino = (uint64_t)item.ino;
   uint64_t cap_id = item.cap_id;

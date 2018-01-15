@@ -17,6 +17,11 @@
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
+#include <list>
+#include <map>
+#include <set>
+#include <string_view>
+
 #include "common/config.h"
 #include "include/counter.h"
 #include "include/elist.h"
@@ -34,10 +39,6 @@
 #include "Capability.h"
 #include "SnapRealm.h"
 #include "Mutation.h"
-
-#include <list>
-#include <set>
-#include <map>
 
 #define dout_context g_ceph_context
 
@@ -102,8 +103,8 @@ public:
   void dump(Formatter *f) const;
 
   /* For use by offline tools */
-  __u32 hash_dentry_name(const std::string &dn);
-  frag_t pick_dirfrag(const std::string &dn);
+  __u32 hash_dentry_name(std::string_view dn);
+  frag_t pick_dirfrag(std::string_view dn);
 };
 
 class InodeStore : public InodeStoreBase {

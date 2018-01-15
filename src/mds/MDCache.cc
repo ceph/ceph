@@ -17,6 +17,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <string_view>
 #include <map>
 
 #include "MDCache.h"
@@ -1602,7 +1603,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	snapid_t oldfirst = dn->first;
 	dn->first = dir_follows+1;
 	if (realm->has_snaps_in_range(oldfirst, dir_follows)) {
-	  CDentry *olddn = dn->dir->add_remote_dentry(dn->name, in->ino(),  in->d_type(),
+	  CDentry *olddn = dn->dir->add_remote_dentry(dn->get_name(), in->ino(),  in->d_type(),
 						      oldfirst, dir_follows);
 	  olddn->pre_dirty();
 	  dout(10) << " olddn " << *olddn << dendl;
@@ -1668,7 +1669,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_inode(oldin);
       if (pcow_inode)
 	*pcow_inode = oldin;
-      CDentry *olddn = dn->dir->add_primary_dentry(dn->name, oldin, oldfirst, follows);
+      CDentry *olddn = dn->dir->add_primary_dentry(dn->get_name(), oldin, oldfirst, follows);
       oldin->inode.version = olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
       bool need_snapflush = !oldin->client_snap_caps.empty();
@@ -1680,7 +1681,7 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
       mut->add_cow_dentry(olddn);
     } else {
       assert(dnl->is_remote());
-      CDentry *olddn = dn->dir->add_remote_dentry(dn->name, dnl->get_remote_ino(), dnl->get_remote_d_type(),
+      CDentry *olddn = dn->dir->add_remote_dentry(dn->get_name(), dnl->get_remote_ino(), dnl->get_remote_d_type(),
 						  oldfirst, follows);
       olddn->pre_dirty();
       dout(10) << " olddn " << *olddn << dendl;
@@ -4182,7 +4183,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       assert(dnl->is_primary());
       CInode *in = dnl->get_inode();
       assert(dnl->get_inode()->is_dir());
-      rejoin->add_weak_primary_dentry(dir->ino(), dn->name.c_str(), dn->first, dn->last, in->ino());
+      rejoin->add_weak_primary_dentry(dir->ino(), dn->get_name(), dn->first, dn->last, in->ino());
       in->get_nested_dirfrags(nested);
       if (in->is_dirty_scattered()) {
 	dout(10) << " sending scatterlock state on " << *in << dendl;
@@ -4230,7 +4231,7 @@ void MDCache::rejoin_walk(CDir *dir, MMDSCacheRejoin *rejoin)
       }
 
       dout(15) << " add_strong_dentry " << *dn << dendl;
-      rejoin->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
+      rejoin->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
 				dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 				dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 				dnl->is_remote() ? dnl->get_remote_d_type():0, 
@@ -4460,7 +4461,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
       unsigned dnonce = dn->add_replica(from);
       dout(10) << " have " << *dn << dendl;
       if (ack) 
-	ack->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
+	ack->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
 			       dnl->get_inode()->ino(), inodeno_t(0), 0, 
 			       dnonce, dn->lock.get_replica_state());
 
@@ -4594,7 +4595,7 @@ void MDCache::rejoin_scour_survivor_replicas(mds_rank_t from, MMDSCacheRejoin *a
 	if (dn->is_replica(from) &&
 	    (ack == NULL ||
 	     ack->strong_dentries.count(dir->dirfrag()) == 0 ||
-	     ack->strong_dentries[dir->dirfrag()].count(string_snap_t(dn->name, dn->last)) == 0)) {
+	     ack->strong_dentries[dir->dirfrag()].count(string_snap_t(dn->get_name(), dn->last)) == 0)) {
 	  dentry_remove_replica(dn, from, gather_locks);
 	  dout(10) << " rem " << *dn << dendl;
 	}
@@ -6054,7 +6055,7 @@ void MDCache::rejoin_send_acks()
 	  auto it = acks.find(r.first);
 	  if (it == acks.end())
 	    continue;
-	  it->second->add_strong_dentry(dir->dirfrag(), dn->name, dn->first, dn->last,
+	  it->second->add_strong_dentry(dir->dirfrag(), dn->get_name(), dn->first, dn->last,
 					   dnl->is_primary() ? dnl->get_inode()->ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_ino():inodeno_t(0),
 					   dnl->is_remote() ? dnl->get_remote_d_type():0,
@@ -6750,7 +6751,7 @@ bool MDCache::trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap
       assert(a != mds->get_nodeid());
       if (expiremap.count(a) == 0) 
 	expiremap[a] = new MCacheExpire(mds->get_nodeid());
-      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->name, dn->last, dn->get_replica_nonce());
+      expiremap[a]->add_dentry(con->dirfrag(), dir->dirfrag(), dn->get_name(), dn->last, dn->get_replica_nonce());
     }
   }
 
@@ -8228,7 +8229,7 @@ CInode *MDCache::cache_traverse(const filepath& fp)
     return NULL;
 
   for (unsigned i = 0; i < fp.depth(); i++) {
-    const string& dname = fp[i];
+    std::string_view dname = fp[i];
     frag_t fg = in->pick_dirfrag(dname);
     dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
     CDir *curdir = in->get_dirfrag(fg);
@@ -8337,7 +8338,8 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
       CDir *dir = dn->get_dir();
       if (dir) {
 	dir->get_inode()->make_path_string(path);
-	path =  path + "/" + dn->get_name();
+	path += "/";
+        path += dn->get_name();
       }
 
       bool fatal = mds->damage_table.notify_remote_damaged(ino, path);
@@ -8760,7 +8762,7 @@ void MDCache::handle_open_ino(MMDSOpenIno *m, int err)
 	if (!pdn)
 	  break;
 	CInode *diri = pdn->get_dir()->get_inode();
-	reply->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->name,
+	reply->ancestors.push_back(inode_backpointer_t(diri->ino(), pdn->get_name(),
 						       in->inode.version));
 	in = diri;
       }
@@ -10262,7 +10264,7 @@ void MDCache::replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl)
 
 void MDCache::replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 {
-  encode(dn->name, bl);
+  encode(dn->get_name(), bl);
   encode(dn->last, bl);
   dn->encode_replica(to, bl, mds->get_state() < MDSMap::STATE_ACTIVE);
 }
@@ -10507,7 +10509,7 @@ void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
       continue;
     CDentry::linkage_t *dnl = dn->get_linkage();
     MDentryLink *m = new MDentryLink(subtree->dirfrag(), dn->get_dir()->dirfrag(),
-				     dn->name, dnl->is_primary());
+				     dn->get_name(), dnl->is_primary());
     if (dnl->is_primary()) {
       dout(10) << "  primary " << *dnl->get_inode() << dendl;
       replicate_inode(dnl->get_inode(), p.first, m->bl,
@@ -10593,7 +10595,7 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& md
 	 rejoin_gather.count(*it)))
       continue;
 
-    MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->name);
+    MDentryUnlink *unlink = new MDentryUnlink(dn->get_dir()->dirfrag(), dn->get_name());
     if (straydn)
       replicate_stray(straydn, *it, unlink->straybl);
     mds->send_message_mds(unlink, *it);
@@ -11963,27 +11965,27 @@ int MDCache::cache_status(Formatter *f)
   return 0;
 }
 
-int MDCache::dump_cache(std::string const &file_name)
+int MDCache::dump_cache(std::string_view file_name)
 {
-  return dump_cache(file_name.c_str(), NULL);
+  return dump_cache(file_name, NULL);
 }
 
 int MDCache::dump_cache(Formatter *f)
 {
-  return dump_cache(NULL, f);
+  return dump_cache(std::string_view(""), f);
 }
 
-int MDCache::dump_cache(const string& dump_root, int depth, Formatter *f)
+int MDCache::dump_cache(std::string_view dump_root, int depth, Formatter *f)
 {
-  return dump_cache(NULL, f, dump_root, depth);
+  return dump_cache(std::string_view(""), f, dump_root, depth);
 }
 
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-int MDCache::dump_cache(const char *fn, Formatter *f,
-			 const string& dump_root, int depth)
+int MDCache::dump_cache(std::string_view fn, Formatter *f,
+			 std::string_view dump_root, int depth)
 {
   int r = 0;
   int fd = -1;
@@ -11991,17 +11993,18 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
   if (f) {
     f->open_array_section("inodes");
   } else {
-    char deffn[200];
-    if (!fn) {
-      snprintf(deffn, sizeof(deffn), "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
-      fn = deffn;
+    char path[PATH_MAX] = "";
+    if (fn.length()) {
+      snprintf(path, sizeof path, "%s", fn.data());
+    } else {
+      snprintf(path, sizeof path, "cachedump.%d.mds%d", (int)mds->mdsmap->get_epoch(), int(mds->get_nodeid()));
     }
 
-    dout(1) << "dump_cache to " << fn << dendl;
+    dout(1) << "dump_cache to " << path << dendl;
 
-    fd = ::open(fn, O_WRONLY|O_CREAT|O_EXCL, 0600);
+    fd = ::open(path, O_WRONLY|O_CREAT|O_EXCL, 0600);
     if (fd < 0) {
-      derr << "failed to open " << fn << ": " << cpp_strerror(errno) << dendl;
+      derr << "failed to open " << path << ": " << cpp_strerror(errno) << dendl;
       return errno;
     }
   }
@@ -12154,14 +12157,14 @@ public:
 };
 
 void MDCache::enqueue_scrub(
-    const string& path,
-    const std::string &tag,
+    std::string_view path,
+    std::string_view tag,
     bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
   dout(10) << __func__ << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_ENQUEUE_SCRUB);
-  filepath fp(path.c_str());
+  filepath fp(path);
   mdr->set_filepath(fp);
 
   C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
@@ -12451,7 +12454,7 @@ do_rdlocks:
   mds->server->respond_to_request(mdr, 0);
 }
 
-void MDCache::flush_dentry(const string& path, Context *fin)
+void MDCache::flush_dentry(std::string_view path, Context *fin)
 {
   if (is_readonly()) {
     dout(10) << __func__ << ": read-only FS" << dendl;
@@ -12460,7 +12463,7 @@ void MDCache::flush_dentry(const string& path, Context *fin)
   }
   dout(10) << "flush_dentry " << path << dendl;
   MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_FLUSH);
-  filepath fp(path.c_str());
+  filepath fp(path);
   mdr->set_filepath(fp);
   mdr->internal_op_finish = fin;
   flush_dentry_work(mdr);

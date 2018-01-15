@@ -18,6 +18,7 @@
 #define CEPH_CDENTRY_H
 
 #include <string>
+#include <string_view>
 #include <set>
 
 #include "include/counter.h"
@@ -101,7 +102,7 @@ public:
   static const unsigned EXPORT_NONCE = 1;
 
 
-  CDentry(const std::string& n, __u32 h,
+  CDentry(std::string_view n, __u32 h,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
@@ -109,7 +110,7 @@ public:
     lock(this, &lock_type),
     versionlock(this, &versionlock_type)
   {}
-  CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
@@ -146,7 +147,7 @@ public:
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
-  const std::string& get_name() const { return name; }
+  std::string_view get_name() const { return std::string_view(name); }
 
   __u32 get_hash() const { return hash; }
 
