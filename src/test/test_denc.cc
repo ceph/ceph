@@ -582,6 +582,44 @@ TEST(denc, optional)
   }
 }
 
+TEST(denc, stdoptional)
+{
+  {
+    cout << "std::optional<uint64_t>" << std::endl;
+    std::optional<uint64_t> s = 97, t = std::nullopt;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    cout << "std::optional<std::string>" << std::endl;
+    std::optional<std::string> s = std::string("Meow"), t = std::nullopt;
+    counts.reset();
+    test_denc(s);
+    test_denc(t);
+  }
+  {
+    size_t s = 0;
+    denc(std::nullopt, s);
+    ASSERT_NE(s, 0u);
+
+    // encode
+    bufferlist bl;
+    {
+      auto a = bl.get_contiguous_appender(s);
+      denc(std::nullopt, a);
+    }
+    ASSERT_LE(bl.length(), s);
+
+    bl.rebuild();
+    std::optional<uint32_t> out = 5;
+    auto bpi = bl.front().begin();
+    denc(out, bpi);
+    ASSERT_FALSE(!!out);
+    ASSERT_EQ(bpi.get_pos(), bl.c_str() + bl.length());
+  }
+}
+
 // unlike legacy_t, Legacy supports denc() also.
 struct Legacy {
   static unsigned n_denc;

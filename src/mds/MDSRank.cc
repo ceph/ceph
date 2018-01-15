@@ -2737,10 +2737,10 @@ bool MDSRank::evict_client(int64_t session_id,
     }
   };
 
-  auto background_blacklist = [this, session_id, cmd](std::function<void ()> fn){
+  auto background_blacklist = [this, cmd](std::function<void ()> fn){
     assert(mds_lock.is_locked_by_me());
 
-    Context *on_blacklist_done = new FunctionContext([this, session_id, fn](int r) {
+    Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
        new C_OnFinisher(
          new FunctionContext([this, fn](int r) {
