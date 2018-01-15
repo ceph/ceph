@@ -13,6 +13,7 @@
  */
 
 #include "include/compat.h"
+#include <iterator>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -59,7 +60,7 @@ int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
 #else
   int ret = ::pipe(selfpipe);
   if (ret == 0) {
-    for (int i = 0; i < ceph::size(selfpipe); i++) {
+    for (int i = 0; i < std::size(selfpipe); i++) {
       int f = fcntl(selfpipe[i], F_GETFD);
       fcntl(selfpipe[i], F_SETFD, f | FD_CLOEXEC | O_NONBLOCK);
     }
