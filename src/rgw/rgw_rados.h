@@ -2410,6 +2410,11 @@ class RGWRados : public AdminSocketHook
   int get_obj_head_ioctx(const RGWBucketInfo& bucket_info, const rgw_obj& obj, librados::IoCtx *ioctx);
   int get_obj_ioctx(const rgw_obj& obj, const rgw_pool& pool, librados::IoCtx *ioctx);
   int get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_rados_ref *ref);
+  int get_obj_tail_ref(
+    const RGWBucketInfo& bucket_info,
+    const rgw_data_placement_volatile_config& dpvc,
+    const rgw_obj& obj,
+    rgw_rados_ref *ref);
   int get_system_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref);
   uint64_t max_bucket_id;
 
@@ -2954,11 +2959,13 @@ public:
         rgw_zone_set *zones_trace;
         bool modify_tail;
         bool completeMultipart;
+        bool track_multipart;
+        const rgw_data_placement_volatile_config* data_placement_vc;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
                  if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), zones_trace(nullptr),
-                 modify_tail(false),  completeMultipart(false) {}
+                 modify_tail(false),  completeMultipart(false), track_multipart(false), data_placement_vc(nullptr){}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
