@@ -225,7 +225,7 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 }
 
 
-void FSMap::create_filesystem(const std::string &name,
+void FSMap::create_filesystem(std::string_view name,
                               int64_t metadata_pool, int64_t data_pool,
                               uint64_t features)
 {
@@ -642,15 +642,16 @@ void Filesystem::decode(bufferlist::iterator& p)
 }
 
 int FSMap::parse_filesystem(
-      std::string const &ns_str,
+      std::string_view ns_str,
       std::shared_ptr<const Filesystem> *result
       ) const
 {
   std::string ns_err;
-  fs_cluster_id_t fscid = strict_strtol(ns_str.c_str(), 10, &ns_err);
+  std::string s(ns_str);
+  fs_cluster_id_t fscid = strict_strtol(s.c_str(), 10, &ns_err);
   if (!ns_err.empty() || filesystems.count(fscid) == 0) {
     for (auto &fs : filesystems) {
-      if (fs.second->mds_map.fs_name == ns_str) {
+      if (fs.second->mds_map.fs_name == s) {
         *result = std::const_pointer_cast<const Filesystem>(fs.second);
         return 0;
       }
@@ -669,7 +670,7 @@ void Filesystem::print(std::ostream &out) const
   mds_map.print(out);
 }
 
-mds_gid_t FSMap::find_standby_for(mds_role_t role, const std::string& name) const
+mds_gid_t FSMap::find_standby_for(mds_role_t role, std::string_view name) const
 {
   mds_gid_t result = MDS_GID_NONE;
 
@@ -744,7 +745,7 @@ mds_gid_t FSMap::find_unused_for(mds_role_t role,
   return MDS_GID_NONE;
 }
 
-mds_gid_t FSMap::find_replacement_for(mds_role_t role, const std::string& name,
+mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name,
                                bool force_standby_active) const {
   const mds_gid_t standby = find_standby_for(role, name);
   if (standby)
@@ -994,7 +995,7 @@ std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
  * if legacy_client_ns is set.
  */
 int FSMap::parse_role(
-    const std::string &role_str,
+    std::string_view role_str,
     mds_role_t *role,
     std::ostream &ss) const
 {
@@ -1018,7 +1019,7 @@ int FSMap::parse_role(
 
   mds_rank_t rank;
   std::string err;
-  std::string rank_str = role_str.substr(rank_pos);
+  std::string rank_str(role_str.substr(rank_pos));
   long rank_i = strict_strtol(rank_str.c_str(), 10, &err);
   if (rank_i < 0 || !err.empty()) {
     ss << "Invalid rank '" << rank_str << "'";

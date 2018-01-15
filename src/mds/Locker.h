@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_LOCKER_H
 #define CEPH_MDS_LOCKER_H
 
+#include <string_view>
+
 #include "include/types.h"
 
 #include <map>
@@ -177,7 +179,7 @@ public:
   bool should_defer_client_cap_frozen(CInode *in);
 
   void process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& r,
-				   const string &dname);
+				   std::string_view dname);
 
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);

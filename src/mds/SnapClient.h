@@ -15,6 +15,8 @@
 #ifndef CEPH_SNAPCLIENT_H
 #define CEPH_SNAPCLIENT_H
 
+#include <string_view>
+
 #include "MDSTableClient.h"
 #include "snap.h"
 
@@ -29,7 +31,7 @@ public:
   void resend_queries() override {}
   void handle_query_result(MMDSTableRequest *m) override {}
 
-  void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
+  void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
 		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
@@ -57,7 +59,7 @@ public:
     _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_update(inodeno_t ino, snapid_t snapid, const string& name, utime_t stamp,
+  void prepare_update(inodeno_t ino, snapid_t snapid, std::string_view name, utime_t stamp,
 		      version_t *pstid, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_UPDATE;

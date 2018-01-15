@@ -16,17 +16,18 @@
 #ifndef CEPH_MDSMAP_H
 #define CEPH_MDSMAP_H
 
+#include <algorithm>
+#include <map>
+#include <set>
+#include <string>
+#include <string_view>
+
 #include <errno.h>
 
 #include "include/types.h"
 #include "common/Clock.h"
 #include "msg/Message.h"
 #include "include/health.h"
-
-#include <set>
-#include <map>
-#include <string>
-#include <algorithm>
 
 #include "common/config.h"
 
@@ -268,7 +269,7 @@ public:
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
 
-  const std::string &get_fs_name() const {return fs_name;}
+  std::string_view get_fs_name() const {return fs_name;}
 
   void set_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_SNAPS);
@@ -349,7 +350,7 @@ public:
     assert(up.count(m) && mds_info.count(up.at(m)));
     return mds_info.at(up.at(m));
   }
-  mds_gid_t find_mds_gid_by_name(const std::string& s) const {
+  mds_gid_t find_mds_gid_by_name(std::string_view s) const {
     for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
 	 p != mds_info.end();
 	 ++p) {

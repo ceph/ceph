@@ -17,6 +17,13 @@
 #ifndef CEPH_CDIR_H
 #define CEPH_CDIR_H
 
+#include <iosfwd>
+#include <list>
+#include <map>
+#include <set>
+#include <string>
+#include <string_view>
+
 #include "include/counter.h"
 #include "include/types.h"
 #include "include/buffer_fwd.h"
@@ -25,13 +32,6 @@
 #include "common/DecayCounter.h"
 
 #include "MDSCacheObject.h"
-
-#include <iosfwd>
-
-#include <list>
-#include <set>
-#include <map>
-#include <string>
 
 
 #include "CInode.h"
@@ -435,17 +435,17 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(const std::string& dname, snapid_t last);
-  CDentry* lookup(const std::string& n, snapid_t snap=CEPH_NOSNAP);
+  CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
+  CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(std::string(n), snap);
+    return lookup(std::string_view(n), snap);
   }
 
-  CDentry* add_null_dentry(const std::string& dname, 
+  CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(const std::string& dname, CInode *in, 
+  CDentry* add_primary_dentry(std::string_view dname, CInode *in,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(const std::string& dname, inodeno_t ino, unsigned char d_type, 
+  CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -455,7 +455,7 @@ protected:
   void try_remove_unlinked_dn(CDentry *dn);
 
   void add_to_bloom(CDentry *dn);
-  bool is_in_bloom(const std::string& name);
+  bool is_in_bloom(std::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
   void remove_bloom() {
     bloom.reset();
@@ -591,7 +591,7 @@ private:
     return file_object_t(ino(), frag);
   }
   void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
-  void fetch(MDSInternalContextBase *c, const std::string& want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
   compact_set<string> wanted_items;
@@ -601,8 +601,8 @@ protected:
     bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
     MDSInternalContextBase *fin);
   CDentry *_load_dentry(
-      const std::string &key,
-      const std::string &dname,
+      std::string_view key,
+      std::string_view dname,
       snapid_t last,
       bufferlist &bl,
       int pos,
@@ -618,7 +618,7 @@ protected:
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
    */
-  void go_bad_dentry(snapid_t last, const std::string &dname);
+  void go_bad_dentry(snapid_t last, std::string_view dname);
 
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
@@ -668,11 +668,11 @@ protected:
   compact_map< string_snap_t, std::list<MDSInternalContextBase*> > waiting_on_dentry;
 
 public:
-  bool is_waiting_for_dentry(const std::string& dname, snapid_t snap) {
+  bool is_waiting_for_dentry(std::string_view dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(const std::string& dentry, snapid_t snap, MDSInternalContextBase *c);
-  void take_dentry_waiting(const std::string& dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
+  void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSInternalContextBase *c);
+  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
   void take_sub_waiting(std::list<MDSInternalContextBase*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, MDSInternalContextBase *c) override;

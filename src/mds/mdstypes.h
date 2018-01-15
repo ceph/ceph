@@ -9,6 +9,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include <string_view>
 
 #include "common/config.h"
 #include "common/Clock.h"
@@ -723,13 +724,13 @@ WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 
 struct dentry_key_t {
   snapid_t snapid = 0;
-  const char *name = nullptr;
+  std::string_view name;
   __u32 hash = 0;
   dentry_key_t() {}
-  dentry_key_t(snapid_t s, const char *n, __u32 h=0) :
+  dentry_key_t(snapid_t s, std::string_view n, __u32 h=0) :
     snapid(s), name(n), hash(h) {}
 
-  bool is_valid() { return name || snapid; }
+  bool is_valid() { return name.length() || snapid; }
 
   // encode into something that can be decoded as a string.
   // name_ (head) or name_%x (!head)
@@ -756,19 +757,20 @@ struct dentry_key_t {
     decode(key, bl);
     decode_helper(key, nm, sn);
   }
-  static void decode_helper(const string& key, string& nm, snapid_t& sn) {
+  static void decode_helper(std::string_view key, string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
     assert(i != string::npos);
-    if (key.compare(i+1, string::npos, "head") == 0) {
+    if (key.compare(i+1, std::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
     } else {
       // name_%x
       long long unsigned x = 0;
-      sscanf(key.c_str() + i + 1, "%llx", &x);
+      std::string x_str(key.substr(i+1));
+      sscanf(x_str.c_str(), "%llx", &x);
       sn = x;
     }  
-    nm = string(key.c_str(), i);
+    nm = key.substr(0, i);
   }
 };
 
@@ -785,7 +787,7 @@ inline bool operator<(const dentry_key_t& k1, const dentry_key_t& k2)
   int c = ceph_frag_value(k1.hash) - ceph_frag_value(k2.hash);
   if (c)
     return c < 0;
-  c = strcmp(k1.name, k2.name);
+  c = k1.name.compare(k2.name);
   if (c)
     return c < 0;
   return k1.snapid < k2.snapid;
@@ -799,7 +801,7 @@ struct string_snap_t {
   string name;
   snapid_t snapid;
   string_snap_t() {}
-  string_snap_t(const string& n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
 
   void encode(bufferlist& bl) const;
@@ -810,7 +812,7 @@ struct string_snap_t {
 WRITE_CLASS_ENCODER(string_snap_t)
 
 inline bool operator<(const string_snap_t& l, const string_snap_t& r) {
-  int c = strcmp(l.name.c_str(), r.name.c_str());
+  int c = l.name.compare(r.name);
   return c < 0 || (c == 0 && l.snapid < r.snapid);
 }
 
@@ -901,7 +903,7 @@ struct cap_reconnect_t {
     memset(&capinfo, 0, sizeof(capinfo));
     snap_follows = 0;
   }
-  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, const string& p, int w, int i,
+  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, std::string_view p, int w, int i,
 		  inodeno_t sr, snapid_t sf, bufferlist& lb) :
     path(p) {
     capinfo.cap_id = cap_id;
