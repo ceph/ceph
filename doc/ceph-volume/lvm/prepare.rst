@@ -227,6 +227,15 @@ a volume group and a logical volume using the following convention:
 * logical volume name: ``osd-block-{osd_fsid}``
 
 
+Crush device class
+------------------
+
+To set the crush device class for the OSD, use the ``--crush-device-class`` flag. This will
+work for both bluestore and filestore OSDs::
+
+    ceph-volume lvm prepare --bluestore --data vg/lv --crush-device-class foo
+
+
 Storing metadata
 ----------------
 The following tags will get applied as part of the preparation process
@@ -236,6 +245,7 @@ regardless of the type of volume (journal or data) or OSD objectstore:
 * ``encrypted``
 * ``osd_fsid``
 * ``osd_id``
+* ``crush_device_class``
 
 For :term:`filestore` these tags will be added:
 
