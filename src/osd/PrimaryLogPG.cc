@@ -2875,7 +2875,6 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
-    auto ob = agent_state->promote_queue.find(missing_oid);
     if (op->may_write() || op->may_cache() || write_ordered) {
       do_proxy_write(op);
     } else {
@@ -2886,9 +2885,15 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
 	return cache_result_t::BLOCKED_PROMOTE;
       }
     }
-    if (!op->need_skip_promote() &&
+    auto p = agent_state->promote_queue.find(missing_oid);
+    if (p == agent_state->promote_queue.end())
+      return cache_result_t::HANDLED_PROXY;
+    else if (p->second.temp < agent_state->promote_temp) {
+      agent_state->promote_queue.erase(p);
+      return cache_result_t::HANDLED_PROXY;
+    } else if (!op->need_skip_promote() &&
 	agent_state->promote_mode == TierAgentState::PROMOTE_MODE_SOME &&
-        ob != agent_state->promote_queue.end()) {
+        !osd->promote_throttle()) {
       agent_state->promote_queue.erase(missing_oid);
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
@@ -3189,7 +3194,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
       prdop->temperature > agent_state->promote_temp &&
       agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
-    agent_state->promote_queue[oid] = ceph_clock_now();
+    agent_state->promote_queue[oid] = {prdop->temperature, ceph_clock_now()};
   }
 }
 
@@ -3575,7 +3580,7 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
       pwop->temperature > agent_state->promote_temp &&
       agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
-    agent_state->promote_queue[oid] = ceph_clock_now();
+    agent_state->promote_queue[oid] = {pwop->temperature, ceph_clock_now()};
   }
 }
 
@@ -13569,19 +13574,21 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
     // trim promote queue
     int promote_q_ls_max = cct->_conf->osd_pool_default_cache_max_evict_check_size;
     int promote_q_ls = 0;
-    map<hobject_t, utime_t>::iterator pos =
-      agent_state->promote_queue.lower_bound(agent_state->promote_q_trim_pos);
-    while (pos != agent_state->promote_queue.end() &&
+    auto p = agent_state->promote_queue.lower_bound(agent_state->promote_q_trim_pos);
+    while (p != agent_state->promote_queue.end() &&
            promote_q_ls < promote_q_ls_max) {
       // TODO: add promote_queue time out to osd conf
-      if (pos->second + utime_t(60, 0) < ceph_clock_now()) {
-        pos = agent_state->promote_queue.erase(pos);
+      if (p->second.request_time + utime_t(60, 0) < ceph_clock_now() ||
+          p->second.temp < agent_state->promote_temp) {
+        p = agent_state->promote_queue.erase(p);
       } else
-        ++pos;
+        ++p;
       ++promote_q_ls;
     }
-    if (pos == agent_state->promote_queue.end())
+    if (p == agent_state->promote_queue.end())
       agent_state->promote_q_trim_pos = hobject_t();
+    else
+      agent_state->promote_q_trim_pos = p->first;
   }
 
   if (agent_state->is_idle()) {
@@ -13716,6 +13723,10 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
     else
       total_started = 0;
     agent_state->start = next;
+    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+      TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+      th->sync(true);
+    }
   }
   agent_state->started = total_started;
 
@@ -13825,8 +13836,11 @@ bool PrimaryLogPG::agent_maybe_flush(ObjectContextRef& obc)
   if (agent_state->flush_mode == TierAgentState::FLUSH_MODE_LOW &&
       hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
     TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
-    if (th->get_temp(obc->obs.oi.soid) > agent_state->flush_temp)
+    if (th->get_temp(obc->obs.oi.soid) > agent_state->flush_temp) {
+      dout(20) << __func__ << " skip (hot) " << obc->obs.oi << dendl;
+      osd->logger->inc(l_osd_agent_skip);
       return false;
+    }
   }
 
   dout(10) << __func__ << " flushing " << obc->obs.oi << dendl;
@@ -14156,16 +14170,35 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   uint64_t target_promote_micro = slope * 1000000;
   if (full_micro > target_promote_micro)
     promote_mode = TierAgentState::PROMOTE_MODE_FULL;
-  else if (full_micro < slope * evict_target)
-    promote_mode = TierAgentState::PROMOTE_MODE_WARMING;
-  else
+  else if (agent_state->promote_mode != TierAgentState::PROMOTE_MODE_WARMINGP ||
+           full_micro >= slope * evict_target)
     promote_mode = TierAgentState::PROMOTE_MODE_SOME;
+  else
+    promote_mode = TierAgentState::PROMOTE_MODE_WARMINGP;
+
+  // flush the object only if it need to be evicted
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK) {
+    if (evict_mode == TierAgentState::EVICT_MODE_FULL)
+      flush_mode = TierAgentState::FLUSH_MODE_HIGH;
+    else if (evict_mode == TierAgentState::EVICT_MODE_SOME)
+      flush_mode = TierAgentState::FLUSH_MODE_LOW;
+    else
+      flush_mode = TierAgentState::FLUSH_MODE_IDLE
+  }
 
   if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
+    uint64_t target_objects = UINT64_MAX;
+    if (pool.info.target_max_objects)
+      target_objects = pool.info.target_max_objects / divisor;
+    if (pool.info.target_max_bytes && num_user_objects > 0) {
+      uint64_t target_objects_size = pool.info.target_max_bytes / divisor / \
+        (num_user_bytes / num_user_objects);
+      target_objects = MIN(target_objects, target_objects_size);
+    }
     TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
-    evict_temp = th->get_rank_temp(slope * evict_target);
-    flush_temp = th->get_rank_temp(slope * flush_target);
-    promote_temp = th->get_rank_temp(slope * slope * evict_target);
+    evict_temp = th->get_rank_temp(slope * evict_target * target_objects / 1000000);
+    flush_temp = evict_temp;
+    promote_temp = MAX(1, evict_temp) * 2;
   }
 
   }

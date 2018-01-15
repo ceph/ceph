@@ -267,29 +267,128 @@ void BloomHitSet::dump(Formatter *f) const {
   f->close_section();
 }
 
-uint32_t TempHitSet::insert(const hobject_t &o, bool created) {
+void TempHitSet::insert(const hobject_t &o, bool created) {
   HitTable::iterator it = hits.find(o.get_hash());
   if (it == hits.end()) {
     if (!created)
-      return 0;
+      return ;
     hits.emplace(o.get_hash(), 1);
-    rh->add(1);
-    return 1;
+    if (rank.get()) {
+      sync();
+      rank->add(1);
+    }
   } else {
     _update_temp(it->second);
     (it->second.temp)++;
-    rh->insert(it->second.temp);
-    return it->second.temp;
+    if (rank.get()) {
+      sync();
+      rank->insert(it->second.temp);
+    }
   }
 }
 
-void TempHitSet::sync() {
-  std::vector<uint32_t> temps;
-  for (HitTable::iterator it = hits.begin(); it != hits.end(); ++it) {
-    _update_temp(it->second);
-    temps.push_back(it->second.temp);
+uint32_t TempHitSet::get_temp(const hobject_t& o) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end())
+    return 0;
+  else {
+    return _update_temp(it->second);
   }
-  rh->sync(temps.begin(), temps.end(), ceph_clock_now().tv.tv_sec);
+}
+
+void TempHitSet::set_temp(const hobject_t &o, uint32_t t) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end()) {
+    hits.emplace(o.get_hash(), t);
+    if (rank.get()) {
+      sync();
+      rank->add(it->second.temp);
+    }
+  } else {
+    if (rank.get()) {
+      sync();
+      rank->sub(it->second.temp);
+    }
+    it->second.temp = t;
+    if (rank.get()) {
+      rank->add(it->second.temp);
+    }
+  }
+}
+
+void TempHitSet::evict(const hobject_t& o) {
+  HitTable::iterator it = hits.find(o.get_hash());
+  if (it == hits.end())
+    return;
+  hits.erase(it);
+  if (rank.get()) {
+    sync();
+    rank->sub(it->second.temp);
+  }
+}
+
+uint32_t TempHitSet::get_rank_temp(uint64_t r) {
+  if (!rank.get())
+    return 0;
+  sync();
+  uint32_t temp = rank->get_position_value(r);
+  return _smooth(temp, last_decay);
+}
+
+uint32_t TempHitSet::get_avg_temp() {
+  if (!rank.get())
+    return 0;
+  sync();
+  uint32_t temp = rank->get_avg();
+  return _smooth(temp, last_decay);
+}
+
+bool TempHitSet::sync(bool deep) {
+  if (!rank.get() && !deep)
+    return false;
+  utime_t now = ceph_clock_now();
+  assert(now >= last_decay);
+  assert(decay_period > 0);
+  uint32_t passed = (now - last_decay).sec();
+  uint32_t periods = passed / decay_period;
+  uint32_t remain = passed % decay_period;
+  if (deep) {
+    rank.reset(new RankHistogram);
+    for (HitTable::iterator it = hits.begin(); it != hits.end(); ++it) {
+      _update_temp(it->second);
+      rank->add(it->second.temp);
+    }
+    last_decay = now - utime_t(remain, 0);
+    return true;
+  }
+  if (periods == 0)
+    return false;
+   else {
+    rank->decay(periods);
+    last_decay = now - utime_t(remain, 0);
+    return true;
+  }
+}
+
+uint32_t TempHitSet::_update_temp(temperature_t& t) {
+  uint32_t now_sec = ceph_clock_now().tv.tv_sec;
+  assert(t.last_decay <= now_sec);
+  assert(decay_period > 0);
+  uint32_t periods = (now_sec - t.last_decay) / decay_period;
+  if (periods == 0)
+    t.temp = MIN(TEMPMAX, t.temp);
+  else {
+    t.temp >>= periods;
+    t.last_decay += periods * decay_period;
+  }
+  return _smooth(t.temp, utime_t(t.last_decay, 0));
+}
+
+uint32_t TempHitSet::_smooth(uint32_t temp, utime_t last_decay) const {
+  utime_t now = ceph_clock_now();
+  uint32_t remain = (now - last_decay).sec() % decay_period;
+  uint32_t temp_smooth = temp - temp * remain / 2 / decay_period;
+  return temp_smooth;
 }
 
 void TempHitSet::dump(Formatter *f) const {

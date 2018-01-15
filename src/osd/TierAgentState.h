@@ -91,8 +91,12 @@ struct TierAgentState {
   uint32_t promote_temp;
   uint32_t flush_temp;
 
+  struct promote_info_t {
+    uint32_t temp;
+    utime_t request_time;
+  };
   hobject_t promote_q_trim_pos;
-  map<hobject_t, utime_t> promote_queue;
+  map<hobject_t, promote_info_t> promote_queue;
 
   TierAgentState()
     : started(0),
