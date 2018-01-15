@@ -157,6 +157,8 @@ public:
     } else {
       obj = rhs.obj;
     }
+    is_head = rhs.is_head;
+    data_placement_vc = rhs.data_placement_vc;
   }
 
   rgw_raw_obj get_raw_obj(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params) const;
@@ -2731,6 +2733,19 @@ public:
   void create_bucket_id(string *bucket_id);
 
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
+  // for reading existing object
+  bool get_obj_tail_data_pool(
+    const RGWObjState& ostate,
+    const string& placement_rule,
+    const rgw_obj& obj,
+    rgw_pool *ptail);
+  // for writing
+  bool get_obj_tail_data_pool(
+    const rgw_data_placement_volatile_config& dpvc,
+    const string& placement_rule,
+    const rgw_obj& obj,
+    rgw_pool *ptail);
+
   bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
   bool obj_to_raw(const rgw_pool& pool, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
@@ -3225,6 +3240,7 @@ public:
                        rgw_obj& src_obj,
                        RGWBucketInfo& dest_bucket_info,
                        RGWBucketInfo& src_bucket_info,
+                       const rgw_data_placement_volatile_config& dest_dpvc,
                        ceph::real_time *src_mtime,
                        ceph::real_time *mtime,
                        const ceph::real_time *mod_ptr,
@@ -3237,7 +3253,7 @@ public:
                        map<string, bufferlist>& attrs,
                        RGWObjCategory category,
                        uint64_t olh_epoch,
-		       ceph::real_time delete_at,
+                       ceph::real_time delete_at,
                        string *version_id,
                        string *ptag,
                        ceph::buffer::list *petag,
@@ -3280,7 +3296,7 @@ public:
                map<std::string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
-	       ceph::real_time delete_at,
+               ceph::real_time delete_at,
                string *version_id,
                string *ptag,
                ceph::buffer::list *petag,
@@ -3289,13 +3305,14 @@ public:
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-	       RGWRados::Object::Read& read_op, off_t end,
+               const rgw_data_placement_volatile_config& dest_dpvc,
+               RGWRados::Object::Read& read_op, off_t end,
                rgw_obj& dest_obj,
-	       ceph::real_time *mtime,
-	       ceph::real_time set_mtime,
+               ceph::real_time *mtime,
+               ceph::real_time set_mtime,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
-	       ceph::real_time delete_at,
+               ceph::real_time delete_at,
                string *version_id,
                ceph::buffer::list *petag);
   

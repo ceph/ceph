@@ -550,6 +550,9 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   rgw_obj dest_obj(src_obj);
 
+  rgw_data_placement_volatile_config dest_dpvc;
+  store->get_zone_params().get_data_placement_volatile_config(bucket_info.placement_rule, &dest_dpvc);
+
   int r = store->fetch_remote_obj(obj_ctx,
                        user_id,
                        client_id,
@@ -561,6 +564,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        src_obj,
                        bucket_info, /* dest */
                        bucket_info, /* source */
+                       dest_dpvc,
                        NULL, /* real_time* src_mtime, */
                        NULL, /* real_time* mtime, */
                        NULL, /* const real_time* mod_ptr, */

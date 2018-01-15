@@ -6161,6 +6161,39 @@ bool RGWRados::get_obj_data_pool(const string& placement_rule, const rgw_obj& ob
   return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, pool);
 }
 
+bool RGWRados::get_obj_tail_data_pool(
+  const RGWObjState& ostate,
+  const string& placement_rule,
+  const rgw_obj& obj,
+  rgw_pool *ptail)
+{
+  if (ostate.has_manifest) {
+    // If tail_data_pool is available in manifest explicitly, the information is authoritative
+    const rgw_data_placement_volatile_config& dpvc = ostate.manifest.get_data_placement_volatile_config();
+    if (dpvc.get_data_layout_type() == RGWDLType_SplitPool) {
+      *ptail = dpvc.get_tail_data_pool();
+      return true;
+    }
+  }
+  // Manifest is unavailable
+  // Fall back to the data pool logic
+  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, ptail);
+}
+
+bool RGWRados::get_obj_tail_data_pool(
+  const rgw_data_placement_volatile_config& dpvc,
+  const string& placement_rule,
+  const rgw_obj& obj,
+  rgw_pool *ptail)
+{
+  if (dpvc.get_data_layout_type() == RGWDLType_SplitPool) {
+      *ptail = dpvc.get_tail_data_pool();
+      return true;
+  }
+  // Fall back to the data pool logic
+  return rgw_get_obj_data_pool(zonegroup, zone_params, placement_rule, obj, ptail);
+}
+
 bool RGWRados::obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj)
 {
   get_obj_bucket_and_oid_loc(obj, raw_obj->oid, raw_obj->loc);
@@ -7559,7 +7592,11 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, rgw_obj& obj)
   attrset.erase(RGW_ATTR_ID_TAG);
   attrset.erase(RGW_ATTR_TAIL_TAG);
 
-  return copy_obj_data(rctx, dest_bucket_info, read_op, obj_size - 1, obj, NULL, mtime, attrset,
+  rgw_data_placement_volatile_config dest_dpvc;
+  get_zone_params().get_data_placement_volatile_config(dest_bucket_info.placement_rule, &dest_dpvc);
+
+
+  return copy_obj_data(rctx, dest_bucket_info, dest_dpvc, read_op, obj_size - 1, obj, NULL, mtime, attrset,
                        0, real_time(),
                        (obj.key.instance.empty() ? NULL : &(obj.key.instance)),
                        NULL);
@@ -7770,6 +7807,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               const rgw_data_placement_volatile_config& dest_dpvc,
                real_time *src_mtime,
                real_time *mtime,
                const real_time *mod_ptr,
@@ -7782,7 +7820,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                map<string, bufferlist>& attrs,
                RGWObjCategory category,
                uint64_t olh_epoch,
-	       real_time delete_at,
+               real_time delete_at,
                string *version_id,
                string *ptag,
                ceph::buffer::list *petag,
@@ -7806,6 +7844,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     processor.set_version_id(*version_id);
   }
   processor.set_olh_epoch(olh_epoch);
+  processor.set_data_placement_volatile_config(dest_dpvc);
   int ret = processor.prepare(this, NULL);
   if (ret < 0) {
     return ret;
@@ -8101,6 +8140,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   bool remote_src;
   bool remote_dest;
 
+  rgw_data_placement_volatile_config dest_dpvc;
+  get_zone_params().get_data_placement_volatile_config(dest_bucket_info.placement_rule, &dest_dpvc);
+
   append_rand_alpha(cct, dest_obj.get_oid(), shadow_oid, 32);
   shadow_obj.init_ns(dest_obj.bucket, shadow_oid, shadow_ns);
 
@@ -8116,7 +8158,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, client_id, op_id, true, info, source_zone,
-               dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
+               dest_obj, src_obj, dest_bucket_info, src_bucket_info, dest_dpvc, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, version_id, ptag, petag, progress_cb, progress_data);
@@ -8184,8 +8226,18 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return -EIO;
   }
 
+  rgw_pool src_tail_pool;
+  rgw_pool dest_tail_pool;
+  if (!get_obj_tail_data_pool(*astate, src_bucket_info.placement_rule, src_obj, &src_tail_pool)) {
+    ldout(cct, 0) << "ERROR: failed to locate tail pool for " << src_obj << dendl;
+    return -EIO;
+  }
+  if (!get_obj_tail_data_pool(dest_dpvc, dest_bucket_info.placement_rule, dest_obj, &dest_tail_pool)) {
+    ldout(cct, 0) << "ERROR: failed to locate tail pool for " << dest_obj << dendl;
+    return -EIO;
+  }
 
-  bool copy_data = !astate->has_manifest || (src_pool != dest_pool);
+  bool copy_data = !astate->has_manifest || (src_pool != dest_pool) || (src_tail_pool != dest_tail_pool);
   bool copy_first = false;
   if (astate->has_manifest) {
     if (!astate->manifest.has_tail()) {
@@ -8211,7 +8263,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
-    return copy_obj_data(obj_ctx, dest_bucket_info, read_op, obj_size - 1, dest_obj,
+    return copy_obj_data(obj_ctx, dest_bucket_info, dest_dpvc, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at,
                          version_id, petag);
   }
@@ -8335,13 +8387,14 @@ done_ret:
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
-	       RGWRados::Object::Read& read_op, off_t end,
+               const rgw_data_placement_volatile_config& dest_dpvc,
+               RGWRados::Object::Read& read_op, off_t end,
                rgw_obj& dest_obj,
-	       real_time *mtime,
-	       real_time set_mtime,
+               real_time *mtime,
+               real_time set_mtime,
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
-	       real_time delete_at,
+               real_time delete_at,
                string *version_id,
                ceph::buffer::list *petag)
 {
@@ -8355,6 +8408,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
     processor.set_version_id(*version_id);
   }
   processor.set_olh_epoch(olh_epoch);
+  processor.set_data_placement_volatile_config(dest_dpvc);;
   int ret = processor.prepare(this, NULL);
   if (ret < 0)
     return ret;
