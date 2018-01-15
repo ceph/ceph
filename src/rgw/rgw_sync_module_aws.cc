@@ -99,6 +99,18 @@ struct AWSSyncConfig_Connection {
       host_style = VirtualStyle;
     }
   }
+  void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+    Formatter::ObjectSection section(jf, "connection");
+    encode_json("connection_id", connection_id, &jf);
+    encode_json("endpoint", endpoint, &jf);
+    string s = (host_style == PathStyle ? "path" : "virtual");
+    encode_json("host_style", s, &jf);
+
+    Formatter::ObjectSection os(jf, "key");
+    encode_json("access_key", key.id, &jf);
+    string secret = (key.key.empty() ? "" : "******");
+    encode_json("secret", secret, &jf);
+  }
 };
 
 static int conf_to_uint64(CephContext *cct, const JSONFormattable& config, const string& key, uint64_t *pval)
@@ -136,6 +148,12 @@ struct AWSSyncConfig_S3 {
     }
     return 0;
   }
+
+  void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+    Formatter::ObjectSection section(jf, "s3");
+    encode_json("multipart_sync_threshold", multipart_sync_threshold, &jf);
+    encode_json("multipart_min_part_size", multipart_min_part_size, &jf);
+  }
 };
 
 struct AWSSyncConfig_Default {
@@ -144,6 +162,13 @@ struct AWSSyncConfig_Default {
   void init(const JSONFormattable& config) {
     conn = make_shared<AWSSyncConfig_Connection>();
     conn->init(config["connection"]);
+  }
+
+  void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+    Formatter::ObjectSection section(jf, "default");
+    if (conn) {
+      conn->dump_conf(cct, jf);
+    }
   }
 };
 
@@ -173,6 +198,13 @@ struct AWSSyncConfig {
     string path;
     string connection_id;
     bool prefix{false};
+
+    void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+      Formatter::ObjectSection section(jf, "target");
+      encode_json("path", path, &jf);
+      encode_json("prefix", prefix, &jf);
+      encode_json("connection_id", connection_id, &jf);
+    }
   };
 
   map<string, Target> explicit_targets;
@@ -234,7 +266,8 @@ struct AWSSyncConfig {
       AWSSyncConfig_Target tc;
       tc.init(target_conf);
 
-      if (connections.find(tc.connection_id) == connections.end()) {
+      if (!tc.connection_id.empty() &&
+          connections.find(tc.connection_id) == connections.end()) {
         ldout(cct, 0) << "ERROR: targets configuration reference non-existent connection_id=" << tc.connection_id << dendl;
         return -EINVAL;
       }
@@ -260,7 +293,37 @@ struct AWSSyncConfig {
       explicit_targets[sb] = t;
     }
 
+    JSONFormatter jf(true);
+    dump_conf(cct, jf);
+
+    stringstream ss;
+    jf.flush(ss);
+
+    ldout(cct, 5) << "sync module config (parsed representation):\n" << ss.str() << dendl;
+
     return 0;
+  }
+
+  void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+    Formatter::ObjectSection config(jf, "config");
+    default_conf.dump_conf(cct, jf);
+    jf.open_array_section("connections");
+    for (auto c : connections) {
+      c.second.dump_conf(cct, jf);
+    }
+    jf.close_section();
+
+    encode_json("bucket_suffix", bucket_suffix, &jf);
+    s3.dump_conf(cct, jf);
+
+    { // targets
+      Formatter::ArraySection as(jf, "targets");
+      for (auto t : explicit_targets) {
+        Formatter::ObjectSection target_section(jf, "target");
+        encode_json("name", t.first, &jf);
+        t.second.dump_conf(cct, jf);
+      }
+    }
   }
 };
 
