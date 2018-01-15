@@ -59,6 +59,9 @@ function TEST_markdown_exceed_maxdown_count() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
+
+    create_rbd_pool || return 1
+
     # 3+1 times within 300s, osd should stay dead on the 4th time
     local count=3
     local sleeptime=10
@@ -79,6 +82,8 @@ function TEST_markdown_boot() {
     run_osd $dir 0 || return 1
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
+
+    create_rbd_pool || return 1
 
     # 3 times within 120s, should stay up
     local count=3
@@ -102,6 +107,7 @@ function TEST_markdown_boot_exceed_time() {
     run_osd $dir 1 || return 1
     run_osd $dir 2 || return 1
 
+    create_rbd_pool || return 1
 
     # 3+1 times, but over 40s, > 20s, so should stay up
     local count=3
