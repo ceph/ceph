@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_EMETABLOB_H
 #define CEPH_MDS_EMETABLOB_H
 
+#include <string_view>
+
 #include <stdlib.h>
 
 #include "../CInode.h"
@@ -64,7 +66,7 @@ public:
     static const int STATE_DIRTYPOOL   = (1<<2);
     static const int STATE_NEED_SNAPFLUSH = (1<<3);
     typedef compact_map<snapid_t, old_inode_t> old_inodes_t;
-    string  dn;         // dentry
+    std::string  dn;         // dentry
     snapid_t dnfirst, dnlast;
     version_t dnv{0};
     inode_t inode;      // if it's not
@@ -79,7 +81,7 @@ public:
     fullbit(const fullbit& o);
     const fullbit& operator=(const fullbit& o);
 
-    fullbit(const string& d, snapid_t df, snapid_t dl, 
+    fullbit(std::string_view d, snapid_t df, snapid_t dl, 
 	    version_t v, const inode_t& i, const fragtree_t &dft, 
 	    const map<string,bufferptr> &xa, const string& sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
@@ -137,14 +139,14 @@ public:
   /* remotebit - a dentry + remote inode link (i.e. just an ino)
    */
   struct remotebit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     inodeno_t ino;
     unsigned char d_type;
     bool dirty;
 
-    remotebit(const string& d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(std::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
@@ -166,12 +168,12 @@ public:
    * nullbit - a null dentry
    */
   struct nullbit {
-    string dn;
+    std::string dn;
     snapid_t dnfirst, dnlast;
     version_t dnv;
     bool dirty;
 
-    nullbit(const string& d, snapid_t df, snapid_t dl, version_t v, bool dr) : 
+    nullbit(std::string_view d, snapid_t df, snapid_t dl, version_t v, bool dr) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}
