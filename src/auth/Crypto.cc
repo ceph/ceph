@@ -12,7 +12,7 @@
  */
 
 #include <sstream>
-#include "Crypto.h"
+#include "common/ceph_crypto.h"
 #ifdef USE_CRYPTOPP
 # include <cryptopp/modes.h>
 # include <cryptopp/aes.h>
@@ -23,10 +23,10 @@
 # include <pk11pub.h>
 #endif
 
+#include "Crypto.h"
 #include "include/assert.h"
 #include "common/Clock.h"
 #include "common/armor.h"
-#include "common/ceph_crypto.h"
 #include "common/hex.h"
 #include "common/safe_io.h"
 #include "include/ceph_fs.h"
@@ -150,9 +150,9 @@ public:
     secret = s;
 
     enc_key = new CryptoPP::AES::Encryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
+      (::byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
     dec_key = new CryptoPP::AES::Decryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
+      (::byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
 
     return 0;
   }
@@ -162,7 +162,7 @@ public:
     string ciphertext;
     CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
     CryptoPP::CBC_Mode_ExternalCipher::Encryption cbc(
-      *enc_key, (const byte*)CEPH_AES_IV);
+      *enc_key, (const ::byte*)CEPH_AES_IV);
     CryptoPP::StreamTransformationFilter stfEncryptor(cbc, sink);
 
     for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
@@ -189,7 +189,7 @@ public:
     string decryptedtext;
     CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
     CryptoPP::CBC_Mode_ExternalCipher::Decryption cbc(
-      *dec_key, (const byte*)CEPH_AES_IV );
+      *dec_key, (const ::byte*)CEPH_AES_IV );
     CryptoPP::StreamTransformationFilter stfDecryptor(cbc, sink);
     for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
 	 it != in.buffers().end(); ++it) {

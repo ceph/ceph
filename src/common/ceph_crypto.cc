@@ -12,8 +12,8 @@
  *
  */
 
-#include "common/config.h"
 #include "ceph_crypto.h"
+#include "common/config.h"
 
 #ifdef USE_CRYPTOPP
 void ceph::crypto::init(CephContext *cct)
