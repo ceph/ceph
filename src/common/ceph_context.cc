@@ -636,7 +636,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
-  _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
+  _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES128);
   _crypto_random.reset(new CryptoRandom());
 
   MempoolObs *mempool_obs = 0;
@@ -844,7 +844,7 @@ CryptoHandler *CephContext::get_crypto_handler(int type)
   switch (type) {
   case CEPH_CRYPTO_NONE:
     return _crypto_none;
-  case CEPH_CRYPTO_AES:
+  case CEPH_CRYPTO_AES128:
     return _crypto_aes;
   default:
     return NULL;

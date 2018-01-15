@@ -1159,7 +1159,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     if (!has_keyring) {
       dout(10) << "AuthMonitor::prepare_command generating random key for "
         << auth_inc.name << dendl;
-      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      new_inc.key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     }
     new_inc.caps = new_caps;
 
@@ -1246,7 +1246,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
@@ -1347,7 +1347,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     KeyServerData::Incremental auth_inc;
     auth_inc.op = KeyServerData::AUTH_INC_ADD;
     auth_inc.name = entity;
-    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     auth_inc.auth.caps = wanted_caps;
 
     push_cephx_inc(auth_inc);
@@ -1563,7 +1563,7 @@ void AuthMonitor::upgrade_format()
       encode("allow profile bootstrap-mgr", auth_inc.auth.caps["mon"]);
       auth_inc.op = KeyServerData::AUTH_INC_ADD;
       // generate key
-      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      auth_inc.auth.key.create(g_ceph_context, CEPH_CRYPTO_AES128);
       push_cephx_inc(auth_inc);
     }
     changed = true;

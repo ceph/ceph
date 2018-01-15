@@ -17,7 +17,7 @@ public:
 };
 
 TEST(AES, ValidateSecret) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
   int l;
 
   for (l=0; l<16; l++) {
@@ -36,7 +36,7 @@ TEST(AES, ValidateSecret) {
 }
 
 TEST(AES, Encrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -76,7 +76,7 @@ TEST(AES, Encrypt) {
 }
 
 TEST(AES, Decrypt) {
-  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+  CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
   char secret_s[] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
     0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -130,7 +130,7 @@ TEST(AES, Loop) {
   for (int i=0; i<10000; i++) {
     bufferlist cipher;
     {
-      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
 
       std::string error;
       CryptoKeyHandler *kh = h->get_key_handler(secret, error);
@@ -143,7 +143,7 @@ TEST(AES, Loop) {
     plaintext.clear();
 
     {
-      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES);
+      CryptoHandler *h = g_ceph_context->get_crypto_handler(CEPH_CRYPTO_AES128);
       std::string error;
       CryptoKeyHandler *ckh = h->get_key_handler(secret, error);
       int r = ckh->decrypt(cipher, plaintext, &error);
@@ -163,7 +163,7 @@ TEST(AES, LoopKey) {
   CryptoRandom random;
   bufferptr k(16);
   random.get_bytes(k.c_str(), k.length());
-  CryptoKey key(CEPH_CRYPTO_AES, ceph_clock_now(), k);
+  CryptoKey key(CEPH_CRYPTO_AES128, ceph_clock_now(), k);
 
   bufferlist data;
   bufferptr r(128);

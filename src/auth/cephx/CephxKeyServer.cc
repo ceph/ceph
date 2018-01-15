@@ -260,14 +260,14 @@ bool KeyServer::get_service_secret(uint32_t service_id,
 bool KeyServer::generate_secret(CryptoKey& secret)
 {
   bufferptr bp;
-  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES128);
   if (!crypto)
     return false;
 
   if (crypto->create(cct->random(), bp) < 0)
     return false;
 
-  secret.set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
+  secret.set_secret(CEPH_CRYPTO_AES128, bp, ceph_clock_now());
 
   return true;
 }

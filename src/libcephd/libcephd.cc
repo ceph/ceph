@@ -87,7 +87,7 @@ extern "C" int cephd_generate_secret_key(char *buf, size_t len)
     cct->init_crypto();
 
     CryptoKey key;
-    key.create(cct, CEPH_CRYPTO_AES);
+    key.create(cct, CEPH_CRYPTO_AES128);
 
     cct->put();
 

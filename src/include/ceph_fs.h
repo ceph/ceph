@@ -63,8 +63,9 @@ struct ceph_dir_layout {
 } __attribute__ ((packed));
 
 /* crypto algorithms */
-#define CEPH_CRYPTO_NONE 0x0
-#define CEPH_CRYPTO_AES  0x1
+#define CEPH_CRYPTO_NONE        0x0
+#define CEPH_CRYPTO_AES128      0x1
+#define CEPH_CRYPTO_AES         CEPH_CRYPTO_AES128 /* alias for AES128 */
 
 #define CEPH_AES_IV "cephsageyudagreg"
 

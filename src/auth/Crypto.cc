@@ -118,7 +118,7 @@ public:
   CryptoAES() { }
   ~CryptoAES() override {}
   int get_type() const override {
-    return CEPH_CRYPTO_AES;
+    return CEPH_CRYPTO_AES128;
   }
   int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
@@ -413,7 +413,7 @@ CryptoHandler *CryptoHandler::create(int type)
   switch (type) {
   case CEPH_CRYPTO_NONE:
     return new CryptoNone;
-  case CEPH_CRYPTO_AES:
+  case CEPH_CRYPTO_AES128:
     return new CryptoAES;
   default:
     return NULL;

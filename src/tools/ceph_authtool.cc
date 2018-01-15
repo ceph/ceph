@@ -161,7 +161,7 @@ int main(int argc, const char **argv)
 
   if (gen_print_key) {
     CryptoKey key;
-    key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     cout << key << std::endl;
     return 0;
   }
@@ -229,7 +229,7 @@ int main(int argc, const char **argv)
   }
   if (gen_key) {
     EntityAuth eauth;
-    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES128);
     keyring.add(ename, eauth);
     modified = true;
   }
