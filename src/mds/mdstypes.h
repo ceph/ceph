@@ -151,19 +151,19 @@ inline string ccap_string(int cap)
 
 
 struct scatter_info_t {
-  version_t version;
+  version_t version = 0;
 
-  scatter_info_t() : version(0) {}
+  scatter_info_t() {}
 };
 
 struct frag_info_t : public scatter_info_t {
   // this frag
   utime_t mtime;
-  uint64_t change_attr;
-  int64_t nfiles;        // files
-  int64_t nsubdirs;      // subdirs
+  uint64_t change_attr = 0;
+  int64_t nfiles = 0;        // files
+  int64_t nsubdirs = 0;      // subdirs
 
-  frag_info_t() : change_attr(0), nfiles(0), nsubdirs(0) {}
+  frag_info_t() {}
 
   int64_t size() const { return nfiles + nsubdirs; }
 
@@ -222,14 +222,14 @@ std::ostream& operator<<(std::ostream &out, const frag_info_t &f);
 struct nest_info_t : public scatter_info_t {
   // this frag + children
   utime_t rctime;
-  int64_t rbytes;
-  int64_t rfiles;
-  int64_t rsubdirs;
+  int64_t rbytes = 0;
+  int64_t rfiles = 0;
+  int64_t rsubdirs = 0;
   int64_t rsize() const { return rfiles + rsubdirs; }
 
-  int64_t rsnaprealms;
+  int64_t rsnaprealms = 0;
 
-  nest_info_t() : rbytes(0), rfiles(0), rsubdirs(0), rsnaprealms(0) {}
+  nest_info_t() {}
 
   void zero() {
     *this = nest_info_t();
@@ -315,10 +315,10 @@ inline bool operator<(const vinodeno_t &l, const vinodeno_t &r) {
 
 struct quota_info_t
 {
-  int64_t max_bytes;
-  int64_t max_files;
+  int64_t max_bytes = 0;
+  int64_t max_files = 0;
  
-  quota_info_t() : max_bytes(0), max_files(0) {}
+  quota_info_t() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -384,9 +384,9 @@ struct client_writeable_range_t {
   };
 
   byte_range_t range;
-  snapid_t follows;     // aka "data+metadata flushed thru"
+  snapid_t follows = 0;     // aka "data+metadata flushed thru"
 
-  client_writeable_range_t() : follows(0) {}
+  client_writeable_range_t() {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
@@ -413,7 +413,7 @@ struct inline_data_t {
 private:
   std::unique_ptr<bufferlist> blp;
 public:
-  version_t version;
+  version_t version = 1;
 
   void free_data() {
     blp.reset();
@@ -425,7 +425,7 @@ public:
   }
   size_t length() const { return blp ? blp->length() : 0; }
 
-  inline_data_t() : version(1) {}
+  inline_data_t() {}
   inline_data_t(const inline_data_t& o) : version(o.version) {
     if (o.blp)
       get_data() = *o.blp;
@@ -468,37 +468,37 @@ struct inode_t {
    * ***************
    */
   // base (immutable)
-  inodeno_t ino;
-  uint32_t   rdev;    // if special file
+  inodeno_t ino = 0;
+  uint32_t   rdev = 0;    // if special file
 
   // affected by any inode change...
   utime_t    ctime;   // inode change time
   utime_t    btime;   // birth time
 
   // perm (namespace permissions)
-  uint32_t   mode;
-  uid_t      uid;
-  gid_t      gid;
+  uint32_t   mode = 0;
+  uid_t      uid = 0;
+  gid_t      gid = 0;
 
   // nlink
-  int32_t    nlink;  
+  int32_t    nlink = 0;
 
   // file (data access)
   ceph_dir_layout  dir_layout;    // [dir only]
   file_layout_t layout;
   compact_set <int64_t> old_pools;
-  uint64_t   size;        // on directory, # dentries
-  uint64_t   max_size_ever; // max size the file has ever been
-  uint32_t   truncate_seq;
-  uint64_t   truncate_size, truncate_from;
-  uint32_t   truncate_pending;
+  uint64_t   size = 0;        // on directory, # dentries
+  uint64_t   max_size_ever = 0; // max size the file has ever been
+  uint32_t   truncate_seq = 0;
+  uint64_t   truncate_size = 0, truncate_from = 0;
+  uint32_t   truncate_pending = 0;
   utime_t    mtime;   // file data modify time.
   utime_t    atime;   // file data access time.
-  uint32_t   time_warp_seq;  // count of (potential) mtime/atime timewarps (i.e., utimes())
+  uint32_t   time_warp_seq = 0;  // count of (potential) mtime/atime timewarps (i.e., utimes())
   inline_data_t inline_data;
 
   // change attribute
-  uint64_t   change_attr;
+  uint64_t   change_attr = 0;
 
   std::map<client_t,client_writeable_range_t> client_ranges;  // client(s) can write to these ranges
 
@@ -509,31 +509,24 @@ struct inode_t {
 
   quota_info_t quota;
 
-  mds_rank_t export_pin;
+  mds_rank_t export_pin = MDS_RANK_NONE;
  
   // special stuff
-  version_t version;           // auth only
-  version_t file_data_version; // auth only
-  version_t xattr_version;
+  version_t version = 0;           // auth only
+  version_t file_data_version = 0; // auth only
+  version_t xattr_version = 0;
 
   utime_t last_scrub_stamp;    // start time of last complete scrub
-  version_t last_scrub_version;// (parent) start version of last complete scrub
+  version_t last_scrub_version = 0;// (parent) start version of last complete scrub
 
-  version_t backtrace_version;
+  version_t backtrace_version = 0;
 
   snapid_t oldest_snap;
 
   string stray_prior_path; //stores path before unlink
 
-  inode_t() : ino(0), rdev(0),
-	      mode(0), uid(0), gid(0), nlink(0),
-	      size(0), max_size_ever(0),
-	      truncate_seq(0), truncate_size(0), truncate_from(0),
-	      truncate_pending(0),
-	      time_warp_seq(0), change_attr(0),
-              export_pin(MDS_RANK_NONE),
-	      version(0), file_data_version(0), xattr_version(0),
-	      last_scrub_version(0), backtrace_version(0) {
+  inode_t()
+  {
     clear_layout();
     memset(&dir_layout, 0, sizeof(dir_layout));
     memset(&quota, 0, sizeof(quota));
@@ -656,25 +649,24 @@ WRITE_CLASS_ENCODER_FEATURES(old_inode_t)
  * like an inode, but for a dir frag 
  */
 struct fnode_t {
-  version_t version;
+  version_t version = 0;
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
-  damage_flags_t damage_flags;
+  damage_flags_t damage_flags = 0;
 
   // we know we and all our descendants have been scrubbed since this version
-  version_t recursive_scrub_version;
+  version_t recursive_scrub_version = 0;
   utime_t recursive_scrub_stamp;
   // version at which we last scrubbed our personal data structures
-  version_t localized_scrub_version;
+  version_t localized_scrub_version = 0;
   utime_t localized_scrub_stamp;
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<fnode_t*>& ls);
-  fnode_t() : version(0), damage_flags(0),
-	      recursive_scrub_version(0), localized_scrub_version(0) {}
+  fnode_t() {}
 };
 WRITE_CLASS_ENCODER(fnode_t)
 
@@ -730,10 +722,10 @@ WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 // dentries
 
 struct dentry_key_t {
-  snapid_t snapid;
-  const char *name;
-  __u32 hash;
-  dentry_key_t() : snapid(0), name(0), hash(0) {}
+  snapid_t snapid = 0;
+  const char *name = nullptr;
+  __u32 hash = 0;
+  dentry_key_t() {}
   dentry_key_t(snapid_t s, const char *n, __u32 h=0) :
     snapid(s), name(n), hash(h) {}
 
@@ -834,10 +826,10 @@ inline std::ostream& operator<<(std::ostream& out, const string_snap_t &k)
  * pending mutation state in the table.
  */
 struct mds_table_pending_t {
-  uint64_t reqid;
-  __s32 mds;
-  version_t tid;
-  mds_table_pending_t() : reqid(0), mds(0), tid(0) {}
+  uint64_t reqid = 0;
+  __s32 mds = 0;
+  version_t tid = 0;
+  mds_table_pending_t() {}
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
   void dump(Formatter *f) const;
@@ -851,8 +843,8 @@ WRITE_CLASS_ENCODER(mds_table_pending_t)
 
 struct metareqid_t {
   entity_name_t name;
-  uint64_t tid;
-  metareqid_t() : tid(0) {}
+  uint64_t tid = 0;
+  metareqid_t() {}
   metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
   void encode(bufferlist& bl) const {
     using ceph::encode;
@@ -986,10 +978,10 @@ WRITE_CLASS_ENCODER(old_cap_reconnect_t)
 // dir frag
 
 struct dirfrag_t {
-  inodeno_t ino;
+  inodeno_t ino = 0;
   frag_t    frag;
 
-  dirfrag_t() : ino(0) { }
+  dirfrag_t() {}
   dirfrag_t(inodeno_t i, frag_t f) : ino(i), frag(f) { }
 
   void encode(bufferlist& bl) const {
@@ -1185,21 +1177,15 @@ struct mds_load_t {
   dirfrag_load_vec_t auth;
   dirfrag_load_vec_t all;
 
-  double req_rate;
-  double cache_hit_rate;
-  double queue_len;
+  double req_rate = 0.0;
+  double cache_hit_rate = 0.0;
+  double queue_len = 0.0;
 
-  double cpu_load_avg;
+  double cpu_load_avg = 0.0;
 
-  explicit mds_load_t(const utime_t &t) : 
-    auth(t), all(t), req_rate(0), cache_hit_rate(0),
-    queue_len(0), cpu_load_avg(0)
-  {}
+  explicit mds_load_t(const utime_t &t) : auth(t), all(t) {}
   // mostly for the dencoder infrastructure
-  mds_load_t() :
-    auth(), all(),
-    req_rate(0), cache_hit_rate(0), queue_len(0), cpu_load_avg(0)
-  {}
+  mds_load_t() : auth(), all() {}
   
   double mds_load();  // defiend in MDBalancer.cc
   void encode(bufferlist& bl) const;
@@ -1233,11 +1219,11 @@ class load_spread_t {
 public:
   static const int MAX = 4;
   int last[MAX];
-  int p, n;
+  int p = 0, n = 0;
   DecayCounter count;
 
 public:
-  load_spread_t() : p(0), n(0), count(ceph_clock_now())
+  load_spread_t() : count(ceph_clock_now())
   {
     for (int i=0; i<MAX; i++)
       last[i] = -1;
@@ -1278,12 +1264,12 @@ typedef std::pair<mds_rank_t, mds_rank_t> mds_authority_t;
 
 class MDSCacheObjectInfo {
 public:
-  inodeno_t ino;
+  inodeno_t ino = 0;
   dirfrag_t dirfrag;
   string dname;
   snapid_t snapid;
 
-  MDSCacheObjectInfo() : ino(0) {}
+  MDSCacheObjectInfo() {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& bl);
