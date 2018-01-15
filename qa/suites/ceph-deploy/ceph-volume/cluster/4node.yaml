@@ -1,3 +1,7 @@
+overrides:
+ ansible.cephlab: 
+  vars: 
+   quick_lvs_to_create: 4
 openstack:
   - machine:
       disk: 10
