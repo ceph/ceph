@@ -82,6 +82,11 @@ public:
     /// create an Impl* of the given type
     bool create_impl(impl_type_t t);
 
+    typedef enum {
+      EXT_TYPE_NONE,
+      EXT_TYPE_TEMP
+    } expansion_type_t;
+
   public:
     class Impl {
     public:
@@ -645,10 +650,15 @@ public:
     return hits.count(o.get_hash());
   }
   unsigned insert_count() const override {
-    if (!rank.get())
-      return approx_unique_insert_count();
-    uint32_t avg_temp = rank->get_avg();
-    return _smooth(avg_temp, last_decay) * hits.size();
+    if (!rank.get()) {
+      uint64_t count = 0;
+      for (auto iter = hits.begin(); iter != hits.end(); ++iter)
+        count += iter->second.temp;
+      return count;
+    } else {
+      uint32_t avg_temp = rank->get_avg();
+      return _smooth(avg_temp, last_decay) * hits.size();
+    }
   }
   unsigned approx_unique_insert_count() const override {
     return hits.size();
@@ -656,7 +666,7 @@ public:
   uint32_t get_temp(const hobject_t& o);
   void set_temp(const hobject_t &o, uint32_t t);
   void evict(const hobject_t& o);
-  uint32_t get_rank_temp(uint64_t rank);
+  uint32_t get_rank_temp(uint64_t r);
   uint32_t get_avg_temp();
   // sync the temperature and rank histogram
   bool sync(bool deep = false);

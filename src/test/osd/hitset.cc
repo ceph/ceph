@@ -202,6 +202,17 @@ public:
   TempHitSetTest() : HitSetTestStrap(new HitSet(new TempHitSet)) {}
 
   TempHitSet *get_hitset() { return static_cast<TempHitSet*>(hitset->impl.get()); }
+
+  void fill_temp(unsigned count) {
+    TempHitSet* hitset_temp = get_hitset();
+    char buf[50];
+    for (unsigned i = 0; i < count; ++i) {
+      sprintf(buf, "hitsettest_%u", i);
+      hobject_t obj(object_t(buf), "", 0, i, 0, "");
+      hitset_temp->insert(obj, true);// create
+    }
+    EXPECT_EQ(count, hitset->insert_count());
+  }
 };
 
 TEST_F(TempHitSetTest, Construct) {
@@ -210,14 +221,14 @@ TEST_F(TempHitSetTest, Construct) {
 }
 
 TEST_F(TempHitSetTest, InsertsMatch) {
-  fill(50);
+  fill_temp(50);
   verify_fill(50);
   EXPECT_EQ((unsigned)50, hitset->approx_unique_insert_count());
   EXPECT_FALSE(hitset->is_full());
 }
 
 TEST_F(TempHitSetTest, RejectsNoMatch) {
-  fill(100);
+  fill_temp(100);
   verify_fill(100);
   EXPECT_FALSE(hitset->is_full());
 
@@ -240,7 +251,7 @@ TEST_F(TempHitSetTest, TempMatch) {
     sprintf(buf, "hitsettest_%u", i);
     hobject_t obj(object_t(buf), "", 0, i, 0, "");
     for (int j = 0; j < i; j++)
-      hitset->insert(obj);
+      hitset_temp->insert(obj, true);//create
     EXPECT_EQ((unsigned)i, hitset_temp->get_temp(obj));
     EXPECT_FALSE(hitset->is_full());
   }

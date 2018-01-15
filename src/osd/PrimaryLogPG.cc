@@ -2860,7 +2860,7 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
     do_proxy_read(op);
     return cache_result_t::HANDLED_PROXY;
 
-  case pg_pool_t::CACHEMODE_TEMPTRACK:
+  case pg_pool_t::CACHEMODE_SWAP:
   {
     if (must_promote ||
         (agent_state->promote_mode == TierAgentState::PROMOTE_MODE_WARMING &&
@@ -3191,7 +3191,7 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   ctx->data_off = prdop->data_offset;
   ctx->ignore_log_op_stats = true;
   complete_read_ctx(r, ctx);
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
       prdop->temperature > agent_state->promote_temp &&
       agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
     agent_state->promote_queue[oid] = {prdop->temperature, ceph_clock_now()};
@@ -3577,7 +3577,7 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
   delete pwop->ctx;
   pwop->ctx = NULL;
 
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK &&
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
       pwop->temperature > agent_state->promote_temp &&
       agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
     agent_state->promote_queue[oid] = {pwop->temperature, ceph_clock_now()};
@@ -13256,16 +13256,15 @@ void PrimaryLogPG::hit_set_create()
       hobject_t oid = get_hit_set_archive_object(p.begin, p.end, p.using_gmt);
       hit_set = hit_set_load(oid);
     }
-    // No need to create a new temp_hit_set if cur temp_hit_set exist
-    if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {
-      TempHitSet* th =
-        static_cast<TempHitSet*>(hit_set->impl.get());
-      th->set_dp(cct->_conf->osd_agent_hist_halflife);
-      hit_set->sealed = false;
-      th->sync();
-      hit_set_start_stamp = now;
-      return;
-    }
+    if (!hit_set || hit_set->impl->get_type() != HitSet::TYPE_TEMP)
+      hit_set.reset(new HitSet(params));
+    TempHitSet* th = static_cast<TempHitSet*>(hit_set->impl.get());
+    th->set_dp(pool.info.hit_set_period);
+    hit_set->sealed = false;
+    if (pool.info.is_tier())
+      th->sync(true);
+    hit_set_start_stamp = now;
+    return;
   }
   hit_set.reset(new HitSet(params));
   hit_set_start_stamp = now;
@@ -14170,20 +14169,20 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   uint64_t target_promote_micro = slope * 1000000;
   if (full_micro > target_promote_micro)
     promote_mode = TierAgentState::PROMOTE_MODE_FULL;
-  else if (agent_state->promote_mode != TierAgentState::PROMOTE_MODE_WARMINGP ||
+  else if (agent_state->promote_mode != TierAgentState::PROMOTE_MODE_WARMING ||
            full_micro >= slope * evict_target)
     promote_mode = TierAgentState::PROMOTE_MODE_SOME;
   else
-    promote_mode = TierAgentState::PROMOTE_MODE_WARMINGP;
+    promote_mode = TierAgentState::PROMOTE_MODE_WARMING;
 
   // flush the object only if it need to be evicted
-  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_TEMPTRACK) {
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP) {
     if (evict_mode == TierAgentState::EVICT_MODE_FULL)
       flush_mode = TierAgentState::FLUSH_MODE_HIGH;
     else if (evict_mode == TierAgentState::EVICT_MODE_SOME)
       flush_mode = TierAgentState::FLUSH_MODE_LOW;
     else
-      flush_mode = TierAgentState::FLUSH_MODE_IDLE
+      flush_mode = TierAgentState::FLUSH_MODE_IDLE;
   }
 
   if (hit_set && hit_set->impl->get_type() == HitSet::TYPE_TEMP) {

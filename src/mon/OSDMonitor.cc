@@ -10635,7 +10635,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      *  readforward: Writes are in writeback mode, Reads are in forward mode
      *  proxy:       Proxy all reads and writes to base pool
      *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
-     *  temptrack:   Proxy all reads and writes, promote and evict based on temperature
+     *  swap:       Swap hot objects with cold objects in cache tier
      *
      * Hence, these are the allowed transitions:
      *
@@ -10707,8 +10707,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
     }
 
-    if (mode == pg_pool_t::CACHEMODE_TEMPTRACK) {
-      err = check_cluster_features(CEPH_FEATURE_NEW_OSD_PROXY_TEMP_TRACK, ss);
+    if (mode == pg_pool_t::CACHEMODE_SWAP) {
+      err = check_cluster_features(CEPH_FEATURE_NEW_CACHEMODE_SWAP, ss);
       if (err == -EAGAIN)
         goto wait;
       if (err)
@@ -10729,16 +10729,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       if (base_pool->read_tier == pool_id ||
 	  base_pool->write_tier == pool_id)
 	ss <<" (WARNING: pool is still configured as read or write tier)";
-    } else if (mode ==  pg_pool_t::CACHEMODE_TEMPTRACK) {
+    } else if (mode ==  pg_pool_t::CACHEMODE_SWAP) {
       const pg_pool_t *base_pool = osdmap.get_pg_pool(np->tier_of);
       assert(base_pool);
       np->hit_set_params = HitSet::Params(new TempHitSet::Params);
-      np->flags |= pg_pool_t::FLAG_POOL_TEMPERATURE;
       np->hit_set_count = 1;
       np->hit_set_period = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
       pg_pool_t *nbp = pending_inc.get_new_pool(np->tier_of, base_pool);
       nbp->hit_set_params = HitSet::Params(new TempHitSet::Params);
-      nbp->flags |= pg_pool_t::FLAG_POOL_TEMPERATURE;
       nbp->hit_set_count = 1;
       nbp->hit_set_period = g_conf->get_val<uint64_t>("osd_tier_default_cache_hit_set_period");
       ss <<" (WARNING: automatically create temperature HitSet in base pool)";

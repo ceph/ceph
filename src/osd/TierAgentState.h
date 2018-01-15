@@ -104,7 +104,7 @@ struct TierAgentState {
       hist_age(0),
       flush_mode(FLUSH_MODE_IDLE),
       evict_mode(EVICT_MODE_IDLE),
-      promote_mode(PROMOTE_MODE_FULL),
+      promote_mode(PROMOTE_MODE_WARMING),
       evict_effort(0),
       evict_temp(0),
       promote_temp(0),

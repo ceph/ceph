@@ -225,7 +225,7 @@ public:
         }
       }
       encode_trace(payload, features);
-      if ((features & CEPH_FEATURE_NEW_OSD_PROXY_TEMP_TRACK) == 0) {
+      if ((features & CEPH_FEATURE_NEW_CACHEMODE_SWAP) == 0) {
         header.version = 9;
       } else {
         ::encode(temperature, payload);

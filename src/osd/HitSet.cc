@@ -147,12 +147,21 @@ const HitSet::Params& HitSet::Params::operator=(const Params& o)
 
 void HitSet::Params::encode(bufferlist &bl) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   if (impl) {
-    encode((__u8)impl->get_type(), bl);
-    impl->encode(bl);
+    if (impl->get_type() == TYPE_TEMP) {
+      encode((__u8)TYPE_NONE, bl);
+      uint8_t expansion_type = EXT_TYPE_TEMP;
+      encode(expansion_type, bl);
+      impl->encode(bl);
+    } else {
+      encode((__u8)impl->get_type(), bl);
+      impl->encode(bl);
+    }
   } else {
     encode((__u8)TYPE_NONE, bl);
+    uint8_t flags = EXT_TYPE_NONE;
+    encode(flags, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -183,9 +192,15 @@ bool HitSet::Params::create_impl(impl_type_t type)
 
 void HitSet::Params::decode(bufferlist::iterator &bl)
 {
-  DECODE_START(1, bl);
+  DECODE_START(2, bl);
   __u8 type;
   decode(type, bl);
+  if (struct_v > 1 && (impl_type_t)type == TYPE_NONE) {
+    uint8_t expansion_type = 0;
+    decode(expansion_type, bl);
+    if ((expansion_type & EXT_TYPE_TEMP) == EXT_TYPE_TEMP)
+      type = (__u8)TYPE_TEMP;
+  }
   if (!create_impl((impl_type_t)type))
     throw buffer::malformed_input("unrecognized HitMap type");
   if (impl)
@@ -302,7 +317,7 @@ void TempHitSet::set_temp(const hobject_t &o, uint32_t t) {
     hits.emplace(o.get_hash(), t);
     if (rank.get()) {
       sync();
-      rank->add(it->second.temp);
+      rank->add(t);
     }
   } else {
     if (rank.get()) {
