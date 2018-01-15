@@ -177,6 +177,7 @@ protected:
 private:
   int num_rdlock;
 
+  // XXX not in mempool
   struct unstable_bits_t {
     set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
 

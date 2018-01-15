@@ -220,7 +220,7 @@ void CDentry::make_path(filepath& fp, bool projected) const
 {
   assert(dir);
   dir->inode->make_path(fp, projected);
-  fp.push_dentry(name);
+  fp.push_dentry(get_name());
 }
 
 /*
