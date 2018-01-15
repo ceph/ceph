@@ -101,8 +101,10 @@ template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const boost::tuple<Ts...> &t);
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
@@ -144,9 +146,21 @@ inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   return out;
 }
 
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
-  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
+template<typename A, typename B, typename C>
+inline ostream& operator<<(ostream& out, const boost::tuple<A, B, C> &t) {
+  return out << boost::get<0>(t) << ","
+	     << boost::get<1>(t) << ","
+	     << boost::get<2>(t);
+}
+
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t) {
+  auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
+    out << e;
+    if (++i != n)
+      out << ",";
+  };
+  ceph::for_each(t, f);
   return out;
 }
 
