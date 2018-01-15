@@ -104,19 +104,21 @@ public:
 
   CDentry(std::string_view n, __u32 h,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type)
+    versionlock(this, &versionlock_type),
+    name(n)
   {}
   CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
-    name(n), hash(h),
+    hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type)
+    versionlock(this, &versionlock_type),
+    name(n)
   {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
@@ -341,7 +343,6 @@ public:
   void dump(Formatter *f) const;
 
 
-  std::string name;
   __u32 hash;
   snapid_t first, last;
 
@@ -352,10 +353,10 @@ public:
   static LockType lock_type;
   static LockType versionlock_type;
 
-  SimpleLock lock;
-  LocalLock versionlock;
+  SimpleLock lock; // FIXME referenced containers not in mempool
+  LocalLock versionlock; // FIXME referenced containers not in mempool
 
-  map<client_t,ClientLease*> client_lease_map;
+  mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
 
 
 protected:
@@ -368,10 +369,13 @@ protected:
 
   CDir *dir = nullptr;     // containing dirfrag
   linkage_t linkage;
-  list<linkage_t> projected;
+  mempool::mds_co::list<linkage_t> projected;
 
   version_t version = 0;  // dir version when last touched.
   version_t projected_version = 0;  // what it will be when i unlock/commit.
+
+private:
+  mempool::mds_co::string name;
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);
