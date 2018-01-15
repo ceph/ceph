@@ -247,6 +247,14 @@ MemStore::CollectionRef MemStore::get_collection(const coll_t& cid)
   return cp->second;
 }
 
+ObjectStore::CollectionHandle MemStore::create_new_collection(const coll_t& cid)
+{
+  RWLock::WLocker l(coll_lock);
+  Collection *c = new Collection(cct, cid);
+  new_coll_map[cid] = c;
+  return c;
+}
+
 
 // ---------------
 // read operations
@@ -684,30 +692,18 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
 // ---------------
 // write operations
 
-int MemStore::queue_transactions(Sequencer *osr,
-				 vector<Transaction>& tls,
-				 TrackedOpRef op,
-				 ThreadPool::TPHandle *handle)
+int MemStore::queue_transactions(
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
   // because memstore operations are synchronous, we can implement the
   // Sequencer with a mutex. this guarantees ordering on a given sequencer,
   // while allowing operations on different sequencers to happen in parallel
-  struct OpSequencer : public Sequencer_impl {
-    OpSequencer(CephContext* cct) :
-      Sequencer_impl(cct) {}
-    std::mutex mutex;
-    void flush() override {}
-    bool flush_commit(Context*) override { return true; }
-  };
-
+  Collection *c = static_cast<Collection*>(ch.get());
   std::unique_lock<std::mutex> lock;
-  if (osr) {
-    if (!osr->p) {
-      osr->p = new OpSequencer(cct);
-    }
-    auto seq = static_cast<OpSequencer*>(osr->p.get());
-    lock = std::unique_lock<std::mutex>(seq->mutex);
-  }
+  lock = std::unique_lock<std::mutex>(c->sequencer_mutex);
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     // poke the TPHandle heartbeat just to exercise that code path
@@ -1368,8 +1364,11 @@ int MemStore::_create_collection(const coll_t& cid, int bits)
   auto result = coll_map.insert(std::make_pair(cid, CollectionRef()));
   if (!result.second)
     return -EEXIST;
-  result.first->second.reset(new Collection(cct, cid));
+  auto p = new_coll_map.find(cid);
+  assert(p != new_coll_map.end());
+  result.first->second = p->second;
   result.first->second->bits = bits;
+  new_coll_map.erase(p);
   return 0;
 }
 

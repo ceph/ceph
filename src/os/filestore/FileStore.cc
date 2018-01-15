@@ -156,7 +156,7 @@ void FileStore::FSPerfTracker::update_from_perfcounters(
 
 ostream& operator<<(ostream& out, const FileStore::OpSequencer& s)
 {
-  return out << *s.parent;
+  return out << "osr(" << s.cid << ")";
 }
 
 int FileStore::get_cdir(const coll_t& cid, char *s, int len)
@@ -535,6 +535,7 @@ FileStore::FileStore(CephContext* cct, const std::string &base,
   sync_entry_timeo_lock("FileStore::sync_entry_timeo_lock"),
   timer(cct, sync_entry_timeo_lock),
   stop(false), sync_thread(this),
+  coll_lock("FileStore::coll_lock"),
   fdcache(cct),
   wbthrottle(cct),
   next_osr_id(0),
@@ -1929,6 +1930,7 @@ void FileStore::init_temp_collections()
   for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     if (p->is_temp())
       continue;
+    coll_map[*p] = new OpSequencer(cct, ++next_osr_id, *p);
     if (p->is_meta())
       continue;
     coll_t temp = p->get_temp();
@@ -2011,6 +2013,25 @@ int FileStore::umount()
 }
 
 
+/// -----------------------------
+
+ObjectStore::CollectionHandle FileStore::open_collection(const coll_t& c)
+{
+  Mutex::Locker l(coll_lock);
+  auto p = coll_map.find(c);
+  if (p == coll_map.end()) {
+    return CollectionHandle();
+  }
+  return p->second;
+}
+
+ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
+{
+  Mutex::Locker l(coll_lock);
+  auto *r = new OpSequencer(cct, ++next_osr_id, c);
+  coll_map[c] = r;
+  return r;
+}
 
 
 /// -----------------------------
@@ -2096,7 +2117,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   Op *o = osr->peek_queue();
   o->trace.event("op_apply_start");
   apply_manager.op_apply_start(o->op);
-  dout(5) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " start" << dendl;
+  dout(5) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << " start" << dendl;
   o->trace.event("_do_transactions start");
   int r = _do_transactions(o->tls, o->op, &handle);
   o->trace.event("op_apply_finish");
@@ -2116,7 +2137,7 @@ void FileStore::_finish_op(OpSequencer *osr)
   utime_t lat = ceph_clock_now();
   lat -= o->start;
 
-  dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << "/" << osr->parent << " lat " << lat << dendl;
+  dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " " << *osr << " lat " << lat << dendl;
   osr->apply_lock.Unlock();  // locked in _do_op
   o->trace.event("_finish_op");
 
@@ -2152,7 +2173,7 @@ struct C_JournaledAhead : public Context {
   }
 };
 
-int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
+int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 				  TrackedOpRef osd_op,
 				  ThreadPool::TPHandle *handle)
 {
@@ -2175,19 +2196,9 @@ int FileStore::queue_transactions(Sequencer *posr, vector<Transaction>& tls,
   }
 
   utime_t start = ceph_clock_now();
-  // set up the sequencer
-  OpSequencer *osr;
-  assert(posr);
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(5) << __FUNC__ << ": existing " << osr << " " << *osr << dendl;
-  } else {
-    osr = new OpSequencer(cct, ++next_osr_id);
-    osr->set_cct(cct);
-    osr->parent = posr;
-    posr->p = osr;
-    dout(5) << __FUNC__ << ": new " << osr << " " << *osr << dendl;
-  }
+
+  OpSequencer *osr = static_cast<OpSequencer*>(ch.get());
+  dout(5) << __FUNC__ << ": osr " << osr << " " << *osr << dendl;
 
   // used to include osr information in tracepoints during transaction apply
   for (vector<Transaction>::iterator i = tls.begin(); i != tls.end(); ++i) {
@@ -2645,7 +2656,8 @@ void FileStore::_do_transaction(
   dout(10) << __FUNC__ << ": on " << &t << dendl;
 
 #ifdef WITH_LTTNG
-  const char *osr_name = t.get_osr() ? static_cast<OpSequencer*>(t.get_osr())->get_name().c_str() : "<NULL>";
+  string osr_name_str = stringify(static_cast<OpSequencer*>(t.get_osr())->cid);
+  const char *osr_name = osr_name_str.c_str();
 #endif
 
   Transaction::iterator i = t.begin();
@@ -5311,6 +5323,11 @@ int FileStore::_destroy_collection(const coll_t& c)
     goto out;
   }
 
+  {
+    Mutex::Locker l(coll_lock);
+    coll_map.erase(c);
+  }
+
  out:
   // destroy parallel temp collection, too
   if (!c.is_meta() && !c.is_temp()) {
@@ -5907,7 +5924,7 @@ void FileStore::dump_transactions(vector<ObjectStore::Transaction>& ls, uint64_t
   unsigned trans_num = 0;
   for (vector<ObjectStore::Transaction>::iterator i = ls.begin(); i != ls.end(); ++i, ++trans_num) {
     m_filestore_dump_fmt.open_object_section("transaction");
-    m_filestore_dump_fmt.dump_string("osr", osr->get_name());
+    m_filestore_dump_fmt.dump_stream("osr") << osr->cid;
     m_filestore_dump_fmt.dump_unsigned("seq", seq);
     m_filestore_dump_fmt.dump_unsigned("trans_num", trans_num);
     (*i).dump(&m_filestore_dump_fmt);

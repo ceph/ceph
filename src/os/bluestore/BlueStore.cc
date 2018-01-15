@@ -3216,13 +3216,25 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
 BlueStore::Collection::Collection(BlueStore *ns, Cache *c, coll_t cid)
-  : store(ns),
+  : CollectionImpl(cid),
+    store(ns),
+    osr(new OpSequencer(store)),
     cache(c),
-    cid(cid),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
     onode_map(c)
 {
+  osr->shard = cid.hash_to_shard(ns->m_finisher_num);
+}
+
+bool BlueStore::Collection::flush_commit(Context *c)
+{
+  return osr->flush_commit(c);
+}
+
+void BlueStore::Collection::flush()
+{
+  osr->flush();
 }
 
 void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
@@ -5633,7 +5645,6 @@ int BlueStore::umount()
   dout(1) << __func__ << dendl;
 
   _osr_drain_all();
-  _osr_unregister_all();
 
   mounted = false;
   if (!_kv_only) {
@@ -6491,6 +6502,18 @@ void BlueStore::_update_cache_logger()
 ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
 {
   return _get_collection(cid);
+}
+
+ObjectStore::CollectionHandle BlueStore::create_new_collection(
+  const coll_t& cid)
+{
+  RWLock::WLocker l(coll_lock);
+  Collection *c = new Collection(
+    this,
+    cache_shards[cid.hash_to_shard(cache_shards.size())],
+    cid);
+  new_coll_map[cid] = c;
+  return c;
 }
 
 bool BlueStore::exists(const coll_t& cid, const ghobject_t& oid)
@@ -7996,9 +8019,10 @@ void BlueStore::get_db_statistics(Formatter *f)
   db->get_statistics(f);
 }
 
-BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
+BlueStore::TransContext *BlueStore::_txc_create(
+  Collection *c, OpSequencer *osr)
 {
-  TransContext *txc = new TransContext(cct, osr);
+  TransContext *txc = new TransContext(cct, c, osr);
   txc->t = db->get_transaction();
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
@@ -8418,8 +8442,14 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   if (empty && osr->zombie) {
-    dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
-    osr->_unregister();
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    auto p = zombie_osr_set.find(osr);
+    if (p != zombie_osr_set.end()) {
+      dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+      zombie_osr_set.erase(p);
+    } else {
+      dout(10) << __func__ << " empty zombie osr " << osr << " already reaped" << dendl;
+    }
   }
 }
 
@@ -8432,6 +8462,14 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   }
   txc->allocated.clear();
   txc->released.clear();
+}
+
+void BlueStore::_osr_register_zombie(OpSequencer *osr)
+{
+  std::lock_guard<std::mutex> l(zombie_osr_lock);
+  dout(10) << __func__ << " " << osr << dendl;
+  osr->zombie = true;
+  zombie_osr_set.insert(osr);
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
@@ -8463,9 +8501,19 @@ void BlueStore::_osr_drain_all()
   dout(10) << __func__ << dendl;
 
   set<OpSequencerRef> s;
+  set<OpSequencerRef> zombies;
   {
-    std::lock_guard<std::mutex> l(osr_lock);
-    s = osr_set;
+    RWLock::RLocker l(coll_lock);
+    for (auto& i : coll_map) {
+      s.insert(i.second->osr);
+    }
+  }
+  {
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    for (auto& i : zombie_osr_set) {
+      s.insert(i);
+      zombies.insert(i);
+    }
   }
   dout(20) << __func__ << " osr_set " << s << dendl;
 
@@ -8489,34 +8537,23 @@ void BlueStore::_osr_drain_all()
   }
   --deferred_aggressive;
 
+  {
+    std::lock_guard<std::mutex> l(zombie_osr_lock);
+    for (auto& osr : zombies) {
+      auto p = zombie_osr_set.find(osr);
+      if (p != zombie_osr_set.end()) {
+	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+	zombie_osr_set.erase(p);
+      } else {
+	dout(10) << __func__ << " empty zombie osr " << osr << " already reaped" << dendl;
+      }
+      assert(osr->q.empty());
+    }
+  }
+
   dout(10) << __func__ << " done" << dendl;
 }
 
-void BlueStore::_osr_unregister_all()
-{
-  set<OpSequencerRef> s;
-  {
-    std::lock_guard<std::mutex> l(osr_lock);
-    s = osr_set;
-  }
-  dout(10) << __func__ << " " << s << dendl;
-  for (auto osr : s) {
-    osr->_unregister();
-
-    if (!osr->zombie) {
-      // break link from Sequencer to us so that this OpSequencer
-      // instance can die with this mount/umount cycle.  note that
-      // we assume umount() will not race against ~Sequencer.
-      assert(osr->parent);
-      osr->parent->p.reset();
-    }
-  }
-  // nobody should be creating sequencers during umount either.
-  {
-    std::lock_guard<std::mutex> l(osr_lock);
-    assert(osr_set.empty());
-  }
-}
 
 void BlueStore::_kv_start()
 {
@@ -9073,9 +9110,16 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 int BlueStore::_deferred_replay()
 {
   dout(10) << __func__ << " start" << dendl;
-  OpSequencerRef osr = new OpSequencer(cct, this);
   int count = 0;
   int r = 0;
+  CollectionRef ch = _get_collection(coll_t::meta());
+  bool fake_ch = false;
+  if (!ch) {
+    // hmm, replaying initial mkfs?
+    ch = static_cast<Collection*>(create_new_collection(coll_t::meta()).get());
+    fake_ch = true;
+  }
+  OpSequencer *osr = static_cast<OpSequencer*>(ch->osr.get());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
@@ -9093,15 +9137,18 @@ int BlueStore::_deferred_replay()
       r = -EIO;
       goto out;
     }
-    TransContext *txc = _txc_create(osr.get());
+    TransContext *txc = _txc_create(ch.get(), osr);
     txc->deferred_txn = deferred_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }
  out:
   dout(20) << __func__ << " draining osr" << dendl;
+  _osr_register_zombie(osr);
   _osr_drain_all();
-  osr->discard();
+  if (fake_ch) {
+    new_coll_map.clear();
+  }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
 }
@@ -9110,10 +9157,10 @@ int BlueStore::_deferred_replay()
 // transactions
 
 int BlueStore::queue_transactions(
-    Sequencer *posr,
-    vector<Transaction>& tls,
-    TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
   FUNCTRACE(cct);
   list<Context *> on_applied, on_commit, on_applied_sync;
@@ -9131,22 +9178,13 @@ int BlueStore::queue_transactions(
     return 0;
   }
   utime_t start = ceph_clock_now();
-  // set up the sequencer
-  OpSequencer *osr;
-  assert(posr);
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
-  } else {
-    osr = new OpSequencer(cct, this);
-    osr->parent = posr;
-    osr->shard = posr->shard_hint.hash_to_shard(m_finisher_num);
-    posr->p = osr;
-    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
-  }
+
+  Collection *c = static_cast<Collection*>(ch.get());
+  OpSequencer *osr = c->osr.get();
+  dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
 
   // prepare
-  TransContext *txc = _txc_create(osr);
+  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr);
   txc->oncommits.swap(on_commit);
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
@@ -11465,13 +11503,12 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    c->reset(
-      new Collection(
-	this,
-	cache_shards[cid.hash_to_shard(cache_shards.size())],
-	cid));
+    auto p = new_coll_map.find(cid);
+    assert(p != new_coll_map.end());
+    *c = p->second;
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
+    new_coll_map.erase(p);
   }
   encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);
@@ -11533,6 +11570,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         coll_map.erase(cid);
         txc->removed_collections.push_back(*c);
         (*c)->exists = false;
+	_osr_register_zombie((*c)->osr.get());
         c->reset();
         txc->t->rmkey(PREFIX_COLL, stringify(cid));
         r = 0;

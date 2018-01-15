@@ -222,14 +222,14 @@ private:
     TrackedOpRef osd_op;
     ZTracer::Trace trace;
   };
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public CollectionImpl {
+    CephContext *cct;
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
     list<uint64_t> jq;
     list<pair<uint64_t, Context*> > flush_commit_waiters;
     Cond cond;
   public:
-    Sequencer *parent;
     Mutex apply_lock;  // for apply mutual exclusion
     int id;
 
@@ -347,20 +347,20 @@ private:
       }
     }
 
-    OpSequencer(CephContext* cct, int i)
-      : Sequencer_impl(cct),
+    OpSequencer(CephContext* cct, int i, coll_t cid)
+      : CollectionImpl(cid),
+	cct(cct),
 	qlock("FileStore::OpSequencer::qlock", false, false),
-	parent(0),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
         id(i) {}
     ~OpSequencer() override {
       assert(q.empty());
     }
-
-    const string& get_name() const {
-      return parent->get_name();
-    }
   };
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+
+  Mutex coll_lock;
+  map<coll_t,OpSequencerRef> coll_map;
 
   friend ostream& operator<<(ostream& out, const OpSequencer& s);
 
@@ -519,7 +519,10 @@ public:
     Transaction& t, uint64_t op_seq, int trans_num,
     ThreadPool::TPHandle *handle);
 
-  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
+  CollectionHandle open_collection(const coll_t& c) override;
+  CollectionHandle create_new_collection(const coll_t& c) override;
+
+  int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
 			 ThreadPool::TPHandle *handle = nullptr) override;
 
