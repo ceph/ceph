@@ -53,11 +53,11 @@ public:
   friend class CDir;
 
   struct linkage_t {
-    CInode *inode;
-    inodeno_t remote_ino;
-    unsigned char remote_d_type;
+    CInode *inode = nullptr;
+    inodeno_t remote_ino = 0;
+    unsigned char remote_d_type = 0;
     
-    linkage_t() : inode(0), remote_ino(0), remote_d_type(0) {}
+    linkage_t() {}
 
     // dentry type is primary || remote || null
     // inode ptr is required for primary, optional for remote, undefined for null
@@ -107,19 +107,16 @@ public:
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
-  }
+    versionlock(this, &versionlock_type)
+  {}
   CDentry(const std::string& n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     name(n), hash(h),
     first(f), last(l),
     item_dirty(this),
     lock(this, &lock_type),
-    versionlock(this, &versionlock_type),
-    dir(0),
-    version(0), projected_version(0) {
+    versionlock(this, &versionlock_type)
+  {
     linkage.remote_ino = ino;
     linkage.remote_d_type = dt;
   }
@@ -368,12 +365,12 @@ protected:
   friend class CInode;
   friend class C_MDC_XlockRequest;
 
-  CDir *dir;     // containing dirfrag
+  CDir *dir = nullptr;     // containing dirfrag
   linkage_t linkage;
   list<linkage_t> projected;
 
-  version_t version;  // dir version when last touched.
-  version_t projected_version;  // what it will be when i unlock/commit.
+  version_t version = 0;  // dir version when last touched.
+  version_t projected_version = 0;  // what it will be when i unlock/commit.
 };
 
 ostream& operator<<(ostream& out, const CDentry& dn);
