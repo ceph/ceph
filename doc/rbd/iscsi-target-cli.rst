@@ -133,6 +133,7 @@ For rpm based instructions execute the following commands:
 
    ::
 
+       # systemctl daemon-reload
        # systemctl enable rbd-target-api
        # systemctl start rbd-target-api
 
