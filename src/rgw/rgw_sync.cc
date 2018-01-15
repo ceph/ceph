@@ -1360,8 +1360,9 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string max_marker;
   const std::string& period_marker; //< max marker stored in next period
 
-  map<string, bufferlist> entries;
-  map<string, bufferlist>::iterator iter;
+  using omap_map = std::map<std::string, bufferlist>;
+  std::shared_ptr<omap_map> entries;
+  omap_map::iterator iter;
 
   string oid;
 
@@ -1547,8 +1548,9 @@ public:
           lost_lock = true;
           break;
         }
+        entries = std::make_shared<omap_map>();
         yield call(new RGWRadosGetOmapKeysCR(sync_env->store, rgw_raw_obj(pool, oid),
-                                             marker, &entries, max_entries));
+                                             marker, entries, max_entries));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: " << __func__ << "(): RGWRadosGetOmapKeysCR() returned ret=" << retcode << dendl;
           tn->log(0, SSTR("ERROR: failed to list omap keys, status=" << retcode));
@@ -1556,12 +1558,12 @@ public:
           drain_all();
           return retcode;
         }
-        tn->log(20, SSTR("retrieved " << entries.size() << " entries to sync"));
-        if (entries.size() > 0) {
+        tn->log(20, SSTR("retrieved " << entries->size() << " entries to sync"));
+        if (entries->size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
         }
-        iter = entries.begin();
-        for (; iter != entries.end(); ++iter) {
+        iter = entries->begin();
+        for (; iter != entries->end(); ++iter) {
           tn->log(20, SSTR("full sync: " << iter->first));
           total_entries++;
           if (!marker_tracker->start(iter->first, total_entries, real_time())) {
@@ -1578,7 +1580,7 @@ public:
           marker = iter->first;
         }
         collect_children();
-      } while ((int)entries.size() == max_entries && can_adjust_marker);
+      } while ((int)entries->size() == max_entries && can_adjust_marker);
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
 
