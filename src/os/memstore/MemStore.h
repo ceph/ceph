@@ -96,7 +96,6 @@ public:
 
   struct PageSetObject;
   struct Collection : public CollectionImpl {
-    coll_t cid;
     int bits = 0;
     CephContext *cct;
     bool use_page_set;
@@ -105,14 +104,11 @@ public:
     map<string,bufferptr> xattr;
     RWLock lock;   ///< for object_{map,hash}
     bool exists;
+    std::mutex sequencer_mutex;
 
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
     friend void intrusive_ptr_release(Collection *c) { c->put(); }
-
-    const coll_t &get_cid() override {
-      return cid;
-    }
 
     ObjectRef create_object() const;
 
@@ -179,8 +175,14 @@ public:
       return result;
     }
 
+    void flush() override {
+    }
+    bool flush_commit(Context *c) override {
+      return true;
+    }
+
     explicit Collection(CephContext *cct, coll_t c)
-      : cid(c),
+      : CollectionImpl(c),
 	cct(cct),
 	use_page_set(cct->_conf->memstore_page_set),
         lock("MemStore::Collection::lock", true, false),
@@ -194,6 +196,7 @@ private:
 
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   RWLock coll_lock;    ///< rwlock to protect coll_map
+  map<coll_t,CollectionRef> new_coll_map;
 
   CollectionRef get_collection(const coll_t& cid);
 
@@ -313,8 +316,10 @@ public:
     bufferlist& bl,
     uint32_t op_flags = 0) override;
   using ObjectStore::fiemap;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid,
+	     uint64_t offset, size_t len, bufferlist& bl) override;
+  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset,
+	     size_t len, map<uint64_t, uint64_t>& destmap) override;
   int getattr(const coll_t& cid, const ghobject_t& oid, const char *name,
 	      bufferptr& value) override;
   int getattr(CollectionHandle &c, const ghobject_t& oid, const char *name,
@@ -329,6 +334,7 @@ public:
   CollectionHandle open_collection(const coll_t& c) override {
     return get_collection(c);
   }
+  CollectionHandle create_new_collection(const coll_t& c) override;
   bool collection_exists(const coll_t& c) override;
   int collection_empty(const coll_t& c, bool *empty) override;
   int collection_bits(const coll_t& c) override;
@@ -401,7 +407,8 @@ public:
 
 
   int queue_transactions(
-    Sequencer *osr, vector<Transaction>& tls,
+    CollectionHandle& ch,
+    vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
 };

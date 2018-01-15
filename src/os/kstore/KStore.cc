@@ -560,13 +560,25 @@ int KStore::OnodeHashLRU::trim(int max)
 #undef dout_prefix
 #define dout_prefix *_dout << "kstore(" << store->path << ").collection(" << cid << ") "
 
-KStore::Collection::Collection(KStore *ns, coll_t c)
-  : store(ns),
-    cid(c),
+KStore::Collection::Collection(KStore *ns, coll_t cid)
+  : CollectionImpl(cid),
+    store(ns),
     lock("KStore::Collection::lock", true, false),
+    osr(new OpSequencer()),
     onode_map(store->cct)
 {
 }
+
+void KStore::Collection::flush()
+{
+  osr->flush();
+}
+
+bool KStore::Collection::flush_commit(Context *c)
+{
+  return osr->flush_commit(c);
+}
+
 
 KStore::OnodeRef KStore::Collection::get_onode(
   const ghobject_t& oid,
@@ -1069,6 +1081,20 @@ void KStore::_sync()
 int KStore::statfs(struct store_statfs_t* buf)
 {
   return db->get_statfs(buf);
+}
+
+
+ObjectStore::CollectionHandle KStore::open_collection(const coll_t& cid)
+{
+  return _get_collection(cid);
+}
+
+ObjectStore::CollectionHandle KStore::create_new_collection(const coll_t& cid)
+{
+  auto *c = new Collection(this, cid);
+  RWLock::WLocker l(coll_lock);
+  new_coll_map[cid] = c;
+  return c;
 }
 
 // ---------------
@@ -2133,10 +2159,10 @@ void KStore::_kv_sync_thread()
 // transactions
 
 int KStore::queue_transactions(
-    Sequencer *posr,
-    vector<Transaction>& tls,
-    TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -2145,17 +2171,9 @@ int KStore::queue_transactions(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
   // set up the sequencer
-  OpSequencer *osr;
-  assert(posr);
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
-  } else {
-    osr = new OpSequencer(cct);
-    osr->parent = posr;
-    posr->p = osr;
-    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
-  }
+  Collection *c = static_cast<Collection*>(ch.get());
+  OpSequencer *osr = c->osr.get();
+  dout(10) << __func__ << " ch " << ch.get() << " " << c->cid << dendl;
 
   // prepare
   TransContext *txc = _txc_create(osr);
@@ -3275,9 +3293,13 @@ int KStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    c->reset(new Collection(this, cid));
+    auto p = new_coll_map.find(cid);
+    assert(p != new_coll_map.end());
+    *c = p->second;
+    assert((*c)->cid == cid);
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
+    new_coll_map.erase(p);
   }
   encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);

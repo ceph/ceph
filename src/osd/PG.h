@@ -251,9 +251,6 @@ public:
   const spg_t pg_id;
   const coll_t coll;
 
-  // for ordering writes
-  ceph::shared_ptr<ObjectStore::Sequencer> osr;
-
   ObjectStore::CollectionHandle ch;
 
   class RecoveryCtx;

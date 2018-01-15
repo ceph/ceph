@@ -715,6 +715,8 @@ static int os_mkdir(const char *path, mode_t mode)
 
   std::lock_guard<std::mutex> l(fs->lock);
 
+  ObjectStore::CollectionHandle ch;
+
   ObjectStore::Transaction t;
   switch (f) {
   case FN_OBJECT:
@@ -728,6 +730,7 @@ static int os_mkdir(const char *path, mode_t mode)
 	}
       }
       t.touch(cid, oid);
+      ch = fs->store->open_collection(cid);
     }
     break;
 
@@ -742,6 +745,8 @@ static int os_mkdir(const char *path, mode_t mode)
       mode = 0;
     }
     t.create_collection(cid, mode);
+
+    ch = fs->store->open_collection(coll_t::meta());
     break;
 
   default:
@@ -749,11 +754,9 @@ static int os_mkdir(const char *path, mode_t mode)
   }
 
   if (!t.empty()) {
-    ceph::shared_ptr<ObjectStore::Sequencer> osr(
-      new ObjectStore::Sequencer("fuse"));
-    fs->store->apply_transaction(&*osr, std::move(t));
+    fs->store->apply_transaction(ch, std::move(t));
     C_SaferCond waiter;
-    if (!osr->flush_commit(&waiter))
+    if (!ch->flush_commit(&waiter))
       waiter.wait();
   }
 
@@ -783,6 +786,8 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     return f;
 
   std::lock_guard<std::mutex> l(fs->lock);
+
+  ObjectStore::CollectionHandle ch = fs->store->open_collection(cid);
 
   ObjectStore::Transaction t;
   bufferlist *pbl = 0;
@@ -826,11 +831,9 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   }
 
   if (!t.empty()) {
-    ceph::shared_ptr<ObjectStore::Sequencer> osr(
-      new ObjectStore::Sequencer("fuse"));
-    fs->store->apply_transaction(&*osr, std::move(t));
+    fs->store->apply_transaction(ch, std::move(t));
     C_SaferCond waiter;
-    if (!osr->flush_commit(&waiter))
+    if (!ch->flush_commit(&waiter))
       waiter.wait();
   }
 
@@ -934,6 +937,8 @@ int os_flush(const char *path, struct fuse_file_info *fi)
   if (!o->dirty)
     return 0;
 
+  ObjectStore::CollectionHandle ch = fs->store->open_collection(cid);
+
   ObjectStore::Transaction t;
 
   switch (f) {
@@ -961,11 +966,9 @@ int os_flush(const char *path, struct fuse_file_info *fi)
     return 0;
   }
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr(
-    new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, std::move(t));
+  fs->store->apply_transaction(ch, std::move(t));
   C_SaferCond waiter;
-  if (!osr->flush_commit(&waiter))
+  if (!ch->flush_commit(&waiter))
     waiter.wait();
 
   return 0;
@@ -987,6 +990,7 @@ static int os_unlink(const char *path)
 
   std::lock_guard<std::mutex> l(fs->lock);
 
+  ObjectStore::CollectionHandle ch;
   ObjectStore::Transaction t;
 
   switch (f) {
@@ -996,10 +1000,12 @@ static int os_unlink(const char *path)
       keys.insert(key);
       t.omap_rmkeys(cid, oid, keys);
     }
+    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT_ATTR_VAL:
     t.rmattr(cid, oid, key.c_str());
+    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT_OMAP_HEADER:
@@ -1007,10 +1013,12 @@ static int os_unlink(const char *path)
       bufferlist empty;
       t.omap_setheader(cid, oid, empty);
     }
+    ch = fs->store->open_collection(cid);
     break;
 
   case FN_OBJECT:
     t.remove(cid, oid);
+    ch = fs->store->open_collection(cid);
     break;
 
   case FN_COLLECTION:
@@ -1023,21 +1031,21 @@ static int os_unlink(const char *path)
         return -ENOTEMPTY;
       t.remove_collection(cid);
     }
+    ch = fs->store->open_collection(coll_t::meta());
     break;
 
   case FN_OBJECT_DATA:
     t.truncate(cid, oid, 0);
+    ch = fs->store->open_collection(cid);
     break;
 
   default:
     return -EPERM;
   }
 
-  ceph::shared_ptr<ObjectStore::Sequencer> osr(
-    new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, std::move(t));
+  fs->store->apply_transaction(ch, std::move(t));
   C_SaferCond waiter;
-  if (!osr->flush_commit(&waiter))
+  if (!ch->flush_commit(&waiter))
     waiter.wait();
 
   return 0;
@@ -1078,13 +1086,12 @@ static int os_truncate(const char *path, off_t size)
     }
   }
 
+  ObjectStore::CollectionHandle ch = fs->store->open_collection(cid);
   ObjectStore::Transaction t;
   t.truncate(cid, oid, size);
-  ceph::shared_ptr<ObjectStore::Sequencer> osr(
-    new ObjectStore::Sequencer("fuse"));
-  fs->store->apply_transaction(&*osr, std::move(t));
+  fs->store->apply_transaction(ch, std::move(t));
   C_SaferCond waiter;
-  if (!osr->flush_commit(&waiter))
+  if (!ch->flush_commit(&waiter))
     waiter.wait();
   return 0;
 }

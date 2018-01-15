@@ -1337,10 +1337,13 @@ public:
     bool map_any(std::function<bool(OnodeRef)> f);
   };
 
+  class OpSequencer;
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+
   struct Collection : public CollectionImpl {
     BlueStore *store;
+    OpSequencerRef osr;
     Cache *cache;       ///< our cache shard
-    coll_t cid;
     bluestore_cnode_t cnode;
     RWLock lock;
 
@@ -1379,10 +1382,6 @@ public:
       return b;
     }
 
-    const coll_t &get_cid() override {
-      return cid;
-    }
-
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
 	return oid.hobj.pool == -1;
@@ -1395,6 +1394,9 @@ public:
     }
 
     void split_cache(Collection *dest);
+
+    bool flush_commit(Context *c) override;
+    void flush() override;
 
     Collection(BlueStore *ns, Cache *ca, coll_t c);
   };
@@ -1417,9 +1419,6 @@ public:
       return 0;
     }
   };
-
-  class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct volatile_statfs{
     enum {
@@ -1547,7 +1546,8 @@ public:
       last_stamp = now;
     }
 
-    OpSequencerRef osr;
+    CollectionRef ch;
+    OpSequencerRef osr;  // this should be ch->osr
     boost::intrusive::list_member_hook<> sequencer_item;
 
     uint64_t bytes = 0, cost = 0;
@@ -1577,8 +1577,9 @@ public:
     uint64_t last_nid = 0;     ///< if non-zero, highest new nid we allocated
     uint64_t last_blobid = 0;  ///< if non-zero, highest new blobid we allocated
 
-    explicit TransContext(CephContext* cct, OpSequencer *o)
-      : osr(o),
+    explicit TransContext(CephContext* cct, Collection *c, OpSequencer *o)
+      : ch(c),
+	osr(o),
 	ioc(cct, this),
 	start(ceph_clock_now()) {
       last_stamp = start;
@@ -1647,7 +1648,7 @@ public:
     }
   };
 
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public RefCountedObject {
   public:
     std::mutex qlock;
     std::condition_variable qcond;
@@ -1664,7 +1665,6 @@ public:
     DeferredBatch *deferred_running = nullptr;
     DeferredBatch *deferred_pending = nullptr;
 
-    Sequencer *parent;
     BlueStore *store;
 
     size_t shard;
@@ -1677,41 +1677,14 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
-    std::atomic_bool registered = {true}; ///< registered in BlueStore's osr_set
-    std::atomic_bool zombie = {false};    ///< owning Sequencer has gone away
+    std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
-    OpSequencer(CephContext* cct, BlueStore *store)
-      : Sequencer_impl(cct),
-	parent(NULL), store(store) {
-      store->register_osr(this);
+    OpSequencer(BlueStore *store)
+      : RefCountedObject(store->cct, 0),
+	store(store) {
     }
-    ~OpSequencer() override {
+    ~OpSequencer() {
       assert(q.empty());
-      _unregister();
-    }
-
-    void discard() override {
-      // Note that we may have txc's in flight when the parent Sequencer
-      // goes away.  Reflect this with zombie==registered==true and let
-      // _osr_drain_all clean up later.
-      assert(!zombie);
-      zombie = true;
-      parent = nullptr;
-      bool empty;
-      {
-	std::lock_guard<std::mutex> l(qlock);
-	empty = q.empty();
-      }
-      if (empty) {
-	_unregister();
-      }
-    }
-
-    void _unregister() {
-      if (registered) {
-	store->unregister_osr(this);
-	registered = false;
-      }
     }
 
     void queue_new(TransContext *txc) {
@@ -1742,7 +1715,7 @@ public:
       return false;
     }
 
-    void flush() override {
+    void flush() {
       std::unique_lock<std::mutex> l(qlock);
       while (true) {
 	// set flag before the check because the condition
@@ -1758,7 +1731,7 @@ public:
       }
     }
 
-    bool flush_commit(Context *c) override {
+    bool flush_commit(Context *c) {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
@@ -1839,11 +1812,12 @@ private:
 
   RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
+  map<coll_t,CollectionRef> new_coll_map;
 
   vector<Cache*> cache_shards;
 
-  std::mutex osr_lock;              ///< protect osd_set
-  std::set<OpSequencerRef> osr_set; ///< set of all OpSequencers
+  std::mutex zombie_osr_lock;              ///< protect zombie_osr_set
+  std::set<OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
   std::atomic<uint64_t> nid_max = {0};
@@ -2026,7 +2000,7 @@ private:
   void _dump_extent_map(ExtentMap& em, int log_level=30);
   void _dump_transaction(Transaction *t, int log_level = 30);
 
-  TransContext *_txc_create(OpSequencer *osr);
+  TransContext *_txc_create(Collection *c, OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
   void _txc_add_transaction(TransContext *txc, Transaction *t);
   void _txc_calc_cost(TransContext *txc);
@@ -2045,9 +2019,9 @@ private:
   void _txc_finish(TransContext *txc);
   void _txc_release_alloc(TransContext *txc);
 
+  void _osr_register_zombie(OpSequencer *osr);
   void _osr_drain_preceding(TransContext *txc);
   void _osr_drain_all();
-  void _osr_unregister_all();
 
   void _kv_start();
   void _kv_stop();
@@ -2205,15 +2179,6 @@ public:
     f->close_section();
   }
 
-  void register_osr(OpSequencer *osr) {
-    std::lock_guard<std::mutex> l(osr_lock);
-    osr_set.insert(osr);
-  }
-  void unregister_osr(OpSequencer *osr) {
-    std::lock_guard<std::mutex> l(osr_lock);
-    osr_set.erase(osr);
-  }
-
 public:
   int statfs(struct store_statfs_t *buf) override;
 
@@ -2283,6 +2248,7 @@ public:
   int list_collections(vector<coll_t>& ls) override;
 
   CollectionHandle open_collection(const coll_t &c) override;
+  CollectionHandle create_new_collection(const coll_t& cid) override;
 
   bool collection_exists(const coll_t& c) override;
   int collection_empty(const coll_t& c, bool *empty) override;
@@ -2409,7 +2375,7 @@ public:
   }
 
   int queue_transactions(
-    Sequencer *osr,
+    CollectionHandle& ch,
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
@@ -2711,10 +2677,6 @@ private:
 			CollectionRef& d,
 			unsigned bits, int rem);
 };
-
-inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {
-  return out << *s.parent;
-}
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
   o->get();

@@ -114,7 +114,8 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
   coll_t txn_coll;
   ghobject_t txn_object(hobject_t(sobject_t("txn", CEPH_NOSNAP)));
   bufferlist bl;
-  store->read(txn_coll, txn_object, 0, 100, bl);
+  auto ch = store->open_collection(txn_coll);
+  store->read(ch, txn_object, 0, 100, bl);
   int32_t txn = 0;
   if (bl.length()) {
     bufferlist::iterator p = bl.begin();

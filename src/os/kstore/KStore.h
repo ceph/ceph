@@ -130,21 +130,21 @@ public:
     int trim(int max=-1);
   };
 
+  class OpSequencer;
+  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+
   struct Collection : public CollectionImpl {
     KStore *store;
-    coll_t cid;
     kstore_cnode_t cnode;
     RWLock lock;
+
+    OpSequencerRef osr;
 
     // cache onodes on a per-collection basis to avoid lock
     // contention.
     OnodeHashLRU onode_map;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
-
-    const coll_t &get_cid() override {
-      return cid;
-    }
 
     bool contains(const ghobject_t& oid) {
       if (cid.is_meta())
@@ -156,6 +156,9 @@ public:
 	  oid.shard_id == spgid.shard;
       return false;
     }
+
+    void flush() override;
+    bool flush_commit(Context *c) override;
 
     Collection(KStore *ns, coll_t c);
   };
@@ -179,9 +182,6 @@ public:
       return 0;
     }
   };
-
-  class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
   struct TransContext {
     typedef enum {
@@ -218,6 +218,7 @@ public:
         start = now;
     }
 
+    CollectionRef ch;
     OpSequencerRef osr;
     boost::intrusive::list_member_hook<> sequencer_item;
 
@@ -253,7 +254,7 @@ public:
     }
   };
 
-  class OpSequencer : public Sequencer_impl {
+  class OpSequencer : public RefCountedObject {
   public:
     std::mutex qlock;
     std::condition_variable qcond;
@@ -265,14 +266,7 @@ public:
 	&TransContext::sequencer_item> > q_list_t;
     q_list_t q;  ///< transactions
 
-    Sequencer *parent;
-
-    OpSequencer(CephContext* cct)
-	//set the qlock to PTHREAD_MUTEX_RECURSIVE mode
-      : Sequencer_impl(cct),
-	parent(NULL) {
-    }
-    ~OpSequencer() override {
+    ~OpSequencer() {
       assert(q.empty());
     }
 
@@ -281,13 +275,13 @@ public:
       q.push_back(*txc);
     }
 
-    void flush() override {
+    void flush() {
       std::unique_lock<std::mutex> l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
-    bool flush_commit(Context *c) override {
+    bool flush_commit(Context *c) {
       std::lock_guard<std::mutex> l(qlock);
       if (q.empty()) {
 	return true;
@@ -322,6 +316,7 @@ private:
 
   RWLock coll_lock;    ///< rwlock to protect coll_map
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
+  map<coll_t,CollectionRef> new_coll_map;
 
   std::mutex nid_lock;
   uint64_t nid_last;
@@ -443,6 +438,9 @@ public:
 
   int statfs(struct store_statfs_t *buf) override;
 
+  CollectionHandle open_collection(const coll_t& c) override;
+  CollectionHandle create_new_collection(const coll_t& c) override;
+
   using ObjectStore::exists;
   bool exists(const coll_t& cid, const ghobject_t& oid) override;
   using ObjectStore::stat;
@@ -559,7 +557,7 @@ public:
 
 
   int queue_transactions(
-    Sequencer *osr,
+    CollectionHandle& ch,
     vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) override;
@@ -668,10 +666,6 @@ private:
 			unsigned bits, int rem);
 
 };
-
-inline ostream& operator<<(ostream& out, const KStore::OpSequencer& s) {
-  return out << *s.parent;
-}
 
 static inline void intrusive_ptr_add_ref(KStore::Onode *o) {
   o->get();

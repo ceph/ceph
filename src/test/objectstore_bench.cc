@@ -107,7 +107,8 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
   assert(starting_offset < cfg.size);
   assert(starting_offset % cfg.block_size == 0);
 
-  ObjectStore::Sequencer sequencer("osbench");
+  ObjectStore::CollectionHandle ch = os->open_collection(cid);
+  assert(ch);
 
   for (int i = 0; i < cfg.repeats; ++i) {
     uint64_t offset = starting_offset;
@@ -135,16 +136,13 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     std::condition_variable cond;
     bool done = false;
 
-    os->queue_transactions(&sequencer, tls, nullptr,
-                           new C_NotifyCond(&mutex, &cond, &done));
+    tls.back().register_on_commit(new C_NotifyCond(&mutex, &cond, &done));
+    os->queue_transactions(ch, tls);
 
     std::unique_lock<std::mutex> lock(mutex);
     cond.wait(lock, [&done](){ return done; });
     lock.unlock();
-
-
   }
-  sequencer.flush();
 }
 
 int main(int argc, const char *argv[])
@@ -257,11 +255,11 @@ int main(int argc, const char *argv[])
   // create a collection
   spg_t pg;
   const coll_t cid(pg);
+  ObjectStore::CollectionHandle ch = os->create_new_collection(cid);
   {
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, std::move(t));
+    os->apply_transaction(ch, std::move(t));
   }
 
   // create the objects
@@ -273,19 +271,17 @@ int main(int argc, const char *argv[])
       oss << "osbench-thread-" << i;
       oids.emplace_back(hobject_t(sobject_t(oss.str(), CEPH_NOSNAP)));
 
-      ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, std::move(t));
+      int r = os->apply_transaction(ch, std::move(t));
       assert(r == 0);
     }
   } else {
     oids.emplace_back(hobject_t(sobject_t("osbench", CEPH_NOSNAP)));
 
-    ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, std::move(t));
+    int r = os->apply_transaction(ch, std::move(t));
     assert(r == 0);
   }
 
@@ -314,11 +310,10 @@ int main(int argc, const char *argv[])
       << iops << " iops" << dendl;
 
   // remove the objects
-  ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,std::move(t));
+  os->apply_transaction(ch, std::move(t));
 
   os->umount();
   return 0;
