@@ -737,7 +737,7 @@ void PrimaryLogPG::maybe_force_recovery()
 		  PG_STATE_BACKFILL_TOOFULL))
     return;
 
-  if (pg_log.get_log().log.size() <
+  if (pg_log.get_log().approx_size() <
       cct->_conf->osd_max_pg_log_entries *
         cct->_conf->osd_force_recovery_pg_log_entries_factor)
     return;
@@ -1578,11 +1578,10 @@ void PrimaryLogPG::calc_trim_to()
   eversion_t limit = std::min(
     min_last_complete_ondisk,
     pg_log.get_can_rollback_to());
-  size_t log_size = pg_log.get_log().log.size();
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
-      log_size > target) {
-    size_t num_to_trim = log_size - target;
+      pg_log.get_log().approx_size() > target) {
+    size_t num_to_trim = pg_log.get_log().approx_size() - target;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min) {
       return;
     }
