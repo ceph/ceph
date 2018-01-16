@@ -4803,7 +4803,7 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
 
     // caps_wanted
     if (is.caps_wanted) {
-      in->mds_caps_wanted[from] = is.caps_wanted;
+      in->set_mds_caps_wanted(from, is.caps_wanted);
       dout(15) << " inode caps_wanted " << ccap_string(is.caps_wanted)
 	       << " on " << *in << dendl;
     }
@@ -7413,7 +7413,7 @@ void MDCache::inode_remove_replica(CInode *in, mds_rank_t from, bool rejoin,
 				   set<SimpleLock *>& gather_locks)
 {
   in->remove_replica(from);
-  in->mds_caps_wanted.erase(from);
+  in->set_mds_caps_wanted(from, 0);
   
   // note: this code calls _eval more often than it needs to!
   // fix lock
