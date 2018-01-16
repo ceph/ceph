@@ -251,7 +251,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
   }
 
   if (group_name->empty()) {
-    std::cerr << "rbd: consistency group name was not specified" << std::endl;
+    std::cerr << "rbd: group name was not specified" << std::endl;
     return -EINVAL;
   }
 
