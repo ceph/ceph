@@ -56,6 +56,15 @@ static void format_features(Formatter *f, uint64_t features)
   format_bitmask(f, "feature", at::ImageFeatures::FEATURE_MAPPING, features);
 }
 
+static void format_op_features(Formatter *f, uint64_t op_features)
+{
+  static std::map<uint64_t, std::string> mapping = {
+    {RBD_OPERATION_FEATURE_CLONE_V2, RBD_OPERATION_FEATURE_NAME_CLONE_V2},
+    {RBD_OPERATION_FEATURE_GROUP, RBD_OPERATION_FEATURE_NAME_GROUP},
+    {RBD_OPERATION_FEATURE_SNAP_TRASH, RBD_OPERATION_FEATURE_NAME_SNAP_TRASH}};
+  format_bitmask(f, "op_feature", mapping, op_features);
+}
+
 static void format_flags(Formatter *f, uint64_t flags)
 {
   std::map<uint64_t, std::string> mapping = {
@@ -105,6 +114,12 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   r = image.features(&features);
   if (r < 0)
     return r;
+
+  uint64_t op_features;
+  r = image.get_op_features(&op_features);
+  if (r < 0) {
+    return r;
+  }
 
   r = image.get_flags(&flags);
   if (r < 0) {
@@ -197,6 +212,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   if (!old_format) {
     format_features(f, features);
+    format_op_features(f, op_features);
     format_flags(f, flags);
   }
 
