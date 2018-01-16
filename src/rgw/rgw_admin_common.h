@@ -10,6 +10,8 @@
 #include "rgw_common.h"
 #include "rgw_rados.h"
 
+#define dout_context g_ceph_context
+
 enum {
   OPT_NO_CMD = 0,
   OPT_USER_CREATE,
@@ -112,6 +114,7 @@ enum {
   OPT_MDLOG_FETCH,
   OPT_MDLOG_STATUS,
   OPT_SYNC_ERROR_LIST,
+  OPT_SYNC_ERROR_TRIM,
   OPT_BILOG_LIST,
   OPT_BILOG_TRIM,
   OPT_BILOG_STATUS,
