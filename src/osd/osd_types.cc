@@ -1208,6 +1208,7 @@ void pg_pool_t::dump(Formatter *f) const
 		   cache_target_full_ratio_micro);
   f->dump_unsigned("cache_min_flush_age", cache_min_flush_age);
   f->dump_unsigned("cache_min_evict_age", cache_min_evict_age);
+  f->dump_bool("cache_pin_head", cache_pin_head);
   f->dump_string("erasure_code_profile", erasure_code_profile);
   f->open_object_section("hit_set_params");
   hit_set_params.dump(f);
@@ -1552,7 +1553,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 26;
+  uint8_t v = 27;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
@@ -1577,7 +1578,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   encode(snaps, bl, features);
   encode(removed_snaps, bl);
   encode(auid, bl);
-  if (v >= 27) {
+  if (v >= 28) {
     encode(flags, bl);
   } else {
     auto tmp = flags;
@@ -1634,12 +1635,16 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 26) {
     encode(application_metadata, bl);
   }
+  if (v >= 27) {
+    encode(cache_pin_head, bl);
+  }
+
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1789,6 +1794,11 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 26) {
     decode(application_metadata, bl);
   }
+  if (struct_v >= 27) {
+    decode(cache_pin_head, bl);
+  } else {
+    cache_pin_head = false;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1851,6 +1861,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.cache_target_full_ratio_micro = 987222;
   a.cache_min_flush_age = 231;
   a.cache_min_evict_age = 2321;
+  a.cache_pin_head = false;
   a.erasure_code_profile = "profile in osdmap";
   a.expected_num_objects = 123456;
   a.fast_read = false;
@@ -1894,6 +1905,8 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
     out << " target_bytes " << p.target_max_bytes;
   if (p.target_max_objects)
     out << " target_objects " << p.target_max_objects;
+  if (p.cache_pin_head)
+    out << " cache_pin_head " << p.cache_pin_head;
   if (p.hit_set_params.get_type() != HitSet::TYPE_NONE) {
     out << " hit_set " << p.hit_set_params
 	<< " " << p.hit_set_period << "s"
