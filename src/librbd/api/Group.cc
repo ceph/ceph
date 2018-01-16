@@ -597,7 +597,7 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 template <typename I>
 int Group<I>::image_list(librados::IoCtx& group_ioctx,
 			 const char *group_name,
-			 std::vector<group_image_status_t>* images)
+			 std::vector<group_image_info_t>* images)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -622,7 +622,7 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
     }
 
     images->push_back(
-	group_image_status_t {
+	group_image_info_t {
 	   image_name,
 	   ioctx.get_id(),
 	   static_cast<group_image_state_t>(image_id.state)});
@@ -632,7 +632,7 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 }
 
 template <typename I>
-int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
+int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 {
   int r = ictx->state->refresh_if_required();
   if (r < 0)
@@ -650,11 +650,11 @@ int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
 				 ictx->group_spec.group_id, &group_name);
     if (r < 0)
       return r;
-    group_spec->pool = ioctx.get_id();
-    group_spec->name = group_name;
+    group_info->pool = ioctx.get_id();
+    group_info->name = group_name;
   } else {
-    group_spec->pool = RBD_GROUP_INVALID_POOL;
-    group_spec->name = "";
+    group_info->pool = RBD_GROUP_INVALID_POOL;
+    group_info->name = "";
   }
 
   return 0;
@@ -979,7 +979,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
-			std::vector<group_snap_spec_t> *snaps)
+			std::vector<group_snap_info_t> *snaps)
 {
   std::vector<cls::rbd::GroupSnapshot> cls_snaps;
 
@@ -990,7 +990,7 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 
   for (auto snap : cls_snaps) {
     snaps->push_back(
-	group_snap_spec_t {
+	group_snap_info_t {
 	   snap.name,
 	   static_cast<group_snap_state_t>(snap.state)});
 
