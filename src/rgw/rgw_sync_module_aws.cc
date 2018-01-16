@@ -223,8 +223,6 @@ struct AWSSyncConfig {
 
   map<string, AWSSyncConfig_Connection> connections;
 
-  string bucket_suffix;
-
   AWSSyncConfig_S3 s3;
 
   struct Target {
@@ -283,8 +281,6 @@ struct AWSSyncConfig {
 
       connections[new_conn["connection_id"]].init(new_conn);
     }
-
-    bucket_suffix = config["bucket_suffix"];
 
     int r = s3.init(cct, config["s3"]);
     if (r < 0) {
@@ -363,7 +359,6 @@ struct AWSSyncConfig {
     }
     jf.close_section();
 
-    encode_json("bucket_suffix", bucket_suffix, &jf);
     s3.dump_conf(cct, jf);
 
     { // targets
@@ -385,9 +380,6 @@ struct AWSSyncConfig {
       owner += bucket_info.owner.id;
     }
     bucket_str += bucket_info.bucket.name;
-    if (!bucket_suffix.empty()) {
-      bucket_str = bucket_str + "-" + bucket_suffix;
-    }
     const Target *target{nullptr};
     const string *path{nullptr};
     if (find_target(bucket_info.bucket, &target)) {
