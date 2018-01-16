@@ -437,7 +437,8 @@ int MDSDaemon::init()
   dout(10) << sizeof(MDSCacheObject) << "\tMDSCacheObject" << dendl;
   dout(10) << sizeof(CInode) << "\tCInode" << dendl;
   dout(10) << sizeof(elist<void*>::item) << "\t elist<>::item   *7=" << 7*sizeof(elist<void*>::item) << dendl;
-  dout(10) << sizeof(inode_t) << "\t inode_t " << dendl;
+  dout(10) << sizeof(CInode::mempool_inode) << "\t inode  " << dendl;
+  dout(10) << sizeof(CInode::mempool_old_inode) << "\t old_inode " << dendl;
   dout(10) << sizeof(nest_info_t) << "\t  nest_info_t " << dendl;
   dout(10) << sizeof(frag_info_t) << "\t  frag_info_t " << dendl;
   dout(10) << sizeof(SimpleLock) << "\t SimpleLock   *5=" << 5*sizeof(SimpleLock) << dendl;

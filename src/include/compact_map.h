@@ -181,13 +181,18 @@ public:
   size_t count (const Key& k) const {
     return map ? map->count(k) : 0;
   }
-  void erase (iterator p) {
+  iterator erase (iterator p) {
     if (map) {
       assert(this == p.map);
-      map->erase(p.it);
+      auto it = map->erase(p.it);
       if (map->empty()) {
         free_internal();
+        return iterator(this);
+      } else {
+        return iterator(this, it);
       }
+    } else {
+      return iterator(this);
     }
   }
   size_t erase (const Key& k) {
@@ -215,6 +220,12 @@ public:
   iterator insert(const std::pair<const Key, T>& val) {
     alloc_internal();
     return iterator(this, map->insert(val));
+  }
+  template <class... Args>
+  std::pair<iterator,bool> emplace ( Args&&... args ) {
+    alloc_internal();
+    auto em = map->emplace(std::forward<Args>(args)...);
+    return std::pair<iterator,bool>(iterator(this, em.first), em.second);
   }
   iterator begin() {
    if (!map)

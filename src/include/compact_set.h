@@ -140,12 +140,18 @@ public:
   size_t count(const T& t) const {
     return set ? set->count(t) : 0;
   }
-  void erase (iterator p) {
+  iterator erase (iterator p) {
     if (set) {
       assert(this == p.set);
-      set->erase(p.it);
-      if (set->empty())
+      auto it = set->erase(p.it);
+      if (set->empty()) {
         free_internal();
+        return iterator(this);
+      } else {
+        return iterator(this, it);
+      }
+    } else {
+      return iterator(this);
     }
   }
   size_t erase (const T& t) {
@@ -175,6 +181,13 @@ public:
     std::pair<typename Set::iterator,bool> r = set->insert(t);
     return std::make_pair(iterator(this, r.first), r.second);
   }
+  template <class... Args>
+  std::pair<iterator,bool> emplace ( Args&&... args ) {
+    alloc_internal();
+    auto em = set->emplace(std::forward<Args>(args)...);
+    return std::pair<iterator,bool>(iterator(this, em.first), em.second);
+  }
+
   iterator begin() {
    if (!set)
      return iterator(this);

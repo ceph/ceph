@@ -1857,7 +1857,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, bool share_max, bo
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
     // check for snap writeback completion
     bool gather = false;
-    compact_map<int,set<client_t> >::iterator p = in->client_snap_caps.begin();
+    auto p = in->client_snap_caps.begin();
     while (p != in->client_snap_caps.end()) {
       auto q = p->second.find(client);
       if (q != p->second.end()) {
@@ -2294,7 +2294,7 @@ public:
   }
 };
 
-uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
+uint64_t Locker::calc_new_max_size(CInode::mempool_inode *pi, uint64_t size)
 {
   uint64_t new_max = (size + 1) << 1;
   uint64_t max_inc = g_conf->mds_client_writeable_range_max_inc_objs;
@@ -2306,10 +2306,10 @@ uint64_t Locker::calc_new_max_size(inode_t *pi, uint64_t size)
 }
 
 void Locker::calc_new_client_ranges(CInode *in, uint64_t size,
-				    map<client_t,client_writeable_range_t> *new_ranges,
+				    CInode::mempool_inode::client_range_map *new_ranges,
 				    bool *max_increased)
 {
-  inode_t *latest = in->get_projected_inode();
+  auto latest = in->get_projected_inode();
   uint64_t ms;
   if(latest->has_layout()) {
     ms = calc_new_max_size(latest, size);
@@ -2348,8 +2348,8 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   assert(in->is_auth());
   assert(in->is_file());
 
-  inode_t *latest = in->get_projected_inode();
-  map<client_t, client_writeable_range_t> new_ranges;
+  CInode::mempool_inode *latest = in->get_projected_inode();
+  CInode::mempool_inode::client_range_map new_ranges;
   uint64_t size = latest->size;
   bool update_size = new_size > 0;
   bool update_max = false;
@@ -2409,20 +2409,20 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
     
-  inode_t *pi = in->project_inode();
-  pi->version = in->pre_dirty();
+  auto &pi = in->project_inode();
+  pi.inode.version = in->pre_dirty();
 
   if (update_max) {
-    dout(10) << "check_inode_max_size client_ranges " << pi->client_ranges << " -> " << new_ranges << dendl;
-    pi->client_ranges = new_ranges;
+    dout(10) << "check_inode_max_size client_ranges " << pi.inode.client_ranges << " -> " << new_ranges << dendl;
+    pi.inode.client_ranges = new_ranges;
   }
 
   if (update_size) {
-    dout(10) << "check_inode_max_size size " << pi->size << " -> " << new_size << dendl;
-    pi->size = new_size;
-    pi->rstat.rbytes = new_size;
-    dout(10) << "check_inode_max_size mtime " << pi->mtime << " -> " << new_mtime << dendl;
-    pi->mtime = new_mtime;
+    dout(10) << "check_inode_max_size size " << pi.inode.size << " -> " << new_size << dendl;
+    pi.inode.size = new_size;
+    pi.inode.rstat.rbytes = new_size;
+    dout(10) << "check_inode_max_size mtime " << pi.inode.mtime << " -> " << new_mtime << dendl;
+    pi.inode.mtime = new_mtime;
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -2615,7 +2615,7 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
   for (auto p = head_in->client_need_snapflush.begin();
        p != head_in->client_need_snapflush.end() && p->first < last; ) {
     snapid_t snapid = p->first;
-    set<client_t>& clients = p->second;
+    auto &clients = p->second;
     ++p;  // be careful, q loop below depends on this
 
     if (clients.count(client)) {
@@ -3120,53 +3120,55 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   // normal metadata updates that we can apply to the head as well.
 
   // update xattrs?
-  bool xattrs = false;
-  map<string,bufferptr> *px = 0;
-  if ((dirty & CEPH_CAP_XATTR_EXCL) && 
-      m->xattrbl.length() &&
-      m->head.xattr_version > in->get_projected_inode()->xattr_version)
-    xattrs = true;
+  CInode::mempool_xattr_map *px = nullptr;
+  bool xattrs = (dirty & CEPH_CAP_XATTR_EXCL) &&
+                m->xattrbl.length() &&
+                m->head.xattr_version > in->get_projected_inode()->xattr_version;
 
-  old_inode_t *oi = 0;
+  CInode::mempool_old_inode *oi = 0;
   if (in->is_multiversion()) {
     oi = in->pick_old_inode(snap);
   }
 
-  inode_t *pi;
+  CInode::mempool_inode *i;
   if (oi) {
     dout(10) << " writing into old inode" << dendl;
-    pi = in->project_inode();
-    pi->version = in->pre_dirty();
+    auto &pi = in->project_inode();
+    pi.inode.version = in->pre_dirty();
     if (snap > oi->first)
       in->split_old_inode(snap);
-    pi = &oi->inode;
+    i = &oi->inode;
     if (xattrs)
       px = &oi->xattrs;
   } else {
+    auto &pi = in->project_inode(xattrs);
+    pi.inode.version = in->pre_dirty();
+    i = &pi.inode;
     if (xattrs)
-      px = new map<string,bufferptr>;
-    pi = in->project_inode(px);
-    pi->version = in->pre_dirty();
+      px = pi.xattrs.get();
   }
 
-  _update_cap_fields(in, dirty, m, pi);
+  _update_cap_fields(in, dirty, m, i);
 
   // xattr
-  if (px) {
-    dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version
+  if (xattrs) {
+    dout(7) << " xattrs v" << i->xattr_version << " -> " << m->head.xattr_version
 	    << " len " << m->xattrbl.length() << dendl;
-    pi->xattr_version = m->head.xattr_version;
+    i->xattr_version = m->head.xattr_version;
     bufferlist::iterator p = m->xattrbl.begin();
     decode(*px, p);
   }
 
-  if (pi->client_ranges.count(client)) {
-    if (in->last == snap) {
-      dout(10) << "  removing client_range entirely" << dendl;
-      pi->client_ranges.erase(client);
-    } else {
-      dout(10) << "  client_range now follows " << snap << dendl;
-      pi->client_ranges[client].follows = snap;
+  {
+    auto it = i->client_ranges.find(client);
+    if (it != i->client_ranges.end()) {
+      if (in->last == snap) {
+        dout(10) << "  removing client_range entirely" << dendl;
+        i->client_ranges.erase(it);
+      } else {
+        dout(10) << "  client_range now follows " << snap << dendl;
+        it->second.follows = snap;
+      }
     }
   }
 
@@ -3183,7 +3185,7 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
 							      client, ack));
 }
 
-void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, inode_t *pi)
+void Locker::_update_cap_fields(CInode *in, int dirty, MClientCaps *m, CInode::mempool_inode *pi)
 {
   if (dirty == 0)
     return;
@@ -3291,7 +3293,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	   << " on " << *in << dendl;
   assert(in->is_auth());
   client_t client = m->get_source().num();
-  inode_t *latest = in->get_projected_inode();
+  CInode::mempool_inode *latest = in->get_projected_inode();
 
   // increase or zero max_size?
   uint64_t size = m->get_size();
@@ -3395,30 +3397,28 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
   mds->mdlog->start_entry(le);
 
-  // xattrs update?
-  map<string,bufferptr> *px = 0;
-  if ((dirty & CEPH_CAP_XATTR_EXCL) && 
-      m->xattrbl.length() &&
-      m->head.xattr_version > in->get_projected_inode()->xattr_version)
-    px = new map<string,bufferptr>;
+  bool xattr = (dirty & CEPH_CAP_XATTR_EXCL) &&
+               m->xattrbl.length() &&
+               m->head.xattr_version > in->get_projected_inode()->xattr_version;
 
-  inode_t *pi = in->project_inode(px);
-  pi->version = in->pre_dirty();
+  auto &pi = in->project_inode(xattr);
+  pi.inode.version = in->pre_dirty();
 
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
 
-  _update_cap_fields(in, dirty, m, pi);
+  _update_cap_fields(in, dirty, m, &pi.inode);
 
   if (change_max) {
     dout(7) << "  max_size " << old_max << " -> " << new_max
 	    << " for " << *in << dendl;
     if (new_max) {
-      pi->client_ranges[client].range.first = 0;
-      pi->client_ranges[client].range.last = new_max;
-      pi->client_ranges[client].follows = in->first - 1;
+      auto &cr = pi.inode.client_ranges[client];
+      cr.range.first = 0;
+      cr.range.last = new_max;
+      cr.follows = in->first - 1;
     } else 
-      pi->client_ranges.erase(client);
+      pi.inode.client_ranges.erase(client);
   }
     
   if (change_max || (dirty & (CEPH_CAP_FILE_EXCL|CEPH_CAP_FILE_WR))) 
@@ -3428,13 +3428,12 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (dirty & CEPH_CAP_AUTH_EXCL)
     wrlock_force(&in->authlock, mut);
 
-  // xattr
-  if (px) {
-    dout(7) << " xattrs v" << pi->xattr_version << " -> " << m->head.xattr_version << dendl;
-    pi->xattr_version = m->head.xattr_version;
+  // xattrs update?
+  if (xattr) {
+    dout(7) << " xattrs v" << pi.inode.xattr_version << " -> " << m->head.xattr_version << dendl;
+    pi.inode.xattr_version = m->head.xattr_version;
     bufferlist::iterator p = m->xattrbl.begin();
-    decode(*px, p);
-
+    decode(*pi.xattrs, p);
     wrlock_force(&in->xattrlock, mut);
   }
   
@@ -4435,8 +4434,8 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   in->pre_cow_old_inode();  // avoid cow mayhem
 
-  inode_t *pi = in->project_inode();
-  pi->version = in->pre_dirty();
+  auto &pi = in->project_inode();
+  pi.inode.version = in->pre_dirty();
 
   in->finish_scatter_gather_update(lock->get_type());
   lock->start_flush();
