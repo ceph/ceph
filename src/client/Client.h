@@ -945,6 +945,10 @@ private:
   mds_rank_t _get_random_up_mds() const;
 
   int _ll_getattr(Inode *in, int caps, const UserPerm& perms);
+  int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
+  int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
+  int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
+  bool _ll_forget(Inode *in, int count);
 
 public:
   int mount(const std::string &mount_root, const UserPerm& perms,
@@ -1142,6 +1146,7 @@ public:
   Inode *ll_get_inode(vinodeno_t vino);
   int ll_lookup(Inode *parent, const char *name, struct stat *attr,
 		Inode **out, const UserPerm& perms);
+  int ll_lookup_inode(struct inodeno_t ino, const UserPerm& perms, Inode **inode);
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
