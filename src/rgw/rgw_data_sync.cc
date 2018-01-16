@@ -1344,6 +1344,18 @@ public:
             tn->log(20, SSTR("received async update notification: " << *modified_iter));
             spawn(new RGWDataSyncSingleEntryCR(sync_env, *modified_iter, string(), marker_tracker, error_repo, false, tn), false);
           }
+          while ((int)num_spawned() > spawn_window) {
+            set_status() << "num_spawned() > spawn_window";
+            yield wait_for_child();
+            int ret;
+            while (collect(&ret, lease_stack.get())) {
+              if (ret < 0) {
+                ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+                /* we have reported this error */
+              }
+              /* not waiting for child here */
+            }
+          }
         }
 
         /* process bucket shards that previously failed */
@@ -1356,6 +1368,19 @@ public:
           tn->log(20, SSTR("handle error entry: " << iter->first));
           spawn(new RGWDataSyncSingleEntryCR(sync_env, iter->first, iter->first, nullptr /* no marker tracker */, error_repo, true, tn), false);
           error_marker = iter->first;
+
+          while ((int)num_spawned() > spawn_window) {
+            set_status() << "num_spawned() > spawn_window";
+            yield wait_for_child();
+            int ret;
+            while (collect(&ret, lease_stack.get())) {
+              if (ret < 0) {
+                ldout(sync_env->cct, 0) << "ERROR: a sync operation returned error" << dendl;
+                /* we have reported this error */
+              }
+              /* not waiting for child here */
+            }
+          }
         }
         if ((int)error_entries.size() != max_error_entries) {
           if (error_marker.empty() && error_entries.empty()) {
