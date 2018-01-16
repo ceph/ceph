@@ -298,6 +298,26 @@ public:
     OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
+class PGRecoveryContext : public PGOpQueueable {
+  unique_ptr<GenContext<ThreadPool::TPHandle&>> c;
+  epoch_t epoch;
+public:
+  PGRecoveryContext(spg_t pgid,
+		    GenContext<ThreadPool::TPHandle&> *c, epoch_t epoch)
+    : PGOpQueueable(pgid),
+      c(c), epoch(epoch) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::bg_recovery;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGRecoveryContext(pgid=" << get_pgid()
+	       << " c=" << c.get() << " epoch=" << epoch
+	       << ")";
+  }
+  void run(
+    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
 class PGDelete : public PGOpQueueable {
   epoch_t epoch_queued;
 public:

@@ -55,6 +55,15 @@ void PGRecovery::run(OSD *osd,
   pg->unlock();
 }
 
+void PGRecoveryContext::run(
+  OSD *osd,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  c.release()->complete(handle);
+  pg->unlock();
+}
+
 void PGDelete::run(
   OSD *osd,
   PGRef& pg,
@@ -62,4 +71,3 @@ void PGDelete::run(
 {
   osd->dequeue_delete(pg.get(), epoch_queued, handle);
 }
-
