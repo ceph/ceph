@@ -160,6 +160,67 @@ static bool is_valid_id(const string &id) {
   return true;
 }
 
+namespace image {
+
+int set_op_features(cls_method_context_t hctx, uint64_t op_features,
+                    uint64_t mask) {
+  uint64_t orig_features;
+  int r = read_key(hctx, "features", &orig_features);
+  if (r < 0) {
+    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  uint64_t orig_op_features = 0;
+  r = read_key(hctx, "op_features", &orig_op_features);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("Could not read op features off disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  op_features = (orig_op_features & ~mask) | (op_features & mask);
+  CLS_LOG(10, "op_features=%" PRIu64 " orig_op_features=%" PRIu64,
+          op_features, orig_op_features);
+  if (op_features == orig_op_features) {
+    return 0;
+  }
+
+  uint64_t features = orig_features;
+  if (op_features == 0ULL) {
+    features &= ~RBD_FEATURE_OPERATIONS;
+
+    r = cls_cxx_map_remove_key(hctx, "op_features");
+    if (r == -ENOENT) {
+      r = 0;
+    }
+  } else {
+    features |= RBD_FEATURE_OPERATIONS;
+
+    bufferlist bl;
+    encode(op_features, bl);
+    r = cls_cxx_map_set_val(hctx, "op_features", &bl);
+  }
+
+  if (r < 0) {
+    CLS_ERR("error updating op features: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (features != orig_features) {
+    bufferlist bl;
+    encode(features, bl);
+    r = cls_cxx_map_set_val(hctx, "features", &bl);
+    if (r < 0) {
+      CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+} // namespace image
+
 /**
  * Initialize the header with basic metadata.
  * Extra features may initialize more fields in the future.
@@ -966,56 +1027,7 @@ int op_features_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  uint64_t orig_features;
-  int r = read_key(hctx, "features", &orig_features);
-  if (r < 0) {
-    CLS_ERR("failed to read features off disk: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  uint64_t orig_op_features = 0;
-  r = read_key(hctx, "op_features", &orig_op_features);
-  if (r < 0 && r != -ENOENT) {
-    CLS_ERR("Could not read op features off disk: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  op_features = (orig_op_features & ~mask) | (op_features & mask);
-  CLS_LOG(10, "set_features op_features=%" PRIu64 " orig_op_features=%" PRIu64,
-          op_features, orig_op_features);
-
-  uint64_t features = orig_features;
-  if (op_features == 0ULL) {
-    features &= ~RBD_FEATURE_OPERATIONS;
-
-    r = cls_cxx_map_remove_key(hctx, "op_features");
-    if (r == -ENOENT) {
-      r = 0;
-    }
-  } else {
-    features |= RBD_FEATURE_OPERATIONS;
-
-    bufferlist bl;
-    encode(op_features, bl);
-    r = cls_cxx_map_set_val(hctx, "op_features", &bl);
-  }
-
-  if (r < 0) {
-    CLS_ERR("error updating op features: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  if (features != orig_features) {
-    bufferlist bl;
-    encode(features, bl);
-    r = cls_cxx_map_set_val(hctx, "features", &bl);
-    if (r < 0) {
-      CLS_ERR("error updating features: %s", cpp_strerror(r).c_str());
-      return r;
-    }
-  }
-
-  return 0;
+  return image::set_op_features(hctx, op_features, mask);
 }
 
 /**
@@ -5062,8 +5074,8 @@ int image_group_add(cls_method_context_t hctx,
 
   int r = cls_cxx_map_get_val(hctx, RBD_GROUP_REF, &existing_refbl);
   if (r == 0) {
-    // If we are trying to link this image to the same group then return success.
-    // If this image already belongs to another group then abort.
+    // If we are trying to link this image to the same group then return
+    // success. If this image already belongs to another group then abort.
     cls::rbd::GroupSpec old_group;
     try {
       bufferlist::iterator iter = existing_refbl.begin();
@@ -5072,21 +5084,26 @@ int image_group_add(cls_method_context_t hctx,
       return -EINVAL;
     }
 
-    if ((old_group.group_id != new_group.group_id)
-	|| (old_group.pool_id != new_group.pool_id)) {
+    if ((old_group.group_id != new_group.group_id) ||
+        (old_group.pool_id != new_group.pool_id)) {
       return -EEXIST;
     } else {
       return 0; // In this case the values are already correct
     }
   } else if (r < 0 && r != -ENOENT) {
-    // No entry means this image is not a member of any group. So, we can use it.
+    // No entry means this image is not a member of any group.
+    return r;
+  }
+
+  r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_GROUP,
+                             RBD_OPERATION_FEATURE_GROUP);
+  if (r < 0) {
     return r;
   }
 
   bufferlist refbl;
   encode(new_group, refbl);
   r = cls_cxx_map_set_val(hctx, RBD_GROUP_REF, &refbl);
-
   if (r < 0) {
     return r;
   }
@@ -5140,6 +5157,11 @@ int image_group_remove(cls_method_context_t hctx,
     return r;
   }
 
+  r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_GROUP);
+  if (r < 0) {
+    return r;
+  }
+
   return 0;
 }
 
@@ -5177,7 +5199,6 @@ int image_group_get(cls_method_context_t hctx,
   encode(spec, *out);
   return 0;
 }
-
 
 namespace group {
 
