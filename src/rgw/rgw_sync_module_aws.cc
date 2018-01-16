@@ -47,7 +47,12 @@ static string obj_to_aws_path(const rgw_obj& obj)
             "access_key": <access>,
             "secret": <secret>,
             "endpoint": <endpoint>,
-            "host_style" <path | virtual>
+            "host_style" <path | virtual>,
+            "acl_mappings": [    # list of source uids and how they map into destination uids in the dest objects acls
+            {
+              "source_id": <id>,
+              "dest_id": <id>
+            } ...
         },
         "target_path": "rgwx-${sid}/${bucket}" # how a bucket name is mapped to destination path,
                                                # final object name will be target_path + "/" + obj
@@ -58,6 +63,11 @@ static string obj_to_aws_path(const rgw_obj& obj)
             "access_key": <access>,
             "secret": <secret>,
             "endpoint": <endpoint>,
+            "acl_mappings": [    # optional, overrides default
+            {
+              "source_id": <id>,
+              "dest_id": <id>
+            } ... ]
           } ... ],
       "targets": [
           {
@@ -65,12 +75,6 @@ static string obj_to_aws_path(const rgw_obj& obj)
          "target_path": <dest>,   # (override default)
          "connection_id": <connection_id> # optional, if empty references default connection
           } ... ],
-      "acl_mapping": [    # list of source uids and how they map into destination uids in the dest objects acls
-      {
-         "source_id": <id>,
-         "dest_id": <id>
-      } ...
-      ]
     }
 
 target path optional variables:
@@ -94,6 +98,19 @@ struct AWSSyncConfig_Connection {
   RGWAccessKey key;
   HostStyle host_style{PathStyle};
 
+  struct ACLMapping {
+    string source_id;
+    string dest_id;
+
+    void dump_conf(CephContext *cct, JSONFormatter& jf) const {
+      Formatter::ObjectSection os(jf, "acl_mapping");
+      encode_json("source_id", source_id, &jf);
+      encode_json("dest_id", dest_id, &jf);
+    }
+  };
+
+  map<string, ACLMapping> acl_mappings;
+
   void init(const JSONFormattable& config) {
     connection_id = config["connectionn_id"];
     endpoint = config["endpoint"];
@@ -105,6 +122,11 @@ struct AWSSyncConfig_Connection {
     } else {
       host_style = VirtualStyle;
     }
+
+    for (auto c : config["acl_mappings"].array()) {
+      const string& source_id = c["source_id"];
+      acl_mappings[source_id] = ACLMapping{source_id, c["dest_id"]};
+    }
   }
   void dump_conf(CephContext *cct, JSONFormatter& jf) const {
     Formatter::ObjectSection section(jf, "connection");
@@ -113,10 +135,19 @@ struct AWSSyncConfig_Connection {
     string s = (host_style == PathStyle ? "path" : "virtual");
     encode_json("host_style", s, &jf);
 
-    Formatter::ObjectSection os(jf, "key");
-    encode_json("access_key", key.id, &jf);
-    string secret = (key.key.empty() ? "" : "******");
-    encode_json("secret", secret, &jf);
+    {
+      Formatter::ObjectSection os(jf, "key");
+      encode_json("access_key", key.id, &jf);
+      string secret = (key.key.empty() ? "" : "******");
+      encode_json("secret", secret, &jf);
+    }
+
+    {
+      Formatter::ArraySection os(jf, "acl_mappings");
+      for (auto& m : acl_mappings) {
+        m.second.dump_conf(cct, jf);
+      }
+    }
   }
 };
 
