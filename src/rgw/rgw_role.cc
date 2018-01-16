@@ -31,7 +31,7 @@ int RGWRole::store_info(bool exclusive)
   bufferlist bl;
   encode(*this, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-                bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+                bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::store_name(bool exclusive)
@@ -45,15 +45,16 @@ int RGWRole::store_name(bool exclusive)
   using ceph::encode;
   encode(nameToId, bl);
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-              bl.c_str(), bl.length(), exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::store_path(bool exclusive)
 {
   string oid = tenant + get_path_oid_prefix() + path + get_info_oid_prefix() + id;
 
+  bufferlist bl;
   return rgw_put_system_obj(store, store->get_zone_params().roles_pool, oid,
-              NULL, 0, exclusive, NULL, real_time(), NULL);
+              bl, exclusive, NULL, real_time(), NULL);
 }
 
 int RGWRole::create(bool exclusive)

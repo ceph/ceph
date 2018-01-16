@@ -383,7 +383,7 @@ int write_history(RGWRados *store, const RGWMetadataLogHistory& state,
 
   auto& pool = store->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
-  return rgw_put_system_obj(store, pool, oid, bl.c_str(), bl.length(),
+  return rgw_put_system_obj(store, pool, oid, bl,
                             exclusive, objv_tracker, real_time{});
 }
 
@@ -1006,8 +1006,7 @@ int RGWMetadataManager::store_in_heap(RGWMetadataHandler *handler, const string&
   otracker.write_version = objv_tracker->write_version;
   string oid = heap_oid(handler, key, objv_tracker->write_version);
   int ret = rgw_put_system_obj(store, heap_pool, oid,
-                               bl.c_str(), bl.length(), false,
-                               &otracker, mtime, pattrs);
+                               bl, false, &otracker, mtime, pattrs);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: rgw_put_system_obj() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
@@ -1059,8 +1058,7 @@ int RGWMetadataManager::put_entry(RGWMetadataHandler *handler, const string& key
     goto done;
   }
 
-  ret = rgw_put_system_obj(store, pool, oid,
-                           bl.c_str(), bl.length(), exclusive,
+  ret = rgw_put_system_obj(store, pool, oid, bl, exclusive,
                            objv_tracker, mtime, pattrs);
 
   if (ret < 0) {
