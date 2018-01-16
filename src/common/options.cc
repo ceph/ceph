@@ -2233,14 +2233,6 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description(""),
 
-    Option("osd_disk_thread_ioprio_class", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description(""),
-
-    Option("osd_disk_thread_ioprio_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(-1)
-    .set_description(""),
-
     Option("osd_recover_clone_overlap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -2776,14 +2768,6 @@ std::vector<Option> get_global_options() {
 
     Option("osd_op_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(150)
-    .set_description(""),
-
-    Option("osd_recovery_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(30)
-    .set_description(""),
-
-    Option("osd_recovery_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(300)
     .set_description(""),
 
     Option("osd_recovery_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)

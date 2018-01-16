@@ -226,8 +226,6 @@ OSDService::OSDService(OSD *osd) :
   logger(osd->logger),
   recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
-  recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
-		  &osd->disk_tp),
   class_handler(osd->class_handler),
   osd_max_object_size(*cct->_conf, "osd_max_object_size"),
   osd_skip_data_digest(*cct->_conf, "osd_skip_data_digest"),
@@ -2012,7 +2010,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_compat(get_osd_compat_set()),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
-  disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
   osdmap_subscribe_lock("OSD::osdmap_subscribe_lock"),
@@ -2695,10 +2692,7 @@ int OSD::init()
   update_log_config();
 
   osd_op_tp.start();
-  disk_tp.start();
   command_tp.start();
-
-  set_disk_tp_priority();
 
   // start the heartbeat
   heartbeat_thread.create("osd_srv_heartbt");
@@ -3453,10 +3447,6 @@ int OSD::shutdown()
   command_tp.drain();
   command_tp.stop();
   dout(10) << "command tp stopped" << dendl;
-
-  disk_tp.drain();
-  disk_tp.stop();
-  dout(10) << "disk tp paused (new)" << dendl;
 
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
@@ -9137,10 +9127,6 @@ void OSD::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("osd_enable_op_tracker")) {
       op_tracker.set_tracking(cct->_conf->osd_enable_op_tracker);
   }
-  if (changed.count("osd_disk_thread_ioprio_class") ||
-      changed.count("osd_disk_thread_ioprio_priority")) {
-    set_disk_tp_priority();
-  }
   if (changed.count("osd_map_cache_size")) {
     service.map_cache.set_size(cct->_conf->osd_map_cache_size);
     service.map_bl_cache.set_size(cct->_conf->osd_map_cache_size);
@@ -9224,25 +9210,6 @@ void OSD::check_config()
 		 << " is not > osd_pg_epoch_persisted_max_stale ("
 		 << cct->_conf->osd_pg_epoch_persisted_max_stale << ")";
   }
-}
-
-void OSD::set_disk_tp_priority()
-{
-  dout(10) << __func__
-	   << " class " << cct->_conf->osd_disk_thread_ioprio_class
-	   << " priority " << cct->_conf->osd_disk_thread_ioprio_priority
-	   << dendl;
-  if (cct->_conf->osd_disk_thread_ioprio_class.empty() ||
-      cct->_conf->osd_disk_thread_ioprio_priority < 0)
-    return;
-  int cls =
-    ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
-  if (cls < 0)
-    derr << __func__ << cpp_strerror(cls) << ": "
-	 << "osd_disk_thread_ioprio_class is " << cct->_conf->osd_disk_thread_ioprio_class
-	 << " but only the following values are allowed: idle, be or rt" << dendl;
-  else
-    disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
 }
 
 // --------------------------------
