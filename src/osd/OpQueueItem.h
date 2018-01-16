@@ -44,7 +44,8 @@ public:
       peering_event,
       bg_snaptrim,
       bg_recovery,
-      bg_scrub
+      bg_scrub,
+      bg_pg_delete
     };
     using Ref = std::unique_ptr<OpQueueable>;
 
@@ -71,6 +72,7 @@ public:
     friend ostream& operator<<(ostream& out, const OpQueueable& q) {
       return q.print(out);
     }
+
   };
 
 private:
@@ -274,5 +276,25 @@ public:
     return reserved_pushes;
   }
   virtual void run(
+    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+};
+
+class PGDelete : public PGOpQueueable {
+  epoch_t epoch_queued;
+public:
+  PGDelete(
+    spg_t pg,
+    epoch_t epoch_queued)
+    : PGOpQueueable(pg),
+      epoch_queued(epoch_queued) {}
+  op_type_t get_op_type() const override final {
+    return op_type_t::bg_pg_delete;
+  }
+  ostream &print(ostream &rhs) const override final {
+    return rhs << "PGDelete(" << get_pgid()
+	       << " e" << epoch_queued
+	       << ")";
+  }
+  void run(
     OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };

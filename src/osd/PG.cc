@@ -227,9 +227,10 @@ void PG::dump_live_ids()
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
-  assert(pi);
+  if (!pi) {
+    return; // pool has been deleted
+  }
   info = *pi;
-  auid = pi->auid;
   name = map->get_pool_name(id);
 
   bool updated = false;
@@ -318,7 +319,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     cct,
     &osdriver,
     p.ps(),
-    p.get_split_bits(curmap->get_pg_num(_pool.id)),
+    p.get_split_bits(_pool.info.get_pg_num()),
     _pool.id,
     p.shard),
   last_persisted_osdmap_ref(curmap),
@@ -1926,7 +1927,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
     req->get_hobj().get_key();
 
   bool cap = caps.is_capable(pool.name, req->get_hobj().nspace,
-                             pool.auid,
+                             pool.info.auid,
 			     pool.info.application_metadata,
 			     key,
 			     op->need_read_cap(),
@@ -1937,7 +1938,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
            << "session=" << session
            << " pool=" << pool.id << " (" << pool.name
            << " " << req->get_hobj().nspace
-	   << ") owner=" << pool.auid
+	   << ") owner=" << pool.info.auid
 	   << " pool_app_metadata=" << pool.info.application_metadata
 	   << " need_read_cap=" << op->need_read_cap()
 	   << " need_write_cap=" << op->need_write_cap()
@@ -2214,6 +2215,19 @@ unsigned PG::get_backfill_priority()
   }
 
   return static_cast<unsigned>(ret);
+}
+
+unsigned PG::get_delete_priority()
+{
+  auto state = get_osdmap()->get_state(osd->whoami);
+  if (state & (CEPH_OSD_NEARFULL |
+	       CEPH_OSD_FULL)) {
+    return OSD_DELETE_PRIORITY_FULL;
+  } else if (state & CEPH_OSD_BACKFILLFULL) {
+    return OSD_DELETE_PRIORITY_FULLISH;
+  } else {
+    return OSD_DELETE_PRIORITY_NORMAL;
+  }
 }
 
 void PG::finish_recovery(list<Context*>& tfin)
@@ -5282,7 +5296,9 @@ void PG::check_full_transition(OSDMapRef lastmap, OSDMapRef osdmap)
     changed = true;
   }
   const pg_pool_t *pi = osdmap->get_pg_pool(info.pgid.pool());
-  assert(pi);
+  if (!pi) {
+    return; // pool deleted
+  }
   if (pi->has_flag(pg_pool_t::FLAG_FULL)) {
     const pg_pool_t *opi = lastmap->get_pg_pool(info.pgid.pool());
     if (!opi || !opi->has_flag(pg_pool_t::FLAG_FULL)) {
@@ -5484,7 +5500,8 @@ void PG::start_peering_interval(
       dirty_info = true;
       dirty_big_info = true;
       info.history.same_interval_since = osdmap->get_epoch();
-      if (info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
+      if (osdmap->have_pg_pool(info.pgid.pgid.pool()) &&
+	  info.pgid.pgid.is_split(lastmap->get_pg_num(info.pgid.pgid.pool()),
 				  osdmap->get_pg_num(info.pgid.pgid.pool()),
 				  nullptr)) {
 	info.history.last_epoch_split = osdmap->get_epoch();
@@ -5631,6 +5648,9 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << "p" << pg.get_primary();
   out << " r=" << pg.get_role();
   out << " lpr=" << pg.get_last_peering_reset();
+
+  if (pg.deleting)
+    out << " DELETING";
 
   if (!pg.past_intervals.empty()) {
     out << " pi=[" << pg.past_intervals.get_bounds()
@@ -5878,8 +5898,9 @@ void PG::take_waiters()
   for (auto i = peering_waiters.rbegin();
        i != peering_waiters.rend();
        ++i) {
-    osd->osd->enqueue_peering_evt_front(this, *i);
+    osd->osd->enqueue_peering_evt_front(info.pgid, *i);
   }
+  peering_waiters.clear();
 }
 
 void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
@@ -5900,7 +5921,7 @@ void PG::queue_peering_event(PGPeeringEventRef evt)
 {
   if (old_peering_evt(evt))
     return;
-  osd->osd->enqueue_peering_evt(this, evt);
+  osd->osd->enqueue_peering_evt(info.pgid, evt);
 }
 
 void PG::queue_null(epoch_t msg_epoch,
@@ -6057,6 +6078,103 @@ void PG::update_store_on_load()
     }
   }
 }
+
+struct C_DeleteMore : public Context {
+  PGRef pg;
+  epoch_t epoch;
+  int count = 2;
+  C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
+  void finish(int r) override {
+    ceph_abort();
+  }
+  void complete(int r) override {
+    assert(r == 0);
+    // complete will be called exactly count times; only the last time will actualy
+    // complete.
+    if (--count) {
+      return;
+    }
+    pg->lock();
+    if (!pg->pg_has_reset_since(epoch)) {
+      pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
+    }
+    pg->unlock();
+    delete this;
+  }
+};
+
+void PG::_delete_some()
+{
+  dout(10) << __func__ << dendl;
+
+  // we do not need to flush here because (1) we only start deleting after
+  // the initial metadata changes are applied and committed, and (2) we do not
+  // process the next chunk until we have applied and committed our work.
+
+  vector<ghobject_t> olist;
+  ObjectStore::Transaction t;
+  int max = std::min(osd->store->get_ideal_list_max(),
+		     (int)cct->_conf->osd_target_transaction_size);
+  ghobject_t next;
+  osd->store->collection_list(
+    coll,
+    next,
+    ghobject_t::get_max(),
+    max,
+    &olist,
+    &next);
+  dout(20) << __func__ << " " << olist << dendl;
+
+  OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
+  int64_t num = 0;
+  for (auto& oid : olist) {
+    if (oid.is_pgmeta()) {
+      continue;
+    }
+    int r = snap_mapper.remove_oid(oid.hobj, &_t);
+    if (r != 0 && r != -ENOENT) {
+      ceph_abort();
+    }
+    t.remove(coll, oid);
+    ++num;
+  }
+  epoch_t e = get_osdmap()->get_epoch();
+  if (num) {
+    dout(20) << __func__ << " deleting " << num << " objects" << dendl;
+    Context *fin = new C_DeleteMore(this, e);
+    osd->store->queue_transaction(
+      osr.get(),
+      std::move(t),
+      fin,
+      fin);
+  } else {
+    dout(20) << __func__ << " finished" << dendl;
+    if (cct->_conf->osd_inject_failure_on_pg_removal) {
+      _exit(1);
+    }
+
+    ObjectStore::Transaction t;
+    PGLog::clear_info_log(info.pgid, &t);
+    t.remove_collection(coll);
+    PGRef pgref(this);
+    int r = osd->store->queue_transaction(
+      osd->meta_osr.get(), std::move(t),
+      // keep pg ref around until txn completes to avoid any issues
+      // with Sequencer lifecycle (seen w/ filestore).
+      new ContainerContext<PGRef>(pgref),
+      new ContainerContext<PGRef>(pgref));
+    assert(r == 0);
+
+    osd->finish_pg_delete(this);
+    deleted = true;
+
+    // cancel reserver here, since the PG is about to get deleted and the
+    // exit() methods don't run when that happens.
+    osd->local_reserver.cancel_reservation(info.pgid);
+  }
+}
+
+
 
 /*------------ Recovery State Machine----------------*/
 #undef dout_prefix
@@ -7326,6 +7444,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     return forward_event();
   }
   ldout(pg->cct, 10) << "Active advmap" << dendl;
+  bool need_publish = false;
 
   if (advmap.osdmap->require_osd_release >= CEPH_RELEASE_MIMIC) {
     const auto& new_removed_snaps = advmap.osdmap->get_new_removed_snaps();
@@ -7404,7 +7523,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
       // share updated purged_snaps to mgr/mon so that we (a) stop reporting
       // purged snaps and (b) perhaps share more snaps that we have purged
       // but didn't fit in pg_stat_t.
-      pg->publish_stats_to_osd();
+      need_publish = true;
       pg->share_pg_info();
     }
   } else if (!pg->pool.newly_removed_snaps.empty()) {
@@ -7422,7 +7541,6 @@ boost::statechart::result PG::RecoveryState::Active::react(const AdvMap& advmap)
     }
   }
 
-  bool need_publish = false;
   /* Check for changes in pool size (if the acting set changed as a result,
    * this does not matter) */
   if (advmap.lastmap->get_pg_size(pg->info.pgid.pgid) !=
@@ -7782,10 +7900,16 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
   assert(!pg->is_peered());
   assert(!pg->is_peering());
   assert(!pg->is_primary());
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+
+  if (!pg->get_osdmap()->have_pg_pool(pg->get_pgid().pool())) {
+    ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
+    post_event(DeleteStart());
+  } else {
+    pg->start_flush(
+      context< RecoveryMachine >().get_cur_transaction(),
+      context< RecoveryMachine >().get_on_applied_context_list(),
+      context< RecoveryMachine >().get_on_safe_context_list());
+  }
 }
 
 boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
@@ -7881,6 +8005,95 @@ void PG::RecoveryState::Stray::exit()
   PG *pg = context< RecoveryMachine >().pg;
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_stray_latency, dur);
+}
+
+
+/*--------ToDelete----------*/
+PG::RecoveryState::ToDelete::ToDelete(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->logger->inc(l_osd_pg_removing);
+}
+
+void PG::RecoveryState::ToDelete::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->osd->logger->dec(l_osd_pg_removing);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+}
+
+/*----WaitDeleteReserved----*/
+PG::RecoveryState::WaitDeleteReserved::WaitDeleteReserved(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg,
+	       "Started/ToDelete/WaitDeleteReseved")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  context<ToDelete>().priority = pg->get_delete_priority();
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  pg->osd->local_reserver.request_reservation(
+    pg->info.pgid,
+    new QueuePeeringEvt<DeleteReserved>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeleteReserved()),
+    context<ToDelete>().priority,
+    new QueuePeeringEvt<DeleteInterrupted>(
+      pg, pg->get_osdmap()->get_epoch(),
+      DeleteInterrupted()));
+}
+
+boost::statechart::result PG::RecoveryState::ToDelete::react(
+  const ActMap& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  if (pg->get_delete_priority() != priority) {
+    ldout(pg->cct,10) << __func__ << " delete priority changed, resetting"
+		      << dendl;
+    return transit<ToDelete>();
+  }
+  return discard_event();
+}
+
+void PG::RecoveryState::WaitDeleteReserved::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+}
+
+/*----Deleting-----*/
+PG::RecoveryState::Deleting::Deleting(my_context ctx)
+  : my_base(ctx),
+    NamedState(context< RecoveryMachine >().pg, "Started/ToDelete/Deleting")
+{
+  context< RecoveryMachine >().log_enter(state_name);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->deleting = true;
+  ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
+  pg->on_removal(t);
+  RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
+  Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
+  rctx->on_applied->contexts.push_back(fin);
+  rctx->on_safe->contexts.push_back(fin);
+}
+
+boost::statechart::result PG::RecoveryState::Deleting::react(
+  const DeleteSome& evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->_delete_some();
+  return discard_event();
+}
+
+void PG::RecoveryState::Deleting::exit()
+{
+  context< RecoveryMachine >().log_exit(state_name, enter_time);
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->deleting = false;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 }
 
 /*--------GetInfo---------*/
@@ -8025,7 +8238,6 @@ void PG::RecoveryState::GetInfo::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getinfo_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------GetLog------------*/
@@ -8160,7 +8372,6 @@ void PG::RecoveryState::GetLog::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getlog_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------WaitActingChange--------*/
@@ -8253,7 +8464,6 @@ void PG::RecoveryState::Down::exit()
   pg->osd->recoverystate_perf->tinc(rs_down_latency, dur);
 
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 boost::statechart::result PG::RecoveryState::Down::react(const QueryState& q)
@@ -8331,7 +8541,6 @@ void PG::RecoveryState::Incomplete::exit()
   pg->osd->recoverystate_perf->tinc(rs_incomplete_latency, dur);
 
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------GetMissing--------*/
@@ -8476,7 +8685,6 @@ void PG::RecoveryState::GetMissing::exit()
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_getmissing_latency, dur);
   pg->blocked_by.clear();
-  pg->publish_stats_to_osd();
 }
 
 /*------WaitUpThru--------*/
@@ -8653,14 +8861,4 @@ void PG::with_heartbeat_peers(std::function<void(int)> f)
     f(p);
   }
   heartbeat_peer_lock.Unlock();
-}
-
-void PG::pg_remove_object(const ghobject_t& oid, ObjectStore::Transaction *t)
-{
-  OSDriver::OSTransaction _t(osdriver.get_transaction(t));
-  int r = snap_mapper.remove_oid(oid.hobj, &_t);
-  if (r != 0 && r != -ENOENT) {
-    ceph_abort();
-  }
-  t->remove(coll, oid);
 }

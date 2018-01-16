@@ -55,4 +55,11 @@ void PGRecovery::run(OSD *osd,
   pg->unlock();
 }
 
+void PGDelete::run(
+  OSD *osd,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  osd->dequeue_delete(pg.get(), epoch_queued, handle);
+}
 
