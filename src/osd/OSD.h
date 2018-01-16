@@ -876,6 +876,7 @@ public:
   SafeTimer scrub_sleep_timer;
 
   AsyncReserver<spg_t> snap_reserver;
+  void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
 

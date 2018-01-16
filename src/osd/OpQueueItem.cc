@@ -55,4 +55,11 @@ void PGRecovery::run(OSD *osd,
   pg->unlock();
 }
 
-
+void PGRecoveryContext::run(
+  OSD *osd,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
+{
+  c.release()->complete(handle);
+  pg->unlock();
+}

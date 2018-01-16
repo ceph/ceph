@@ -1716,6 +1716,22 @@ void OSDService::enqueue_front(OpQueueItem&& qi)
   osd->op_shardedwq.queue_front(std::move(qi));
 }
 
+void OSDService::queue_recovery_context(
+  PG *pg,
+  GenContext<ThreadPool::TPHandle&> *c)
+{
+  epoch_t e = get_osdmap()->get_epoch();
+  enqueue_back(
+    OpQueueItem(
+      unique_ptr<OpQueueItem::OpQueueable>(
+	new PGRecoveryContext(pg->get_pgid(), c, e)),
+      cct->_conf->osd_recovery_cost,
+      cct->_conf->osd_recovery_priority,
+      ceph_clock_now(),
+      0,
+      e));
+}
+
 void OSDService::queue_for_snap_trim(PG *pg)
 {
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;

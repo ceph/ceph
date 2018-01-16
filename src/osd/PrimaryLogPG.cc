@@ -583,7 +583,7 @@ void PrimaryLogPG::begin_peer_recover(
 void PrimaryLogPG::schedule_recovery_work(
   GenContext<ThreadPool::TPHandle&> *c)
 {
-  osd->recovery_gen_wq.queue(c);
+  osd->queue_recovery_context(this, c);
 }
 
 void PrimaryLogPG::send_message_osd_cluster(
