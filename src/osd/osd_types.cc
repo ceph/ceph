@@ -2411,7 +2411,8 @@ void pg_stat_t::encode(bufferlist &bl) const
   encode(last_became_peered, bl);
   encode(pin_stats_invalid, bl);
   encode(snaptrimq_len, bl);
-  encode(state, bl);
+  __u32 top_state = (state >> 32);
+  encode(top_state, bl);
   encode(purged_snaps, bl);
   ENCODE_FINISH(bl);
 }
@@ -2470,7 +2471,9 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   if (struct_v >= 23) {
     decode(snaptrimq_len, bl);
     if (struct_v >= 24) {
-      decode(state, bl);
+      __u32 top_state;
+      decode(top_state, bl);
+      state = (uint64_t)old_state | ((uint64_t)top_state << 32);
       decode(purged_snaps, bl);
     } else {
       state = old_state;
