@@ -99,6 +99,11 @@ def common_parser(prog, description):
         dest='crush_device_class',
         help='Crush device class to assign this OSD to',
     )
+    parser.add_argument(
+        '--dmcrypt',
+        action='store_true',
+        help='Enable device encryption via dm-crypt',
+    )
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser
