@@ -7,6 +7,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
@@ -190,6 +191,8 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
     lderr(cct) << "couldn't remove group reference from image"
 	       << cpp_strerror(-r) << dendl;
     return r;
+  } else if (r >= 0) {
+    ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
   }
 
   r = cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
@@ -548,6 +551,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     // Ignore errors in the clean up procedure.
     return r;
   }
+  ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
 				  attached_st);
