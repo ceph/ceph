@@ -304,6 +304,21 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       pg_map.dump_osd_stats(&f);
     });
     return f.get();
+  } else if (what == "osd_pool_stats") {
+    int64_t poolid = -ENOENT;
+    string pool_name;
+    PyFormatter f;
+    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        f.open_array_section("pool_stats");
+        for (auto &p : osdmap.get_pools()) {
+          poolid = p.first;
+          pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, &f, nullptr);
+        }
+        f.close_section();
+      });
+    });
+    return f.get();
   } else if (what == "health" || what == "mon_status") {
     PyFormatter f;
     bufferlist json;

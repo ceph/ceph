@@ -2444,7 +2444,64 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   ss << tab;
 }
 
-
+void PGMap::dump_pool_stats_and_io_rate(int64_t poolid, const OSDMap &osd_map,
+                                        Formatter *f,
+                                        stringstream *rs) const {
+  string pool_name = osd_map.get_pool_name(poolid);
+  if (f) {
+    f->open_object_section("pool");
+    f->dump_string("pool_name", pool_name.c_str());
+    f->dump_int("pool_id", poolid);
+    f->open_object_section("recovery");
+  }
+  list<string> sl;
+  stringstream tss;
+  pool_recovery_summary(f, &sl, poolid);
+  if (!f && !sl.empty()) {
+    for (auto &p : sl)
+      tss << "  " << p << "\n";
+  }
+  if (f) {
+    f->close_section(); // object section recovery
+    f->open_object_section("recovery_rate");
+  }
+  ostringstream rss;
+  pool_recovery_rate_summary(f, &rss, poolid);
+  if (!f && !rss.str().empty())
+    tss << "  recovery io " << rss.str() << "\n";
+  if (f) {
+    f->close_section(); // object section recovery_rate
+    f->open_object_section("client_io_rate");
+  }
+  rss.clear();
+  rss.str("");
+  pool_client_io_rate_summary(f, &rss, poolid);
+  if (!f && !rss.str().empty())
+    tss << "  client io " << rss.str() << "\n";
+  // dump cache tier IO rate for cache pool
+  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
+  if (pool->is_tier()) {
+    if (f) {
+      f->close_section(); // object section client_io_rate
+      f->open_object_section("cache_io_rate");
+    }
+    rss.clear();
+    rss.str("");
+    pool_cache_io_rate_summary(f, &rss, poolid);
+    if (!f && !rss.str().empty())
+      tss << "  cache tier io " << rss.str() << "\n";
+  }
+  if (f) {
+    f->close_section(); // object section cache_io_rate
+    f->close_section(); // object section pool
+  } else {
+    *rs << "pool " << pool_name << " id " << poolid << "\n";
+    if (!tss.str().empty())
+      *rs << tss.str() << "\n";
+    else
+      *rs << "  nothing is going on\n\n";
+  }
+}
 
 // Only called with a single bit set in "what"
 static void note_stuck_detail(
@@ -4089,114 +4146,6 @@ int process_pg_map_command(
       pg_map.print_osd_blocked_by_stats(&ds);
     }
     odata->append(ds);
-    return 0;
-  }
-
-  if (prefix == "osd pool stats") {
-    string pool_name;
-    cmd_getval(g_ceph_context, cmdmap, "name", pool_name);
-
-    int64_t poolid = -ENOENT;
-    bool one_pool = false;
-    if (!pool_name.empty()) {
-      poolid = osdmap.lookup_pg_pool_name(pool_name);
-      if (poolid < 0) {
-        assert(poolid == -ENOENT);
-        *ss << "unrecognized pool '" << pool_name << "'";
-        return -ENOENT;
-      }
-      one_pool = true;
-    }
-
-    stringstream rs;
-
-    if (f)
-      f->open_array_section("pool_stats");
-    else {
-      if (osdmap.get_pools().empty()) {
-        *ss << "there are no pools!";
-	goto stats_out;
-      }
-    }
-
-    for (auto& p : osdmap.get_pools()) {
-      if (!one_pool)
-        poolid = p.first;
-
-      pool_name = osdmap.get_pool_name(poolid);
-
-      if (f) {
-        f->open_object_section("pool");
-        f->dump_string("pool_name", pool_name.c_str());
-        f->dump_int("pool_id", poolid);
-        f->open_object_section("recovery");
-      }
-
-      list<string> sl;
-      stringstream tss;
-      pg_map.pool_recovery_summary(f, &sl, poolid);
-      if (!f && !sl.empty()) {
-	for (auto& p : sl)
-	  tss << "  " << p << "\n";
-      }
-
-      if (f) {
-        f->close_section();
-        f->open_object_section("recovery_rate");
-      }
-
-      ostringstream rss;
-      pg_map.pool_recovery_rate_summary(f, &rss, poolid);
-      if (!f && !rss.str().empty())
-        tss << "  recovery io " << rss.str() << "\n";
-
-      if (f) {
-        f->close_section();
-        f->open_object_section("client_io_rate");
-      }
-      rss.clear();
-      rss.str("");
-
-      pg_map.pool_client_io_rate_summary(f, &rss, poolid);
-      if (!f && !rss.str().empty())
-        tss << "  client io " << rss.str() << "\n";
-
-      // dump cache tier IO rate for cache pool
-      const pg_pool_t *pool = osdmap.get_pg_pool(poolid);
-      if (pool->is_tier()) {
-        if (f) {
-          f->close_section();
-          f->open_object_section("cache_io_rate");
-        }
-        rss.clear();
-        rss.str("");
-
-        pg_map.pool_cache_io_rate_summary(f, &rss, poolid);
-        if (!f && !rss.str().empty())
-          tss << "  cache tier io " << rss.str() << "\n";
-      }
-      if (f) {
-        f->close_section();
-        f->close_section();
-      } else {
-        rs << "pool " << pool_name << " id " << poolid << "\n";
-        if (!tss.str().empty())
-          rs << tss.str() << "\n";
-        else
-          rs << "  nothing is going on\n\n";
-      }
-      if (one_pool)
-        break;
-    }
-
-stats_out:
-    if (f) {
-      f->close_section();
-      f->flush(ds);
-      odata->append(ds);
-    } else {
-      odata->append(rs.str());
-    }
     return 0;
   }
 

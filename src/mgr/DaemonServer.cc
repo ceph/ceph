@@ -1034,6 +1034,54 @@ bool DaemonServer::handle_command(MCommand *m)
       });
     cmdctx->reply(r, "");
     return true;
+  } else if (prefix == "osd pool stats") {
+    string pool_name;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "pool_name", pool_name);
+    int64_t poolid = -ENOENT;
+    bool one_pool = false;
+    r = cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      return cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        if (!pool_name.empty()) {
+          poolid = osdmap.lookup_pg_pool_name(pool_name);
+          if (poolid < 0) {
+            assert(poolid == -ENOENT);
+            ss << "unrecognized pool '" << pool_name << "'";
+            return -ENOENT;
+          }
+          one_pool = true;
+        }
+        stringstream rs;
+        if (f)
+          f->open_array_section("pool_stats");
+        else {
+          if (osdmap.get_pools().empty()) {
+            ss << "there are no pools!";
+            goto stats_out;
+          }
+        }
+        for (auto &p : osdmap.get_pools()) {
+          if (!one_pool) {
+            poolid = p.first;
+          }
+          pg_map.dump_pool_stats_and_io_rate(poolid, osdmap, f.get(), &rs); 
+          if (one_pool) {
+            break;
+          }
+        }
+      stats_out:
+        if (f) {
+          f->close_section();
+          f->flush(cmdctx->odata);
+        } else {
+          cmdctx->odata.append(rs.str());
+        }
+        return 0;
+      });
+    });
+    if (r != -EOPNOTSUPP) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
   } else if (prefix == "osd safe-to-destroy") {
     vector<string> ids;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "ids", ids);
