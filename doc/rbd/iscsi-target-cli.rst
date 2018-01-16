@@ -47,6 +47,18 @@ to the *Installing* section:
 
 **Installing:**
 
+If you are using the upstream ceph-iscsi-cli package follow the
+`manual install instructions`_.
+
+.. _`manual install instructions`: ../iscsi-target-cli-manual-install
+
+.. toctree::
+   :hidden:
+
+   iscsi-target-cli-manual-install
+
+For rpm based instructions execute the following commands:
+
 #. As ``root``, on all iSCSI gateway nodes, install the
    ``ceph-iscsi-cli`` package:
 
