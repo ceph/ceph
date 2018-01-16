@@ -284,9 +284,10 @@ int execute_list_images(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  std::vector<librbd::group_image_status_t> images;
+  std::vector<librbd::group_image_info_t> images;
 
-  r = rbd.group_image_list(io_ctx, group_name.c_str(), &images);
+  r = rbd.group_image_list(io_ctx, group_name.c_str(), &images,
+                           sizeof(librbd::group_image_info_t));
 
   if (r == -ENOENT)
     r = 0;
@@ -476,9 +477,10 @@ int execute_group_snap_list(const po::variables_map &vm,
   }
 
   librbd::RBD rbd;
-  std::vector<librbd::group_snap_spec_t> snaps;
+  std::vector<librbd::group_snap_info_t> snaps;
 
-  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps);
+  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps,
+                          sizeof(librbd::group_snap_info_t));
 
   if (r == -ENOENT) {
     r = 0;

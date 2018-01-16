@@ -27,6 +27,8 @@ struct Image {
   typedef std::map<PoolSpec, ImageIds> PoolImageIds;
   typedef std::map<std::string, std::string> ImageNameToIds;
 
+  static int get_op_features(ImageCtxT *ictx, uint64_t *op_features);
+
   static int list_images(librados::IoCtx& io_ctx,
                          ImageNameToIds *images);
 
