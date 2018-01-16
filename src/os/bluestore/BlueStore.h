@@ -1772,10 +1772,16 @@ public:
     const uint64_t offset,
     const size_t length);
 
+  enum class HoleMode {
+    ZEROIZE,
+    INDEX
+  };
+
   struct AioReadBatch : public AioContext {
     struct read_ctx_t {
       async_read_params_t params;
       cache_response_t cache_response;
+      HoleMode hole_mode = HoleMode::ZEROIZE;
 
       read_ctx_t(async_read_params_t params)
         : params(std::move(params)) {
@@ -2430,12 +2436,14 @@ public:
     OnodeRef o;
     std::unique_ptr<AioReadBatch> aio;
 
+
     int _do_read(
       uint64_t offset,
       uint64_t length,
       uint32_t flags,
       ceph::bufferlist& destbl,
-      Context* on_complete);
+      Context* on_complete,
+      HoleMode hole_mode);
 
   public:
     BlueReadTrans(BlueStore* const store,
@@ -2447,6 +2455,13 @@ public:
     }
 
     int read(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete) override;
+
+    int read_sparse(
       uint64_t offset,
       uint64_t length,
       uint32_t flags,
@@ -2674,6 +2689,10 @@ private:
   bool _do_read_is_buffered(
     const uint32_t op_flags) const;
   ceph::bufferlist _do_read_compose_result(
+    BlueStore::ready_regions_t& ready_regions,
+    size_t offset,
+    size_t length);
+  ceph::bufferlist _do_read_compose_sparse_result(
     BlueStore::ready_regions_t& ready_regions,
     size_t offset,
     size_t length);

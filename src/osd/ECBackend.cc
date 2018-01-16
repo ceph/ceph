@@ -2125,6 +2125,18 @@ int ECBackend::ECReadTransaction::read(
   return -EINPROGRESS;
 }
 
+int ECBackend::ECReadTransaction::read_sparse(
+  uint64_t offset,
+  uint64_t length,
+  uint32_t flags,
+  ceph::bufferlist& destbl,
+  Context* on_complete)
+{
+  pending_async_reads.emplace_back(offset, length, &destbl,
+                                   on_complete, flags);
+  return -EINPROGRESS;
+}
+
 int ECBackend::ECReadTransaction::apply(Context *on_complete)
 {
   std::vector<ObjectStore::async_read_params_t> to_read;

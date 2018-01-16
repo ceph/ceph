@@ -197,6 +197,13 @@ public:
       ceph::bufferlist& destbl,
       Context* on_complete) override;
 
+    int read_sparse(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete) override;
+
     bool empty() const override {
       return pending_async_reads.empty();
     }

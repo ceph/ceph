@@ -1770,6 +1770,32 @@ public:
       ceph::bufferlist& destbl,
       Context* on_complete) = 0;
 
+    /**
+     * read_sparse -- read a byte range of data from an object using
+     * the formatting of CEPH_OSD_OP_SPARSE_READ for output.
+     *
+     * The operation can be performed synchronously or asynchronously
+     * solely depnding on the implementation's decision.
+     *
+     * Note: if reading from an offset past the end of the object, we
+     * return 0 (not, say, -EINVAL).
+     *
+     * @param offset location offset of first byte to be read
+     * @param len number of bytes to be read
+     * @param op_flags is CEPH_OSD_OP_FLAG_*
+     * @param destbl output bufferlist
+     * @param on_complete callback to be called
+     * @returns number of bytes read on success,
+     *          or negative error code on failure,
+     *          or -EINPROGESS if implementations decided to go async.
+     */
+    virtual int read_sparse(
+      uint64_t offset,
+      uint64_t length,
+      uint32_t flags,
+      ceph::bufferlist& destbl,
+      Context* on_complete) = 0;
+
     virtual bool empty() const = 0;
     virtual int apply(Context* on_complete) = 0;
   };
