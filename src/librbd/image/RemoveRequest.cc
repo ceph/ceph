@@ -298,7 +298,7 @@ void RemoveRequest<I>::check_group() {
   ldout(m_cct, 20) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::image_get_group_start(&op);
+  librbd::cls_client::image_group_get_start(&op);
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion = create_rados_callback<
@@ -317,7 +317,7 @@ void RemoveRequest<I>::handle_check_group(int r) {
   cls::rbd::GroupSpec s;
   if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    r = librbd::cls_client::image_get_group_finish(&it, &s);
+    r = librbd::cls_client::image_group_get_finish(&it, &s);
   }
   if (r < 0 && r != -EOPNOTSUPP) {
     lderr(m_cct) << "error fetching group for image: "

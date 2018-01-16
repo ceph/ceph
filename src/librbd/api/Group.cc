@@ -185,7 +185,7 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
     return r;
   }
 
-  r = cls_client::image_remove_group(&image_ioctx, image_header_oid,
+  r = cls_client::image_group_remove(&image_ioctx, image_header_oid,
 				     group_spec);
   if ((r < 0) && (r != -ENOENT)) {
     lderr(cct) << "couldn't remove group reference from image"
@@ -542,7 +542,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  r = cls_client::image_add_group(&image_ioctx, image_header_oid, group_spec);
+  r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
 	       << cpp_strerror(-r) << dendl;

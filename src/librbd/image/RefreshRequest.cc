@@ -456,7 +456,7 @@ void RefreshRequest<I>::send_v2_get_group() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::image_get_group_start(&op);
+  cls_client::image_group_get_start(&op);
 
   using klass = RefreshRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -476,7 +476,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
 
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    cls_client::image_get_group_finish(&it, &m_group_spec);
+    cls_client::image_group_get_finish(&it, &m_group_spec);
   }
   if (*result == -EOPNOTSUPP) {
     // Older OSD doesn't support RBD groups

@@ -2154,7 +2154,7 @@ TEST_F(TestClsRbd, group_image_clean) {
   ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED, ref_state);
 }
 
-TEST_F(TestClsRbd, image_add_group) {
+TEST_F(TestClsRbd, image_group_add) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2167,7 +2167,7 @@ TEST_F(TestClsRbd, image_add_group) {
   string group_id = "group_id";
 
   cls::rbd::GroupSpec spec(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec));
 
   map<string, bufferlist> vals;
   ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
@@ -2180,7 +2180,7 @@ TEST_F(TestClsRbd, image_add_group) {
   ASSERT_EQ(pool_id, val_spec.pool_id);
 }
 
-TEST_F(TestClsRbd, image_remove_group) {
+TEST_F(TestClsRbd, image_group_remove) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2193,10 +2193,10 @@ TEST_F(TestClsRbd, image_remove_group) {
   string group_id = "group_id";
 
   cls::rbd::GroupSpec spec(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
-  // Add reference in order to make sure that image_remove_group actually
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec));
+  // Add reference in order to make sure that image_group_remove actually
   // does something.
-  ASSERT_EQ(0, image_remove_group(&ioctx, image_id, spec));
+  ASSERT_EQ(0, image_group_remove(&ioctx, image_id, spec));
 
   map<string, bufferlist> vals;
   ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
@@ -2204,7 +2204,7 @@ TEST_F(TestClsRbd, image_remove_group) {
   ASSERT_EQ(0U, vals.size());
 }
 
-TEST_F(TestClsRbd, image_get_group) {
+TEST_F(TestClsRbd, image_group_get) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2217,10 +2217,10 @@ TEST_F(TestClsRbd, image_get_group) {
   string group_id = "group_id_get_group_spec";
 
   cls::rbd::GroupSpec spec_add(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec_add));
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec_add));
 
   cls::rbd::GroupSpec spec;
-  ASSERT_EQ(0, image_get_group(&ioctx, image_id, &spec));
+  ASSERT_EQ(0, image_group_get(&ioctx, image_id, &spec));
 
   ASSERT_EQ(group_id, spec.group_id);
   ASSERT_EQ(pool_id, spec.pool_id);
