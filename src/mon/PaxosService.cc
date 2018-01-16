@@ -399,6 +399,7 @@ void PaxosService::maybe_trim()
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
+  cached_first_committed = trim_to;
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
