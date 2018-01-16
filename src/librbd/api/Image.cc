@@ -20,6 +20,21 @@ namespace librbd {
 namespace api {
 
 template <typename I>
+int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
+  CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "image_ctx=" << ictx << dendl;
+
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  RWLock::RLocker snap_locker(ictx->snap_lock);
+  *op_features = ictx->op_features;
+  return 0;
+}
+
+template <typename I>
 int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "io_ctx=" << &io_ctx << dendl;
