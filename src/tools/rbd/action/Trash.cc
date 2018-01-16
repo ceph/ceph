@@ -122,7 +122,7 @@ void remove_error_check(int r) {
                 << std::endl;
     } else if (r == -EMLINK) {
       std::cerr << std::endl
-		<< "Remove the image from the consistency group and try again."
+		<< "Remove the image from the group and try again."
 		<< std::endl;
     } else if (r == -EPERM) {
       std::cerr << std::endl

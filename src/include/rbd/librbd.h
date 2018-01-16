@@ -882,7 +882,7 @@ CEPH_RBD_API int rbd_aio_mirror_image_get_status(rbd_image_t image,
                                                  size_t status_size,
                                                  rbd_completion_t c);
 
-// RBD consistency groups support functions
+// RBD groups support functions
 CEPH_RBD_API int rbd_group_create(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_remove(rados_ioctx_t p, const char *name);
 CEPH_RBD_API int rbd_group_list(rados_ioctx_t p, char *names, size_t *size);

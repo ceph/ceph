@@ -79,13 +79,13 @@ int execute(const po::variables_map &vm,
 	image_r = image.get_group(&group_spec);
       }
       if (image_r == 0)
-	std::cerr << "rbd: error: image belongs to a consistency group "
+	std::cerr << "rbd: error: image belongs to a group "
 		  << group_spec.pool << "." << group_spec.name;
       else
-	std::cerr << "rbd: error: image belongs to a consistency group";
+	std::cerr << "rbd: error: image belongs to a group";
 
       std::cerr << std::endl
-		<< "Remove the image from the consistency group and try again."
+		<< "Remove the image from the group and try again."
 		<< std::endl;
       image.close();
     } else {

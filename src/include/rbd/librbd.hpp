@@ -212,7 +212,7 @@ public:
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
 
-  // RBD consistency groups support functions
+  // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
   int group_remove(IoCtx& io_ctx, const char *group_name);
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
