@@ -101,6 +101,8 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   if (ret < 0)
     return ret;
 
+  int num {0};
+
   for (list<cls_log_entry>::iterator iter = op.entries.begin();
        iter != op.entries.end(); ++iter) {
     cls_log_entry& entry = *iter;
@@ -115,13 +117,15 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
 
     if (entry.id.empty()) {
       get_index(hctx, timestamp, index);
+      index.append(".");
+      index.append(to_string(num));
       entry.id = index;
     } else {
       index = entry.id;
     }
+    num += 1;
 
-    CLS_LOG(20, "storing entry at %s", index.c_str());
-
+    CLS_LOG(20, "storing entry id=%s key=%s", index.c_str(), entry.name.c_str());
 
     if (index > header.max_marker)
       header.max_marker = index;
