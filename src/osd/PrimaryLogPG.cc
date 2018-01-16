@@ -10065,6 +10065,34 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   for (auto &&entry: ctx->log) {
     projected_log.add(entry);
   }
+
+  for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
+       i != async_recovery_targets.end();
+       ++i) {
+    if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
+    for (auto &&entry: ctx->log) {
+      peer_missing[*i].add_next_event(entry);
+    }
+  }
+
+  for (set<pg_shard_t>::const_iterator i = acting_recovery_backfill.begin();
+       i != acting_recovery_backfill.end();
+       ++i) {
+    pg_shard_t peer(*i);
+    if (peer == pg_whoami) continue;
+    if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(soid)) {
+      missing_loc.add_missing(soid, ctx->at_version, eversion_t());
+    }
+  }
+
+  for (set<pg_shard_t>::const_iterator i = actingset.begin();
+       i != actingset.end();
+       ++i) {
+    pg_shard_t peer(*i);
+    if (!peer_missing[peer].is_missing(soid))
+      missing_loc.add_location(soid, peer);
+  }
+
   pgbackend->submit_transaction(
     soid,
     ctx->delta_stats,
@@ -10078,15 +10106,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     repop->rep_tid,
     ctx->reqid,
     ctx->op);
-
-  for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
-       i != async_recovery_targets.end();
-       ++i) {
-    if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
-    for (auto &&entry: ctx->log) {
-      peer_missing[*i].add_next_event(entry);
-    }
-  }
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
