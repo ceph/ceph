@@ -75,6 +75,18 @@ For rpm based instructions execute the following commands:
 
 **Setup:**
 
+#. gwcli requires a pool with the name ``rbd``, so it can store metadata
+   like the iSCSI configuration. To check if this pool has been created
+   run:
+
+   ::
+
+       # ceph osd lspools
+
+   If it does not exist instructions for creating pools can be found on the
+   `RADOS pool operations page
+   <http://docs.ceph.com/docs/master/rados/operations/pools/>`_.
+
 #. As ``root``, on a iSCSI gateway node, create a file named
    ``iscsi-gateway.cfg`` in the ``/etc/ceph/`` directory:
 
