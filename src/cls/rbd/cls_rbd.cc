@@ -4738,14 +4738,14 @@ int mirror_image_map_remove(cls_method_context_t hctx, bufferlist *in,
 }
 
 /**
- * List consistency groups from the directory.
+ * List groups from the directory.
  *
  * Input:
  * @param start_after (std::string)
  * @param max_return (int64_t)
  *
  * Output:
- * @param map of consistency groups (name, id)
+ * @param map of groups (name, id)
  * @return 0 on success, negative error code on failure
  */
 int group_dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -4782,7 +4782,7 @@ int group_dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
       try {
 	decode(id, iter);
       } catch (const buffer::error &err) {
-	CLS_ERR("could not decode id of consistency group '%s'", val.first.c_str());
+	CLS_ERR("could not decode id of group '%s'", val.first.c_str());
 	return -EIO;
       }
       CLS_LOG(20, "adding '%s' -> '%s'", dir_name_from_key(val.first).c_str(), id.c_str());
@@ -4801,7 +4801,7 @@ int group_dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * Add a consistency group to the directory.
+ * Add a group to the directory.
  *
  * Input:
  * @param name (std::string)
@@ -4815,7 +4815,7 @@ int group_dir_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   int r = cls_cxx_create(hctx, false);
 
   if (r < 0) {
-    CLS_ERR("could not create consistency group directory: %s",
+    CLS_ERR("could not create group directory: %s",
 	    cpp_strerror(r).c_str());
     return r;
   }
@@ -4830,7 +4830,7 @@ int group_dir_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   if (!name.size() || !is_valid_id(id)) {
-    CLS_ERR("invalid consistency group name '%s' or id '%s'",
+    CLS_ERR("invalid group name '%s' or id '%s'",
 	    name.c_str(), id.c_str());
     return -EINVAL;
   }
@@ -4860,7 +4860,7 @@ int group_dir_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * Remove a consistency group from the directory.
+ * Remove a group from the directory.
  *
  * Input:
  * @param name (std::string)
@@ -4922,7 +4922,7 @@ int group_dir_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * Set state of an image in the consistency group.
+ * Set state of an image in the group.
  *
  * Input:
  * @param image_status (cls::rbd::GroupImageStatus)
@@ -4955,7 +4955,7 @@ int group_image_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 }
 
 /**
- * Remove reference to an image from the consistency group.
+ * Remove reference to an image from the group.
  *
  * Input:
  * @param spec (cls::rbd::GroupImageSpec)
@@ -4987,7 +4987,7 @@ int group_image_remove(cls_method_context_t hctx,
 }
 
 /*
- * List images in the consistency group.
+ * List images in the group.
  *
  * Input:
  * @param start_after which name to begin listing after
@@ -5056,7 +5056,7 @@ int group_image_list(cls_method_context_t hctx,
 }
 
 /**
- * Reference the consistency group this image belongs to.
+ * Reference the group this image belongs to.
  *
  * Input:
  * @param group_id (std::string)
@@ -5097,7 +5097,8 @@ int image_add_group(cls_method_context_t hctx,
     } else {
       return 0; // In this case the values are already correct
     }
-  } else if (r < 0 && r != -ENOENT) { // No entry means this image is not a member of any consistency group. So, we can use it.
+  } else if (r < 0 && r != -ENOENT) {
+    // No entry means this image is not a member of any group. So, we can use it.
     return r;
   }
 
@@ -5113,7 +5114,7 @@ int image_add_group(cls_method_context_t hctx,
 }
 
 /**
- * Remove image's pointer to the consistency group.
+ * Remove image's pointer to the group.
  *
  * Input:
  * @param cg_id (std::string)
@@ -5162,7 +5163,7 @@ int image_remove_group(cls_method_context_t hctx,
 }
 
 /**
- * Retrieve the id and pool of the consistency group this image belongs to.
+ * Retrieve the id and pool of the group this image belongs to.
  *
  * Input:
  * none
@@ -5353,7 +5354,7 @@ int group_snap_remove(cls_method_context_t hctx,
 }
 
 /**
- * Get consistency group's snapshot by id.
+ * Get group's snapshot by id.
  *
  * Input:
  * @param snapshot_id the id of the snapshot to look for.
@@ -5397,7 +5398,7 @@ int group_snap_get_by_id(cls_method_context_t hctx,
 }
 
 /**
- * List consistency group's snapshots.
+ * List group's snapshots.
  *
  * Input:
  * @param start_after which name to begin listing after
@@ -5992,7 +5993,8 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "mirror_image_map_remove",
                           CLS_METHOD_WR, mirror_image_map_remove,
                           &h_mirror_image_map_remove);
-  /* methods for the consistency groups feature */
+
+  /* methods for the groups feature */
   cls_register_cxx_method(h_class, "group_dir_list",
 			  CLS_METHOD_RD,
 			  group_dir_list, &h_group_dir_list);

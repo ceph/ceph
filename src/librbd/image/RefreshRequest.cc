@@ -481,7 +481,7 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
   if (*result == -EOPNOTSUPP) {
     // Older OSD doesn't support RBD groups
     *result = 0;
-    ldout(cct, 10) << "OSD does not support consistency groups" << dendl;
+    ldout(cct, 10) << "OSD does not support groups" << dendl;
   } else if (*result < 0) {
     lderr(cct) << "failed to retrieve group: " << cpp_strerror(*result)
                << dendl;
