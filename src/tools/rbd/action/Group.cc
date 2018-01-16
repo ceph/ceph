@@ -641,22 +641,26 @@ Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
-  {"group", "image", "remove"}, {}, "Remove an image from a group.",
-  "", &get_remove_image_arguments, &execute_remove_image);
+  {"group", "image", "remove"}, {"group", "image", "rm"},
+  "Remove an image from a group.", "",
+  &get_remove_image_arguments, &execute_remove_image);
 Shell::Action action_list_images(
-  {"group", "image", "list"}, {}, "List images in a group.",
-  "", &get_list_images_arguments, &execute_list_images);
+  {"group", "image", "list"}, {"group", "image", "ls"},
+  "List images in a group.", "",
+  &get_list_images_arguments, &execute_list_images);
 Shell::Action action_group_snap_create(
   {"group", "snap", "create"}, {}, "Make a snapshot of a group.",
   "", &get_group_snap_create_arguments, &execute_group_snap_create);
 Shell::Action action_group_snap_remove(
-  {"group", "snap", "remove"}, {"group", "snap", "rm"}, "Remove a snapshot from a group.",
+  {"group", "snap", "remove"}, {"group", "snap", "rm"},
+  "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
 Shell::Action action_group_snap_rename(
   {"group", "snap", "rename"}, {}, "Rename group's snapshot.",
   "", &get_group_snap_rename_arguments, &execute_group_snap_rename);
 Shell::Action action_group_snap_list(
-  {"group", "snap", "list"}, {}, "List snapshots of a group.",
+  {"group", "snap", "list"}, {"group", "snap", "ls"},
+  "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
 } // namespace group
 } // namespace action
