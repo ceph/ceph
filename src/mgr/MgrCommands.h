@@ -75,7 +75,7 @@ COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
 	"osd", "r", "cli,rest")
 COMMAND("osd pool stats " \
-        "name=name,type=CephString,req=false",
+        "name=pool_name,type=CephPoolname,req=false",
         "obtain stats from all pools, or from specified pool",
         "osd", "r", "cli,rest")
 COMMAND("osd reweight-by-utilization " \
