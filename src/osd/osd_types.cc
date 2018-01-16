@@ -3877,16 +3877,18 @@ bool ObjectCleanRegions::object_is_exist() const
 
 void ObjectCleanRegions::encode(bufferlist &bl) const
 {
-  ::encode(clean_offsets, bl);
-  ::encode(clean_omap, bl);
-  ::encode(new_object, bl);
+  using ceph::encode;
+  encode(clean_offsets, bl);
+  encode(clean_omap, bl);
+  encode(new_object, bl);
 }
 
 void ObjectCleanRegions::decode(bufferlist::iterator &bl)
 {
-  ::decode(clean_offsets, bl);
-  ::decode(clean_omap, bl);
-  ::decode(new_object, bl);
+  using ceph::decode;
+  decode(clean_offsets, bl);
+  decode(clean_omap, bl);
+  decode(new_object, bl);
 }
 
 void ObjectCleanRegions::dump(Formatter *f) const
@@ -3946,10 +3948,11 @@ void pg_log_entry_t::decode_with_checksum(bufferlist::iterator& p)
 
 void pg_log_entry_t::encode(bufferlist &bl) const
 {
+  using ceph::encode;
   ENCODE_START(12, 4, bl);
-  ::encode(op, bl);
-  ::encode(soid, bl);
-  ::encode(version, bl);
+  encode(op, bl);
+  encode(soid, bl);
+  encode(version, bl);
 
   /**
    * Added with reverting_to:
@@ -3979,6 +3982,7 @@ void pg_log_entry_t::encode(bufferlist &bl) const
 
 void pg_log_entry_t::decode(bufferlist::iterator &bl)
 {
+  using ceph::decode;
   DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {

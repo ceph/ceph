@@ -4086,15 +4086,15 @@ public:
 
   void encode(bufferlist &bl, uint64_t features) const {
    ENCODE_START(5, 2, bl)
-   ::encode(missing, bl, features);
-   ::encode(may_include_deletes, bl);
+   encode(missing, bl, features);
+   encode(may_include_deletes, bl);
    ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
     DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
-    ::decode(missing, bl);
+    decode(missing, bl);
     if (struct_v >= 4) {
       decode(may_include_deletes, bl);
     }

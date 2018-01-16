@@ -7547,13 +7547,6 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
       maybe_create_new_object(ctx, true);
       ctx->delta_stats.num_bytes -= obs.oi.size;
       ctx->delta_stats.num_bytes += rollback_to->obs.oi.size;
-      
-      if (obs.oi.has_extents()) {
-        ctx->delta_stats.num_bytes -= obs.oi.extents.size();
-        obs.oi.extents.clear();
-      } else {
-        ctx->delta_stats.num_bytes -= obs.oi.size;
-      }
       ctx->clean_regions.mark_data_region_dirty(0, rollback_to->obs.oi.size);
       ctx->clean_regions.mark_omap_dirty();
       obs.oi.size = rollback_to->obs.oi.size;
