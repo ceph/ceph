@@ -2919,6 +2919,14 @@ bool PrimaryLogPG::maybe_promote(ObjectContextRef obc,
   dout(20) << __func__ << " missing_oid " << missing_oid
 	   << "  in_hit_set " << in_hit_set << dendl;
 
+  if (pool.info.cache_pin_head) {
+    const hobject_t& oid = obc.get() ? obc->obs.oi.soid : missing_oid;
+    if (oid.is_head())
+      goto do_promote;
+    else
+      return false;
+  }
+
   switch (recency) {
   case 0:
     break;
@@ -2962,6 +2970,8 @@ bool PrimaryLogPG::maybe_promote(ObjectContextRef obc,
     dout(10) << __func__ << " promote throttled" << dendl;
     return false;
   }
+
+do_promote:
   promote_object(obc, missing_oid, oloc, promote_op, promote_obc);
   return true;
 }
@@ -13631,6 +13641,13 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
       osd->logger->inc(l_osd_agent_skip);
       continue;
     }
+    if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+        pool.info.cache_pin_head &&
+        p->is_head() && !obc->obs.oi.is_whiteout()) {
+      dout(20) << __func__ << " skip (head) " << obc->obs.oi.soid << dendl;
+      osd->logger->inc(l_osd_agent_skip);
+      continue;
+    }
 
     // be careful flushing omap to an EC pool.
     if (!base_pool->supports_omap() &&
@@ -13964,6 +13981,22 @@ bool PrimaryLogPG::agent_choose_mode(bool restart, OpRequestRef op)
   if (info.stats.stats_invalid) {
     // idle; stats can't be trusted until we scrub.
     dout(20) << __func__ << " stats invalid (post-split), idle" << dendl;
+    goto skip_calc;
+  }
+
+  if (pool.info.cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
+      pool.info.cache_pin_head) {
+    // do not flush omap objects if ec backing pool
+    const pg_pool_t *base_pool = get_osdmap()->get_pg_pool(pool.info.tier_of);
+    assert(base_pool);
+    uint64_t unflushable = base_pool->supports_omap() ?
+      0 : info.stats.stats.sum.num_objects_omap;
+
+    if (info.stats.stats.sum.num_whiteouts > 0 ||
+        info.stats.stats.sum.num_object_clones > unflushable) {
+      evict_mode = TierAgentState::EVICT_MODE_SOME;
+      flush_mode = TierAgentState::FLUSH_MODE_LOW;
+    }
     goto skip_calc;
   }
 
