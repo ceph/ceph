@@ -1709,7 +1709,7 @@ int snapshot_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   cls::rbd::SnapshotInfo snapshot_info{snap.id, snap.snapshot_namespace,
                                        snap.name, snap.image_size,
-                                       snap.timestamp};
+                                       snap.timestamp, snap.child_count};
   encode(snapshot_info, *out);
   return 0;
 }

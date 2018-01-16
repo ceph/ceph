@@ -59,27 +59,24 @@ struct cls_rbd_parent {
 WRITE_CLASS_ENCODER(cls_rbd_parent)
 
 struct cls_rbd_snap {
-  snapid_t id;
+  snapid_t id = CEPH_NOSNAP;
   string name;
-  uint64_t image_size;
-  uint8_t protection_status;
+  uint64_t image_size = 0;
+  uint8_t protection_status = RBD_PROTECTION_STATUS_UNPROTECTED;
   cls_rbd_parent parent;
-  uint64_t flags;
+  uint64_t flags = 0;
   utime_t timestamp;
   cls::rbd::SnapshotNamespace snapshot_namespace = {
     cls::rbd::UserSnapshotNamespace{}};
+  uint32_t child_count = 0;
 
   /// true if we have a parent
   bool has_parent() const {
     return parent.exists();
   }
 
-  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0),
-		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED),
-                   flags(0), timestamp(utime_t())
-    {}
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
+    ENCODE_START(7, 1, bl);
     encode(id, bl);
     encode(name, bl);
     encode(image_size, bl);
@@ -90,10 +87,11 @@ struct cls_rbd_snap {
     encode(flags, bl);
     encode(snapshot_namespace, bl);
     encode(timestamp, bl);
+    encode(child_count, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
-    DECODE_START(6, p);
+    DECODE_START(7, p);
     decode(id, p);
     decode(name, p);
     decode(image_size, p);
@@ -113,6 +111,9 @@ struct cls_rbd_snap {
     }
     if (struct_v >= 6) {
       decode(timestamp, p);
+    }
+    if (struct_v >= 7) {
+      decode(child_count, p);
     }
     DECODE_FINISH(p);
   }
@@ -138,6 +139,7 @@ struct cls_rbd_snap {
     default:
       ceph_abort();
     }
+    f->dump_unsigned("child_count", child_count);
   }
   static void generate_test_instances(list<cls_rbd_snap*>& o) {
     o.push_back(new cls_rbd_snap);
@@ -146,6 +148,7 @@ struct cls_rbd_snap {
     t->name = "snap";
     t->image_size = 123456;
     t->flags = 31;
+    t->child_count = 543;
     o.push_back(t);
     t = new cls_rbd_snap;
     t->id = 2;

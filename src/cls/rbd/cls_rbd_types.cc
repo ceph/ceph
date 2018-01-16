@@ -436,6 +436,7 @@ void SnapshotInfo::encode(bufferlist& bl) const {
   encode(name, bl);
   encode(image_size, bl);
   encode(timestamp, bl);
+  encode(child_count, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -446,6 +447,7 @@ void SnapshotInfo::decode(bufferlist::iterator& it) {
   decode(name, it);
   decode(image_size, it);
   decode(timestamp, it);
+  decode(child_count, it);
   DECODE_FINISH(it);
 }
 
@@ -462,12 +464,12 @@ void SnapshotInfo::dump(Formatter *f) const {
 
 void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
   o.push_back(new SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
-                               {123456, 0}));
+                               {123456, 0}, 12));
   o.push_back(new SnapshotInfo(2ULL,
                                GroupSnapshotNamespace{567, "group1", "snap1"},
-                               "snap1", 123, {123456, 0}));
+                               "snap1", 123, {123456, 0}, 987));
   o.push_back(new SnapshotInfo(3ULL, TrashSnapshotNamespace{"snap1"},
-                               "12345", 123, {123456, 0}));
+                               "12345", 123, {123456, 0}, 429));
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
