@@ -200,14 +200,11 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
-  state = STATE_INITIAL;
-
   memset(&fnode, 0, sizeof(fnode));
 
   // auth
   assert(in->is_dir());
-  if (auth) 
-    state |= STATE_AUTH;
+  if (auth) state_set(STATE_AUTH);
 }
 
 /**
@@ -825,7 +822,7 @@ void CDir::steal_dentry(CDentry *dn)
 
     if (dn->get_linkage()->is_primary()) {
       CInode *in = dn->get_linkage()->get_inode();
-      inode_t *pi = in->get_projected_inode();
+      auto pi = in->get_projected_inode();
       if (dn->get_linkage()->get_inode()->is_dir())
 	fnode.fragstat.nsubdirs++;
       else
@@ -1143,7 +1140,7 @@ void CDir::merge(list<CDir*>& subs, list<MDSInternalContextBase*>& waiters, bool
 void CDir::resync_accounted_fragstat()
 {
   fnode_t *pf = get_projected_fnode();
-  inode_t *pi = inode->get_projected_inode();
+  auto pi = inode->get_projected_inode();
 
   if (pf->accounted_fragstat.version != pi->dirstat.version) {
     pf->fragstat.version = pi->dirstat.version;
@@ -1158,7 +1155,7 @@ void CDir::resync_accounted_fragstat()
 void CDir::resync_accounted_rstat()
 {
   fnode_t *pf = get_projected_fnode();
-  inode_t *pi = inode->get_projected_inode();
+  auto pi = inode->get_projected_inode();
   
   if (pf->accounted_rstat.version != pi->rstat.version) {
     pf->rstat.version = pi->rstat.version;
@@ -1178,8 +1175,8 @@ void CDir::assimilate_dirty_rstat_inodes()
     if (in->is_frozen())
       continue;
 
-    inode_t *pi = in->project_inode();
-    pi->version = in->pre_dirty();
+    auto &pi = in->project_inode();
+    pi.inode.version = in->pre_dirty();
 
     inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0, NULL);
   }

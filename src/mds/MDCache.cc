@@ -1512,15 +1512,14 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
     assert(head_in);
     if (head_in->split_need_snapflush(oldin, in)) {
       oldin->client_snap_caps = in->client_snap_caps;
-      for (compact_map<int,set<client_t> >::iterator p = in->client_snap_caps.begin();
-	   p != in->client_snap_caps.end();
-	   ++p) {
-	SimpleLock *lock = oldin->get_lock(p->first);
+      for (const auto &p : in->client_snap_caps) {
+	SimpleLock *lock = oldin->get_lock(p.first);
 	assert(lock);
-	for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+	for (const auto &q : p.second) {
 	  oldin->auth_pin(lock);
 	  lock->set_state(LOCK_SNAP_SYNC);  // gathering
 	  lock->get_wrlock(true);
+          (void)q; /* unused */
 	}
       }
     }
@@ -1723,7 +1722,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
 					  int linkunlink, SnapRealm *prealm)
 {
   CDentry *parentdn = cur->get_projected_parent_dn();
-  inode_t *curi = cur->get_projected_inode();
+  CInode::mempool_inode *curi = cur->get_projected_inode();
 
   if (cur->first > first)
     first = cur->first;
@@ -1766,23 +1765,21 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
   }
 
   if (g_conf->mds_snap_rstat) {
-    for (compact_set<snapid_t>::iterator p = cur->dirty_old_rstats.begin();
-	 p != cur->dirty_old_rstats.end();
-	 ++p) {
-      old_inode_t& old = cur->old_inodes[*p];
-      snapid_t ofirst = MAX(old.first, floor);
-      set<snapid_t>::const_iterator q = snaps.lower_bound(ofirst);
-      if (q == snaps.end() || *q > *p)
+    for (const auto &p : cur->dirty_old_rstats) {
+      auto &old = cur->old_inodes[p];
+      snapid_t ofirst = std::max(old.first, floor);
+      auto it = snaps.lower_bound(ofirst);
+      if (it == snaps.end() || *it > p)
 	continue;
-      if (*p >= floor)
-	_project_rstat_inode_to_frag(old.inode, ofirst, *p, parent, 0, false);
+      if (p >= floor)
+	_project_rstat_inode_to_frag(old.inode, ofirst, p, parent, 0, false);
     }
   }
   cur->dirty_old_rstats.clear();
 }
 
 
-void MDCache::_project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+void MDCache::_project_rstat_inode_to_frag(CInode::mempool_inode& inode, snapid_t ofirst, snapid_t last,
 					  CDir *parent, int linkunlink, bool update_inode)
 {
   dout(10) << "_project_rstat_inode_to_frag [" << ofirst << "," << last << "]" << dendl;
@@ -1913,13 +1910,13 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   dout(20) << "                 delta " << delta << dendl;
 
   while (last >= ofirst) {
-    inode_t *pi;
+    CInode::mempool_inode *pi;
     snapid_t first;
     if (last == pin->last) {
       pi = pin->get_projected_inode();
       first = MAX(ofirst, pin->first);
       if (first > pin->first) {
-	old_inode_t& old = pin->cow_old_inode(first-1, cow_head);
+	auto &old = pin->cow_old_inode(first-1, cow_head);
 	dout(20) << "   cloned old_inode rstat is " << old.inode.rstat << dendl;
       }
     } else {
@@ -1929,23 +1926,23 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
       } else {
 	// our life is easier here because old_inodes is not sparse
 	// (although it may not begin at snapid 1)
-	compact_map<snapid_t,old_inode_t>::iterator p = pin->old_inodes.lower_bound(last);
-	if (p == pin->old_inodes.end()) {
+	auto it = pin->old_inodes.lower_bound(last);
+	if (it == pin->old_inodes.end()) {
 	  dout(10) << " no old_inode <= " << last << ", done." << dendl;
 	  break;
 	}
-	first = p->second.first;
+	first = it->second.first;
 	if (first > last) {
-	  dout(10) << " oldest old_inode is [" << first << "," << p->first << "], done." << dendl;
+	  dout(10) << " oldest old_inode is [" << first << "," << it->first << "], done." << dendl;
 	  //assert(p == pin->old_inodes.begin());
 	  break;
 	}
-	if (p->first > last) {
-	  dout(10) << " splitting right old_inode [" << first << "," << p->first << "] to ["
-		   << (last+1) << "," << p->first << "]" << dendl;
-	  pin->old_inodes[last] = p->second;
-	  p->second.first = last+1;
-	  pin->dirty_old_rstats.insert(p->first);
+	if (it->first > last) {
+	  dout(10) << " splitting right old_inode [" << first << "," << it->first << "] to ["
+		   << (last+1) << "," << it->first << "]" << dendl;
+	  pin->old_inodes[last] = it->second;
+	  it->second.first = last+1;
+	  pin->dirty_old_rstats.insert(it->first);
 	}
       }
       if (first < ofirst) {
@@ -1971,7 +1968,7 @@ void MDCache::broadcast_quota_to_client(CInode *in)
   if (!in->is_auth() || in->is_frozen())
     return;
 
-  inode_t *i = in->get_projected_inode();
+  auto i = in->get_projected_inode();
 
   if (!i->quota.is_enable())
     return;
@@ -2243,32 +2240,32 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     pin->pre_cow_old_inode();  // avoid cow mayhem!
 
-    inode_t *pi = pin->project_inode();
-    pi->version = pin->pre_dirty();
+    auto &pi = pin->project_inode();
+    pi.inode.version = pin->pre_dirty();
 
     // dirstat
     if (do_parent_mtime || linkunlink) {
       dout(20) << "predirty_journal_parents add_delta " << pf->fragstat << dendl;
       dout(20) << "predirty_journal_parents         - " << pf->accounted_fragstat << dendl;
       bool touched_mtime = false, touched_chattr = false;
-      pi->dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
+      pi.inode.dirstat.add_delta(pf->fragstat, pf->accounted_fragstat, &touched_mtime, &touched_chattr);
       pf->accounted_fragstat = pf->fragstat;
       if (touched_mtime)
-	pi->mtime = pi->ctime = pi->dirstat.mtime;
+	pi.inode.mtime = pi.inode.ctime = pi.inode.dirstat.mtime;
       if (touched_chattr)
-	pi->change_attr = pi->dirstat.change_attr;
-      dout(20) << "predirty_journal_parents     gives " << pi->dirstat << " on " << *pin << dendl;
+	pi.inode.change_attr = pi.inode.dirstat.change_attr;
+      dout(20) << "predirty_journal_parents     gives " << pi.inode.dirstat << " on " << *pin << dendl;
 
       if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-	if (pi->dirstat.size() < 0)
+	if (pi.inode.dirstat.size() < 0)
 	  assert(!"negative dirstat size" == g_conf->mds_verify_scatter);
-	if (pi->dirstat.size() != pf->fragstat.size()) {
+	if (pi.inode.dirstat.size() != pf->fragstat.size()) {
 	  mds->clog->error() << "unmatched fragstat size on single dirfrag "
-	     << parent->dirfrag() << ", inode has " << pi->dirstat
+	     << parent->dirfrag() << ", inode has " << pi.inode.dirstat
 	     << ", dirfrag has " << pf->fragstat;
 	  
 	  // trust the dirfrag for now
-	  pi->dirstat = pf->fragstat;
+	  pi.inode.dirstat = pf->fragstat;
 
 	  assert(!"unmatched fragstat size" == g_conf->mds_verify_scatter);
 	}
@@ -2309,13 +2306,13 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     pf->accounted_rstat = pf->rstat;
 
     if (parent->get_frag() == frag_t()) { // i.e., we are the only frag
-      if (pi->rstat.rbytes != pf->rstat.rbytes) {
+      if (pi.inode.rstat.rbytes != pf->rstat.rbytes) {
 	mds->clog->error() << "unmatched rstat rbytes on single dirfrag "
-	  << parent->dirfrag() << ", inode has " << pi->rstat
+	  << parent->dirfrag() << ", inode has " << pi.inode.rstat
 	  << ", dirfrag has " << pf->rstat;
 
 	// trust the dirfrag for now
-	pi->rstat = pf->rstat;
+	pi.inode.rstat = pf->rstat;
 
 	assert(!"unmatched rstat rbytes" == g_conf->mds_verify_scatter);
       }
@@ -6103,7 +6100,7 @@ void MDCache::queue_file_recover(CInode *in)
     s.erase(*s.rbegin());
   dout(10) << " snaps in [" << in->first << "," << in->last << "] are " << s << dendl;
   if (s.size() > 1) {
-    inode_t *pi = in->project_inode();
+    CInode::mempool_inode pi = in->project_inode();
     pi->version = in->pre_dirty();
 
     auto mut(std::make_shared<MutationImpl>());
@@ -6228,7 +6225,7 @@ public:
 
 void MDCache::truncate_inode(CInode *in, LogSegment *ls)
 {
-  inode_t *pi = in->get_projected_inode();
+  auto pi = in->get_projected_inode();
   dout(10) << "truncate_inode "
 	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in
@@ -6262,7 +6259,7 @@ struct C_IO_MDC_TruncateFinish : public MDCacheIOContext {
 
 void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 {
-  inode_t *pi = &in->inode;
+  auto pi = &in->inode;
   dout(10) << "_truncate_inode "
 	   << pi->truncate_from << " -> " << pi->truncate_size
 	   << " on " << *in << dendl;
@@ -6311,10 +6308,10 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   ls->truncating_inodes.erase(p);
 
   // update
-  inode_t *pi = in->project_inode();
-  pi->version = in->pre_dirty();
-  pi->truncate_from = 0;
-  pi->truncate_pending--;
+  auto &pi = in->project_inode();
+  pi.inode.version = in->pre_dirty();
+  pi.inode.truncate_from = 0;
+  pi.inode.truncate_pending--;
 
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
@@ -9297,17 +9294,18 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
 
   le->metablob.add_table_transaction(TABLE_SNAP, mdr->more()->stid);
 
-  inode_t *pi = in->project_inode();
-  pi->version = in->pre_dirty();
-  pi->rstat.rsnaprealms++;
+  auto &pi = in->project_inode(false, true);
+  pi.inode.version = in->pre_dirty();
+  pi.inode.rstat.rsnaprealms++;
 
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
   snapid_t seq;
   ::decode(seq, p);
 
-  sr_t *newsnap = in->project_snaprealm(seq);
-  newsnap->seq = seq;
-  newsnap->last_created = seq;
+  auto &newsnap = *pi.snapnode;
+  newsnap.created = seq;
+  newsnap.seq = seq;
+  newsnap.last_created = seq;
   
   predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   journal_cow_inode(mut, &le->metablob, in);
@@ -11265,8 +11263,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   // dft lock
   if (diri->is_auth()) {
     // journal dirfragtree
-    inode_t *pi = diri->project_inode();
-    pi->version = diri->pre_dirty();
+    auto &pi = diri->project_inode();
+    pi.inode.version = diri->pre_dirty();
     journal_dirty_inode(mdr.get(), &le->metablob, diri);
   } else {
     mds->locker->mark_updated_scatterlock(&diri->dirfragtreelock);
@@ -11629,7 +11627,8 @@ void MDCache::rollback_uncommitted_fragments()
     }
 
     if (diri_auth) {
-      diri->project_inode()->version = diri->pre_dirty();
+      auto &pi = diri->project_inode();
+      pi.inode.version = diri->pre_dirty();
       diri->pop_and_dirty_projected_inode(ls); // hacky
       le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), diri, true);
     } else {
