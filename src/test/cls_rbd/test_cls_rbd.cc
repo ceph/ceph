@@ -2308,7 +2308,7 @@ TEST_F(TestClsRbd, group_snap_set) {
   auto it = keys.begin();
   ASSERT_EQ(1U, keys.size());
 
-  string snap_key = group::snap_key(snap.id);
+  string snap_key = "snapshot_" + stringify(snap.id);
   ASSERT_EQ(snap_key, *it);
 }
 
@@ -2399,7 +2399,7 @@ TEST_F(TestClsRbd, group_snap_remove) {
   auto it = keys.begin();
   ASSERT_EQ(1U, keys.size());
 
-  string snap_key = group::snap_key(snap.id);
+  string snap_key = "snapshot_" + stringify(snap.id);
   ASSERT_EQ(snap_key, *it);
 
   // Remove the snapshot

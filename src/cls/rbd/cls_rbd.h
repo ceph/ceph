@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef __CEPH_CLS_RBD_H
 #define __CEPH_CLS_RBD_H
 
@@ -164,15 +165,4 @@ struct cls_rbd_snap {
 };
 WRITE_CLASS_ENCODER(cls_rbd_snap)
 
-namespace group {
-
-  static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
-
-  std::string snap_key(std::string snap_id) {
-    ostringstream oss;
-    oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
-    return oss.str();
-  }
-}
-
-#endif
+#endif // __CEPH_CLS_RBD_H
