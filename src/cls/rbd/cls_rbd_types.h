@@ -376,15 +376,17 @@ struct SnapshotInfo {
   std::string name;
   uint64_t image_size = 0;
   utime_t timestamp;
+  uint32_t child_count = 0;
 
   SnapshotInfo() {
   }
   SnapshotInfo(snapid_t id,
                const cls::rbd::SnapshotNamespace& snapshot_namespace,
                const std::string& name, uint64_t image_size,
-               const utime_t& timestamp)
+               const utime_t& timestamp, uint32_t child_count)
     : id(id), snapshot_namespace(snapshot_namespace),
-      name(name), image_size(image_size), timestamp(timestamp) {
+      name(name), image_size(image_size), timestamp(timestamp),
+      child_count(child_count) {
   }
 
   void encode(bufferlist& bl) const;
