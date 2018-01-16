@@ -2708,7 +2708,11 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
 {
   RGWPutObjProcessor_Aio::prepare(store, oid_rand);
 
-  int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj, &max_chunk_size);
+  int r = store->get_max_chunk_size(
+    data_placement_vc,
+    bucket_info.placement_rule,
+    head_obj,
+    &max_chunk_size);
   if (r < 0) {
     return r;
   }
@@ -3416,14 +3420,48 @@ int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
   return 0;
 }
 
-int RGWRados::get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size)
+int RGWRados::get_max_chunk_size(
+  const rgw_data_placement_volatile_config& dpvc,
+  const string& placement_rule,
+  const rgw_obj& obj,
+  uint64_t *max_chunk_size)
 {
-  rgw_pool pool;
-  if (!get_obj_data_pool(placement_rule, obj, &pool)) {
+  rgw_pool data_pool;
+  uint64_t data_max_chunk_size(0);
+  if (!get_obj_data_pool(placement_rule, obj, &data_pool)) {
     ldout(cct, 0) << "ERROR: failed to get data pool for object " << obj << dendl;
     return -EIO;
   }
-  return get_max_chunk_size(pool, max_chunk_size);
+  int r1 = get_max_chunk_size(data_pool, &data_max_chunk_size);
+  if (r1 < 0) {
+    return r1;
+  }
+  rgw_pool tail_pool;
+  uint64_t tail_max_chunk_size(0);
+  if (!get_obj_tail_data_pool(dpvc, placement_rule, obj, &tail_pool)) {
+    ldout(cct, 0) << "ERROR: failed to get tail pool for object " << obj << dendl;
+    return -EIO;
+  }
+  int r2 = get_max_chunk_size(tail_pool, &tail_max_chunk_size);
+  if (r2 < 0) {
+    return r2;
+  }
+  uint64_t little = std::min(data_max_chunk_size, tail_max_chunk_size);
+  uint64_t big = std::max(data_max_chunk_size, tail_max_chunk_size);
+  if (big % little) {
+    // This check just makes the configuration still valid even if both pools use EC.
+    // Although this may exclude some valid combinations, this stricter condition
+    // should be still acceptable and more complex check may be over-engneering.
+    ldout(cct, 0) << "ERROR: max chunk sizes for " << data_pool
+                  << " and " << tail_pool << " mismatched" << dendl;
+    return -EIO;
+  }
+  // Larger value usually result in better efficiency.
+  // For EC pools, due to alignment requirement, a large value is always OK
+  // but there is no gurantee for the smaller one.
+  // So pick 'big'
+  *max_chunk_size = big;
+  return 0;
 }
 
 class RGWIndexCompletionManager;
@@ -8238,7 +8276,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   }
   uint64_t max_chunk_size;
 
-  ret = get_max_chunk_size(dest_bucket_info.placement_rule, dest_obj, &max_chunk_size);
+  ret = get_max_chunk_size(dest_dpvc, dest_bucket_info.placement_rule, dest_obj, &max_chunk_size);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed to get max_chunk_size() for bucket " << dest_obj.bucket << dendl;
     return ret;

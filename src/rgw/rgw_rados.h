@@ -2647,7 +2647,11 @@ public:
 
   int get_required_alignment(const rgw_pool& pool, uint64_t *alignment);
   int get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size);
-  int get_max_chunk_size(const string& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size);
+  int get_max_chunk_size(
+    const rgw_data_placement_volatile_config& dpvc,
+    const string& placement_rule,
+    const rgw_obj& obj,
+    uint64_t *max_chunk_size);
 
   uint32_t get_max_bucket_shards() {
     return rgw_shards_max();
