@@ -410,6 +410,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // themselves to be a daemon for some service.
     dout(4) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
+    m->get_connection()->mark_down();
     m->put();
     return true;
   }
