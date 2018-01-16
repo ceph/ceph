@@ -60,7 +60,7 @@ static int cls_timeindex_add(cls_method_context_t hctx,
 
   cls_timeindex_add_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_add_op(): failed to decode op");
     return -EINVAL;
@@ -93,7 +93,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
 
   cls_timeindex_list_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_list_op(): failed to decode op");
     return -EINVAL;
@@ -160,7 +160,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
 
   ret.marker = marker;
 
-  ::encode(ret, *out);
+  encode(ret, *out);
 
   return 0;
 }
@@ -174,7 +174,7 @@ static int cls_timeindex_trim(cls_method_context_t hctx,
 
   cls_timeindex_trim_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_timeindex_trim: failed to decode entry");
     return -EINVAL;

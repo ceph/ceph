@@ -2683,9 +2683,9 @@ void PG::_update_calc_stats()
   // computed using target and eventual used to get degraded total.
 
   unsigned target = get_osdmap()->get_pg_size(info.pgid.pgid);
-  unsigned nrep = MAX(actingset.size(), upset.size());
+  unsigned nrep = std::max(actingset.size(), upset.size());
   // calc num_object_copies
-  info.stats.stats.calc_copies(MAX(target, nrep));
+  info.stats.stats.calc_copies(std::max(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
@@ -2753,7 +2753,7 @@ void PG::_update_calc_stats()
           osd_missing = peer_missing[p].num_missing();
         }
 
-        osd_objects = MAX(0, num_objects - osd_missing);
+        osd_objects = std::max<int64_t>(0, num_objects - osd_missing);
         object_copies += osd_objects;
         // Count non-missing objects not in up as misplaced
 	if (!in_up) {
@@ -2762,8 +2762,8 @@ void PG::_update_calc_stats()
 	}
       } else {
         // If this peer has more objects then it should, ignore them
-        int64_t osd_backfilled = MIN(num_objects,
-				     peer_info[p].stats.stats.sum.num_objects);
+        int64_t osd_backfilled = std::min(num_objects,
+					  peer_info[p].stats.stats.sum.num_objects);
 	backfill_target_objects.insert(make_pair(osd_backfilled, p));
 	backfilled += osd_backfilled;
       }
@@ -2792,11 +2792,11 @@ void PG::_update_calc_stats()
 	 ++i, --num_misplaced) {
       adjust_misplaced += i->first;
     }
-    misplaced = MAX(0, misplaced - adjust_misplaced);
+    misplaced = std::max<int64_t>(0, misplaced - adjust_misplaced);
 
     // a degraded objects has fewer replicas or EC shards than the
     // pool specifies.  num_object_copies will never be smaller than target * num_objects.
-    int64_t degraded = MAX(0, info.stats.stats.sum.num_object_copies - object_copies);
+    int64_t degraded = std::max<int64_t>(0, info.stats.stats.sum.num_object_copies - object_copies);
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();
@@ -2808,7 +2808,7 @@ void PG::_update_blocked_by()
 {
   // set a max on the number of blocking peers we report. if we go
   // over, report a random subset.  keep the result sorted.
-  unsigned keep = MIN(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
+  unsigned keep = std::min(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
   unsigned skip = blocked_by.size() - keep;
   info.stats.blocked_by.clear();
   info.stats.blocked_by.resize(keep);
@@ -3002,7 +3002,7 @@ void PG::upgrade(ObjectStore *store)
   if (info_struct_v < latest_struct_v) {
     map<string,bufferlist> v;
     __u8 ver = latest_struct_v;
-    ::encode(ver, v[infover_key]);
+    encode(ver, v[infover_key]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
 
@@ -3040,7 +3040,7 @@ int PG::_prepare_write_info(CephContext* cct,
 			    PerfCounters *logger)
 {
   if (dirty_epoch) {
-    ::encode(epoch, (*km)[epoch_key]);
+    encode(epoch, (*km)[epoch_key]);
   }
 
   if (logger)
@@ -3054,7 +3054,7 @@ int PG::_prepare_write_info(CephContext* cct,
     bool did = fast.try_apply_to(&last_written_info);
     assert(did);  // we verified last_update increased above
     if (info == last_written_info) {
-      ::encode(fast, (*km)[fastinfo_key]);
+      encode(fast, (*km)[fastinfo_key]);
       if (logger)
 	logger->inc(l_osd_pg_fastinfo);
       return 0;
@@ -3078,14 +3078,14 @@ int PG::_prepare_write_info(CephContext* cct,
   // info.  store purged_snaps separately.
   interval_set<snapid_t> purged_snaps;
   purged_snaps.swap(info.purged_snaps);
-  ::encode(info, (*km)[info_key]);
+  encode(info, (*km)[info_key]);
   purged_snaps.swap(info.purged_snaps);
 
   if (dirty_big_info) {
     // potentially big stuff
     bufferlist& bigbl = (*km)[biginfo_key];
-    ::encode(past_intervals, bigbl);
-    ::encode(info.purged_snaps, bigbl);
+    encode(past_intervals, bigbl);
+    encode(info.purged_snaps, bigbl);
     //dout(20) << "write_info bigbl " << bigbl.length() << dendl;
     if (logger)
       logger->inc(l_osd_pg_biginfo);
@@ -3109,8 +3109,8 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
     bufferlist hint;
     uint32_t pg_num = pool->get_pg_num();
     uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
-    ::encode(pg_num, hint);
-    ::encode(expected_num_objects_pg, hint);
+    encode(pg_num, hint);
+    encode(expected_num_objects_pg, hint);
     uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
     t.collection_hint(coll, hint_type, hint);
   }
@@ -3119,7 +3119,7 @@ void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
   t.touch(coll, pgmeta_oid);
   map<string,bufferlist> values;
   __u8 struct_v = latest_struct_v;
-  ::encode(struct_v, values[infover_key]);
+  encode(struct_v, values[infover_key]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
 
@@ -3190,12 +3190,12 @@ int PG::peek_map_epoch(ObjectStore *store,
     // sanity check version
     bufferlist::iterator bp = values[infover_key].begin();
     __u8 struct_v = 0;
-    ::decode(struct_v, bp);
+    decode(struct_v, bp);
     assert(struct_v >= 8);
 
     // get epoch
     bp = values[epoch_key].begin();
-    ::decode(cur_epoch, bp);
+    decode(cur_epoch, bp);
   } else {
     // probably bug 10617; see OSD::load_pgs()
     return -1;
@@ -3402,20 +3402,20 @@ int PG::read_info(
 	 values.size() == 4);
 
   bufferlist::iterator p = values[infover_key].begin();
-  ::decode(struct_v, p);
+  decode(struct_v, p);
   assert(struct_v >= 10);
 
   p = values[info_key].begin();
-  ::decode(info, p);
+  decode(info, p);
 
   p = values[biginfo_key].begin();
-  ::decode(past_intervals, p);
-  ::decode(info.purged_snaps, p);
+  decode(past_intervals, p);
+  decode(info.purged_snaps, p);
 
   p = values[fastinfo_key].begin();
   if (!p.end()) {
     pg_fast_info_t fast;
-    ::decode(fast, p);
+    decode(fast, p);
     fast.try_apply_to(&info);
   }
   return 0;
@@ -3528,7 +3528,7 @@ void PG::update_snap_map(
 	bufferlist snapbl = i->snaps;
 	bufferlist::iterator p = snapbl.begin();
 	try {
-	  ::decode(snaps, p);
+	  decode(snaps, p);
 	} catch (...) {
 	  snaps.clear();
 	}
@@ -4076,7 +4076,7 @@ void PG::_scan_snaps(ScrubMap &smap)
       bl.push_back(o.attrs[SS_ATTR]);
       auto p = bl.begin();
       try {
-	::decode(snapset, p);
+	decode(snapset, p);
       } catch(...) {
 	continue;
       }
@@ -4173,7 +4173,7 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
       // Fix object info
       oi.soid = hoid;
       bl.clear();
-      ::encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+      encode(oi, bl, get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
 
       bufferptr bp(bl.c_str(), bl.length());
       o.attrs[OI_ATTR] = bp;
@@ -4259,7 +4259,7 @@ void PG::repair_object(
   object_info_t oi;
   try {
     bufferlist::iterator bliter = bv.begin();
-    ::decode(oi, bliter);
+    decode(oi, bliter);
   } catch (...) {
     dout(0) << __func__ << ": Need version of replica, bad object_info_t: " << soid << dendl;
     assert(0);
@@ -4340,7 +4340,7 @@ void PG::replica_scrub(
     spg_t(info.pgid.pgid, get_primary().shard),
     msg->map_epoch,
     pg_whoami);
-  ::encode(map, reply->get_data());
+  encode(map, reply->get_data());
   osd->send_message_osd_cluster(reply, msg->get_connection());
 }
 
@@ -4575,7 +4575,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   * left end of the range if we are a tier because they may legitimately
 	   * not exist (see _scrub).
 	   */
-	  int min = MAX(3, cct->_conf->osd_scrub_chunk_min);
+	  int min = std::max<int64_t>(3, cct->_conf->osd_scrub_chunk_min);
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
@@ -4583,7 +4583,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
-	    MAX(min, cct->_conf->osd_scrub_chunk_max),
+	    std::max<int64_t>(min, cct->_conf->osd_scrub_chunk_max),
 	    &objects,
 	    &candidate_end);
 	  assert(ret >= 0);
@@ -5083,22 +5083,23 @@ void PG::share_pg_info()
        i != actingbackfill.end();
        ++i) {
     if (*i == pg_whoami) continue;
-    pg_shard_t peer = *i;
-    if (peer_info.count(peer)) {
-      peer_info[peer].last_epoch_started = info.last_epoch_started;
-      peer_info[peer].last_interval_started = info.last_interval_started;
-      peer_info[peer].history.merge(info.history);
+    auto pg_shard = *i;
+    auto peer = peer_info.find(pg_shard);
+    if (peer != peer_info.end()) {
+      peer->second.last_epoch_started = info.last_epoch_started;
+      peer->second.last_interval_started = info.last_interval_started;
+      peer->second.history.merge(info.history);
     }
     MOSDPGInfo *m = new MOSDPGInfo(get_osdmap()->get_epoch());
     m->pg_list.push_back(
       make_pair(
 	pg_notify_t(
-	  peer.shard, pg_whoami.shard,
+	  pg_shard.shard, pg_whoami.shard,
 	  get_osdmap()->get_epoch(),
 	  get_osdmap()->get_epoch(),
 	  info),
 	past_intervals));
-    osd->send_message_osd_cluster(peer.osd, m, get_osdmap()->get_epoch());
+    osd->send_message_osd_cluster(pg_shard.osd, m, get_osdmap()->get_epoch());
   }
 }
 

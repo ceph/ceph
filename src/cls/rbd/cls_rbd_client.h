@@ -89,6 +89,14 @@ namespace librbd {
 		  vector<uint64_t> *snap_flags);
     void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
                    uint64_t flags, uint64_t mask);
+    void op_features_get_start(librados::ObjectReadOperation *op);
+    int op_features_get_finish(bufferlist::iterator *it, uint64_t *op_features);
+    int op_features_get(librados::IoCtx *ioctx, const std::string &oid,
+		        uint64_t *op_features);
+    void op_features_set(librados::ObjectWriteOperation *op,
+                         uint64_t op_features, uint64_t mask);
+    int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t op_features, uint64_t mask);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
@@ -399,7 +407,6 @@ namespace librbd {
                                  const std::string &global_image_id);
 
     // Consistency groups functions
-    int group_create(librados::IoCtx *ioctx, const std::string &oid);
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		    const std::string &start, uint64_t max_return,
 		    map<string, string> *groups);
@@ -424,6 +431,17 @@ namespace librbd {
                                cls::rbd::GroupSpec *group_spec);
     int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
+    int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
+		       const cls::rbd::GroupSnapshot &snapshot);
+    int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
+			  const std::string &snap_id);
+    int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
+			     const std::string &snap_id,
+			     cls::rbd::GroupSnapshot *snapshot);
+    int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
+			const cls::rbd::GroupSnapshot &start,
+			uint64_t max_return,
+			std::vector<cls::rbd::GroupSnapshot> *snapshots);
 
     // operations on rbd_trash object
     void trash_add(librados::ObjectWriteOperation *op,

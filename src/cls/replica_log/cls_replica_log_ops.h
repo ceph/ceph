@@ -19,13 +19,13 @@ struct cls_replica_log_delete_marker_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entity_id, bl);
+    encode(entity_id, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entity_id, bl);
+    decode(entity_id, bl);
     DECODE_FINISH(bl);
   }
 
@@ -43,13 +43,13 @@ struct cls_replica_log_set_marker_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(marker, bl);
+    encode(marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(marker, bl);
+    decode(marker, bl);
     DECODE_FINISH(bl);
   }
 
@@ -89,17 +89,17 @@ struct cls_replica_log_get_bounds_ret {
   {}
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(position_marker, bl);
-    ::encode(oldest_time, bl);
-    ::encode(markers, bl);
+    encode(position_marker, bl);
+    encode(oldest_time, bl);
+    encode(markers, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(position_marker, bl);
-    ::decode(oldest_time, bl);
-    ::decode(markers, bl);
+    decode(position_marker, bl);
+    decode(oldest_time, bl);
+    decode(markers, bl);
     DECODE_FINISH(bl);
   }
 

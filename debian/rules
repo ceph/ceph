@@ -143,6 +143,7 @@ override_dh_strip:
 	dh_strip -pceph-mgr --dbg-package=ceph-mgr-dbg
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
+	dh_strip -pceph-base --dbg-package=ceph-base-dbg
 	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
 	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
@@ -155,6 +156,14 @@ override_dh_strip:
 	dh_strip -plibrgw2 --dbg-package=librgw2-dbg
 	dh_strip -pradosgw --dbg-package=radosgw-dbg
 	dh_strip -pceph-test --dbg-package=ceph-test-dbg
+	dh_strip -ppython-rados --dbg-package=python-rados-dbg
+	dh_strip -ppython3-rados --dbg-package=python3-rados-dbg
+	dh_strip -ppython-rbd --dbg-package=python-rbd-dbg
+	dh_strip -ppython3-rbd --dbg-package=python3-rbd-dbg
+	dh_strip -ppython-rgw --dbg-package=python-rgw-dbg
+	dh_strip -ppython3-rgw --dbg-package=python3-rgw-dbg
+	dh_strip -ppython-cephfs --dbg-package=python-cephfs-dbg
+	dh_strip -ppython3-cephfs --dbg-package=python3-cephfs-dbg
 
 override_dh_shlibdeps:
 	dh_shlibdeps -a --exclude=erasure-code --exclude=rados-classes --exclude=compressor

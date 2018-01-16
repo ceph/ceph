@@ -153,7 +153,8 @@ epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
 }
 
 
-struct C_UpdateCreatingPGs : public Context {
+class C_UpdateCreatingPGs : public Context {
+public:
   OSDMonitor *osdmon;
   utime_t start;
   epoch_t epoch;
@@ -687,7 +688,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
   }
 
   // process queue
-  unsigned max = MAX(1, g_conf->mon_osd_max_creating_pgs);
+  unsigned max = std::max<int64_t>(1, g_conf->mon_osd_max_creating_pgs);
   const auto total = pending_creatings.pgs.size();
   while (pending_creatings.pgs.size() < max &&
 	 !pending_creatings.queue.empty()) {
@@ -698,7 +699,7 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
 	     << " modified " << p->second.modified
 	     << " [" << p->second.start << "-" << p->second.end << ")"
 	     << dendl;
-    int n = MIN(max - pending_creatings.pgs.size(),
+    int n = std::min(max - pending_creatings.pgs.size(),
 		p->second.end - p->second.start);
     ps_t first = p->second.start;
     ps_t end = first + n;
@@ -1179,7 +1180,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 		 << " legacy removed_snaps" << dendl;
 	string k = make_snap_epoch_key(p.first, pending_inc.epoch);
 	bufferlist v;
-	::encode(p.second.removed_snaps, v);
+	encode(p.second.removed_snaps, v);
 	t->put(OSD_SNAP_PREFIX, k, v);
 	for (auto q = p.second.removed_snaps.begin();
 	     q != p.second.removed_snaps.end();
@@ -1253,7 +1254,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     dout(10) << __func__ << " encoding full map with " << features << dendl;
 
     bufferlist fullbl;
-    ::encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
+    encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
@@ -1265,7 +1266,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // encode
   assert(get_last_committed() + 1 == pending_inc.epoch);
   bufferlist bl;
-  ::encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
+  encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
 
   dout(20) << " full_crc " << tmp.get_crc()
 	   << " inc_crc " << pending_inc.inc_crc << dendl;
@@ -1289,7 +1290,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // and pg creating, also!
   auto pending_creatings = update_pending_pgs(pending_inc);
   bufferlist creatings_bl;
-  ::encode(pending_creatings, creatings_bl);
+  encode(pending_creatings, creatings_bl);
   t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
 
   // removed_snaps
@@ -1299,7 +1300,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	// all snaps removed this epoch
 	string k = make_snap_epoch_key(i.first, pending_inc.epoch);
 	bufferlist v;
-	::encode(i.second, v);
+	encode(i.second, v);
 	t->put(OSD_SNAP_PREFIX, k, v);
       }
       for (auto q = i.second.begin();
@@ -1355,7 +1356,7 @@ int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
     return r;
   try {
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
   }
   catch (buffer::error& e) {
     if (err)
@@ -1413,7 +1414,7 @@ bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
   // just check a few pgs for efficiency - this can't give a guarantee anyway,
   // since filestore osds could always join the pool later
   set<int> checked_osds;
-  for (unsigned ps = 0; ps < MIN(8, pool.get_pg_num()); ++ps) {
+  for (unsigned ps = 0; ps < std::min(8u, pool.get_pg_num()); ++ps) {
     vector<int> up, acting;
     pg_t pgid(ps, pool_id, -1);
     osdmap.pg_to_up_acting_osds(pgid, up, acting);
@@ -1679,14 +1680,14 @@ bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
   epoch_t first = get_first_committed();
   epoch_t last = osdmap.get_epoch();
   int max = g_conf->osd_map_message_max;
-  for (epoch_t e = MAX(first, m->get_full_first());
-       e <= MIN(last, m->get_full_last()) && max > 0;
+  for (epoch_t e = std::max(first, m->get_full_first());
+       e <= std::min(last, m->get_full_last()) && max > 0;
        ++e, --max) {
     int r = get_version_full(e, reply->maps[e]);
     assert(r >= 0);
   }
-  for (epoch_t e = MAX(first, m->get_inc_first());
-       e <= MIN(last, m->get_inc_last()) && max > 0;
+  for (epoch_t e = std::max(first, m->get_inc_first());
+       e <= std::min(last, m->get_inc_last()) && max > 0;
        ++e, --max) {
     int r = get_version(e, reply->incremental_maps[e]);
     assert(r >= 0);
@@ -2382,7 +2383,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 
     // metadata
     bufferlist osd_metadata;
-    ::encode(m->metadata, osd_metadata);
+    encode(m->metadata, osd_metadata);
     pending_metadata[from] = osd_metadata;
     pending_metadata_rm.erase(from);
 
@@ -3069,8 +3070,8 @@ void OSDMonitor::send_incremental(epoch_t first,
   }
 
   while (first <= osdmap.get_epoch()) {
-    epoch_t last = MIN(first + g_conf->osd_map_message_max - 1,
-		       osdmap.get_epoch());
+    epoch_t last = std::min<epoch_t>(first + g_conf->osd_map_message_max - 1,
+				     osdmap.get_epoch());
     MOSDMap *m = build_incremental(first, last);
 
     if (req) {
@@ -3101,7 +3102,7 @@ void OSDMonitor::get_removed_snaps_range(
       if (v.length()) {
 	auto q = v.begin();
 	OSDMap::snap_interval_set_t snaps;
-	::decode(snaps, q);
+	decode(snaps, q);
 	t.union_of(snaps);
       }
     }
@@ -4984,9 +4985,9 @@ string OSDMonitor::make_snap_key_value(
 {
   // encode the *last* epoch in the key so that we can use forward
   // iteration only to search for an epoch in an interval.
-  ::encode(snap, *v);
-  ::encode(snap + num, *v);
-  ::encode(epoch, *v);
+  encode(snap, *v);
+  encode(snap + num, *v);
+  encode(epoch, *v);
   return make_snap_key(pool, snap + num - 1);
 }
 
@@ -5003,9 +5004,9 @@ string OSDMonitor::make_snap_purged_key_value(
 {
   // encode the *last* epoch in the key so that we can use forward
   // iteration only to search for an epoch in an interval.
-  ::encode(snap, *v);
-  ::encode(snap + num, *v);
-  ::encode(epoch, *v);
+  encode(snap, *v);
+  encode(snap + num, *v);
+  encode(epoch, *v);
   return make_snap_purged_key(pool, snap + num - 1);
 }
 
@@ -5023,8 +5024,8 @@ int OSDMonitor::lookup_pruned_snap(int64_t pool, snapid_t snap,
   }
   bufferlist v = it->value();
   auto p = v.begin();
-  ::decode(*begin, p);
-  ::decode(*end, p);
+  decode(*begin, p);
+  decode(*end, p);
   if (snap < *begin || snap >= *end) {
     return -ENOENT;
   }
@@ -5408,7 +5409,7 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
                                                  stringstream& ss)
 {
   OSDMap::Incremental new_pending = pending_inc;
-  ::encode(*newcrush, new_pending.crush, mon->get_quorum_con_features());
+  encode(*newcrush, new_pending.crush, mon->get_quorum_con_features());
   OSDMap newmap;
   newmap.deepish_copy_from(osdmap);
   newmap.apply_incremental(new_pending);
@@ -5447,7 +5448,7 @@ bool OSDMonitor::erasure_code_profile_in_use(
   for (map<int64_t, pg_pool_t>::const_iterator p = pools.begin();
        p != pools.end();
        ++p) {
-    if (p->second.erasure_code_profile == profile) {
+    if (p->second.erasure_code_profile == profile && p->second.is_erasure()) {
       *ss << osdmap.pool_name[p->first] << " ";
       found = true;
     }
@@ -5516,7 +5517,7 @@ int OSDMonitor::prepare_pool_size(const unsigned pool_type,
       err = get_erasure_code(erasure_code_profile, &erasure_code, ss);
       if (err == 0) {
 	*size = erasure_code->get_chunk_count();
-	*min_size = MIN(erasure_code->get_data_chunk_count() + 1, *size);
+	*min_size = std::min(erasure_code->get_data_chunk_count() + 1, *size);
       }
     }
     break;
@@ -5838,7 +5839,11 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = auid;
-  pi->erasure_code_profile = erasure_code_profile;
+  if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      pi->erasure_code_profile = erasure_code_profile;
+  } else {
+      pi->erasure_code_profile = "";
+  }
   pi->stripe_width = stripe_width;
   pi->cache_target_dirty_ratio_micro =
     g_conf->osd_pool_default_cache_target_dirty_ratio * 1000000;
@@ -6024,7 +6029,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
       return -EPERM;
     }
-    int expected_osds = MIN(p.get_pg_num(), osdmap.get_num_osds());
+    int expected_osds = std::min(p.get_pg_num(), osdmap.get_num_osds());
     int64_t new_pgs = n - p.get_pg_num();
     if (new_pgs > g_conf->mon_osd_max_split_count * expected_osds) {
       ss << "specified pg_num " << n << " is too large (creating "
@@ -11136,7 +11141,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     {
       uint64_t snapid;
       pp.add_unmanaged_snap(snapid);
-      ::encode(snapid, reply_data);
+      encode(snapid, reply_data);
       changed = true;
     }
     break;

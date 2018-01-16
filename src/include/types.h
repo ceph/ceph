@@ -101,8 +101,10 @@ template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const vector<A,Alloc>& v);
 template<class A, class Comp, class Alloc>
 inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v);
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t);
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const boost::tuple<Ts...> &t);
 template<class A, class Alloc>
 inline ostream& operator<<(ostream& out, const list<A,Alloc>& ilist);
 template<class A, class Comp, class Alloc>
@@ -144,9 +146,21 @@ inline ostream& operator<<(ostream& out, const deque<A,Alloc>& v) {
   return out;
 }
 
-template<class A, class B, class C>
-inline ostream& operator<<(ostream&out, const boost::tuple<A, B, C> &t) {
-  out << boost::get<0>(t) <<"," << boost::get<1>(t) << "," << boost::get<2>(t);
+template<typename A, typename B, typename C>
+inline ostream& operator<<(ostream& out, const boost::tuple<A, B, C> &t) {
+  return out << boost::get<0>(t) << ","
+	     << boost::get<1>(t) << ","
+	     << boost::get<2>(t);
+}
+
+template<typename... Ts>
+inline ostream& operator<<(ostream& out, const std::tuple<Ts...> &t) {
+  auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
+    out << e;
+    if (++i != n)
+      out << ",";
+  };
+  ceph::for_each(t, f);
   return out;
 }
 
@@ -314,10 +328,12 @@ struct client_t {
   client_t(int64_t _v = -2) : v(_v) {}
   
   void encode(bufferlist& bl) const {
-    ::encode(v, bl);
+    using ceph::encode;
+    encode(v, bl);
   }
   void decode(bufferlist::iterator& bl) {
-    ::decode(v, bl);
+    using ceph::decode;
+    decode(v, bl);
   }
 };
 WRITE_CLASS_ENCODER(client_t)
@@ -487,10 +503,12 @@ struct shard_id_t {
   const static shard_id_t NO_SHARD;
 
   void encode(bufferlist &bl) const {
-    ::encode(id, bl);
+    using ceph::encode;
+    encode(id, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(id, bl);
+    using ceph::decode;
+    decode(id, bl);
   }
 };
 WRITE_CLASS_ENCODER(shard_id_t)
@@ -522,11 +540,13 @@ struct errorcode32_t {
   int operator<=(int i) { return code <= i; }
 
   void encode(bufferlist &bl) const {
+    using ceph::encode;
     __s32 newcode = hostos_to_ceph_errno(code);
-    ::encode(newcode, bl);
+    encode(newcode, bl);
   }
   void decode(bufferlist::iterator &bl) {
-    ::decode(code, bl);
+    using ceph::decode;
+    decode(code, bl);
     code = ceph_to_hostos_errno(code);
   }
 };

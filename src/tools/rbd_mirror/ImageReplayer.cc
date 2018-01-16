@@ -1037,7 +1037,7 @@ void ImageReplayer<I>::handle_get_remote_tag(int r) {
   if (r == 0) {
     try {
       bufferlist::iterator it = m_replay_tag.data.begin();
-      ::decode(m_replay_tag_data, it);
+      decode(m_replay_tag_data, it);
     } catch (const buffer::error &err) {
       r = -EBADMSG;
     }
@@ -1292,8 +1292,8 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   int last_r;
   bool stopping_replay;
 
-  OptionalMirrorImageStatusState mirror_image_status_state{
-    boost::make_optional(false, cls::rbd::MirrorImageStatusState{})};
+  OptionalMirrorImageStatusState mirror_image_status_state =
+    boost::make_optional(false, cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
   image_replayer::BootstrapRequest<I>* bootstrap_request = nullptr;
   {
     Mutex::Locker locker(m_lock);
@@ -1355,7 +1355,8 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
         return;
       }
       status.description = "replaying, " + desc;
-      mirror_image_status_state = boost::none;
+      mirror_image_status_state = boost::make_optional(
+        false, cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN);
     }
     break;
   case STATE_STOPPING:

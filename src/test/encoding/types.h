@@ -418,6 +418,13 @@ TYPE(cls_rbd_snap)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
+TYPE(cls::rbd::MirrorImageStatus)
+TYPE(cls::rbd::GroupImageSpec)
+TYPE(cls::rbd::GroupImageStatus)
+TYPE(cls::rbd::GroupSpec)
+TYPE(cls::rbd::SnapshotNamespaceOnDisk)
+TYPE(cls::rbd::ImageSnapshotSpec)
+TYPE(cls::rbd::GroupSnapshot)
 #endif
 
 #include "cls/lock/cls_lock_types.h"

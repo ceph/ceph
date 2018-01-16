@@ -129,6 +129,8 @@ namespace librbd {
     cls::rbd::GroupSpec group_spec;
     uint64_t stripe_unit, stripe_count;
     uint64_t flags;
+    uint64_t op_features = 0;
+    bool operations_disabled = false;
     utime_t create_timestamp;
 
     file_layout_t layout;
@@ -241,8 +243,8 @@ namespace librbd {
     int snap_set(cls::rbd::SnapshotNamespace in_snap_namespace,
 		 std::string in_snap_name);
     void snap_unset();
-    librados::snap_t get_snap_id(cls::rbd::SnapshotNamespace in_snap_namespace,
-				 std::string in_snap_name) const;
+    librados::snap_t get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
+                                 const std::string& in_snap_name) const;
     const SnapInfo* get_snap_info(librados::snap_t in_snap_id) const;
     int get_snap_name(librados::snap_t in_snap_id,
 		      std::string *out_snap_name) const;

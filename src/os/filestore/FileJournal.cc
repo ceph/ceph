@@ -713,7 +713,7 @@ int FileJournal::read_header(header_t *hdr) const
 
   try {
     bufferlist::iterator p = bl.begin();
-    ::decode(*hdr, p);
+    decode(*hdr, p);
   }
   catch (buffer::error& e) {
     derr << "read_header error decoding journal header" << dendl;
@@ -745,7 +745,7 @@ bufferptr FileJournal::prepare_header()
     Mutex::Locker l(finisher_lock);
     header.committed_up_to = journaled_seq;
   }
-  ::encode(header, bl);
+  encode(header, bl);
   bufferptr bp = buffer::create_page_aligned(get_top());
   // don't use bp.zero() here, because it also invalidates
   // crc cache (which is not yet populated anyway)
@@ -1558,7 +1558,7 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
      data_len = (*p).get_data_length();
      data_align = ((*p).get_data_alignment() - bl.length()) & ~CEPH_PAGE_MASK;
     }
-    ::encode(*p, bl);
+    encode(*p, bl);
   }
   if (tbl->length()) {
     bl.claim_append(*tbl);
@@ -1570,7 +1570,7 @@ int FileJournal::prepare_entry(vector<ObjectStore::Transaction>& tls, bufferlist
   memset(&h, 0, sizeof(h));
   if (data_align >= 0)
     h.pre_pad = ((unsigned int)data_align - (unsigned int)head_size) & ~CEPH_PAGE_MASK;
-  off64_t size = ROUND_UP_TO(base_size + h.pre_pad, header.alignment);
+  off64_t size = round_up_to(base_size + h.pre_pad, header.alignment);
   unsigned post_pad = size - base_size - h.pre_pad;
   h.len = bl.length();
   h.post_pad = post_pad;
@@ -1745,10 +1745,10 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
 {
   dout(10) << __func__ << "trim(" << offset << ", " << end << dendl;
 
-  offset = ROUND_UP_TO(offset, block_size);
+  offset = round_up_to(offset, block_size);
   if (offset >= end)
     return;
-  end = ROUND_UP_TO(end - block_size, block_size);
+  end = round_up_to(end - block_size, block_size);
   assert(end >= offset);
   if (offset < end)
     if (block_device_discard(fd, offset, end - offset) < 0)

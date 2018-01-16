@@ -437,6 +437,6 @@ void PaxosService::load_health()
   mon->store->get("health", service_name, bl);
   if (bl.length()) {
     auto p = bl.begin();
-    ::decode(health_checks, p);
+    decode(health_checks, p);
   }
 }

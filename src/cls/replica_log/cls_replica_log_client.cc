@@ -50,7 +50,7 @@ void cls_replica_log_update_bound(librados::ObjectWriteOperation& o,
 {
   cls_replica_log_set_marker_op op(progress);
   bufferlist in;
-  ::encode(op, in);
+  encode(op, in);
   o.exec("replica_log", "set", in);
 }
 
@@ -59,7 +59,7 @@ void cls_replica_log_delete_bound(librados::ObjectWriteOperation& o,
 {
   cls_replica_log_delete_marker_op op(entity);
   bufferlist in;
-  ::encode(op, in);
+  encode(op, in);
   o.exec("replica_log", "delete", in);
 }
 
@@ -71,7 +71,7 @@ int cls_replica_log_get_bounds(librados::IoCtx& io_ctx, const string& oid,
   bufferlist in;
   bufferlist out;
   cls_replica_log_get_bounds_op op;
-  ::encode(op, in);
+  encode(op, in);
   int r = io_ctx.exec(oid, "replica_log", "get", in, out);
   if (r < 0)
     return r;
@@ -79,7 +79,7 @@ int cls_replica_log_get_bounds(librados::IoCtx& io_ctx, const string& oid,
   cls_replica_log_get_bounds_ret ret;
   try {
     bufferlist::iterator i = out.begin();
-    ::decode(ret, i);
+    decode(ret, i);
   } catch (buffer::error& err) {
     return -EIO;
   }

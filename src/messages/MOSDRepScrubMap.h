@@ -51,22 +51,23 @@ private:
   ~MOSDRepScrubMap() {}
 
 public:
-  const char *get_type_name() const { return "rep_scrubmap"; }
-  void print(ostream& out) const {
+  const char *get_type_name() const override { return "rep_scrubmap"; }
+  void print(ostream& out) const override {
     out << "rep_scrubmap(" << pgid << " e" << map_epoch
 	<< " from shard " << from << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(from, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(from, payload);
   }
-  void decode_payload() {
+  void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(from, p);
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(from, p);
   }
 };
 

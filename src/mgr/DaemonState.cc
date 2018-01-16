@@ -150,10 +150,10 @@ void DaemonPerfCounters::update(MMgrReport *report)
     uint64_t avgcount = 0;
     uint64_t avgcount2 = 0;
 
-    ::decode(val, p);
+    decode(val, p);
     if (t.type & PERFCOUNTER_LONGRUNAVG) {
-      ::decode(avgcount, p);
-      ::decode(avgcount2, p);
+      decode(avgcount, p);
+      decode(avgcount2, p);
     }
     // TODO: interface for insertion of avgs
     instances[t_path].push(now, val);

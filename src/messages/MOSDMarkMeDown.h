@@ -46,18 +46,19 @@ public:
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(target_osd, p);
-    ::decode(epoch, p);
-    ::decode(request_ack, p);
+    decode(fsid, p);
+    decode(target_osd, p);
+    decode(epoch, p);
+    decode(request_ack, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(target_osd, payload, features);
-    ::encode(epoch, payload);
-    ::encode(request_ack, payload);
+    encode(fsid, payload);
+    encode(target_osd, payload, features);
+    encode(epoch, payload);
+    encode(request_ack, payload);
   }
 
   const char *get_type_name() const override { return "MOSDMarkMeDown"; }

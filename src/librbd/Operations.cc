@@ -373,7 +373,7 @@ void Operations<I>::execute_flatten(ProgressContext &prog_ctx,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "flatten" << dendl;
 
-  if (m_image_ctx.read_only) {
+  if (m_image_ctx.read_only || m_image_ctx.operations_disabled) {
     on_finish->complete(-EROFS);
     return;
   }
@@ -452,10 +452,11 @@ void Operations<I>::execute_rebuild_object_map(ProgressContext &prog_ctx,
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
-  if (m_image_ctx.read_only) {
+  if (m_image_ctx.read_only || m_image_ctx.operations_disabled) {
     on_finish->complete(-EROFS);
     return;
   }
+
   if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
     lderr(cct) << "image must support object-map feature" << dendl;
     on_finish->complete(-EINVAL);
@@ -563,6 +564,11 @@ void Operations<I>::execute_rename(const std::string &dest_name,
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   m_image_ctx.snap_lock.get_read();
   if (m_image_ctx.name == dest_name) {
     m_image_ctx.snap_lock.put_read();
@@ -646,7 +652,8 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
                 << "size=" << m_image_ctx.size << ", "
                 << "new_size=" << size << dendl;
 
-  if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only) {
+  if (m_image_ctx.snap_id != CEPH_NOSNAP || m_image_ctx.read_only ||
+      m_image_ctx.operations_disabled) {
     m_image_ctx.snap_lock.put_read();
     on_finish->complete(-EROFS);
     return;
@@ -667,7 +674,7 @@ void Operations<I>::execute_resize(uint64_t size, bool allow_shrink, ProgressCon
 
 template <typename I>
 int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-			       const char *snap_name) {
+			       const std::string& snap_name) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -691,7 +698,7 @@ int Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace
 
 template <typename I>
 void Operations<I>::snap_create(const cls::rbd::SnapshotNamespace &snap_namespace,
-				const char *snap_name,
+				const std::string& snap_name,
 				Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -734,6 +741,11 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   m_image_ctx.snap_lock.get_read();
   if (m_image_ctx.get_snap_id(snap_namespace, snap_name) != CEPH_NOSNAP) {
     m_image_ctx.snap_lock.put_read();
@@ -751,7 +763,7 @@ void Operations<I>::execute_snap_create(const cls::rbd::SnapshotNamespace &snap_
 
 template <typename I>
 int Operations<I>::snap_rollback(const cls::rbd::SnapshotNamespace& snap_namespace,
-				 const char *snap_name,
+				 const std::string& snap_name,
                                  ProgressContext& prog_ctx) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -809,6 +821,11 @@ void Operations<I>::execute_snap_rollback(const cls::rbd::SnapshotNamespace& sna
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   m_image_ctx.snap_lock.get_read();
   uint64_t snap_id = m_image_ctx.get_snap_id(snap_namespace, snap_name);
   if (snap_id == CEPH_NOSNAP) {
@@ -831,7 +848,7 @@ void Operations<I>::execute_snap_rollback(const cls::rbd::SnapshotNamespace& sna
 
 template <typename I>
 int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-			       const char *snap_name) {
+			       const std::string& snap_name) {
   if (m_image_ctx.read_only) {
     return -EROFS;
   }
@@ -855,7 +872,7 @@ int Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace
 
 template <typename I>
 void Operations<I>::snap_remove(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const char *snap_name,
+				const std::string& snap_name,
 				Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
@@ -907,6 +924,11 @@ void Operations<I>::execute_snap_remove(const cls::rbd::SnapshotNamespace& snap_
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
+
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
 
   m_image_ctx.snap_lock.get_read();
   uint64_t snap_id = m_image_ctx.get_snap_id(snap_namespace, snap_name);
@@ -1002,6 +1024,11 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   m_image_ctx.snap_lock.get_read();
   if (m_image_ctx.get_snap_id(cls::rbd::UserSnapshotNamespace(),
 			      dest_snap_name) != CEPH_NOSNAP) {
@@ -1026,7 +1053,7 @@ void Operations<I>::execute_snap_rename(const uint64_t src_snap_id,
 
 template <typename I>
 int Operations<I>::snap_protect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				const char *snap_name) {
+				const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1094,6 +1121,11 @@ void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap
            m_image_ctx.exclusive_lock->is_lock_owner());
   }
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   m_image_ctx.snap_lock.get_read();
   bool is_protected;
   int r = m_image_ctx.is_snap_protected(m_image_ctx.get_snap_id(snap_namespace, snap_name),
@@ -1121,7 +1153,7 @@ void Operations<I>::execute_snap_protect(const cls::rbd::SnapshotNamespace& snap
 
 template <typename I>
 int Operations<I>::snap_unprotect(const cls::rbd::SnapshotNamespace& snap_namespace,
-				  const char *snap_name) {
+				  const std::string& snap_name) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": snap_name=" << snap_name
                 << dendl;
@@ -1182,6 +1214,11 @@ void Operations<I>::execute_snap_unprotect(const cls::rbd::SnapshotNamespace& sn
   if (m_image_ctx.test_features(RBD_FEATURE_JOURNALING)) {
     assert(m_image_ctx.exclusive_lock == nullptr ||
            m_image_ctx.exclusive_lock->is_lock_owner());
+  }
+
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
   }
 
   m_image_ctx.snap_lock.get_read();
@@ -1333,6 +1370,11 @@ void Operations<I>::execute_update_features(uint64_t features, bool enabled,
   ldout(cct, 5) << this << " " << __func__ << ": features=" << features
                 << ", enabled=" << enabled << dendl;
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   if (enabled) {
     operation::EnableFeaturesRequest<I> *req =
       new operation::EnableFeaturesRequest<I>(
@@ -1402,6 +1444,11 @@ void Operations<I>::execute_metadata_set(const std::string &key,
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << ", value="
                 << value << dendl;
 
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
   operation::MetadataSetRequest<I> *request =
     new operation::MetadataSetRequest<I>(m_image_ctx,
 					 new C_NotifyUpdate<I>(m_image_ctx, on_finish),
@@ -1461,6 +1508,11 @@ void Operations<I>::execute_metadata_remove(const std::string &key,
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": key=" << key << dendl;
+
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
 
   operation::MetadataRemoveRequest<I> *request =
     new operation::MetadataRemoveRequest<I>(

@@ -397,14 +397,14 @@ public:
                          bool ignore_orphan, int r) {
     EXPECT_CALL(mock_image_deleter,
                 trash_move(global_image_id, ignore_orphan, _))
-      .WillOnce(WithArg<2>(Invoke([this, &mock_image_deleter, r](Context* ctx) {
+      .WillOnce(WithArg<2>(Invoke([this, r](Context* ctx) {
                              m_threads->work_queue->queue(ctx, r);
                            })));
   }
 
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
     bufferlist bl;
-    ::encode(tag_data, bl);
+    encode(tag_data, bl);
     return bl;
   }
 
@@ -479,7 +479,7 @@ public:
     client_data.client_meta = image_client_meta;
 
     cls::journal::Client client;
-    ::encode(client_data, client.data);
+    encode(client_data, client.data);
 
     EXPECT_CALL(mock_journaler, get_cached_client("local_mirror_uuid", _))
       .WillOnce(DoAll(SetArgPointee<1>(client),

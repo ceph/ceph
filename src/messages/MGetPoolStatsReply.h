@@ -38,15 +38,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(pool_stats, payload, features);
+    encode(fsid, payload);
+    encode(pool_stats, payload, features);
   }
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(pool_stats, p);
+    decode(fsid, p);
+    decode(pool_stats, p);
   }
 };
 

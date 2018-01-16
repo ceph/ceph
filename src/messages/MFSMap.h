@@ -49,12 +49,13 @@ public:
   // marshalling
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(fsmap, p);
+    decode(epoch, p);
+    decode(fsmap, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(fsmap, payload, features);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(fsmap, payload, features);
   }
 };
 

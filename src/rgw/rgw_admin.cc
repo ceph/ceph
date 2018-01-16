@@ -74,7 +74,7 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
   bufferlist::iterator iter = bl.begin();
 
   try {
-    ::decode(t, iter);
+    decode(t, iter);
   } catch (buffer::error& err) {
     return false;
   }
@@ -2581,6 +2581,8 @@ int main(int argc, const char **argv)
         handled = dump_string("tag", bl, formatter);
       } else if (iter->first == RGW_ATTR_ETAG) {
         handled = dump_string("etag", bl, formatter);
+      } else if (iter->first == RGW_ATTR_COMPRESSION) {
+        handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter);
       }
 
       if (!handled)
@@ -2984,7 +2986,7 @@ int main(int argc, const char **argv)
     }
 
     RGWSyncModuleInstanceRef sync_module;
-    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type,
+    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type, 
         store->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;

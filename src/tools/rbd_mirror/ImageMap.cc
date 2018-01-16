@@ -166,7 +166,7 @@ void ImageMap<I>::update_image_mapping() {
   image_map::PolicyMetaNone policy_meta;
 
   bufferlist bl;
-  ::encode(image_map::PolicyData(policy_meta), bl);
+  encode(image_map::PolicyData(policy_meta), bl);
 
   // prepare update map
   std::map<std::string, cls::rbd::MirrorImageMap> update_mapping;

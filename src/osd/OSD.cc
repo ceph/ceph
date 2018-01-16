@@ -708,14 +708,14 @@ void OSDService::promote_throttle_recalibrate()
   if (attempts && dur > 0) {
     uint64_t avg_size = 1;
     if (obj)
-      avg_size = MAX(bytes / obj, 1);
+      avg_size = std::max<uint64_t>(bytes / obj, 1);
     unsigned po = (double)target_obj_sec * dur * 1000.0 / (double)attempts;
     unsigned pb = (double)target_bytes_sec / (double)avg_size * dur * 1000.0
       / (double)attempts;
     dout(20) << __func__ << "  po " << po << " pb " << pb << " avg_size "
 	     << avg_size << dendl;
     if (target_obj_sec && target_bytes_sec)
-      new_prob = MIN(po, pb);
+      new_prob = std::min(po, pb);
     else if (target_obj_sec)
       new_prob = po;
     else if (target_bytes_sec)
@@ -735,13 +735,13 @@ void OSDService::promote_throttle_recalibrate()
     ratio = (double)actual / (double)prob;
     new_prob = (double)new_prob / ratio;
   }
-  new_prob = MAX(new_prob, min_prob);
-  new_prob = MIN(new_prob, 1000);
+  new_prob = std::max(new_prob, min_prob);
+  new_prob = std::min(new_prob, 1000u);
 
   // adjust
   prob = (prob + new_prob) / 2;
-  prob = MAX(prob, min_prob);
-  prob = MIN(prob, 1000);
+  prob = std::max(prob, min_prob);
+  prob = std::min(prob, 1000u);
   dout(10) << __func__ << "  actual " << actual
 	   << ", actual/prob ratio " << ratio
 	   << ", adjusted new_prob " << new_prob
@@ -1169,7 +1169,7 @@ bool OSDService::should_share_map(entity_name_t name, Connection *con,
       (osdmap->get_cluster_addr(name.num()) == con->get_peer_addr() ||
        osdmap->get_hb_back_addr(name.num()) == con->get_peer_addr())) {
     // remember
-    epoch_t has = MAX(get_peer_epoch(name.num()), epoch);
+    epoch_t has = std::max(get_peer_epoch(name.num()), epoch);
 
     // share?
     if (has < osdmap->get_epoch()) {
@@ -1814,7 +1814,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     dout(0) << " have superblock" << dendl;
     bufferlist::iterator p;
     p = sbbl.begin();
-    ::decode(sb, p);
+    decode(sb, p);
     if (whoami != sb.whoami) {
       derr << "provided osd id " << whoami << " != superblock's " << sb.whoami
 	   << dendl;
@@ -1835,7 +1835,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     sb.compat_features = get_osd_initial_compat_set();
 
     bufferlist bl;
-    ::encode(sb, bl);
+    encode(sb, bl);
 
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
@@ -3551,9 +3551,9 @@ int OSD::update_crush_location()
       return r;
     }
     snprintf(weight, sizeof(weight), "%.4lf",
-	     MAX((double).00001,
-		 (double)(st.total) /
-		 (double)(1ull << 40 /* TB */)));
+	     std::max(.00001,
+		      double(st.total) /
+		      double(1ull << 40 /* TB */)));
   }
 
   std::multimap<string,string> loc = cct->crush_location.get_location();
@@ -3615,7 +3615,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
     superblock.compat_features.incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
 
   bufferlist bl;
-  ::encode(superblock, bl);
+  encode(superblock, bl);
   t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
 }
 
@@ -3627,7 +3627,7 @@ int OSD::read_superblock()
     return r;
 
   bufferlist::iterator p = bl.begin();
-  ::decode(superblock, p);
+  decode(superblock, p);
 
   dout(10) << "read_superblock " << superblock << dendl;
 
@@ -4878,7 +4878,7 @@ void OSD::heartbeat_check()
 	     << " front " << p->second.last_rx_front
 	     << " (cutoff " << cutoff << ")" << dendl;
 	// fail
-	failure_queue[p->first] = MIN(p->second.last_rx_back, p->second.last_rx_front);
+	failure_queue[p->first] = std::min(p->second.last_rx_back, p->second.last_rx_front);
       }
     }
   }
@@ -5026,7 +5026,7 @@ void OSD::tick_without_osd_lock()
   dout(10) << "tick_without_osd_lock" << dendl;
 
   logger->set(l_osd_buf, buffer::get_total_alloc());
-  logger->set(l_osd_history_alloc_bytes, SHIFT_ROUND_UP(buffer::get_history_alloc_bytes(), 20));
+  logger->set(l_osd_history_alloc_bytes, shift_round_up(buffer::get_history_alloc_bytes(), 20));
   logger->set(l_osd_history_alloc_num, buffer::get_history_alloc_num());
   logger->set(l_osd_cached_crc, buffer::get_cached_crc());
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
@@ -6743,7 +6743,7 @@ bool OSD::ms_verify_authorizer(Connection *con, int peer_type,
       bufferlist::iterator p = caps_info.caps.begin();
       string str;
       try {
-	::decode(str, p);
+	decode(str, p);
       }
       catch (buffer::error& e) {
         isvalid = false;
@@ -7255,7 +7255,7 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   if (latest_subscribed_epoch >= epoch && !force_request)
     return;
 
-  latest_subscribed_epoch = MAX(epoch, latest_subscribed_epoch);
+  latest_subscribed_epoch = std::max<uint64_t>(epoch, latest_subscribed_epoch);
 
   if (monc->sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
       force_request) {
@@ -7415,7 +7415,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   uint64_t txn_size = 0;
 
   // store new maps: queue for disk and put in the osdmap cache
-  epoch_t start = MAX(superblock.newest_map + 1, first);
+  epoch_t start = std::max(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     if (txn_size >= t.get_num_bytes()) {
       derr << __func__ << " transaction size overflowed" << dendl;
@@ -9008,7 +9008,7 @@ void OSDService::_maybe_queue_recovery() {
   uint64_t available_pushes;
   while (!awaiting_throttle.empty() &&
 	 _recover_now(&available_pushes)) {
-    uint64_t to_start = MIN(
+    uint64_t to_start = std::min(
       available_pushes,
       cct->_conf->osd_recovery_max_single_start);
     _queue_for_recovery(awaiting_throttle.front(), to_start);

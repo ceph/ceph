@@ -159,57 +159,59 @@ public:
     }
 
     void encode(bufferlist& bl) const {
+      using ceph::encode;
       __u32 v = 4;
-      ::encode(v, bl);
+      encode(v, bl);
       bufferlist em;
       {
-	::encode(flags, em);
-	::encode(fsid, em);
-	::encode(block_size, em);
-	::encode(alignment, em);
-	::encode(max_size, em);
-	::encode(start, em);
-	::encode(committed_up_to, em);
-	::encode(start_seq, em);
+	encode(flags, em);
+	encode(fsid, em);
+	encode(block_size, em);
+	encode(alignment, em);
+	encode(max_size, em);
+	encode(start, em);
+	encode(committed_up_to, em);
+	encode(start_seq, em);
       }
-      ::encode(em, bl);
+      encode(em, bl);
     }
     void decode(bufferlist::iterator& bl) {
+      using ceph::decode;
       __u32 v;
-      ::decode(v, bl);
-      if (v < 2) {  // normally 0, but concievably 1
+      decode(v, bl);
+      if (v < 2) {  // normally 0, but conceivably 1
 	// decode old header_t struct (pre v0.40).
 	bl.advance(4); // skip __u32 flags (it was unused by any old code)
 	flags = 0;
 	uint64_t tfsid;
-	::decode(tfsid, bl);
+	decode(tfsid, bl);
 	*(uint64_t*)&fsid.bytes()[0] = tfsid;
 	*(uint64_t*)&fsid.bytes()[8] = tfsid;
-	::decode(block_size, bl);
-	::decode(alignment, bl);
-	::decode(max_size, bl);
-	::decode(start, bl);
+	decode(block_size, bl);
+	decode(alignment, bl);
+	decode(max_size, bl);
+	decode(start, bl);
 	committed_up_to = 0;
 	start_seq = 0;
 	return;
       }
       bufferlist em;
-      ::decode(em, bl);
+      decode(em, bl);
       bufferlist::iterator t = em.begin();
-      ::decode(flags, t);
-      ::decode(fsid, t);
-      ::decode(block_size, t);
-      ::decode(alignment, t);
-      ::decode(max_size, t);
-      ::decode(start, t);
+      decode(flags, t);
+      decode(fsid, t);
+      decode(block_size, t);
+      decode(alignment, t);
+      decode(max_size, t);
+      decode(start, t);
 
       if (v > 2)
-	::decode(committed_up_to, t);
+	decode(committed_up_to, t);
       else
 	committed_up_to = 0;
 
       if (v > 3)
-	::decode(start_seq, t);
+	decode(start_seq, t);
       else
 	start_seq = 0;
     }
@@ -387,7 +389,7 @@ private:
   } write_finish_thread;
 
   off64_t get_top() const {
-    return ROUND_UP_TO(sizeof(header), block_size);
+    return round_up_to(sizeof(header), block_size);
   }
 
   ZTracer::Endpoint trace_endpoint;

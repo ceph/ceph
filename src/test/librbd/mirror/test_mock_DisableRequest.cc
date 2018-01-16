@@ -117,8 +117,9 @@ public:
   void expect_get_mirror_image(MockTestImageCtx &mock_image_ctx,
                                const cls::rbd::MirrorImage &mirror_image,
                                int r) {
+    using ceph::encode;
     bufferlist bl;
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),
@@ -162,7 +163,8 @@ public:
                                   const std::set<cls::journal::Client> &clients,
                                   int r) {
     bufferlist bl;
-    ::encode(clients, bl);
+    using ceph::encode;
+    encode(clients, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
@@ -175,7 +177,8 @@ public:
                                         const std::string &client_id,
                                         int r) {
     bufferlist bl;
-    ::encode(client_id, bl);
+    using ceph::encode;
+    encode(client_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
                 exec(::journal::Journaler::header_oid(mock_image_ctx.id),
@@ -198,8 +201,9 @@ public:
 
   template <typename T>
   bufferlist encode(const T &t) {
+    using ceph::encode;
     bufferlist bl;
-    ::encode(t, bl);
+    encode(t, bl);
     return bl;
   }
 

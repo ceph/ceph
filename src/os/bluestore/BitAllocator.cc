@@ -1122,7 +1122,7 @@ void BitAllocator::init_check(int64_t total_blocks, int64_t zone_size_block,
 
   unaligned_blocks = total_blocks % zone_size_block;
   m_extra_blocks = unaligned_blocks? zone_size_block - unaligned_blocks: 0;
-  total_blocks = ROUND_UP_TO(total_blocks, zone_size_block);
+  total_blocks = round_up_to(total_blocks, zone_size_block);
 
   m_alloc_mode = mode;
   m_is_stats_on = stats_on;

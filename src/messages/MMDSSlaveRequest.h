@@ -161,41 +161,42 @@ private:
 
 public:
   void encode_payload(uint64_t features) override {
-    ::encode(reqid, payload);
-    ::encode(attempt, payload);
-    ::encode(op, payload);
-    ::encode(flags, payload);
-    ::encode(lock_type, payload);
-    ::encode(object_info, payload);
-    ::encode(authpins, payload);
-    ::encode(srcdnpath, payload);
-    ::encode(destdnpath, payload);
-    ::encode(witnesses, payload);
-    ::encode(op_stamp, payload);
-    ::encode(inode_export, payload);
-    ::encode(inode_export_v, payload);
-    ::encode(srcdn_auth, payload);
-    ::encode(srci_replica, payload);
-    ::encode(stray, payload);
+    using ceph::encode;
+    encode(reqid, payload);
+    encode(attempt, payload);
+    encode(op, payload);
+    encode(flags, payload);
+    encode(lock_type, payload);
+    encode(object_info, payload);
+    encode(authpins, payload);
+    encode(srcdnpath, payload);
+    encode(destdnpath, payload);
+    encode(witnesses, payload);
+    encode(op_stamp, payload);
+    encode(inode_export, payload);
+    encode(inode_export_v, payload);
+    encode(srcdn_auth, payload);
+    encode(srci_replica, payload);
+    encode(stray, payload);
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(reqid, p);
-    ::decode(attempt, p);
-    ::decode(op, p);
-    ::decode(flags, p);
-    ::decode(lock_type, p);
-    ::decode(object_info, p);
-    ::decode(authpins, p);
-    ::decode(srcdnpath, p);
-    ::decode(destdnpath, p);
-    ::decode(witnesses, p);
-    ::decode(op_stamp, p);
-    ::decode(inode_export, p);
-    ::decode(inode_export_v, p);
-    ::decode(srcdn_auth, p);
-    ::decode(srci_replica, p);
-    ::decode(stray, p);
+    decode(reqid, p);
+    decode(attempt, p);
+    decode(op, p);
+    decode(flags, p);
+    decode(lock_type, p);
+    decode(object_info, p);
+    decode(authpins, p);
+    decode(srcdnpath, p);
+    decode(destdnpath, p);
+    decode(witnesses, p);
+    decode(op_stamp, p);
+    decode(inode_export, p);
+    decode(inode_export_v, p);
+    decode(srcdn_auth, p);
+    decode(srci_replica, p);
+    decode(stray, p);
   }
 
   const char *get_type_name() const override { return "slave_request"; }

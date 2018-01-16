@@ -611,7 +611,7 @@ KStore::OnodeRef KStore::Collection::get_onode(
     on = new Onode(store->cct, oid, key);
     on->exists = true;
     bufferlist::iterator p = v.begin();
-    ::decode(on->onode, p);
+    decode(on->onode, p);
   }
   o.reset(on);
   onode_map.add(oid, o);
@@ -884,7 +884,7 @@ int KStore::_open_collections(int *errors)
       bufferlist bl = it->value();
       bufferlist::iterator p = bl.begin();
       try {
-        ::decode(c->cnode, p);
+        decode(c->cnode, p);
       } catch (buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
@@ -1235,7 +1235,7 @@ int KStore::_do_read(
     _do_read_stripe(o, offset - stripe_off, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
-    unsigned swant = MIN(stripe_size - stripe_off, length);
+    unsigned swant = std::min(stripe_size - stripe_off, length);
     if (stripe.length()) {
       if (swant == stripe.length()) {
 	bl.claim_append(stripe);
@@ -1243,7 +1243,7 @@ int KStore::_do_read(
       } else {
 	unsigned l = 0;
 	if (stripe_off < stripe.length()) {
-	  l = MIN(stripe.length() - stripe_off, swant);
+	  l = std::min<uint64_t>(stripe.length() - stripe_off, swant);
 	  bufferlist t;
 	  t.substr_of(stripe, stripe_off, l);
 	  bl.claim_append(t);
@@ -1281,7 +1281,7 @@ int KStore::fiemap(
   map<uint64_t, uint64_t> m;
   int r = fiemap(cid, oid, offset, len, m);
   if (r >= 0) {
-    ::encode(m, bl);
+    encode(m, bl);
   }
 
   return r;
@@ -1887,7 +1887,7 @@ int KStore::_open_super_meta()
     db->get(PREFIX_SUPER, "nid_max", &bl);
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(nid_max, p);
+      decode(nid_max, p);
     } catch (buffer::error& e) {
     }
     dout(10) << __func__ << " old nid_max " << nid_max << dendl;
@@ -1906,7 +1906,7 @@ void KStore::_assign_nid(TransContext *txc, OnodeRef o)
   if (nid_last > nid_max) {
     nid_max += cct->_conf->kstore_nid_prealloc;
     bufferlist bl;
-    ::encode(nid_max, bl);
+    encode(nid_max, bl);
     txc->t->set(PREFIX_SUPER, "nid_max", bl);
     dout(10) << __func__ << " nid_max now " << nid_max << dendl;
   }
@@ -1981,7 +1981,7 @@ void KStore::_txc_finalize(OpSequencer *osr, TransContext *txc)
        p != txc->onodes.end();
        ++p) {
     bufferlist bl;
-    ::encode((*p)->onode, bl);
+    encode((*p)->onode, bl);
     dout(20) << " onode size is " << bl.length() << dendl;
     txc->t->set(PREFIX_OBJ, (*p)->key, bl);
 
@@ -2257,8 +2257,8 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           dout(10) << __func__ << " collection hint objects is a no-op, "
 		   << " pg_num " << pg_num << " num_objects " << num_objs
 		   << dendl;
@@ -2656,7 +2656,7 @@ int KStore::_do_write(TransContext *txc,
 	     << ", got " << prev.length() << dendl;
     bufferlist bl;
     if (offset_rem) {
-      unsigned p = MIN(prev.length(), offset_rem);
+      unsigned p = std::min<uint64_t>(prev.length(), offset_rem);
       if (p) {
 	dout(20) << __func__ << " reuse leading " << p << " bytes" << dendl;
 	bl.substr_of(prev, 0, p);
@@ -2746,7 +2746,7 @@ int KStore::_zero(TransContext *txc,
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist bl;
-	bl.substr_of(stripe, 0, MIN(stripe.length(), stripe_off));
+	bl.substr_of(stripe, 0, std::min<uint64_t>(stripe.length(), stripe_off));
 	if (end >= pos - stripe_off + stripe_size ||
 	    end >= o->onode.size) {
 	  dout(20) << __func__ << " truncated stripe " << pos - stripe_off
@@ -2803,7 +2803,7 @@ int KStore::_do_truncate(TransContext *txc, OnodeRef o, uint64_t offset)
 	dout(30) << __func__ << " stripe " << pos - stripe_off << " got "
 		 << stripe.length() << dendl;
 	bufferlist t;
-	t.substr_of(stripe, 0, MIN(stripe_off, stripe.length()));
+	t.substr_of(stripe, 0, std::min<uint64_t>(stripe_off, stripe.length()));
 	_do_write_stripe(txc, o, pos - stripe_off, t);
 	dout(20) << __func__ << " truncated stripe " << pos - stripe_off
 		 << " to " << t.length() << dendl;
@@ -2989,12 +2989,12 @@ int KStore::_omap_setkeys(TransContext *txc,
     o->onode.omap_head = o->onode.nid;
     txc->write_onode(o);
   }
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
     bufferlist value;
-    ::decode(key, p);
-    ::decode(value, p);
+    decode(key, p);
+    decode(value, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
     dout(30) << __func__ << "  " << pretty_binary_string(final_key)
@@ -3039,10 +3039,10 @@ int KStore::_omap_rmkeys(TransContext *txc,
     r = 0;
     goto out;
   }
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
+    decode(key, p);
     string final_key;
     get_omap_key(o->onode.omap_head, key, &final_key);
     dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
@@ -3279,7 +3279,7 @@ int KStore::_create_collection(
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
   }
-  ::encode((*c)->cnode, bl);
+  encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);
   r = 0;
 
@@ -3363,7 +3363,7 @@ int KStore::_split_collection(TransContext *txc,
   r = 0;
 
   bufferlist bl;
-  ::encode(c->cnode, bl);
+  encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "

@@ -24,12 +24,16 @@ Skip test on FreeBSD as it generates different output there.
       feature enable                    Enable the specified image feature.
       flatten                           Fill clone with parent data (make it
                                         independent).
-      group create                      Create a consistency group.
-      group image add                   Add an image to a consistency group.
-      group image list                  List images in a consistency group.
-      group image remove                Remove an image from a consistency group.
-      group list (group ls)             List rbd consistency groups.
-      group remove (group rm)           Delete a consistency group.
+      group create                      Create a group.
+      group image add                   Add an image to a group.
+      group image list                  List images in a group.
+      group image remove                Remove an image from a group.
+      group list (group ls)             List rbd groups.
+      group remove (group rm)           Delete a group.
+      group snap create                 Make a snapshot of a group.
+      group snap list                   List snapshots of a group.
+      group snap remove (group snap rm) Remove a snapshot from a group.
+      group snap rename                 Rename group's snapshot.
       image-meta get                    Image metadata get the value associated
                                         with the key.
       image-meta list (image-meta ls)   Image metadata list keys with values.
@@ -192,9 +196,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -239,9 +242,9 @@ Skip test on FreeBSD as it generates different output there.
     --order arg                  object order [12 <= order <= 25]
     --object-size arg            object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg          image features
-                                 [layering(+), striping, exclusive-lock(+*),
+                                 [layering(+), exclusive-lock(+*),
                                  object-map(+*), fast-diff(+*), deep-flatten(+-),
-                                 journaling(*), data-pool]
+                                 journaling(*)]
     --image-shared               shared image
     --stripe-unit arg            stripe unit in B/K/M
     --stripe-count arg           stripe count
@@ -284,9 +287,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -397,8 +399,7 @@ Skip test on FreeBSD as it generates different output there.
     <image-spec>         image specification
                          (example: [<pool-name>/]<image-name>)
     <features>           image features
-                         [layering, striping, exclusive-lock, object-map,
-                         fast-diff, deep-flatten, journaling, data-pool]
+                         [exclusive-lock, object-map, fast-diff, journaling]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -417,8 +418,7 @@ Skip test on FreeBSD as it generates different output there.
     <image-spec>              image specification
                               (example: [<pool-name>/]<image-name>)
     <features>                image features
-                              [layering, striping, exclusive-lock, object-map,
-                              fast-diff, deep-flatten, journaling, data-pool]
+                              [exclusive-lock, object-map, fast-diff, journaling]
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -446,7 +446,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd group create [--pool <pool>] [--group <group>] 
                           <group-spec> 
   
-  Create a consistency group.
+  Create a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -462,7 +462,7 @@ Skip test on FreeBSD as it generates different output there.
                              [--pool <pool>] 
                              <group-spec> <image-spec> 
   
-  Add an image to a consistency group.
+  Add an image to a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -482,7 +482,7 @@ Skip test on FreeBSD as it generates different output there.
                               [--pool <pool>] [--group <group>] 
                               <group-spec> 
   
-  List images in a consistency group.
+  List images in a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -500,7 +500,7 @@ Skip test on FreeBSD as it generates different output there.
                                 [--pool <pool>] [--image-id <image-id>] 
                                 <group-spec> <image-spec> 
   
-  Remove an image from a consistency group.
+  Remove an image from a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -519,7 +519,7 @@ Skip test on FreeBSD as it generates different output there.
   rbd help group list
   usage: rbd group list [--pool <pool>] [--format <format>] [--pretty-format] 
   
-  List rbd consistency groups.
+  List rbd groups.
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -530,7 +530,7 @@ Skip test on FreeBSD as it generates different output there.
   usage: rbd group remove [--pool <pool>] [--group <group>] 
                           <group-spec> 
   
-  Delete a consistency group.
+  Delete a group.
   
   Positional arguments
     <group-spec>         group specification
@@ -539,6 +539,72 @@ Skip test on FreeBSD as it generates different output there.
   Optional arguments
     -p [ --pool ] arg    pool name
     --group arg          group name
+  
+  rbd help group snap create
+  usage: rbd group snap create [--pool <pool>] [--group <group>] [--snap <snap>] 
+                               <group-spec> 
+  
+  Make a snapshot of a group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>@<snap-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+    --snap arg           snapshot name
+  
+  rbd help group snap list
+  usage: rbd group snap list [--format <format>] [--pretty-format] 
+                             [--pool <pool>] [--group <group>] 
+                             <group-spec> 
+  
+  List snapshots of a group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>)
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+  
+  rbd help group snap remove
+  usage: rbd group snap remove [--pool <pool>] [--group <group>] [--snap <snap>] 
+                               <group-spec> 
+  
+  Remove a snapshot from a group.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>@<snap-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+    --snap arg           snapshot name
+  
+  rbd help group snap rename
+  usage: rbd group snap rename [--pool <pool>] [--group <group>] [--snap <snap>] 
+                               [--dest-snap <dest-snap>] 
+                               <group-spec> <dest-snap> 
+  
+  Rename group's snapshot.
+  
+  Positional arguments
+    <group-spec>         group specification
+                         (example: [<pool-name>/]<group-name>@<snap-name>)
+    <dest-snap>          destination snapshot name
+                         (example: <snapshot-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --group arg          group name
+    --snap arg           snapshot name
+    --dest-snap arg      destination snapshot name
   
   rbd help image-meta get
   usage: rbd image-meta get [--pool <pool>] [--image <image>] 
@@ -635,9 +701,8 @@ Skip test on FreeBSD as it generates different output there.
     --order arg               object order [12 <= order <= 25]
     --object-size arg         object size in B/K/M [4K <= object size <= 32M]
     --image-feature arg       image features
-                              [layering(+), striping, exclusive-lock(+*),
-                              object-map(+*), fast-diff(+*), deep-flatten(+-),
-                              journaling(*), data-pool]
+                              [layering(+), exclusive-lock(+*), object-map(+*),
+                              fast-diff(+*), deep-flatten(+-), journaling(*)]
     --image-shared            shared image
     --stripe-unit arg         stripe unit in B/K/M
     --stripe-count arg        stripe count
@@ -1343,7 +1408,7 @@ Skip test on FreeBSD as it generates different output there.
   
   rbd help snap list
   usage: rbd snap list [--pool <pool>] [--image <image>] [--image-id <image-id>] 
-                       [--format <format>] [--pretty-format] 
+                       [--format <format>] [--pretty-format] [--all] 
                        <image-spec> 
   
   Dump list of image snapshots.
@@ -1358,6 +1423,7 @@ Skip test on FreeBSD as it generates different output there.
     --image-id arg       image id
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
+    -a [ --all ]         list snapshots from all namespaces
   
   rbd help snap protect
   usage: rbd snap protect [--pool <pool>] [--image <image>] [--snap <snap>] 

@@ -65,20 +65,21 @@ public:
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(target_osd, p);
-    ::decode(epoch, p);
-    ::decode(flags, p);
-    ::decode(failed_for, p);
+    decode(fsid, p);
+    decode(target_osd, p);
+    decode(epoch, p);
+    decode(flags, p);
+    decode(failed_for, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(target_osd, payload, features);
-    ::encode(epoch, payload);
-    ::encode(flags, payload);
-    ::encode(failed_for, payload);
+    encode(fsid, payload);
+    encode(target_osd, payload, features);
+    encode(epoch, payload);
+    encode(flags, payload);
+    encode(failed_for, payload);
   }
 
   const char *get_type_name() const override { return "osd_failure"; }

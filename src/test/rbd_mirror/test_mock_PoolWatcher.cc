@@ -226,12 +226,12 @@ public:
   void expect_mirror_uuid_get(librados::IoCtx &io_ctx,
                               const std::string &uuid, int r) {
     bufferlist out_bl;
-    ::encode(uuid, out_bl);
+    encode(uuid, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),
                      _, _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([this, out_bl](bufferlist *bl) {
+      .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
                         })),
                       Return(r)));

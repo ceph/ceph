@@ -67,7 +67,7 @@ static int parse_diff_header(int fd, __u8 *tag, string *from, string *to, uint64
       bufferlist bl;
       bl.append(buf, 8);
       bufferlist::iterator p = bl.begin();
-      ::decode(*size, p);
+      decode(*size, p);
     } else {
       break;
     }
@@ -103,8 +103,8 @@ static int parse_diff_body(int fd, __u8 *tag, uint64_t *offset, uint64_t *length
   bufferlist bl;
   bl.append(buf, 16);
   bufferlist::iterator p = bl.begin();
-  ::decode(*offset, p);
-  ::decode(*length, p);
+  decode(*offset, p);
+  decode(*length, p);
 
   if (!(*length))
     return -ENOTSUP;
@@ -122,9 +122,9 @@ static int accept_diff_body(int fd, int pd, __u8 tag, uint64_t offset, uint64_t 
     return 0;
 
   bufferlist bl;
-  ::encode(tag, bl);
-  ::encode(offset, bl);
-  ::encode(length, bl);
+  encode(tag, bl);
+  encode(offset, bl);
+  encode(length, bl);
   int r;
   r = bl.write_fd(pd);
   if (r < 0)
@@ -228,19 +228,19 @@ static int do_merge_diff(const char *first, const char *second,
     __u8 tag;
     if (f_from.size()) {
       tag = RBD_DIFF_FROM_SNAP;
-      ::encode(tag, bl);
-      ::encode(f_from, bl);
+      encode(tag, bl);
+      encode(f_from, bl);
     }
 
     if (s_to.size()) {
       tag = RBD_DIFF_TO_SNAP;
-      ::encode(tag, bl);
-      ::encode(s_to, bl);
+      encode(tag, bl);
+      encode(s_to, bl);
     }
 
     tag = RBD_DIFF_IMAGE_SIZE;
-    ::encode(tag, bl);
-    ::encode(s_size, bl);
+    encode(tag, bl);
+    encode(s_size, bl);
 
     r = bl.write_fd(pd);
     if (r < 0) {
@@ -382,7 +382,7 @@ static int do_merge_diff(const char *first, const char *second,
   {//tail
     __u8 tag = RBD_DIFF_END;
     bufferlist bl;
-    ::encode(tag, bl);
+    encode(tag, bl);
     r = bl.write_fd(pd);
   }
 

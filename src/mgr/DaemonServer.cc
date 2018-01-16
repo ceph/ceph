@@ -179,7 +179,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       bufferlist::iterator p = caps_info.caps.begin();
       string str;
       try {
-	::decode(str, p);
+	decode(str, p);
       }
       catch (buffer::error& e) {
         is_valid = false;
@@ -436,7 +436,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
       } else if (key.first == "mds") {
         c->set_default("addr", stringify(m->get_source_addr()));
-        oss << "{\"prefix\": \"mds metadata\", \"role\": \""
+        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
             << key.second << "\"}";
  
       } else {
@@ -1427,7 +1427,7 @@ void DaemonServer::send_report()
 	_prune_pending_service_map();
 	if (pending_service_map_dirty >= pending_service_map.epoch) {
 	  pending_service_map.modified = ceph_clock_now();
-	  ::encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
+	  encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
 	  dout(10) << "sending service_map e" << pending_service_map.epoch
 		   << dendl;
 	  pending_service_map.epoch++;

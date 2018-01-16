@@ -64,21 +64,22 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(from_mds, p);
-    ::decode(dirfrag, p);
-    ::decode(dir_rep, p);
-    ::decode(discover, p);
-    ::decode(dir_rep_by, p);
-    ::decode(path, p);
+    decode(from_mds, p);
+    decode(dirfrag, p);
+    decode(dir_rep, p);
+    decode(discover, p);
+    decode(dir_rep_by, p);
+    decode(path, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(from_mds, payload);
-    ::encode(dirfrag, payload);
-    ::encode(dir_rep, payload);
-    ::encode(discover, payload);
-    ::encode(dir_rep_by, payload);
-    ::encode(path, payload);
+    using ceph::encode;
+    encode(from_mds, payload);
+    encode(dirfrag, payload);
+    encode(dir_rep, payload);
+    encode(discover, payload);
+    encode(dir_rep_by, payload);
+    encode(path, payload);
   }
 };
 

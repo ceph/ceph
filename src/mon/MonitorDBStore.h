@@ -65,22 +65,22 @@ class MonitorDBStore
 
     void encode(bufferlist& encode_bl) const {
       ENCODE_START(2, 1, encode_bl);
-      ::encode(type, encode_bl);
-      ::encode(prefix, encode_bl);
-      ::encode(key, encode_bl);
-      ::encode(bl, encode_bl);
-      ::encode(endkey, encode_bl);
+      encode(type, encode_bl);
+      encode(prefix, encode_bl);
+      encode(key, encode_bl);
+      encode(bl, encode_bl);
+      encode(endkey, encode_bl);
       ENCODE_FINISH(encode_bl);
     }
 
     void decode(bufferlist::iterator& decode_bl) {
       DECODE_START(2, decode_bl);
-      ::decode(type, decode_bl);
-      ::decode(prefix, decode_bl);
-      ::decode(key, decode_bl);
-      ::decode(bl, decode_bl);
+      decode(type, decode_bl);
+      decode(prefix, decode_bl);
+      decode(key, decode_bl);
+      decode(bl, decode_bl);
       if (struct_v >= 2)
-	::decode(endkey, decode_bl);
+	decode(endkey, decode_bl);
       DECODE_FINISH(decode_bl);
     }
 
@@ -125,8 +125,9 @@ class MonitorDBStore
     }
 
     void put(string prefix, string key, version_t ver) {
+      using ceph::encode;
       bufferlist bl;
-      ::encode(ver, bl);
+      encode(ver, bl);
       put(prefix, key, bl);
     }
 
@@ -152,18 +153,18 @@ class MonitorDBStore
 
     void encode(bufferlist& bl) const {
       ENCODE_START(2, 1, bl);
-      ::encode(ops, bl);
-      ::encode(bytes, bl);
-      ::encode(keys, bl);
+      encode(ops, bl);
+      encode(bytes, bl);
+      encode(keys, bl);
       ENCODE_FINISH(bl);
     }
 
     void decode(bufferlist::iterator& bl) {
       DECODE_START(2, bl);
-      ::decode(ops, bl);
+      decode(ops, bl);
       if (struct_v >= 2) {
-	::decode(bytes, bl);
-	::decode(keys, bl);
+	decode(bytes, bl);
+	decode(keys, bl);
       }
       DECODE_FINISH(bl);
     }
@@ -395,9 +396,9 @@ class MonitorDBStore
       last_key.second = key;
 
       if (g_conf->mon_sync_debug) {
-	::encode(prefix, crc_bl);
-	::encode(key, crc_bl);
-	::encode(value, crc_bl);
+	encode(prefix, crc_bl);
+	encode(key, crc_bl);
+	encode(value, crc_bl);
       }
 
       return true;
@@ -538,7 +539,7 @@ class MonitorDBStore
     assert(bl.length());
     version_t ver;
     bufferlist::iterator p = bl.begin();
-    ::decode(ver, p);
+    decode(ver, p);
     return ver;
   }
 

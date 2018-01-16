@@ -137,8 +137,19 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   }
 
   std::string group_string = "";
-  if (-1 != group_spec.pool)
-    group_string = stringify(group_spec.pool) + "." + group_spec.name;
+  if (RBD_GROUP_INVALID_POOL != group_spec.pool) {
+    std::string group_pool;
+    librados::Rados rados(io_ctx);
+    librados::IoCtx group_io_ctx;
+    r = rados.ioctx_create2(group_spec.pool, group_io_ctx);
+    if (r < 0) {
+      group_pool = "<missing group pool " + stringify(group_spec.pool) + ">";
+    } else {
+      group_pool = group_io_ctx.get_pool_name();
+    }
+
+    group_string = group_pool + "/" + group_spec.name;
+  }
 
   struct timespec create_timestamp;
   image.get_create_timestamp(&create_timestamp);
@@ -193,7 +204,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
     if (f) {
       f->dump_string("group", group_string);
     } else {
-      std::cout << "\tconsistency group: " << group_string
+      std::cout << "\tgroup: " << group_string
 		<< std::endl;
     }
   }

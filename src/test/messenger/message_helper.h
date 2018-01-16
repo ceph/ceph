@@ -38,7 +38,7 @@ static inline Message* new_ping_monstyle(const char *tag, int mult)
   stringstream ss;
 
   f->flush(ss);
-  ::encode(ss.str(), bl);
+  encode(ss.str(), bl);
   m->set_payload(bl);
 
   return m;

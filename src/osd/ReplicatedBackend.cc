@@ -20,6 +20,7 @@
 #include "messages/MOSDPGPull.h"
 #include "messages/MOSDPGPushReply.h"
 #include "common/EventTrace.h"
+#include "include/random.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -311,7 +312,7 @@ void generate_transaction(
     auto oiter = pgt->op_map.find(le.soid);
     if (oiter != pgt->op_map.end() && oiter->second.updated_snaps) {
       bufferlist bl(oiter->second.updated_snaps->second.size() * 8 + 8);
-      ::encode(oiter->second.updated_snaps->second, bl);
+      encode(oiter->second.updated_snaps->second, bl);
       le.snaps.swap(bl);
       le.snaps.reassign_to_mempool(mempool::mempool_osd_pglog);
     }
@@ -712,7 +713,7 @@ void ReplicatedBackend::be_deep_scrub(
     if (seed == 0) {
       // legacy
       bufferlist bl;
-      ::encode(hdrbl, bl);
+      encode(hdrbl, bl);
       oh << bl;
     } else {
       oh << hdrbl;
@@ -742,8 +743,8 @@ void ReplicatedBackend::be_deep_scrub(
 
     value_sum += iter->value().length();
 
-    ::encode(iter->key(), bl);
-    ::encode(iter->value(), bl);
+    encode(iter->key(), bl);
+    encode(iter->value(), bl);
     oh << bl;
     bl.clear();
   }
@@ -964,17 +965,17 @@ Message * ReplicatedBackend::generate_subop(
   if (!parent->should_send_op(peer, soid)) {
     dout(10) << "issue_repop shipping empty opt to osd." << peer
 	     <<", object " << soid
-	     << " beyond MAX(last_backfill_started "
+	     << " beyond std::max(last_backfill_started "
 	     << ", pinfo.last_backfill "
 	     << pinfo.last_backfill << ")" << dendl;
     ObjectStore::Transaction t;
-    ::encode(t, wr->get_data());
+    encode(t, wr->get_data());
   } else {
-    ::encode(op_t, wr->get_data());
+    encode(op_t, wr->get_data());
     wr->get_header().data_off = op_t.get_data_alignment();
   }
 
-  ::encode(log_entries, wr->logbl);
+  encode(log_entries, wr->logbl);
 
   if (pinfo.is_incomplete())
     wr->pg_stats = pinfo.stats;  // reflects backfill progress
@@ -1082,7 +1083,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   vector<pg_log_entry_t> log;
 
   bufferlist::iterator p = const_cast<bufferlist&>(m->get_data()).begin();
-  ::decode(rm->opt, p);
+  decode(rm->opt, p);
 
   if (m->new_temp_oid != hobject_t()) {
     dout(20) << __func__ << " start tracking temp " << m->new_temp_oid << dendl;
@@ -1099,7 +1100,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   }
 
   p = const_cast<bufferlist&>(m->logbl).begin();
-  ::decode(log, p);
+  decode(log, p);
   rm->opt.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
   bool update_snaps = false;
@@ -1363,9 +1364,10 @@ void ReplicatedBackend::prepare_pull(
   assert(!q->second.empty());
 
   // pick a pullee
-  vector<pg_shard_t> shuffle(q->second.begin(), q->second.end());
-  random_shuffle(shuffle.begin(), shuffle.end());
-  vector<pg_shard_t>::iterator p = shuffle.begin();
+  auto p = q->second.begin();
+  std::advance(p,
+               util::generate_random_number<int>(0,
+                                                 q->second.size() - 1));
   assert(get_osdmap()->is_up(p->osd));
   pg_shard_t fromshard = *p;
 
@@ -1915,7 +1917,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     object_info_t oi;
     try {
      bufferlist::iterator bliter = bv.begin();
-     ::decode(oi, bliter);
+     decode(oi, bliter);
     } catch (...) {
       dout(0) << __func__ << ": bad object_info_t: " << recovery_info.soid << dendl;
       return -EINVAL;

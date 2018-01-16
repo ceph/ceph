@@ -162,7 +162,7 @@ bool KeyServer::_check_rotating_secrets()
     ldout(cct, 10) << __func__ << " added " << added << dendl;
     data.rotating_ver++;
     //data.next_rotating_time = ceph_clock_now(cct);
-    //data.next_rotating_time += MIN(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
+    //data.next_rotating_time += std::min(cct->_conf->auth_mon_ticket_ttl, cct->_conf->auth_service_ticket_ttl);
     _dump_rotating_secrets();
     return true;
   }
@@ -329,7 +329,8 @@ int KeyServer::encode_secrets(Formatter *f, stringstream *ds) const
       bufferlist *bl = const_cast<bufferlist*>(&capsiter->second);
       bufferlist::iterator dataiter = bl->begin();
       string caps;
-      ::decode(caps, dataiter);
+      using ceph::decode;
+      decode(caps, dataiter);
       if (ds)
         *ds << "\tcaps: [" << capsiter->first << "] " << caps << std::endl;
       if (f)

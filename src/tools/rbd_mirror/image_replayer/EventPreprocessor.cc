@@ -147,7 +147,7 @@ void EventPreprocessor<I>::update_client() {
 
   librbd::journal::ClientData client_data(client_meta);
   bufferlist data_bl;
-  ::encode(client_data, data_bl);
+  encode(client_data, data_bl);
 
   Context *ctx = create_context_callback<
     EventPreprocessor<I>, &EventPreprocessor<I>::handle_update_client>(

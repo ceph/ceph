@@ -48,11 +48,11 @@ void bluestore_bdev_label_t::encode(bufferlist& bl) const
   bl.append(stringify(osd_uuid));
   bl.append("\n");
   ENCODE_START(2, 1, bl);
-  ::encode(osd_uuid, bl);
-  ::encode(size, bl);
-  ::encode(btime, bl);
-  ::encode(description, bl);
-  ::encode(meta, bl);
+  encode(osd_uuid, bl);
+  encode(size, bl);
+  encode(btime, bl);
+  encode(description, bl);
+  encode(meta, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -60,12 +60,12 @@ void bluestore_bdev_label_t::decode(bufferlist::iterator& p)
 {
   p.advance(60); // see above
   DECODE_START(2, p);
-  ::decode(osd_uuid, p);
-  ::decode(size, p);
-  ::decode(btime, p);
-  ::decode(description, p);
+  decode(osd_uuid, p);
+  decode(size, p);
+  decode(btime, p);
+  decode(description, p);
   if (struct_v >= 2) {
-    ::decode(meta, p);
+    decode(meta, p);
   }
   DECODE_FINISH(p);
 }
@@ -165,7 +165,7 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     }
     if (p->first > offset) {
       // gap
-      uint64_t newlen = MIN(p->first - offset, length);
+      uint64_t newlen = std::min<uint64_t>(p->first - offset, length);
       p = ref_map.insert(
 	map<uint64_t,record_t>::value_type(offset,
 					   record_t(newlen, 1))).first;
@@ -386,7 +386,7 @@ void bluestore_blob_use_tracker_t::init(
   assert(_au_size > 0);
   assert(full_length > 0);
   clear();  
-  uint32_t _num_au = ROUND_UP_TO(full_length, _au_size) / _au_size;
+  uint32_t _num_au = round_up_to(full_length, _au_size) / _au_size;
   au_size = _au_size;
   if( _num_au > 1 ) {
     num_au = _num_au;
@@ -406,7 +406,7 @@ void bluestore_blob_use_tracker_t::get(
     while (offset < end) {
       auto phase = offset % au_size;
       bytes_per_au[offset / au_size] += 
-	MIN(au_size - phase, end - offset);
+	std::min(au_size - phase, end - offset);
       offset += (phase ? au_size - phase : au_size);
     }
   }
@@ -430,7 +430,7 @@ bool bluestore_blob_use_tracker_t::put(
     while (offset < end) {
       auto phase = offset % au_size;
       size_t pos = offset / au_size;
-      auto diff = MIN(au_size - phase, end - offset);
+      auto diff = std::min(au_size - phase, end - offset);
       assert(diff <= bytes_per_au[pos]);
       bytes_per_au[pos] -= diff;
       offset += (phase ? au_size - phase : au_size);
@@ -935,7 +935,7 @@ bool bluestore_blob_t::release_extents(bool all,
       uint32_t to_release = loffs_it->length;
       do {
 	uint32_t to_release_part =
-	  MIN(pext_it->length - delta0 - delta, to_release);
+	  std::min(pext_it->length - delta0 - delta, to_release);
 	auto o = pext_it->offset + delta0 + delta;
 	if (last_r != r->end() && last_r->offset + last_r->length == o) {
 	  last_r->length += to_release_part;

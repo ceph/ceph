@@ -254,8 +254,8 @@ class PGLSHelloFilter : public PGLSFilter {
 public:
   int init(bufferlist::iterator& params) override {
     try {
-      ::decode(xattr, params);
-      ::decode(val, params);
+      decode(xattr, params);
+      decode(val, params);
     } catch (buffer::error &e) {
       return -EINVAL;
     }

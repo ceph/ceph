@@ -364,7 +364,7 @@ static int inspect_entry(bufferlist& data,
 			 bool verbose) {
   try {
     bufferlist::iterator it = data.begin();
-    ::decode(event_entry, it);
+    decode(event_entry, it);
   } catch (const buffer::error &err) {
     std::cerr << "failed to decode event entry: " << err.what() << std::endl;
     return -EINVAL;

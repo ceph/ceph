@@ -36,7 +36,7 @@ static void reset_rop(librados::ObjectReadOperation **pop) {
 void add_log(librados::ObjectWriteOperation *op, const string& client_id, const string& op_id, string& obj, uint32_t state)
 {
   bufferlist bl;
-  ::encode(state, bl);
+  encode(state, bl);
 
   utime_t ts = ceph_clock_now();
 

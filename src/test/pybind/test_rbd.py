@@ -12,7 +12,7 @@ from rados import (Rados,
                    LIBRADOS_OP_FLAG_FADVISE_DONTNEED,
                    LIBRADOS_OP_FLAG_FADVISE_NOCACHE,
                    LIBRADOS_OP_FLAG_FADVISE_RANDOM)
-from rbd import (RBD, Image, ImageNotFound, InvalidArgument, ImageExists,
+from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
@@ -27,7 +27,11 @@ rados = None
 ioctx = None
 features = None
 image_idx = 0
+group_idx = 0
+snap_idx = 0
 image_name = None
+group_name = None
+snap_name = None
 pool_idx = 0
 pool_name = None
 IMG_SIZE = 8 << 20 # 8 MiB
@@ -65,6 +69,16 @@ def get_temp_image_name():
     image_idx += 1
     return "image" + str(image_idx)
 
+def get_temp_group_name():
+    global group_idx
+    group_idx += 1
+    return "group" + str(group_idx)
+
+def get_temp_snap_name():
+    global snap_idx
+    snap_idx += 1
+    return "snap" + str(snap_idx)
+
 def create_image():
     global image_name
     image_name = get_temp_image_name()
@@ -77,6 +91,15 @@ def create_image():
 def remove_image():
     if image_name is not None:
         RBD().remove(ioctx, image_name)
+
+def create_group():
+    global group_name
+    group_name = get_temp_group_name()
+    RBD().group_create(ioctx, group_name)
+
+def remove_group():
+    if group_name is not None:
+        RBD().group_remove(ioctx, group_name)
 
 def require_new_format():
     def wrapper(fn):
@@ -1658,3 +1681,126 @@ class TestTrash(object):
         RBD().trash_move(ioctx, image_name, 1000)
         RBD().trash_restore(ioctx, image_id, image_name)
         remove_image()
+
+def test_create_group():
+    create_group()
+    remove_group()
+
+def test_list_groups_empty():
+    eq([], RBD().group_list(ioctx))
+
+@with_setup(create_group, remove_group)
+def test_list_groups():
+    eq([group_name], RBD().group_list(ioctx))
+
+@with_setup(create_group)
+def test_list_groups_after_removed():
+    remove_group()
+    eq([], RBD().group_list(ioctx))
+
+class TestGroups(object):
+
+    def setUp(self):
+        global snap_name
+        self.rbd = RBD()
+        create_image()
+        self.image_names = [image_name]
+        self.image = Image(ioctx, image_name)
+
+        create_group()
+        snap_name = get_temp_snap_name()
+        self.group = Group(ioctx, group_name)
+
+    def tearDown(self):
+        remove_group()
+        self.image = None
+        for name in self.image_names:
+            RBD().remove(ioctx, name)
+
+    def test_group_image_add(self):
+        self.group.add_image(ioctx, image_name)
+
+    def test_group_image_list_empty(self):
+        eq([], list(self.group.list_images()))
+
+    def test_group_image_list(self):
+        eq([], list(self.group.list_images()))
+        self.group.add_image(ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+
+    def test_group_image_many_images(self):
+        eq([], list(self.group.list_images()))
+        self.group.add_image(ioctx, image_name)
+
+        for x in range(0, 20):
+            create_image()
+            self.image_names.append(image_name)
+            self.group.add_image(ioctx, image_name)
+
+        self.image_names.sort()
+        answer = [img['name'] for img in self.group.list_images()]
+        answer.sort()
+        eq(self.image_names, answer)
+
+    def test_group_image_remove(self):
+        eq([], list(self.group.list_images()))
+        self.group.add_image(ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+        self.group.remove_image(ioctx, image_name)
+        eq([], list(self.group.list_images()))
+
+    def test_group_snap(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+        self.group.create_snap(snap_name)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+
+        for snap in self.image.list_snaps():
+            eq(rbd.RBD_SNAP_NAMESPACE_TYPE_GROUP,
+               self.image.snap_get_namespace_type(snap['id']))
+
+            info = self.image.snap_get_group_namespace(snap['id'])
+            eq(group_name, info['group_name'])
+            eq(snap_name, info['group_snap_name'])
+
+        self.group.remove_snap(snap_name)
+        eq([], list(self.group.list_snaps()))
+
+    def test_group_snap_list_many(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+        snap_names = []
+        for x in range(0, 20):
+            snap_names.append(snap_name)
+            self.group.create_snap(snap_name)
+            snap_name = get_temp_snap_name()
+
+        snap_names.sort()
+        answer = [snap['name'] for snap in self.group.list_snaps()]
+        answer.sort()
+        eq(snap_names, answer)
+
+    def test_group_snap_namespace(self):
+        global snap_name
+        eq([], list(self.group.list_snaps()))
+        self.group.add_image(ioctx, image_name)
+        self.group.create_snap(snap_name)
+        eq(1, len([snap['name'] for snap in self.image.list_snaps()]))
+        self.group.remove_image(ioctx, image_name)
+        self.group.remove_snap(snap_name)
+        eq([], list(self.group.list_snaps()))
+
+    def test_group_snap_rename(self):
+        global snap_name
+        new_snap_name = "new" + snap_name
+
+        eq([], list(self.group.list_snaps()))
+        self.group.create_snap(snap_name)
+        eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
+        self.group.rename_snap(snap_name, new_snap_name)
+        eq([new_snap_name], [snap['name'] for snap in self.group.list_snaps()])
+
+@with_setup(create_image, remove_image)
+def test_rename():
+    rbd = RBD()
+    image_name2 = get_temp_image_name()

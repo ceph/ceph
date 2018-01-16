@@ -48,7 +48,7 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
     return r;
 
   if (f) {
-    f->open_object_section("locks");
+    f->open_array_section("locks");
   } else {
     tbl.define_column("Locker", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
@@ -69,7 +69,8 @@ static int do_lock_list(librbd::Image& image, Formatter *f)
     for (std::list<librbd::locker_t>::const_iterator it = lockers.begin();
          it != lockers.end(); ++it) {
       if (f) {
-        f->open_object_section(it->cookie.c_str());
+        f->open_object_section("lock");
+        f->dump_string("id", it->cookie);
         f->dump_string("locker", it->client);
         f->dump_string("address", it->address);
         f->close_section();

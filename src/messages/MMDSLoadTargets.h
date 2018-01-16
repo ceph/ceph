@@ -43,16 +43,18 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
-    ::decode(global_id, p);
-    ::decode(targets, p);
+    decode(global_id, p);
+    decode(targets, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(global_id, payload);
-    ::encode(targets, payload);
+    encode(global_id, payload);
+    encode(targets, payload);
   }
 };
 

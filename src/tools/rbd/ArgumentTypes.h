@@ -129,6 +129,9 @@ std::string get_description_prefix(ArgumentModifier modifier);
 void add_special_pool_option(boost::program_options::options_description *opt,
 			     std::string prefix);
 
+void add_all_option(boost::program_options::options_description *opt,
+		    std::string description);
+
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");
@@ -160,7 +163,7 @@ void add_image_spec_options(boost::program_options::options_description *pos,
 
 void add_group_spec_options(boost::program_options::options_description *pos,
 			    boost::program_options::options_description *opt,
-			    ArgumentModifier modifier);
+			    ArgumentModifier modifier, bool snap);
 
 void add_snap_spec_options(boost::program_options::options_description *pos,
                            boost::program_options::options_description *opt,

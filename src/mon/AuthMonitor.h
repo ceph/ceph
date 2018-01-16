@@ -46,41 +46,42 @@ public:
     Incremental() : inc_type(GLOBAL_ID), max_global_id(0), auth_type(0) {}
 
     void encode(bufferlist& bl, uint64_t features=-1) const {
+      using ceph::encode;
       if ((features & CEPH_FEATURE_MONENC) == 0) {
 	__u8 v = 1;
-	::encode(v, bl);
+	encode(v, bl);
 	__u32 _type = (__u32)inc_type;
-	::encode(_type, bl);
+	encode(_type, bl);
 	if (_type == GLOBAL_ID) {
-	  ::encode(max_global_id, bl);
+	  encode(max_global_id, bl);
 	} else {
-	  ::encode(auth_type, bl);
-	  ::encode(auth_data, bl);
+	  encode(auth_type, bl);
+	  encode(auth_data, bl);
 	}
 	return;
       } 
       ENCODE_START(2, 2, bl);
       __u32 _type = (__u32)inc_type;
-      ::encode(_type, bl);
+      encode(_type, bl);
       if (_type == GLOBAL_ID) {
-	::encode(max_global_id, bl);
+	encode(max_global_id, bl);
       } else {
-	::encode(auth_type, bl);
-	::encode(auth_data, bl);
+	encode(auth_type, bl);
+	encode(auth_data, bl);
       }
       ENCODE_FINISH(bl);
     }
     void decode(bufferlist::iterator& bl) {
       DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
       __u32 _type;
-      ::decode(_type, bl);
+      decode(_type, bl);
       inc_type = (IncType)_type;
       assert(inc_type >= GLOBAL_ID && inc_type <= AUTH_DATA);
       if (_type == GLOBAL_ID) {
-	::decode(max_global_id, bl);
+	decode(max_global_id, bl);
       } else {
-	::decode(auth_type, bl);
-	::decode(auth_data, bl);
+	decode(auth_type, bl);
+	decode(auth_data, bl);
       }
       DECODE_FINISH(bl);
     }
@@ -122,7 +123,7 @@ private:
   void push_cephx_inc(KeyServerData::Incremental& auth_inc) {
     Incremental inc;
     inc.inc_type = AUTH_DATA;
-    ::encode(auth_inc, inc.auth_data);
+    encode(auth_inc, inc.auth_data);
     inc.auth_type = CEPH_AUTH_CEPHX;
     pending_auth.push_back(inc);
   }

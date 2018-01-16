@@ -363,7 +363,7 @@ int Pipe::accept()
   }
 
   // and my addr
-  ::encode(msgr->my_inst.addr, addrs, 0);  // legacy
+  encode(msgr->my_inst.addr, addrs, 0);  // legacy
 
   port = msgr->my_inst.addr.get_port();
 
@@ -376,7 +376,7 @@ int Pipe::accept()
     goto fail_unlocked;
   }
   socket_addr.set_sockaddr((sockaddr*)&ss);
-  ::encode(socket_addr, addrs, 0);  // legacy
+  encode(socket_addr, addrs, 0);  // legacy
 
   r = tcp_write(addrs.c_str(), addrs.length());
   if (r < 0) {
@@ -406,7 +406,7 @@ int Pipe::accept()
   }
   try {
     bufferlist::iterator ti = addrbl.begin();
-    ::decode(peer_addr, ti);
+    decode(peer_addr, ti);
   } catch (const buffer::error& e) {
     ldout(msgr->cct,2) << __func__ <<  " decode peer_addr failed: " << e.what()
 			<< dendl;
@@ -1072,8 +1072,8 @@ int Pipe::connect()
   }
   try {
     bufferlist::iterator p = addrbl.begin();
-    ::decode(paddr, p);
-    ::decode(peer_addr_for_me, p);
+    decode(paddr, p);
+    decode(peer_addr_for_me, p);
   }
   catch (buffer::error& e) {
     ldout(msgr->cct,2) << "connect couldn't decode peer addrs: " << e.what()
@@ -1100,7 +1100,7 @@ int Pipe::connect()
 
   msgr->learned_addr(peer_addr_for_me);
 
-  ::encode(msgr->my_inst.addr, myaddrbl, 0);  // legacy
+  encode(msgr->my_inst.addr, myaddrbl, 0);  // legacy
 
   memset(&msg, 0, sizeof(msg));
   msgvec[0].iov_base = myaddrbl.c_str();
@@ -1999,7 +1999,7 @@ static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
   if (off & ~CEPH_PAGE_MASK) {
     // head
     unsigned head = 0;
-    head = MIN(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
+    head = std::min<uint64_t>(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
     data.push_back(buffer::create(head));
     left -= head;
   }
@@ -2139,7 +2139,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	}
       }
       bufferptr bp = blp.get_current_ptr();
-      int read = MIN(bp.length(), left);
+      int read = std::min(bp.length(), left);
       ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << bp.length() << dendl;
       ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
       ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
@@ -2374,7 +2374,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   unsigned left = blist.length();
 
   while (left > 0) {
-    unsigned donow = MIN(left, pb->length()-b_off);
+    unsigned donow = std::min(left, pb->length()-b_off);
     if (donow == 0) {
       ldout(msgr->cct,0) << "donow = " << donow << " left " << left << " pb->length " << pb->length()
                          << " b_off " << b_off << dendl;
@@ -2538,7 +2538,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
   size_t left = len;
   ssize_t total_recv = 0;
   if (recv_len > recv_ofs) {
-    int to_read = MIN(recv_len - recv_ofs, left);
+    int to_read = std::min(recv_len - recv_ofs, left);
     memcpy(buf, &recv_buf[recv_ofs], to_read);
     recv_ofs += to_read;
     left -= to_read;
@@ -2573,7 +2573,7 @@ ssize_t Pipe::buffered_recv(char *buf, size_t len, int flags)
   }
 
   recv_len = (size_t)got;
-  got = MIN(left, (size_t)got);
+  got = std::min(left, (size_t)got);
   memcpy(buf, recv_buf, got);
   recv_ofs = got;
   total_recv += got;

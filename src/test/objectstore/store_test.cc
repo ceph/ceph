@@ -428,7 +428,7 @@ TEST_P(StoreTest, FiemapEmpty) {
     store->fiemap(cid, oid, 0, 100000, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     e[0] = 100000;
     EXPECT_TRUE(m == e || m.empty());
@@ -467,7 +467,7 @@ TEST_P(StoreTest, FiemapHoles) {
     store->fiemap(cid, oid, 0, SKIP_STEP * (MAX_EXTENTS - 1) + 3, bl);
     map<uint64_t,uint64_t> m, e;
     bufferlist::iterator p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
     ASSERT_GE(m[0], 3u);
@@ -487,7 +487,7 @@ TEST_P(StoreTest, FiemapHoles) {
     store->fiemap(cid, oid, SKIP_STEP, SKIP_STEP * (MAX_EXTENTS - 2) + 3, bl);
     map<uint64_t,uint64_t> m, e;
     auto p = bl.begin();
-    ::decode(m, p);
+    decode(m, p);
     cout << " got " << m << std::endl;
     ASSERT_TRUE(!m.empty());
     // kstore always returns [0, object_size] regardless of offset and length
@@ -612,8 +612,8 @@ TEST_P(StoreTest, SimpleColPreHashTest) {
     t.create_collection(cid, 5);
     cerr << "create collection" << std::endl;
     bufferlist hint;
-    ::encode(pg_num, hint);
-    ::encode(expected_num_objs, hint);
+    encode(pg_num, hint);
+    encode(expected_num_objs, hint);
     t.collection_hint(cid, ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS, hint);
     cerr << "collection hint" << std::endl;
     r = apply_transaction(store, &osr, std::move(t));
@@ -3767,9 +3767,9 @@ public:
     uint64_t dstoff = srcoff; //u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
-      srcoff = ROUND_UP_TO(srcoff, write_alignment);
-      dstoff = ROUND_UP_TO(dstoff, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      srcoff = round_up_to(srcoff, write_alignment);
+      dstoff = round_up_to(dstoff, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     if (srcoff > srcdata.length() - 1) {
@@ -3837,8 +3837,8 @@ public:
     uint64_t len = u2(*rng);
     bufferlist bl;
     if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      offset = round_up_to(offset, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     filled_byte_array(bl, len);
@@ -3882,7 +3882,7 @@ public:
     boost::uniform_int<> choose(0, max_object_len);
     size_t len = choose(*rng);
     if (write_alignment) {
-      len = ROUND_UP_TO(len, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     t.truncate(cid, obj, len);
@@ -3918,8 +3918,8 @@ public:
     uint64_t offset = u1(*rng);
     uint64_t len = u2(*rng);
     if (write_alignment) {
-      offset = ROUND_UP_TO(offset, write_alignment);
-      len = ROUND_UP_TO(len, write_alignment);
+      offset = round_up_to(offset, write_alignment);
+      len = round_up_to(len, write_alignment);
     }
 
     if (len > 0) {

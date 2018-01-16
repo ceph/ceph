@@ -197,7 +197,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 				    extents);
   assert(got != 0);
   if (got < (int64_t)want) {
-    alloc[id]->unreserve(want - MAX(0, got));
+    alloc[id]->unreserve(want - std::max<int64_t>(0, got));
   }
   if (got < 0) {
     derr << __func__ << " failed to allocate space to return to bluestore"
@@ -479,9 +479,9 @@ int BlueFS::_write_super()
 {
   // build superblock
   bufferlist bl;
-  ::encode(super, bl);
+  encode(super, bl);
   uint32_t crc = bl.crc32c(-1);
-  ::encode(crc, bl);
+  encode(crc, bl);
   dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
   dout(10) << __func__ << " superblock " << super.version << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
@@ -511,13 +511,13 @@ int BlueFS::_open_super()
     return r;
 
   bufferlist::iterator p = bl.begin();
-  ::decode(super, p);
+  decode(super, p);
   {
     bufferlist t;
     t.substr_of(bl, 0, p.get_off());
     crc = t.crc32c(-1);
   }
-  ::decode(expected_crc, p);
+  decode(expected_crc, p);
   if (crc != expected_crc) {
     derr << __func__ << " bad crc on superblock, expected 0x"
          << std::hex << expected_crc << " != actual 0x" << crc << std::dec
@@ -569,13 +569,13 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       bufferlist::iterator p = bl.begin();
       __u8 a, b;
       uint32_t len;
-      ::decode(a, p);
-      ::decode(b, p);
-      ::decode(len, p);
-      ::decode(uuid, p);
-      ::decode(seq, p);
+      decode(a, p);
+      decode(b, p);
+      decode(len, p);
+      decode(uuid, p);
+      decode(seq, p);
       if (len + 6 > bl.length()) {
-	more = ROUND_UP_TO(len + 6 - bl.length(), super.block_size);
+	more = round_up_to(len + 6 - bl.length(), super.block_size);
       }
     }
     if (uuid != super.uuid) {
@@ -608,7 +608,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     bluefs_transaction_t t;
     try {
       bufferlist::iterator p = bl.begin();
-      ::decode(t, p);
+      decode(t, p);
     }
     catch (buffer::error& e) {
       dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
@@ -628,7 +628,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     bufferlist::iterator p = t.op_bl.begin();
     while (!p.end()) {
       __u8 op;
-      ::decode(op, p);
+      decode(op, p);
       switch (op) {
 
       case bluefs_transaction_t::OP_INIT:
@@ -646,8 +646,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  uint64_t next_seq;
 	  uint64_t offset;
-	  ::decode(next_seq, p);
-	  ::decode(offset, p);
+	  decode(next_seq, p);
+	  decode(offset, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
 		   << ":  op_jump seq " << next_seq
 		   << " offset 0x" << std::hex << offset << std::dec << dendl;
@@ -678,7 +678,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_JUMP_SEQ:
         {
 	  uint64_t next_seq;
-	  ::decode(next_seq, p);
+	  decode(next_seq, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_jump_seq " << next_seq << dendl;
           if (unlikely(to_stdout)) {
@@ -695,9 +695,9 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  __u8 id;
 	  uint64_t offset, length;
-	  ::decode(id, p);
-	  ::decode(offset, p);
-	  ::decode(length, p);
+	  decode(id, p);
+	  decode(offset, p);
+	  decode(length, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_alloc_add " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
@@ -720,9 +720,9 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  __u8 id;
 	  uint64_t offset, length;
-	  ::decode(id, p);
-	  ::decode(offset, p);
-	  ::decode(length, p);
+	  decode(id, p);
+	  decode(offset, p);
+	  decode(length, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_alloc_rm " << " " << (int)id
                    << ":0x" << std::hex << offset << "~" << length << std::dec
@@ -745,9 +745,9 @@ int BlueFS::_replay(bool noop, bool to_stdout)
         {
 	  string dirname, filename;
 	  uint64_t ino;
-	  ::decode(dirname, p);
-	  ::decode(filename, p);
-	  ::decode(ino, p);
+	  decode(dirname, p);
+	  decode(filename, p);
+	  decode(ino, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_link " << " " << dirname << "/" << filename
                    << " to " << ino
@@ -775,8 +775,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_DIR_UNLINK:
         {
 	  string dirname, filename;
-	  ::decode(dirname, p);
-	  ::decode(filename, p);
+	  decode(dirname, p);
+	  decode(filename, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_unlink " << " " << dirname << "/" << filename
                    << dendl;
@@ -801,7 +801,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_DIR_CREATE:
         {
 	  string dirname;
-	  ::decode(dirname, p);
+	  decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_create " << dirname << dendl;
           if (unlikely(to_stdout)) {
@@ -820,7 +820,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_DIR_REMOVE:
         {
 	  string dirname;
-	  ::decode(dirname, p);
+	  decode(dirname, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_dir_remove " << dirname << dendl;
           if (unlikely(to_stdout)) {
@@ -840,7 +840,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_FILE_UPDATE:
         {
 	  bluefs_fnode_t fnode;
-	  ::decode(fnode, p);
+	  decode(fnode, p);
 	  fnode.recalc_allocated();
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_update " << " " << fnode << dendl;
@@ -862,7 +862,7 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       case bluefs_transaction_t::OP_FILE_REMOVE:
         {
 	  uint64_t ino;
-	  ::decode(ino, p);
+	  decode(ino, p);
 	  dout(20) << __func__ << " 0x" << std::hex << pos << std::dec
                    << ":  op_file_remove " << ino << dendl;
           if (unlikely(to_stdout)) {
@@ -1005,7 +1005,7 @@ int BlueFS::_read_random(
   while (len > 0) {
     uint64_t x_off = 0;
     auto p = h->file->fnode.seek(off, &x_off);
-    uint64_t l = MIN(p->length - x_off, len);
+    uint64_t l = std::min(p->length - x_off, len);
     dout(20) << __func__ << " read buffered 0x"
              << std::hex << x_off << "~" << l << std::dec
              << " of " << *p << dendl;
@@ -1057,11 +1057,11 @@ int BlueFS::_read(
       buf->bl_off = off & super.block_mask();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(buf->bl_off, &x_off);
-      uint64_t want = ROUND_UP_TO(len + (off & ~super.block_mask()),
+      uint64_t want = round_up_to(len + (off & ~super.block_mask()),
 				  super.block_size);
-      want = MAX(want, buf->max_prefetch);
-      uint64_t l = MIN(p->length - x_off, want);
-      uint64_t eof_offset = ROUND_UP_TO(h->file->fnode.size, super.block_size);
+      want = std::max(want, buf->max_prefetch);
+      uint64_t l = std::min(p->length - x_off, want);
+      uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
       if (!h->ignore_eof &&
 	  buf->bl_off + l > eof_offset) {
 	l = eof_offset - buf->bl_off;
@@ -1077,7 +1077,7 @@ int BlueFS::_read(
     dout(20) << __func__ << " left 0x" << std::hex << left
              << " len 0x" << len << std::dec << dendl;
 
-    int r = MIN(len, left);
+    int r = std::min(len, left);
     if (outbl) {
       bufferlist t;
       t.substr_of(buf->bl, off - buf->bl_off, r);
@@ -1115,12 +1115,12 @@ void BlueFS::_invalidate_cache(FileRef f, uint64_t offset, uint64_t length)
            << dendl;
   if (offset & ~super.block_mask()) {
     offset &= super.block_mask();
-    length = ROUND_UP_TO(length, super.block_size);
+    length = round_up_to(length, super.block_size);
   }
   uint64_t x_off = 0;
   auto p = f->fnode.seek(offset, &x_off);
   while (length > 0 && p != f->fnode.extents.end()) {
-    uint64_t x_len = MIN(p->length - x_off, length);
+    uint64_t x_len = std::min(p->length - x_off, length);
     bdev[p->bdev]->invalidate_cache(p->offset + x_off, x_len);
     dout(20) << __func__  << " 0x" << std::hex << x_off << "~" << x_len
              << std:: dec << " of " << *p << dendl;
@@ -1139,7 +1139,7 @@ uint64_t BlueFS::_estimate_log_size()
     size += p.num_intervals() * (1 + 1 + sizeof(uint64_t) * 2);
   size += dir_map.size() + (1 + avg_dir_size);
   size += file_map.size() * (1 + avg_dir_size + avg_file_size);
-  return ROUND_UP_TO(size, super.block_size);
+  return round_up_to(size, super.block_size);
 }
 
 void BlueFS::compact_log()
@@ -1219,7 +1219,7 @@ void BlueFS::_compact_log_sync()
   t.op_jump_seq(log_seq);
 
   bufferlist bl;
-  ::encode(t, bl);
+  encode(t, bl);
   _pad_bl(bl);
 
   uint64_t need = bl.length() + cct->_conf->bluefs_max_log_runway;
@@ -1337,12 +1337,12 @@ void BlueFS::_compact_log_async(std::unique_lock<std::mutex>& l)
   _compact_log_dump_metadata(&t);
 
   // conservative estimate for final encoded size
-  new_log_jump_to = ROUND_UP_TO(t.op_bl.length() + super.block_size * 2,
+  new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
                                 cct->_conf->bluefs_alloc_size);
   t.op_jump(log_seq, new_log_jump_to);
 
   bufferlist bl;
-  ::encode(t, bl);
+  encode(t, bl);
   _pad_bl(bl);
 
   dout(10) << __func__ << " new_log_jump_to 0x" << std::hex << new_log_jump_to
@@ -1511,7 +1511,7 @@ int BlueFS::_flush_and_sync_log(std::unique_lock<std::mutex>& l,
   }
 
   bufferlist bl;
-  ::encode(log_t, bl);
+  encode(log_t, bl);
 
   // pad to block boundary
   _pad_bl(bl);
@@ -1729,7 +1729,7 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
 
   uint64_t bloff = 0;
   while (length > 0) {
-    uint64_t x_len = MIN(p->length - x_off, length);
+    uint64_t x_len = std::min(p->length - x_off, length);
     bufferlist t;
     t.substr_of(bl, bloff, x_len);
     unsigned tail = x_len & ~super.block_mask();
@@ -1932,7 +1932,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   assert(id < alloc.size());
   uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
 
-  uint64_t left = ROUND_UP_TO(len, min_alloc_size);
+  uint64_t left = round_up_to(len, min_alloc_size);
   int r = -ENOSPC;
   int64_t alloc_len = 0;
   AllocExtentVector extents;

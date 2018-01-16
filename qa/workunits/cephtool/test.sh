@@ -1416,6 +1416,11 @@ function test_mon_osd()
   #
   # osd scrub
   #
+
+  # blocking
+  ceph osd scrub 0 --block
+  ceph osd deep-scrub 0 --block
+
   # how do I tell when these are done?
   ceph osd scrub 0
   ceph osd deep-scrub 0
@@ -1703,6 +1708,17 @@ function test_mon_osd_pool()
   set -e
   ceph osd pool delete replicated replicated --yes-i-really-really-mean-it
   ceph osd pool delete ec_test ec_test --yes-i-really-really-mean-it
+
+  # test create pool with rule
+  ceph osd erasure-code-profile set foo foo
+  ceph osd erasure-code-profile ls | grep foo
+  ceph osd crush rule create-erasure foo foo
+  ceph osd pool create erasure 12 12 erasure foo
+  expect_false ceph osd erasure-code-profile rm foo
+  ceph osd pool delete erasure erasure --yes-i-really-really-mean-it
+  ceph osd crush rule rm foo
+  ceph osd erasure-code-profile rm foo
+
 }
 
 function test_mon_osd_pool_quota()

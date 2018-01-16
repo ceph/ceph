@@ -216,7 +216,6 @@ common() {
 		ceph-dencoder \
 		ceph-rbdnamer \
 		ceph-syn \
-		ceph-crush-location \
 		cephfs-data-scan \
 		cephfs-journal-tool \
 		cephfs-table-tool \

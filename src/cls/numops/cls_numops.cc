@@ -37,8 +37,8 @@ static int add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bufferlist::iterator iter = in->begin();
   try {
-    ::decode(key, iter);
-    ::decode(diff_str, iter);
+    decode(key, iter);
+    decode(diff_str, iter);
   } catch (const buffer::error &err) {
     CLS_LOG(20, "add: invalid decode of input");
     return -EINVAL;
@@ -92,8 +92,8 @@ static int mul(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   bufferlist::iterator iter = in->begin();
   try {
-    ::decode(key, iter);
-    ::decode(diff_str, iter);
+    decode(key, iter);
+    decode(diff_str, iter);
   } catch (const buffer::error &err) {
     CLS_LOG(20, "add: invalid decode of input");
     return -EINVAL;

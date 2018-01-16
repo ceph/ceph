@@ -44,10 +44,11 @@ public:
 
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(map, p);
+    decode(map, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(map, payload, features);
+    using ceph::encode;
+    encode(map, payload, features);
   }
 };
 
