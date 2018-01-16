@@ -118,6 +118,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   $ rbd info bar --format json | python -mjson.tool | sed 's/,$/, /'
@@ -136,6 +137,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 256, 
+      "op_features": [], 
       "order": 22, 
       "size": 1073741824
   }
@@ -155,6 +157,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
   </image>
@@ -165,6 +168,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   \tprotected: True (esc)
@@ -184,6 +188,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 128, 
+      "op_features": [], 
       "order": 22, 
       "protected": "true", 
       "size": 536870912
@@ -204,6 +209,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
     <protected>true</protected>
@@ -215,6 +221,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   \tprotected: False (esc)
@@ -234,6 +241,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "bar", 
       "object_size": 4194304, 
       "objects": 256, 
+      "op_features": [], 
       "order": 22, 
       "protected": "false", 
       "size": 1073741824
@@ -254,6 +262,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
     <protected>false</protected>
@@ -265,6 +274,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   $ rbd info baz --format json | python -mjson.tool | sed 's/,$/, /'
@@ -279,6 +289,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "baz", 
       "object_size": 4194304, 
       "objects": 512, 
+      "op_features": [], 
       "order": 22, 
       "size": 2147483648
   }
@@ -294,6 +305,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <features>
       <feature>layering</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
   </image>
@@ -330,6 +342,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   $ rbd info rbd_other/child --format json | python -mjson.tool | sed 's/,$/, /'
@@ -347,6 +360,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "child", 
       "object_size": 4194304, 
       "objects": 128, 
+      "op_features": [], 
       "order": 22, 
       "size": 536870912
   }
@@ -365,6 +379,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>object-map</feature>
       <feature>fast-diff</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
   </image>
@@ -375,6 +390,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   \tprotected: False (esc)
@@ -395,6 +411,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "child", 
       "object_size": 4194304, 
       "objects": 128, 
+      "op_features": [], 
       "order": 22, 
       "parent": {
           "image": "bar", 
@@ -420,6 +437,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>object-map</feature>
       <feature>fast-diff</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
     <protected>false</protected>
@@ -437,6 +455,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   $ rbd info rbd_other/deep-flatten-child --format json | python -mjson.tool | sed 's/,$/, /'
@@ -455,6 +474,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "deep-flatten-child", 
       "object_size": 4194304, 
       "objects": 128, 
+      "op_features": [], 
       "order": 22, 
       "size": 536870912
   }
@@ -474,6 +494,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
   </image>
@@ -484,6 +505,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [^^]+ (re)
   \tformat: 2 (esc)
   \tfeatures: layering, exclusive-lock, object-map, fast-diff, deep-flatten (esc)
+  \top_features:  (esc)
   \tflags:  (esc)
   \tcreate_timestamp:* (glob)
   \tprotected: False (esc)
@@ -503,6 +525,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       "name": "deep-flatten-child", 
       "object_size": 4194304, 
       "objects": 128, 
+      "op_features": [], 
       "order": 22, 
       "protected": "false", 
       "size": 536870912
@@ -523,6 +546,7 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
       <feature>fast-diff</feature>
       <feature>deep-flatten</feature>
     </features>
+    <op_features></op_features>
     <flags></flags>
     <create_timestamp>*</create_timestamp> (glob)
     <protected>false</protected>
