@@ -21,7 +21,7 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_MIRROR_MODE_DISABLED, RBD_MIRROR_MODE_IMAGE,
                  RBD_MIRROR_MODE_POOL, RBD_MIRROR_IMAGE_ENABLED,
                  RBD_MIRROR_IMAGE_DISABLED, MIRROR_IMAGE_STATUS_STATE_UNKNOWN,
-                 RBD_LOCK_MODE_EXCLUSIVE)
+                 RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP)
 
 rados = None
 ioctx = None
@@ -1745,9 +1745,17 @@ class TestGroups(object):
     def test_group_image_remove(self):
         eq([], list(self.group.list_images()))
         self.group.add_image(ioctx, image_name)
+        with Image(ioctx, image_name) as image:
+            eq(RBD_OPERATION_FEATURE_GROUP,
+               image.op_features() & RBD_OPERATION_FEATURE_GROUP)
+            group = image.group()
+            eq(group_name, group['name'])
+
         eq([image_name], [img['name'] for img in self.group.list_images()])
         self.group.remove_image(ioctx, image_name)
         eq([], list(self.group.list_images()))
+        with Image(ioctx, image_name) as image:
+            eq(0, image.op_features() & RBD_OPERATION_FEATURE_GROUP)
 
     def test_group_snap(self):
         global snap_name
