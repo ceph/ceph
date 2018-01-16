@@ -2063,31 +2063,31 @@ namespace librbd {
       return ioctx->exec(oid, "rbd", "group_image_set", bl, bl2);
     }
 
-    int image_add_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
 	                const cls::rbd::GroupSpec &group_spec)
     {
       bufferlist bl, bl2;
       encode(group_spec, bl);
 
-      return ioctx->exec(oid, "rbd", "image_add_group", bl, bl2);
+      return ioctx->exec(oid, "rbd", "image_group_add", bl, bl2);
     }
 
-    int image_remove_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupSpec &group_spec)
     {
       bufferlist bl, bl2;
       encode(group_spec, bl);
 
-      return ioctx->exec(oid, "rbd", "image_remove_group", bl, bl2);
+      return ioctx->exec(oid, "rbd", "image_group_remove", bl, bl2);
     }
 
-    void image_get_group_start(librados::ObjectReadOperation *op)
+    void image_group_get_start(librados::ObjectReadOperation *op)
     {
       bufferlist in_bl;
-      op->exec("rbd", "image_get_group", in_bl);
+      op->exec("rbd", "image_group_get", in_bl);
     }
 
-    int image_get_group_finish(bufferlist::iterator *iter,
+    int image_group_get_finish(bufferlist::iterator *iter,
                                cls::rbd::GroupSpec *group_spec)
     {
       try {
@@ -2098,11 +2098,11 @@ namespace librbd {
       return 0;
     }
 
-    int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_get(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec)
     {
       librados::ObjectReadOperation op;
-      image_get_group_start(&op);
+      image_group_get_start(&op);
 
       bufferlist out_bl;
       int r = ioctx->operate(oid, &op, &out_bl);
@@ -2111,7 +2111,7 @@ namespace librbd {
       }
 
       bufferlist::iterator iter = out_bl.begin();
-      return image_get_group_finish(&iter, group_spec);
+      return image_group_get_finish(&iter, group_spec);
     }
 
     int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,

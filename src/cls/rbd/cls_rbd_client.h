@@ -422,14 +422,14 @@ namespace librbd {
 			 std::vector<cls::rbd::GroupImageStatus> *images);
     int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
 			const cls::rbd::GroupImageStatus &st);
-    int image_add_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
 	                const cls::rbd::GroupSpec &group_spec);
-    int image_remove_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupSpec &group_spec);
-    void image_get_group_start(librados::ObjectReadOperation *op);
-    int image_get_group_finish(bufferlist::iterator *iter,
+    void image_group_get_start(librados::ObjectReadOperation *op);
+    int image_group_get_finish(bufferlist::iterator *iter,
                                cls::rbd::GroupSpec *group_spec);
-    int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_get(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
     int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
 		       const cls::rbd::GroupSnapshot &snapshot);

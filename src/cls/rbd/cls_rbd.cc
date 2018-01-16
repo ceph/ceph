@@ -5046,10 +5046,10 @@ int group_image_list(cls_method_context_t hctx,
  * Output:
  * @return 0 on success, negative error code on failure
  */
-int image_add_group(cls_method_context_t hctx,
+int image_group_add(cls_method_context_t hctx,
 		    bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(20, "image_add_group");
+  CLS_LOG(20, "image_group_add");
   cls::rbd::GroupSpec new_group;
   try {
     bufferlist::iterator iter = in->begin();
@@ -5104,11 +5104,11 @@ int image_add_group(cls_method_context_t hctx,
  * Output:
  * @return 0 on success, negative error code on failure
  */
-int image_remove_group(cls_method_context_t hctx,
+int image_group_remove(cls_method_context_t hctx,
 		       bufferlist *in,
 		       bufferlist *out)
 {
-  CLS_LOG(20, "image_remove_group");
+  CLS_LOG(20, "image_group_remove");
   cls::rbd::GroupSpec spec;
   try {
     bufferlist::iterator iter = in->begin();
@@ -5153,10 +5153,10 @@ int image_remove_group(cls_method_context_t hctx,
  * @param GroupSpec
  * @return 0 on success, negative error code on failure
  */
-int image_get_group(cls_method_context_t hctx,
+int image_group_get(cls_method_context_t hctx,
 		    bufferlist *in, bufferlist *out)
 {
-  CLS_LOG(20, "image_get_group");
+  CLS_LOG(20, "image_group_get");
   bufferlist refbl;
   int r = cls_cxx_map_get_val(hctx, RBD_GROUP_REF, &refbl);
   if (r < 0 && r != -ENOENT) {
@@ -5720,9 +5720,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_group_image_remove;
   cls_method_handle_t h_group_image_list;
   cls_method_handle_t h_group_image_set;
-  cls_method_handle_t h_image_add_group;
-  cls_method_handle_t h_image_remove_group;
-  cls_method_handle_t h_image_get_group;
+  cls_method_handle_t h_image_group_add;
+  cls_method_handle_t h_image_group_remove;
+  cls_method_handle_t h_image_group_get;
   cls_method_handle_t h_group_snap_set;
   cls_method_handle_t h_group_snap_remove;
   cls_method_handle_t h_group_snap_get_by_id;
@@ -6002,15 +6002,15 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "group_image_set",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_image_set, &h_group_image_set);
-  cls_register_cxx_method(h_class, "image_add_group",
+  cls_register_cxx_method(h_class, "image_group_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_add_group, &h_image_add_group);
-  cls_register_cxx_method(h_class, "image_remove_group",
+			  image_group_add, &h_image_group_add);
+  cls_register_cxx_method(h_class, "image_group_remove",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  image_remove_group, &h_image_remove_group);
-  cls_register_cxx_method(h_class, "image_get_group",
+			  image_group_remove, &h_image_group_remove);
+  cls_register_cxx_method(h_class, "image_group_get",
 			  CLS_METHOD_RD,
-			  image_get_group, &h_image_get_group);
+			  image_group_get, &h_image_group_get);
   cls_register_cxx_method(h_class, "group_snap_set",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  group_snap_set, &h_group_snap_set);
