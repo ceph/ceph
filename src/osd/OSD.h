@@ -274,7 +274,6 @@ public:
   PerfCounters *&logger;
   PerfCounters *&recoverystate_perf;
   MonClient   *&monc;
-  GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
 
   md_config_cacher_t<uint64_t> osd_max_object_size;
@@ -1317,10 +1316,8 @@ public:
 private:
 
   ShardedThreadPool osd_op_tp;
-  ThreadPool disk_tp;
   ThreadPool command_tp;
 
-  void set_disk_tp_priority();
   void get_latest_osdmap();
 
   // -- sessions --
