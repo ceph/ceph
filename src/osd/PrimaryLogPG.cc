@@ -11631,7 +11631,7 @@ void PrimaryLogPG::on_activate()
 
 void PrimaryLogPG::_on_new_interval()
 {
-  dout(20) << __func__ << "checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
+  dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
   if (!pg_log.get_missing().may_include_deletes &&
       get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
     pg_log.rebuild_missing_set_with_deletes(osd->store, coll, info);
@@ -12024,9 +12024,6 @@ bool PrimaryLogPG::start_recovery_ops(
   if (state_test(PG_STATE_RECOVERING)) {
     state_clear(PG_STATE_RECOVERING);
     state_clear(PG_STATE_FORCED_RECOVERY);
-    if (get_osdmap()->get_pg_size(info.pgid.pgid) <= acting.size()) {
-      state_clear(PG_STATE_DEGRADED);
-    }
     if (needs_backfill()) {
       dout(10) << "recovery done, queuing backfill" << dendl;
       queue_peering_event(

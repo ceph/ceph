@@ -157,8 +157,8 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
   if (rhs.is_undefined())
     return lhs << "?";
   if (rhs.shard == shard_id_t::NO_SHARD)
-    return lhs << rhs.osd;
-  return lhs << rhs.osd << '(' << (unsigned)(rhs.shard) << ')';
+    return lhs << rhs.get_osd();
+  return lhs << rhs.get_osd() << '(' << (unsigned)(rhs.shard) << ')';
 }
 
 // -- osd_reqid_t --
@@ -5982,4 +5982,3 @@ void OSDOp::clear_data(vector<OSDOp>& ops)
     }
   }
 }
-

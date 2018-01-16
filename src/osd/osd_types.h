@@ -138,6 +138,7 @@ WRITE_CLASS_DENC(osd_reqid_t)
 
 
 struct pg_shard_t {
+  static const int32_t NO_OSD = 0x7fffffff;
   int32_t osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
@@ -146,6 +147,7 @@ struct pg_shard_t {
   bool is_undefined() const {
     return osd == -1;
   }
+  string get_osd() const { return (osd == NO_OSD ? "NONE" : to_string(osd)); }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const {
