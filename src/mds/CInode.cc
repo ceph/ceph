@@ -2730,7 +2730,7 @@ client_t CInode::calc_ideal_loner()
 {
   if (mdcache->is_readonly())
     return -1;
-  if (!mds_caps_wanted.empty())
+  if (!get_mds_caps_wanted().empty())
     return -1;
   
   int n = 0;
@@ -2844,6 +2844,43 @@ void CInode::choose_lock_states(int dirty_caps)
   choose_lock_state(&linklock, issued);
 }
 
+void CInode::set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m)
+{
+  bool old_empty = mds_caps_wanted.empty();
+  mds_caps_wanted.swap(m);
+  if (old_empty != (bool)mds_caps_wanted.empty()) {
+    if (old_empty)
+      adjust_num_caps_wanted(1);
+    else
+      adjust_num_caps_wanted(-1);
+  }
+}
+
+void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
+{
+  bool old_empty = mds_caps_wanted.empty();
+  if (wanted) {
+    mds_caps_wanted[mds] = wanted;
+    if (old_empty)
+      adjust_num_caps_wanted(1);
+  } else if (!old_empty) {
+    mds_caps_wanted.erase(mds);
+    if (mds_caps_wanted.empty())
+      adjust_num_caps_wanted(-1);
+  }
+}
+
+void CInode::adjust_num_caps_wanted(int d)
+{
+  if (!num_caps_wanted && d > 0)
+    ; // add 'this' to open file table
+  else if (num_caps_wanted > 0 && num_caps_wanted == -d)
+    ; // remove 'this' from open file table
+
+  num_caps_wanted +=d;
+  assert(num_caps_wanted >= 0);
+}
+
 Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
 {
   assert(last == CEPH_NOSNAP);
@@ -2887,6 +2924,9 @@ void CInode::remove_client_cap(client_t client)
   
   if (client == loner_cap)
     loner_cap = -1;
+
+  if (cap->wanted())
+    adjust_num_caps_wanted(-1);
 
   delete cap;
   client_caps.erase(client);
@@ -2947,7 +2987,10 @@ void CInode::clear_client_caps_after_export()
     remove_client_cap(client_caps.begin()->first);
   loner_cap = -1;
   want_loner_cap = -1;
-  mds_caps_wanted.clear();
+  if (!get_mds_caps_wanted().empty()) {
+    mempool::mds_co::compact_map<int32_t,int32_t> empty;
+    set_mds_caps_wanted(empty);
+  }
 }
 
 void CInode::export_client_caps(map<client_t,Capability::Export>& cl)

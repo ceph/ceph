@@ -2263,10 +2263,7 @@ void Locker::handle_inode_file_caps(MInodeFileCaps *m)
 
   dout(7) << "handle_inode_file_caps replica mds." << from << " wants caps " << ccap_string(m->get_caps()) << " on " << *in << dendl;
 
-  if (m->get_caps())
-    in->mds_caps_wanted[from] = m->get_caps();
-  else
-    in->mds_caps_wanted.erase(from);
+  in->set_mds_caps_wanted(from, m->get_caps());
 
   try_eval(in, CEPH_CAP_LOCKS);
   m->put();
@@ -3336,7 +3333,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	bool need_issue = false;
 	if (cap)
 	  cap->inc_suppress();
-	if (in->mds_caps_wanted.empty() &&
+	if (in->get_mds_caps_wanted().empty() &&
 	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
@@ -5042,7 +5039,7 @@ void Locker::file_excl(ScatterLock *lock, bool *need_issue)
   assert(in->is_auth());
   assert(lock->is_stable());
 
-  assert((in->get_loner() >= 0 && in->mds_caps_wanted.empty()) ||
+  assert((in->get_loner() >= 0 && in->get_mds_caps_wanted().empty()) ||
 	 (lock->get_state() == LOCK_XSYN));  // must do xsyn -> excl -> <anything else>
   
   switch (lock->get_state()) {
@@ -5103,7 +5100,7 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
   dout(7) << "file_xsyn on " << *lock << " on " << *lock->get_parent() << dendl;
   CInode *in = static_cast<CInode *>(lock->get_parent());
   assert(in->is_auth());
-  assert(in->get_loner() >= 0 && in->mds_caps_wanted.empty());
+  assert(in->get_loner() >= 0 && in->get_mds_caps_wanted().empty());
 
   switch (lock->get_state()) {
   case LOCK_EXCL: lock->set_state(LOCK_EXCL_XSYN); break;

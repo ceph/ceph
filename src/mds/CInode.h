@@ -564,7 +564,8 @@ protected:
   using cap_map = mempool::mds_co::map<client_t, Capability*>;
   cap_map client_caps;         // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
-  int                   replica_caps_wanted = 0; // [replica] what i've requested from auth
+  int replica_caps_wanted = 0; // [replica] what i've requested from auth
+  int num_caps_wanted = 0;
 
 public:
   mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
@@ -689,6 +690,7 @@ public:
     clear_file_locks();
     assert(num_projected_xattrs == 0);
     assert(num_projected_srnodes == 0);
+    assert(num_caps_wanted == 0);
   }
   
 
@@ -973,7 +975,8 @@ public:
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
 
   const mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() const { return mds_caps_wanted; }
-  mempool::mds_co::compact_map<int32_t,int32_t>& get_mds_caps_wanted() { return mds_caps_wanted; }
+  void set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m);
+  void set_mds_caps_wanted(mds_rank_t mds, int32_t wanted);
 
   const cap_map& get_client_caps() const { return client_caps; }
   Capability *get_client_cap(client_t client) {
@@ -990,6 +993,9 @@ public:
       return 0;
     }
   }
+
+  int get_num_caps_wanted() const { return num_caps_wanted; }
+  void adjust_num_caps_wanted(int d);
 
   Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
   void remove_client_cap(client_t client);
