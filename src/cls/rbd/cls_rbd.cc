@@ -5200,6 +5200,14 @@ int image_get_group(cls_method_context_t hctx,
 
 namespace group {
 
+static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
+
+std::string snap_key(std::string snap_id) {
+  ostringstream oss;
+  oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
+  return oss.str();
+}
+
 static int group_snap_list(cls_method_context_t hctx,
 			   cls::rbd::GroupSnapshot start_after,
 			   uint64_t max_return,
