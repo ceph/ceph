@@ -4122,6 +4122,7 @@ namespace {
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
     CACHE_TARGET_FULL_RATIO,
     CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
+    CACHE_PIN_HEAD,
     ERASURE_CODE_PROFILE, MIN_READ_RECENCY_FOR_PROMOTE,
     MIN_WRITE_RECENCY_FOR_PROMOTE, FAST_READ,
     HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N,
@@ -4738,6 +4739,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"cache_target_full_ratio", CACHE_TARGET_FULL_RATIO},
       {"cache_min_flush_age", CACHE_MIN_FLUSH_AGE},
       {"cache_min_evict_age", CACHE_MIN_EVICT_AGE},
+      {"cache_pin_head", CACHE_PIN_HEAD},
       {"erasure_code_profile", ERASURE_CODE_PROFILE},
       {"min_read_recency_for_promote", MIN_READ_RECENCY_FOR_PROMOTE},
       {"min_write_recency_for_promote", MIN_WRITE_RECENCY_FOR_PROMOTE},
@@ -4767,6 +4769,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       TARGET_MAX_OBJECTS, TARGET_MAX_BYTES, CACHE_TARGET_FULL_RATIO,
       CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
       CACHE_MIN_FLUSH_AGE, CACHE_MIN_EVICT_AGE,
+      CACHE_PIN_HEAD,
       MIN_READ_RECENCY_FOR_PROMOTE,
       MIN_WRITE_RECENCY_FOR_PROMOTE,
       HIT_SET_GRADE_DECAY_RATE, HIT_SET_SEARCH_LAST_N
@@ -4931,6 +4934,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case CACHE_MIN_EVICT_AGE:
 	    f->dump_unsigned("cache_min_evict_age", p->cache_min_evict_age);
 	    break;
+	  case CACHE_PIN_HEAD:
+	    f->dump_int("cache_pin_head", p->cache_pin_head);
+	    break;
 	  case ERASURE_CODE_PROFILE:
 	    f->dump_string("erasure_code_profile", p->erasure_code_profile);
 	    break;
@@ -5060,6 +5066,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    break;
 	  case CACHE_MIN_EVICT_AGE:
 	    ss << "cache_min_evict_age: " << p->cache_min_evict_age << "\n";
+	    break;
+	  case CACHE_PIN_HEAD:
+	    ss << "cache_pin_head: " << p->cache_pin_head << "\n";
 	    break;
 	  case ERASURE_CODE_PROFILE:
 	    ss << "erasure_code_profile: " << p->erasure_code_profile << "\n";
@@ -6507,6 +6516,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
   if (!p.is_tier() &&
       (var == "hit_set_type" || var == "hit_set_period" ||
        var == "hit_set_count" || var == "hit_set_fpp" ||
+       var == "cache_pin_head" ||
        var == "target_max_objects" || var == "target_max_bytes" ||
        var == "cache_target_full_ratio" || var == "cache_target_dirty_ratio" ||
        var == "cache_target_dirty_high_ratio" || var == "use_gmt_hitset" ||
@@ -6812,6 +6822,15 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     p.cache_min_evict_age = n;
+  } else if (var == "cache_pin_head") {
+    if (val == "true" || (interr.empty() && n == 1)) {
+      p.cache_pin_head = true;
+    } else if (val == "false" || (interr.empty() && n == 0)) {
+      p.cache_pin_head = false;
+    } else {
+      ss << "expecting value 'true', 'false', '0', or '1'";
+      return -EINVAL;
+    }
   } else if (var == "min_read_recency_for_promote") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
