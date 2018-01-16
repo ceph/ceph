@@ -15,11 +15,11 @@
 #include <core/sharded.hh>
 
 #include "include/buffer_raw.h"
+#include "buffer_seastar.h"
 
 using temporary_buffer = seastar::temporary_buffer<char>;
 
-namespace ceph {
-namespace buffer {
+namespace ceph::buffer {
 
 class raw_seastar_foreign_ptr : public raw {
   seastar::foreign_ptr<temporary_buffer> ptr;
@@ -77,5 +77,32 @@ list::operator seastar::net::packet() &&
   return p;
 }
 
-} // namespace buffer
-} // namespace ceph
+} // namespace ceph::buffer
+
+namespace {
+
+using ceph::buffer::raw;
+class raw_seastar_local_shared_ptr : public raw {
+  temporary_buffer buf;
+public:
+  raw_seastar_local_shared_ptr(temporary_buffer& buf)
+    : raw(buf.get_write(), buf.size()), buf(buf.share()) {}
+  raw* clone_empty() override {
+    return ceph::buffer::create(len);
+  }
+};
+}
+
+buffer::ptr seastar_buffer_iterator::get_ptr(size_t len)
+{
+  buffer::raw* r = new raw_seastar_local_shared_ptr{buf};
+  buffer::ptr p{r};
+  p.set_length(len);
+  return p;
+}
+
+buffer::ptr const_seastar_buffer_iterator::get_ptr(size_t len)
+{
+  buffer::raw* r = buffer::copy(get_pos_add(len), len);
+  return buffer::ptr{r};
+}
