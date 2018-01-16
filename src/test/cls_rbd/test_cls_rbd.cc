@@ -2524,6 +2524,7 @@ TEST_F(TestClsRbd, op_features)
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);
 
+  op_features = RBD_OPERATION_FEATURES_ALL;
   mask = RBD_OPERATION_FEATURES_ALL;
   ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
@@ -2541,7 +2542,7 @@ TEST_F(TestClsRbd, op_features)
                                     ~RBD_OPERATION_FEATURE_CLONE_V2;
   ASSERT_EQ(expected_op_features, actual_op_features);
 
-  mask = 0;
+  mask = RBD_OPERATION_FEATURES_ALL;
   ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);
