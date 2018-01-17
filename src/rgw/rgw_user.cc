@@ -1012,14 +1012,14 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   case KEY_TYPE_S3:
     id = op_state.get_access_key();
     if (id.empty()) {
-      set_err_msg(err_msg, "no access key specified");
+      set_err_msg(err_msg, "no S3 key specified");
       return -ERR_INVALID_ACCESS_KEY;
     }
     break;
   case KEY_TYPE_SWIFT:
     id = op_state.build_default_swift_kid();
     if (id.empty()) {
-      set_err_msg(err_msg, "no subuser specified");
+      set_err_msg(err_msg, "no swift key specified");
       return -EINVAL;
     }
     break;
