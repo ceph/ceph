@@ -114,6 +114,8 @@ workload_luminous:
          client.1:
          - rados/test.sh
          - cls
+       env:
+         CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.snapshots_namespaces'
    - print: "**** done rados/test.sh &  cls workload_luminous"
    - sequential:
      - rgw: [client.0]
