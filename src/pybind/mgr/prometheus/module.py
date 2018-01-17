@@ -57,6 +57,8 @@ OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
 OSD_STATUS = ['weight', 'up', 'in']
 
+OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
+
 POOL_METADATA = ('pool_id', 'name')
 
 DISK_OCCUPATION = ('instance', 'device', 'ceph_daemon')
@@ -201,6 +203,15 @@ class Module(MgrModule):
                 'OSD status {}'.format(state),
                 ('ceph_daemon',)
             )
+        for stat in OSD_STATS:
+            path = 'osd_{}'.format(stat)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD stat {}'.format(stat),
+                ('ceph_daemon',)
+            )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -271,6 +282,16 @@ class Module(MgrModule):
                 except KeyError:
                     self.log.warn("skipping pg in unknown state {}".format(state))
 
+    def get_osd_stats(self):
+        osd_stats = self.get('osd_stats')
+        for osd in osd_stats['osd_stats']:
+            id_ = osd['osd']
+            for stat in OSD_STATS:
+                status = osd['perf_stat'][stat]
+                self.metrics['osd_{}'.format(stat)].set(
+                    status,
+                    ('osd.{}'.format(id_),))
+
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_devices = self.get('osd_map_crush')['devices']
@@ -320,6 +341,7 @@ class Module(MgrModule):
     def collect(self):
         self.get_health()
         self.get_df()
+        self.get_osd_stats()
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
