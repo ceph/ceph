@@ -66,7 +66,7 @@ struct cls_rbd_snap {
   cls_rbd_parent parent;
   uint64_t flags;
   utime_t timestamp;
-  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace = {
+  cls::rbd::SnapshotNamespace snapshot_namespace = {
     cls::rbd::UserSnapshotNamespace{}};
 
   /// true if we have a parent

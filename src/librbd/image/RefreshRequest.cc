@@ -133,10 +133,12 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": " << "r=" << *result << dendl;
 
+  std::vector<std::string> snap_names;
+  std::vector<uint64_t> snap_sizes;
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::old_snapshot_list_finish(
-      &it, &m_snap_names, &m_snap_sizes, &m_snapc);
+    *result = cls_client::old_snapshot_list_finish(&it, &snap_names,
+                                                   &snap_sizes, &m_snapc);
   }
 
   if (*result < 0) {
@@ -151,12 +153,12 @@ Context *RefreshRequest<I>::handle_v1_get_snapshots(int *result) {
     return m_on_finish;
   }
 
-  //m_snap_namespaces = {m_snap_names.size(), cls::rbd::UserSnapshotNamespace()};
-  m_snap_namespaces = std::vector<cls::rbd::SnapshotNamespace>(
-					    m_snap_names.size(),
-					    cls::rbd::UserSnapshotNamespace());
-
-  m_snap_timestamps = std::vector<utime_t>(m_snap_names.size(), utime_t());
+  m_snap_infos.clear();
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    m_snap_infos.push_back({m_snapc.snaps[i],
+                            {cls::rbd::UserSnapshotNamespace{}},
+                            snap_names[i], snap_sizes[i], {}});
+  }
 
   send_v1_get_locks();
   return nullptr;
@@ -378,6 +380,7 @@ Context *RefreshRequest<I>::handle_v2_get_flags(int *result) {
                  << "r=" << *result << dendl;
 
   if (*result == 0) {
+    /// NOTE: remove support for snap paramter after Luminous is retired
     bufferlist::iterator it = m_out_bl.begin();
     cls_client::get_flags_finish(&it, &m_flags, m_snapc.snaps, &m_snap_flags);
   }
@@ -495,12 +498,9 @@ Context *RefreshRequest<I>::handle_v2_get_group(int *result) {
 template <typename I>
 void RefreshRequest<I>::send_v2_get_snapshots() {
   if (m_snapc.snaps.empty()) {
-    m_snap_names.clear();
-    m_snap_namespaces.clear();
-    m_snap_sizes.clear();
+    m_snap_infos.clear();
     m_snap_parents.clear();
     m_snap_protection.clear();
-    m_snap_timestamps.clear();
     send_v2_refresh_parent();
     return;
   }
@@ -509,7 +509,7 @@ void RefreshRequest<I>::send_v2_get_snapshots() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::snapshot_list_start(&op, m_snapc.snaps);
+  cls_client::snapshot_get_start(&op, m_snapc.snaps);
 
   using klass = RefreshRequest<I>;
   librados::AioCompletion *comp = create_rados_callback<
@@ -529,9 +529,60 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
 
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
+    *result = cls_client::snapshot_get_finish(&it, m_snapc.snaps, &m_snap_infos,
+                                              &m_snap_parents,
+                                              &m_snap_protection);
+  }
+  if (*result == -ENOENT) {
+    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
+    send_v2_get_mutable_metadata();
+    return nullptr;
+  } else if (*result == -EOPNOTSUPP) {
+    ldout(cct, 10) << "retrying using legacy snapshot methods" << dendl;
+    send_v2_get_snapshots_legacy();
+    return nullptr;
+  } else if (*result < 0) {
+    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
+               << dendl;
+    return m_on_finish;
+  }
+
+  send_v2_refresh_parent();
+  return nullptr;
+}
+
+template <typename I>
+void RefreshRequest<I>::send_v2_get_snapshots_legacy() {
+  /// NOTE: remove after Luminous is retired
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::snapshot_list_start(&op, m_snapc.snaps);
+
+  using klass = RefreshRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_snapshots_legacy>(this);
+  m_out_bl.clear();
+  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
+                                         &m_out_bl);
+  assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *RefreshRequest<I>::handle_v2_get_snapshots_legacy(int *result) {
+  /// NOTE: remove after Luminous is retired
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 10) << this << " " << __func__ << ": "
+                 << "r=" << *result << dendl;
+
+  std::vector<std::string> snap_names;
+  std::vector<uint64_t> snap_sizes;
+  if (*result == 0) {
+    bufferlist::iterator it = m_out_bl.begin();
     *result = cls_client::snapshot_list_finish(&it, m_snapc.snaps,
-                                               &m_snap_names,
-					       &m_snap_sizes,
+                                               &snap_names, &snap_sizes,
                                                &m_snap_parents,
                                                &m_snap_protection);
   }
@@ -545,12 +596,20 @@ Context *RefreshRequest<I>::handle_v2_get_snapshots(int *result) {
     return m_on_finish;
   }
 
+  m_snap_infos.clear();
+  for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+    m_snap_infos.push_back({m_snapc.snaps[i],
+                            {cls::rbd::UserSnapshotNamespace{}},
+                            snap_names[i], snap_sizes[i], {}});
+  }
+
   send_v2_get_snap_timestamps();
   return nullptr;
 }
 
 template <typename I>
 void RefreshRequest<I>::send_v2_get_snap_timestamps() {
+  /// NOTE: remove after Luminous is retired
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
@@ -569,78 +628,36 @@ void RefreshRequest<I>::send_v2_get_snap_timestamps() {
 
 template <typename I>
 Context *RefreshRequest<I>::handle_v2_get_snap_timestamps(int *result) {
+  /// NOTE: remove after Luminous is retired
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " " << __func__ << ": " << "r=" << *result << dendl;
 
+  std::vector<utime_t> snap_timestamps;
   if (*result == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::snapshot_timestamp_list_finish(&it, m_snapc.snaps, &m_snap_timestamps);
+    *result = cls_client::snapshot_timestamp_list_finish(&it, m_snapc.snaps,
+                                                         &snap_timestamps);
   }
   if (*result == -ENOENT) {
     ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
     send_v2_get_mutable_metadata();
     return nullptr;
   } else if (*result == -EOPNOTSUPP) {
-    m_snap_timestamps = std::vector<utime_t>(m_snap_names.size(), utime_t());
     // Ignore it means no snap timestamps are available
   } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
-               << dendl;
+    lderr(cct) << "failed to retrieve snapshot timestamps: "
+               << cpp_strerror(*result) << dendl;
     return m_on_finish;
-  }
-
-  send_v2_get_snap_namespaces();
-  return nullptr;
-}
-
-template <typename I>
-void RefreshRequest<I>::send_v2_get_snap_namespaces() {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  librados::ObjectReadOperation op;
-  cls_client::snapshot_namespace_list_start(&op, m_snapc.snaps);
-
-  using klass = RefreshRequest<I>;
-  librados::AioCompletion *comp = create_rados_callback<
-    klass, &klass::handle_v2_get_snap_namespaces>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op,
-                                         &m_out_bl);
-  assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-Context *RefreshRequest<I>::handle_v2_get_snap_namespaces(int *result) {
-  CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << this << " " << __func__ << ": "
-                 << "r=" << *result << dendl;
-
-  if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
-    *result = cls_client::snapshot_namespace_list_finish(&it, m_snapc.snaps,
-                                                         &m_snap_namespaces);
-  }
-  if (*result == -ENOENT) {
-    ldout(cct, 10) << "out-of-sync snapshot state detected" << dendl;
-    send_v2_get_mutable_metadata();
-    return nullptr;
-  } else if (*result == -EOPNOTSUPP) {
-    m_snap_namespaces = std::vector
-				<cls::rbd::SnapshotNamespace>(
-					     m_snap_names.size(),
-					     cls::rbd::UserSnapshotNamespace());
-    // Ignore it means no snap namespaces are available
-  } else if (*result < 0) {
-    lderr(cct) << "failed to retrieve snapshots: " << cpp_strerror(*result)
-               << dendl;
-    return m_on_finish;
+  } else {
+    for (size_t i = 0; i < m_snapc.snaps.size(); ++i) {
+      m_snap_infos[i].timestamp = snap_timestamps[i];
+    }
   }
 
   send_v2_refresh_parent();
   return nullptr;
 }
+
 
 template <typename I>
 void RefreshRequest<I>::send_v2_refresh_parent() {
@@ -850,8 +867,8 @@ void RefreshRequest<I>::send_v2_open_object_map() {
   if (m_image_ctx.snap_name.empty()) {
     m_object_map = m_image_ctx.create_object_map(CEPH_NOSNAP);
   } else {
-    for (size_t snap_idx = 0; snap_idx < m_snap_names.size(); ++snap_idx) {
-      if (m_snap_names[snap_idx] == m_image_ctx.snap_name) {
+    for (size_t snap_idx = 0; snap_idx < m_snap_infos.size(); ++snap_idx) {
+      if (m_snap_infos[snap_idx].name == m_image_ctx.snap_name) {
         m_object_map = m_image_ctx.create_object_map(
           m_snapc.snaps[snap_idx].val);
         break;
@@ -1143,8 +1160,8 @@ void RefreshRequest<I>::apply() {
       if (it == m_image_ctx.snaps.end()) {
         m_flush_aio = true;
         ldout(cct, 20) << "new snapshot id=" << m_snapc.snaps[i].val
-                       << " name=" << m_snap_names[i]
-                       << " size=" << m_snap_sizes[i]
+                       << " name=" << m_snap_infos[i].name
+                       << " size=" << m_snap_infos[i].image_size
                        << dendl;
       }
     }
@@ -1162,9 +1179,11 @@ void RefreshRequest<I>::apply() {
         parent = m_snap_parents[i];
       }
 
-      m_image_ctx.add_snap(m_snap_namespaces[i], m_snap_names[i],
-			   m_snapc.snaps[i].val, m_snap_sizes[i], parent,
-			   protection_status, flags, m_snap_timestamps[i]);
+      m_image_ctx.add_snap(m_snap_infos[i].snapshot_namespace,
+                           m_snap_infos[i].name, m_snapc.snaps[i].val,
+                           m_snap_infos[i].image_size, parent,
+			   protection_status, flags,
+                           m_snap_infos[i].timestamp);
     }
     m_image_ctx.snapc = m_snapc;
 
