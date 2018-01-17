@@ -862,8 +862,11 @@ remove_image_snaps:
     ictx->snap_lock.put_read();
     if (r >= 0) {
       ictx->operations->snap_remove(ne, snap_name.c_str(), on_finishes[i]);
+    } else {
+      // Ignore missing image snapshots. The whole snapshot could have been
+      // inconsistent.
+      on_finishes[i]->complete(0);
     }
-    // Ignore missing image snapshots. The whole snapshot could have been inconsistent.
   }
 
   for (int i = 0, n = on_finishes.size(); i < n; ++i) {
