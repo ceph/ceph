@@ -299,10 +299,13 @@ public:
 			     Context *on_complete) override;
 
   template<class T> class BlessedGenContext;
+  template<class T> class UnlockedBlessedGenContext;
   class BlessedContext;
   Context *bless_context(Context *c) override;
 
   GenContext<ThreadPool::TPHandle&> *bless_gencontext(
+    GenContext<ThreadPool::TPHandle&> *c) override;
+  GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) override;
     
   void send_message(int to_osd, Message *m) override {
