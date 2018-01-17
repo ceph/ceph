@@ -365,7 +365,8 @@
                             <th>Name</th>
                             <th>PG status</th>
                             <th>Usage</th>
-                            <th>Activity</th>
+                            <th colspan="2">Read</th>
+                            <th colspan="2">Write</th>
                             </thead>
                             <tbody>
                             <tr rv-each-pool="pools">
@@ -380,8 +381,16 @@
                                     {pool.stats.max_avail.latest | dimless_binary }
                                 </td>
                                 <td>
-                                    {pool.stats.rd_bytes.rate | dimless } rd, {
-                                    pool.stats.wr_bytes.rate | dimless } wr
+                                    {pool.stats.rd_bytes.rate | dimless }
+                                </td>
+                                <td>
+                                    {pool.stats.rd.rate | dimless } ops
+                                </td>
+                                <td>
+                                    {pool.stats.wr_bytes.rate | dimless }
+                                </td>
+                                <td>
+                                    {pool.stats.wr.rate | dimless } ops
                                 </td>
                             </tr>
                             </tbody>
