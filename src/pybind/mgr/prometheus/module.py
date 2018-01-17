@@ -284,7 +284,7 @@ class Module(MgrModule):
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
-            self.metrics['osd_metadata'].set(0, (
+            self.metrics['osd_metadata'].set(1, (
                 c_addr,
                 dev_class['class'],
                 id_,
@@ -308,7 +308,7 @@ class Module(MgrModule):
             if osd_dev_node and osd_hostname:
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
                     id_, osd_hostname, osd_dev_node))
-                self.metrics['disk_occupation'].set(0, (
+                self.metrics['disk_occupation'].set(1, (
                     osd_hostname,
                     osd_dev_node,
                     "osd.{0}".format(id_)
@@ -320,7 +320,7 @@ class Module(MgrModule):
         for pool in osd_map['pools']:
             id_ = pool['pool']
             name = pool['pool_name']
-            self.metrics['pool_metadata'].set(0, (id_, name))
+            self.metrics['pool_metadata'].set(1, (id_, name))
 
     def collect(self):
         self.get_health()
