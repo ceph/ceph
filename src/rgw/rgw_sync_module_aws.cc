@@ -564,6 +564,33 @@ public:
 
     ldout(sync_env->cct, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
 
+    if (extra_data.length() > 0) {
+      JSONParser jp;
+      if (!jp.parse(extra_data.c_str(), extra_data.length())) {
+        ldout(sync_env->cct, 0) << "ERROR: failed to parse response extra data. len=" << extra_data.length() << " data=" << extra_data.c_str() << dendl;
+        return -EIO;
+      }
+
+      map<string, bufferlist> src_attrs;
+
+      JSONDecoder::decode_json("attrs", src_attrs, &jp);
+
+      info->acls.set_ctx(sync_env->cct);
+      auto aiter = src_attrs.find(RGW_ATTR_ACL);
+      if (aiter != src_attrs.end()) {
+        bufferlist& bl = aiter->second;
+        bufferlist::iterator bliter = bl.begin();
+        try {
+          info->acls.decode(bliter);
+        } catch (buffer::error& err) {
+          ldout(sync_env->cct, 0) << "ERROR: failed to decode policy off extra data" << dendl;
+          return -EIO;
+        }
+      } else {
+        ldout(sync_env->cct, 0) << "WARNING: acl attrs not provided in extra data" << dendl;
+      }
+    }
+
     return 0;
 
   }
@@ -612,11 +639,87 @@ public:
   void send_ready(const rgw_rest_obj& rest_obj) override {
     RGWRESTStreamS3PutObj *r = (RGWRESTStreamS3PutObj *)req;
 
-    RGWAccessControlPolicy policy;
+    map<string, string> new_attrs = rest_obj.attrs;
+
+    auto acl = rest_obj.acls.get_acl();
+
+    map<int, vector<string> > access_map;
+
+    for (auto& grant : acl.get_grant_map()) {
+      auto& grantee = grant.first;
+      auto& perm = grant.second;
+
+      string type;
+
+      switch (perm.get_type().get_type()) {
+        case ACL_TYPE_CANON_USER:
+          type = "id";
+          break;
+        case ACL_TYPE_EMAIL_USER:
+          type = "emailAddress";
+          break;
+        case ACL_TYPE_GROUP:
+          type = "uri";
+          break;
+        default:
+          continue;
+      }
+
+      string tv = type + "=" + grantee;
+
+      int flags = perm.get_permission().get_permissions();
+      if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
+        access_map[flags].push_back(tv);
+        continue;
+      }
+
+      for (int i = 1; i <= RGW_PERM_WRITE_ACP; i <<= 1) {
+        if (flags & i) {
+          access_map[i].push_back(tv);
+        }
+      }
+    }
+
+    for (auto aiter : access_map) {
+      int grant_type = aiter.first;
+
+      string header_str("x-amz-grant-");
+
+      switch (grant_type) {
+        case RGW_PERM_READ:
+          header_str.append("read");
+          break;
+        case RGW_PERM_WRITE:
+          header_str.append("write");
+          break;
+        case RGW_PERM_READ_ACP:
+          header_str.append("read-acp");
+          break;
+        case RGW_PERM_WRITE_ACP:
+          header_str.append("write-acp");
+          break;
+        case RGW_PERM_FULL_CONTROL:
+          header_str.append("full-control");
+          break;
+      }
+
+      string s;
+
+      for (auto viter : aiter.second) {
+        if (!s.empty()) {
+          s.append(", ");
+        }
+        s.append(viter);
+      }
+
+      new_attrs[header_str] = s;
+    }
 
     r->set_send_length(rest_obj.content_len);
 
-    r->send_ready(conn->get_key(), rest_obj.attrs, policy, false);
+    RGWAccessControlPolicy policy;
+
+    r->send_ready(conn->get_key(), new_attrs, policy, false);
   }
 
   void handle_headers(const map<string, string>& headers) {
