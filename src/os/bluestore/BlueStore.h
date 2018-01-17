@@ -23,6 +23,7 @@
 #include <mutex>
 #include <condition_variable>
 
+#include <boost/container/small_vector.hpp>
 #include <boost/intrusive/list.hpp>
 #include <boost/intrusive/unordered_set.hpp>
 #include <boost/intrusive/set.hpp>
@@ -1723,7 +1724,7 @@ public:
       using region_t::region_t;
     };
 
-    std::vector<plain_region_t> regions2read;
+    boost::container::small_vector<plain_region_t, 1> regions2read;
 
     void add_region_hint(
       const uint64_t logical_offset,
@@ -1739,7 +1740,7 @@ public:
   };
 
   class CompressedRegionReader : public RegionReader {
-    std::vector<region_t> regions2read;
+    boost::container::small_vector<region_t, 1> regions2read;
     ceph::bufferlist compressed_bl;
    
     void add_region_hint(
@@ -1794,7 +1795,7 @@ public:
       }
     };
 
-    std::vector<read_ctx_t> read_ctx_batch;
+    boost::container::small_vector<read_ctx_t, 1> read_ctx_batch;
     Context* on_all_complete;
     IOContext ioc;
 
