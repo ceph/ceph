@@ -7240,7 +7240,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   int64_t osdid;
   string name;
-  bool osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  bool osdid_present = false;
+  if (prefix != "osd pg-temp" &&
+      prefix != "osd pg-upmap" &&
+      prefix != "osd pg-upmap-items") {  // avoid commands with non-int id arg
+    osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  }
   if (osdid_present) {
     ostringstream oss;
     oss << "osd." << osdid;
