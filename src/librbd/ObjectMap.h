@@ -46,7 +46,7 @@ public:
 
   void open(Context *on_finish);
   void close(Context *on_finish);
-
+  bool set_object_map(ceph::BitVector<2> &target_object_map);
   bool object_may_exist(uint64_t object_no) const;
 
   void aio_save(Context *on_finish);
