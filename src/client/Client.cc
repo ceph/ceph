@@ -12714,7 +12714,7 @@ int Client::ll_read_block(Inode *in, uint64_t blockid,
   if (unmounting)
     return -ENOTCONN;
 
-  vinodeno_t vino = ll_get_vino(in);
+  vinodeno_t vino = _get_vino(in);
   object_t oid = file_object_t(vino.ino, blockid);
   C_SaferCond onfinish;
   bufferlist bl;
@@ -12823,7 +12823,7 @@ int Client::ll_commit_blocks(Inode *in,
     Mutex::Locker lock(client_lock);
     /*
     BarrierContext *bctx;
-    vinodeno_t vino = ll_get_vino(in);
+    vinodeno_t vino = _get_vino(in);
     uint64_t ino = vino.ino;
 
     ldout(cct, 1) << "ll_commit_blocks for " << vino.ino << " from "
