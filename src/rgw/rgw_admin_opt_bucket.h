@@ -12,7 +12,7 @@
 #include "common/ceph_argparse.h"
 
 template <class T, class K>
-static int read_decode_json(const string& infile, T& t, K *k)
+int read_decode_json(const string& infile, T& t, K *k)
 {
   bufferlist bl;
   int ret = read_input(infile, bl);
@@ -77,5 +77,56 @@ int handle_opt_bucket_sync_status(const string& source_zone, const string& bucke
 int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_name, const string& bucket_id,
                                const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store);
 
+int handle_opt_bi_get(const string& object, const string& bucket_id, const string& bucket_name, const string& tenant,
+                      BIIndexType bi_index_type, const string& object_version, rgw_bucket& bucket, RGWRados *store, Formatter *formatter);
+
+int handle_opt_bi_put(const string& bucket_id, const string& bucket_name, const string& tenant, const string& infile,
+                      const string& object_version, rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_bi_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
+                       const string& object, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter);
+
+int handle_opt_bi_purge(const string& bucket_id, const string& bucket_name, const string& tenant, bool yes_i_really_mean_it,
+                        rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_bilog_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
+                          int shard_id, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter);
+
+int handle_opt_bilog_trim(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
+                          string& start_marker, string& end_marker, rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_bilog_status(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
+                            rgw_bucket& bucket, RGWRados *store, Formatter *formatter);
+
+int handle_opt_bilog_autotrim(RGWRados *store);
+
+int handle_opt_reshard_add(const string& bucket_id, const string& bucket_name, const string& tenant,
+                           bool num_shards_specified, int num_shards, bool yes_i_really_mean_it,
+                           RGWRados *store);
+
+int handle_opt_reshard_list(int max_entries, RGWRados *store, Formatter *formatter);
+
+int handle_opt_reshard_status(const string& bucket_id, const string& bucket_name, const string& tenant,
+                              RGWRados *store, Formatter *formatter);
+
+int handle_opt_reshard_process(RGWRados *store);
+
+int handle_opt_reshard_cancel(const string& bucket_name, RGWRados *store);
+
+int handle_opt_object_rm(const string& bucket_id, const string& bucket_name, const string& tenant, const string& object,
+                         const string& object_version, rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_object_rewrite(const string& bucket_id, const string& bucket_name, const string& tenant,
+                              const string& object, const string& object_version, uint64_t min_rewrite_stripe_size,
+                              rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_object_expire(RGWRados *store);
+
+int handle_opt_object_unlink(const string& bucket_id, const string& bucket_name, const string& tenant,
+                             const string& object, const string& object_version, rgw_bucket& bucket, RGWRados *store);
+
+int handle_opt_object_stat(const string& bucket_id, const string& bucket_name, const string& tenant,
+                           const string& object, const string& object_version, rgw_bucket& bucket,
+                           RGWRados *store, Formatter *formatter);
 
 #endif //CEPH_RGW_ADMIN_BUCKET_H
