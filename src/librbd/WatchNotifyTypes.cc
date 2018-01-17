@@ -204,23 +204,20 @@ void ResizePayload::dump(Formatter *f) const {
 void SnapPayloadBase::encode(bufferlist &bl) const {
   using ceph::encode;
   encode(snap_name, bl);
-  encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  encode(snap_namespace, bl);
 }
 
 void SnapPayloadBase::decode(__u8 version, bufferlist::iterator &iter) {
   using ceph::decode;
   decode(snap_name, iter);
   if (version >= 6) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    decode(sn, iter);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, iter);
   }
 }
 
 void SnapPayloadBase::dump(Formatter *f) const {
   f->dump_string("snap_name", snap_name);
-  cls::rbd::SnapshotNamespaceOnDisk sn(snap_namespace);
-  sn.dump(f);
+  snap_namespace.dump(f);
 }
 
 void SnapCreatePayload::encode(bufferlist &bl) const {
@@ -231,9 +228,7 @@ void SnapCreatePayload::decode(__u8 version, bufferlist::iterator &iter) {
   using ceph::decode;
   SnapPayloadBase::decode(version, iter);
   if (version == 5) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    decode(sn, iter);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, iter);
   }
 }
 

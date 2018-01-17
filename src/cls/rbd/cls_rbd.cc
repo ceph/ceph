@@ -1562,6 +1562,14 @@ int get_data_pool(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ * Input:
+ * @param snap_id which snapshot to query
+ *
+ * Output:
+ * @param name (string) of the snapshot
+ * @returns 0 on success, negative error code on failure
+ */
 int get_snapshot_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t snap_id;
@@ -1590,10 +1598,20 @@ int get_snapshot_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out
   return 0;
 }
 
+/**
+ * Input:
+ * @param snap_id which snapshot to query
+ *
+ * Output:
+ * @param timestamp (utime_t) of the snapshot
+ * @returns 0 on success, negative error code on failure
+ *
+ * NOTE: deprecated - remove this method after Luminous is unsupported
+ */
 int get_snapshot_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t snap_id;
-  
+
   bufferlist::iterator iter = in->begin();
   try {
     decode(snap_id, iter);
@@ -1606,7 +1624,7 @@ int get_snapshot_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist
   if (snap_id == CEPH_NOSNAP) {
     return -EINVAL;
   }
-  
+
   cls_rbd_snap snap;
   string snapshot_key;
   key_from_snap_id(snap_id, &snapshot_key);
@@ -1620,16 +1638,14 @@ int get_snapshot_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist
 }
 
 /**
- * Retrieve namespace of a snapshot.
- *
  * Input:
- * @param snap_id id of the snapshot (uint64_t)
+ * @param snap_id which snapshot to query
  *
  * Output:
- * @param SnapshotNamespace
- * @returns 0 on success, negative error code on failure.
+ * @param snapshot (cls::rbd::SnapshotInfo)
+ * @returns 0 on success, negative error code on failure
  */
-int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+int snapshot_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   uint64_t snap_id;
 
@@ -1640,8 +1656,7 @@ int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist
     return -EINVAL;
   }
 
-  CLS_LOG(20, "get_snapshot_namespace snap_id=%" PRIu64, snap_id);
-
+  CLS_LOG(20, "snapshot_get snap_id=%llu", (unsigned long long)snap_id);
   if (snap_id == CEPH_NOSNAP) {
     return -EINVAL;
   }
@@ -1654,8 +1669,10 @@ int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist
     return r;
   }
 
-  encode(snap.snapshot_namespace, *out);
-
+  cls::rbd::SnapshotInfo snapshot_info{snap.id, snap.snapshot_namespace,
+                                       snap.name, snap.image_size,
+                                       snap.timestamp};
+  encode(snapshot_info, *out);
   return 0;
 }
 
@@ -1665,7 +1682,7 @@ int get_snapshot_namespace(cls_method_context_t hctx, bufferlist *in, bufferlist
  * Input:
  * @param snap_name name of the snapshot (string)
  * @param snap_id id of the snapshot (uint64_t)
- * @param snap_namespace namespace of the snapshot (cls::rbd::SnapshotNamespaceOnDisk)
+ * @param snap_namespace namespace of the snapshot (cls::rbd::SnapshotNamespace)
  *
  * Output:
  * @returns 0 on success, negative error code on failure.
@@ -1690,7 +1707,7 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   }
 
   if (boost::get<cls::rbd::UnknownSnapshotNamespace>(
-        &snap_meta.snapshot_namespace.snapshot_namespace) != nullptr) {
+        &snap_meta.snapshot_namespace) != nullptr) {
     CLS_ERR("Unknown snapshot namespace provided");
     return -EINVAL;
   }
@@ -5678,8 +5695,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_object_prefix;
   cls_method_handle_t h_get_data_pool;
   cls_method_handle_t h_get_snapshot_name;
-  cls_method_handle_t h_get_snapshot_namespace;
   cls_method_handle_t h_get_snapshot_timestamp;
+  cls_method_handle_t h_snapshot_get;
   cls_method_handle_t h_snapshot_add;
   cls_method_handle_t h_snapshot_remove;
   cls_method_handle_t h_snapshot_rename;
@@ -5780,12 +5797,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "get_snapshot_name",
 			  CLS_METHOD_RD,
 			  get_snapshot_name, &h_get_snapshot_name);
-  cls_register_cxx_method(h_class, "get_snapshot_namespace",
-			  CLS_METHOD_RD,
-			  get_snapshot_namespace, &h_get_snapshot_namespace);
   cls_register_cxx_method(h_class, "get_snapshot_timestamp",
 			  CLS_METHOD_RD,
 			  get_snapshot_timestamp, &h_get_snapshot_timestamp);
+  cls_register_cxx_method(h_class, "snapshot_get",
+                          CLS_METHOD_RD,
+                          snapshot_get, &h_snapshot_get);
   cls_register_cxx_method(h_class, "snapshot_add",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_add, &h_snapshot_add);
