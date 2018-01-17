@@ -141,6 +141,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual Context *bless_context(Context *c) = 0;
      virtual GenContext<ThreadPool::TPHandle&> *bless_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
+     virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual void send_message(int to_osd, Message *m) = 0;
      virtual void queue_transaction(
