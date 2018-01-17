@@ -6,6 +6,7 @@
 
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "common/ceph_time.h"
 #include "include/Context.h"
 #include "include/utime.h"
 #include "include/rbd/librbd.hpp"
@@ -53,7 +54,7 @@ struct AioCompletion {
   int ref;
   bool released;
   ImageCtx *ictx;
-  utime_t start_time;
+  coarse_mono_time start_time;
   aio_type_t aio_type;
 
   ReadResult read_result;

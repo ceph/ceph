@@ -35,6 +35,7 @@
 #include <map>
 using std::map;
 using std::vector;
+using std::chrono::duration_cast;
 
 #include "common/config.h"
 #include "common/errno.h"
@@ -148,31 +149,35 @@ void MDBalancer::handle_export_pins(void)
 void MDBalancer::tick()
 {
   static int num_bal_times = g_conf->mds_bal_max;
-  static utime_t first = ceph_clock_now();
-  utime_t now = ceph_clock_now();
-  utime_t elapsed = now;
-  elapsed -= first;
+  static mono_time first = mono_clock::now();
+  mono_time now = mono_clock::now();
+  ceph::timespan elapsed = now - first;
 
   if (g_conf->mds_bal_export_pin) {
     handle_export_pins();
   }
 
   // sample?
-  if ((double)now - (double)last_sample > g_conf->mds_bal_sample_interval) {
+  if (chrono::duration<double> (now - last_sample).count() >
+    g_conf->mds_bal_sample_interval) {
     dout(15) << "tick last_sample now " << now << dendl;
     last_sample = now;
   }
 
+  // We can use duration_cast below, although the result is an int,
+  // because the values from g_conf are also integers.
   // balance?
-  if (last_heartbeat == utime_t())
+  if (mono_clock::is_zero(last_heartbeat))
     last_heartbeat = now;
   if (mds->get_nodeid() == 0 &&
       g_conf->mds_bal_interval > 0 &&
       (num_bal_times ||
        (g_conf->mds_bal_max_until >= 0 &&
-	elapsed.sec() > g_conf->mds_bal_max_until)) &&
+        duration_cast<chrono::seconds>(elapsed).count() >
+          g_conf->mds_bal_max_until)) &&
       mds->is_active() &&
-      now.sec() - last_heartbeat.sec() >= g_conf->mds_bal_interval) {
+      duration_cast<chrono::seconds>(now - last_heartbeat).count() >=
+       g_conf->mds_bal_interval) {
     last_heartbeat = now;
     send_heartbeat();
     num_bal_times--;

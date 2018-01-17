@@ -16,12 +16,15 @@
                            // now, this include has to come before the others.
 
 
+#include "common/Clock.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket_client.h"
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/ceph_time.h"
+#include "include/utime.h"
 
 #include "common/code_environment.h"
 #include "global/global_context.h"
@@ -40,6 +43,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/un.h>
+#include <thread>
 #include <time.h>
 #include <unistd.h>
 
@@ -218,4 +222,57 @@ TEST(PerfCounters, ResetPerfCounters) {
   coll->clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf reset\", \"var\": \"test_perfcounter_1\", \"format\": \"json\" }", &msg));
   ASSERT_EQ(sd("{\"error\":\"Not find: test_perfcounter_1\"}"), msg);
+}
+
+enum {
+  TEST_PERFCOUNTERS3_ELEMENT_FIRST = 800,
+  TEST_PERFCOUNTERS3_ELEMENT_1,
+  TEST_PERFCOUNTERS3_ELEMENT_2,
+  TEST_PERFCOUNTERS3_ELEMENT_LAST,
+};
+
+static PerfCounters* setup_test_perfcounters3(CephContext *cct)
+{
+  PerfCountersBuilder bld(cct, "test_perfcounter_3",
+          TEST_PERFCOUNTERS3_ELEMENT_FIRST, TEST_PERFCOUNTERS3_ELEMENT_LAST);
+  bld.add_time_avg(TEST_PERFCOUNTERS3_ELEMENT_1, "ceph::timespan");
+  bld.add_time_avg(TEST_PERFCOUNTERS3_ELEMENT_2, "utime_t");
+  return bld.create_perf_counters();
+}
+
+TEST(CoarseSteadyClock, PerfCounter) {
+  PerfCountersCollection *coll = g_ceph_context->get_perfcounters_collection();
+  PerfCounters* fake_pf = setup_test_perfcounters3(g_ceph_context);
+  coll->add(fake_pf);
+
+  AdminSocketClient client(get_rand_socket_path());
+  std::string msg;
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
+
+  coarse_mono_time t1, t2;
+  ceph::timespan elapsed;
+  utime_t u_t1, u_t2, u_elapsed;
+
+  t1 = coarse_mono_clock::now();
+  u_t1 = ceph_clock_now();
+
+  std::this_thread::sleep_for(std::chrono::seconds(1));
+
+  t2 = coarse_mono_clock::now();
+  u_t2 = ceph_clock_now();
+
+  elapsed = t2 - t1;
+  u_elapsed = u_t2 - u_t1;
+
+  // clear digits
+  elapsed = elapsed - (elapsed - std::chrono::seconds(1));
+  u_elapsed.tv.tv_nsec = 0;
+
+  fake_pf->tinc(TEST_PERFCOUNTERS3_ELEMENT_1, elapsed);
+  fake_pf->tinc(TEST_PERFCOUNTERS3_ELEMENT_2, u_elapsed);
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_3\":"
+          "{\"ceph::timespan\":{\"avgcount\":1,\"sum\":1.000000000,\"avgtime\":1.000000000},\"utime_t\":{\"avgcount\":1,\"sum\":1.000000000,\"avgtime\":1.000000000}}}"), msg);
+  coll->remove(fake_pf);
+  delete fake_pf;
 }
