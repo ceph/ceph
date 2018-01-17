@@ -627,3 +627,623 @@ int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_n
   }
   return 0;
 }
+
+int handle_opt_bi_get(const string& object, const string& bucket_id, const string& bucket_name, const string& tenant,
+                      BIIndexType bi_index_type, const string& object_version, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket name not specified" << std::endl;
+    return EINVAL;
+  }
+  if (object.empty()) {
+    cerr << "ERROR: object not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  rgw_obj obj(bucket, object);
+  if (!object_version.empty()) {
+    obj.key.set_instance(object_version);
+  }
+
+  rgw_cls_bi_entry entry;
+
+  ret = store->bi_get(bucket, obj, bi_index_type, &entry);
+  if (ret < 0) {
+    cerr << "ERROR: bi_get(): " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("entry", entry, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_bi_put(const string& bucket_id, const string& bucket_name, const string& tenant, const string& infile,
+                      const string& object_version, rgw_bucket& bucket, RGWRados *store)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket name not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  rgw_cls_bi_entry entry;
+  cls_rgw_obj_key key;
+  ret = read_decode_json(infile, entry, &key);
+  if (ret < 0) {
+    return 1;
+  }
+
+  rgw_obj obj(bucket, key);
+
+  ret = store->bi_put(bucket, obj, entry);
+  if (ret < 0) {
+    cerr << "ERROR: bi_put(): " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_bi_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
+                       const string& object, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket name not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  list<rgw_cls_bi_entry> entries;
+  bool is_truncated;
+  if (max_entries < 0) {
+    max_entries = 1000;
+  }
+
+  int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+  formatter->open_array_section("entries");
+
+  for (int i = 0; i < max_shards; i++) {
+    RGWRados::BucketShard bs(store);
+    int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+    int ret = bs.init(bucket, shard_id);
+    marker.clear();
+
+    if (ret < 0) {
+      cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    do {
+      entries.clear();
+      ret = store->bi_list(bs, object, marker, max_entries, &entries, &is_truncated);
+      if (ret < 0) {
+        cerr << "ERROR: bi_list(): " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      list<rgw_cls_bi_entry>::iterator iter;
+      for (iter = entries.begin(); iter != entries.end(); ++iter) {
+        rgw_cls_bi_entry& entry = *iter;
+        encode_json("entry", entry, formatter);
+        marker = entry.idx;
+      }
+      formatter->flush(cout);
+    } while (is_truncated);
+    formatter->flush(cout);
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_bi_purge(const string& bucket_id, const string& bucket_name, const string& tenant, bool yes_i_really_mean_it,
+                        rgw_bucket& bucket, RGWRados *store)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket name not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  RGWBucketInfo cur_bucket_info;
+  rgw_bucket cur_bucket;
+  ret = init_bucket(store, tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  if (cur_bucket_info.bucket.bucket_id == bucket_info.bucket.bucket_id && !yes_i_really_mean_it) {
+    cerr << "specified bucket instance points to a current bucket instance" << std::endl;
+    cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+    return EINVAL;
+  }
+
+  int max_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+  for (int i = 0; i < max_shards; i++) {
+    RGWRados::BucketShard bs(store);
+    int shard_id = (bucket_info.num_shards > 0  ? i : -1);
+    int ret = bs.init(bucket, shard_id);
+    if (ret < 0) {
+      cerr << "ERROR: bs.init(bucket=" << bucket << ", shard=" << shard_id << "): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    ret = store->bi_remove(bs);
+    if (ret < 0) {
+      cerr << "ERROR: failed to remove bucket index object: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+  return 0;
+}
+
+int handle_opt_bilog_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
+                          int shard_id, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  formatter->open_array_section("entries");
+  bool truncated;
+  int count = 0;
+  if (max_entries < 0)
+    max_entries = 1000;
+
+  do {
+    list<rgw_bi_log_entry> entries;
+    ret = store->list_bi_log_entries(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
+    if (ret < 0) {
+      cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    count += entries.size();
+
+    for (auto &entry : entries) {
+      encode_json("entry", entry, formatter);
+
+      marker = entry.id;
+    }
+    formatter->flush(cout);
+  } while (truncated && count < max_entries);
+
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_bilog_trim(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
+                          string& start_marker, string& end_marker, rgw_bucket& bucket, RGWRados *store)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  ret = store->trim_bi_log_entries(bucket_info, shard_id, start_marker, end_marker);
+  if (ret < 0) {
+    cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_bilog_status(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
+                            rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  map<int, string> markers;
+  ret = store->get_bi_log_status(bucket_info, shard_id, markers);
+  if (ret < 0) {
+    cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  formatter->open_object_section("entries");
+  encode_json("markers", markers, formatter);
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_bilog_autotrim(RGWRados *store)
+{
+  RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
+  RGWHTTPManager http(store->ctx(), crs.get_completion_mgr());
+  int ret = http.set_threaded();
+  if (ret < 0) {
+    cerr << "failed to initialize http client with " << cpp_strerror(ret) << std::endl;
+    return -ret;
+  }
+
+  rgw::BucketTrimConfig config;
+  configure_bucket_trim(store->ctx(), config);
+
+  rgw::BucketTrimManager trim(store, config);
+  ret = trim.init();
+  if (ret < 0) {
+    cerr << "trim manager init failed with " << cpp_strerror(ret) << std::endl;
+    return -ret;
+  }
+  ret = crs.run(trim.create_admin_bucket_trim_cr(&http));
+  if (ret < 0) {
+    cerr << "automated bilog trim failed with " << cpp_strerror(ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_reshard_add(const string& bucket_id, const string& bucket_name, const string& tenant,
+                           bool num_shards_specified, int num_shards, bool yes_i_really_mean_it,
+                           RGWRados *store)
+{
+  rgw_bucket bucket;
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+
+  int ret = check_reshard_bucket_params(store,
+                                        bucket_name,
+                                        tenant,
+                                        bucket_id,
+                                        num_shards_specified,
+                                        num_shards,
+                                        yes_i_really_mean_it,
+                                        bucket,
+                                        bucket_info,
+                                        attrs);
+  if (ret < 0) {
+    return ret;
+  }
+
+  int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
+
+  RGWReshard reshard(store);
+  cls_rgw_reshard_entry entry;
+  entry.time = real_clock::now();
+  entry.tenant = tenant;
+  entry.bucket_name = bucket_name;
+  entry.bucket_id = bucket_info.bucket.bucket_id;
+  entry.old_num_shards = num_source_shards;
+  entry.new_num_shards = num_shards;
+
+  return reshard.add(entry);
+}
+
+int handle_opt_reshard_list(int max_entries, RGWRados *store, Formatter *formatter)
+{
+  list<cls_rgw_reshard_entry> entries;
+  int ret;
+  int count = 0;
+  if (max_entries < 0) {
+    max_entries = 1000;
+  }
+
+  int num_logshards = store->ctx()->_conf->rgw_reshard_num_logs;
+
+  RGWReshard reshard(store);
+
+  formatter->open_array_section("reshard");
+  for (int i = 0; i < num_logshards; i++) {
+    bool is_truncated = true;
+    string marker;
+    do {
+      entries.clear();
+      ret = reshard.list(i, marker, max_entries, entries, &is_truncated);
+      if (ret < 0) {
+        cerr << "Error listing resharding buckets: " << cpp_strerror(-ret) << std::endl;
+        return ret;
+      }
+      for (auto &entry : entries) {
+        encode_json("entry", entry, formatter);
+        entry.get_key(&marker);
+      }
+      count += entries.size();
+      formatter->flush(cout);
+    } while (is_truncated && count < max_entries);
+
+    if (count >= max_entries) {
+      break;
+    }
+  }
+
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_reshard_status(const string& bucket_id, const string& bucket_name, const string& tenant,
+                              RGWRados *store, Formatter *formatter)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+
+  rgw_bucket bucket;
+  RGWBucketInfo bucket_info;
+  map<string, bufferlist> attrs;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  RGWBucketReshard br(store, bucket_info, attrs);
+  list<cls_rgw_bucket_instance_entry> status;
+  int r = br.get_status(&status);
+  if (r < 0) {
+    cerr << "ERROR: could not get resharding status for bucket " << bucket_name << std::endl;
+    return -r;
+  }
+
+  encode_json("status", status, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_reshard_process(RGWRados *store)
+{
+  RGWReshard reshard(store, true, &cout);
+
+  int ret = reshard.process_all_logshards();
+  if (ret < 0) {
+    cerr << "ERROR: failed to process reshard logs, error=" << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_reshard_cancel(const string& bucket_name, RGWRados *store)
+{
+  RGWReshard reshard(store);
+
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+  cls_rgw_reshard_entry entry;
+  //entry.tenant = tenant;
+  entry.bucket_name = bucket_name;
+  //entry.bucket_id = bucket_id;
+  int ret = reshard.get(entry);
+  if (ret < 0) {
+    cerr << "Error in getting bucket " << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+
+  /* TBD stop running resharding */
+
+  ret = reshard.remove(entry);
+  if (ret < 0) {
+    cerr << "Error removing bucket " << bucket_name << " for resharding queue: " << cpp_strerror(-ret) <<
+         std::endl;
+    return ret;
+  }
+  return 0;
+}
+
+template <class T>
+static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  T t;
+
+  bufferlist::iterator iter = bl.begin();
+
+  try {
+    decode(t, iter);
+  } catch (buffer::error& err) {
+    return false;
+  }
+
+  encode_json(field_name, t, f);
+
+  return true;
+}
+
+static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
+{
+  string val;
+  if (bl.length() > 0) {
+    val.assign(bl.c_str());
+  }
+  f->dump_string(field_name, val);
+
+  return true;
+}
+
+int handle_opt_object_rm(const string& bucket_id, const string& bucket_name, const string& tenant, const string& object,
+                         const string& object_version, rgw_bucket& bucket, RGWRados *store)
+{
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  rgw_obj_key key(object, object_version);
+  ret = rgw_remove_object(store, bucket_info, bucket, key);
+
+  if (ret < 0) {
+    cerr << "ERROR: object remove returned: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_object_rewrite(const string& bucket_id, const string& bucket_name, const string& tenant,
+                              const string& object, const string& object_version, uint64_t min_rewrite_stripe_size,
+                              rgw_bucket& bucket, RGWRados *store)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+  if (object.empty()) {
+    cerr << "ERROR: object not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  rgw_obj obj(bucket, object);
+  obj.key.set_instance(object_version);
+  bool need_rewrite = true;
+  if (min_rewrite_stripe_size > 0) {
+    ret = check_min_obj_stripe_size(store, bucket_info, obj, min_rewrite_stripe_size, &need_rewrite);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "WARNING: check_min_obj_stripe_size failed, r=" << ret << dendl;
+    }
+  }
+  if (need_rewrite) {
+    ret = store->rewrite_obj(bucket_info, obj);
+    if (ret < 0) {
+      cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  } else {
+    ldout(store->ctx(), 20) << "skipped object" << dendl;
+  }
+  return 0;
+}
+
+int handle_opt_object_expire(RGWRados *store)
+{
+  int ret = store->process_expire_objects();
+  if (ret < 0) {
+    cerr << "ERROR: process_expire_objects() processing returned error: " << cpp_strerror(-ret) << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+int handle_opt_object_unlink(const string& bucket_id, const string& bucket_name, const string& tenant,
+                             const string& object, const string& object_version, rgw_bucket& bucket, RGWRados *store)
+{
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  list<rgw_obj_index_key> oid_list;
+  rgw_obj_key key(object, object_version);
+  rgw_obj_index_key index_key;
+  key.get_index_key(&index_key);
+  oid_list.push_back(index_key);
+  ret = store->remove_objs_from_index(bucket_info, oid_list);
+  if (ret < 0) {
+    cerr << "ERROR: remove_obj_from_index() returned error: " << cpp_strerror(-ret) << std::endl;
+    return 1;
+  }
+  return 0;
+}
+
+int handle_opt_object_stat(const string& bucket_id, const string& bucket_name, const string& tenant,
+                           const string& object, const string& object_version, rgw_bucket& bucket,
+                           RGWRados *store, Formatter *formatter)
+{
+  RGWBucketInfo bucket_info;
+  int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
+  if (ret < 0) {
+    cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  rgw_obj obj(bucket, object);
+  obj.key.set_instance(object_version);
+
+  uint64_t obj_size;
+  map<string, bufferlist> attrs;
+  RGWObjectCtx obj_ctx(store);
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.obj_size = &obj_size;
+
+  ret = read_op.prepare();
+  if (ret < 0) {
+    cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
+    return 1;
+  }
+  formatter->open_object_section("object_metadata");
+  formatter->dump_string("name", object);
+  formatter->dump_unsigned("size", obj_size);
+
+  map<string, bufferlist>::iterator iter;
+  map<string, bufferlist> other_attrs;
+  for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
+    bufferlist& bl = iter->second;
+    bool handled = false;
+    if (iter->first == RGW_ATTR_MANIFEST) {
+      handled = decode_dump<RGWObjManifest>("manifest", bl, formatter);
+    } else if (iter->first == RGW_ATTR_ACL) {
+      handled = decode_dump<RGWAccessControlPolicy>("policy", bl, formatter);
+    } else if (iter->first == RGW_ATTR_ID_TAG) {
+      handled = dump_string("tag", bl, formatter);
+    } else if (iter->first == RGW_ATTR_ETAG) {
+      handled = dump_string("etag", bl, formatter);
+    } else if (iter->first == RGW_ATTR_COMPRESSION) {
+      handled = decode_dump<RGWCompressionInfo>("compression", bl, formatter);
+    }
+
+    if (!handled)
+      other_attrs[iter->first] = bl;
+  }
+
+  formatter->open_object_section("attrs");
+  for (iter = other_attrs.begin(); iter != other_attrs.end(); ++iter) {
+    dump_string(iter->first.c_str(), iter->second, formatter);
+  }
+  formatter->close_section();
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}

@@ -11,6 +11,7 @@
 #include "rgw_rados.h"
 
 #define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_rgw
 
 enum {
   OPT_NO_CMD = 0,
