@@ -3366,13 +3366,13 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
-    int get = MIN(size-pos, 1048576);
+    int get = std::min<int>(size - pos, 1048576);
 
     Mutex flock("synclient chunk_file lock");
     Cond cond;
     bool done;
     bufferlist bl;
-    
+
     flock.Lock();
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
     client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,
