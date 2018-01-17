@@ -1134,7 +1134,7 @@ public:
   static std::enable_if_t<denc_traits<U>::featured>
   bound_encode(const container& s, size_t& p, uint64_t f) {
     ceph::for_each(s, [&p, f] (const auto& e) {
-	if constexpr (denc_traits<std::decay_t<decltype(p)>>::featured) {
+	if constexpr (denc_traits<std::decay_t<decltype(e)>>::featured) {
 	  denc(e, p, f);
 	} else {
 	  denc(e, p);
@@ -1153,7 +1153,7 @@ public:
   static std::enable_if_t<denc_traits<U>::featured>
   encode(const container& s, buffer::list::contiguous_appender& p, uint64_t f) {
     ceph::for_each(s, [&p, f] (const auto& e) {
-	if constexpr (denc_traits<std::decay_t<decltype(p)>>::featured) {
+	if constexpr (denc_traits<std::decay_t<decltype(e)>>::featured) {
 	  denc(e, p, f);
 	} else {
 	  denc(e, p);
