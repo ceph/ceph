@@ -821,7 +821,7 @@ void ReplicatedBackend::_do_pull_response(OpRequestRef op)
     t.register_on_complete(
       new PG_RecoveryQueueAsync(
 	get_parent(),
-	get_parent()->bless_gencontext(c)));
+	get_parent()->bless_unlocked_gencontext(c)));
   }
   replies.erase(replies.end() - 1);
 
