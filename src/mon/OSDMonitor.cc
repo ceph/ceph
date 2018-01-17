@@ -6130,17 +6130,26 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
+    } else if (n < 0) {
+      ss << "hit_set_period should be non-negative";
+      return -EINVAL;
     }
     p.hit_set_period = n;
   } else if (var == "hit_set_count") {
     if (interr.length()) {
       ss << "error parsing integer value '" << val << "': " << interr;
       return -EINVAL;
+    } else if (n < 0) {
+      ss << "hit_set_count should be non-negative";
+      return -EINVAL;
     }
     p.hit_set_count = n;
   } else if (var == "hit_set_fpp") {
     if (floaterr.length()) {
       ss << "error parsing floating point value '" << val << "': " << floaterr;
+      return -EINVAL;
+    } else if (f < 0 || f > 1.0) {
+      ss << "hit_set_fpp should be in the range 0..1";
       return -EINVAL;
     }
     if (p.hit_set_params.get_type() != HitSet::TYPE_BLOOM) {
