@@ -165,6 +165,7 @@ public:
       utime_t end = ceph_clock_now();
       dout(10) << "osdmap epoch " << epoch << " mapping took "
 	       << (end - start) << " seconds" << dendl;
+      osdmon->process_crush_errors();
       osdmon->update_creating_pgs();
       osdmon->check_pg_creates_subs();
     }
@@ -894,6 +895,41 @@ void OSDMonitor::prime_pg_temp(
   }
 }
 
+void OSDMonitor::check_health(health_check_map_t *checks)
+{
+  dout(20) << __func__ << dendl;
+  list<string> detail;
+  int64_t crush_errors = 0;
+  if (mapping.has_crush_errors()) {
+    dout(20) << __func__ << " mapping has crush errors" << dendl;
+    const auto pool_crush_errors = mapping.get_per_pool_crush_errors();
+    std::for_each(
+        pool_crush_errors->begin(), pool_crush_errors->end(),
+        [&](std::pair<long unsigned int, struct crush_errors_t> pair) {
+          if (pair.second.has_errors) {
+            stringstream ss;
+            crush_errors += pair.second.choose_firstn_tries_exceeded_errors +
+                            pair.second.choose_indep_tries_exceeded_errors;
+            ss << pair.second.choose_firstn_tries_exceeded_errors +
+                  pair.second.choose_indep_tries_exceeded_errors
+               << " crush errors seen in pool "
+               << "'" << osdmap.get_pool_name(pair.first) << "'";
+            detail.push_back(ss.str());
+          }
+        });
+  }
+  if (!detail.empty()) {
+    ostringstream ss;
+    ss << crush_errors << " crush errors";
+    auto& d = checks->add("CRUSH_ERRORS", HEALTH_WARN, ss.str());
+    stringstream tip;
+    tip << "Search the cluster log for 'process_crush_errors' for more "
+           "details.";
+    detail.push_back(tip.str());
+    d.detail.swap(detail);
+  }
+}
+
 /**
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
@@ -1345,6 +1381,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(&next);
+  check_health(&next);
   encode_health(next, t);
 }
 
@@ -11593,4 +11630,55 @@ void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 ret, epoch, get_last_committed(), blp);
   mon->send_reply(op, reply);
+}
+
+void OSDMonitor::process_crush_errors()
+{
+  // Have we finished creating pgs?
+  if (creating_pgs.queue.size() != 0 || creating_pgs.pgs.size() != 0)
+    return;
+
+  mapping.check_new_crush_errors();
+
+  if (mapping.has_crush_errors()) {
+    auto pool_crush_errors = mapping.get_per_pool_crush_errors();
+    std::stringstream ss;
+    size_t total_firstn_tries_exceeded = 0;
+    size_t total_indep_tries_exceeded = 0;
+    bool first_pass = true;
+    std::for_each(
+        pool_crush_errors->begin(), pool_crush_errors->end(),
+        [&](std::pair<long unsigned int, struct crush_errors_t> pair) {
+          if (pair.second.new_errors) {
+            total_firstn_tries_exceeded +=
+                pair.second.choose_firstn_tries_exceeded_errors;
+            total_indep_tries_exceeded +=
+                pair.second.choose_indep_tries_exceeded_errors;
+            if (first_pass) {
+              ss << pair.first;
+              first_pass = false;
+            } else {
+              ss << ", " << pair.first;
+            }
+          }
+        });
+    mon->clog->warn()
+        << __func__ << ": Pools " << ss.str() << " collectively have "
+        << total_firstn_tries_exceeded
+        << " choose_firstn_tries_exceeded_errors and "
+        << total_indep_tries_exceeded
+        << " choose_indep_tries_exceeded_errors since last clean pass";
+    mapping.clear_new_crush_error_flags();
+
+    // We need to update health here due to a timing issue with paxos
+    // update timing on the monitor
+    MonitorDBStore::TransactionRef t(new MonitorDBStore::Transaction);
+    health_check_map_t next;
+    osdmap.check_health(&next);
+    check_health(&next);
+    encode_health(next, t);
+    mon->store->apply_transaction(t);
+    load_health();
+  } else
+    dout(10) << __func__ << ": clean" << dendl;
 }

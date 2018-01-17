@@ -10,6 +10,7 @@
 
 #include "osd/osd_types.h"
 #include "common/WorkQueue.h"
+#include "crush/crush.h"
 
 class OSDMap;
 
@@ -169,7 +170,13 @@ public:
 class OSDMapMapping {
 public:
   MEMPOOL_CLASS_HELPERS();
+
 private:
+  struct mapping_crush_errors_t {
+    bool crush_errors_seen = false;
+    bool crush_new_errors_seen = false;
+    std::map<uint64_t, struct crush_errors_t> per_pool_crush_errors;
+  } mapping_crush_errors;
 
   struct PoolMapping {
     MEMPOOL_CLASS_HELPERS();
@@ -312,6 +319,43 @@ public:
 
   uint64_t get_num_pgs() const {
     return num_pgs;
+  }
+
+  std::map<uint64_t, struct crush_errors_t>* get_per_pool_crush_errors() {
+    return &mapping_crush_errors.per_pool_crush_errors;
+  }
+
+  void clear_pool_crush_errors(const int64_t pool) {
+    auto pool_crush_errors = get_per_pool_crush_errors();
+    auto it = pool_crush_errors->find(pool);
+    if (it != pool_crush_errors->end()) {
+      it->second.choose_firstn_tries_exceeded_errors = 0;
+      it->second.choose_indep_tries_exceeded_errors = 0;
+      it->second.has_errors = false;
+      it->second.new_errors = false;
+    }
+  }
+
+  void crush_new_errors_seen() {
+    mapping_crush_errors.crush_new_errors_seen = true;
+  }
+
+  void check_new_crush_errors() {
+    mapping_crush_errors.crush_errors_seen =
+        mapping_crush_errors.crush_new_errors_seen;
+    mapping_crush_errors.crush_new_errors_seen = false;
+  }
+
+  void clear_new_crush_error_flags() {
+    auto pool_crush_errors = get_per_pool_crush_errors();
+    for (auto& crush_errors : *pool_crush_errors) {
+      crush_errors.second.has_errors = crush_errors.second.new_errors;
+      crush_errors.second.new_errors = false;
+    }
+  }
+
+  bool has_crush_errors() const {
+    return mapping_crush_errors.crush_errors_seen;
   }
 };
 

@@ -4,6 +4,7 @@
 #ifdef __KERNEL__
 # include <linux/types.h>
 #else
+# include <stdbool.h>
 # include "crush_compat.h"
 #endif
 
@@ -523,6 +524,14 @@ static inline const char *crush_alg_name(int alg)
 		return "unknown";
 	}
 }
+
+// Crush errors
+struct crush_errors_t {
+  uint64_t choose_firstn_tries_exceeded_errors;
+  uint64_t choose_indep_tries_exceeded_errors;
+  bool has_errors;
+  bool new_errors;
+};
 
 /* ---------------------------------------------------------------------
 			       Private

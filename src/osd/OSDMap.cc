@@ -2081,7 +2081,7 @@ void OSDMap::_remove_nonexistent_osds(const pg_pool_t& pool,
 void OSDMap::_pg_to_raw_osds(
   const pg_pool_t& pool, pg_t pg,
   vector<int> *osds,
-  ps_t *ppps) const
+  ps_t *ppps, struct crush_errors_t* crush_errors) const
 {
   // map to osds[]
   ps_t pps = pool.raw_pg_to_pps(pg);  // placement ps
@@ -2090,7 +2090,7 @@ void OSDMap::_pg_to_raw_osds(
   // what crush rule?
   int ruleno = crush->find_rule(pool.get_crush_rule(), pool.get_type(), size);
   if (ruleno >= 0)
-    crush->do_rule(ruleno, pps, *osds, size, osd_weight, pg.pool());
+    crush->do_rule(ruleno, pps, *osds, size, osd_weight, pg.pool(), crush_errors);
 
   _remove_nonexistent_osds(pool, *osds);
 
@@ -2299,7 +2299,7 @@ void OSDMap::pg_to_raw_up(pg_t pg, vector<int> *up, int *primary) const
 void OSDMap::_pg_to_up_acting_osds(
   const pg_t& pg, vector<int> *up, int *up_primary,
   vector<int> *acting, int *acting_primary,
-  bool raw_pg_to_pg) const
+  bool raw_pg_to_pg, struct crush_errors_t* crush_errors) const
 {
   const pg_pool_t *pool = get_pg_pool(pg.pool());
   if (!pool ||
@@ -2322,7 +2322,7 @@ void OSDMap::_pg_to_up_acting_osds(
   ps_t pps;
   _get_temp_osds(*pool, pg, &_acting, &_acting_primary);
   if (_acting.empty() || up || up_primary) {
-    _pg_to_raw_osds(*pool, pg, &raw, &pps);
+    _pg_to_raw_osds(*pool, pg, &raw, &pps, crush_errors);
     _apply_upmap(*pool, pg, &raw);
     _raw_to_up_osds(*pool, raw, &_up);
     _up_primary = _pick_primary(_up);

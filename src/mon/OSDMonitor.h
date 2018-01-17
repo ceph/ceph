@@ -167,6 +167,7 @@ public:
 private:
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
+  void check_health(health_check_map_t *checks);
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void on_active() override;
   void on_restart() override;
@@ -571,6 +572,8 @@ public:
       pending_inc.new_flags &= ~flag;
     }
   }
+
+  void process_crush_errors();
 };
 
 #endif

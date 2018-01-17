@@ -473,7 +473,8 @@ static int crush_choose_firstn(const struct crush_map *map,
 			       unsigned int stable,
 			       int *out2,
 			       int parent_r,
-                               const struct crush_choose_arg *choose_args)
+                               const struct crush_choose_arg *choose_args,
+                               struct crush_errors_t* crush_errors)
 {
 	int rep;
 	unsigned int ftotal, flocal;
@@ -585,7 +586,8 @@ parent_r %d stable %d\n",
 							    stable,
 							    NULL,
 							    sub_r,
-                                                            choose_args) <= outpos)
+                                                            choose_args,
+                                                            crush_errors) <= outpos)
 							/* didn't get leaf */
 							reject = 1;
 					} else {
@@ -617,9 +619,14 @@ reject:
 					else if (ftotal < tries)
 						/* then retry descent */
 						retry_descent = 1;
-					else
+					else {
 						/* else give up */
 						skip_rep = 1;
+						if (crush_errors) {
+							crush_errors->choose_firstn_tries_exceeded_errors++;
+							crush_errors->new_errors = true;
+						}
+					}
 					dprintk("  reject %d  collide %d  "
 						"ftotal %u  flocal %u\n",
 						reject, collide, ftotal,
@@ -663,7 +670,8 @@ static void crush_choose_indep(const struct crush_map *map,
 			       int recurse_to_leaf,
 			       int *out2,
 			       int parent_r,
-                               const struct crush_choose_arg *choose_args)
+                               const struct crush_choose_arg *choose_args,
+                               struct crush_errors_t* crush_errors)
 {
 	const struct crush_bucket *in = bucket;
 	int endpos = outpos + left;
@@ -685,7 +693,7 @@ static void crush_choose_indep(const struct crush_map *map,
 			out2[rep] = CRUSH_ITEM_UNDEF;
 	}
 
-	for (ftotal = 0; left > 0 && ftotal < tries; ftotal++) {
+	for (ftotal = 0; left > 0; ftotal++) {
 #ifdef DEBUG_INDEP
 		if (out2 && ftotal) {
 			dprintk("%u %d a: ", ftotal, left);
@@ -700,6 +708,13 @@ static void crush_choose_indep(const struct crush_map *map,
 			dprintk("\n");
 		}
 #endif
+		if (ftotal >= tries) {
+			if (crush_errors) {
+				crush_errors->choose_indep_tries_exceeded_errors++;
+				crush_errors->new_errors = true;
+			}
+			break;
+		}
 		for (rep = outpos; rep < endpos; rep++) {
 			if (out[rep] != CRUSH_ITEM_UNDEF)
 				continue;
@@ -791,7 +806,8 @@ static void crush_choose_indep(const struct crush_map *map,
 							x, 1, numrep, 0,
 							out2, rep,
 							recurse_tries, 0,
-							0, NULL, r, choose_args);
+							0, NULL, r, choose_args,
+							crush_errors);
 						if (out2[rep] == CRUSH_ITEM_NONE) {
 							/* placed nothing; no leaf */
 							break;
@@ -900,7 +916,8 @@ void crush_init_workspace(const struct crush_map *m, void *v) {
 int crush_do_rule(const struct crush_map *map,
 		  int ruleno, int x, int *result, int result_max,
 		  const __u32 *weight, int weight_max,
-		  void *cwin, const struct crush_choose_arg *choose_args)
+		  void *cwin, const struct crush_choose_arg *choose_args,
+                  struct crush_errors_t* crush_errors)
 {
 	int result_len;
 	struct crush_work *cw = cwin;
@@ -1051,7 +1068,8 @@ int crush_do_rule(const struct crush_map *map,
 						stable,
 						c+osize,
 						0,
-						choose_args);
+						choose_args,
+                                                crush_errors);
 				} else {
 					out_size = ((numrep < (result_max-osize)) ?
 						    numrep : (result_max-osize));
@@ -1069,7 +1087,8 @@ int crush_do_rule(const struct crush_map *map,
 						recurse_to_leaf,
 						c+osize,
 						0,
-						choose_args);
+						choose_args,
+						crush_errors);
 					osize += out_size;
 				}
 			}

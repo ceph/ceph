@@ -111,15 +111,22 @@ void OSDMapMapping::_update_range(
   assert(i != pools.end());
   assert(pg_begin <= pg_end);
   assert(pg_end <= i->second.pg_num);
+  struct crush_errors_t crush_errors;
+  auto pool_crush_errors = get_per_pool_crush_errors();
+  auto it = pool_crush_errors->try_emplace(pool, crush_errors).first;
   for (unsigned ps = pg_begin; ps < pg_end; ++ps) {
     vector<int> up, acting;
     int up_primary, acting_primary;
     osdmap.pg_to_up_acting_osds(
       pg_t(ps, pool),
-      &up, &up_primary, &acting, &acting_primary);
+      &up, &up_primary, &acting, &acting_primary, &(it->second));
     i->second.set(ps, std::move(up), up_primary,
 		  std::move(acting), acting_primary);
   }
+  if (it->second.new_errors)
+    crush_new_errors_seen();
+  else
+    clear_pool_crush_errors(pool);
 }
 
 // ---------------------------

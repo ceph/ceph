@@ -1497,14 +1497,15 @@ public:
   template<typename WeightVector>
   void do_rule(int rule, int x, vector<int>& out, int maxout,
 	       const WeightVector& weight,
-	       uint64_t choose_args_index) const {
+	       uint64_t choose_args_index,
+               struct crush_errors_t* crush_errors = nullptr) const {
     int rawout[maxout];
     char work[crush_work_size(crush, maxout)];
     crush_init_workspace(crush, work);
     crush_choose_arg_map arg_map = choose_args_get_with_fallback(
       choose_args_index);
     int numrep = crush_do_rule(crush, rule, x, rawout, maxout, &weight[0],
-			       weight.size(), work, arg_map.args);
+			       weight.size(), work, arg_map.args, crush_errors);
     if (numrep < 0)
       numrep = 0;
     out.resize(numrep);
