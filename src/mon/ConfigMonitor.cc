@@ -358,13 +358,12 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       }
 
       Option::value_t real_value;
-      string str;
-      err = opt->parse_value(value, &real_value, &str);
+      string errstr;
+      err = opt->parse_value(value, &real_value, &errstr, &value);
       if (err < 0) {
-	ss << "error parsing value: " << str;
+	ss << "error parsing value: " << errstr;
 	goto reply;
       }
-      value = stringify(real_value);
     }
 
     string section;

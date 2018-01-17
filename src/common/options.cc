@@ -91,7 +91,8 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
 int Option::parse_value(
   const std::string& raw_val,
   value_t *out,
-  std::string *error_message) const
+  std::string *error_message,
+  std::string *normalized_value) const
 {
   std::string val = raw_val;
 
@@ -131,7 +132,7 @@ int Option::parse_value(
       if (!error_message->empty()) {
 	return -EINVAL;
       }
-      *out = !!b;
+      *out = (bool)!!b;
     }
   } else if (type == Option::TYPE_ADDR) {
     entity_addr_t addr;
@@ -154,6 +155,9 @@ int Option::parse_value(
     return r;
   }
 
+  if (normalized_value) {
+    *normalized_value = to_str(*out);
+  }
   return 0;
 }
 
@@ -203,35 +207,20 @@ void Option::dump(Formatter *f) const
   f->dump_bool("can_update_at_runtime", can_update_at_runtime());
 }
 
-ostream& operator<<(ostream& out, const Option::value_t& v)
+std::string Option::to_str(const Option::value_t& v)
 {
   if (boost::get<boost::blank>(&v)) {
-    return out;
+    return string();
   }
   if (const bool *flag = boost::get<const bool>(&v)) {
-    return out << (*flag ? "true" : "false");
+    return *flag ? "true" : "false";
   }
   if (const double *dp = boost::get<const double>(&v)) {
     ostringstream oss;
     oss << std::fixed << *dp;
-    return out << oss.str();
+    return oss.str();
   }
-  if (const uint64_t *i = boost::get<const uint64_t>(&v)) {
-    return out << *i;
-  }
-  if (const int64_t *i = boost::get<const int64_t>(&v)) {
-    return out << *i;
-  }
-  if (const std::string *i = boost::get<const std::string>(&v)) {
-    return out << *i;
-  }
-  if (const uuid_d *i = boost::get<const uuid_d>(&v)) {
-    return out << *i;
-  }
-  if (const entity_addr_t *i = boost::get<const entity_addr_t>(&v)) {
-    return out << *i;
-  }
-  ceph_abort();
+  return stringify(v);
 }
 
 void Option::print(ostream *out) const

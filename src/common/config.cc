@@ -92,17 +92,7 @@ static int conf_stringify(const Option::value_t& v, string *out)
   if (boost::get<boost::blank>(&v)) {
     return -ENOENT;
   }
-  if (const bool *flag = boost::get<const bool>(&v)) {
-    *out = *flag ? "true" : "false";
-    return 0;
-  }
-  ostringstream oss;
-  if (const double *dp = boost::get<const double>(&v)) {
-    oss << std::fixed << *dp;
-  } else {
-    oss << v;
-  }
-  *out = oss.str();
+  *out = Option::to_str(v);
   return 0;
 }
 
@@ -903,7 +893,7 @@ void md_config_t::get_defaults_bl(bufferlist *bl)
       if (j != values.end()) {
 	auto k = j->second.find(CONF_DEFAULT);
 	if (k != j->second.end()) {
-	  encode(stringify(k->second), bl);
+	  encode(Option::to_str(k->second), bl);
 	  continue;
 	}
       }
@@ -933,7 +923,7 @@ void md_config_t::get_config_bl(bufferlist *bl)
       encode((uint32_t)i.second.size(), bl);
       for (auto& j : i.second) {
 	encode(j.first, bl);
-	encode(stringify(j.second), bl);
+	encode(Option::to_str(j.second), bl);
       }
     }
     // make sure overridden items appear, and include the default value
