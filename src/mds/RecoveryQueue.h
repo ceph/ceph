@@ -36,11 +36,15 @@ public:
 
 private:
   void _start(CInode *in);  ///< start recovering this file
-
-  std::set<CInode*> file_recover_queue;   ///< the queue
-  std::set<CInode*> file_recover_queue_front;  ///< elevated priority items
-  std::set<CInode*> file_recovering;
   void _recovered(CInode *in, int r, uint64_t size, utime_t mtime);
+
+  size_t file_recover_queue_size = 0;
+  size_t file_recover_queue_front_size = 0;
+
+  elist<CInode*> file_recover_queue;   ///< the queue
+  elist<CInode*> file_recover_queue_front;  ///< elevated priority items
+  std::map<CInode*, bool> file_recovering; // inode -> need_restart
+
   MDSRank *mds;
   PerfCounters *logger;
   Filer filer;

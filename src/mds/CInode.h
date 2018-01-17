@@ -628,6 +628,10 @@ public:
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
   elist<CInode*>::item item_scrub;
 
+  // also update RecoveryQueue::RecoveryQueue() if you change this
+  elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
+  elist<CInode*>::item& item_recover_queue_front = item_dirty_dirfrag_nest;
+
 public:
   int auth_pin_freeze_allowance;
 

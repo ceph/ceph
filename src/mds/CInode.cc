@@ -1871,6 +1871,7 @@ void CInode::clear_scatter_dirty()
 void CInode::clear_dirty_scattered(int type)
 {
   dout(10) << __func__ << " " << type << " on " << *this << dendl;
+  assert(is_dir());
   switch (type) {
   case CEPH_LOCK_IFILE:
     item_dirty_dirfrag_dir.remove_myself();
