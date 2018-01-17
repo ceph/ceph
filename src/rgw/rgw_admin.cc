@@ -3477,7 +3477,7 @@ int main(int argc, const char **argv)
         encode_json("realm", realm, formatter);
         formatter->flush(cout);
       }
-      return 0;
+      break;
 
     case OPT_ZONEGROUP_ADD:
       {
