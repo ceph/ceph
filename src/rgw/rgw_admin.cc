@@ -43,6 +43,7 @@
 #include "rgw_admin_opt_role.h"
 #include "rgw_admin_opt_quota.h"
 #include "rgw_admin_other.h"
+#include "rgw_admin_opt_user.h"
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
@@ -1782,23 +1783,9 @@ int main(int argc, const char **argv)
   case OPT_USER_INFO:
     break;
   case OPT_USER_CREATE:
-    if (!user_op.has_existing_user()) {
-      user_op.set_generate_key(); // generate a new key by default
-    }
-    ret = user.add(user_op, &err_msg);
-    if (ret < 0) {
-      cerr << "could not create user: " << err_msg << std::endl;
-      if (ret == -ERR_INVALID_TENANT_NAME)
-	ret = -EINVAL;
-
-      return -ret;
-    }
-    if (!subuser.empty()) {
-      ret = user.subusers.add(user_op, &err_msg);
-      if (ret < 0) {
-        cerr << "could not create subuser: " << err_msg << std::endl;
-        return -ret;
-      }
+    ret = handle_opt_user_create(subuser, user_op, user);
+    if (ret != 0) {
+      return ret;
     }
     break;
   case OPT_USER_RM:
@@ -2338,40 +2325,10 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_USER_STATS) {
-    if (sync_stats) {
-      if (!bucket_name.empty()) {
-        int ret = rgw_bucket_sync_user_stats(store, tenant, bucket_name);
-        if (ret < 0) {
-          cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-      } else {
-        int ret = rgw_user_sync_all_stats(store, user_id);
-        if (ret < 0) {
-          cerr << "ERROR: failed to sync user stats: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-      }
+    ret = handle_opt_user_stats(sync_stats, bucket_name, tenant, user_id, store, formatter);
+    if (ret != 0) {
+      return ret;
     }
-
-    if (user_id.empty()) {
-      cerr << "ERROR: uid not specified" << std::endl;
-      return EINVAL;
-    }
-    cls_user_header header;
-    string user_str = user_id.to_str();
-    int ret = store->cls_user_get_header(user_str, &header);
-    if (ret < 0) {
-      if (ret == -ENOENT) { /* in case of ENOENT */
-        cerr << "User has not been initialized or user does not exist" << std::endl;
-      } else {
-        cerr << "ERROR: can't read user: " << cpp_strerror(ret) << std::endl;
-      }
-      return -ret;
-    }
-
-    encode_json("header", header, formatter);
-    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_METADATA_GET) {
