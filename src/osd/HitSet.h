@@ -640,7 +640,7 @@ public:
     return false;
   }
   void set_dp(uint32_t dp) {
-    decay_period = dp;
+    decay_period = MAX(1, dp);
   }
   void insert(const hobject_t &o) override {
     insert(o, false);
@@ -673,14 +673,14 @@ public:
 
   void encode(bufferlist &bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(hits, bl);
-    ::encode(last_decay, bl);
+    encode(hits, bl);
+    encode(last_decay, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) override {
     DECODE_START(1, bl);
-    ::decode(hits, bl);
-    ::decode(last_decay, bl);
+    decode(hits, bl);
+    decode(last_decay, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const override;
