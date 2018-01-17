@@ -104,10 +104,8 @@ std::string calc_ind_image_snap_name(uint64_t pool_id,
 				     std::string snap_id)
 {
   std::stringstream ind_snap_name_stream;
-  ind_snap_name_stream << std::setw(16) << std::setfill('0') << std::hex <<
-			  pool_id <<
-			  "_" << group_id <<
-			  "_" << snap_id;
+  ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
+                       << group_id << "_" << snap_id;
   return ind_snap_name_stream.str();
 }
 
