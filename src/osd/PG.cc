@@ -3338,7 +3338,7 @@ void PG::read_state(ObjectStore *store, bufferlist &bl)
     cct->_conf->osd_ignore_stale_divergent_priors,
     cct->_conf->osd_debug_verify_missing_on_start);
   if (oss.tellp())
-    osd->clog->error() << oss.rdbuf();
+    osd->clog->error() << oss.str();
 
   if (force_rebuild_missing) {
     dout(10) << __func__ << " forced rebuild of missing got "
