@@ -283,6 +283,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual ceph_tid_t get_tid() = 0;
 
+     virtual bool get_have_sync_onreadable() = 0;
+
      virtual LogClientTemp clog_error() = 0;
      virtual LogClientTemp clog_warn() = 0;
 

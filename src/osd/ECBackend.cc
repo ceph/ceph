@@ -197,6 +197,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    have_sync_onreadable(pg->get_have_sync_onreadable()),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   assert((ec_impl->get_data_chunk_count() *
@@ -849,6 +850,7 @@ void ECBackend::sub_write_committed(
     reply.tid = tid;
     reply.last_complete = last_complete;
     reply.committed = true;
+    reply.applied = true;
     reply.from = get_parent()->whoami_shard();
     handle_sub_write_reply(
       get_parent()->whoami_shard(),
@@ -862,6 +864,7 @@ void ECBackend::sub_write_committed(
     r->op.tid = tid;
     r->op.last_complete = last_complete;
     r->op.committed = true;
+    r->op.applied = true;
     r->op.from = get_parent()->whoami_shard();
     r->set_priority(CEPH_MSG_PRIO_HIGH);
     r->trace = trace;
@@ -873,48 +876,59 @@ void ECBackend::sub_write_committed(
 
 struct SubWriteApplied : public Context {
   ECBackend *pg;
-  OpRequestRef msg;
-  ceph_tid_t tid;
-  eversion_t version;
-  const ZTracer::Trace trace;
+  hobject_t oid;
   SubWriteApplied(
     ECBackend *pg,
-    OpRequestRef msg,
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace)
-    : pg(pg), msg(msg), tid(tid), version(version), trace(trace) {}
+    hobject_t oid)
+    : pg(pg), oid(oid) {
+    pg->start_apply(oid);
+  }
   void finish(int) override {
-    if (msg)
-      msg->mark_event("sub_op_applied");
-    pg->sub_write_applied(tid, version, trace);
+    pg->sub_write_applied(oid);
   }
 };
-void ECBackend::sub_write_applied(
-  ceph_tid_t tid, eversion_t version,
-  const ZTracer::Trace &trace) {
-  parent->op_applied(version);
-  if (get_parent()->pgb_is_primary()) {
-    ECSubWriteReply reply;
-    reply.from = get_parent()->whoami_shard();
-    reply.tid = tid;
-    reply.applied = true;
-    handle_sub_write_reply(
-      get_parent()->whoami_shard(),
-      reply, trace);
-  } else {
-    MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
-    r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
-    r->min_epoch = get_parent()->get_interval_start_epoch();
-    r->op.from = get_parent()->whoami_shard();
-    r->op.tid = tid;
-    r->op.applied = true;
-    r->set_priority(CEPH_MSG_PRIO_HIGH);
-    r->trace = trace;
-    r->trace.event("sending sub op apply");
-    get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+
+void ECBackend::sub_write_applied(const hobject_t& oid)
+{
+  Mutex::Locker l(apply_lock);
+  dout(20) << __func__ << " " << oid << " was " << applying << dendl;
+  auto p = applying.find(oid);
+  assert(p != applying.end());
+  applying.erase(p);
+  apply_cond.Signal();
+  dout(20) << __func__ << " " << oid << " now " << applying << dendl;
+}
+
+void ECBackend::start_apply(const hobject_t& oid)
+{
+  Mutex::Locker l(apply_lock);
+  applying.insert(oid);
+  dout(20) << __func__ << " " << oid << " now " << applying << dendl;
+}
+
+void ECBackend::_wait_for_apply(const hobject_t& oid)
+{
+  Mutex::Locker l(apply_lock);
+  dout(20) << __func__ << " " << oid << ", ls is " << applying << dendl;
+  while (applying.find(oid) != applying.end()) {
+    dout(20) << __func__ << " " << oid << " waiting" << dendl;
+    apply_cond.Wait(apply_lock);
+  }
+}
+
+void ECBackend::wait_for_all_apply()
+{
+  if (have_sync_onreadable) {
+    return;
+  }
+  Mutex::Locker l(apply_lock);
+  dout(20) << __func__ << " ls is " << applying << dendl;
+  if (!applying.empty()) {
+    while (!applying.empty()) {
+      dout(20) << __func__ << " waiting" << dendl;
+      apply_cond.Wait(apply_lock);
+    }
+    dout(20) << __func__ << " done" << dendl;
   }
 }
 
@@ -973,9 +987,10 @@ void ECBackend::handle_sub_write(
 	this, msg, op.tid,
 	op.at_version,
 	get_parent()->get_info().last_complete, trace)));
-  localt.register_on_applied(
-    get_parent()->bless_context(
-      new SubWriteApplied(this, msg, op.tid, op.at_version, trace)));
+  if (!have_sync_onreadable) {
+    localt.register_on_applied_sync(
+      new SubWriteApplied(this, op.soid));
+  }
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
@@ -994,6 +1009,7 @@ void ECBackend::handle_sub_read(
   for(auto i = op.to_read.begin();
       i != op.to_read.end();
       ++i) {
+    wait_for_apply(i->first);
     int r = 0;
     ECUtil::HashInfoRef hinfo;
     int subchunk_size = sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
@@ -1088,6 +1104,7 @@ error:
 	     << *i << dendl;
     if (reply->errors.count(*i))
       continue;
+    wait_for_apply(*i);
     int r = store->getattrs(
       ch,
       ghobject_t(
@@ -1399,6 +1416,8 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
 void ECBackend::on_change()
 {
   dout(10) << __func__ << dendl;
+
+  wait_for_all_apply();
 
   completed_to = eversion_t();
   committed_to = eversion_t();
@@ -1745,6 +1764,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
   if (!ref) {
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
+    wait_for_apply(hoid);
     struct stat st;
     int r = store->stat(
       ch,
@@ -2386,6 +2406,7 @@ int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
   map<string, bufferlist> *out)
 {
+  wait_for_apply(hoid);
   int r = store->getattrs(
     ch,
     ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
@@ -2431,6 +2452,8 @@ void ECBackend::be_deep_scrub(
   uint64_t pos = 0;
   bool skip_data_digest = store->has_builtin_csum() &&
     g_conf->get_val<bool>("osd_skip_data_digest");
+
+  wait_for_apply(poid);
 
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;

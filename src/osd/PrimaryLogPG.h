@@ -483,6 +483,10 @@ public:
 
   ceph_tid_t get_tid() override { return osd->get_tid(); }
 
+  bool get_have_sync_onreadable() override {
+    return osd->store->is_sync_onreadable();
+  }
+
   LogClientTemp clog_error() override { return osd->clog->error(); }
   LogClientTemp clog_warn() override { return osd->clog->warn(); }
 

@@ -36,6 +36,21 @@ class ECBackend : public PGBackend {
 public:
   RecoveryHandle *open_recovery_op() override;
 
+  bool have_sync_onreadable = false;
+
+  Mutex apply_lock = {"ECBackend::apply_lock"};
+  Cond apply_cond;
+  std::multiset<hobject_t> applying;
+
+  void start_apply(const hobject_t& oid);
+  void wait_for_apply(const hobject_t& oid) {
+    if (!have_sync_onreadable) {
+      _wait_for_apply(oid);
+    }
+  }
+  void _wait_for_apply(const hobject_t& oid);
+  void wait_for_all_apply();
+
   void run_recovery_op(
     RecoveryHandle *h,
     int priority
@@ -57,10 +72,7 @@ public:
     ) override;
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
-  void sub_write_applied(
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace);
+  void sub_write_applied(const hobject_t& oid);
   void sub_write_committed(
     ceph_tid_t tid,
     eversion_t version,
