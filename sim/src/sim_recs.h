@@ -38,6 +38,8 @@ using ServerId = uint;
 namespace crimson {
   namespace qos_simulation {
 
+    using Cost = uint32_t;
+
     inline void debugger() {
       raise(SIGCONT);
     }
