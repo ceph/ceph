@@ -5984,7 +5984,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
        } else {
-	 ss << __func__ << " get_erasure_code failed: " << tmp.rdbuf();
+	 ss << __func__ << " get_erasure_code failed: " << tmp.str();
 	 return err;
        }
 
