@@ -213,6 +213,28 @@ def create_vg(name, *devices):
     return vg
 
 
+def remove_vg(vg_name):
+    """
+    Removes a volume group.
+
+    Will return True if the vg is successfully removed or
+    raises a RuntimeError if the removal fails.
+    """
+    stdout, stderr, returncode = process.call(
+        [
+            'vgremove',
+            '-v',  # verbose
+            '-f',  # force it
+            vg_name
+        ],
+        show_command=True,
+        terminal_verbose=True,
+    )
+    if returncode != 0:
+        raise RuntimeError("Unable to remove vg %s".format(vg_name))
+    return True
+
+
 def remove_lv(path):
     """
     Removes a logical volume given it's absolute path.
