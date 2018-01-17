@@ -122,7 +122,7 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid'
+    fields = 'pv_name,pv_tags,pv_uuid,vg_name'
 
     # note the use of `pvs -a` which will return every physical volume including
     # ones that have not been initialized as "pv" by LVM
@@ -707,6 +707,7 @@ class PVolume(object):
             setattr(self, k, v)
         self.pv_api = kw
         self.name = kw['pv_name']
+        self.vg_name = kw['vg_name']
         self.tags = parse_tags(kw['pv_tags'])
 
     def __str__(self):
