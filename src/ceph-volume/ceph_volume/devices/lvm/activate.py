@@ -54,6 +54,7 @@ def activate_filestore(lvs):
 
     # start the OSD
     systemctl.start_osd(osd_id)
+    terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 
 def get_osd_device_path(osd_lv, lvs, device_type):
@@ -126,6 +127,7 @@ def activate_bluestore(lvs):
 
     # start the OSD
     systemctl.start_osd(osd_id)
+    terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 
 class Activate(object):
