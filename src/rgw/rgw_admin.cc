@@ -2095,17 +2095,6 @@ int main(int argc, const char **argv)
     }
   }
 
-  if (opt_cmd == OPT_OLH_GET || opt_cmd == OPT_OLH_READLOG) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-    if (object.empty()) {
-      cerr << "ERROR: object not specified" << std::endl;
-      return EINVAL;
-    }
-  }
-
   if (opt_cmd == OPT_OLH_GET) {
     ret = handle_opt_olh_get(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
     if (ret != 0) {
