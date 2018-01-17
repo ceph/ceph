@@ -86,7 +86,7 @@ struct Option {
   value_t value;
   value_t daemon_value;
 
-  friend ostream& operator<<(ostream&, const value_t& v);
+  static std::string to_str(const value_t& v);
 
   // Items like mon, osd, rgw, rbd, ceph-fuse.  This is advisory metadata
   // for presentation layers (like web dashboards, or generated docs), so that
@@ -195,7 +195,8 @@ struct Option {
   int parse_value(
     const std::string& raw_val,
     value_t *out,
-    std::string *error_message) const;
+    std::string *error_message,
+    std::string *normalized_value=nullptr) const;
 
   template<typename T>
   Option& set_default(const T& v) {
