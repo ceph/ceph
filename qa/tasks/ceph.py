@@ -796,9 +796,14 @@ def cluster(ctx, config):
             )
             mnt_point = DATA_PATH.format(
                 type_='osd', cluster=cluster_name, id_=id_)
-            remote.run(args=[
-                'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
-            ])
+            try:
+                remote.run(args=[
+                    'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
+                ])
+            except run.CommandFailedError as e:
+                # hammer does not have ceph user, so ignore this error
+                log.info('ignoring error when chown ceph:ceph,'
+                         'probably installing hammer: %s', e)
 
     log.info('Reading keys from all nodes...')
     keys_fp = StringIO()
@@ -890,9 +895,14 @@ def cluster(ctx, config):
                     '--keyring', keyring_path,
                 ],
             )
-            remote.run(args=[
-                'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
-            ])
+            try:
+                remote.run(args=[
+                    'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
+                ])
+            except run.CommandFailedError as e:
+                # hammer does not have ceph user, so ignore this error
+                log.info('ignoring error when chown ceph:ceph,'
+                         'probably installing hammer: %s', e)
 
     run.wait(
         mons.run(
