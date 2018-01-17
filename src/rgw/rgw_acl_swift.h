@@ -20,7 +20,8 @@ public:
   ~RGWAccessControlPolicy_SWIFT() {}
 
   void add_grants(RGWRados *store, list<string>& uids, int perm);
-  bool create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list);
+  bool create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list, uint32_t& rw_mask);
+  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(string& read, string& write);
 };
 

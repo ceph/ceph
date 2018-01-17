@@ -82,11 +82,12 @@ void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uid
   }
 }
 
-bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list)
+bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string& name, string& read_list, string& write_list, uint32_t& rw_mask)
 {
   acl.create_default(id, name);
   owner.set_id(id);
   owner.set_name(name);
+  rw_mask = 0;
 
   if (read_list.size()) {
     list<string> uids;
@@ -97,6 +98,7 @@ bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string&
     }
 
     add_grants(store, uids, SWIFT_PERM_READ);
+    rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list.size()) {
     list<string> uids;
@@ -107,8 +109,29 @@ bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string&
     }
 
     add_grants(store, uids, SWIFT_PERM_WRITE);
+    rw_mask |= SWIFT_PERM_WRITE;
   }
   return true;
+}
+
+void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
+                                                RGWAccessControlPolicy_SWIFT *old)
+{
+  /* rw_mask&SWIFT_PERM_READ => setting read acl,
+   * rw_mask&SWIFT_PERM_WRITE => setting write acl
+   * when bit is cleared, copy matching elements from old.
+   */
+  if (rw_mask == (SWIFT_PERM_READ|SWIFT_PERM_WRITE)) {
+    return;
+  }
+  rw_mask ^= (SWIFT_PERM_READ|SWIFT_PERM_WRITE);
+  for (auto &iter: old->acl.get_grant_map()) {
+    ACLGrant& grant = iter.second;
+    uint32_t perm = grant.get_permission().get_permissions();
+    if (perm & rw_mask) {
+      acl.add_grant(&grant);
+    }
+  }
 }
 
 void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
