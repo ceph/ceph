@@ -123,9 +123,6 @@
 /* Define if have curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
 
-/* Define if using CryptoPP. */
-#cmakedefine USE_CRYPTOPP
-
 /* Define if using NSS. */
 #cmakedefine USE_NSS
 
