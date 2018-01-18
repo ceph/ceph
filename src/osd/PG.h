@@ -1457,13 +1457,16 @@ public:
 
     // common to both scrubs
     bool active;
-    int waiting_on;
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
     int deep_errors;
     int large_omap_objects = 0;
     int fixed;
     ScrubMap primary_scrubmap;
+    ScrubMapBuilder primary_scrubmap_pos;
+    epoch_t replica_scrub_start = 0;
+    ScrubMap replica_scrubmap;
+    ScrubMapBuilder replica_scrubmap_pos;
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
@@ -1506,16 +1509,19 @@ public:
       WAIT_PUSHES,
       WAIT_LAST_UPDATE,
       BUILD_MAP,
+      BUILD_MAP_DONE,
       WAIT_REPLICAS,
       COMPARE_MAPS,
       WAIT_DIGEST_UPDATES,
       FINISH,
+      BUILD_MAP_REPLICA,
     } state;
 
     std::unique_ptr<Scrub::Store> store;
     // deep scrub
     bool deep;
-    uint32_t seed;
+    int preempt_left;
+    int preempt_divisor;
 
     list<Context*> callbacks;
     void add_callback(Context *context) {
@@ -1540,26 +1546,21 @@ public:
         case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
         case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
         case BUILD_MAP: ret = "BUILD_MAP"; break;
+        case BUILD_MAP_DONE: ret = "BUILD_MAP_DONE"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;
         case COMPARE_MAPS: ret = "COMPARE_MAPS"; break;
         case WAIT_DIGEST_UPDATES: ret = "WAIT_DIGEST_UPDATES"; break;
         case FINISH: ret = "FINISH"; break;
+        case BUILD_MAP_REPLICA: ret = "BUILD_MAP_REPLICA"; break;
       }
       return ret;
     }
 
     bool is_chunky_scrub_active() const { return state != INACTIVE; }
 
-    // classic (non chunk) scrubs block all writes
-    // chunky scrubs only block writes to a range
-    bool write_blocked_by_scrub(const hobject_t &soid) {
-      return (soid >= start && soid < end);
-    }
-
     // clear all state
     void reset() {
       active = false;
-      waiting_on = 0;
       waiting_on_whom.clear();
       if (active_rep_scrub) {
         active_rep_scrub = OpRequestRef();
@@ -1580,12 +1581,15 @@ public:
       large_omap_objects = 0;
       fixed = 0;
       deep = false;
-      seed = 0;
       run_callbacks();
       inconsistent.clear();
       missing.clear();
       authoritative.clear();
       num_digest_updates_pending = 0;
+      primary_scrubmap = ScrubMap();
+      primary_scrubmap_pos.reset();
+      replica_scrubmap = ScrubMap();
+      replica_scrubmap_pos.reset();
       cleaned_meta_map = ScrubMap();
       sleeping = false;
       needs_sleep = true;
@@ -1600,6 +1604,14 @@ protected:
   bool scrub_after_recovery;
 
   int active_pushes;
+
+  bool scrub_can_preempt = false;
+  bool scrub_preempted = false;
+
+  // we allow some number of preemptions of the scrub, which mean we do
+  // not block.  then we start to block.  once we start blocking, we do
+  // not stop until the scrub range is completed.
+  bool write_blocked_by_scrub(const hobject_t &soid);
 
   void repair_object(
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
@@ -1621,10 +1633,11 @@ protected:
     ThreadPool::TPHandle &handle);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep,
-			  uint32_t seed);
+			  bool allow_preemption);
   int build_scrub_map_chunk(
     ScrubMap &map,
-    hobject_t start, hobject_t end, bool deep, uint32_t seed,
+    ScrubMapBuilder &pos,
+    hobject_t start, hobject_t end, bool deep,
     ThreadPool::TPHandle &handle);
   /**
    * returns true if [begin, end) is good to scrub at this time
