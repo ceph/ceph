@@ -190,8 +190,18 @@ class Prepare(object):
 
         cluster_fsid = conf.ceph.get('global', 'fsid')
         osd_fsid = args.osd_fsid or system.generate_uuid()
+        crush_device_class = args.crush_device_class
+        if crush_device_class:
+            secrets['crush_device_class'] = crush_device_class
         # allow re-using an id, in case a prepare failed
         self.osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
+        tags = {
+            'ceph.osd_fsid': osd_fsid,
+            'ceph.osd_id': self.osd_id,
+            'ceph.cluster_fsid': cluster_fsid,
+            'ceph.cluster_name': conf.cluster,
+            'ceph.crush_device_class': crush_device_class,
+        }
         if args.filestore:
             if not args.journal:
                 raise RuntimeError('--journal is required when using --filestore')
@@ -200,14 +210,8 @@ class Prepare(object):
             if not data_lv:
                 data_lv = self.prepare_device(args.data, 'data', cluster_fsid, osd_fsid)
 
-            tags = {
-                'ceph.osd_fsid': osd_fsid,
-                'ceph.osd_id': self.osd_id,
-                'ceph.cluster_fsid': cluster_fsid,
-                'ceph.cluster_name': conf.cluster,
-                'ceph.data_device': data_lv.lv_path,
-                'ceph.data_uuid': data_lv.lv_uuid,
-            }
+            tags['ceph.data_device'] = data_lv.lv_path
+            tags['ceph.data_uuid'] = data_lv.lv_uuid
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
@@ -226,14 +230,8 @@ class Prepare(object):
             if not block_lv:
                 block_lv = self.prepare_device(args.data, 'block', cluster_fsid, osd_fsid)
 
-            tags = {
-                'ceph.osd_fsid': osd_fsid,
-                'ceph.osd_id': self.osd_id,
-                'ceph.cluster_fsid': cluster_fsid,
-                'ceph.cluster_name': conf.cluster,
-                'ceph.block_device': block_lv.lv_path,
-                'ceph.block_uuid': block_lv.lv_uuid,
-            }
+            tags['ceph.block_device'] = block_lv.lv_path
+            tags['ceph.block_uuid'] = block_lv.lv_uuid
 
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
