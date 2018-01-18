@@ -1,4 +1,39 @@
+import copy
 import math
+
+import static_metrics
+
+
+def get_metrics_spec():
+    """
+    Load the metrics configuration, and build a spec representing the set of
+    metrics we'll use.
+    """
+    metrics_spec = copy.deepcopy(static_metrics.groups)
+    for name, group in metrics_spec.items():
+        templates = group.pop('templates', dict())
+        defaults = group.pop('defaults', dict())
+        for name, item in group.get('metrics', dict()).items():
+            apply_defaults(defaults, item)
+            apply_templates(templates, name, item)
+            if 'name' not in item:
+                item['name'] = name
+    return metrics_spec
+
+
+def apply_defaults(defaults, item):
+    for name, value in defaults.items():
+        if name not in item:
+            item[name] = value
+    return item
+
+
+def apply_templates(templates, item_name, item):
+    for name, value in templates.items():
+        new_value = value.format(item_name)
+        if name not in item:
+            item[name] = new_value
+    return item
 
 
 class Metric(object):

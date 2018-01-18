@@ -6,12 +6,11 @@ import socket
 from collections import OrderedDict
 from mgr_module import MgrModule, MgrStandbyModule
 
-from metric import Metric
+from metric import Metric, get_metrics_spec
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 # for Prometheus exporter port registry
-
 DEFAULT_ADDR = '::'
 DEFAULT_PORT = 9283
 
@@ -20,13 +19,11 @@ DEFAULT_PORT = 9283
 def os_exit_noop(*args, **kwargs):
     pass
 
-
 os._exit = os_exit_noop
 
 
 # to access things in class Module from subclass Root.  Because
 # it's a dict, the writer doesn't need to declare 'global' for access
-
 _global_instance = {'plugin': None}
 
 
@@ -36,33 +33,12 @@ def global_instance():
 
 
 def health_status_to_number(status):
-
     if status == 'HEALTH_OK':
         return 0
     elif status == 'HEALTH_WARN':
         return 1
     elif status == 'HEALTH_ERR':
         return 2
-
-PG_STATES = ['creating', 'active', 'clean', 'down', 'scrubbing', 'deep', 'degraded',
-        'inconsistent', 'peering', 'repair', 'recovering', 'forced-recovery',
-        'backfill', 'forced-backfill', 'wait-backfill', 'backfill-toofull',
-        'incomplete', 'stale', 'remapped', 'undersized', 'peered']
-
-DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
-
-DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
-           'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
-
-OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
-
-OSD_STATUS = ['weight', 'up', 'in']
-
-OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
-
-POOL_METADATA = ('pool_id', 'name')
-
-DISK_OCCUPATION = ('instance', 'device', 'ceph_daemon')
 
 
 class Module(MgrModule):
@@ -76,12 +52,12 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self.metrics = self._setup_static_metrics()
+        self.metrics_spec = get_metrics_spec()
+        self.metrics = self._setup_static_metrics(self.metrics_spec)
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
 
     def _stattype_to_str(self, stattype):
-
         typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
         if typeonly == 0:
             return 'gauge'
@@ -92,89 +68,19 @@ class Module(MgrModule):
             return 'counter'
         if typeonly == self.PERFCOUNTER_HISTOGRAM:
             return 'histogram'
-
         return ''
 
-    def _setup_static_metrics(self):
-        metrics = {}
-        metrics['health_status'] = Metric(
-            'untyped',
-            'health_status',
-            'Cluster health status'
-        )
-        metrics['mon_quorum_count'] = Metric(
-            'gauge',
-            'mon_quorum_count',
-            'Monitors in quorum'
-        )
-        metrics['osd_metadata'] = Metric(
-            'untyped',
-            'osd_metadata',
-            'OSD Metadata',
-            OSD_METADATA
-        )
-
-        # The reason for having this separate to OSD_METADATA is
-        # so that we can stably use the same tag names that
-        # the Prometheus node_exporter does
-        metrics['disk_occupation'] = Metric(
-            'untyped',
-            'disk_occupation',
-            'Associate Ceph daemon with disk used',
-            DISK_OCCUPATION
-        )
-
-        metrics['pool_metadata'] = Metric(
-            'untyped',
-            'pool_metadata',
-            'POOL Metadata',
-            POOL_METADATA
-        )
-        for state in OSD_STATUS:
-            path = 'osd_{}'.format(state)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'untyped',
-                path,
-                'OSD status {}'.format(state),
-                ('ceph_daemon',)
-            )
-        for stat in OSD_STATS:
-            path = 'osd_{}'.format(stat)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'gauge',
-                path,
-                'OSD stat {}'.format(stat),
-                ('ceph_daemon',)
-            )
-        for state in PG_STATES:
-            path = 'pg_{}'.format(state)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'gauge',
-                path,
-                'PG {}'.format(state),
-            )
-        for state in DF_CLUSTER:
-            path = 'cluster_{}'.format(state)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'gauge',
-                path,
-                'DF {}'.format(state),
-            )
-        for state in DF_POOL:
-            path = 'pool_{}'.format(state)
-            self.log.debug("init: creating {}".format(path))
-            metrics[path] = Metric(
-                'gauge',
-                path,
-                'DF pool {}'.format(state),
-                ('pool_id',)
-            )
-
+    def _setup_static_metrics(self, metrics_spec):
+        metrics = dict()
+        for group_name, group in metrics_spec.items():
+            for spec in group['metrics'].values():
+                spec['mtype'] = spec.pop('type')
+                metrics[spec['name']] = Metric(**spec)
         return metrics
+
+    def _get_spec_group(self, group_name):
+        group = self.metrics_spec[group_name]
+        return group['metrics']
 
     def get_health(self):
         health = json.loads(self.get('health')['json'])
@@ -183,14 +89,13 @@ class Module(MgrModule):
         )
 
     def get_df(self):
-        # maybe get the to-be-exported metrics from a config?
         df = self.get('df')
-        for stat in DF_CLUSTER:
+        for stat in self._get_spec_group('df_cluster').keys():
             path = 'cluster_{}'.format(stat)
             self.metrics[path].set(df['stats'][stat])
 
         for pool in df['pools']:
-            for stat in DF_POOL:
+            for stat in self._get_spec_group('df_pool').keys():
                 path = 'pool_{}'.format(stat)
                 self.metrics[path].set(pool['stats'][stat], (pool['id'],))
 
@@ -201,7 +106,7 @@ class Module(MgrModule):
     def get_pg_status(self):
         # TODO add per pool status?
         pg_s = self.get('pg_summary')['all']
-        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
+        reported_pg_s = [(s, v) for key, v in pg_s.items() for s in
                          key.split('+')]
         for state, value in reported_pg_s:
             path = 'pg_{}'.format(state)
@@ -210,19 +115,20 @@ class Module(MgrModule):
             except KeyError:
                 self.log.warn("skipping pg in unknown state {}".format(state))
         reported_states = [s[0] for s in reported_pg_s]
-        for state in PG_STATES:
+        for state in self._get_spec_group('pg_states').keys():
             path = 'pg_{}'.format(state)
             if state not in reported_states:
                 try:
                     self.metrics[path].set(0)
                 except KeyError:
-                    self.log.warn("skipping pg in unknown state {}".format(state))
+                    self.log.warn(
+                        "skipping pg in unknown state {}".format(state))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
             id_ = osd['osd']
-            for stat in OSD_STATS:
+            for stat in self._get_spec_group('osd_stats').keys():
                 status = osd['perf_stat'][stat]
                 self.metrics['osd_{}'.format(stat)].set(
                     status,
@@ -242,14 +148,15 @@ class Module(MgrModule):
                 id_,
                 p_addr
             ))
-            for state in OSD_STATUS:
+            for state in self._get_spec_group('osd_status').keys():
                 status = osd[state]
                 self.metrics['osd_{}'.format(state)].set(
                     status,
                     ('osd.{}'.format(id_),))
 
             osd_metadata = self.get_metadata("osd", str(id_))
-            dev_keys = ("backend_filestore_dev_node", "bluestore_bdev_dev_node")
+            dev_keys = ("backend_filestore_dev_node",
+                        "bluestore_bdev_dev_node")
             osd_dev_node = None
             for dev_key in dev_keys:
                 val = osd_metadata.get(dev_key, None)
@@ -266,8 +173,9 @@ class Module(MgrModule):
                     "osd.{0}".format(id_)
                 ))
             else:
-                self.log.info("Missing dev node metadata for osd {0}, skipping "
-                               "occupation record for this osd".format(id_))
+                self.log.info("Missing dev node metadata for osd {0}, "
+                              "skipping occupation record for this "
+                              "osd".format(id_))
 
         for pool in osd_map['pools']:
             id_ = pool['pool']
