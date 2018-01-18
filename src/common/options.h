@@ -50,7 +50,7 @@ struct Option {
     switch (l) {
       case LEVEL_BASIC: return "basic";
       case LEVEL_ADVANCED: return "advanced";
-      case LEVEL_DEV: return "developer";
+      case LEVEL_DEV: return "dev";
       default: return "unknown";
     }
   }
