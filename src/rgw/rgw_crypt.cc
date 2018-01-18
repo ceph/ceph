@@ -125,7 +125,7 @@ public:
 	  return encrypt(input, in_ofs, size, output, stream_offset);
   }
 
-  void prepare_iv(::byte iv[AES_256_IVSIZE], off_t offset) {
+  void prepare_iv(unsigned char iv[AES_256_IVSIZE], off_t offset) {
     off_t index = offset / AES_256_IVSIZE;
     off_t i = AES_256_IVSIZE - 1;
     unsigned int val;
@@ -424,7 +424,7 @@ public:
   }
 
 
-  void prepare_iv(::byte (&iv)[AES_256_IVSIZE], off_t offset) {
+  void prepare_iv(unsigned char (&iv)[AES_256_IVSIZE], off_t offset) {
     off_t index = offset / AES_256_IVSIZE;
     off_t i = AES_256_IVSIZE - 1;
     unsigned int val;
@@ -984,8 +984,8 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
       }
 
       MD5 key_hash;
-      ::byte key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-      key_hash.Update(reinterpret_cast<const ::byte*>(key_bin.c_str()), key_bin.size());
+      unsigned char key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
+      key_hash.Update(reinterpret_cast<const unsigned char*>(key_bin.c_str()), key_bin.size());
       key_hash.Final(key_hash_res);
 
       if (memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
@@ -1221,7 +1221,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
     MD5 key_hash;
     uint8_t key_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    key_hash.Update(reinterpret_cast<const ::byte*>(key_bin.c_str()), key_bin.size());
+    key_hash.Update(reinterpret_cast<const unsigned char*>(key_bin.c_str()), key_bin.size());
     key_hash.Final(key_hash_res);
 
     if ((memcmp(key_hash_res, keymd5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) ||

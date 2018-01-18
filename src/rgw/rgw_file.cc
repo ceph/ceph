@@ -1365,7 +1365,7 @@ namespace rgw {
     if (need_to_wait) {
       orig_data = data;
     }
-    hash.Update((const ::byte *)data.c_str(), data.length());
+    hash.Update((const unsigned char *)data.c_str(), data.length());
     op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
     if (op_ret < 0) {
       if (!need_to_wait || op_ret != -EEXIST) {
