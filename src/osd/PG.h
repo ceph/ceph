@@ -270,6 +270,9 @@ public:
     assert(osdmap_ref);
     return osdmap_ref;
   }
+  epoch_t get_osdmap_epoch() const {
+    return osdmap_ref->get_epoch();
+  }
 
   void lock_suspend_timeout(ThreadPool::TPHandle &handle) {
     handle.suspend_tp_timeout();
