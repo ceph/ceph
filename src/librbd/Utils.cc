@@ -10,6 +10,7 @@
 #include "include/rbd/features.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Features.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -66,9 +67,10 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
 
 uint64_t get_rbd_default_features(CephContext* cct)
 {
-  auto str_val = cct->_conf->get_val<std::string>("rbd_default_features");
-  return boost::lexical_cast<uint64_t>(str_val);
+  auto value = cct->_conf->get_val<std::string>("rbd_default_features");
+  return librbd::rbd_features_from_string(value, nullptr);
 }
+
 
 bool calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
