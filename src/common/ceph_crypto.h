@@ -9,50 +9,7 @@
 #define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 
-#ifdef USE_CRYPTOPP
-# define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <string.h>
-#include <cryptopp/md5.h>
-#include <cryptopp/sha.h>
-#include <cryptopp/hmac.h>
-
-// reinclude our assert to clobber the system one
-# include "include/assert.h"
-
-namespace ceph {
-  namespace crypto {
-    void assert_init();
-    void init(CephContext *cct);
-    // @param shared true if the the underlying crypto library could be shared
-    //               with the application linked against the Ceph library.
-    // @note we do extra global cleanup specific to the underlying crypto
-    //       library, if @c shared is @c false.
-    void shutdown(bool shared=true);
-
-    using CryptoPP::Weak::MD5;
-    using CryptoPP::SHA1;
-    using CryptoPP::SHA256;
-
-    class HMACSHA1: public CryptoPP::HMAC<CryptoPP::SHA1> {
-    public:
-    HMACSHA1 (const ::byte *key, size_t length)
-	: CryptoPP::HMAC<CryptoPP::SHA1>(key, length)
-	{
-	}
-      ~HMACSHA1();
-    };
-
-    class HMACSHA256: public CryptoPP::HMAC<CryptoPP::SHA256> {
-    public:
-    HMACSHA256 (const ::byte *key, size_t length)
-        : CryptoPP::HMAC<CryptoPP::SHA256>(key, length)
-        {
-        }
-      ~HMACSHA256();
-    };
-  }
-}
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 // you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
 # include <nss.h>
 # include <pk11pub.h>
