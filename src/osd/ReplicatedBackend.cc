@@ -651,129 +651,145 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   }
 }
 
-void ReplicatedBackend::be_deep_scrub(
+int ReplicatedBackend::be_deep_scrub(
   const hobject_t &poid,
-  uint32_t seed,
-  ScrubMap::object &o,
-  ThreadPool::TPHandle &handle,
-  ScrubMap* const map)
+  ScrubMap &map,
+  ScrubMapBuilder &pos,
+  ScrubMap::object &o)
 {
-  dout(10) << __func__ << " " << poid << " seed " 
-	   << std::hex << seed << std::dec << dendl;
-  bufferhash h(seed), oh(seed);
-  bufferlist bl, hdrbl;
+  dout(10) << __func__ << " " << poid << " pos " << pos << dendl;
   int r;
-  __u64 pos = 0;
-  bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
-
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL |
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
-  while (true) {
-    handle.reset_tp_timeout();
+  bool skip_data_digest = store->has_builtin_csum() &&
+    g_conf->get_val<bool>("osd_skip_data_digest");
+
+  utime_t sleeptime;
+  sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
+  if (sleeptime != utime_t()) {
+    lgeneric_derr(cct) << __func__ << " sleeping for " << sleeptime << dendl;
+    sleeptime.sleep();
+  }
+
+  assert(poid == pos.ls[pos.pos]);
+  if (!pos.data_done()) {
+    if (pos.data_pos == 0) {
+      pos.data_hash = bufferhash(-1);
+    }
+
+    bufferlist bl;
     r = store->read(
-	  ch,
-	  ghobject_t(
-	    poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	  pos,
-	  cct->_conf->osd_deep_scrub_stride, bl,
-	  fadvise_flags);
-    if (r <= 0)
-      break;
-
+      ch,
+      ghobject_t(
+	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      pos.data_pos,
+      cct->_conf->osd_deep_scrub_stride, bl,
+      fadvise_flags);
+    if (r < 0) {
+      dout(20) << __func__ << "  " << poid << " got "
+	       << r << " on read, read_error" << dendl;
+      o.read_error = true;
+      return 0;
+    }
+    if (r > 0 && !skip_data_digest) {
+      pos.data_hash << bl;
+    }
+    pos.data_pos += r;
+    if (r == cct->_conf->osd_deep_scrub_stride) {
+      dout(20) << __func__ << "  " << poid << " more data, digest so far 0x"
+	       << std::hex << pos.data_hash.digest() << std::dec << dendl;
+      return -EINPROGRESS;
+    }
+    // done with bytes
+    pos.data_pos = -1;
     if (!skip_data_digest) {
-      h << bl;
+      o.digest = pos.data_hash.digest();
+      o.digest_present = true;
     }
-    pos += bl.length();
-    bl.clear();
-  }
-  if (r == -EIO) {
-    dout(25) << __func__ << "  " << poid << " got "
-	     << r << " on read, read_error" << dendl;
-    o.read_error = true;
-    return;
-  }
-  if (!skip_data_digest) {
-    o.digest = h.digest();
-    o.digest_present = true;
+    dout(20) << __func__ << "  " << poid << " done with data, digest 0x"
+	     << std::hex << o.digest << std::dec << dendl;
   }
 
-  bl.clear();
-  r = store->omap_get_header(
-    coll,
-    ghobject_t(
-      poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    &hdrbl, true);
-  // NOTE: bobtail to giant, we would crc the head as (len, head).
-  // that changes at the same time we start using a non-zero seed.
-  if (r == 0 && hdrbl.length()) {
-    dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
-             << dendl;
-    if (seed == 0) {
-      // legacy
-      bufferlist bl;
-      encode(hdrbl, bl);
-      oh << bl;
-    } else {
-      oh << hdrbl;
+  // omap header
+  if (pos.omap_pos.empty()) {
+    pos.omap_hash = bufferhash(-1);
+
+    bufferlist hdrbl;
+    r = store->omap_get_header(
+      coll,
+      ghobject_t(
+	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
+      &hdrbl, true);
+    if (r == -EIO) {
+      dout(20) << __func__ << "  " << poid << " got "
+	       << r << " on omap header read, read_error" << dendl;
+      o.read_error = true;
+      return 0;
     }
-  } else if (r == -EIO) {
-    dout(25) << __func__ << "  " << poid << " got "
-	     << r << " on omap header read, read_error" << dendl;
-    o.read_error = true;
-    return;
+    if (r == 0 && hdrbl.length()) {
+      dout(25) << "CRC header " << string(hdrbl.c_str(), hdrbl.length())
+	       << dendl;
+      pos.omap_hash << hdrbl;
+    }
   }
 
+  // omap
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
     coll,
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
-  uint64_t keys_scanned = 0;
-  uint64_t value_sum = 0;
-  for (iter->seek_to_first(); iter->status() == 0 && iter->valid();
-    iter->next(false)) {
-    ++keys_scanned;
-    handle.reset_tp_timeout();
+  if (pos.omap_pos.length()) {
+    iter->lower_bound(pos.omap_pos);
+  } else {
+    iter->seek_to_first();
+  }
+  int max = g_conf->osd_deep_scrub_keys;
+  while (iter->status() == 0 && iter->valid()) {
+    pos.omap_bytes += iter->value().length();
+    ++pos.omap_keys;
 
-    dout(25) << "CRC key " << iter->key() << " value:\n";
-    iter->value().hexdump(*_dout);
-    *_dout << dendl;
-
-    value_sum += iter->value().length();
-
+    // fixme: we can do this more efficiently.
+    bufferlist bl;
     encode(iter->key(), bl);
     encode(iter->value(), bl);
-    oh << bl;
-    bl.clear();
+    pos.omap_hash << bl;
+
+    iter->next();
+
+    if (iter->valid() && max == 0) {
+      pos.omap_pos = iter->key();
+      return -EINPROGRESS;
+    }
+    if (iter->status() < 0) {
+      dout(25) << __func__ << "  " << poid
+	       << " on omap scan, db status error" << dendl;
+      o.read_error = true;
+      return 0;
+    }
   }
 
-  if (keys_scanned > cct->_conf->get_val<uint64_t>(
-                         "osd_deep_scrub_large_omap_object_key_threshold") ||
-      value_sum > cct->_conf->get_val<uint64_t>(
-                      "osd_deep_scrub_large_omap_object_value_sum_threshold")) {
+  if (pos.omap_keys > cct->_conf->get_val<uint64_t>(
+	"osd_deep_scrub_large_omap_object_key_threshold") ||
+      pos.omap_bytes > cct->_conf->get_val<uint64_t>(
+	"osd_deep_scrub_large_omap_object_value_sum_threshold")) {
     dout(25) << __func__ << " " << poid
-             << " large omap object detected. Object has " << keys_scanned
-             << " keys and size " << value_sum << " bytes" << dendl;
+	     << " large omap object detected. Object has " << pos.omap_keys
+	     << " keys and size " << pos.omap_bytes << " bytes" << dendl;
     o.large_omap_object_found = true;
-    o.large_omap_object_key_count = keys_scanned;
-    o.large_omap_object_value_size = value_sum;
-    map->has_large_omap_object_errors = true;
+    o.large_omap_object_key_count = pos.omap_keys;
+    o.large_omap_object_value_size = pos.omap_bytes;
+    map.has_large_omap_object_errors = true;
   }
 
-  if (iter->status() < 0) {
-    dout(25) << __func__ << "  " << poid
-             << " on omap scan, db status error" << dendl;
-    o.read_error = true;
-    return;
-  }
-
-  //Store final calculated CRC32 of omap header & key/values
-  o.omap_digest = oh.digest();
+  o.omap_digest = pos.omap_hash.digest();
   o.omap_digest_present = true;
-  dout(20) << __func__ << "  " << poid << " omap_digest "
+  dout(20) << __func__ << " done with " << poid << " omap_digest "
 	   << std::hex << o.omap_digest << std::dec << dendl;
+
+  // done!
+  return 0;
 }
 
 void ReplicatedBackend::_do_push(OpRequestRef op)
@@ -1067,6 +1083,8 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
 
   // we better not be missing this.
   assert(!parent->get_log().get_missing().is_missing(soid));
+
+  parent->maybe_preempt_replica_scrub(soid);
 
   int ackerosd = m->get_source().num();
 

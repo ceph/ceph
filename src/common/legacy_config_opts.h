@@ -746,7 +746,9 @@ OPTION(osd_scrub_auto_repair_num_errors, OPT_U32)   // only auto-repair when num
 OPTION(osd_deep_scrub_interval, OPT_FLOAT) // once a week
 OPTION(osd_deep_scrub_randomize_ratio, OPT_FLOAT) // scrubs will randomly become deep scrubs at this rate (0.15 -> 15% of scrubs are deep)
 OPTION(osd_deep_scrub_stride, OPT_INT)
+OPTION(osd_deep_scrub_keys, OPT_INT)
 OPTION(osd_deep_scrub_update_digest_min_age, OPT_INT)   // objects must be this old (seconds) before we update the whole-object digest on scrub
+OPTION(osd_skip_data_digest, OPT_BOOL)
 OPTION(osd_class_dir, OPT_STR) // where rados plugins are stored
 OPTION(osd_open_classes_on_start, OPT_BOOL)
 OPTION(osd_class_load_list, OPT_STR) // list of object classes allowed to be loaded (allow all: *)
@@ -790,6 +792,7 @@ OPTION(osd_debug_misdirected_ops, OPT_BOOL)
 OPTION(osd_debug_skip_full_check_in_recovery, OPT_BOOL)
 OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
+OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track
