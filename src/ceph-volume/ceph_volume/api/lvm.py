@@ -737,7 +737,6 @@ class PVolume(object):
             setattr(self, k, v)
         self.pv_api = kw
         self.name = kw['pv_name']
-        self.vg_name = kw['vg_name']
         self.tags = parse_tags(kw['pv_tags'])
 
     def __str__(self):
