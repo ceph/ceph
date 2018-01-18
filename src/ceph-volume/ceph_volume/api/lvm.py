@@ -115,6 +115,8 @@ def get_api_pvs():
     Return the list of physical volumes configured for lvm and available in the
     system using flags to include common metadata associated with them like the uuid
 
+    This will only return physical volumes set up to work with LVM.
+
     Command and delimeted output, should look like::
 
         $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid

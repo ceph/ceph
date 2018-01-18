@@ -89,7 +89,7 @@ class Zap(object):
         sub_command_help = dedent("""
         Zaps the given logical volume, raw device or partition for reuse by ceph-volume.
         If given a path to a logical volume it must be in the format of vg/lv. Any
-        filesystems present on the given device/lv/partition will be removed and
+        filesystems present on the given device, vg/lv, or partition will be removed and
         all data will be purged.
 
         However, the lv or partition will be kept intact.
@@ -105,11 +105,10 @@ class Zap(object):
               ceph-volume lvm zap /dev/sdc1
 
         If the --destroy flag is given and you are zapping a raw device or partition
-        then all vgs and lvs that exist on that raw device or parition will be destroyed.
+        then all vgs and lvs that exist on that raw device or partition will be destroyed.
 
-        This is especially useful if you've give that raw device or partition to the
-        ceph-volume lvm create or ceph-volume lvm prepare commands previously and now want to
-        reuse that device.
+        This is especially useful if a raw device or partition was used by ceph-volume lvm create
+        or ceph-volume lvm prepare commands previously and now you want to reuse that device.
 
         For example:
 
