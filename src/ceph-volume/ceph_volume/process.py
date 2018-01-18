@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def log_output(descriptor, message, terminal_logging):
+def log_output(descriptor, message, terminal_logging, logfile_logging):
     """
     log output to both the logger and the terminal if terminal_logging is
     enabled
@@ -20,7 +20,8 @@ def log_output(descriptor, message, terminal_logging):
     line = '%s %s' % (descriptor, message)
     if terminal_logging:
         getattr(terminal, descriptor)(message)
-    logger.info(line)
+    if logfile_logging:
+        logger.info(line)
 
 
 def log_descriptors(reads, process, terminal_logging):
@@ -42,7 +43,7 @@ def log_descriptors(reads, process, terminal_logging):
     for descriptor in reads:
         descriptor_name = descriptor_names[descriptor]
         try:
-            log_output(descriptor_name, read(descriptor, 1024), terminal_logging)
+            log_output(descriptor_name, read(descriptor, 1024), terminal_logging, True)
         except (IOError, OSError):
             # nothing else to log
             pass
@@ -148,10 +149,16 @@ def call(command, **kw):
     Useful when system calls are needed to act on output, and that same output
     shouldn't get displayed on the terminal.
 
+    Optionally, the command can be displayed on the terminal and the log file,
+    and log file output can be turned off. This is useful to prevent sensitive
+    output going to stderr/stdout and being captured on a log file.
+
     :param terminal_verbose: Log command output to terminal, defaults to False, and
                              it is forcefully set to True if a return code is non-zero
+    :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
     """
     terminal_verbose = kw.pop('terminal_verbose', False)
+    logfile_verbose = kw.pop('logfile_verbose', True)
     show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
@@ -184,12 +191,13 @@ def call(command, **kw):
         # set to true so that we can log the stderr/stdout that callers would
         # do anyway
         terminal_verbose = True
+        logfile_verbose = True
 
     # the following can get a messed up order in the log if the system call
     # returns output with both stderr and stdout intermingled. This separates
     # that.
     for line in stdout:
-        log_output('stdout', line, terminal_verbose)
+        log_output('stdout', line, terminal_verbose, logfile_verbose)
     for line in stderr:
-        log_output('stderr', line, terminal_verbose)
+        log_output('stderr', line, terminal_verbose, logfile_verbose)
     return stdout, stderr, returncode
