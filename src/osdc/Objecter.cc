@@ -708,10 +708,9 @@ void Objecter::_send_linger_ping(LingerOp *info)
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
-  MOSDOp *m = _prepare_osd_op(o);
   o->tid = ++last_tid;
   _session_op_assign(info->session, o);
-  _send_op(o, m);
+  _send_op(o);
   info->ping_tid = o->tid;
 
   onack->sent = now;
@@ -2464,11 +2463,6 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     _maybe_request_map();
   }
 
-  MOSDOp *m = NULL;
-  if (need_send) {
-    m = _prepare_osd_op(op);
-  }
-
   OSDSession::unique_lock sl(s->lock);
   if (op->tid == 0)
     op->tid = ++last_tid;
@@ -2482,7 +2476,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   _session_op_assign(s, op);
 
   if (need_send) {
-    _send_op(op, m);
+    _send_op(op);
   }
 
   // Last chance to touch Op here, after giving up session lock it can
@@ -3226,7 +3220,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
   return m;
 }
 
-void Objecter::_send_op(Op *op, MOSDOp *m)
+void Objecter::_send_op(Op *op)
 {
   // rwlock is locked
   // op->session->lock is locked
@@ -3255,10 +3249,8 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     }
   }
 
-  if (!m) {
-    assert(op->tid > 0);
-    m = _prepare_osd_op(op);
-  }
+  assert(op->tid > 0);
+  MOSDOp *m = _prepare_osd_op(op);
 
   if (op->target.actual_pgid != m->get_spg()) {
     ldout(cct, 10) << __func__ << " " << op->tid << " pgid change from "
@@ -3291,8 +3283,6 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   }
 
   op->incarnation = op->session->incarnation;
-
-  m->set_tid(op->tid);
 
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
