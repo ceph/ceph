@@ -355,6 +355,20 @@ void GroupSnapshotNamespace::dump(Formatter *f) const {
   f->dump_string("group_snapshot_id", group_snapshot_id);
 }
 
+void TrashSnapshotNamespace::encode(bufferlist& bl) const {
+  using ceph::encode;
+  encode(original_name, bl);
+}
+
+void TrashSnapshotNamespace::decode(bufferlist::iterator& it) {
+  using ceph::decode;
+  decode(original_name, it);
+}
+
+void TrashSnapshotNamespace::dump(Formatter *f) const {
+  f->dump_string("original_name", original_name);
+}
+
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
 public:
   explicit EncodeSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
@@ -452,6 +466,8 @@ void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
   o.push_back(new SnapshotInfo(2ULL,
                                GroupSnapshotNamespace{567, "group1", "snap1"},
                                "snap1", 123, {123456, 0}));
+  o.push_back(new SnapshotInfo(3ULL, TrashSnapshotNamespace{"snap1"},
+                               "12345", 123, {123456, 0}));
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
@@ -472,6 +488,9 @@ void SnapshotNamespace::decode(bufferlist::iterator &p)
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP:
       *this = GroupSnapshotNamespace();
       break;
+    case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+      *this = TrashSnapshotNamespace();
+      break;
     default:
       *this = UnknownSnapshotNamespace();
       break;
@@ -481,13 +500,17 @@ void SnapshotNamespace::decode(bufferlist::iterator &p)
 }
 
 void SnapshotNamespace::dump(Formatter *f) const {
-  boost::apply_visitor(DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"), *this);
+  boost::apply_visitor(
+    DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"), *this);
 }
 
 void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o) {
   o.push_back(new SnapshotNamespace(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a", "2118643c9732")));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869", "33352be8933c")));
+  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
+                                                           "2118643c9732")));
+  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
+                                                           "33352be8933c")));
+  o.push_back(new SnapshotNamespace(TrashSnapshotNamespace()));
 }
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
@@ -500,6 +523,11 @@ std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
      << " group_pool=" << ns.group_pool
      << " group_id=" << ns.group_id
      << " group_snapshot_id=" << ns.group_snapshot_id << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns) {
+  os << "[trash]";
   return os;
 }
 
