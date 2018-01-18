@@ -72,6 +72,9 @@ class Zap(object):
                 logger.info("Destroying physical volume %s because --destroy was given", device)
                 terminal.write("Destroying physical volume %s because --destroy was given" % device)
                 api.remove_pv(device)
+            else:
+                logger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
+                terminal.write("Skipping --destroy because no associated physical volumes are found for %s" % device)
 
         wipefs(path)
         zap_data(path)
