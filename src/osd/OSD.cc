@@ -6542,6 +6542,9 @@ void OSD::ms_fast_dispatch(Message *m)
   case MSG_COMMAND:
     handle_command(static_cast<MCommand*>(m));
     return;
+  case MSG_OSD_FORCE_RECOVERY:
+    handle_fast_force_recovery(static_cast<MOSDForceRecovery*>(m));
+    return;
 
   case MSG_OSD_PG_CREATE2:
     return handle_fast_pg_create(static_cast<MOSDPGCreate2*>(m));
@@ -6773,10 +6776,6 @@ void OSD::_dispatch(Message *m)
     // osd
   case MSG_OSD_SCRUB:
     handle_scrub(static_cast<MOSDScrub*>(m));
-    break;
-
-  case MSG_OSD_FORCE_RECOVERY:
-    handle_force_recovery(m);
     break;
 
     // -- need OSDMap --
@@ -8596,32 +8595,46 @@ void OSD::handle_fast_pg_remove(MOSDPGRemove *m)
   }
 }
 
-void OSD::handle_force_recovery(Message *m)
+void OSD::handle_fast_force_recovery(MOSDForceRecovery *m)
 {
-  MOSDForceRecovery *msg = static_cast<MOSDForceRecovery*>(m);
-  assert(msg->get_type() == MSG_OSD_FORCE_RECOVERY);
-
-  vector<PGRef> local_pgs;
-  local_pgs.reserve(msg->forced_pgs.size());
-
-  {
-    RWLock::RLocker l(pg_map_lock);
-    for (auto& i : msg->forced_pgs) {
-      spg_t locpg;
-      if (osdmap->get_primary_shard(i, &locpg)) {
-	auto pg_map_entry = pg_map.find(locpg);
-	if (pg_map_entry != pg_map.end()) {
-	  local_pgs.push_back(pg_map_entry->second);
-	}
+  dout(10) << __func__ << " " << *m << dendl;
+  epoch_t epoch = get_osdmap()->get_epoch();
+  for (auto pgid : m->forced_pgs) {
+    if (m->options & OFR_BACKFILL) {
+      if (m->options & OFR_CANCEL) {
+	enqueue_peering_evt(
+	  pgid,
+	  PGPeeringEventRef(
+	    std::make_shared<PGPeeringEvent>(
+	      epoch, epoch,
+	      PG::UnsetForceBackfill())));
+      } else {
+	enqueue_peering_evt(
+	  pgid,
+	  PGPeeringEventRef(
+	    std::make_shared<PGPeeringEvent>(
+	      epoch, epoch,
+	      PG::SetForceBackfill())));
+      }
+    } else if (m->options & OFR_RECOVERY) {
+      if (m->options & OFR_CANCEL) {
+	enqueue_peering_evt(
+	  pgid,
+	  PGPeeringEventRef(
+	    std::make_shared<PGPeeringEvent>(
+	      epoch, epoch,
+	      PG::UnsetForceRecovery())));
+      } else {
+	enqueue_peering_evt(
+	  pgid,
+	  PGPeeringEventRef(
+	    std::make_shared<PGPeeringEvent>(
+	      epoch, epoch,
+	      PG::SetForceRecovery())));
       }
     }
   }
-
-  if (local_pgs.size()) {
-    service.adjust_pg_priorities(local_pgs, msg->options);
-  }
-
-  msg->put();
+  m->put();
 }
 
 void OSD::handle_pg_query_nopg(const MQuery& q)
@@ -8726,37 +8739,6 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
     *available_pushes = max - recovery_ops_active - recovery_ops_reserved;
 
   return true;
-}
-
-
-void OSDService::adjust_pg_priorities(const vector<PGRef>& pgs, int newflags)
-{
-  if (!pgs.size() || !(newflags & (OFR_BACKFILL | OFR_RECOVERY))) {
-    return;
-  }
-  set<spg_t> did;
-  if (newflags & OFR_BACKFILL) {
-    for (auto& pg : pgs) {
-      if (pg->set_force_backfill(!(newflags & OFR_CANCEL))) {
-	did.insert(pg->pg_id);
-      }
-    }
-  } else if (newflags & OFR_RECOVERY) {
-    for (auto& pg : pgs) {
-      if (pg->set_force_recovery(!(newflags & OFR_CANCEL))) {
-	did.insert(pg->pg_id);
-      }
-    }
-  }
-  if (did.empty()) {
-    dout(10) << __func__ << " " << ((newflags & OFR_CANCEL) ? "cleared" : "set")
-	     << " force_" << ((newflags & OFR_BACKFILL) ? "backfill" : "recovery")
-	     << " on no pgs" << dendl;
-  } else {
-    dout(10) << __func__ << " " << ((newflags & OFR_CANCEL) ? "cleared" : "set")
-	     << " force_" << ((newflags & OFR_BACKFILL) ? "backfill" : "recovery")
-	     << " on " << did << dendl;
-  }
 }
 
 void OSD::do_recovery(

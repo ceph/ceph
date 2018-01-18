@@ -1213,7 +1213,6 @@ bool DaemonServer::handle_command(MCommand *m)
   	       prefix == "pg cancel-force-backfill") {
     string forceop = prefix.substr(3, string::npos);
     list<pg_t> parsed_pgs;
-    map<int, list<pg_t> > osdpgs;
 
     // figure out actual op just once
     int actual_op = 0;
@@ -1303,20 +1302,6 @@ bool DaemonServer::handle_command(MCommand *m)
 	    }
 	  }
 	}
-
-	// group pgs to process by osd
-	for (auto& pgid : parsed_pgs) {
-	  auto workit = pg_map.pg_stat.find(pgid);
-	  if (workit != pg_map.pg_stat.end()) {
-	    pg_stat_t workpg = workit->second;
-	    set<int32_t> osds(workpg.up.begin(), workpg.up.end());
-	    osds.insert(workpg.acting.begin(), workpg.acting.end());
-	    for (auto i : osds) {
-	      osdpgs[i].push_back(pgid);
-	    }
-	  }
-	}
-
       });
     }
 
@@ -1328,24 +1313,35 @@ bool DaemonServer::handle_command(MCommand *m)
       r = 0;
     }
 
-    // optimize the command -> messages conversion, use only one message per distinct OSD
+    // optimize the command -> messages conversion, use only one
+    // message per distinct OSD
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
-      for (auto& i : osdpgs) {
-	if (osdmap.is_up(i.first)) {
-	  vector<pg_t> pgvec(make_move_iterator(i.second.begin()), make_move_iterator(i.second.end()));
-	  auto p = osd_cons.find(i.first);
-	  if (p == osd_cons.end()) {
-	    ss << "osd." << i.first << " is not currently connected";
-	    r = -EAGAIN;
-	    continue;
+	// group pgs to process by osd
+	map<int, vector<spg_t>> osdpgs;
+	for (auto& pgid : parsed_pgs) {
+	  int primary;
+	  spg_t spg;
+	  if (osdmap.get_primary_shard(pgid, &primary, &spg)) {
+	    osdpgs[primary].push_back(spg);
 	  }
-	  for (auto& con : p->second) {
-	    con->send_message(new MOSDForceRecovery(monc->get_fsid(), pgvec, actual_op));
-	  }
-	  ss << "instructing pg(s) " << i.second << " on osd." << i.first << " to " << forceop << "; ";
 	}
-      }
-    });
+	for (auto& i : osdpgs) {
+	  if (osdmap.is_up(i.first)) {
+	    auto p = osd_cons.find(i.first);
+	    if (p == osd_cons.end()) {
+	      ss << "osd." << i.first << " is not currently connected";
+	      r = -EAGAIN;
+	      continue;
+	    }
+	    for (auto& con : p->second) {
+	      con->send_message(
+		new MOSDForceRecovery(monc->get_fsid(), i.second, actual_op));
+	    }
+	    ss << "instructing pg(s) " << i.second << " on osd." << i.first
+	       << " to " << forceop << "; ";
+	  }
+	}
+      });
     ss << std::endl;
     cmdctx->reply(r, ss);
     return true;
