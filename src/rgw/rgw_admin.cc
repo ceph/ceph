@@ -483,344 +483,89 @@ int main(int argc, const char **argv)
                                    store, formatter);
     case OPT_ZONEGROUP_ADD:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_id,zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to initialize zonegroup " << zonegroup_name << " id " << zonegroup_id << " :"
-	       << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	RGWZoneParams zone(zone_id, zone_name);
-	ret = zone.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        if (zone.realm_id != zonegroup.realm_id) {
-          zone.realm_id = zonegroup.realm_id;
-          ret = zone.update();
-          if (ret < 0) {
-            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
+	ret = handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name, tier_type_specified, tier_type,
+                                       tier_config_add, sync_from_all_specified, sync_from_all, redirect_zone_set,
+                                       redirect_zone, is_master_set, is_master, is_read_only_set, read_only, endpoints,
+                                       sync_from, sync_from_rm, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-
-        string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-        zone.tier_config = tier_config_add;
-
-        bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
-        string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
-
-        ret = zonegroup.add_zone(zone,
-                                 (is_master_set ? &is_master : nullptr),
-                                 (is_read_only_set ? &read_only : nullptr),
-                                 endpoints, ptier_type,
-                                 psync_from_all, sync_from, sync_from_rm,
-                                 predirect_zone);
-	if (ret < 0) {
-	  cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name() << ": "
-	       << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        encode_json("zonegroup", zonegroup, formatter);
-        formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_CREATE:
       {
-	if (zonegroup_name.empty()) {
-	  cerr << "Missing zonegroup name" << std::endl;
-	  return EINVAL;
-	}
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_name, is_master, g_ceph_context, store, realm.get_id(), endpoints);
-        zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
-	ret = zonegroup.create();
-	if (ret < 0) {
-	  cerr << "failed to create zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = zonegroup.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
+        ret = handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, set_default,
+                                          is_master, endpoints, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-
-	encode_json("zonegroup", zonegroup, formatter);
-	formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_DEFAULT:
       {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	ret = zonegroup.set_as_default();
-	if (ret < 0) {
-	  cerr << "failed to set zonegroup as default: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
+        ret = handle_opt_zonegroup_default(zonegroup_id, zonegroup_name, g_ceph_context, store);
+        if (ret != 0) {
+          return ret;
+        }
       }
       break;
     case OPT_ZONEGROUP_DELETE:
-      {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup.delete_obj();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't delete zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
+    {
+      ret = handle_opt_zonegroup_delete(zonegroup_id, zonegroup_name, g_ceph_context, store);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_ZONEGROUP_GET:
-      {
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	encode_json("zonegroup", zonegroup, formatter);
-	formatter->flush(cout);
+    {
+      ret = handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_ZONEGROUP_LIST:
-      {
-	RGWZoneGroup zonegroup;
-	int ret = zonegroup.init(g_ceph_context, store, false);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	list<string> zonegroups;
-	ret = store->list_zonegroups(zonegroups);
-	if (ret < 0) {
-	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	string default_zonegroup;
-	ret = zonegroup.read_default_id(default_zonegroup);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
-	}
-	formatter->open_object_section("zonegroups_list");
-	encode_json("default_info", default_zonegroup, formatter);
-	encode_json("zonegroups", zonegroups, formatter);
-	formatter->close_section();
-	formatter->flush(cout);
+    {
+      ret = handle_opt_zonegroup_list(g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_ZONEGROUP_MODIFY:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        bool need_update = false;
-
-        if (!master_zone.empty()) {
-          zonegroup.master_zone = master_zone;
-          need_update = true;
-        }
-
-	if (is_master_set) {
-	  zonegroup.update_master(is_master);
-          need_update = true;
-        }
-
-        if (!endpoints.empty()) {
-          zonegroup.endpoints = endpoints;
-          need_update = true;
-        }
-
-        if (!api_name.empty()) {
-          zonegroup.api_name = api_name;
-          need_update = true;
-        }
-
-        if (!realm_id.empty()) {
-          zonegroup.realm_id = realm_id;
-          need_update = true;
-        } else if (!realm_name.empty()) {
-          // get realm id from name
-          RGWRealm realm{g_ceph_context, store};
-          ret = realm.read_id(realm_name, zonegroup.realm_id);
-          if (ret < 0) {
-            cerr << "failed to find realm by name " << realm_name << std::endl;
-            return -ret;
-          }
-          need_update = true;
-        }
-
-        if (need_update) {
-	  ret = zonegroup.update();
-	  if (ret < 0) {
-	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	}
-
-        if (set_default) {
-          ret = zonegroup.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-        encode_json("zonegroup", zonegroup, formatter);
-        formatter->flush(cout);
+    {
+      ret = handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, master_zone,
+                                        is_master_set, is_master, set_default, endpoints, g_ceph_context, store,
+                                        formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_ZONEGROUP_SET:
       {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-       bool default_realm_not_exist = (ret == -ENOENT && realm_id.empty() && realm_name.empty());
-
-	if (ret < 0 && !default_realm_not_exist ) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup;
-	ret = zonegroup.init(g_ceph_context, store, false);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = read_decode_json(infile, zonegroup);
-	if (ret < 0) {
-	  return 1;
-	}
-	if (zonegroup.realm_id.empty() && !default_realm_not_exist) {
-	  zonegroup.realm_id = realm.get_id();
-	}
-	ret = zonegroup.create();
-	if (ret < 0 && ret != -EEXIST) {
-	  cerr << "ERROR: couldn't create zonegroup info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	} else if (ret == -EEXIST) {
-	  ret = zonegroup.update();
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't store zonegroup info: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
-	}
-
-        if (set_default) {
-          ret = zonegroup.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
+        ret = handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile, set_default,
+                                       endpoints, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-
-	encode_json("zonegroup", zonegroup, formatter);
-	formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_REMOVE:
       {
-        RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-        int ret = zonegroup.init(g_ceph_context, store);
-        if (ret < 0) {
-          cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
+        ret = handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-
-        if (zone_id.empty()) {
-          if (zone_name.empty()) {
-            cerr << "no --zone-id or --rgw-zone name provided" << std::endl;
-            return EINVAL;
-          }
-          // look up zone id by name
-          for (auto& z : zonegroup.zones) {
-            if (zone_name == z.second.name) {
-              zone_id = z.second.id;
-              break;
-            }
-          }
-          if (zone_id.empty()) {
-            cerr << "zone name " << zone_name << " not found in zonegroup "
-                << zonegroup.get_name() << std::endl;
-            return ENOENT;
-          }
-        }
-
-        ret = zonegroup.remove_zone(zone_id);
-        if (ret < 0) {
-          cerr << "failed to remove zone: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("zonegroup", zonegroup, formatter);
-        formatter->flush(cout);
       }
       break;
     case OPT_ZONEGROUP_RENAME:
       {
-	if (zonegroup_new_name.empty()) {
-	  cerr << " missing zonegroup new name" << std::endl;
-	  return EINVAL;
-	}
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = zonegroup.rename(zonegroup_new_name);
-	if (ret < 0) {
-	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
+	ret = handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name, g_ceph_context, store);
+        if (ret != 0) {
+          return ret;
+        }
       }
       break;
     case OPT_ZONEGROUP_PLACEMENT_LIST:
