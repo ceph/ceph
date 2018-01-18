@@ -214,45 +214,33 @@ def create_vg(name, *devices):
 def remove_vg(vg_name):
     """
     Removes a volume group.
-
-    Will return True if the vg is successfully removed or
-    raises a RuntimeError if the removal fails.
     """
-    stdout, stderr, returncode = process.call(
+    fail_msg = "Unable to remove vg %s".format(vg_name)
+    process.run(
         [
             'vgremove',
             '-v',  # verbose
             '-f',  # force it
             vg_name
         ],
-        show_command=True,
-        terminal_verbose=True,
+        fail_msg=fail_msg,
     )
-    if returncode != 0:
-        raise RuntimeError("Unable to remove vg %s".format(vg_name))
-    return True
 
 
 def remove_pv(pv_name):
     """
     Removes a physical volume.
-
-    Will return True if the pv is successfully removed or
-    raises a RuntimeError if the removal fails.
     """
-    stdout, stderr, returncode = process.call(
+    fail_msg = "Unable to remove vg %s".format(pv_name)
+    process.run(
         [
             'pvremove',
             '-v',  # verbose
             '-f',  # force it
             pv_name
         ],
-        show_command=True,
-        terminal_verbose=True,
+        fail_msg=fail_msg,
     )
-    if returncode != 0:
-        raise RuntimeError("Unable to remove vg %s".format(pv_name))
-    return True
 
 
 def remove_lv(path):
