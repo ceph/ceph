@@ -120,7 +120,6 @@ if [ x`uname`x = xFreeBSDx ]; then
         databases/leveldb \
         net/openldap-client \
         security/nss \
-        security/cryptopp \
         archivers/snappy \
         ftp/curl \
         misc/e2fsprogs-libuuid \
