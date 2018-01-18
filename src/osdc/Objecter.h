@@ -1969,7 +1969,6 @@ private:
   void _send_command_map_check(CommandOp *op);
   void _command_cancel_map_check(CommandOp *op);
 
-  void kick_requests(OSDSession *session);
   void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend, unique_lock& ul);
 

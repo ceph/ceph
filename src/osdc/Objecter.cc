@@ -2044,20 +2044,6 @@ bool Objecter::wait_for_map(epoch_t epoch, Context *c, int err)
   return false;
 }
 
-void Objecter::kick_requests(OSDSession *session)
-{
-  ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
-
-  map<uint64_t, LingerOp *> lresend;
-  unique_lock wl(rwlock);
-
-  OSDSession::unique_lock sl(session->lock);
-  _kick_requests(session, lresend);
-  sl.unlock();
-
-  _linger_ops_resend(lresend, wl);
-}
-
 void Objecter::_kick_requests(OSDSession *session,
 			      map<uint64_t, LingerOp *>& lresend)
 {
