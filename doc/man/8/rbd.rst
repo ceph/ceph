@@ -201,6 +201,10 @@ Commands
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
 
+:command:`deep cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
+  Deep copy the content of a src-image into the newly created dest-image.
+  Dest-image will have the same size, object size, image format, and snapshots as src-image.
+
 :command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
   Dump a list of byte extents in the image that have changed since the specified start
   snapshot, or since the image was created.  Each output line includes the starting offset

@@ -3,7 +3,7 @@
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
-IMGS="testimg1 testimg2 testimg3 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 clone2"
+IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 clone2"
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
@@ -73,6 +73,14 @@ test_others() {
     rbd info testimg-diff2 | grep 'size 256 MB'
     rbd info testimg-diff3 | grep 'size 128 MB'
 
+    # deep copies
+    rbd deep copy testimg1 testimg4
+    rbd deep copy testimg1 --snap=snap1 testimg5
+    rbd info testimg4 | grep 'size 128 MB'
+    rbd info testimg5 | grep 'size 256 MB'
+    rbd snap ls testimg4 | grep -v 'SNAPID' | wc -l | grep 1
+    rbd snap ls testimg4 | grep '.*snap1.*'
+
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
     rbd export testimg3 /tmp/img3.new
@@ -100,6 +108,7 @@ test_others() {
     rbd rm testimg3
     rbd create testimg2 -s 0
     rbd cp testimg2 testimg3
+    rbd deep cp testimg2 testimg6
 
     # remove snapshots
     rbd snap rm --snap=snap1 testimg1
