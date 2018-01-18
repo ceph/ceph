@@ -474,7 +474,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
-      fe = new RGWAsioFrontend(env);
+      fe = new RGWAsioFrontend(env, config);
     }
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)

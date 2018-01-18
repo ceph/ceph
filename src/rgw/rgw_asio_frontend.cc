@@ -194,6 +194,7 @@ class Connection {
 
 class AsioFrontend {
   RGWProcessEnv env;
+  RGWFrontendConfig* conf;
   boost::asio::io_service service;
 
   tcp::acceptor acceptor;
@@ -208,8 +209,8 @@ class AsioFrontend {
   void accept(boost::system::error_code ec);
 
  public:
-  AsioFrontend(const RGWProcessEnv& env)
-    : env(env), acceptor(service), peer_socket(service) {}
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
+    : env(env), conf(conf), acceptor(service), peer_socket(service) {}
 
   int init();
   int run();
@@ -221,10 +222,28 @@ class AsioFrontend {
 
 int AsioFrontend::init()
 {
-  auto ep = tcp::endpoint{tcp::v4(), static_cast<unsigned short>(env.port)};
+  std::string port_str;
+  conf->get_val("port", "80", &port_str);
+
+  unsigned short port;
+  boost::asio::ip::address addr; // default to 'any'
+  boost::system::error_code ec;
+
+  auto colon = port_str.find(':');
+  if (colon != port_str.npos) {
+    addr = boost::asio::ip::make_address(port_str.substr(0, colon), ec);
+    if (ec) {
+      lderr(ctx()) << "failed to parse address '" << port_str << "': " << ec.message() << dendl;
+      return -ec.value();
+    }
+    port = std::stoul(port_str.substr(colon + 1), nullptr, 0);
+  } else {
+    port = std::stoul(port_str, nullptr, 0);
+  }
+
+  tcp::endpoint ep = {addr, port};
   ldout(ctx(), 4) << "frontend listening on " << ep << dendl;
 
-  boost::system::error_code ec;
   acceptor.open(ep.protocol(), ec);
   if (ec) {
     lderr(ctx()) << "failed to open socket: " << ec.message() << dendl;
@@ -336,11 +355,12 @@ void AsioFrontend::unpause(RGWRados* const store,
 
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
-  Impl(const RGWProcessEnv& env) : AsioFrontend(env) {}
+  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf) : AsioFrontend(env, conf) {}
 };
 
-RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env)
-  : impl(new Impl(env))
+RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
+                                 RGWFrontendConfig* conf)
+  : impl(new Impl(env, conf))
 {
 }
 
