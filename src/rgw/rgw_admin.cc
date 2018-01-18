@@ -406,288 +406,81 @@ int main(int argc, const char **argv)
     }
     case OPT_REALM_CREATE:
       {
-	if (realm_name.empty()) {
-	  cerr << "missing realm name" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWRealm realm(realm_name, g_ceph_context, store);
-	int ret = realm.create();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = realm.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
+        ret = handle_opt_realm_create(realm_name, set_default, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-
-	encode_json("realm", realm, formatter);
-	formatter->flush(cout);
       }
       break;
     case OPT_REALM_DELETE:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	if (realm_name.empty() && realm_id.empty()) {
-	  cerr << "missing realm name or id" << std::endl;
-	  return EINVAL;
-	}
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = realm.delete_obj();
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't : " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
+    {
+      ret = handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, store);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_GET:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  if (ret == -ENOENT && realm_name.empty() && realm_id.empty()) {
-	    cerr << "missing realm name or id, or default realm not found" << std::endl;
-	  } else {
-	    cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
-          }
-	  return -ret;
-	}
-	encode_json("realm", realm, formatter);
-	formatter->flush(cout);
+    {
+      ret = handle_opt_realm_get(realm_id, realm_name, g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_GET_DEFAULT:
-      {
-	RGWRealm realm(g_ceph_context, store);
-	string default_id;
-	int ret = realm.read_default_id(default_id);
-	if (ret == -ENOENT) {
-	  cout << "No default realm is set" << std::endl;
-	  return -ret;
-	} else if (ret < 0) {
-	  cerr << "Error reading default realm:" << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	cout << "default realm: " << default_id << std::endl;
+    {
+      ret = handle_opt_realm_get_default(g_ceph_context, store);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_LIST:
-      {
-	RGWRealm realm(g_ceph_context, store);
-	string default_id;
-	int ret = realm.read_default_id(default_id);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
-	}
-	list<string> realms;
-	ret = store->list_realms(realms);
-	if (ret < 0) {
-	  cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	formatter->open_object_section("realms_list");
-	encode_json("default_info", default_id, formatter);
-	encode_json("realms", realms, formatter);
-	formatter->close_section();
-	formatter->flush(cout);
+    {
+      ret = handle_opt_realm_list(g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_LIST_PERIODS:
-      {
-        int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
-	if (ret < 0) {
-	  return -ret;
-	}
-	list<string> periods;
-	ret = store->list_periods(period_id, periods);
-	if (ret < 0) {
-	  cerr << "list periods failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	formatter->open_object_section("realm_periods_list");
-	encode_json("current_period", period_id, formatter);
-	encode_json("periods", periods, formatter);
-	formatter->close_section();
-	formatter->flush(cout);
+    {
+      ret = handle_opt_realm_list_periods(realm_id, realm_name, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
 
     case OPT_REALM_RENAME:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	if (realm_new_name.empty()) {
-	  cerr << "missing realm new name" << std::endl;
-	  return EINVAL;
-	}
-	if (realm_name.empty() && realm_id.empty()) {
-	  cerr << "missing realm name or id" << std::endl;
-	  return EINVAL;
-	}
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "realm.init failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = realm.rename(realm_new_name);
-	if (ret < 0) {
-	  cerr << "realm.rename failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        cout << "Realm name updated. Note that this change only applies to "
-            "the current cluster, so this command must be run separately "
-            "on each of the realm's other clusters." << std::endl;
+    {
+      ret = handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, store);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_SET:
-      {
-	if (realm_id.empty() && realm_name.empty()) {
-	  cerr << "no realm name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWRealm realm(realm_id, realm_name);
-	bool new_realm = false;
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	} else if (ret == -ENOENT) {
-	  new_realm = true;
-	}
-	ret = read_decode_json(infile, realm);
-	if (ret < 0) {
-	  return 1;
-	}
-	if (!realm_name.empty() && realm.get_name() != realm_name) {
-	  cerr << "mismatch between --rgw-realm " << realm_name << " and json input file name " <<
-	    realm.get_name() << std::endl;
-	  return EINVAL;
-	}
-	/* new realm */
-	if (new_realm) {
-	  cout << "clearing period and epoch for new realm" << std::endl;
-	  realm.clear_current_period_and_epoch();
-	  ret = realm.create();
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't create new realm: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
-	} else {
-	  ret = realm.update();
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't store realm info: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
-	}
-
-        if (set_default) {
-          ret = realm.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-	encode_json("realm", realm, formatter);
-	formatter->flush(cout);
+    {
+      ret = handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
 
     case OPT_REALM_DEFAULT:
-      {
-	RGWRealm realm(realm_id, realm_name);
-	int ret = realm.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	ret = realm.set_as_default();
-	if (ret < 0) {
-	  cerr << "failed to set realm as default: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
+    {
+      ret = handle_opt_realm_default(realm_id, realm_name, g_ceph_context, store);
+      if (ret != 0) {
+        return ret;
       }
+    }
       break;
     case OPT_REALM_PULL:
-      {
-        if (url.empty()) {
-          cerr << "A --url must be provided." << std::endl;
-          return EINVAL;
-        }
-        RGWEnv env;
-        req_info r_info(g_ceph_context, &env);
-        r_info.method = "GET";
-        r_info.request_uri = "/admin/realm";
-
-        map<string, string> &params = r_info.args.get_params();
-        if (!realm_id.empty())
-          params["id"] = realm_id;
-        if (!realm_name.empty())
-          params["name"] = realm_name;
-
-        bufferlist bl;
-        JSONParser p;
-        int ret = send_to_url(url, access_key, secret_key, r_info, bl, p);
-        if (ret < 0) {
-          cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-          if (ret == -EACCES) {
-            cerr << "If the realm has been changed on the master zone, the "
-                "master zone's gateway may need to be restarted to recognize "
-                "this user." << std::endl;
-          }
-          return -ret;
-        }
-        RGWRealm realm;
-        realm.init(g_ceph_context, store, false);
-        try {
-          decode_json_obj(realm, &p);
-        } catch (JSONDecoder::err& e) {
-          cerr << "failed to decode JSON response: " << e.message << std::endl;
-          return EINVAL;
-        }
-        RGWPeriod period;
-        auto& current_period = realm.get_current_period();
-        if (!current_period.empty()) {
-          // pull the latest epoch of the realm's current period
-          ret = do_period_pull(store, nullptr, url, access_key, secret_key,
-                               realm_id, realm_name, current_period, "",
-                               &period);
-          if (ret < 0) {
-            cerr << "could not fetch period " << current_period << std::endl;
-            return -ret;
-          }
-        }
-        ret = realm.create(false);
-        if (ret < 0 && ret != -EEXIST) {
-          cerr << "Error storing realm " << realm.get_id() << ": "
-            << cpp_strerror(ret) << std::endl;
-          return -ret;
-        } else if (ret ==-EEXIST) {
-	  ret = realm.update();
-	  if (ret < 0) {
-	    cerr << "Error storing realm " << realm.get_id() << ": "
-		 << cpp_strerror(ret) << std::endl;
-	  }
-	}
-
-        if (set_default) {
-          ret = realm.set_as_default();
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-        encode_json("realm", realm, formatter);
-        formatter->flush(cout);
-      }
-      return 0;
-
+      return handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
+                                   store, formatter);
     case OPT_ZONEGROUP_ADD:
       {
 	if (zonegroup_id.empty() && zonegroup_name.empty()) {
@@ -1562,10 +1355,10 @@ int main(int argc, const char **argv)
           if (compression_type) {
             info.compression_type = *compression_type;
           }
-          
+
           ret = check_pool_support_omap(info.get_data_extra_pool());
           if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
+             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool()
                  << "' does not support omap" << std::endl;
              return ret;
           }
@@ -1780,80 +1573,15 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT_PERIOD_PUSH:
-    {
-      RGWEnv env;
-      req_info r_info(g_ceph_context, &env);
-      r_info.method = "POST";
-      r_info.request_uri = "/admin/realm/period";
-
-      map<string, string> &params = r_info.args.get_params();
-      if (!realm_id.empty())
-        params["realm_id"] = realm_id;
-      if (!realm_name.empty())
-        params["realm_name"] = realm_name;
-      if (!period_id.empty())
-        params["period_id"] = period_id;
-      if (!period_epoch.empty())
-        params["epoch"] = period_epoch;
-
-      // load the period
-      RGWPeriod period(period_id);
-      int ret = period.init(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      // json format into a bufferlist
-      JSONFormatter jf(false);
-      encode_json("period", period, &jf);
-      bufferlist bl;
-      jf.flush(bl);
-
-      JSONParser p;
-      ret = send_to_remote_or_url(nullptr, url, access_key, secret_key,
-                                  r_info, bl, p);
-      if (ret < 0) {
-        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-    return 0;
+    return handle_opt_period_push(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
+                                 g_ceph_context, store);
   case OPT_PERIOD_UPDATE:
-    {
-      int ret = update_period(store, realm_id, realm_name, period_id, period_epoch,
+      return update_period(store, realm_id, realm_name, period_id, period_epoch,
                               commit, remote, url, access_key, secret_key,
                               formatter, yes_i_really_mean_it);
-      if (ret < 0) {
-	return -ret;
-      }
-    }
-    return 0;
   case OPT_PERIOD_COMMIT:
-    {
-      // read realm and staging period
-      RGWRealm realm(realm_id, realm_name);
-      int ret = realm.init(g_ceph_context, store);
-      if (ret < 0) {
-        cerr << "Error initializing realm: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      RGWPeriod period(RGWPeriod::get_staging_id(realm.get_id()), 1);
-      ret = period.init(g_ceph_context, store, realm.get_id());
-      if (ret < 0) {
-        cerr << "period init failed: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      ret = commit_period(store, realm, period, remote, url, access_key, secret_key,
-                          yes_i_really_mean_it);
-      if (ret < 0) {
-        cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      encode_json("period", period, formatter);
-      formatter->flush(cout);
-    }
-    return 0;
+    return handle_opt_period_commit(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
+                                   remote, yes_i_really_mean_it, g_ceph_context, store, formatter);
   case OPT_ROLE_CREATE: return handle_opt_role_create(role_name, assume_role_doc, path, tenant,
                                                       g_ceph_context, store, formatter);
   case OPT_ROLE_DELETE: return handle_opt_role_delete(role_name, tenant, g_ceph_context, store);
@@ -2478,7 +2206,7 @@ int main(int argc, const char **argv)
     }
 
     RGWSyncModuleInstanceRef sync_module;
-    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type, 
+    int ret = store->get_sync_modules_manager()->create_instance(g_ceph_context, store->get_zone().tier_type,
         store->get_zone_params().tier_config, &sync_module);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
