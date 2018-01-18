@@ -5956,7 +5956,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description("threshold for issuing a sparse-read")
     .set_long_description("minimum number of sequential bytes to read against "
                           "an object before issuing a sparse-read request to "
-                          "the cluster. 0 implies it must be a full object read"
+                          "the cluster. 0 implies it must be a full object read "
                           "to issue a sparse-read, 1 implies always use "
                           "sparse-read, and any value larger than the maximum "
                           "object size will disable sparse-read for all "
