@@ -94,6 +94,11 @@ def common_parser(prog, description):
         dest='block_wal',
         help='(bluestore) Path to bluestore block.wal logical volume or device',
     )
+    parser.add_argument(
+        '--crush-device-class',
+        dest='crush_device_class',
+        help='Crush device class to assign this OSD to',
+    )
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser
