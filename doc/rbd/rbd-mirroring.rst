@@ -314,7 +314,7 @@ ID as the daemon instance::
 
   systemctl enable ceph-rbd-mirror@rbd-mirror.{unique id}
 
-The ``rbd-morror`` can also be run in foreground by ``rbd-mirror`` command::
+The ``rbd-mirror`` can also be run in foreground by ``rbd-mirror`` command::
 
   rbd-mirror -f --log-file={log_path}
 
