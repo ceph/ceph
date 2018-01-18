@@ -2284,52 +2284,44 @@ void PG::mark_clean()
 bool PG::set_force_recovery(bool b)
 {
   bool did = false;
-  lock();
-  if (!deleting) {
-    if (b) {
-      if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
-		    PG_STATE_RECOVERY_WAIT |
-		    PG_STATE_RECOVERING))) {
-	dout(20) << __func__ << " set" << dendl;
-	state_set(PG_STATE_FORCED_RECOVERY);
-	publish_stats_to_osd();
-	did = true;
-      }
-    } else if (state & PG_STATE_FORCED_RECOVERY) {
-      dout(20) << __func__ << " clear" << dendl;
-      state_clear(PG_STATE_FORCED_RECOVERY);
+  if (b) {
+    if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	(state & (PG_STATE_DEGRADED |
+		  PG_STATE_RECOVERY_WAIT |
+		  PG_STATE_RECOVERING))) {
+      dout(20) << __func__ << " set" << dendl;
+      state_set(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
       did = true;
     }
+  } else if (state & PG_STATE_FORCED_RECOVERY) {
+    dout(20) << __func__ << " clear" << dendl;
+    state_clear(PG_STATE_FORCED_RECOVERY);
+    publish_stats_to_osd();
+    did = true;
   }
-  unlock();
   return did;
 }
 
 bool PG::set_force_backfill(bool b)
 {
   bool did = false;
-  lock();
-  if (!deleting) {
-    if (b) {
-      if (!(state & PG_STATE_FORCED_RECOVERY) &&
-	  (state & (PG_STATE_DEGRADED |		// XXX: Will this check be messed up?
-		    PG_STATE_BACKFILL_WAIT |
-		    PG_STATE_BACKFILLING))) {
-	dout(10) << __func__ << " set" << dendl;
-	state_set(PG_STATE_FORCED_RECOVERY);
-	publish_stats_to_osd();
-	did = true;
-      }
-    } else if (state & PG_STATE_FORCED_RECOVERY) {
-      dout(10) << __func__ << " clear" << dendl;
-      state_clear(PG_STATE_FORCED_RECOVERY);
+  if (b) {
+    if (!(state & PG_STATE_FORCED_RECOVERY) &&
+	(state & (PG_STATE_DEGRADED |
+		  PG_STATE_BACKFILL_WAIT |
+		  PG_STATE_BACKFILLING))) {
+      dout(10) << __func__ << " set" << dendl;
+      state_set(PG_STATE_FORCED_RECOVERY);
       publish_stats_to_osd();
       did = true;
     }
+  } else if (state & PG_STATE_FORCED_RECOVERY) {
+    dout(10) << __func__ << " clear" << dendl;
+    state_clear(PG_STATE_FORCED_RECOVERY);
+    publish_stats_to_osd();
+    did = true;
   }
-  unlock();
   return did;
 }
 
@@ -6836,6 +6828,38 @@ boost::statechart::result PG::RecoveryState::Primary::react(const ActMap&)
   return discard_event();
 }
 
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const SetForceRecovery&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_recovery(true);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const UnsetForceRecovery&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_recovery(false);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const SetForceBackfill&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_backfill(true);
+  return discard_event();
+}
+
+boost::statechart::result PG::RecoveryState::Primary::react(
+  const UnsetForceBackfill&)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->set_force_backfill(false);
+  return discard_event();
+}
+
 void PG::RecoveryState::Primary::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
@@ -7734,7 +7758,7 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   if (pg->is_active()) {
     pg->mark_clean();
   }
-
+  pg->state_clear(PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
   pg->share_pg_info();
   pg->publish_stats_to_osd();
   pg->requeue_ops(pg->waiting_for_clean_to_primary_repair);
