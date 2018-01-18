@@ -216,13 +216,7 @@ if(${ENABLE_COVERAGE})
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
-if(USE_NSS)
-  if(NSS_FOUND)
-    if(NSPR_FOUND)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${NSS_INCLUDE_DIR} -I${NSPR_INCLUDE_DIR}")
-    endif(NSPR_FOUND)
-  endif(NSS_FOUND)
-endif(USE_NSS)
+include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
 
 set(GCOV_PREFIX_STRIP 4)
 
@@ -1065,12 +1059,6 @@ if(WITH_RADOSGW)
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
   set_property(TARGET civetweb_common_objs
     APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if(USE_OPENSSL)
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-    target_include_directories(civetweb_common_objs SYSTEM PRIVATE
-      "${SSL_INCLUDE_DIR}")
-  endif(USE_OPENSSL)
   if (LIBSSL_SONAME)
     set_property(TARGET civetweb_common_objs
       APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")
