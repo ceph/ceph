@@ -229,8 +229,9 @@ struct GroupSpec {
 WRITE_CLASS_ENCODER(GroupSpec);
 
 enum SnapshotNamespaceType {
-  SNAPSHOT_NAMESPACE_TYPE_USER = 0,
-  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1
+  SNAPSHOT_NAMESPACE_TYPE_USER  = 0,
+  SNAPSHOT_NAMESPACE_TYPE_GROUP = 1,
+  SNAPSHOT_NAMESPACE_TYPE_TRASH = 2
 };
 
 struct UserSnapshotNamespace {
@@ -251,10 +252,7 @@ struct UserSnapshotNamespace {
   inline bool operator<(const UserSnapshotNamespace& usn) const {
     return false;
   }
-
 };
-
-std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 
 struct GroupSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
@@ -293,10 +291,29 @@ struct GroupSnapshotNamespace {
     }
     return false;
   }
-
 };
 
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+struct TrashSnapshotNamespace {
+  static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
+    SNAPSHOT_NAMESPACE_TYPE_TRASH;
+
+  std::string original_name;
+
+  TrashSnapshotNamespace() {}
+  TrashSnapshotNamespace(const std::string& original_name)
+    : original_name(original_name) {}
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  inline bool operator==(const TrashSnapshotNamespace& usn) const {
+    return true;
+  }
+  inline bool operator<(const TrashSnapshotNamespace& usn) const {
+    return false;
+  }
+};
 
 struct UnknownSnapshotNamespace {
   static const SnapshotNamespaceType SNAPSHOT_NAMESPACE_TYPE =
@@ -307,6 +324,7 @@ struct UnknownSnapshotNamespace {
   void encode(bufferlist& bl) const {}
   void decode(bufferlist::iterator& it) {}
   void dump(Formatter *f) const {}
+
   inline bool operator==(const UnknownSnapshotNamespace& gsn) const {
     return true;
   }
@@ -316,14 +334,17 @@ struct UnknownSnapshotNamespace {
   }
 };
 
+std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
+std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef boost::variant<UserSnapshotNamespace,
                        GroupSnapshotNamespace,
+                       TrashSnapshotNamespace,
                        UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 
 struct SnapshotNamespace : public SnapshotNamespaceVariant {
-
   SnapshotNamespace() {
   }
 
