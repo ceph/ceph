@@ -124,10 +124,8 @@ def get_api_pvs():
     """
     fields = 'pv_name,pv_tags,pv_uuid,vg_name'
 
-    # note the use of `pvs -a` which will return every physical volume including
-    # ones that have not been initialized as "pv" by LVM
     stdout, stderr, returncode = process.call(
-        ['pvs', '-a', '--no-heading', '--separator=";"', '-o', fields]
+        ['pvs', '--no-heading', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
