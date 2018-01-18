@@ -214,24 +214,24 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH);
 
   // -- state --
-  static const int STATE_EXPORTING =   (1<<2);   // on nonauth bystander.
-  static const int STATE_OPENINGDIR =  (1<<5);
-  static const int STATE_FREEZING =    (1<<7);
-  static const int STATE_FROZEN =      (1<<8);
-  static const int STATE_AMBIGUOUSAUTH = (1<<9);
-  static const int STATE_EXPORTINGCAPS = (1<<10);
-  static const int STATE_NEEDSRECOVER = (1<<11);
-  static const int STATE_RECOVERING =   (1<<12);
-  static const int STATE_PURGING =     (1<<13);
-  static const int STATE_DIRTYPARENT =  (1<<14);
-  static const int STATE_DIRTYRSTAT =  (1<<15);
-  static const int STATE_STRAYPINNED = (1<<16);
-  static const int STATE_FROZENAUTHPIN = (1<<17);
-  static const int STATE_DIRTYPOOL =   (1<<18);
-  static const int STATE_REPAIRSTATS = (1<<19);
-  static const int STATE_MISSINGOBJS = (1<<20);
-  static const int STATE_EVALSTALECAPS = (1<<21);
-  static const int STATE_QUEUEDEXPORTPIN = (1<<22);
+  static const int STATE_EXPORTING 		= (1<<0);   // on nonauth bystander.
+  static const int STATE_OPENINGDIR		= (1<<1);
+  static const int STATE_FREEZING		= (1<<2);
+  static const int STATE_FROZEN			= (1<<3);
+  static const int STATE_AMBIGUOUSAUTH		= (1<<4);
+  static const int STATE_EXPORTINGCAPS		= (1<<5);
+  static const int STATE_NEEDSRECOVER		= (1<<6);
+  static const int STATE_RECOVERING		= (1<<7);
+  static const int STATE_PURGING		= (1<<8);
+  static const int STATE_DIRTYPARENT		= (1<<9);
+  static const int STATE_DIRTYRSTAT		= (1<<10);
+  static const int STATE_STRAYPINNED		= (1<<11);
+  static const int STATE_FROZENAUTHPIN		= (1<<12);
+  static const int STATE_DIRTYPOOL		= (1<<13);
+  static const int STATE_REPAIRSTATS		= (1<<14);
+  static const int STATE_MISSINGOBJS		= (1<<15);
+  static const int STATE_EVALSTALECAPS		= (1<<16);
+  static const int STATE_QUEUEDEXPORTPIN	= (1<<17);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
