@@ -4,6 +4,7 @@ import logging
 import uuid
 from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
+from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import system, disk
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.api import lvm as api
@@ -13,7 +14,30 @@ from .common import prepare_parser, rollback_osd
 logger = logging.getLogger(__name__)
 
 
-def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
+def prepare_dmcrypt(key, device, device_type, tags):
+    """
+    Helper for devices that are encrypted. The operations needed for
+    block, db, wal, or data/journal devices are all the same
+    """
+    if not device:
+        return ''
+    tag_name = 'ceph.%s_uuid' % device_type
+    uuid = tags[tag_name]
+    # format data device
+    encryption_utils.luks_format(
+        key,
+        device
+    )
+    encryption_utils.luks_open(
+        key,
+        device,
+        uuid
+    )
+
+    return '/dev/mapper/%s' % uuid
+
+
+def prepare_filestore(device, journal, secrets, tags, id_=None, fsid=None):
     """
     :param device: The name of the logical volume to work with
     :param journal: similar to device but can also be a regular/plain disk
@@ -23,11 +47,19 @@ def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
     """
     cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
     json_secrets = json.dumps(secrets)
-
     # allow re-using an existing fsid, in case prepare failed
     fsid = fsid or system.generate_uuid()
     # allow re-using an id, in case a prepare failed
     osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
+
+    # encryption-only operations
+    if secrets.get('dmcrypt_key'):
+        # format and open ('decrypt' devices) and re-assign the device and journal
+        # variables so that the rest of the process can use the mapper paths
+        key = secrets['dmcrypt_key']
+        device = prepare_dmcrypt(key, device, 'data', tags)
+        journal = prepare_dmcrypt(key, journal, 'journal', tags)
+
     # create the directory
     prepare_utils.create_osd_path(osd_id)
     # format the device
@@ -42,9 +74,17 @@ def prepare_filestore(device, journal, secrets, id_=None, fsid=None):
     prepare_utils.osd_mkfs_filestore(osd_id, fsid)
     # write the OSD keyring if it doesn't exist already
     prepare_utils.write_keyring(osd_id, cephx_secret)
+    if secrets.get('dmcrypt_key'):
+        # if the device is going to get activated right away, this can be done
+        # here, otherwise it will be recreated
+        encryption_utils.write_lockbox_keyring(
+            osd_id,
+            fsid,
+            tags['ceph.cephx_lockbox_secret']
+        )
 
 
-def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
+def prepare_bluestore(block, wal, db, secrets, tags, id_=None, fsid=None):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -55,6 +95,17 @@ def prepare_bluestore(block, wal, db, secrets, id_=None, fsid=None):
     """
     cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
     json_secrets = json.dumps(secrets)
+    # encryption-only operations
+    if secrets.get('dmcrypt_key'):
+        # If encrypted, there is no need to create the lockbox keyring file because
+        # bluestore re-creates the files and does not have support for other files
+        # like the custom lockbox one. This will need to be done on activation.
+        # format and open ('decrypt' devices) and re-assign the device and journal
+        # variables so that the rest of the process can use the mapper paths
+        key = secrets['dmcrypt_key']
+        block = prepare_dmcrypt(key, block, 'block', tags)
+        wal = prepare_dmcrypt(key, wal, 'wal', tags)
+        db = prepare_dmcrypt(key, db, 'db', tags)
 
     # allow re-using an existing fsid, in case prepare failed
     fsid = fsid or system.generate_uuid()
@@ -187,6 +238,13 @@ class Prepare(object):
         # (!!) or some flags that we would need to compound into a dict so that we
         # can convert to JSON (!!!)
         secrets = {'cephx_secret': prepare_utils.create_key()}
+        cephx_lockbox_secret = ''
+        encrypted = 1 if args.dmcrypt else 0
+        cephx_lockbox_secret = '' if not encrypted else prepare_utils.create_key()
+
+        if encrypted:
+            secrets['dmcrypt_key'] = encryption_utils.create_dmcrypt_key()
+            secrets['cephx_lockbox_secret'] = cephx_lockbox_secret
 
         cluster_fsid = conf.ceph.get('global', 'fsid')
         osd_fsid = args.osd_fsid or system.generate_uuid()
@@ -212,6 +270,8 @@ class Prepare(object):
 
             tags['ceph.data_device'] = data_lv.lv_path
             tags['ceph.data_uuid'] = data_lv.lv_uuid
+            tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
+            tags['ceph.encrypted'] = encrypted
 
             journal_device, journal_uuid, tags = self.setup_device('journal', args.journal, tags)
 
@@ -222,6 +282,7 @@ class Prepare(object):
                 data_lv.lv_path,
                 journal_device,
                 secrets,
+                tags,
                 id_=self.osd_id,
                 fsid=osd_fsid,
             )
@@ -232,6 +293,8 @@ class Prepare(object):
 
             tags['ceph.block_device'] = block_lv.lv_path
             tags['ceph.block_uuid'] = block_lv.lv_uuid
+            tags['ceph.cephx_lockbox_secret'] = cephx_lockbox_secret
+            tags['ceph.encrypted'] = encrypted
 
             wal_device, wal_uuid, tags = self.setup_device('wal', args.block_wal, tags)
             db_device, db_uuid, tags = self.setup_device('db', args.block_db, tags)
@@ -244,6 +307,7 @@ class Prepare(object):
                 wal_device,
                 db_device,
                 secrets,
+                tags,
                 id_=self.osd_id,
                 fsid=osd_fsid,
             )
@@ -257,6 +321,8 @@ class Prepare(object):
 
         Once the OSD is ready, an ad-hoc systemd unit will be enabled so that
         it can later get activated and the OSD daemon can get started.
+
+        Encryption is supported via dmcrypt and the --dmcrypt flag.
 
         Example calls for supported scenarios:
 
