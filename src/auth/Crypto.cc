@@ -142,6 +142,35 @@ class nss_exception : public std::exception {
   }
 };
 
+// unique_ptr wrappers
+struct slotinfo_deleter {
+  void operator()(PK11SlotInfo *slot) noexcept {
+    PK11_FreeSlot(slot);
+  }
+};
+using pk11_slotinfo_ptr = std::unique_ptr<PK11SlotInfo, slotinfo_deleter>;
+
+struct symkey_deleter {
+  void operator()(PK11SymKey *key) noexcept {
+    PK11_FreeSymKey(key);
+  }
+};
+using pk11_symkey_ptr = std::unique_ptr<PK11SymKey, symkey_deleter>;
+
+struct context_deleter {
+  void operator()(PK11Context *ctx) noexcept {
+    PK11_DestroyContext(ctx, PR_TRUE);
+  }
+};
+using pk11_context_ptr = std::unique_ptr<PK11Context, context_deleter>;
+
+struct secitem_deleter {
+  void operator()(SECItem *param) noexcept {
+    SECITEM_FreeItem(param, PR_TRUE);
+  }
+};
+using secitem_ptr = std::unique_ptr<SECItem, secitem_deleter>;
+
 static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
                               CK_MECHANISM_TYPE mechanism,
                               PK11SymKey *key,
@@ -157,27 +186,24 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
   int written;
   unsigned char *in_buf;
 
-  PK11Context *ectx;
-  ectx = PK11_CreateContextBySymKey(mechanism, op, key, param);
+  pk11_context_ptr ectx{PK11_CreateContextBySymKey(mechanism, op, key, param)};
   if (!ectx) {
     throw nss_exception("PK11_CreateContextBySymKey", PR_GetError());
   }
 
   incopy = in;  // it's a shallow copy!
   in_buf = (unsigned char*)incopy.c_str();
-  ret = PK11_CipherOp(ectx,
+  ret = PK11_CipherOp(ectx.get(),
 		      (unsigned char*)out_tmp.c_str(), &written, out_tmp.length(),
 		      in_buf, in.length());
   if (ret != SECSuccess) {
-    PK11_DestroyContext(ectx, PR_TRUE);
     throw nss_exception("PK11_CipherOp", PR_GetError());
   }
 
   unsigned int written2;
-  ret = PK11_DigestFinal(ectx,
+  ret = PK11_DigestFinal(ectx.get(),
 			 (unsigned char*)out_tmp.c_str()+written, &written2,
 			 out_tmp.length()-written);
-  PK11_DestroyContext(ectx, PR_TRUE);
   if (ret != SECSuccess) {
     throw nss_exception("PK11_DigestFinal", PR_GetError());
   }
@@ -187,63 +213,64 @@ static void nss_aes_operation(CK_ATTRIBUTE_TYPE op,
 }
 
 class KeyHandlerImpl : public KeyHandler {
-  CK_MECHANISM_TYPE mechanism;
-  PK11SlotInfo *slot;
-  PK11SymKey *key;
-  SECItem *param;
+  static constexpr CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
+  pk11_slotinfo_ptr slot;
+  pk11_symkey_ptr key;
+  secitem_ptr param;
+  bufferptr secret;
 
 public:
-  KeyHandlerImpl()
-    : mechanism(CKM_AES_CBC_PAD),
-      slot(NULL),
-      key(NULL),
-      param(NULL) {}
-  ~KeyHandlerImpl() override {
-    SECITEM_FreeItem(param, PR_TRUE);
-    if (key)
-      PK11_FreeSymKey(key);
-    if (slot)
-      PK11_FreeSlot(slot);
-  }
-
-  void init(const bufferptr& s) {
-    secret = s;
-
-    slot = PK11_GetBestSlot(mechanism, NULL);
-    if (!slot) {
-      throw nss_exception("PK11_GetBestSlot", PR_GetError());
-    }
-
-    SECItem keyItem;
-    keyItem.type = siBuffer;
-    keyItem.data = (unsigned char*)secret.c_str();
-    keyItem.len = secret.length();
-    key = PK11_ImportSymKey(slot, mechanism, PK11_OriginUnwrap, CKA_ENCRYPT,
-			    &keyItem, NULL);
-    if (!key) {
-      throw nss_exception("PK11_ImportSymKey", PR_GetError());
-    }
-
-    SECItem ivItem;
-    ivItem.type = siBuffer;
-    // losing constness due to SECItem.data; IV should never be
-    // modified, regardless
-    ivItem.data = (unsigned char*)CEPH_AES_IV;
-    ivItem.len = sizeof(CEPH_AES_IV);
-
-    param = PK11_ParamFromIV(mechanism, &ivItem);
-    if (!param) {
-      throw nss_exception("PK11_ParamFromIV", PR_GetError());
-    }
-  }
+  KeyHandlerImpl(pk11_slotinfo_ptr&& slot, pk11_symkey_ptr&& key,
+                 secitem_ptr&& param, const bufferptr& secret)
+    : slot(std::move(slot)),
+      key(std::move(key)),
+      param(std::move(param)),
+      secret(secret)
+  {}
 
   void encrypt(const bufferlist& in, bufferlist& out) const override {
-    nss_aes_operation(CKA_ENCRYPT, mechanism, key, param, in, out);
+    nss_aes_operation(CKA_ENCRYPT, mechanism, key.get(), param.get(), in, out);
   }
   void decrypt(const bufferlist& in, bufferlist& out) const override {
-    nss_aes_operation(CKA_DECRYPT, mechanism, key, param, in, out);
+    nss_aes_operation(CKA_DECRYPT, mechanism, key.get(), param.get(), in, out);
   }
 };
+
+std::unique_ptr<KeyHandler> HandlerImpl::get_key_handler(const bufferptr& secret)
+{
+  constexpr CK_MECHANISM_TYPE mechanism = CKM_AES_CBC_PAD;
+
+  pk11_slotinfo_ptr slot{PK11_GetBestSlot(mechanism, nullptr)};
+  if (!slot) {
+    throw nss_exception("PK11_GetBestSlot", PR_GetError());
+  }
+
+  SECItem keyItem;
+  keyItem.type = siBuffer;
+  keyItem.data = (unsigned char*)secret.c_str();
+  keyItem.len = secret.length();
+  pk11_symkey_ptr key{PK11_ImportSymKey(slot.get(), mechanism,
+                                        PK11_OriginUnwrap, CKA_ENCRYPT,
+                                        &keyItem, nullptr)};
+  if (!key) {
+    throw nss_exception("PK11_ImportSymKey", PR_GetError());
+  }
+
+  SECItem ivItem;
+  ivItem.type = siBuffer;
+  // losing constness due to SECItem.data; IV should never be
+  // modified, regardless
+  ivItem.data = (unsigned char*)CEPH_AES_IV;
+  ivItem.len = sizeof(CEPH_AES_IV);
+
+  secitem_ptr param{PK11_ParamFromIV(mechanism, &ivItem)};
+  if (!param) {
+    throw nss_exception("PK11_ParamFromIV", PR_GetError());
+  }
+
+  return std::make_unique<KeyHandlerImpl>(std::move(slot), std::move(key),
+                                          std::move(param), secret);
+}
 
 #else
 # error "No supported crypto implementation found."
@@ -268,13 +295,6 @@ int HandlerImpl::validate_secret(const bufferptr& secret)
   }
 
   return 0;
-}
-
-std::unique_ptr<KeyHandler> HandlerImpl::get_key_handler(const bufferptr& secret)
-{
-  auto ckh = std::make_unique<KeyHandlerImpl>();
-  ckh->init(secret);
-  return ckh;
 }
 
 } // namespace aes128
