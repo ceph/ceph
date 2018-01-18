@@ -76,6 +76,15 @@
   $ rbd cp foo@snap
   rbd: destination image name was not specified
   [22]
+  $ rbd deep cp
+  rbd: image name was not specified
+  [22]
+  $ rbd deep cp foo
+  rbd: destination image name was not specified
+  [22]
+  $ rbd deep cp foo@snap
+  rbd: destination image name was not specified
+  [22]
   $ rbd mv
   rbd: image name was not specified
   [22]

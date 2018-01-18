@@ -172,6 +172,30 @@ test_rbd_copy()
     rbd remove ${image}
 }
 
+test_rbd_deep_copy()
+{
+    local src=testrbdcopys$$
+    rbd create --size 256 ${src}
+    rbd snap create ${src}@snap1
+
+    local dest=testrbdcopy$$
+    rbd deep copy --image-feature exclusive-lock --image-feature journaling \
+        --journal-pool rbd \
+        --journal-object-size 20M \
+        --journal-splay-width 6 \
+        ${src} ${dest}
+
+    rbd snap purge ${src}
+    rbd remove ${src}
+
+    rbd_assert_eq ${dest} 'journal info' '//journal/order' 25
+    rbd_assert_eq ${dest} 'journal info' '//journal/splay_width' 6
+    rbd_assert_eq ${dest} 'journal info' '//journal/object_pool' rbd
+
+    rbd snap purge ${dest}
+    rbd remove ${dest}
+}
+
 test_rbd_clone()
 {
     local parent=testrbdclonep$$

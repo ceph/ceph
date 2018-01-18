@@ -245,7 +245,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     case COPY_OP_TYPE_WRITE:
       buffer_offset = 0;
       for (auto &e : copy_op.dst_extent_map) {
-        ldout(m_cct, 20) << ": write op: " << e.first << "~" << e.second
+        ldout(m_cct, 20) << "write op: " << e.first << "~" << e.second
                          << dendl;
         bufferlist tmpbl;
         tmpbl.substr_of(copy_op.out_bl, buffer_offset, e.second);
