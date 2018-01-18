@@ -800,8 +800,8 @@ protected:
       }
     }
 
-    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have) {
-      needs_recovery_map[hoid] = pg_missing_item(need, have);
+    void add_missing(const hobject_t &hoid, eversion_t need, eversion_t have, bool is_delete=false) {
+      needs_recovery_map[hoid] = pg_missing_item(need, have, is_delete);
     }
     void revise_need(const hobject_t &hoid, eversion_t need) {
       auto it = needs_recovery_map.find(hoid);

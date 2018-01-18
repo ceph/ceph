@@ -10081,7 +10081,9 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     pg_shard_t peer(*i);
     if (peer == pg_whoami) continue;
     if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(soid)) {
-      missing_loc.add_missing(soid, ctx->at_version, eversion_t());
+      for (auto &&entry: ctx->log) {
+	missing_loc.add_missing(soid, ctx->at_version, eversion_t(), entry.is_delete());
+      }
     }
   }
 
