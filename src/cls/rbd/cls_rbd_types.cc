@@ -317,24 +317,6 @@ bool GroupSpec::is_valid() const {
   return (!group_id.empty()) && (pool_id != -1);
 }
 
-void GroupSnapshotNamespace::encode(bufferlist& bl) const {
-  ::encode(group_pool, bl);
-  ::encode(group_id, bl);
-  ::encode(snapshot_id, bl);
-}
-
-void GroupSnapshotNamespace::decode(bufferlist::iterator& it) {
-  ::decode(group_pool, it);
-  ::decode(group_id, it);
-  ::decode(snapshot_id, it);
-}
-
-void GroupSnapshotNamespace::dump(Formatter *f) const {
-  f->dump_int("group_pool", group_pool);
-  f->dump_string("group_id", group_id);
-  f->dump_int("snapshot_id", snapshot_id);
-}
-
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
 public:
   explicit EncodeSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
@@ -409,9 +391,6 @@ void SnapshotNamespaceOnDisk::decode(bufferlist::iterator &p)
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_USER:
       snapshot_namespace = UserSnapshotNamespace();
       break;
-    case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP:
-      snapshot_namespace = GroupSnapshotNamespace();
-      break;
     default:
       snapshot_namespace = UnknownSnapshotNamespace();
       break;
@@ -426,20 +405,10 @@ void SnapshotNamespaceOnDisk::dump(Formatter *f) const {
 
 void SnapshotNamespaceOnDisk::generate_test_instances(std::list<SnapshotNamespaceOnDisk *> &o) {
   o.push_back(new SnapshotNamespaceOnDisk(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(0, "10152ae8944a", 1)));
-  o.push_back(new SnapshotNamespaceOnDisk(GroupSnapshotNamespace(5, "1018643c9869", 3)));
 }
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
   os << "[user]";
-  return os;
-}
-
-std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
-  os << "[group"
-     << " group_pool=" << ns.group_pool
-     << " group_id=" << ns.group_id
-     << " snapshot_id=" << ns.snapshot_id << "]";
   return os;
 }
 
