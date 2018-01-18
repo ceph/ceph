@@ -69,6 +69,9 @@ class Zap(object):
                 logger.info("Destroying volume group %s because --destroy was given", vg_name)
                 terminal.write("Destroying volume group %s because --destroy was given" % vg_name)
                 api.remove_vg(vg_name)
+                logger.info("Destroying physical volume %s because --destroy was given", device)
+                terminal.write("Destroying physical volume %s because --destroy was given" % device)
+                api.remove_pv(device)
 
         wipefs(path)
         zap_data(path)
