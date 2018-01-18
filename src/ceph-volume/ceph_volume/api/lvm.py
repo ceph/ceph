@@ -233,6 +233,28 @@ def remove_vg(vg_name):
     return True
 
 
+def remove_pv(pv_name):
+    """
+    Removes a physical volume.
+
+    Will return True if the pv is successfully removed or
+    raises a RuntimeError if the removal fails.
+    """
+    stdout, stderr, returncode = process.call(
+        [
+            'pvremove',
+            '-v',  # verbose
+            '-f',  # force it
+            pv_name
+        ],
+        show_command=True,
+        terminal_verbose=True,
+    )
+    if returncode != 0:
+        raise RuntimeError("Unable to remove vg %s".format(pv_name))
+    return True
+
+
 def remove_lv(path):
     """
     Removes a logical volume given it's absolute path.
