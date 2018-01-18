@@ -259,8 +259,8 @@ public:
     utime_t last_scrub_stamp;
     scrub_stamp_info_t() : scrub_start_version(0), last_scrub_version(0) {}
     void reset() {
-      scrub_start_version = 0;
-      scrub_start_stamp = utime_t();
+      scrub_start_version = last_scrub_version = 0;
+      scrub_start_stamp = last_scrub_stamp = utime_t();
     }
   };
 
