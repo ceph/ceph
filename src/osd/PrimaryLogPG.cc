@@ -318,11 +318,9 @@ void PrimaryLogPG::OpContext::start_async_reads(PrimaryLogPG *pg)
 
     // called by recovery workers
     void finish(ThreadPool::TPHandle&) override {
-      pg->lock();
       if (!pg->pg_has_reset_since(e)) {
         opcontext->finish_read(pg.get());
       }
-      pg->unlock();
     }
   };
 
