@@ -13,25 +13,37 @@ logger = logging.getLogger(__name__)
 
 
 def create_key():
-    stdout, stderr, returncode = process.call(['ceph-authtool', '--gen-print-key'])
+    stdout, stderr, returncode = process.call(
+        ['ceph-authtool', '--gen-print-key'],
+        show_command=True)
     if returncode != 0:
         raise RuntimeError('Unable to generate a new auth key')
     return ' '.join(stdout).strip()
 
 
-def write_keyring(osd_id, secret):
-    # FIXME this only works for cephx, but there will be other types of secrets
-    # later
-    osd_keyring = '/var/lib/ceph/osd/%s-%s/keyring' % (conf.cluster, osd_id)
+def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
+    """
+    Create a keyring file with the ``ceph-authtool`` utility. Constructs the
+    path over well-known conventions for the OSD, and allows any other custom
+    ``name`` to be set.
+
+    :param osd_id: The ID for the OSD to be used
+    :param secret: The key to be added as (as a string)
+    :param name: Defaults to 'osd.{ID}' but can be used to add other client
+                 names, specifically for 'lockbox' type of keys
+    :param keyring_name: Alternative keyring name, for supporting other
+                         types of keys like for lockbox
+    """
+    osd_keyring = '/var/lib/ceph/osd/%s-%s/%s' % (conf.cluster, osd_id, keyring_name)
+    name = name or 'osd.%s' % str(osd_id)
     process.run(
         [
             'ceph-authtool', osd_keyring,
             '--create-keyring',
-            '--name', 'osd.%s' % str(osd_id),
+            '--name', name,
             '--add-key', secret
         ])
     system.chown(osd_keyring)
-    # TODO: do the restorecon dance on the osd_keyring path
 
 
 def create_id(fsid, json_secrets):
@@ -50,7 +62,8 @@ def create_id(fsid, json_secrets):
             '-i', '-',
             'osd', 'new', fsid
         ],
-        stdin=json_secrets
+        stdin=json_secrets,
+        show_command=True
     )
     if returncode != 0:
         raise RuntimeError('Unable to create a new OSD id')
@@ -218,7 +231,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
 
     command = base_command + supplementary_command
 
-    process.call(command, stdin=keyring)
+    process.call(command, stdin=keyring, show_command=True)
 
 
 def osd_mkfs_filestore(osd_id, fsid):
