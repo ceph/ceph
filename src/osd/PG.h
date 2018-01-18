@@ -1867,8 +1867,10 @@ protected:
 
   TrivialEvent(IntervalFlush)
 
+  public:
   TrivialEvent(DeleteStart)
   TrivialEvent(DeleteSome)
+  protected:
   TrivialEvent(DeleteReserved)
   TrivialEvent(DeleteInterrupted)
 
