@@ -20,31 +20,6 @@
 # include <pk11pub.h>
 #endif
 
-#ifdef USE_CRYPTOPP
-#include <cryptopp/cryptlib.h>
-#include <cryptopp/modes.h>
-#include <cryptopp/aes.h>
-#if defined(CIVETWEB_VERSION_MAJOR) && \
-    defined(CIVETWEB_VERSION_MINOR) && \
-    (CIVETWEB_VERSION_MAJOR * 100) + CIVETWEB_VERSION_MINOR >= 110
-#error SSL_CTX_set_ecdh_auto patch no longer needed. Please delete.
-#else
-/*
- * patching for https://github.com/openssl/openssl/issues/1437
- * newer versions of civetweb do not experience problems
- */
-extern "C"
-{
-bool SSL_CTX_set_ecdh_auto(void* dummy, int onoff)
-{
-  return onoff!=0;
-}
-}
-#endif
-
-using namespace CryptoPP;
-#endif
-
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -78,52 +53,7 @@ public:
     return AES_256_IVSIZE;
   }
 
-#ifdef USE_CRYPTOPP
-
-  bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
-    ::byte iv[AES_256_IVSIZE];
-    ldout(cct, 25)
-        << "Encrypt in_ofs " << in_ofs
-        << " size=" << size
-        << " stream_offset=" << stream_offset
-        << dendl;
-    if (input.length() < in_ofs + size) {
-      return false;
-    }
-
-    output.clear();
-    buffer::ptr buf((size + AES_256_KEYSIZE - 1) / AES_256_KEYSIZE * AES_256_KEYSIZE);
-    /*create CTR mask*/
-    prepare_iv(iv, stream_offset);
-    CTR_Mode< AES >::Encryption e;
-    e.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
-    buf.zero();
-    e.ProcessData((::byte*)buf.c_str(), (::byte*)buf.c_str(), buf.length());
-    buf.set_length(size);
-    off_t plaintext_pos = in_ofs;
-    off_t crypt_pos = 0;
-    auto iter = input.buffers().begin();
-    //skip unaffected begin
-    while ((iter != input.buffers().end()) && (plaintext_pos >= iter->length())) {
-      plaintext_pos -= iter->length();
-      ++iter;
-    }
-    while (iter != input.buffers().end()) {
-      off_t cnt = std::min<off_t>(iter->length() - plaintext_pos, size - crypt_pos);
-      auto src = (::byte*)iter->c_str() + plaintext_pos;
-      auto dst = (::byte*)buf.c_str() + crypt_pos;
-      for (off_t i = 0; i < cnt; i++) {
-        dst[i] ^= src[i];
-      }
-      ++iter;
-      plaintext_pos = 0;
-      crypt_pos += cnt;
-    }
-    output.append(buf);
-    return true;
-  }
-
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 
   bool encrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset)
   {
@@ -188,7 +118,7 @@ public:
   }
 
 #else
-#error Must define USE_CRYPTOPP or USE_NSS
+# error "No supported crypto implementation found."
 #endif
   /* in CTR encrypt is the same as decrypt */
   bool decrypt(bufferlist& input, off_t in_ofs, size_t size, bufferlist& output, off_t stream_offset) {
@@ -286,28 +216,7 @@ public:
     return CHUNK_SIZE;
   }
 
-#ifdef USE_CRYPTOPP
-
-  bool cbc_transform(unsigned char* out,
-                     const unsigned char* in,
-                     size_t size,
-                     const unsigned char (&iv)[AES_256_IVSIZE],
-                     const unsigned char (&key)[AES_256_KEYSIZE],
-                     bool encrypt)
-  {
-    if (encrypt) {
-      CBC_Mode< AES >::Encryption e;
-      e.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
-      e.ProcessData((byte*)out, (byte*)in, size);
-    } else {
-      CBC_Mode< AES >::Decryption d;
-      d.SetKeyWithIV(key, AES_256_KEYSIZE, iv, AES_256_IVSIZE);
-      d.ProcessData((byte*)out, (byte*)in, size);
-    }
-    return true;
-  }
-
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 
   bool cbc_transform(unsigned char* out,
                      const unsigned char* in,
@@ -364,7 +273,7 @@ public:
   }
 
 #else
-#error Must define USE_CRYPTOPP or USE_NSS
+# error "No supported crypto implementation found."
 #endif
 
   bool cbc_transform(unsigned char* out,
@@ -543,30 +452,7 @@ const uint8_t AES_256_CBC::IV[AES_256_CBC::AES_256_IVSIZE] =
     { 'a', 'e', 's', '2', '5', '6', 'i', 'v', '_', 'c', 't', 'r', '1', '3', '3', '7' };
 
 
-#ifdef USE_CRYPTOPP
-
-bool AES_256_ECB_encrypt(CephContext* cct,
-                         const uint8_t* key,
-                         size_t key_size,
-                         const uint8_t* data_in,
-                         uint8_t* data_out,
-                         size_t data_size)
-{
-  bool res = false;
-  if (key_size == AES_256_KEYSIZE) {
-    try {
-      ECB_Mode< AES >::Encryption e;
-      e.SetKey( key, key_size );
-      e.ProcessData(data_out, data_in, data_size);
-      res = true;
-    } catch( CryptoPP::Exception& ex ) {
-      ldout(cct, 5) << "AES-ECB encryption failed with: " << ex.GetWhat() << dendl;
-    }
-  }
-  return res;
-}
-
-#elif defined USE_NSS
+#ifdef USE_NSS
 
 bool AES_256_ECB_encrypt(CephContext* cct,
                          const uint8_t* key,
@@ -625,7 +511,7 @@ bool AES_256_ECB_encrypt(CephContext* cct,
 }
 
 #else
-#error Must define USE_CRYPTOPP or USE_NSS
+# error "No supported crypto implementation found."
 #endif
 
 
