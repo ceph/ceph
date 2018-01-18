@@ -1693,7 +1693,7 @@ void OSDService::queue_recovery_context(
   PG *pg,
   GenContext<ThreadPool::TPHandle&> *c)
 {
-  epoch_t e = get_osdmap()->get_epoch();
+  epoch_t e = get_osdmap_epoch();
   enqueue_back(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(
@@ -1711,12 +1711,12 @@ void OSDService::queue_for_snap_trim(PG *pg)
   enqueue_back(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(
-	new PGSnapTrim(pg->get_pgid(), pg->get_osdmap()->get_epoch())),
+	new PGSnapTrim(pg->get_pgid(), pg->get_osdmap_epoch())),
       cct->_conf->osd_snap_trim_cost,
       cct->_conf->osd_snap_trim_priority,
       ceph_clock_now(),
       0,
-      pg->get_osdmap()->get_epoch()));
+      pg->get_osdmap_epoch()));
 }
 
 void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
@@ -1725,7 +1725,7 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
   if (with_high_priority && scrub_queue_priority < cct->_conf->osd_client_op_priority) {
     scrub_queue_priority = cct->_conf->osd_client_op_priority;
   }
-  const auto epoch = pg->get_osdmap()->get_epoch();
+  const auto epoch = pg->get_osdmap_epoch();
   enqueue_back(
     OpQueueItem(
       unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
@@ -4827,13 +4827,13 @@ void OSD::heartbeat()
       i->second.first_tx = now;
     dout(30) << "heartbeat sending ping to osd." << peer << dendl;
     i->second.con_back->send_message(new MOSDPing(monc->get_fsid(),
-					  service.get_osdmap()->get_epoch(),
+					  service.get_osdmap_epoch(),
 					  MOSDPing::PING, now,
 					  cct->_conf->osd_heartbeat_min_size));
 
     if (i->second.con_front)
       i->second.con_front->send_message(new MOSDPing(monc->get_fsid(),
-					     service.get_osdmap()->get_epoch(),
+					     service.get_osdmap_epoch(),
 					     MOSDPing::PING, now,
 					  cct->_conf->osd_heartbeat_min_size));
   }
@@ -6856,8 +6856,8 @@ void OSD::handle_scrub(MOSDScrub *m)
       pgid,
       PGPeeringEventRef(
 	std::make_shared<PGPeeringEvent>(
-	  get_osdmap()->get_epoch(),
-	  get_osdmap()->get_epoch(),
+	  get_osdmap_epoch(),
+	  get_osdmap_epoch(),
 	  PG::RequestScrub(m->deep, m->repair))));
   }
 
@@ -7866,7 +7866,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
 
     pg->lock();
     dout(10) << __func__ << " " << *pg << dendl;
-    epoch_t e = pg->get_osdmap()->get_epoch();
+    epoch_t e = pg->get_osdmap_epoch();
     pg->unlock();
 
     pg_map_lock.get_write();
@@ -7897,7 +7897,7 @@ void OSD::advance_pg(
   OSDMapRef lastmap = pg->get_osdmap();
   assert(lastmap->get_epoch() < osd_epoch);
   set<PGRef> new_pgs;  // any split children
-  for (epoch_t next_epoch = pg->get_osdmap()->get_epoch() + 1;
+  for (epoch_t next_epoch = pg->get_osdmap_epoch() + 1;
        next_epoch <= osd_epoch;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
@@ -8659,7 +8659,7 @@ void OSD::handle_fast_force_recovery(MOSDForceRecovery *m)
     m->put();
     return;
   }
-  epoch_t epoch = get_osdmap()->get_epoch();
+  epoch_t epoch = get_osdmap_epoch();
   for (auto pgid : m->forced_pgs) {
     if (m->options & OFR_BACKFILL) {
       if (m->options & OFR_CANCEL) {
@@ -9038,7 +9038,7 @@ void OSD::dequeue_peering_evt(
       ceph_abort();
     }
   } else {
-    if (curmap->get_epoch() > pg->get_osdmap()->get_epoch()) {
+    if (curmap->get_epoch() > pg->get_osdmap_epoch()) {
       advance_pg(curmap->get_epoch(), pg, handle, &rctx);
     }
     pg->do_peering_event(evt, &rctx);
