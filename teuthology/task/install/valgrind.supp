@@ -403,36 +403,68 @@
 {
     python does not reset the member field when dealloc an object
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:Py_InitializeEx
     ...
 }
 {
+    statically allocated python types don't get members freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyType_Ready
+    ...
+}
+{
+    manually constructed python module members don't get freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:Py_InitModule4_64
+    ...
+}
+{
+    manually constructed python module members don't get freed
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:PyModule_AddObject
+    ...
+}
+{
+    python subinterpreters may not clean up properly
+    Memcheck:Leak
+    match-leak-kinds: all
+    ...
+    fun:Py_NewInterpreter
+    ...
+}
+{
     python should be able to take care of itself
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:PyEval_EvalCode
 }
 {
     python should be able to take care of itself
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:PyImport_ImportModuleLevel
 }
 {
-    python should be able to take care of itself
+    python-owned threads may not full clean up after themselves
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:PyEval_CallObjectWithKeywords
 }
 {
     python should be able to take care of itself
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:PyEval_EvalFrameEx
     ...
@@ -441,7 +473,7 @@
 {
     python should be able to take care of itself
     Memcheck:Leak
-    match-leak-kinds: possible
+    match-leak-kinds: all
     ...
     fun:PyObject_Call
 }
