@@ -500,11 +500,11 @@ void PGMapDigest::pool_recovery_rate_summary(Formatter *f, ostream *out,
 void PGMapDigest::pool_recovery_summary(Formatter *f, list<string> *psl,
                                   uint64_t poolid) const
 {
-  auto p = per_pool_sum_delta.find(poolid);
-  if (p == per_pool_sum_delta.end())
+  auto p = pg_pool_sum.find(poolid);
+  if (p == pg_pool_sum.end())
     return;
 
-  recovery_summary(f, psl, p->second.first);
+  recovery_summary(f, psl, p->second);
 }
 
 void PGMapDigest::client_io_rate_summary(Formatter *f, ostream *out,
