@@ -2501,3 +2501,106 @@ TEST_F(TestClsRbd, op_features)
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);
 }
+
+TEST_F(TestClsRbd, clone_parent)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap"));
+
+  ASSERT_EQ(-ENOENT, child_attach(&ioctx, oid, 345, {}));
+  ASSERT_EQ(-ENOENT, child_detach(&ioctx, oid, 123, {}));
+  ASSERT_EQ(-ENOENT, child_detach(&ioctx, oid, 345, {}));
+
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "image1"}));
+  ASSERT_EQ(-EEXIST, child_attach(&ioctx, oid, 123, {1, "image1"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {1, "image2"}));
+  ASSERT_EQ(0, child_attach(&ioctx, oid, 123, {2, "image2"}));
+
+  std::vector<cls::rbd::SnapshotInfo> snaps;
+  std::vector<ParentInfo> parents;
+  std::vector<uint8_t> protection_status;
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, {123}, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ(3U, snaps[0].child_count);
+
+  // op feature should have been enabled
+  uint64_t op_features;
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) ==
+                RBD_OPERATION_FEATURE_CLONE_PARENT);
+
+  // cannot attach to trashed snapshot
+  librados::ObjectWriteOperation op;
+  ::librbd::cls_client::snapshot_add(&op, 234, "trash_snap",
+                                     cls::rbd::TrashSnapshotNamespace());
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
+  ASSERT_EQ(-ENOENT, child_attach(&ioctx, oid, 234, {}));
+
+  cls::rbd::ChildImageSpecs child_images;
+  ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
+
+  cls::rbd::ChildImageSpecs expected_child_images = {
+    {1, "image1"}, {1, "image2"}, {2, "image2"}};
+  ASSERT_EQ(expected_child_images, child_images);
+
+  expected_child_images = {{1, "image1"}, {2, "image2"}};
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image2"}));
+  ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
+  ASSERT_EQ(expected_child_images, child_images);
+
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {2, "image2"}));
+
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) ==
+                RBD_OPERATION_FEATURE_CLONE_PARENT);
+
+  ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image1"}));
+  ASSERT_EQ(-ENOENT, children_list(&ioctx, oid, 123, &child_images));
+
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) == 0ULL);
+}
+
+TEST_F(TestClsRbd, clone_child)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22,
+                            RBD_FEATURE_LAYERING | RBD_FEATURE_DEEP_FLATTEN,
+                            oid, -1));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "parent", 2}, 1));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 123, "user_snap1"));
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, RBD_OPERATION_FEATURE_CLONE_CHILD,
+                               RBD_OPERATION_FEATURE_CLONE_CHILD));
+
+  // clone child should be disabled due to deep flatten
+  ASSERT_EQ(0, remove_parent(&ioctx, oid));
+  uint64_t op_features;
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
+
+  ASSERT_EQ(0, set_features(&ioctx, oid, 0, RBD_FEATURE_DEEP_FLATTEN));
+  ASSERT_EQ(0, set_parent(&ioctx, oid, {1, "parent", 2}, 1));
+  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 124, "user_snap2"));
+  ASSERT_EQ(0, op_features_set(&ioctx, oid, RBD_OPERATION_FEATURE_CLONE_CHILD,
+                               RBD_OPERATION_FEATURE_CLONE_CHILD));
+
+  // clone child should remain enabled w/o deep flatten
+  ASSERT_EQ(0, remove_parent(&ioctx, oid));
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) ==
+                RBD_OPERATION_FEATURE_CLONE_CHILD);
+
+  // ... but removing the last linked snapshot should disable it
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 124));
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_CHILD) == 0ULL);
+}
+

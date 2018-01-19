@@ -212,6 +212,30 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
   return os;
 }
 
+void ChildImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(pool_id, bl);
+  encode(image_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ChildImageSpec::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  decode(pool_id, it);
+  decode(image_id, it);
+  DECODE_FINISH(it);
+}
+
+void ChildImageSpec::dump(Formatter *f) const {
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_id", image_id);
+}
+
+void ChildImageSpec::generate_test_instances(std::list<ChildImageSpec*> &o) {
+  o.push_back(new ChildImageSpec());
+  o.push_back(new ChildImageSpec(123, "abc"));
+}
+
 void GroupImageSpec::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   encode(image_id, bl);
