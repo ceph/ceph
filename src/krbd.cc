@@ -639,7 +639,8 @@ static bool dump_one_image(Formatter *f, TextTable *tbl,
     return false;
 
   if (f) {
-    f->open_object_section(id);
+    f->open_object_section("device");
+    f->dump_string("id", id);
     f->dump_string("pool", pool);
     f->dump_string("name", image);
     f->dump_string("snap", snap);
@@ -693,7 +694,7 @@ int dump_images(struct krbd_ctx *ctx, Formatter *f)
   int r;
 
   if (f) {
-    f->open_object_section("devices");
+    f->open_array_section("devices");
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
