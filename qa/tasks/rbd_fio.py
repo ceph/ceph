@@ -218,7 +218,7 @@ def run_fio(remote, config, rbd_test_dir):
         mapped_images = json.loads(out.getvalue())
         if mapped_images:
             log.info("Unmapping rbd images on {sn}".format(sn=sn))
-            for image in mapped_images.itervalues():
+            for image in mapped_images:
                 remote.run(args=['sudo', 'rbd', 'unmap', str(image['device'])])
         log.info("Cleaning up fio install")
         remote.run(args=['rm','-rf', run.Raw(rbd_test_dir)])
