@@ -570,7 +570,6 @@ int JournalTool::journal_export(std::string const &path, bool import)
     } else {
       r = dumper.dump(path.c_str());
     }
-    dumper.shutdown();
   }
 
   return r;
@@ -595,7 +594,6 @@ int JournalTool::journal_reset(bool hard)
   } else {
     r = resetter.reset(mds_role_t(role_selector.get_ns(), rank));
   }
-  resetter.shutdown();
 
   return r;
 }
