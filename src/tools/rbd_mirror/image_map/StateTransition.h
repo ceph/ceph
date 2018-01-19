@@ -4,6 +4,8 @@
 #ifndef CEPH_RBD_MIRROR_IMAGE_MAP_STATE_TRANSITION_H
 #define CEPH_RBD_MIRROR_IMAGE_MAP_STATE_TRANSITION_H
 
+#include <boost/optional.hpp>
+
 namespace rbd {
 namespace mirror {
 namespace image_map {
@@ -27,13 +29,23 @@ public:
 
   struct Transition {
     State next_state;
-    bool retry_on_error;
+    boost::optional<State> final_state;
+    boost::optional<State> error_state;
 
-    Transition() {
+    Transition()
+      : Transition(STATE_UNASSIGNED, boost::none, boost::none) {
     }
-    Transition(State next_state, bool retry_on_error)
+    Transition(State next_state)
+      : Transition(next_state, boost::none, boost::none) {
+    }
+    Transition(State next_state, State final_state)
+      : Transition(next_state, final_state, boost::none) {
+    }
+    Transition(State next_state, boost::optional<State> final_state,
+               boost::optional<State> error_state)
       : next_state(next_state),
-        retry_on_error(retry_on_error) {
+        final_state(final_state),
+        error_state(error_state) {
     }
   };
 

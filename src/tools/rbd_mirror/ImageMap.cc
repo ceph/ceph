@@ -324,9 +324,7 @@ void ImageMap<I>::schedule_add_action(const std::string &global_image_id) {
 
   // in order of state-machine execution, so its easier to follow
   Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new FunctionContext([this, global_image_id](int r) {
-      queue_acquire_image(global_image_id);
-    });
+  Context *on_acquire = new C_AcquireImage(this, global_image_id);
   Context *on_finish = new FunctionContext([this, global_image_id](int r) {
       handle_add_action(global_image_id, r);
     });
@@ -365,9 +363,7 @@ void ImageMap<I>::schedule_shuffle_action(const std::string &global_image_id) {
       queue_release_image(global_image_id);
     });
   Context *on_update = new C_UpdateMap(this, global_image_id);
-  Context *on_acquire = new FunctionContext([this, global_image_id](int r) {
-      queue_acquire_image(global_image_id);
-    });
+  Context *on_acquire = new C_AcquireImage(this, global_image_id);
   Context *on_finish = new FunctionContext([this, global_image_id](int r) {
       handle_shuffle_action(global_image_id, r);
     });

@@ -1029,7 +1029,7 @@ TEST_F(TestMockImageMap, RemoveInstanceWithRemoveImage) {
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));
 }
 
-TEST_F(TestMockImageMap, AddErrorWithRetryAndResume) {
+TEST_F(TestMockImageMap, AddErrorAndRemoveImage) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);
 
@@ -1051,11 +1051,6 @@ TEST_F(TestMockImageMap, AddErrorWithRetryAndResume) {
     "global id 1", "global id 2", "global id 3", "remote id 4",
   };
   std::set<std::string> global_image_ids_ack(global_image_ids);
-
-  std::set<std::string> remove_global_image_ids{
-    "global id 1"
-  };
-  std::set<std::string> remove_global_image_ids_ack(remove_global_image_ids);
 
   // UPDATE_MAPPING+ACQUIRE
   expect_add_event(mock_threads);
@@ -1088,22 +1083,29 @@ TEST_F(TestMockImageMap, AddErrorWithRetryAndResume) {
                          mock_listener, shuffled_global_image_ids, 0);
   remote_peer_ack_listener_wait(mock_image_map.get(), shuffled_global_image_ids, 0);
 
-  // instance blacklisted -- ACQUIRE request fails
-  remote_peer_ack_nowait(mock_image_map.get(), shuffled_global_image_ids, -EBLACKLISTED);
-
-  expect_add_event(mock_threads);
-  expect_update_request(mock_update_request, 0);
-  expect_add_event(mock_threads);
-  listener_acquire_images(mock_listener, shuffled_global_image_ids);
-
-  // remove the dead instance
   mock_image_map->update_instances_removed({"9876"});
 
-  ASSERT_TRUE(wait_for_map_update(1));
-  ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids.size()));
+  // instance blacklisted -- ACQUIRE request fails
+  update_map_and_acquire(mock_threads, mock_update_request,
+                         mock_listener, shuffled_global_image_ids, 0);
+  remote_peer_ack_listener_wait(mock_image_map.get(), shuffled_global_image_ids, -EBLACKLISTED);
 
-  // remote peer ACKs image acquire request
+  // new peer acks acquire request
   remote_peer_ack_nowait(mock_image_map.get(), shuffled_global_image_ids, 0);
+  wait_for_scheduled_task();
+
+  std::set<std::string> shuffled_global_image_ids_ack(shuffled_global_image_ids);
+
+  // remove image
+  listener_remove_images(mock_listener, "uuid1", shuffled_global_image_ids);
+  expect_add_event(mock_threads);
+  listener_release_images(mock_listener, shuffled_global_image_ids);
+  update_map_request(mock_threads, mock_update_request, shuffled_global_image_ids, 0);
+
+  mock_image_map->update_images("uuid1", {}, std::move(shuffled_global_image_ids));
+  ASSERT_TRUE(wait_for_listener_notify(shuffled_global_image_ids_ack.size() * 2));
+
+  remote_peer_ack_wait(mock_image_map.get(), shuffled_global_image_ids_ack, 0);
 
   wait_for_scheduled_task();
   ASSERT_EQ(0, when_shut_down(mock_image_map.get()));

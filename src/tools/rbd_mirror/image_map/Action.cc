@@ -58,16 +58,10 @@ void Action::execute_state_callback(StateTransition::State state) {
   }
 }
 
-void Action::state_callback_complete(StateTransition::State state, bool delete_context) {
-  Context *on_state = nullptr;
-
+void Action::state_callback_complete(StateTransition::State state) {
   auto it = context_map.find(state);
   if (it != context_map.end()) {
-    std::swap(it->second, on_state);
-  }
-
-  if (on_state && delete_context) {
-    delete on_state;
+    it->second = nullptr;
   }
 }
 
