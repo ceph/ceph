@@ -219,6 +219,44 @@ int set_op_features(cls_method_context_t hctx, uint64_t op_features,
   return 0;
 }
 
+template<typename L>
+int snapshot_iterate(cls_method_context_t hctx, L& lambda) {
+  int max_read = RBD_MAX_KEYS_READ;
+  string last_read = RBD_SNAP_KEY_PREFIX;
+  bool more = false;
+  do {
+    map<string, bufferlist> vals;
+    int r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
+			         max_read, &vals, &more);
+    if (r < 0) {
+      return r;
+    }
+
+    cls_rbd_snap snap_meta;
+    for (auto& val : vals) {
+      bufferlist::iterator iter = val.second.begin();
+      try {
+	decode(snap_meta, iter);
+      } catch (const buffer::error &err) {
+	CLS_ERR("error decoding snapshot metadata for snap : %s",
+	        val.first.c_str());
+	return -EIO;
+      }
+
+      r = lambda(snap_meta);
+      if (r < 0) {
+        return r;
+      }
+    }
+
+    if (!vals.empty()) {
+      last_read = vals.rbegin()->first;
+    }
+  } while (more);
+
+  return 0;
+}
+
 } // namespace image
 
 /**
@@ -1751,48 +1789,31 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   snap_meta.timestamp = ceph_clock_now();
 
-  int max_read = RBD_MAX_KEYS_READ;
   uint64_t total_read = 0;
-  string last_read = RBD_SNAP_KEY_PREFIX;
-  bool more;
-  do {
-    map<string, bufferlist> vals;
-    r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
-			     max_read, &vals, &more);
-    if (r < 0)
-      return r;
-
-    total_read += vals.size();
-    if (total_read >= snap_limit) {
-      CLS_ERR("Attempt to create snapshot over limit of %" PRIu64, snap_limit);
-      return -EDQUOT;
-    }
-
-    for (map<string, bufferlist>::iterator it = vals.begin();
-	 it != vals.end(); ++it) {
-      cls_rbd_snap old_meta;
-      bufferlist::iterator iter = it->second.begin();
-      try {
-	decode(old_meta, iter);
-      } catch (const buffer::error &err) {
-	snapid_t snap_id = snap_id_from_key(it->first);
-	CLS_ERR("error decoding snapshot metadata for snap_id: %llu",
-	        (unsigned long long)snap_id.val);
-	return -EIO;
+  auto pre_check_lambda =
+    [&snap_meta, &total_read, snap_limit](const cls_rbd_snap& old_meta) {
+      ++total_read;
+      if (total_read >= snap_limit) {
+        CLS_ERR("Attempt to create snapshot over limit of %" PRIu64,
+                snap_limit);
+        return -EDQUOT;
       }
+
       if ((snap_meta.name == old_meta.name &&
 	    snap_meta.snapshot_namespace == old_meta.snapshot_namespace) ||
 	  snap_meta.id == old_meta.id) {
-	CLS_LOG(20, "snap_name %s or snap_id %llu matches existing snap %s %llu",
-		snap_meta.name.c_str(), (unsigned long long)snap_meta.id.val,
-		old_meta.name.c_str(), (unsigned long long)old_meta.id.val);
+	CLS_LOG(20, "snap_name %s or snap_id %" PRIu64 " matches existing snap "
+                "%s %" PRIu64, snap_meta.name.c_str(), snap_meta.id.val,
+		old_meta.name.c_str(), old_meta.id.val);
 	return -EEXIST;
       }
-    }
+      return 0;
+    };
 
-    if (!vals.empty())
-      last_read = vals.rbegin()->first;
-  } while (more);
+  r = image::snapshot_iterate(hctx, pre_check_lambda);
+  if (r < 0) {
+    return r;
+  }
 
   // snapshot inherits parent, if any
   cls_rbd_parent parent;
@@ -1847,42 +1868,25 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
-  
+
   CLS_LOG(20, "snapshot_rename id=%llu dst_name=%s", (unsigned long long)src_snap_id.val,
 	 dst_snap_name.c_str());
 
-  int max_read = RBD_MAX_KEYS_READ;
-  string last_read = RBD_SNAP_KEY_PREFIX;
-  bool more;
-  do {
-    map<string, bufferlist> vals;
-    r = cls_cxx_map_get_vals(hctx, last_read, RBD_SNAP_KEY_PREFIX,
-			     max_read, &vals, &more);
-    if (r < 0)
-      return r;
-
-    for (map<string, bufferlist>::iterator it = vals.begin();
-	 it != vals.end(); ++it) {
-      bufferlist::iterator iter = it->second.begin();
-      try {
-	decode(snap_meta, iter);
-      } catch (const buffer::error &err) {
-	CLS_ERR("error decoding snapshot metadata for snap : %s",
-	        dst_snap_name.c_str());
-	return -EIO;
-      }
-      if (dst_snap_name == snap_meta.name) {
-	CLS_LOG(20, "snap_name %s  matches existing snap with snap id = %llu ",
-		dst_snap_name.c_str(), (unsigned long long)snap_meta.id.val);
-        return -EEXIST;
-      }
+  auto duplicate_name_lambda = [&dst_snap_name](const cls_rbd_snap& snap_meta) {
+    if (snap_meta.name == dst_snap_name) {
+      CLS_LOG(20, "snap_name %s matches existing snap with snap id %" PRIu64,
+              dst_snap_name.c_str(), snap_meta.id.val);
+      return -EEXIST;
     }
-    if (!vals.empty())
-      last_read = vals.rbegin()->first;
-  } while (more);
+    return 0;
+  };
+  r = image::snapshot_iterate(hctx, duplicate_name_lambda);
+  if (r < 0) {
+    return r;
+  }
 
   key_from_snap_id(src_snap_id, &src_snap_key);
-  r = read_key(hctx, src_snap_key, &snap_meta); 
+  r = read_key(hctx, src_snap_key, &snap_meta);
   if (r == -ENOENT) {
     CLS_LOG(20, "cannot find existing snap with snap id = %llu ", (unsigned long long)src_snap_id);
     return r;
