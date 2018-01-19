@@ -60,11 +60,10 @@ CLS_NAME(rbd)
 
 #define RBD_MAX_KEYS_READ 64
 #define RBD_SNAP_KEY_PREFIX "snapshot_"
+#define RBD_SNAP_CHILDREN_KEY_PREFIX "snap_children_"
 #define RBD_DIR_ID_KEY_PREFIX "id_"
 #define RBD_DIR_NAME_KEY_PREFIX "name_"
 #define RBD_METADATA_KEY_PREFIX "metadata_"
-
-#define GROUP_SNAP_SEQ "snap_seq"
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
 {
@@ -140,6 +139,19 @@ static int read_key(cls_method_context_t hctx, const string &key, T *out)
   return 0;
 }
 
+template <typename T>
+static int write_key(cls_method_context_t hctx, const string &key, const T &t) {
+  bufferlist bl;
+  encode(t, bl);
+
+  int r = cls_cxx_map_set_val(hctx, key, &bl);
+  if (r < 0) {
+    CLS_ERR("failed to set omap key: %s", key.c_str());
+    return r;
+  }
+  return 0;
+}
+
 static int remove_key(cls_method_context_t hctx, const string &key) {
   int r = cls_cxx_map_remove_key(hctx, key);
   if (r < 0 && r != -ENOENT) {
@@ -161,6 +173,14 @@ static bool is_valid_id(const string &id) {
 }
 
 namespace image {
+
+std::string snap_children_key_from_snap_id(snapid_t snap_id)
+{
+  ostringstream oss;
+  oss << RBD_SNAP_CHILDREN_KEY_PREFIX
+      << std::setw(16) << std::setfill('0') << std::hex << snap_id;
+  return oss.str();
+}
 
 int set_op_features(cls_method_context_t hctx, uint64_t op_features,
                     uint64_t mask) {
@@ -1229,51 +1249,30 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
-  // remove the parent from all snapshots
-  if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0) {
-    int max_read = RBD_MAX_KEYS_READ;
-    vector<snapid_t> snap_ids;
-    string last_read = RBD_SNAP_KEY_PREFIX;
-    bool more;
+  auto flatten_lambda = [hctx, features](const cls_rbd_snap& snap_meta) {
+    if (snap_meta.parent.pool != -1) {
+      if ((features & RBD_FEATURE_DEEP_FLATTEN) != 0ULL) {
+        // remove parent reference from snapshot
+        cls_rbd_snap snap_meta_copy = snap_meta;
+        snap_meta_copy.parent = cls_rbd_parent();
 
-    do {
-      set<string> keys;
-      r = cls_cxx_map_get_keys(hctx, last_read, max_read, &keys, &more);
-      if (r < 0) {
-        return r;
-      }
-
-      for (std::set<string>::const_iterator it = keys.begin();
-           it != keys.end(); ++it) {
-        if ((*it).find(RBD_SNAP_KEY_PREFIX) != 0) {
-	  break;
-        }
-
-        uint64_t snap_id = snap_id_from_key(*it);
-        cls_rbd_snap snap_meta;
-        r = read_key(hctx, *it, &snap_meta);
+        std::string snap_key;
+        key_from_snap_id(snap_meta_copy.id, &snap_key);
+        int r = write_key(hctx, snap_key, snap_meta_copy);
         if (r < 0) {
-          CLS_ERR("Could not read snapshot: snap_id=%" PRIu64 ": %s",
-                  snap_id, cpp_strerror(r).c_str());
           return r;
         }
-
-        snap_meta.parent = cls_rbd_parent();
-
-        bufferlist bl;
-        encode(snap_meta, bl);
-        r = cls_cxx_map_set_val(hctx, *it, &bl);
-        if (r < 0) {
-          CLS_ERR("Could not update snapshot: snap_id=%" PRIu64 ": %s",
-                  snap_id, cpp_strerror(r).c_str());
-          return r;
-        }
+      } else {
+        return -EEXIST;
       }
+    }
+    return 0;
+  };
 
-      if (!keys.empty()) {
-        last_read = *(keys.rbegin());
-      }
-    } while (more);
+  r = image::snapshot_iterate(hctx, flatten_lambda);
+  bool has_child_snaps = (r == -EEXIST);
+  if (r < 0 && r != -EEXIST) {
+    return r;
   }
 
   cls_rbd_parent parent;
@@ -1286,6 +1285,15 @@ int remove_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     CLS_ERR("error removing parent: %s", cpp_strerror(r).c_str());
     return r;
   }
+
+  if (!has_child_snaps) {
+    // disable clone child op feature if no longer associated
+    r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_CHILD);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   return 0;
 }
 
@@ -1950,10 +1958,31 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED)
     return -EBUSY;
 
+  auto remove_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
+    if (snap_meta.id != snap_id && snap_meta.parent.pool != -1) {
+      return -EEXIST;
+    }
+    return 0;
+  };
+
+  r = image::snapshot_iterate(hctx, remove_lambda);
+  bool has_child_snaps = (r == -EEXIST);
+  if (r < 0 && r != -EEXIST) {
+    return r;
+  }
+
   r = cls_cxx_map_remove_key(hctx, snapshot_key);
   if (r < 0) {
     CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
     return r;
+  }
+
+  if (!has_child_snaps) {
+    // disable clone child op feature if no longer associated
+    r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_CHILD);
+    if (r < 0) {
+      return r;
+    }
   }
 
   return 0;
@@ -3007,6 +3036,215 @@ int snapshot_set_limit(cls_method_context_t hctx, bufferlist *in,
   return rc;
 }
 
+
+/**
+ * Input:
+ * @param snap id (uint64_t) parent snapshot id
+ * @param child spec (cls::rbd::ChildImageSpec) child image
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int child_attach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+  cls::rbd::ChildImageSpec child_image;
+  try {
+    bufferlist::iterator it = in->begin();
+    decode(snap_id, it);
+    decode(child_image, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "child_attach snap_id=%" PRIu64 ", child_pool_id=%" PRIi64 ", "
+              "child_image_id=%s", snap_id, child_image.pool_id,
+               child_image.image_id.c_str());
+
+  cls_rbd_snap snap;
+  std::string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
+        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    // cannot attach to a deleted snapshot
+    return -ENOENT;
+  }
+
+  auto children_key = image::snap_children_key_from_snap_id(snap_id);
+  cls::rbd::ChildImageSpecs child_images;
+  r = read_key(hctx, children_key, &child_images);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error reading snapshot children: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  auto it = child_images.insert(child_image);
+  if (!it.second) {
+    // child already attached to the snapshot
+    return -EEXIST;
+  }
+
+  r = write_key(hctx, children_key, child_images);
+  if (r < 0) {
+    CLS_ERR("error writing snapshot children: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  ++snap.child_count;
+  r = write_key(hctx, snapshot_key, snap);
+  if (r < 0) {
+    CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_CLONE_PARENT,
+                             RBD_OPERATION_FEATURE_CLONE_PARENT);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param snap id (uint64_t) parent snapshot id
+ * @param child spec (cls::rbd::ChildImageSpec) child image
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int child_detach(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+  cls::rbd::ChildImageSpec child_image;
+  try {
+    bufferlist::iterator it = in->begin();
+    decode(snap_id, it);
+    decode(child_image, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "child_detach snap_id=%" PRIu64 ", child_pool_id=%" PRIi64 ", "
+              "child_image_id=%s", snap_id, child_image.pool_id,
+               child_image.image_id.c_str());
+
+  cls_rbd_snap snap;
+  std::string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  auto children_key = image::snap_children_key_from_snap_id(snap_id);
+  cls::rbd::ChildImageSpecs child_images;
+  r = read_key(hctx, children_key, &child_images);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error reading snapshot children: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (snap.child_count != child_images.size()) {
+    // children and reference count don't match
+    CLS_ERR("children reference count mismatch: %" PRIu64, snap_id);
+    return -EINVAL;
+  }
+
+  if (child_images.erase(child_image) == 0) {
+    // child not attached to the snapshot
+    return -ENOENT;
+  }
+
+  if (child_images.empty()) {
+    r = remove_key(hctx, children_key);
+  } else {
+    r = write_key(hctx, children_key, child_images);
+    if (r < 0) {
+      CLS_ERR("error writing snapshot children: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  }
+
+  --snap.child_count;
+  r = write_key(hctx, snapshot_key, snap);
+  if (r < 0) {
+    CLS_ERR("error writing snapshot: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (snap.child_count == 0) {
+    auto clone_in_use_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
+      if (snap_meta.id != snap_id && snap_meta.child_count > 0) {
+        return -EEXIST;
+      }
+      return 0;
+    };
+
+    r = image::snapshot_iterate(hctx, clone_in_use_lambda);
+    if (r < 0 && r != -EEXIST) {
+      return r;
+    }
+
+    if (r != -EEXIST) {
+      // remove the clone_v2 op feature if not in-use by any other snapshots
+      r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_PARENT);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
+ * @param snap id (uint64_t) parent snapshot id
+ *
+ * Output:
+ * @param (cls::rbd::ChildImageSpecs) child images
+ * @returns 0 on success, negative error code on failure
+ */
+int children_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  uint64_t snap_id;
+  try {
+    bufferlist::iterator it = in->begin();
+    decode(snap_id, it);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "child_detach snap_id=%" PRIu64, snap_id);
+
+  cls_rbd_snap snap;
+  std::string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r < 0) {
+    return r;
+  }
+
+  auto children_key = image::snap_children_key_from_snap_id(snap_id);
+  cls::rbd::ChildImageSpecs child_images;
+  r = read_key(hctx, children_key, &child_images);
+  if (r == -ENOENT) {
+    return r;
+  } else if (r < 0) {
+    CLS_ERR("error reading snapshot children: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  encode(child_images, *out);
+  return 0;
+}
 
 /****************************** Old format *******************************/
 
@@ -5737,6 +5975,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_metadata_get;
   cls_method_handle_t h_snapshot_get_limit;
   cls_method_handle_t h_snapshot_set_limit;
+  cls_method_handle_t h_child_attach;
+  cls_method_handle_t h_child_detach;
+  cls_method_handle_t h_children_list;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -5886,6 +6127,15 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_set_limit",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_set_limit, &h_snapshot_set_limit);
+  cls_register_cxx_method(h_class, "child_attach",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          child_attach, &h_child_attach);
+  cls_register_cxx_method(h_class, "child_detach",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          child_detach, &h_child_detach);
+  cls_register_cxx_method(h_class, "children_list",
+                          CLS_METHOD_RD,
+                          children_list, &h_children_list);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

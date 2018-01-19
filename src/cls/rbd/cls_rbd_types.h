@@ -12,6 +12,7 @@
 #include "include/utime.h"
 #include <iosfwd>
 #include <string>
+#include <set>
 
 #define RBD_GROUP_REF "rbd_group_ref"
 
@@ -162,6 +163,36 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
 
+struct ChildImageSpec {
+  int64_t pool_id = -1;
+  std::string image_id;
+
+  ChildImageSpec() {}
+  ChildImageSpec(int64_t pool_id, const std::string& image_id)
+    : pool_id(pool_id), image_id(image_id) {
+  }
+
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<ChildImageSpec*> &o);
+
+  inline bool operator==(const ChildImageSpec& rhs) const {
+    return (pool_id == rhs.pool_id &&
+            image_id == rhs.image_id);
+  }
+  inline bool operator<(const ChildImageSpec& rhs) const {
+    if (pool_id != rhs.pool_id) {
+      return pool_id < rhs.pool_id;
+    }
+    return image_id < rhs.image_id;
+  }
+};
+WRITE_CLASS_ENCODER(ChildImageSpec);
+
+typedef std::set<ChildImageSpec> ChildImageSpecs;
+
 struct GroupImageSpec {
   GroupImageSpec() {}
 
@@ -182,7 +213,6 @@ struct GroupImageSpec {
   std::string image_key();
 
 };
-
 WRITE_CLASS_ENCODER(GroupImageSpec);
 
 struct GroupImageStatus {
