@@ -140,7 +140,8 @@ void get_list_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_list(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -182,7 +183,8 @@ void get_get_arguments(po::options_description *positional,
   add_key_option(positional);
 }
 
-int execute_get(const po::variables_map &vm) {
+int execute_get(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -226,7 +228,8 @@ void get_set_arguments(po::options_description *positional,
     ("value", "image meta value");
 }
 
-int execute_set(const po::variables_map &vm) {
+int execute_set(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -274,7 +277,8 @@ void get_remove_arguments(po::options_description *positional,
   add_key_option(positional);
 }
 
-int execute_remove(const po::variables_map &vm) {
+int execute_remove(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
