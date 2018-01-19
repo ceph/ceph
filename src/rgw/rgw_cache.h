@@ -49,16 +49,17 @@ struct ObjectMetaInfo {
 WRITE_CLASS_ENCODER(ObjectMetaInfo)
 
 struct ObjectCacheInfo {
-  int status;
-  uint32_t flags;
-  uint64_t epoch;
+  int status = 0;
+  uint32_t flags = 0;
+  uint64_t epoch = 0;
   bufferlist data;
   map<string, bufferlist> xattrs;
   map<string, bufferlist> rm_xattrs;
   ObjectMetaInfo meta;
-  obj_version version;
+  obj_version version = {};
+  ceph::coarse_mono_time time_added = ceph::coarse_mono_clock::now();
 
-  ObjectCacheInfo() : status(0), flags(0), epoch(0), version() {}
+  ObjectCacheInfo() = default;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
@@ -146,6 +147,7 @@ class ObjectCache {
   list<RGWChainedCache *> chained_cache;
 
   bool enabled;
+  ceph::timespan expiry;
 
   void touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter);
   void remove_lru(string& name, std::list<string>::iterator& lru_iter);
@@ -159,6 +161,8 @@ public:
   void set_ctx(CephContext *_cct) {
     cct = _cct;
     lru_window = cct->_conf->rgw_cache_lru_size / 2;
+    expiry = std::chrono::seconds(cct->_conf->get_val<uint64_t>(
+						"rgw_cache_expiry_interval"));
   }
   bool chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry);
 
@@ -238,7 +242,8 @@ public:
                      RGWObjVersionTracker *objv_tracker, rgw_raw_obj& obj,
                      bufferlist& bl, off_t ofs, off_t end,
                      map<string, bufferlist> *attrs,
-                     rgw_cache_entry_info *cache_info) override;
+                     rgw_cache_entry_info *cache_info,
+		     boost::optional<obj_version> refresh_version = boost::none) override;
 
   int raw_obj_stat(rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch, map<string, bufferlist> *attrs,
                    bufferlist *first_chunk, RGWObjVersionTracker *objv_tracker) override;
@@ -283,7 +288,8 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
                      RGWObjVersionTracker *objv_tracker, rgw_raw_obj& obj,
                      bufferlist& obl, off_t ofs, off_t end,
                      map<string, bufferlist> *attrs,
-                     rgw_cache_entry_info *cache_info)
+		     rgw_cache_entry_info *cache_info,
+		     boost::optional<obj_version> refresh_version)
 {
   rgw_pool pool;
   string oid;
@@ -300,8 +306,9 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
     flags |= CACHE_FLAG_OBJV;
   if (attrs)
     flags |= CACHE_FLAG_XATTRS;
-  
-  if (cache.get(name, info, flags, cache_info) == 0) {
+
+  if ((cache.get(name, info, flags, cache_info) == 0) &&
+      (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
       return info.status;
 

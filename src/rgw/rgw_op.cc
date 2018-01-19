@@ -644,6 +644,37 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
   dump_bucket_from_state(s);
 }
 
+// So! Now and then when we try to update bucket information, the
+// bucket has changed during the course of the operation. (Or we have
+// a cache consistency problem that Watch/Notify isn't ruling out
+// completely.)
+//
+// When this happens, we need to update the bucket info and try
+// again. We have, however, to try the right *part* again.  We can't
+// simply re-send, since that will obliterate the previous update.
+//
+// Thus, callers of this function should include everything that
+// merges information to be changed into the bucket information as
+// well as the call to set it.
+//
+// The called function must return an integer, negative on error. In
+// general, they should just return op_ret.
+namespace {
+template<typename F>
+int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
+  auto r = f();
+  for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
+    r = g->try_refresh_bucket_info(s->bucket_info, nullptr,
+				   &s->bucket_attrs);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
+}
+
+
 int RGWGetObj::verify_permission()
 {
   obj = rgw_obj(s->bucket, s->object);
@@ -2091,15 +2122,18 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
-    s->bucket_info.flags |= BUCKET_VERSIONED;
-    s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
-    s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      if (enable_versioning) {
+	s->bucket_info.flags |= BUCKET_VERSIONED;
+	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+      } else {
+	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+      }
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					  &s->bucket_attrs);
+      return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+					     &s->bucket_attrs);
+    });
+
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
 		     << " returned err=" << op_ret << dendl;
@@ -2169,10 +2203,14 @@ void RGWSetBucketWebsite::execute()
     }
   }
 
-  s->bucket_info.has_website = true;
-  s->bucket_info.website_conf = website_conf;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = true;
+      s->bucket_info.website_conf = website_conf;
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false,
+					       real_time(), &s->bucket_attrs);
+      return op_ret;
+    });
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -2194,10 +2232,13 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
-  s->bucket_info.has_website = false;
-  s->bucket_info.website_conf = RGWBucketWebsiteConf();
-
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = false;
+      s->bucket_info.website_conf = RGWBucketWebsiteConf();
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false,
+					       real_time(), &s->bucket_attrs);
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -4045,55 +4086,61 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  /* Encode special metadata first as we're using std::map::emplace under
-   * the hood. This method will add the new items only if the map doesn't
-   * contain such keys yet. */
-  if (has_policy) {
-    if (s->dialect.compare("swift") == 0) {
-	auto old_policy = \
-          static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
-	auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
-	new_policy->filter_merge(policy_rw_mask, old_policy);
-	policy = *new_policy;
-    }
-    buffer::list bl;
-    policy.encode(bl);
-    emplace_attr(RGW_ATTR_ACL, std::move(bl));
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      /* Encode special metadata first as we're using std::map::emplace under
+       * the hood. This method will add the new items only if the map doesn't
+       * contain such keys yet. */
+      if (has_policy) {
+	if (s->dialect.compare("swift") == 0) {
+	  auto old_policy =						\
+	    static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
+	  auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
+	  new_policy->filter_merge(policy_rw_mask, old_policy);
+	  policy = *new_policy;
+	}
+	buffer::list bl;
+	policy.encode(bl);
+	emplace_attr(RGW_ATTR_ACL, std::move(bl));
+      }
 
-  if (has_cors) {
-    buffer::list bl;
-    cors_config.encode(bl);
-    emplace_attr(RGW_ATTR_CORS, std::move(bl));
-  }
+      if (has_cors) {
+	buffer::list bl;
+	cors_config.encode(bl);
+	emplace_attr(RGW_ATTR_CORS, std::move(bl));
+      }
 
-  /* It's supposed that following functions WILL NOT change any special
-   * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-  prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
-  populate_with_generic_attrs(s, attrs);
+      /* It's supposed that following functions WILL NOT change any
+       * special attributes (like RGW_ATTR_ACL) if they are already
+       * present in attrs. */
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+      populate_with_generic_attrs(s, attrs);
 
-  /* According  to the Swift's behaviour and its container_quota WSGI middleware
-   * implementation: anyone with write permissions is able to set the bucket
-   * quota. This stays in contrast to account quotas that can be set only by
-   * clients holding reseller admin privileges. */
-  op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
-  if (op_ret < 0) {
-    return;
-  }
+      /* According to the Swift's behaviour and its container_quota
+       * WSGI middleware implementation: anyone with write permissions
+       * is able to set the bucket quota. This stays in contrast to
+       * account quotas that can be set only by clients holding
+       * reseller admin privileges. */
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
+      if (op_ret < 0) {
+	return op_ret;
+      }
 
-  if (swift_ver_location) {
-    s->bucket_info.swift_ver_location = *swift_ver_location;
-    s->bucket_info.swift_versioning = (! swift_ver_location->empty());
-  }
+      if (swift_ver_location) {
+	s->bucket_info.swift_ver_location = *swift_ver_location;
+	s->bucket_info.swift_versioning = (!swift_ver_location->empty());
+      }
 
-  /* Web site of Swift API. */
-  filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
-  s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
+      /* Web site of Swift API. */
+      filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
+      s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
 
-  /* Setting attributes also stores the provided bucket info. Due to this
-   * fact, the new quota settings can be serialized with the same call. */
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
+      /* Setting attributes also stores the provided bucket info. Due
+       * to this fact, the new quota settings can be serialized with
+       * the same call. */
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				    &s->bucket_info.objv_tracker);
+      return op_ret;
+    });
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -5064,9 +5111,11 @@ void RGWPutCORS::execute()
     }
   }
 
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs[RGW_ATTR_CORS] = cors_bl;
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_CORS] = cors_bl;
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    });
 }
 
 int RGWDeleteCORS::verify_permission()
@@ -5085,32 +5134,35 @@ void RGWDeleteCORS::execute()
     return;
 
   bufferlist bl;
-  rgw_raw_obj obj;
   if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     op_ret = -ENOENT;
     return;
   }
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_prefetch_data(s->obj_ctx, obj);
-  map<string, bufferlist> orig_attrs, attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      rgw_raw_obj obj;
+      store->get_bucket_instance_obj(s->bucket, obj);
+      store->set_prefetch_data(s->obj_ctx, obj);
+      map<string, bufferlist> orig_attrs, attrs, rmattrs;
+      map<string, bufferlist>::iterator iter;
 
-  op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
-  if (op_ret < 0)
-    return;
+      op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+      if (op_ret < 0)
+	return op_ret;
 
-  /* only remove meta attrs */
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    dout(10) << "DeleteCORS : attr: " << name << dendl;
-    if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
-      rmattrs[name] = iter->second;
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      /* only remove meta attrs */
+      for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+	const string& name = iter->first;
+	dout(10) << "DeleteCORS : attr: " << name << dendl;
+	if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
+	  rmattrs[name] = iter->second;
+	} else if (attrs.find(name) == attrs.end()) {
+	  attrs[name] = iter->second;
+	}
+      }
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				  &s->bucket_info.objv_tracker);
+    });
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -6934,15 +6986,15 @@ void RGWPutBucketPolicy::execute()
   }
 
   try {
-    Policy p(s->cct, s->bucket_tenant, in_data);
-    auto attrs = s->bucket_attrs;
-    attrs[RGW_ATTR_IAM_POLICY].clear();
-    attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				  &s->bucket_info.objv_tracker);
-    if (op_ret == -ECANCELED) {
-      op_ret = 0; /* lost a race, but it's ok because policies are immutable */
-    }
+    const Policy p(s->cct, s->bucket_tenant, in_data);
+    op_ret = retry_raced_bucket_write(store, s, [&p, this] {
+	auto attrs = s->bucket_attrs;
+	attrs[RGW_ATTR_IAM_POLICY].clear();
+	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				      &s->bucket_info.objv_tracker);
+	return op_ret;
+      });
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -EINVAL;
@@ -7010,11 +7062,11 @@ int RGWDeleteBucketPolicy::verify_permission()
 
 void RGWDeleteBucketPolicy::execute()
 {
-  auto attrs = s->bucket_attrs;
-  attrs.erase(RGW_ATTR_IAM_POLICY);
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
-  if (op_ret == -ECANCELED) {
-    op_ret = 0; /* lost a race, but it's ok because policies are immutable */
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      auto attrs = s->bucket_attrs;
+      attrs.erase(RGW_ATTR_IAM_POLICY);
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				    &s->bucket_info.objv_tracker);
+      return op_ret;
+    });
 }
