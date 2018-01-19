@@ -184,7 +184,8 @@ int rgw_link_bucket(RGWRados* const store,
                     const rgw_user& user_id,
                     rgw_bucket& bucket,
                     ceph::real_time creation_time,
-                    bool update_entrypoint)
+                    bool update_entrypoint,
+                    bool update_stats)
 {
   int ret;
   string& tenant_name = bucket.tenant;
@@ -217,7 +218,7 @@ int rgw_link_bucket(RGWRados* const store,
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
-  ret = store->cls_user_add_bucket(obj, new_bucket);
+  ret = store->cls_user_add_bucket(obj, new_bucket, update_stats);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
                            << cpp_strerror(-ret) << dendl;
@@ -901,7 +902,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     }
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
-                        ceph::real_time());
+                        ceph::real_time(),true, op_state.will_update_stats());
     if (r < 0) {
       return r;
     }
