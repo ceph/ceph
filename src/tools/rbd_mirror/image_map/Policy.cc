@@ -121,7 +121,7 @@ void Policy::remove_instances(const std::vector<std::string> &instance_ids,
   for (auto const &instance : instance_ids) {
     dout(10) << ": removing instance_id=" << instance << dendl;
     for (auto const &global_image_id : m_map[instance]) {
-      if (!remove_pending(global_image_id)) {
+      if (!actions_pending(global_image_id, m_map_lock)) {
         remap_global_image_ids->emplace(global_image_id);
       }
     }
@@ -146,14 +146,16 @@ void Policy::start_next_action(const std::string &global_image_id) {
   StateTransition::ActionType action_type = action.get_action_type();
   action_state.transition = StateTransition::transit(action_type, action_state.current_state);
 
+  StateTransition::State next_state = action_state.transition.next_state;
+
   dout(10) << ": global_image_id=" << global_image_id << ", action=" << action
-           << ", currrent_state=" << action_state.current_state << ", next_state="
-           << action_state.transition.next_state << dendl;
+           << ", current_state=" << action_state.current_state << ", next_state="
+           << next_state << dendl;
 
   // invoke state context callback
-  pre_execute_state_callback(global_image_id, action_type, action_state.transition.next_state);
+  pre_execute_state_callback(global_image_id, action_type, next_state);
   m_map_lock.put_write();
-  action.execute_state_callback(action_state.transition.next_state);
+  action.execute_state_callback(next_state);
   m_map_lock.get_write();
 }
 
@@ -171,9 +173,8 @@ bool Policy::finish_action(const std::string &global_image_id, int r) {
   Action &action = action_state.actions.front();
 
   bool complete;
-  if (r == 0) {
-    post_execute_state_callback(global_image_id, action_state.transition.next_state);
-    complete = perform_transition(&action_state, &action);
+  if (can_transit(action_state, r)) {
+    complete = perform_transition(global_image_id, &action_state, &action, r != 0);
   } else {
     complete = abort_or_retry(&action_state, &action);
   }
@@ -204,47 +205,60 @@ bool Policy::queue_action(const std::string &global_image_id, const Action &acti
   return it->second.actions.size() == 1;
 }
 
-bool Policy::is_transition_complete(StateTransition::ActionType action_type, StateTransition::State *state) {
-  assert(m_map_lock.is_locked());
+void Policy::rollback(ActionState *action_state) {
+  dout(20) << dendl;
+  assert(m_map_lock.is_wlocked());
 
-  dout(10) << ": action_type=" << action_type << ", state=" << *state << dendl;
+  assert(action_state->transition.error_state);
+  StateTransition::State state = action_state->transition.error_state.get();
 
-  bool complete = false;
-  switch (action_type) {
-  case StateTransition::ACTION_TYPE_ADD:
-  case StateTransition::ACTION_TYPE_SHUFFLE:
-    complete = *state == StateTransition::STATE_ASSOCIATED;
-    break;
-  case StateTransition::ACTION_TYPE_REMOVE:
-    if (*state == StateTransition::STATE_REMOVE_MAPPING) {
-      complete = true;
-      *state = StateTransition::STATE_UNASSIGNED;
-    }
-    break;
-  default:
-    derr << "UNKNOWN (" << static_cast<uint32_t>(action_type) << ")" << dendl;
-    assert(false);
-  }
-
-  return complete;
+  dout(10) << ": rolling back state=" << action_state->current_state << " -> "
+           << state << dendl;
+  action_state->current_state = state;
 }
 
-bool Policy::perform_transition(ActionState *action_state, Action *action) {
+bool Policy::advance(const std::string &global_image_id,
+                     ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
   StateTransition::State state = action_state->transition.next_state;
-  // delete context based on retry_on_error flag
-  action->state_callback_complete(state, action_state->transition.retry_on_error);
+  if (!is_state_retriable(state)) {
+    action->state_callback_complete(state);
+  }
 
-  bool complete = is_transition_complete(action->get_action_type(), &state);
-  dout(10) << ": advancing state: " << action_state->current_state << " -> "
+  post_execute_state_callback(global_image_id, state);
+
+  bool reached_final_state = false;
+  if (action_state->transition.final_state) {
+    reached_final_state = true;
+    state = action_state->transition.final_state.get();
+    assert(is_idle_state(state));
+  }
+
+  dout(10) << ": advancing state=" << action_state->current_state << " -> "
            << state << dendl;
-
   action_state->current_state = state;
-  if (is_idle_state(state)) {
-    action_state->last_idle_state = state;
-    dout(10) << ": tranisition reached idle state=" << state << dendl;
+
+  return reached_final_state;
+}
+
+bool Policy::perform_transition(const std::string &global_image_id,
+                                ActionState *action_state, Action *action, bool transition_error) {
+  dout(20) << dendl;
+  assert(m_map_lock.is_wlocked());
+
+  bool complete = false;
+  if (transition_error) {
+    rollback(action_state);
+   } else {
+    complete = advance(global_image_id, action_state, action);
+  }
+
+  if (is_idle_state(action_state->current_state)) {
+    action_state->last_idle_state = action_state->current_state;
+    dout(10) << ": transition reached idle state=" << action_state->current_state
+             << dendl;
   }
 
   return complete;
@@ -254,10 +268,13 @@ bool Policy::abort_or_retry(ActionState *action_state, Action *action) {
   dout(20) << dendl;
   assert(m_map_lock.is_wlocked());
 
-  bool complete = !action_state->transition.retry_on_error;
+  StateTransition::State state = action_state->transition.next_state;
+  bool complete = !is_state_retriable(state);
+
   if (complete) {
-    // we aborted, so the context need not be freed
-    action->state_callback_complete(action_state->transition.next_state, false);
+    // we aborted, so the context need not be freed later
+    action->state_callback_complete(state);
+
     if (action_state->last_idle_state) {
       dout(10) << ": using last idle state=" << action_state->last_idle_state.get()
                << " as current state" << dendl;
@@ -304,8 +321,8 @@ void Policy::post_execute_state_callback(const std::string &global_image_id, Sta
   case StateTransition::STATE_UPDATE_MAPPING:
   case StateTransition::STATE_REMOVE_MAPPING:
     break;
-  case StateTransition::STATE_UNASSIGNED:
   default:
+  case StateTransition::STATE_UNASSIGNED:
     assert(false);
   }
 }
@@ -318,20 +335,6 @@ bool Policy::actions_pending(const std::string &global_image_id, const RWLock &l
   assert(it != m_actions.end());
 
   return !it->second.actions.empty();
-}
-
-bool Policy::remove_pending(const std::string &global_image_id) {
-  dout(20) << ": global_image_id=" << global_image_id << dendl;
-  assert(m_map_lock.is_locked());
-
-  auto it = m_actions.find(global_image_id);
-  assert(it != m_actions.end());
-
-  auto r_it = std::find_if(it->second.actions.rbegin(), it->second.actions.rend(),
-                           [](const Action &action) {
-      return (action.get_action_type() == StateTransition::ACTION_TYPE_REMOVE);
-    });
-  return r_it != it->second.actions.rend();
 }
 
 Policy::LookupInfo Policy::lookup(const std::string &global_image_id, const RWLock &lock) {

@@ -55,17 +55,17 @@ std::ostream &operator<<(std::ostream &os, const StateTransition::State &state) 
 const StateTransition::TransitionTable StateTransition::transition_table[] = {
   // action_type         current_state                   Transition
   // -------------------------------------------------------------------------------
-  ACTION_TYPE_ADD,     STATE_UNASSIGNED,      Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_ADD,     STATE_ASSOCIATED,      Transition(STATE_ASSOCIATED,     false),
-  ACTION_TYPE_ADD,     STATE_DISASSOCIATED,   Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_ADD,     STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED,     false),
+  ACTION_TYPE_ADD,     STATE_UNASSIGNED,      Transition(STATE_UPDATE_MAPPING),
+  ACTION_TYPE_ADD,     STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED, STATE_ASSOCIATED,
+                                                         STATE_UNASSIGNED),
 
-  ACTION_TYPE_REMOVE,  STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED,  false),
-  ACTION_TYPE_REMOVE,  STATE_DISASSOCIATED,   Transition(STATE_REMOVE_MAPPING, true),
+  ACTION_TYPE_REMOVE,  STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED),
+  ACTION_TYPE_REMOVE,  STATE_DISASSOCIATED,   Transition(STATE_REMOVE_MAPPING, STATE_UNASSIGNED),
 
-  ACTION_TYPE_SHUFFLE, STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED,  false),
-  ACTION_TYPE_SHUFFLE, STATE_DISASSOCIATED,   Transition(STATE_UPDATE_MAPPING, true),
-  ACTION_TYPE_SHUFFLE, STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED,     false),
+  ACTION_TYPE_SHUFFLE, STATE_ASSOCIATED,      Transition(STATE_DISASSOCIATED),
+  ACTION_TYPE_SHUFFLE, STATE_DISASSOCIATED,   Transition(STATE_UPDATE_MAPPING),
+  ACTION_TYPE_SHUFFLE, STATE_UPDATE_MAPPING,  Transition(STATE_ASSOCIATED, STATE_ASSOCIATED,
+                                                         STATE_DISASSOCIATED),
 };
 
 const StateTransition::Transition &StateTransition::transit(ActionType action_type, State state) {
