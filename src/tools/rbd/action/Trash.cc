@@ -40,7 +40,8 @@ void get_move_arguments(po::options_description *positional,
      "time delay in seconds until effectively remove the image");
 }
 
-int execute_move(const po::variables_map &vm) {
+int execute_move(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -88,7 +89,8 @@ void get_remove_arguments(po::options_description *positional,
       ("force", po::bool_switch(), "force remove of non-expired delayed images");
 }
 
-int execute_remove(const po::variables_map &vm) {
+int execute_remove(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_id;
@@ -294,7 +296,8 @@ void get_list_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_list(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
 
@@ -331,7 +334,8 @@ void get_restore_arguments(po::options_description *positional,
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, "");
 }
 
-int execute_restore(const po::variables_map &vm) {
+int execute_restore(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_id;

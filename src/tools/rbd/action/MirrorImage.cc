@@ -95,11 +95,13 @@ int execute_enable_disable(const po::variables_map &vm, bool enable,
   return 0;
 }
 
-int execute_disable(const po::variables_map &vm) {
+int execute_disable(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   return execute_enable_disable(vm, false, vm["force"].as<bool>());
 }
 
-int execute_enable(const po::variables_map &vm) {
+int execute_enable(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   return execute_enable_disable(vm, true, false);
 }
 
@@ -110,7 +112,8 @@ void get_arguments_promote(po::options_description *positional,
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_promote(const po::variables_map &vm) {
+int execute_promote(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -148,7 +151,8 @@ int execute_promote(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_demote(const po::variables_map &vm) {
+int execute_demote(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -184,7 +188,8 @@ int execute_demote(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_resync(const po::variables_map &vm) {
+int execute_resync(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -226,7 +231,8 @@ void get_status_arguments(po::options_description *positional,
   at::add_format_options(options);
 }
 
-int execute_status(const po::variables_map &vm) {
+int execute_status(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   at::Format::Formatter formatter;
   int r = utils::get_formatter(vm, &formatter);
   if (r < 0) {

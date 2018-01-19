@@ -461,12 +461,14 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   return 0;
 }
 
-int execute_for_write(const po::variables_map &vm) {
+int execute_for_write(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   std::cerr << "rbd: bench-write is deprecated, use rbd bench --io-type write ..." << std::endl;
   return bench_execute(vm, IO_TYPE_WRITE);
 }
 
-int execute_for_bench(const po::variables_map &vm) {
+int execute_for_bench(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   io_type_t bench_io_type;
   if (vm.count("io-type")) {
     bench_io_type = vm["io-type"].as<io_type_t>();

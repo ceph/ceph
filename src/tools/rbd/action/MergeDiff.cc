@@ -414,7 +414,8 @@ void get_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   std::string first_diff = utils::get_positional_argument(vm, 0);
   if (first_diff.empty()) {
     std::cerr << "rbd: first diff was not specified" << std::endl;
