@@ -31,6 +31,7 @@
 #include <errno.h>
 #include <sstream>
 
+#include "include/uuid.h"
 #include "common/bit_vector.hpp"
 #include "common/errno.h"
 #include "objclass/objclass.h"
@@ -274,6 +275,27 @@ int snapshot_iterate(cls_method_context_t hctx, L& lambda) {
     }
   } while (more);
 
+  return 0;
+}
+
+int snapshot_trash_add(cls_method_context_t hctx,
+                       const std::string& snapshot_key, cls_rbd_snap snap) {
+  // add snap_trash feature bit if not already enabled
+  int r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_SNAP_TRASH,
+                                 RBD_OPERATION_FEATURE_SNAP_TRASH);
+  if (r < 0) {
+    return r;
+  }
+
+  snap.snapshot_namespace = cls::rbd::TrashSnapshotNamespace{snap.name};
+  uuid_d uuid_gen;
+  uuid_gen.generate_random();
+  snap.name = uuid_gen.to_string();
+
+  r = write_key(hctx, snapshot_key, snap);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 
@@ -1847,6 +1869,16 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
+        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    // add snap_trash feature bit if not already enabled
+    r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_SNAP_TRASH,
+                               RBD_OPERATION_FEATURE_SNAP_TRASH);
+    if (r < 0) {
+      return r;
+    }
+  }
+
   return 0;
 }
 
@@ -1952,37 +1984,117 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string snapshot_key;
   key_from_snap_id(snap_id, &snapshot_key);
   int r = read_key(hctx, snapshot_key, &snap);
-  if (r == -ENOENT)
+  if (r == -ENOENT) {
     return -ENOENT;
+  }
 
-  if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED)
+  if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED) {
     return -EBUSY;
+  }
 
-  auto remove_lambda = [snap_id](const cls_rbd_snap& snap_meta) {
-    if (snap_meta.id != snap_id && snap_meta.parent.pool != -1) {
-      return -EEXIST;
+  // snapshot is in-use by clone v2 child
+  if (snap.child_count > 0) {
+    if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
+          cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+      // trash snapshot still in-use
+      return -EBUSY;
     }
-    return 0;
-  };
 
-  r = image::snapshot_iterate(hctx, remove_lambda);
-  bool has_child_snaps = (r == -EEXIST);
-  if (r < 0 && r != -EEXIST) {
-    return r;
-  }
-
-  r = cls_cxx_map_remove_key(hctx, snapshot_key);
-  if (r < 0) {
-    CLS_ERR("error writing snapshot metadata: %s", cpp_strerror(r).c_str());
-    return r;
-  }
-
-  if (!has_child_snaps) {
-    // disable clone child op feature if no longer associated
-    r = image::set_op_features(hctx, 0, RBD_OPERATION_FEATURE_CLONE_CHILD);
+    r = image::snapshot_trash_add(hctx, snapshot_key, snap);
     if (r < 0) {
       return r;
     }
+
+    return 0;
+  }
+
+  r = remove_key(hctx, snapshot_key);
+  if (r < 0) {
+    return r;
+  }
+
+  bool has_child_snaps = false;
+  bool has_trash_snaps = false;
+  auto remove_lambda =
+    [snap_id, &has_child_snaps, &has_trash_snaps](const cls_rbd_snap& snap_meta) {
+      if (snap_meta.id != snap_id) {
+        if (snap_meta.parent.pool != -1) {
+          has_child_snaps = true;
+        }
+        if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
+              cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+          has_trash_snaps = true;
+        }
+      }
+      return 0;
+    };
+
+  r = image::snapshot_iterate(hctx, remove_lambda);
+  if (r < 0) {
+    return r;
+  }
+
+  uint64_t op_features_mask = 0ULL;
+  if (!has_child_snaps) {
+    // disable clone child op feature if no longer associated
+    op_features_mask |= RBD_OPERATION_FEATURE_CLONE_CHILD;
+  }
+  if (!has_trash_snaps) {
+    // remove the snap_trash op feature if not in-use by any other snapshots
+    op_features_mask |= RBD_OPERATION_FEATURE_SNAP_TRASH;
+  }
+
+  if (op_features_mask != 0ULL) {
+    r = image::set_op_features(hctx, 0, op_features_mask);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Moves a snapshot to the trash namespace.
+ *
+ * Input:
+ * @param snap_id the id of the snapshot to move to the trash (uint64_t)
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
+                       bufferlist *out)
+{
+  snapid_t snap_id;
+
+  try {
+    bufferlist::iterator iter = in->begin();
+    decode(snap_id, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "snapshot_trash_add id=%" PRIu64, snap_id.val);
+
+  cls_rbd_snap snap;
+  std::string snapshot_key;
+  key_from_snap_id(snap_id, &snapshot_key);
+  int r = read_key(hctx, snapshot_key, &snap);
+  if (r == -ENOENT) {
+    return r;
+  }
+
+  if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED) {
+    return -EBUSY;
+  } else if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
+               cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+    return -EINVAL;
+  }
+
+  r = image::snapshot_trash_add(hctx, snapshot_key, snap);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
@@ -5953,6 +6065,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_snapshot_add;
   cls_method_handle_t h_snapshot_remove;
   cls_method_handle_t h_snapshot_rename;
+  cls_method_handle_t h_snapshot_trash_add;
   cls_method_handle_t h_get_all_features;
   cls_method_handle_t h_copyup;
   cls_method_handle_t h_get_id;
@@ -6068,6 +6181,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "snapshot_rename",
 			  CLS_METHOD_RD | CLS_METHOD_WR,
 			  snapshot_rename, &h_snapshot_rename);
+  cls_register_cxx_method(h_class, "snapshot_trash_add",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          snapshot_trash_add, &h_snapshot_trash_add);
   cls_register_cxx_method(h_class, "get_all_features",
 			  CLS_METHOD_RD,
 			  get_all_features, &h_get_all_features);
