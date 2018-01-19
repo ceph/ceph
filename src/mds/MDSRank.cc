@@ -1075,6 +1075,8 @@ void MDSRank::boot_start(BootStep step, int r)
 	} else if (!standby_replaying) {
 	  dout(2) << "boot_start " << step << ": opening purge queue (async)" << dendl;
 	  purge_queue.open(NULL);
+	  dout(2) << "boot_start " << step << ": loading open file table (async)" << dendl;
+	  mdcache->open_file_table.load(nullptr);
 	}
 
         if (mdsmap->get_tableserver() == whoami) {
@@ -1274,8 +1276,10 @@ void MDSRank::standby_replay_restart()
           this,
 	  mdlog->get_journaler()->get_read_pos()));
 
-      dout(1) << " opening purge queue (async)" << dendl;
+      dout(1) << " opening purge_queue (async)" << dendl;
       purge_queue.open(NULL);
+      dout(1) << " opening open_file_table (async)" << dendl;
+      mdcache->open_file_table.load(nullptr);
     } else {
       dout(1) << " waiting for osdmap " << mdsmap->get_last_failure_osd_epoch()
               << " (which blacklists prior instance)" << dendl;

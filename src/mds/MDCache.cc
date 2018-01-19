@@ -171,7 +171,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   filer(m->objecter, m->finisher),
   exceeded_size_limit(false),
   recovery_queue(m),
-  stray_manager(m, purge_queue_)
+  stray_manager(m, purge_queue_),
+  open_file_table(m)
 {
   migrator.reset(new Migrator(mds, this));
   root = NULL;
