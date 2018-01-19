@@ -959,11 +959,14 @@ public:
   void _cancel_pending_splits_for_parent(spg_t parent);
   bool splitting(spg_t pgid);
   void expand_pg_num(OSDMapRef old_map,
-		     OSDMapRef new_map);
+		     OSDMapRef new_map,
+		     set<spg_t> *new_children);
   void _maybe_split_pgid(OSDMapRef old_map,
 			 OSDMapRef new_map,
-			 spg_t pgid);
-  void init_splits_between(spg_t pgid, OSDMapRef frommap, OSDMapRef tomap);
+			 spg_t pgid,
+			 set<spg_t> *new_children);
+  void init_splits_between(spg_t pgid, OSDMapRef frommap, OSDMapRef tomap,
+			   set<spg_t> *new_chilren);
 
   // -- stats --
   Mutex stat_lock;
@@ -1580,16 +1583,18 @@ private:
 	deque<OpQueueItem> to_process; ///< order items for this slot
 	int num_running = 0;          ///< _process threads doing pg lookup/lock
 
-	/// true if pg does/did not exist. if so all new items go directly to
-	/// to_process.  cleared by prune_pg_waiters.
-	bool waiting_for_pg = false;
+	deque<OpQueueItem> waiting;         ///< waiting for pg (or map + pg)
+	deque<OpQueueItem> waiting_peering; ///< waiting for map (peering evt)
 
-	/// one or more queued items doesn't need a pg, only a map >= this
-	epoch_t pending_nopg_epoch = 0;
+	/// min required map across waiting_peering items
+	epoch_t pending_peering_epoch = 0;
 
 	/// incremented by wake_pg_waiters; indicates racing _process threads
 	/// should bail out (their op has been requeued)
 	uint64_t requeue_seq = 0;
+
+	/// waiting for split child to materialize
+	bool waiting_for_split = false;
       };
 
       /// map of slots for each spg_t.  maintains ordering of items dequeued
@@ -1671,8 +1676,13 @@ private:
       }
     }
 
-    /// wake any pg waiters after a PG is created/instantiated
-    void wake_pg_waiters(spg_t pgid);
+    void _add_slot_waiter(
+      spg_t token,
+      ShardData::pg_slot& slot,
+      OpQueueItem&& qi);
+
+    /// wake any pg waiters after a PG is split
+    void wake_pg_split_waiters(spg_t pgid);
 
     void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot,
 		       unsigned *pushes_to_free);
@@ -1920,11 +1930,6 @@ protected:
     int lastactingprimary
     ); ///< @return false if there was a map gap between from and now
 
-  // this must be called with pg->lock held on any pg addition to pg_map
-  void wake_pg_waiters(PGRef pg) {
-    assert(pg->is_locked());
-    op_shardedwq.wake_pg_waiters(pg->get_pgid());
-  }
   epoch_t last_pg_create_epoch;
 
   void handle_pg_create(OpRequestRef op);
