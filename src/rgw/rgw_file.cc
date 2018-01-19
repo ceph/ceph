@@ -954,10 +954,6 @@ namespace rgw {
   }
 
   RGWFileHandle::~RGWFileHandle() {
-    /* in the non-delete case, handle may still be in handle table */
-    if (fh_hook.is_linked()) {
-      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
-    }
     /* cond-unref parent */
     if (parent && (! parent->is_mount())) {
       /* safe because if parent->unref causes its deletion,
@@ -1007,9 +1003,11 @@ namespace rgw {
     lsubdout(fs->get_context(), rgw, 17)
       << __func__ << " " << *this
       << dendl;
-    /* remove if still in fh_cache */
+    /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
-      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+      /* in this case, we are being called from a context which holds
+       * the partition lock */
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_NONE);
     }
     return true;
   } /* RGWFileHandle::reclaim */
