@@ -507,8 +507,7 @@ void OpenFileTable::_prefetch_inodes()
     } else {
       if (prefetch_state != FILE_INODES)
 	continue;
-      if (!mdcache->rejoin_has_cap_reconnect(it.first))
-	continue;
+      // load all file inodes for MDCache::identify_files_to_recover()
     }
     CInode *in = mdcache->get_inode(it.first);
     if (in)
@@ -540,4 +539,18 @@ bool OpenFileTable::prefetch_inodes()
 
   _prefetch_inodes();
   return !is_prefetched();
+}
+
+bool OpenFileTable::should_log_open(CInode *in)
+{
+  if (in->state_test(CInode::STATE_TRACKEDBYOFT)) {
+    // inode just journaled
+    if (in->last_journaled >= committing_log_seq)
+      return false;
+    // item not dirty. it means the item has already been saved
+    auto p = dirty_items.find(in->ino());
+    if (p == dirty_items.end())
+      return false;
+  }
+  return true;
 }

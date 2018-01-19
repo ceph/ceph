@@ -155,22 +155,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
     while (!p.end()) {
       CInode *in = *p;
       ++p;
-      if (in->last == CEPH_NOSNAP && in->is_auth() &&
-	  !in->is_ambiguous_auth() && in->is_any_caps()) {
-	if (in->is_any_caps_wanted()) {
-	  dout(20) << "try_to_expire requeueing open file " << *in << dendl;
-	  if (!le) {
-	    le = new EOpen(mds->mdlog);
-	    mds->mdlog->start_entry(le);
-	  }
-	  le->add_clean_inode(in);
-	  ls->open_files.push_back(&in->item_open_file);
-	} else {
-	  // drop inodes that aren't wanted
-	  dout(20) << "try_to_expire not requeueing and delisting unwanted file " << *in << dendl;
-	  in->item_open_file.remove_myself();
-	}
-      } else if (in->last != CEPH_NOSNAP && !in->client_snap_caps.empty()) {
+      if (in->last != CEPH_NOSNAP && in->is_auth() && !in->client_snap_caps.empty()) {
 	// journal snap inodes that need flush. This simplify the mds failover hanlding
 	dout(20) << "try_to_expire requeueing snap needflush inode " << *in << dendl;
 	if (!le) {
@@ -180,16 +165,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 	le->add_clean_inode(in);
 	ls->open_files.push_back(&in->item_open_file);
       } else {
-	/*
-	 * we can get a capless inode here if we replay an open file, the client fails to
-	 * reconnect it, but does REPLAY an open request (that adds it to the logseg).  AFAICS
-	 * it's ok for the client to replay an open on a file it doesn't have in it's cache
-	 * anymore.
-	 *
-	 * this makes the mds less sensitive to strict open_file consistency, although it does
-	 * make it easier to miss subtle problems.
-	 */
-	dout(20) << "try_to_expire not requeueing and delisting capless file " << *in << dendl;
+	// open files are tracked by open file table, no need to journal them again
 	in->item_open_file.remove_myself();
       }
     }

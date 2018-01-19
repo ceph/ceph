@@ -2935,7 +2935,6 @@ void CInode::remove_client_cap(client_t client)
     put(PIN_CAPS);
     item_caps.remove_myself();
     containing_realm = NULL;
-    item_open_file.remove_myself();  // unpin logsegment
     mdcache->num_inodes_with_caps--;
   }
 
