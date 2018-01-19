@@ -2123,7 +2123,6 @@ private:
     case MSG_OSD_SCRUB2:
     case MSG_OSD_FORCE_RECOVERY:
     case MSG_MON_COMMAND:
-    case MSG_COMMAND:
     case MSG_OSD_PG_CREATE2:
     case MSG_OSD_PG_QUERY:
     case MSG_OSD_PG_INFO:
