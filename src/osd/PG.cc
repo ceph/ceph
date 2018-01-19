@@ -3790,6 +3790,10 @@ void PG::do_replica_scrub_map(OpRequestRef op)
 	   << dendl;
   assert(scrubber.waiting_on_whom.count(m->from));
   scrubber.waiting_on_whom.erase(m->from);
+  if (m->preempted) {
+    dout(10) << __func__ << " replica was preempted, setting flag" << dendl;
+    scrub_preempted = true;
+  }
   if (scrubber.waiting_on_whom.empty()) {
     if (ops_blocked_by_scrub()) {
       requeue_scrub(true);
@@ -3842,7 +3846,8 @@ void PG::sub_op_scrub_map(OpRequestRef op)
 void PG::_request_scrub_map(
   pg_shard_t replica, eversion_t version,
   hobject_t start, hobject_t end,
-  bool deep, uint32_t seed)
+  bool deep, uint32_t seed,
+  bool allow_preemption)
 {
   assert(replica != pg_whoami);
   dout(10) << "scrub  requesting scrubmap from osd." << replica
@@ -3851,7 +3856,8 @@ void PG::_request_scrub_map(
     spg_t(info.pgid.pgid, replica.shard), version,
     get_osdmap()->get_epoch(),
     get_last_peering_reset(),
-    start, end, deep, seed);
+    start, end, deep, seed,
+    allow_preemption);
   // default priority, we want the rep scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
   osd->send_message_osd_cluster(
@@ -4375,6 +4381,8 @@ void PG::replica_scrub(
   scrubber.deep = msg->deep;
   scrubber.epoch_start = info.history.same_interval_since;
 
+  scrub_can_preempt = msg->allow_preemption;
+  scrub_preempted = false;
   scrubber.replica_scrubmap_pos.reset();
 
   requeue_scrub(false);
@@ -4595,12 +4603,25 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	}
 
 	scrubber.seed = -1;
-
+	scrubber.preempt_left = cct->_conf->get_val<uint64_t>(
+	  "osd_scrub_max_preemptions");
+	scrubber.preempt_divisor = 1;
         break;
 
       case PG::Scrubber::NEW_CHUNK:
         scrubber.primary_scrubmap = ScrubMap();
         scrubber.received_maps.clear();
+
+	// begin (possible) preemption window
+	if (scrub_preempted) {
+	  scrubber.preempt_left--;
+	  scrubber.preempt_divisor *= 2;
+	  dout(10) << __func__ << " preempted, " << scrubber.preempt_left
+		   << " left" << dendl;
+	  scrubber.state = PG::Scrubber::NEW_CHUNK;
+	}
+	scrub_preempted = false;
+	scrub_can_preempt = scrubber.preempt_left > 0;
 
         {
           /* get the start and end of our scrub chunk
@@ -4701,14 +4722,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  if (*i == pg_whoami) continue;
           _request_scrub_map(*i, scrubber.subset_last_update,
                              scrubber.start, scrubber.end, scrubber.deep,
-			     scrubber.seed);
+			     scrubber.seed,
+			     scrubber.preempt_left > 0);
           scrubber.waiting_on_whom.insert(*i);
         }
 	dout(10) << __func__ << " waiting_on_whom " << scrubber.waiting_on_whom
 		 << dendl;
 
         scrubber.state = PG::Scrubber::WAIT_PUSHES;
-
         break;
 
       case PG::Scrubber::WAIT_PUSHES:
@@ -4736,6 +4757,11 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
         assert(last_update_applied >= scrubber.subset_last_update);
 
         // build my own scrub map
+	if (scrub_preempted) {
+	  dout(10) << __func__ << " preempted" << dendl;
+	  scrubber.state = PG::Scrubber::BUILD_MAP_DONE;
+	  break;
+	}
 	ret = build_scrub_map_chunk(
 	  scrubber.primary_scrubmap,
 	  scrubber.primary_scrubmap_pos,
@@ -4771,7 +4797,14 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           // will be requeued by sub_op_scrub_map
           dout(10) << "wait for replicas to build scrub map" << dendl;
           done = true;
-        } else {
+	  break;
+	}
+	// end (possible) preemption window
+	scrub_can_preempt = false;
+	if (scrub_preempted) {
+	  dout(10) << __func__ << " preempted, restarting chunk" << dendl;
+	  scrubber.state = PG::Scrubber::NEW_CHUNK;
+	} else {
           scrubber.state = PG::Scrubber::COMPARE_MAPS;
         }
         break;
@@ -4800,8 +4833,12 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  break;
 	}
 
+	scrubber.preempt_left = cct->_conf->get_val<uint64_t>(
+	  "osd_scrub_max_preemptions");
+	scrubber.preempt_divisor = 1;
+
 	if (!(scrubber.end.is_max())) {
-          scrubber.state = PG::Scrubber::NEW_CHUNK;
+	  scrubber.state = PG::Scrubber::NEW_CHUNK;
 	  requeue_scrub();
           done = true;
         } else {
@@ -4824,12 +4861,17 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 
       case PG::Scrubber::BUILD_MAP_REPLICA:
         // build my own scrub map
+	if (scrub_preempted) {
+	  dout(10) << __func__ << " preempted" << dendl;
+	  ret = 0;
+	} else {
 	  ret = build_scrub_map_chunk(
 	    scrubber.replica_scrubmap,
 	    scrubber.replica_scrubmap_pos,
 	    scrubber.start, scrubber.end,
 	    scrubber.deep, scrubber.seed,
 	    handle);
+	}
 	if (ret == -EINPROGRESS) {
 	  requeue_scrub();
 	  done = true;
@@ -4841,6 +4883,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	    spg_t(info.pgid.pgid, get_primary().shard),
 	    scrubber.replica_scrub_start,
 	    pg_whoami);
+	  reply->preempted = scrub_preempted;
 	  ::encode(scrubber.replica_scrubmap, reply->get_data());
 	  osd->send_message_osd_cluster(
 	    get_primary().osd, reply,
@@ -4867,6 +4910,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	    get_primary().osd, subop,
 	    scrubber.replica_scrub_start);
 	}
+	scrub_preempted = false;
+	scrub_can_preempt = false;
 	scrubber.state = PG::Scrubber::INACTIVE;
 	scrubber.replica_scrubmap = ScrubMap();
 	scrubber.replica_scrubmap_pos = ScrubMapBuilder();
@@ -4881,6 +4926,23 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
   }
   dout(20) << "scrub final state " << Scrubber::state_string(scrubber.state)
 	   << " [" << scrubber.start << "," << scrubber.end << ")" << dendl;
+}
+
+bool PG::write_blocked_by_scrub(const hobject_t& soid)
+{
+  if (soid < scrubber.start || soid >= scrubber.end) {
+    return false;
+  }
+  if (scrub_can_preempt) {
+    if (!scrub_preempted) {
+      dout(10) << __func__ << " " << soid << " preempted" << dendl;
+      scrub_preempted = true;
+    } else {
+      dout(10) << __func__ << " " << soid << " already preempted" << dendl;
+    }
+    return false;
+  }
+  return true;
 }
 
 void PG::scrub_clear_state()

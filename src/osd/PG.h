@@ -1273,6 +1273,8 @@ public:
     // deep scrub
     bool deep;
     uint32_t seed;
+    int preempt_left;
+    int preempt_divisor;
 
     list<Context*> callbacks;
     void add_callback(Context *context) {
@@ -1308,12 +1310,6 @@ public:
     }
 
     bool is_chunky_scrub_active() const { return state != INACTIVE; }
-
-    // classic (non chunk) scrubs block all writes
-    // chunky scrubs only block writes to a range
-    bool write_blocked_by_scrub(const hobject_t &soid) {
-      return (soid >= start && soid < end);
-    }
 
     // clear all state
     void reset() {
@@ -1362,6 +1358,14 @@ public:
 
   int active_pushes;
 
+  bool scrub_can_preempt = false;
+  bool scrub_preempted = false;
+
+  // we allow some number of preemptions of the scrub, which mean we do
+  // not block.  then we start to block.  once we start blocking, we do
+  // not stop until the scrub range is completed.
+  bool write_blocked_by_scrub(const hobject_t &soid);
+
   void repair_object(
     const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
     pg_shard_t bad_peer);
@@ -1383,7 +1387,7 @@ public:
     ThreadPool::TPHandle &handle);
   void _request_scrub_map(pg_shard_t replica, eversion_t version,
                           hobject_t start, hobject_t end, bool deep,
-			  uint32_t seed);
+			  uint32_t seed, bool allow_preemption);
   int build_scrub_map_chunk(
     ScrubMap &map,
     ScrubMapBuilder &pos,
