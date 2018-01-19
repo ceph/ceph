@@ -600,6 +600,9 @@ public:
   bool rejoin_has_cap_reconnect(inodeno_t ino) const {
     return cap_imports.count(ino);
   }
+  void add_replay_ino_alloc(inodeno_t ino) {
+    cap_imports_missing.insert(ino); // avoid opening ino during cache rejoin
+  }
   const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&

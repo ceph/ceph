@@ -214,6 +214,10 @@ void Server::dispatch(Message *m)
       if (req->is_replay()) {
 	dout(3) << "queuing replayed op" << dendl;
 	queue_replay = true;
+	if (req->head.ino &&
+	    !session->have_completed_request(req->get_reqid().tid, nullptr)) {
+	  mdcache->add_replay_ino_alloc(inodeno_t(req->head.ino));
+	}
       } else if (req->get_retry_attempt()) {
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
