@@ -1842,7 +1842,6 @@ int snapshot_add(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
-
 /**
  * rename snapshot .
  *
@@ -1857,7 +1856,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   bufferlist snap_namebl, snap_idbl;
   snapid_t src_snap_id;
-  string src_snap_key,dst_snap_name;
+  string dst_snap_name;
   cls_rbd_snap snap_meta;
   int r;
 
@@ -1869,11 +1868,13 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  CLS_LOG(20, "snapshot_rename id=%llu dst_name=%s", (unsigned long long)src_snap_id.val,
-	 dst_snap_name.c_str());
+  CLS_LOG(20, "snapshot_rename id=%" PRIu64 ", dst_name=%s",
+          src_snap_id.val, dst_snap_name.c_str());
 
   auto duplicate_name_lambda = [&dst_snap_name](const cls_rbd_snap& snap_meta) {
-    if (snap_meta.name == dst_snap_name) {
+    if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) ==
+          cls::rbd::SNAPSHOT_NAMESPACE_TYPE_USER &&
+        snap_meta.name == dst_snap_name) {
       CLS_LOG(20, "snap_name %s matches existing snap with snap id %" PRIu64,
               dst_snap_name.c_str(), snap_meta.id.val);
       return -EEXIST;
@@ -1885,12 +1886,21 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  std::string src_snap_key;
   key_from_snap_id(src_snap_id, &src_snap_key);
   r = read_key(hctx, src_snap_key, &snap_meta);
   if (r == -ENOENT) {
-    CLS_LOG(20, "cannot find existing snap with snap id = %llu ", (unsigned long long)src_snap_id);
+    CLS_LOG(20, "cannot find existing snap with snap id = %" PRIu64,
+            src_snap_id.val);
     return r;
   }
+
+  if (cls::rbd::get_snap_namespace_type(snap_meta.snapshot_namespace) !=
+        cls::rbd::SNAPSHOT_NAMESPACE_TYPE_USER) {
+    // can only rename user snapshots
+    return -EINVAL;
+  }
+
   snap_meta.name = dst_snap_name;
   bufferlist snap_metabl;
   encode(snap_meta, snap_metabl);
@@ -1903,6 +1913,7 @@ int snapshot_rename(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   return 0;
 }
+
 /**
  * Removes a snapshot from an rbd header.
  *
