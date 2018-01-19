@@ -2436,7 +2436,7 @@ int ECBackend::be_deep_scrub(
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
 
   if (pos.data_pos == 0) {
-    pos.data_hash = bufferhash(pos.seed);
+    pos.data_hash = bufferhash(-1);
   }
 
   uint64_t stride = cct->_conf->osd_deep_scrub_stride;
@@ -2518,7 +2518,7 @@ int ECBackend::be_deep_scrub(
     }
   }
 
-  o.omap_digest = pos.seed;
+  o.omap_digest = -1;
   o.omap_digest_present = true;
   return 0;
 }
