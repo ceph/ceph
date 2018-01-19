@@ -2871,7 +2871,6 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
         block_write_on_full_cache(missing_oid, op);
         return cache_result_t::BLOCKED_FULL;
       }
-      agent_state->promote_queue.erase(missing_oid);
       promote_object(obc, missing_oid, oloc, op, promote_obc);
       return cache_result_t::BLOCKED_PROMOTE;
     }
@@ -2879,24 +2878,6 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_cache_detail(
       do_proxy_write(op);
     } else {
       do_proxy_read(op);
-      if (obc.get() && obc->is_blocked()) {
-	if (promote_obc)
-	  *promote_obc = obc;
-	return cache_result_t::BLOCKED_PROMOTE;
-      }
-    }
-    auto p = agent_state->promote_queue.find(missing_oid);
-    if (p == agent_state->promote_queue.end())
-      return cache_result_t::HANDLED_PROXY;
-    else if (p->second.temp < agent_state->promote_temp) {
-      agent_state->promote_queue.erase(p);
-      return cache_result_t::HANDLED_PROXY;
-    } else if (!op->need_skip_promote() &&
-	agent_state->promote_mode == TierAgentState::PROMOTE_MODE_SOME &&
-        !osd->promote_throttle()) {
-      agent_state->promote_queue.erase(missing_oid);
-      promote_object(obc, missing_oid, oloc, op, promote_obc);
-      return cache_result_t::BLOCKED_PROMOTE;
     }
     return cache_result_t::HANDLED_PROXY;
   }
@@ -3193,8 +3174,13 @@ void PrimaryLogPG::finish_proxy_read(hobject_t oid, ceph_tid_t tid, int r)
   complete_read_ctx(r, ctx);
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
       prdop->temperature > agent_state->promote_temp &&
-      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
-    agent_state->promote_queue[oid] = {prdop->temperature, ceph_clock_now()};
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL &&
+      !prdop->op->need_skip_promote()) {
+    ObjectContextRef obc = get_object_context(oid, false);
+    if (obc.get() && obc->is_blocked())
+      return;
+    const object_locator_t oloc = m->get_object_locator();
+    maybe_promote(ObjectContextRef(), oid, oloc, false, 0, OpRequestRef(), NULL);
   }
 }
 
@@ -3579,8 +3565,13 @@ void PrimaryLogPG::finish_proxy_write(hobject_t oid, ceph_tid_t tid, int r)
 
   if (pool.info.cache_mode == pg_pool_t::CACHEMODE_SWAP &&
       pwop->temperature > agent_state->promote_temp &&
-      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL) {
-    agent_state->promote_queue[oid] = {pwop->temperature, ceph_clock_now()};
+      agent_state->promote_mode != TierAgentState::PROMOTE_MODE_FULL &&
+      !pwop->op->need_skip_promote()) {
+    ObjectContextRef obc = get_object_context(oid, false);
+    if (obc.get() && obc->is_blocked())
+      return;
+    const object_locator_t oloc = m->get_object_locator();
+    maybe_promote(ObjectContextRef(), oid, oloc, false, 0, OpRequestRef(), NULL);
   }
 }
 
@@ -13536,7 +13527,6 @@ void PrimaryLogPG::agent_setup()
       info.pgid.pgid,
       rand()));
     agent_state->start = agent_state->position;
-    agent_state->promote_q_trim_pos = hobject_t();
 
     dout(10) << __func__ << " allocated new state, position "
 	     << agent_state->position << dendl;
@@ -13568,34 +13558,6 @@ bool PrimaryLogPG::agent_work(int start_max, int agent_flush_quota)
   }
 
   assert(!deleting);
-
-  {
-    // trim promote queue
-    int promote_q_ls_max = cct->_conf->osd_pool_default_cache_max_evict_check_size;
-    int promote_q_ls = 0;
-    auto p = agent_state->promote_queue.lower_bound(agent_state->promote_q_trim_pos);
-    while (p != agent_state->promote_queue.end() &&
-           promote_q_ls < promote_q_ls_max) {
-      // TODO: add promote_queue time out to osd conf
-      if (p->second.request_time + utime_t(60, 0) < ceph_clock_now() ||
-          p->second.temp < agent_state->promote_temp) {
-        p = agent_state->promote_queue.erase(p);
-      } else
-        ++p;
-      ++promote_q_ls;
-    }
-    if (p == agent_state->promote_queue.end())
-      agent_state->promote_q_trim_pos = hobject_t();
-    else
-      agent_state->promote_q_trim_pos = p->first;
-  }
-
-  if (agent_state->is_idle()) {
-    dout(10) << __func__ << " idle, stopping" << dendl;
-    unlock();
-    return true;
-  }
-
   osd->logger->inc(l_osd_agent_wake);
 
   dout(10) << __func__
