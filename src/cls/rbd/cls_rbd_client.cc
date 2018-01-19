@@ -641,6 +641,14 @@ namespace librbd {
       op->exec("rbd", "snapshot_rename", bl);
     }
 
+    void snapshot_trash_add(librados::ObjectWriteOperation *op,
+                            snapid_t snap_id)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      op->exec("rbd", "snapshot_trash_add", bl);
+    }
+
     void get_snapcontext_start(librados::ObjectReadOperation *op)
     {
       bufferlist bl;

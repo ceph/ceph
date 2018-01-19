@@ -2530,15 +2530,18 @@ TEST_F(TestClsRbd, clone_parent)
 
   // op feature should have been enabled
   uint64_t op_features;
+  uint64_t expected_op_features = RBD_OPERATION_FEATURE_CLONE_PARENT;
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
-  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) ==
-                RBD_OPERATION_FEATURE_CLONE_PARENT);
+  ASSERT_TRUE((op_features & expected_op_features) == expected_op_features);
 
   // cannot attach to trashed snapshot
-  librados::ObjectWriteOperation op;
-  ::librbd::cls_client::snapshot_add(&op, 234, "trash_snap",
-                                     cls::rbd::TrashSnapshotNamespace());
-  ASSERT_EQ(0, ioctx.operate(oid, &op));
+  librados::ObjectWriteOperation op1;
+  ::librbd::cls_client::snapshot_add(&op1, 234, "trash_snap",
+                                     cls::rbd::UserSnapshotNamespace());
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+  librados::ObjectWriteOperation op2;
+  ::librbd::cls_client::snapshot_trash_add(&op2, 234);
+  ASSERT_EQ(0, ioctx.operate(oid, &op2));
   ASSERT_EQ(-ENOENT, child_attach(&ioctx, oid, 234, {}));
 
   cls::rbd::ChildImageSpecs child_images;
@@ -2548,6 +2551,19 @@ TEST_F(TestClsRbd, clone_parent)
     {1, "image1"}, {1, "image2"}, {2, "image2"}};
   ASSERT_EQ(expected_child_images, child_images);
 
+  // move snapshot to the trash
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 123));
+  ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, oid, 123));
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, {123}, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(1U, snaps.size());
+  ASSERT_EQ(cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH,
+            cls::rbd::get_snap_namespace_type(snaps[0].snapshot_namespace));
+
+  expected_op_features |= RBD_OPERATION_FEATURE_SNAP_TRASH;
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & expected_op_features) == expected_op_features);
+
   expected_child_images = {{1, "image1"}, {2, "image2"}};
   ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image2"}));
   ASSERT_EQ(0, children_list(&ioctx, oid, 123, &child_images));
@@ -2556,14 +2572,19 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {2, "image2"}));
 
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
-  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) ==
-                RBD_OPERATION_FEATURE_CLONE_PARENT);
+  ASSERT_TRUE((op_features & expected_op_features) == expected_op_features);
 
   ASSERT_EQ(0, child_detach(&ioctx, oid, 123, {1, "image1"}));
   ASSERT_EQ(-ENOENT, children_list(&ioctx, oid, 123, &child_images));
 
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 234));
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
-  ASSERT_TRUE((op_features & RBD_OPERATION_FEATURE_CLONE_PARENT) == 0ULL);
+  ASSERT_TRUE((op_features & expected_op_features) ==
+                RBD_OPERATION_FEATURE_SNAP_TRASH);
+
+  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 123));
+  ASSERT_EQ(0, op_features_get(&ioctx, oid, &op_features));
+  ASSERT_TRUE((op_features & expected_op_features) == 0);
 }
 
 TEST_F(TestClsRbd, clone_child)
