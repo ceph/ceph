@@ -928,7 +928,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_LIST;
     if (strcmp(cmd, "status") == 0)
       return OPT_RESHARD_STATUS;
-    if (strcmp(cmd, "execute") == 0)
+    if (strcmp(cmd, "process") == 0)
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
