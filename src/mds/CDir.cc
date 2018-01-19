@@ -566,6 +566,9 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
   // pin dentry?
   if (in->get_num_ref())
     dn->get(CDentry::PIN_INODEPIN);
+
+  if (in->state_test(CInode::STATE_TRACKEDBYOFT))
+    inode->mdcache->open_file_table.notify_link(in);
   
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
@@ -642,6 +645,9 @@ void CDir::unlink_inode_work( CDentry *dn )
     // unpin dentry?
     if (in->get_num_ref())
       dn->put(CDentry::PIN_INODEPIN);
+
+    if (in->state_test(CInode::STATE_TRACKEDBYOFT))
+      inode->mdcache->open_file_table.notify_unlink(in);
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)

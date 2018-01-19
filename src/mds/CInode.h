@@ -232,13 +232,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_MISSINGOBJS		= (1<<15);
   static const int STATE_EVALSTALECAPS		= (1<<16);
   static const int STATE_QUEUEDEXPORTPIN	= (1<<17);
+  static const int STATE_TRACKEDBYOFT		= (1<<18);  // tracked by open file table
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
   static const int MASK_STATE_EXPORTED =
     (STATE_DIRTY|STATE_NEEDSRECOVER|STATE_DIRTYPARENT|STATE_DIRTYPOOL);
   static const int MASK_STATE_EXPORT_KEPT =
-    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|STATE_QUEUEDEXPORTPIN);
+    (STATE_FROZEN|STATE_AMBIGUOUSAUTH|STATE_EXPORTINGCAPS|
+     STATE_QUEUEDEXPORTPIN|STATE_TRACKEDBYOFT);
 
   // -- waiters --
   static const uint64_t WAIT_DIR         = (1<<0);

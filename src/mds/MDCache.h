@@ -31,6 +31,7 @@
 #include "events/EMetaBlob.h"
 #include "RecoveryQueue.h"
 #include "StrayManager.h"
+#include "OpenFileTable.h"
 #include "MDSContext.h"
 #include "MDSMap.h"
 #include "Mutation.h"
@@ -1227,6 +1228,8 @@ public:
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
+
+  OpenFileTable open_file_table;
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {

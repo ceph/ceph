@@ -2873,9 +2873,9 @@ void CInode::set_mds_caps_wanted(mds_rank_t mds, int32_t wanted)
 void CInode::adjust_num_caps_wanted(int d)
 {
   if (!num_caps_wanted && d > 0)
-    ; // add 'this' to open file table
+    mdcache->open_file_table.add_inode(this);
   else if (num_caps_wanted > 0 && num_caps_wanted == -d)
-    ; // remove 'this' from open file table
+    mdcache->open_file_table.remove_inode(this);
 
   num_caps_wanted +=d;
   assert(num_caps_wanted >= 0);
