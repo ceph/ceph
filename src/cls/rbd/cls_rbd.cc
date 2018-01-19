@@ -2500,8 +2500,11 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   size_t orig_object_map_size = object_map.size();
   if (object_count < orig_object_map_size) {
-    for (uint64_t i = object_count + 1; i < orig_object_map_size; ++i) {
-      if (object_map[i] != default_state) {
+    auto it = object_map.begin() + object_count;
+    auto end_it = object_map.end() ;
+    uint64_t i = object_count;
+    for (; it != end_it; ++it, ++i) {
+      if (*it != default_state) {
 	CLS_ERR("object map indicates object still exists: %" PRIu64, i);
 	return -ESTALE;
       }
@@ -2509,8 +2512,10 @@ int object_map_resize(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     object_map.resize(object_count);
   } else if (object_count > orig_object_map_size) {
     object_map.resize(object_count);
-    for (uint64_t i = orig_object_map_size; i < object_count; ++i) {
-      object_map[i] = default_state;
+    auto it = object_map.begin() + orig_object_map_size;
+    auto end_it = object_map.end();
+    for (; it != end_it; ++it) {
+      *it = default_state;
     }
   }
 
