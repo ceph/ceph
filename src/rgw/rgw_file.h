@@ -711,7 +711,7 @@ namespace rgw {
     typedef bi::rbtree<RGWFileHandle, bi::compare<FhLT>, FhHook> FhTree;
 #endif
     typedef cohort::lru::TreeX<RGWFileHandle, FhTree, FhLT, FhEQ, fh_key,
-			       std::mutex> FHCache;
+			       std::recursive_mutex> FHCache;
 
     ~RGWFileHandle() override;
 
@@ -1069,13 +1069,14 @@ namespace rgw {
 	  /* lock fh (LATCHED) */
 	  if (flags & RGWFileHandle::FLAG_LOCK)
 	    fh->mtx.lock();
-	  /* inserts, releasing latch */
-	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
+	  /* inserts */
+ 	  fh_cache.insert(fhk.fh_hk.object, fh, RGWFileHandle::FHCache::FLAG_NONE);
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
 	  /* ref parent (non-initial ref cannot fail on valid object) */
 	  if (! parent->is_mount()) {
 	    (void) fh_lru.ref(parent, cohort::lru::FLAG_NONE);
 	  }
+	  lat.lock->unlock();
 	  goto out; /* !LATCHED */
 	} else {
 	  lat.lock->unlock();
