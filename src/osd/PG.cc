@@ -7719,10 +7719,14 @@ PG::RecoveryState::Recovered::Recovered(my_context ctx)
   // adjust acting set?  (e.g. because backfill completed...)
   bool history_les_bound = false;
   if (pg->acting != pg->up && !pg->choose_acting(auth_log_shard,
-						 true, &history_les_bound))
+						 true, &history_les_bound)) {
     assert(pg->want_acting.size());
+  } else if (!pg->async_recovery_targets.empty()) {
+    pg->choose_acting(auth_log_shard, true, &history_les_bound);
+  }
 
-  if (context< Active >().all_replicas_activated)
+  if (context< Active >().all_replicas_activated  &&
+      pg->async_recovery_targets.empty())
     post_event(GoClean());
 }
 
