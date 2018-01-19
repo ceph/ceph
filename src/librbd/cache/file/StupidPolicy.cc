@@ -129,9 +129,9 @@ int StupidPolicy<I>::map(IOType io_type, uint64_t block, bool partial_block,
         ldout(cct, 1) << "cache hit, block: " << block << dendl;
         break;
       case LOCATE_IN_BASE_CACHE:
-        *policy_map_result = POLICY_MAP_RESULT_HIT_IN_BASE;
-        ldout(cct, 1) << "cache hit in base, block: " << block << dendl;
-        break;
+        //*policy_map_result = POLICY_MAP_RESULT_HIT_IN_BASE;
+        //ldout(cct, 1) << "cache hit in base, block: " << block << dendl;
+        //break;
       case NOT_IN_CACHE:
       default:
         entry = reinterpret_cast<Entry*>(m_free_lru.lru_expire());
@@ -175,6 +175,7 @@ void StupidPolicy<I>::tick() {
 
 template <typename I>
 void StupidPolicy<I>::set_to_base_cache(uint64_t block) {
+  //TODO(): check object map instead
   Block* block_info = m_block_map->find_block(block);
   block_info->status = LOCATE_IN_BASE_CACHE;
 }

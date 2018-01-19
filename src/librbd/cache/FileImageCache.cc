@@ -454,11 +454,13 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
 
     switch (policy_map_result) {
     case POLICY_MAP_RESULT_HIT:
+    case POLICY_MAP_RESULT_HIT_IN_BASE:
       req = new C_ReadFromCacheRequest<I>(cct, *cache_ctx->m_image_store, 
                                           cache_ctx->m_policy,
                                           std::move(block_io),
                                           &extent_buffers, req);
       break;
+/*
     case POLICY_MAP_RESULT_HIT_IN_BASE:
       PolicyMapResult parent_policy_map_result;
       cache_ctx->m_parent_policy->map(IO_TYPE_READ, block_io.block_info->block,
@@ -489,6 +491,7 @@ struct C_ReadBlockRequest : public BlockGuard::C_BlockRequest {
         break;
       }
       break;
+*/
     case POLICY_MAP_RESULT_MISS:
       req = new C_ReadFromImageRequest<I>(cct, cache_ctx->m_image_writeback,
                                           std::move(block_io), &extent_buffers,
@@ -747,6 +750,7 @@ void FileImageCache<I>::init(Context *on_finish) {
 
   bool has_parent = m_image_ctx.parent!=nullptr?true:false;
   Context *ctx = on_finish;
+/*
   // step1: init parent meta and cachestore if parent exists
   if (has_parent) {
     if_cloned_volume = true;
@@ -786,6 +790,7 @@ void FileImageCache<I>::init(Context *on_finish) {
         }
     });
   }
+*/
 
   // step2: init meta and cachestore
   m_image_store = new ImageStore<I>(m_image_ctx, m_image_ctx.ssd_cache_size, m_image_ctx.id);
@@ -871,6 +876,7 @@ void FileImageCache<I>::shut_down(Context *on_finish) {
       }
       m_meta_store->shut_down(next_ctx);
     });
+/*
   if (m_image_ctx.parent != nullptr) {
     ctx = new FunctionContext(
       [this, ctx](int r) {
@@ -884,6 +890,7 @@ void FileImageCache<I>::shut_down(Context *on_finish) {
         m_parent_image_store->shut_down(next_ctx);
       });
   }
+*/
   ctx = new FunctionContext(
     [this, ctx](int r) {
       Context *next_ctx = ctx;

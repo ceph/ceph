@@ -366,7 +366,7 @@ void RemoveRequest<I>::handle_trim_image(int r) {
   }
 
   //remove cache
-  if (m_image_ctx->persistent_cache_enabled) {
+  if (m_image_ctx->persistent_cache_enabled && m_image_ctx->parent && m_image_ctx->image_cache) {
     remove_image_cache();
   } else {
     remove_child();

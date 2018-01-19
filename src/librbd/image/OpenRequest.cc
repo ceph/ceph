@@ -515,7 +515,7 @@ Context *OpenRequest<I>::handle_set_snap(int *result) {
 template <typename I>
 Context *OpenRequest<I>::send_init_image_cache(int *result) {
   if (m_image_ctx->old_format || m_image_ctx->read_only ||
-      !m_image_ctx->persistent_cache_enabled) {
+      !(m_image_ctx->persistent_cache_enabled && m_image_ctx->parent)) {
     *result = 0;
     return m_on_finish;
   }

@@ -2931,6 +2931,7 @@ TEST_F(TestLibRBD, TestClone)
 TEST_F(TestLibRBD, TestClone2)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
