@@ -38,7 +38,6 @@ Set configuration values using the following command:
 
     ceph config-key set mgr/influx/<key> <value>
 
-
 The most important settings are ``hostname``, ``username`` and ``password``.  
 For example, a typical configuration might look like this:
 
@@ -55,6 +54,15 @@ Additional optional configuration settings are:
 :port: InfluxDB server port.  Default 8086
 :ssl: Use https connection for InfluxDB server. Use "true" or "false". Default false
 :verify_ssl: Verify https cert for InfluxDB server. Use "true" or "false". Default true
+:destinations: Set multiple influxdb destinations.   Set as a JSON array of objects.  The property 'hostname' is required in each object.  Other properties will be taken from the global config-key settings if they are not set in the objects.
+
+For example, setting 2 influx destination hosts which will all take database, user, password from the other config key settings:
+
+::
+
+    ceph config-key set mgr/influx/destinations '[ { "hostname": "influx1.mydomain.com"}, {"hostname": "influx2.mydomain.com"} ]'
+
+If the destination hosts required different username/password/etc then also set those properties in the destinations objects.  You cannot set different intervals for different hosts.  If destinations is set then the 'hostname' key is ignored.  Note that you must use double-quotes in the JSON string.  
 
 ---------
 Debugging 

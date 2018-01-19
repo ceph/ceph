@@ -47,7 +47,8 @@ class Module(MgrModule):
         'password': None,
         'interval': 5,
         'ssl': 'false',
-        'verify_ssl': 'true'
+        'verify_ssl': 'true',
+        'destinations': None
     }
 
     def __init__(self, *args, **kwargs):
@@ -179,10 +180,61 @@ class Module(MgrModule):
             self.get_config("verify_ssl", default=self.config_keys['verify_ssl'])
         self.config['verify_ssl'] = verify_ssl.lower() == 'true'
 
+        # get_config_json returns None if key is not set, does not accept default arg 
+        self.config['destinations'] = \
+                self.get_config_json("destinations")
+
+        self.init_influx_clients()
+
+    def init_influx_clients(self):
+
+        self.clients = []
+        
+        if not self.config['destinations']:
+            destinations = [ 
+                { 
+                    'hostname':   self.config['hostname'],
+                    'username':   self.config['username'],
+                    'password':   self.config['password'],
+                    'database':   self.config['database'],
+                    'ssl':        self.config['ssl'],
+                    'verify_ssl': self.config['verify_ssl']
+                },
+            ]
+        else: 
+            destinations = self.config['destinations']
+        
+        for dest in destinations:
+            # use global settings if these keys not set in destinations object 
+            merge_configs = [ 'port', 'database', 'username', 'password', 'ssl', 'verify_ssl']
+            conf = dict()
+
+            for key in merge_configs:
+                conf[key] = dest[key] if key in dest else self.config[key]
+                # make sure this is an int or may encounter type errors later
+                if key == 'port':
+                    conf[key] = int(conf[key])
+
+            # if not cast to string set_health_check will complain when var is used in error summary string format
+            # everything else seems to consider it a string already (?)
+            conf['hostname'] = str(dest['hostname'])
+
+            self.log.debug("Sending data to Influx host: %s",
+                conf['hostname'])
+
+            client = InfluxDBClient(conf['hostname'], conf['port'],
+                conf['username'], 
+                conf['password'], 
+                conf['database'],
+                conf['ssl'],
+                conf['verify_ssl'])
+
+            self.clients.append([client,conf])
+
     def send_to_influx(self):
-        if not self.config['hostname']:
-            self.log.error("No Influx server configured, please set one using: "
-                           "ceph influx config-set hostname <hostname>")
+        if not self.config['hostname'] and not self.config['destinations']:
+            self.log.error("No Influx server configured, please set using: "
+                           "ceph influx config-set mgr/influx/hostname <hostname> or ceph influx config-set mgr/influx/destinations '<json array>'")
             self.set_health_checks({
                 'MGR_INFLUX_NO_SERVER': {
                     'severity': 'warning',
@@ -192,53 +244,49 @@ class Module(MgrModule):
             })
             return
 
-        # If influx server has authentication turned off then
-        # missing username/password is valid.
-        self.log.debug("Sending data to Influx host: %s",
-                       self.config['hostname'])
-        client = InfluxDBClient(self.config['hostname'], self.config['port'],
-                                self.config['username'],
-                                self.config['password'],
-                                self.config['database'],
-                                self.config['ssl'],
-                                self.config['verify_ssl'])
+        df_stats = self.get_df_stats()
+        daemon_stats = self.get_daemon_stats()
+        pg_summary = self.get_pg_summary(df_stats[1])
 
-        # using influx client get_list_database requires admin privs,
-        # instead we'll catch the not found exception and inform the user if
-        # db can not be created
-        try:
-            client.write_points(self.get_df_stats(), 'ms')
-            client.write_points(self.get_daemon_stats(), 'ms')
-            self.set_health_checks(dict())
-        except ConnectionError as e:
-            self.log.exception("Failed to connect to Influx host %s:%d",
-                               self.config['hostname'], self.config['port'])
-            self.set_health_checks({
-                'MGR_INFLUX_SEND_FAILED': {
-                    'severity': 'warning',
-                    'summary': 'Failed to send data to InfluxDB server at %s:%d'
-                               ' due to an connection error'
-                               % (self.config['hostname'], self.config['port']),
-                    'detail': [str(e)]
-                }
-            })
-        except InfluxDBClientError as e:
-            if e.code == 404:
-                self.log.info("Database '%s' not found, trying to create "
-                              "(requires admin privs).  You can also create "
-                              "manually and grant write privs to user "
-                              "'%s'", self.config['database'],
-                              self.config['username'])
-                client.create_database(self.config['database'])
-            else:
+        for client,conf in self.clients:
+            # using influx client get_list_database requires admin privs,
+            # instead we'll catch the not found exception and inform the user if
+            # db can not be created
+            try:
+                client.write_points(df_stats[0], 'ms')
+                client.write_points(daemon_stats, 'ms')
+                client.write_points(self.get_pg_summary(df_stats[1]))
+                self.set_health_checks(dict())
+            except ConnectionError as e:
+                # InfluxDBClient also has get_host and get_port but since we have the config here anyways...
+                self.log.exception("Failed to connect to Influx host %s:%d",
+                                   conf['hostname'], conf['port'])
                 self.set_health_checks({
                     'MGR_INFLUX_SEND_FAILED': {
                         'severity': 'warning',
-                        'summary': 'Failed to send data to InfluxDB',
+                        'summary': 'Failed to send data to InfluxDB server at %s:%d'
+                                   ' due to a connection error'
+                                   %(conf['hostname'], conf['port']),
                         'detail': [str(e)]
                     }
                 })
-                raise
+            except InfluxDBClientError as e:
+                if e.code == 404:
+                    self.log.info("Database '%s' not found, trying to create "
+                                  "(requires admin privs).  You can also create "
+                                  "manually and grant write privs to user "
+                                  "'%s'", conf['database'],
+                                  conf['username'])
+                    client.create_database(conf['database'])
+                else:
+                    self.set_health_checks({
+                        'MGR_INFLUX_SEND_FAILED': {
+                            'severity': 'warning',
+                            'summary': 'Failed to send data to InfluxDB',
+                            'detail': [str(e)]
+                        }
+                    })
+                    raise
 
     def shutdown(self):
         self.log.info('Stopping influx module')
@@ -257,7 +305,6 @@ class Module(MgrModule):
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
             self.set_config(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
         elif cmd['prefix'] == 'influx send':
             self.send_to_influx()
             return 0, 'Sending data to Influx', ''
@@ -268,7 +315,6 @@ class Module(MgrModule):
 
             result = {
                 'daemon_stats': daemon_stats,
-                'df_stats': df_stats
             }
 
             return 0, json.dumps(result, indent=2), 'Self-test OK'
