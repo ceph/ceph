@@ -315,7 +315,7 @@ static struct rgw_flags_desc rgw_perms[] = {
  { RGW_PERM_READ, "read" },
  { RGW_PERM_WRITE, "write" },
  { RGW_PERM_READ_ACP, "read-acp" },
- { RGW_PERM_WRITE_ACP, "read-acp" },
+ { RGW_PERM_WRITE_ACP, "write-acp" },
  { 0, NULL }
 };
 
