@@ -897,10 +897,8 @@ make "$CEPH_MFLAGS_JOBS"
 %check
 # run in-tree unittests
 cd build
-ctest %{?_smp_mflags}
-
+ctest "$CEPH_MFLAGS_JOBS"
 %endif
-
 
 
 %install
