@@ -785,7 +785,7 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 
   } else if (w->id == TokenID::Sid) {
     t->sid.emplace(s, l);
-  } else if ((w->id == TokenID::Effect) &&
+  } else if ((w->id == TokenID::Effect) && k &&
 	     k->kind == TokenKind::effect_key) {
     t->effect = static_cast<Effect>(k->specific);
   } else if (w->id == TokenID::Principal && s && *s == '*') {
