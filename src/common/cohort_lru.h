@@ -32,6 +32,7 @@ namespace cohort {
     /* public flag values */
     constexpr uint32_t FLAG_NONE = 0x0000;
     constexpr uint32_t FLAG_INITIAL = 0x0001;
+    constexpr uint32_t FLAG_RECYCLE = 0x0002;
 
     enum class Edge : std::uint8_t
     {
@@ -232,12 +233,14 @@ namespace cohort {
 	  delete tdo;
       } /* unref */
 
-      Object* insert(ObjectFactory* fac, Edge edge, uint32_t flags) {
+      Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
 	/* use supplied functor to re-use an evicted object, or
 	 * allocate a new one of the descendant type */
 	Object* o = evict_block();
-	if (o)
+	if (o) {
 	  fac->recycle(o); /* recycle existing object */
+	  flags |= FLAG_RECYCLE;
+	}
 	else
 	  o = fac->alloc(); /* get a new one */
 
