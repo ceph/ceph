@@ -5634,10 +5634,8 @@ void MDCache::clean_open_file_lists()
       CInode *in = *q;
       ++q;
       if (in->last == CEPH_NOSNAP) {
-	if (!in->is_any_caps_wanted()) {
-	  dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
-	  in->item_open_file.remove_myself();
-	}
+	dout(10) << " unlisting unwanted/capless inode " << *in << dendl;
+	in->item_open_file.remove_myself();
       } else {
 	if (in->client_snap_caps.empty()) {
 	  dout(10) << " unlisting flushed snap inode " << *in << dendl;

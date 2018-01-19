@@ -56,6 +56,7 @@ public:
     waiting_for_prefetch.push_back(c);
   }
 
+  bool should_log_open(CInode *in);
 
 protected:
   MDSRank *mds;

@@ -1553,8 +1553,6 @@ void Migrator::finish_export_inode(CInode *in, utime_t now, mds_rank_t peer,
   if (!in->has_subtree_root_dirfrag(mds->get_nodeid()))
     in->clear_scatter_dirty();
 
-  in->item_open_file.remove_myself();
-
   in->clear_dirty_parent();
 
   in->clear_file_locks();
