@@ -46,7 +46,16 @@ public:
     waiting_for_load.push_back(c);
   }
 
-  bool get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors);
+  bool get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,
+		     mds_rank_t& auth_hint);
+
+  bool prefetch_inodes();
+  bool is_prefetched() const { return prefetch_state == DONE; }
+  void wait_for_prefetch(MDSInternalContextBase *c) {
+    assert(!is_prefetched());
+    waiting_for_prefetch.push_back(c);
+  }
+
 
 protected:
   MDSRank *mds;
@@ -77,9 +86,20 @@ protected:
                     bufferlist &header_bl,
 		    std::map<std::string, bufferlist> &values);
 
+  enum {
+    DIR_INODES = 1,
+    FILE_INODES = 2,
+    DONE = 3,
+  };
+  unsigned prefetch_state = 0;
+  unsigned num_opening_inodes = 0;
+  list<MDSInternalContextBase*> waiting_for_prefetch;
+  void _open_ino_finish(inodeno_t ino, int r);
+  void _prefetch_inodes();
 
   friend class C_IO_OFT_Load;
   friend class C_IO_OFT_Save;
+  friend class C_OFT_OpenInoFinish;
 };
 
 #endif

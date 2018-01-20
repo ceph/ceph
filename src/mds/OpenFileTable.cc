@@ -356,6 +356,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       bufferlist::iterator p = it.second.begin();
       decode(anchor, p);
       assert(ino == anchor.ino);
+      anchor.auth = MDS_RANK_NONE;
     }
   } catch (buffer::error &e) {
     derr << __func__ << ": corrupted header/values: " << e.what() << dendl;
@@ -406,7 +407,8 @@ void OpenFileTable::load(MDSInternalContextBase *onload)
 		      new C_OnFinisher(c, mds->finisher));
 }
 
-bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors)
+bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,
+				  mds_rank_t& auth_hint)
 {
   auto p = loaded_anchor_map.find(ino);
   if (p == loaded_anchor_map.end())
@@ -416,6 +418,7 @@ bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& an
   if (dirino == inodeno_t(0))
     return false;
 
+  bool first = true;
   ancestors.clear();
   while (true) {
     ancestors.push_back(inode_backpointer_t(dirino, p->second.d_name, 0));
@@ -424,9 +427,117 @@ bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& an
     if (p == loaded_anchor_map.end())
       break;
 
+    if (first)
+      auth_hint = p->second.auth;
+
     dirino = p->second.dirino;
     if (dirino == inodeno_t(0))
       break;
+
+    first = false;
   }
   return true;
+}
+
+class C_OFT_OpenInoFinish: public MDSInternalContextBase {
+  OpenFileTable *oft;
+  inodeno_t ino;
+  MDSRank *get_mds() override { return oft->mds; }
+public:
+  C_OFT_OpenInoFinish(OpenFileTable *t, inodeno_t i) : oft(t), ino(i) {}
+  void finish(int r) override {
+    oft->_open_ino_finish(ino, r);
+  }
+};
+
+void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
+{
+  if (prefetch_state == DIR_INODES && r >= 0 && ino != inodeno_t(0)) {
+    auto p = loaded_anchor_map.find(ino);
+    assert(p != loaded_anchor_map.end());
+    p->second.auth = mds_rank_t(r);
+  }
+
+  if (r != mds->get_nodeid())
+    mds->mdcache->rejoin_prefetch_ino_finish(ino, r);
+
+  num_opening_inodes--;
+  if (num_opening_inodes == 0) {
+    if (prefetch_state == DIR_INODES)  {
+      prefetch_state = FILE_INODES;
+      _prefetch_inodes();
+    } else if (prefetch_state == FILE_INODES) {
+      prefetch_state = DONE;
+      finish_contexts(g_ceph_context, waiting_for_prefetch);
+      waiting_for_prefetch.clear();
+    } else {
+      assert(0);
+    }
+  }
+}
+
+void OpenFileTable::_prefetch_inodes()
+{
+  dout(10) << __func__ << " state " << prefetch_state << dendl;
+  assert(!num_opening_inodes);
+  num_opening_inodes = 1;
+
+  int64_t pool;
+  if (prefetch_state == DIR_INODES)
+    pool = mds->mdsmap->get_metadata_pool();
+  else if (prefetch_state == FILE_INODES)
+    pool = mds->mdsmap->get_first_data_pool();
+  else
+    assert(0);
+
+  MDCache *mdcache = mds->mdcache;
+
+  for (auto& it : loaded_anchor_map) {
+    if (it.second.d_type == DT_DIR) {
+      if (prefetch_state != DIR_INODES)
+	continue;
+      if (MDS_INO_IS_MDSDIR(it.first)) {
+	it.second.auth = MDS_INO_MDSDIR_OWNER(it.first);
+	continue;
+      }
+      if (MDS_INO_IS_STRAY(it.first)) {
+	it.second.auth = MDS_INO_STRAY_OWNER(it.first);
+	continue;
+      }
+    } else {
+      if (prefetch_state != FILE_INODES)
+	continue;
+      if (!mdcache->rejoin_has_cap_reconnect(it.first))
+	continue;
+    }
+    CInode *in = mdcache->get_inode(it.first);
+    if (in)
+      continue;
+
+    num_opening_inodes++;
+    mdcache->open_ino(it.first, pool, new C_OFT_OpenInoFinish(this, it.first), false);
+  }
+
+  _open_ino_finish(inodeno_t(0), 0);
+}
+
+bool OpenFileTable::prefetch_inodes()
+{
+  dout(10) << __func__ << dendl;
+  assert(!prefetch_state);
+  prefetch_state = DIR_INODES;
+
+  if (!load_done) {
+    wait_for_load(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext([this](int r) {
+	    _prefetch_inodes();
+	    })
+	  )
+	);
+    return true;
+  }
+
+  _prefetch_inodes();
+  return !is_prefetched();
 }

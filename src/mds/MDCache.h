@@ -597,6 +597,9 @@ public:
 			     mds_rank_t frommds=MDS_RANK_NONE) {
     cap_imports[ino][client][frommds] = icr;
   }
+  bool rejoin_has_cap_reconnect(inodeno_t ino) const {
+    return cap_imports.count(ino);
+  }
   const cap_reconnect_t *get_replay_cap_reconnect(inodeno_t ino, client_t client) {
     if (cap_imports.count(ino) &&
 	cap_imports[ino].count(client) &&
@@ -644,6 +647,7 @@ public:
   friend class C_MDC_RejoinOpenInoFinish;
   friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
+  void rejoin_prefetch_ino_finish(inodeno_t ino, int ret);
   void rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map,
 				   map<client_t,uint64_t>& sseqmap);
   bool process_imported_caps();
