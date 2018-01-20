@@ -11,7 +11,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous or later storage cluster
 
--  RHEL/CentOS 7.5; Linux kernel v4.17 or newer; or the `Ceph iSCSI client kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-stable>`_
+-  RHEL/CentOS 7.5; Linux kernel v4.17 or newer; or the `Ceph iSCSI client test kernel <https://shaman.ceph.com/repos/kernel/ceph-iscsi-test>`_
 
 -  The following packages must be installed from your Linux distribution's software repository:
 
@@ -183,7 +183,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...-igw/gateways>  create ceph-gw-1 10.172.19.21
        > /iscsi-target...-igw/gateways>  create ceph-gw-2 10.172.19.22
 
-   If not using RHEL/CentOS or using an upstream or ceph-iscsi-stable kernel,
+   If not using RHEL/CentOS or using an upstream or ceph-iscsi-test kernel,
    the skipchecks=true argument must be used. This will avoid the Red Hat kernel
    and rpm checks:
 
