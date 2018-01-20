@@ -12,4 +12,3 @@ overrides:
       - \(REQUEST_SLOW\)
       - \(TOO_FEW_PGS\)
       - \(MON_DOWN\)
-      - \(TOO_MANY_PGS\)
