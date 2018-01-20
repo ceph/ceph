@@ -5294,9 +5294,40 @@ void MDCache::rejoin_open_sessions_finish(map<client_t,entity_inst_t> client_map
     rejoin_gather_finish();
 }
 
+void MDCache::rejoin_prefetch_ino_finish(inodeno_t ino, int ret)
+{
+  auto p = cap_imports.find(ino);
+  if (p != cap_imports.end()) {
+    dout(10) << __func__ << " ino " << ino << " ret " << ret << dendl;
+    if (ret < 0) {
+      cap_imports_missing.insert(ino);
+    } else if (ret != mds->get_nodeid()) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q) {
+	assert(q->second.count(MDS_RANK_NONE));
+	assert(q->second.size() == 1);
+	rejoin_export_caps(p->first, q->first, q->second[MDS_RANK_NONE], ret);
+      }
+      cap_imports.erase(p);
+    }
+  }
+}
+
 bool MDCache::process_imported_caps()
 {
   dout(10) << "process_imported_caps" << dendl;
+
+  if (!open_file_table.is_prefetched() &&
+      open_file_table.prefetch_inodes()) {
+    open_file_table.wait_for_prefetch(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext([this](int r) {
+	    assert(rejoin_gather.count(mds->get_nodeid()));
+	    process_imported_caps();
+	    })
+	  )
+	);
+    return true;
+  }
 
   for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
     CInode *in = get_inode(p->first);
@@ -8687,21 +8718,22 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
   dout(10) << "do_open_ino_peer " << ino << " active " << active
 	   << " all " << all << " checked " << info.checked << dendl;
 
+  mds_rank_t whoami = mds->get_nodeid();
   mds_rank_t peer = MDS_RANK_NONE;
-  if (info.auth_hint >= 0) {
+  if (info.auth_hint >= 0 && info.auth_hint != whoami) {
     if (active.count(info.auth_hint)) {
       peer = info.auth_hint;
       info.auth_hint = MDS_RANK_NONE;
     }
   } else {
     for (set<mds_rank_t>::iterator p = active.begin(); p != active.end(); ++p)
-      if (*p != mds->get_nodeid() && info.checked.count(*p) == 0) {
+      if (*p != whoami && info.checked.count(*p) == 0) {
 	peer = *p;
 	break;
       }
   }
   if (peer < 0) {
-    all.erase(mds->get_nodeid());
+    all.erase(whoami);
     if (all != info.checked) {
       dout(10) << " waiting for more peers to be active" << dendl;
     } else {
@@ -8857,7 +8889,14 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
     info.tid = ++open_ino_last_tid;
     info.pool = pool >= 0 ? pool : default_file_layout.pool_id;
     info.waiters.push_back(fin);
-    do_open_ino(ino, info, 0);
+    if (mds->is_rejoin() &&
+	open_file_table.get_ancestors(ino, info.ancestors, info.auth_hint)) {
+      info.fetch_backtrace = false;
+      info.checking = mds->get_nodeid();
+      _open_ino_traverse_dir(ino, info, 0);
+    } else {
+      do_open_ino(ino, info, 0);
+    }
   }
 }
 

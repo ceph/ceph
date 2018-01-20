@@ -32,7 +32,10 @@ public:
   inodeno_t dirino;
   std::string d_name;
   __u8 d_type;
-  mutable int nref;	// how many children
+  union {
+    mutable int nref;		// how many children
+    mutable mds_rank_t auth;	// auth hint
+  };
 
   Anchor() : d_type(0), nref(0) {}
   Anchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp, int nr) :
