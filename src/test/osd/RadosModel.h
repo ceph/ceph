@@ -195,6 +195,8 @@ public:
   const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
+  string low_tier_pool_name;
+  librados::IoCtx low_tier_io_ctx;
   int snapname_num;
   map<string,string > redirect_objs;
 
@@ -207,6 +209,7 @@ public:
 		   bool no_sparse,
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
+		   const string &low_tier_pool_name,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -224,6 +227,7 @@ public:
     no_sparse(no_sparse),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
+    low_tier_pool_name(low_tier_pool_name),
     snapname_num(0)
   {
   }
@@ -246,6 +250,13 @@ public:
     if (r < 0) {
       rados.shutdown();
       return r;
+    }
+    if (!low_tier_pool_name.empty()) {
+      r = rados.ioctx_create(low_tier_pool_name.c_str(), low_tier_io_ctx);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
     }
     bufferlist inbl;
     r = rados.mon_command(
@@ -2203,6 +2214,82 @@ public:
   string getType() override
   {
     return "ChunkReadOp";
+  }
+};
+
+class CopyOp : public TestOp {
+public:
+  string oid, oid_src, tgt_pool_name;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  ObjectDesc src_value, tgt_value;
+  int done;
+  int r;
+  CopyOp(int n,
+	   RadosTestContext *context,
+	   const string &oid_src,
+	   const string &oid,
+	   const string &tgt_pool_name,
+	   TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_src(oid_src), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), r(0) 
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid_src);
+    context->oid_not_in_use.erase(oid_src);
+
+    string src = context->prefix+oid_src;
+    context->find_object(oid_src, &src_value); 
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+
+    cout << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    if (tgt_pool_name == context->low_tier_pool_name) {
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    } else {
+      context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    }
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing copy op to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " write returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "CopyOp";
   }
 };
 

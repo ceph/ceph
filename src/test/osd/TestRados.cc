@@ -49,15 +49,11 @@ public:
 							  m_total_weight));
     }
     if (m_set_redirect || m_set_chunk) {
-      m_redirect_objects = objects*2; // for creating objects using copy_from 
-      m_initial_redirected_objects = objects; // for rediect or set-chunk
-      // we need pre-initialization process before run the test
-      // so, m_ops is increased
       if (m_set_redirect) {
-	m_ops = ops+m_redirect_objects+m_initial_redirected_objects;
+	m_ops = ops+m_objects+m_objects;
       } else {
 	/* create 10 chunks per an object*/
-	m_ops = ops+m_redirect_objects+m_initial_redirected_objects+m_objects*10;
+	m_ops = ops+m_objects+m_objects*10;
       }
     }
   }
@@ -67,7 +63,7 @@ public:
     TestOp *retval = NULL;
 
     ++m_op;
-    if (m_op <= m_objects) {
+    if (m_op <= m_objects && !m_set_redirect && !m_set_chunk ) {
       stringstream oid;
       oid << m_op;
       if (m_op % 2) {
@@ -86,7 +82,7 @@ public:
     }
     
     if (m_set_redirect || m_set_chunk) {
-      if (pre_init_extensible_tier(context, retval)) {
+      if (init_extensible_tier(context, retval)) {
 	return retval;
       }
     } 
@@ -115,52 +111,65 @@ public:
     }
     return retval;
   }
-  
-  bool pre_init_extensible_tier(RadosTestContext &context, TestOp *& op) {
+
+  bool init_extensible_tier(RadosTestContext &context, TestOp *& op) {
     /*
-     * set-redirect or set-chunk test
-     * 0. create default objects
-     * 1. create target objects (using copy from)
-     * 2. set-redirect or set-chunk
+     * set-redirect or set-chunk test (manifest test)
+     * 0. make default objects (using create op)
+     * 1. set-redirect or set-chunk
+     * 2. initialize target objects (using write op)
      * 3. wait for set-* completion
      */
-    int create_objects_end = m_objects + m_redirect_objects;
-    int set_redirect_end = create_objects_end + m_initial_redirected_objects; 
+    int copy_manifest_end = m_objects*2;
+    int make_manifest_end = copy_manifest_end;
     if (m_set_chunk) {
-      /* create 10 chunks per an object*/
-      set_redirect_end += set_redirect_end + m_objects * 10;
+      /* make 10 chunks per an object*/
+      make_manifest_end = make_manifest_end + m_objects * 10;
+    } else {
+      /* redirect */
+      make_manifest_end = make_manifest_end + m_objects;
     }
 
-    if (m_op <= create_objects_end) {
+    if (m_op <= m_objects) {
       stringstream oid;
-      int _oid = m_op;
-      oid << _oid;
-      if ((_oid) % 2) {
+      oid << m_op;
+      if (m_op % 2) {
 	oid << " " << string(300, 'o');
       }
-      stringstream oid2;
-      int _oid2 = _oid - m_objects;
-      oid2 << _oid2;
-      if ((_oid2) % 2) {
-	oid2 << " " << string(300, 'o');
+      cout << m_op << ": write initial oid " << oid.str() << std::endl;
+      context.oid_not_flushing.insert(oid.str());
+      if (m_ec_pool) {
+	op = new WriteOp(m_op, &context, oid.str(), true, true);
+      } else {
+	op = new WriteOp(m_op, &context, oid.str(), false, true);
       }
-      cout << m_op << ": " << "(create target oid) copy_from oid " << oid.str() 
-	    << " from oid " << oid2.str() << std::endl;
-      op = new CopyFromOp(m_op, &context, oid.str(), oid2.str(), m_stats);
       return true;
-    } else if (m_op <= set_redirect_end) {
-      if (m_set_redirect) {
-	stringstream oid;
-	int _oid = m_op-create_objects_end;
+    } else if (m_op <= copy_manifest_end) {
+	stringstream oid, oid2;
+	int _oid = m_op-m_objects;
 	oid << _oid;
 	if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
 	}
-	stringstream oid2;
-	int _oid2 = _oid + m_objects;
-	oid2 << _oid2;
-	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
+	oid2 << _oid << " " << context.low_tier_pool_name;
+	if ((_oid) % 2) {
+	  oid2 << " " << string(300, 'm');
+	}
+	cout << m_op << ": " << "copy oid " << oid.str() << " target oid " 
+	      << oid2.str() << std::endl;
+	op = new CopyOp(m_op, &context, oid.str(), oid2.str(), context.low_tier_pool_name);
+	return true;
+    } else if (m_op <= make_manifest_end) {
+      if (m_set_redirect) {
+	stringstream oid, oid2;
+	int _oid = m_op-copy_manifest_end;
+	oid << _oid;
+	if ((_oid) % 2) {
+	  oid << " " << string(300, 'o');
+	}
+	oid2 << _oid << " " << context.low_tier_pool_name;
+	if ((_oid) % 2) {
+	  oid2 << " " << string(300, 'm');
 	}
 	cout << m_op << ": " << "set_redirect oid " << oid.str() << " target oid " 
 	      << oid2.str() << std::endl;
@@ -181,22 +190,17 @@ public:
 	  return true;
 	}
 	stringstream oid2;
-	int _oid2 = _oid + m_objects;
-	oid2 << _oid2;
-	if ((_oid2) % 2) {
-	  oid2 << " " << string(300, 'o');
+	oid2 << _oid << " " << context.low_tier_pool_name;
+	if ((_oid) % 2) {
+	  oid2 << " " << string(300, 'm');
 	}
 
-	/* make a chunk like source object (random offset, random length) --> 
-	 * target object (random offset)
+	/* make a chunk (random offset, random length --> 
+	 * target object's random offset)
 	 */
 	ObjectDesc contents, contents2;
 	context.find_object(oid.str(), &contents);
-	context.find_object(oid2.str(), &contents2);
 	uint32_t max_len = contents.most_recent_gen()->get_length(contents.most_recent());
-	if (max_len > contents2.most_recent_gen()->get_length(contents2.most_recent())) {
-	  max_len = contents2.most_recent_gen()->get_length(contents2.most_recent());
-	}
 	uint32_t rand_offset = rand() % max_len;
 	uint32_t rand_length = rand() % max_len;
 	rand_offset = rand_offset - (rand_offset % 512);
@@ -216,34 +220,27 @@ public:
 			      context.pool_name, rand_tgt_offset, m_stats);
 	return true;
       }
-    } 
-
-    if (!context.oid_redirect_not_in_use.size() && m_op > set_redirect_end) {
+    } else if (m_op == make_manifest_end + 1) {
       int set_size = context.oid_not_in_use.size();
-      /* wait until redirect or set_chunk completion */
-      if (set_size < m_objects + m_redirect_objects) {
+      int set_manifest_size = context.oid_redirect_not_in_use.size();
+      cout << m_op << " oid_not_in_use " << set_size << " oid_redirect_not_in_use " << set_manifest_size <<  std::endl;
+      /* wait for redirect or set_chunk initialization */
+      if (set_size != m_objects || set_manifest_size != 0) {
 	op = NULL;
 	m_op--;
-	cout << m_op << " wait completion " << std::endl;
+	cout << m_op << " wait for manifest initialization " << std::endl;
 	return true;
       }
-      for (int t_op = m_objects+1; t_op <= create_objects_end; t_op++) {
+      for (int t_op = m_objects+1; t_op <= m_objects*2; t_op++) {
 	stringstream oid;
-	oid << t_op;
+	oid << t_op << " " << context.low_tier_pool_name;
 	if (t_op % 2) {
-	  oid << " " << string(300, 'o');
+	  oid << " " << string(300, 'm');
 	}
-	context.oid_not_flushing.erase(oid.str());
-	context.oid_not_in_use.erase(oid.str());
-	context.oid_in_use.erase(oid.str());
-	cout << m_op << ": " << " remove oid " << oid.str() << " from oid_*_use " << std::endl;
-	if (t_op > m_objects + m_initial_redirected_objects) {
-	  context.oid_redirect_not_in_use.insert(oid.str());
-	}
+	context.oid_redirect_not_in_use.insert(oid.str());
       }
-      cout << m_op << ": " << " oid_not_in_use: " << context.oid_not_in_use.size()
-	    << " oid_in_use: " << context.oid_in_use.size() << std::endl;
     }
+
     return false;
   }
 
@@ -427,8 +424,6 @@ private:
   bool m_balance_reads;
   bool m_set_redirect;
   bool m_set_chunk;
-  int m_redirect_objects{0};
-  int m_initial_redirected_objects{0}; 
 };
 
 int main(int argc, char **argv)
@@ -476,6 +471,7 @@ int main(int argc, char **argv)
 
   map<TestOpType, unsigned int> op_weights;
   string pool_name = "rbd";
+  string low_tier_pool_name = "";
   bool ec_pool = false;
   bool no_omap = false;
   bool no_sparse = false;
@@ -556,8 +552,17 @@ int main(int argc, char **argv)
       set_redirect = true;
     } else if (strcmp(argv[i], "--set_chunk") == 0) {
       set_chunk = true;
+    } else if (strcmp(argv[i], "--low_tier_pool") == 0) {
+      low_tier_pool_name = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
+      exit(1);
+    }
+  }
+
+  if (set_redirect || set_chunk) {
+    if (low_tier_pool_name == "") {
+      cerr << "low_tier_pool_name is needed" << std::endl;
       exit(1);
     }
   }
@@ -610,6 +615,7 @@ int main(int argc, char **argv)
     no_sparse,
     pool_snaps,
     write_fadvise_dontneed,
+    low_tier_pool_name,
     id);
 
   TestOpStat stats;
