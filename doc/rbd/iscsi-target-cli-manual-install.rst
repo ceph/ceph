@@ -34,13 +34,19 @@ on each machine that will be a iSCSI gateway:
 -  Linux Kernel
 
    If not using a distro kernel that contains the required Ceph iSCSI patches,
-   then Linux kernel v4.17 or newer or the ceph-client ceph-iscsi-stable
-   branch must be used. To get the ceph-iscsi-stable branch run:
+   then Linux kernel v4.17 or newer or the ceph-client ceph-iscsi-test
+   branch must be used. To get the branch run:
 
    ::
 
        > git clone https://github.com/ceph/ceph-client.git
-       > git checkout ceph-iscsi-stable
+       > git checkout ceph-iscsi-test
+
+   .. warning::
+       ceph-iscsi-test is not for production use. It should only be used
+       for proof of concept setups and testing. The kernel is only updated
+       with Ceph iSCSI patches. General security and bug fixes from upstream
+       are not applied.
 
    Check your distro's docs for specific instructions on how to build a
    kernel. The only Ceph iSCSI specific requirements are the following
