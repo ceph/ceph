@@ -65,7 +65,7 @@ class KernelMount(CephFSMount):
         if mount_path is None:
             mount_path = "/"
 
-        opts = 'name={id},secretfile={secret}'.format(id=self.client_id,
+        opts = 'name={id},secretfile={secret},norequire_active_mds'.format(id=self.client_id,
                                                       secret=secret)
 
         if mount_fs_name is not None:

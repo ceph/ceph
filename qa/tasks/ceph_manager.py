@@ -116,7 +116,7 @@ class Thrasher:
         if self.config.get('powercycle'):
             self.revive_timeout += 120
         self.clean_wait = self.config.get('clean_wait', 0)
-        self.minin = self.config.get("min_in", 3)
+        self.minin = self.config.get("min_in", 4)
         self.chance_move_pg = self.config.get('chance_move_pg', 1.0)
         self.sighup_delay = self.config.get('sighup_delay')
         self.optrack_toggle_delay = self.config.get('optrack_toggle_delay')
@@ -1032,6 +1032,7 @@ class Thrasher:
                         Scrubber(self.ceph_manager, self.config)
             self.choose_action()()
             time.sleep(delay)
+        self.all_up()
         if self.random_eio > 0:
             self.ceph_manager.raw_cluster_cmd('tell', 'osd.'+str(self.rerrosd),
                           'injectargs', '--', '--filestore_debug_random_read_err=0.0')
