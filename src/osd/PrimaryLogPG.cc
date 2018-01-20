@@ -2129,9 +2129,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
-    OSDOp& osd_op = *p;
-
-    if (osd_op.op.op == CEPH_OSD_OP_LIST_SNAPS) {
+    if (p->op.op == CEPH_OSD_OP_LIST_SNAPS) {
       if (m->get_snapid() != CEPH_SNAPDIR) {
 	dout(10) << "LIST_SNAPS with incorrect context" << dendl;
 	osd->reply_op_error(op, -EINVAL);
