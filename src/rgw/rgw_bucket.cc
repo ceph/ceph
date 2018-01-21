@@ -400,11 +400,11 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
   return 0;
 }
 
-int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
+int rgw_bucket_set_attrs(RGWRados *store, const RGWBucketInfo& bucket_info,
                          map<string, bufferlist>& attrs,
                          RGWObjVersionTracker *objv_tracker)
 {
-  rgw_bucket& bucket = bucket_info.bucket;
+  const rgw_bucket& bucket = bucket_info.bucket;
 
   if (!bucket_info.has_instance_obj) {
     /* an old bucket object, need to convert it */
