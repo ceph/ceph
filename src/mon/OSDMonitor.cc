@@ -5984,7 +5984,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
        } else {
-	 ss << __func__ << " get_erasure_code failed: " << tmp.rdbuf();
+	 ss << __func__ << " get_erasure_code failed: " << tmp.str();
 	 return err;
        }
 
@@ -7243,7 +7243,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   int64_t osdid;
   string name;
-  bool osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  bool osdid_present = false;
+  if (prefix != "osd pg-temp" &&
+      prefix != "osd pg-upmap" &&
+      prefix != "osd pg-upmap-items") {  // avoid commands with non-int id arg
+    osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  }
   if (osdid_present) {
     ostringstream oss;
     oss << "osd." << osdid;
