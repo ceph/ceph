@@ -873,6 +873,7 @@ int RGWHTTPStreamRWRequest::handle_header(const string& name, const string& val)
       return -EINVAL;
     }
 
+    extra_len = len;
     cb->set_extra_data_len(len);
   }
   return 0;
@@ -883,7 +884,7 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
   size_t orig_len = len;
 
   if (cb) {
-    in_data.append((const char *)ptr, len);
+    in_data.append((const char *)ptr, orig_len);
 
     size_t orig_in_data_len = in_data.length();
 
@@ -895,15 +896,18 @@ int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
     } else {
       /* partial read */
       ceph_assert(in_data.length() <= orig_in_data_len);
-      len = ret;
+      orig_len = ret;
       bufferlist bl;
-      size_t left_to_read = orig_in_data_len - len;
+      size_t left_to_read = orig_in_data_len - orig_len;
       if (in_data.length() > left_to_read) {
         in_data.splice(0, in_data.length() - left_to_read, &bl);
       }
     }
   }
-  ofs += len;
+  ofs += orig_len;
+  if (ofs > extra_len) {
+    set_receive_length(ofs - extra_len);
+  }
   return orig_len;
 }
 

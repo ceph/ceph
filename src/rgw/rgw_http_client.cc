@@ -510,6 +510,9 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hin
   if (has_send_len) {
     curl_easy_setopt(easy_handle, CURLOPT_INFILESIZE, (void *)send_len); 
   }
+  if (has_receive_len) {
+    curl_easy_setopt(easy_handle, CURLOPT_RESUME_FROM_LARGE, receive_len);
+  }
   if (!verify_ssl) {
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(easy_handle, CURLOPT_SSL_VERIFYHOST, 0L);
@@ -518,6 +521,17 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data, bool send_data_hin
   curl_easy_setopt(easy_handle, CURLOPT_PRIVATE, (void *)req_data);
 
   return 0;
+}
+
+bool RGWHTTPClient::resume()
+{
+  size_t rl_threshold = 1<<8;
+  CURL *easy_handle = req_data->get_easy_handle();
+  if (has_receive_len && receive_len > rl_threshold) {
+    curl_easy_setopt(easy_handle, CURLOPT_RESUME_FROM_LARGE, receive_len);
+    return true;
+  }
+  return false;
 }
 
 bool RGWHTTPClient::is_done()
@@ -1152,10 +1166,22 @@ void *RGWHTTPManager::reqs_thread_entry()
           case CURLE_OPERATION_TIMEDOUT:
             dout(0) << "WARNING: curl operation timed out, network average transfer speed less than " 
               << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
+            status = -ETIMEDOUT;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
 	    break;
         }
+
+        if (req_data->client->method.compare("GET") == 0 && status == -ETIMEDOUT &&
+            req_data->client->retry_num < cct->_conf->rgw_curl_timeout_retry_num) {
+          if (req_data->client->resume()) {
+            req_data->client->retry_num++;
+            dout(10) << "ERROR: req_data->id=" << id << " will try to resume GET" << dendl;
+            continue;
+          }
+        }
+
+	finish_request(req_data, status);
       }
     }
   }

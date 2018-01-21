@@ -5920,6 +5920,10 @@ std::vector<Option> get_rgw_options() {
         "the rgw_curl_low_speed_limit for the library to consider it too slow and abort. "
         "Set it zero to disable this."),
 
+    Option("rgw_curl_timeout_retry_num", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(3)
+    .set_description("The max times allowed to retry connecting other when network connection is timeout"),
+
     Option("rgw_copy_obj_progress", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Send progress report through copy operation")
