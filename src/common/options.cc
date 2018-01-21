@@ -2710,7 +2710,7 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description(""),
 
-    Option("osd_debug_verify_snaps_on_info", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    Option("osd_debug_verify_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
 
