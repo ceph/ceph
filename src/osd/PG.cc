@@ -1706,8 +1706,9 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
     // Caller is GetInfo
     backfill_targets = want_backfill;
   }
-  assert(async_recovery_targets.empty() || async_recovery_targets == want_async_recovery);
-  if (async_recovery_targets.empty()) {
+  // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
+  assert(async_recovery_targets.empty() || async_recovery_targets == want_async_recovery || !needs_recovery());
+  if (async_recovery_targets.empty() || !needs_recovery()) {
     async_recovery_targets = want_async_recovery;
   }
   // Will not change if already set because up would have had to change
