@@ -346,7 +346,7 @@ public:
 
 int RGWBucketReshard::do_reshard(
 		   int num_shards,
-		   const RGWBucketInfo& new_bucket_info,
+		   RGWBucketInfo& new_bucket_info,
 		   int max_entries,
                    bool verbose,
                    ostream *out,
@@ -470,16 +470,10 @@ int RGWBucketReshard::do_reshard(
     return EIO;
   }
 
-  RGWBucketAdminOpState bucket_op;
-
-  bucket_op.set_bucket_name(new_bucket_info.bucket.name);
-  bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
-  bucket_op.set_user_id(new_bucket_info.owner);
-  string err;
-  int r = RGWBucketAdminOp::link(store, bucket_op, &err);
-  if (r < 0) {
-    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << ")" << dendl;
-    return -r;
+  ret = rgw_link_bucket(store, new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+  if (ret < 0) {
+    lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
+    return -ret;
   }
 
   ret = bucket_info_updater.complete();
