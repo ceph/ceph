@@ -243,7 +243,12 @@ void SnapMapper::add_oid(
   {
     object_snaps out;
     int r = get_snaps(oid, &out);
-    assert(r == -ENOENT);
+    if (r != -ENOENT) {
+      derr << __func__ << " found existing snaps mapped on " << oid
+	   << ", removing" << dendl;
+      assert(!cct->_conf->osd_debug_verify_snaps);
+      remove_oid(oid, t);
+    }
   }
 
   object_snaps _snaps(oid, snaps);
