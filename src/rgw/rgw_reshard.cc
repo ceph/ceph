@@ -482,6 +482,12 @@ int RGWBucketReshard::do_reshard(
     return -ret;
   }
 
+  ret = rgw_bucket_set_attrs(store, new_bucket_info, bucket_attrs, &new_bucket_info.objv_tracker);
+  if (ret < 0) {
+    lderr(store->ctx()) << "failed to reset attrs for bucket " << new_bucket_info.bucket.name << " instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-ret) << ")" << dendl;
+    /* don't error out, reshard process succeeded */
+  }
+
   ret = bucket_info_updater.complete();
   if (ret < 0) {
     ldout(store->ctx(), 0) << __func__ << ": failed to update bucket info ret=" << ret << dendl;
