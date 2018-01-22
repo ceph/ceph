@@ -2013,14 +2013,13 @@ protected:
       void exit();
 
       typedef boost::mpl::list <
-	boost::statechart::custom_reaction< Initialize >,
+	boost::statechart::transition< Initialize, Reset >,
 	boost::statechart::custom_reaction< Load >,
 	boost::statechart::custom_reaction< NullEvt >,
 	boost::statechart::transition< boost::statechart::event_base, Crashed >
 	> reactions;
 
       boost::statechart::result react(const Load&);
-      boost::statechart::result react(const Initialize&);
       boost::statechart::result react(const MNotifyRec&);
       boost::statechart::result react(const MInfoRec&);
       boost::statechart::result react(const MLogRec&);
