@@ -5949,6 +5949,10 @@ void PG::handle_create(RecoveryCtx *rctx)
   recovery_state.handle_event(evt, rctx);
   ActMap evt2;
   recovery_state.handle_event(evt2, rctx);
+
+  rctx->on_applied->add(make_lambda_context([this]() {
+    update_store_with_options();
+  }));
 }
 
 void PG::handle_query_state(Formatter *f)
