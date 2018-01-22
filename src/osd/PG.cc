@@ -5966,7 +5966,7 @@ void PG::update_store_with_options()
 {
   auto r = osd->store->set_collection_opts(coll, pool.info.opts);
   if(r < 0 && r != -EOPNOTSUPP) {
-    derr << __func__ << "set_collection_opts returns error:" << r << dendl;
+    derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
 }
 
