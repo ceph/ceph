@@ -441,6 +441,7 @@ class MDSRank {
         const cmdmap_t &cmdmap,
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
+    void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
 
   protected:
     Messenger    *messenger;

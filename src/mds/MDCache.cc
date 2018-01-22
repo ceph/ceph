@@ -11946,6 +11946,28 @@ int MDCache::cache_status(Formatter *f)
   return 0;
 }
 
+void MDCache::dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f) 
+{
+  assert(in);
+  if ((max_depth >= 0) && (cur_depth > max_depth)) {
+    return;
+  }
+  list<CDir*> ls;
+  in->get_dirfrags(ls);
+  for (const auto &subdir : ls) {
+    for (const auto &p : subdir->items) {
+      CDentry *dn = p.second;
+      CInode *in = dn->get_linkage()->get_inode();
+      if (in) {
+        dump_tree(in, cur_depth + 1, max_depth, f);
+      }
+    }
+  }
+  f->open_object_section("inode");
+  in->dump(f);
+  f->close_section();
+}
+
 int MDCache::dump_cache(std::string_view file_name)
 {
   return dump_cache(file_name, NULL);
@@ -11956,17 +11978,11 @@ int MDCache::dump_cache(Formatter *f)
   return dump_cache(std::string_view(""), f);
 }
 
-int MDCache::dump_cache(std::string_view dump_root, int depth, Formatter *f)
-{
-  return dump_cache(std::string_view(""), f, dump_root, depth);
-}
-
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-int MDCache::dump_cache(std::string_view fn, Formatter *f,
-			 std::string_view dump_root, int depth)
+int MDCache::dump_cache(const char *fn, Formatter *f)
 {
   int r = 0;
   int fd = -1;
@@ -11990,24 +12006,8 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f,
     }
   }
 
-  auto dump_func = [fd, f, depth, &dump_root](CInode *in) {
+  auto dump_func = [fd, f](CInode *in) {
     int r;
-    if (!dump_root.empty()) {
-      string ipath;
-      if (in->is_root())
-	ipath = "/";
-      else
-	in->make_path_string(ipath);
-
-      if (dump_root.length() > ipath.length() ||
-	  !equal(dump_root.begin(), dump_root.end(), ipath.begin()))
-	return 0;
-
-      if (depth >= 0 &&
-	  count(ipath.begin() + dump_root.length(), ipath.end(), '/') > depth)
-	return 0;
-    }
-
     if (f) {
       f->open_object_section("inode");
       in->dump(f);

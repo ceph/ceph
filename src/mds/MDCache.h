@@ -1172,14 +1172,12 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 protected:
-  int dump_cache(std::string_view fn, Formatter *f,
-		  std::string_view dump_root = "",
-		  int depth = -1);
+  int dump_cache(const char *fn, Formatter *f);
 public:
   int dump_cache() { return dump_cache(NULL, NULL); }
   int dump_cache(std::string_view filename);
   int dump_cache(Formatter *f);
-  int dump_cache(std::string_view dump_root, int depth, Formatter *f);
+  void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
 
   int cache_status(Formatter *f);
 
