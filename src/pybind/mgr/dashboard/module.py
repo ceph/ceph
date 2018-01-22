@@ -26,6 +26,7 @@ import socket
 
 import cherrypy
 import jinja2
+import urlparse
 
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
@@ -63,16 +64,24 @@ def recurse_refs(root, path):
     log.info("%s %d (%s)" % (path, sys.getrefcount(root), root.__class__))
 
 def get_prefixed_url(url):
-    return global_instance().url_prefix + url
+    return global_instance().url_prefix.rstrip('/') + url
 
 def to_sorted_array(data):
     assert isinstance(data, dict)
     return sorted(data.iteritems())
 
+def prepare_url_prefix(url_prefix):
+    url_prefix = urlparse.urljoin('/', url_prefix)
+    if url_prefix[-1] != '/':
+        url_prefix = url_prefix + '/'
+    return url_prefix
+
 class StandbyModule(MgrStandbyModule):
     def serve(self):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '7000')
+        url_prefix = prepare_url_prefix(self.get_config('url_prefix', default=''))
+
         if server_addr is None:
             raise RuntimeError('no server_addr configured; try "ceph config-key set mgr/dashboard/server_addr <ip>"')
         log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
@@ -90,16 +99,16 @@ class StandbyModule(MgrStandbyModule):
 
         class Root(object):
             @cherrypy.expose
-            def index(self):
+            def default(self, *args, **kwargs):
                 active_uri = module.get_active_uri()
                 if active_uri:
-                    log.info("Redirecting to active '{0}'".format(active_uri))
-                    raise cherrypy.HTTPRedirect(active_uri)
+                    log.info("Redirecting to active '{0}'".format(active_uri + "/".join(args)))
+                    raise cherrypy.HTTPRedirect(active_uri + "/".join(args))
                 else:
                     template = env.get_template("standby.html")
                     return template.render(delay=5)
 
-        cherrypy.tree.mount(Root(), "/", {})
+        cherrypy.tree.mount(Root(), url_prefix, {})
         log.info("Starting engine...")
         cherrypy.engine.start()
         log.info("Waiting for engine...")
@@ -946,15 +955,7 @@ class Module(MgrModule):
                         ret[k1][k2] = sorted_dict
                 return ret
 
-        url_prefix = self.get_config('url_prefix')
-        if url_prefix == None:
-            url_prefix = ''
-        else:
-            if len(url_prefix) != 0:
-                if url_prefix[0] != '/':
-                    url_prefix = '/'+url_prefix
-                if url_prefix[-1] == '/':
-                    url_prefix = url_prefix[:-1]
+        url_prefix = prepare_url_prefix(self.get_config('url_prefix', default=''))
         self.url_prefix = url_prefix
 
         server_addr = self.get_localized_config('server_addr', '::')
@@ -973,9 +974,10 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        self.set_uri("http://{0}:{1}/".format(
+        self.set_uri("http://{0}:{1}{2}".format(
             socket.getfqdn() if server_addr == "::" else server_addr,
-            server_port
+            server_port,
+            url_prefix
         ))
 
         static_dir = os.path.join(current_dir, 'static')
