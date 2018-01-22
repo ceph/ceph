@@ -743,7 +743,7 @@ int RGWGetObj::verify_permission()
     } else {
       action = rgw::IAM::s3GetObjectVersion;
     }
-    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG))
+    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG, true))
       rgw_iam_add_existing_objtags(store, s, obj, action);
   }
 
@@ -781,7 +781,7 @@ int RGWGetObjTags::verify_permission()
     rgw::IAM::s3GetObjectVersionTagging;
   // TODO since we are parsing the bl now anyway, we probably change
   // the send_response function to accept RGWObjTag instead of a bl
-  if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+  if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG, true)){
     rgw_obj obj = rgw_obj(s->bucket, s->object);
     rgw_iam_add_existing_objtags(store, s, obj, iam_action);
   }
@@ -827,7 +827,7 @@ int RGWPutObjTags::verify_permission()
     rgw::IAM::s3PutObjectTagging:
     rgw::IAM::s3PutObjectVersionTagging;
 
-  if(s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+  if(s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG, true)){
     auto obj = rgw_obj(s->bucket, s->object);
     rgw_iam_add_existing_objtags(store, s, obj, iam_action);
   }
@@ -870,7 +870,7 @@ int RGWDeleteObjTags::verify_permission()
       rgw::IAM::s3DeleteObjectTagging:
       rgw::IAM::s3DeleteObjectVersionTagging;
 
-    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG, true)){
       auto obj = rgw_obj(s->bucket, s->object);
       rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     }
@@ -4685,7 +4685,7 @@ int RGWGetACLs::verify_permission()
       rgw::IAM::s3GetObjectAcl :
       rgw::IAM::s3GetObjectVersionAcl;
 
-    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG)){
+    if (s->iam_policy && s->iam_policy->has_conditional(S3_EXISTING_OBJTAG, true)){
       rgw_obj obj = rgw_obj(s->bucket, s->object);
       rgw_iam_add_existing_objtags(store, s, obj, iam_action);
     }
