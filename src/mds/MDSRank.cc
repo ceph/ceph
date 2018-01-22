@@ -1971,19 +1971,7 @@ bool MDSRankDispatcher::handle_asok_command(
       ss << "Failed to get cache status: " << cpp_strerror(r);
     }
   } else if (command == "dump tree") {
-    string root;
-    int64_t depth;
-    cmd_getval(g_ceph_context, cmdmap, "root", root);
-    if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
-      depth = -1;
-    {
-      Mutex::Locker l(mds_lock);
-      int r = mdcache->dump_cache(root, depth, f);
-      if (r != 0) {
-        ss << "Failed to dump tree: " << cpp_strerror(r);
-        f->reset();
-      }
-    }
+    command_dump_tree(cmdmap, ss, f);
   } else if (command == "dump loads") {
     Mutex::Locker l(mds_lock);
     int r = balancer->dump_loads(f);
@@ -2357,6 +2345,24 @@ int MDSRank::_command_export_dir(
 
   mdcache->migrator->export_dir(dir, target);
   return 0;
+}
+
+void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f) 
+{
+  std::string root;
+  int64_t depth;
+  cmd_getval(g_ceph_context, cmdmap, "root", root);
+  if (!cmd_getval(g_ceph_context, cmdmap, "depth", depth))
+    depth = -1;
+  Mutex::Locker l(mds_lock);
+  CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
+  if (!in) {
+    ss << "root inode is not in cache";
+    return;
+  }
+  f->open_array_section("inodes");
+  mdcache->dump_tree(in, 0, depth, f);
+  f->close_section();
 }
 
 CDir *MDSRank::_command_dirfrag_get(
