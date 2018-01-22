@@ -12,7 +12,8 @@ Synopsis
 | **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
 |                 [--log-path LOG_PATH]
 
-| **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare* ]
+| **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
+| *zap* | *list*]
 
 Description
 ===========
@@ -69,8 +70,9 @@ Optional arguments:
 * [-h, --help]          show the help message and exit
 * [--journal JOURNAL]   A logical group name, path to a logical volume, or path to a device
 * [--journal-size GB]   Size (in GB) A logical group name or a path to a logical volume
-* [--bluestore]         Use the bluestore objectstore (not currently supported)
-* [--filestore]         Use the filestore objectstore (currently the only supported object store)
+* [--bluestore]         Use the bluestore objectstore (default)
+* [--filestore]         Use the filestore objectstore
+* [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--osd-id OSD_ID]     Reuse an existing OSD id
 * [--osd-fsid OSD_FSID] Reuse an existing OSD fsid
 
