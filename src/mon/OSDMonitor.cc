@@ -7242,7 +7242,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   cmd_getval(cct, cmdmap, "prefix", prefix);
 
   int64_t osdid;
-  string name;
+  string osd_name;
   bool osdid_present = false;
   if (prefix != "osd pg-temp" &&
       prefix != "osd pg-upmap" &&
@@ -7252,7 +7252,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   if (osdid_present) {
     ostringstream oss;
     oss << "osd." << osdid;
-    name = oss.str();
+    osd_name = oss.str();
   }
 
   // Even if there's a pending state with changes that could affect
@@ -7783,7 +7783,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
-      ss << name << " does not exist. Create it before updating the crush map";
+      ss << osd_name
+	 << " does not exist. Create it before updating the crush map";
       goto reply;
     }
 
@@ -7804,14 +7805,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (prefix == "osd crush set"
         && !_get_stable_crush().item_exists(osdid)) {
       err = -ENOENT;
-      ss << "unable to set item id " << osdid << " name '" << name
+      ss << "unable to set item id " << osdid << " name '" << osd_name
          << "' weight " << weight << " at location " << loc
          << ": does not exist";
       goto reply;
     }
 
     dout(5) << "adding/updating crush item id " << osdid << " name '"
-      << name << "' weight " << weight << " at location "
+      << osd_name << "' weight " << weight << " at location "
       << loc << dendl;
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
@@ -7820,10 +7821,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (prefix == "osd crush set" ||
         newcrush.check_item_loc(cct, osdid, loc, (int *)NULL)) {
       action = "set";
-      err = newcrush.update_item(cct, osdid, weight, name, loc);
+      err = newcrush.update_item(cct, osdid, weight, osd_name, loc);
     } else {
       action = "add";
-      err = newcrush.insert_item(cct, osdid, weight, name, loc);
+      err = newcrush.insert_item(cct, osdid, weight, osd_name, loc);
       if (err == 0)
         err = 1;
     }
@@ -7832,15 +7833,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
 
     if (err == 0 && !_have_pending_crush()) {
-      ss << action << " item id " << osdid << " name '" << name << "' weight "
-        << weight << " at location " << loc << ": no change";
+      ss << action << " item id " << osdid << " name '" << osd_name
+	 << "' weight " << weight << " at location " << loc << ": no change";
       goto reply;
     }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << action << " item id " << osdid << " name '" << name << "' weight "
-      << weight << " at location " << loc << " to crush map";
+    ss << action << " item id " << osdid << " name '" << osd_name << "' weight "
+       << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						      get_last_committed() + 1));
@@ -7851,7 +7852,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // osd crush create-or-move <OsdName> <initial_weight> <loc1> [<loc2> ...]
       if (!osdmap.exists(osdid)) {
 	err = -ENOENT;
-	ss << name << " does not exist.  create it before updating the crush map";
+	ss << osd_name
+	   << " does not exist.  create it before updating the crush map";
 	goto reply;
       }
 
@@ -7869,22 +7871,25 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
-      dout(0) << "create-or-move crush item name '" << name << "' initial_weight " << weight
-	      << " at location " << loc << dendl;
+      dout(0) << "create-or-move crush item name '" << osd_name
+	      << "' initial_weight " << weight << " at location " << loc
+	      << dendl;
 
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
-      err = newcrush.create_or_move_item(cct, osdid, weight, name, loc);
+      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc);
       if (err == 0) {
-	ss << "create-or-move updated item name '" << name << "' weight " << weight
+	ss << "create-or-move updated item name '" << osd_name
+	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	break;
       }
       if (err > 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-	ss << "create-or-move updating item name '" << name << "' weight " << weight
+	ss << "create-or-move updating item name '" << osd_name
+	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -7896,7 +7901,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush move") {
     do {
       // osd crush move <name> <loc1> [<loc2> ...]
-
+      string name;
       string args;
       vector<string> argvec;
       cmd_getval(cct, cmdmap, "name", name);
