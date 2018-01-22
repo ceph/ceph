@@ -21,7 +21,7 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
    -  ``tcmu-runner-1.3.0`` or newer package
 
-   -  ``ceph-iscsi-config-2.3`` or newer package
+   -  ``ceph-iscsi-config-2.4`` or newer package
 
    -  ``ceph-iscsi-cli-2.5`` or newer package
 
