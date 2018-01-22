@@ -12448,8 +12448,7 @@ int RGWRados::list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   librados::IoCtx index_ctx;
   map<int, string> oids;
   map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
-  map<int, string> bucket_instance_ids;
-  int r = open_bucket_index(bucket_info, index_ctx, oids, shard_id, &bucket_instance_ids);
+  int r = open_bucket_index(bucket_info, index_ctx, oids, shard_id);
   if (r < 0)
     return r;
 
