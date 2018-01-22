@@ -33,14 +33,14 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
     : Dispatcher(cct_), cct(cct_), msgr(msgr_),
       timer(cct_, lock)
 {
-  assert(cct != nullptr);
+  assert(cct);
 }
 
 void MgrClient::init()
 {
   Mutex::Locker l(lock);
 
-  assert(msgr != nullptr);
+  assert(msgr);
 
   timer.init();
 }

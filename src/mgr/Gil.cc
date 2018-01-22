@@ -27,7 +27,7 @@
 SafeThreadState::SafeThreadState(PyThreadState *ts_)
     : ts(ts_)
 {
-  assert(ts != nullptr);
+  assert(ts);
   thread = pthread_self();
 }
 
@@ -66,7 +66,7 @@ Gil::Gil(SafeThreadState &ts, bool new_thread) : pThreadState(ts)
 
 Gil::~Gil()
 {
-  if (pNewThreadState != nullptr) {
+  if (pNewThreadState) {
     dout(20) << "Destroying new thread state " << pNewThreadState << dendl;
     PyThreadState_Swap(pThreadState.ts);
     PyThreadState_Clear(pNewThreadState);

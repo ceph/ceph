@@ -67,7 +67,7 @@ int ActivePyModule::load(ActivePyModules *py_modules)
   Py_DECREF(pClass);
   Py_DECREF(pModuleName);
   Py_DECREF(pArgs);
-  if (pClassInstance == nullptr) {
+  if (!pClassInstance) {
     derr << "Failed to construct class in '" << module_name << "'" << dendl;
     derr << handle_pyerror() << dendl;
     return -EINVAL;
@@ -80,7 +80,7 @@ int ActivePyModule::load(ActivePyModules *py_modules)
 
 void ActivePyModule::notify(const std::string &notify_type, const std::string &notify_id)
 {
-  assert(pClassInstance != nullptr);
+  assert(pClassInstance);
 
   Gil gil(pMyThreadState, true);
 
@@ -103,7 +103,7 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
 
 void ActivePyModule::notify_clog(const LogEntry &log_entry)
 {
-  assert(pClassInstance != nullptr);
+  assert(pClassInstance);
 
   Gil gil(pMyThreadState, true);
 
@@ -134,7 +134,7 @@ int ActivePyModule::load_commands()
   // Don't need a Gil here -- this is called from ActivePyModule::load(),
   // which already has one.
   PyObject *command_list = PyObject_GetAttrString(pClassInstance, "COMMANDS");
-  if (command_list == nullptr) {
+  if (!command_list) {
     // Even modules that don't define command should still have the COMMANDS
     // from the MgrModule definition.  Something is wrong!
     derr << "Module " << get_name() << " has missing COMMANDS member" << dendl;
@@ -150,22 +150,22 @@ int ActivePyModule::load_commands()
   const size_t list_size = PyList_Size(command_list);
   for (size_t i = 0; i < list_size; ++i) {
     PyObject *command = PyList_GetItem(command_list, i);
-    assert(command != nullptr);
+    assert(command);
 
     ModuleCommand item;
 
     PyObject *pCmd = PyDict_GetItemString(command, "cmd");
-    assert(pCmd != nullptr);
+    assert(pCmd);
     item.cmdstring = PyString_AsString(pCmd);
 
     dout(20) << "loaded command " << item.cmdstring << dendl;
 
     PyObject *pDesc = PyDict_GetItemString(command, "desc");
-    assert(pDesc != nullptr);
+    assert(pDesc);
     item.helpstring = PyString_AsString(pDesc);
 
     PyObject *pPerm = PyDict_GetItemString(command, "perm");
-    assert(pPerm != nullptr);
+    assert(pPerm);
     item.perm = PyString_AsString(pPerm);
 
     item.handler = this;
@@ -184,8 +184,8 @@ int ActivePyModule::handle_command(
   std::stringstream *ds,
   std::stringstream *ss)
 {
-  assert(ss != nullptr);
-  assert(ds != nullptr);
+  assert(ss);
+  assert(ds);
 
   Gil gil(pMyThreadState, true);
 

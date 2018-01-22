@@ -58,7 +58,7 @@ public:
     : py_modules(py_modules_), python_completion(ev),
       tag(tag_), pThreadState(ts_)
   {
-    assert(python_completion != nullptr);
+    assert(python_completion);
     Py_INCREF(python_completion);
   }
 
@@ -75,7 +75,7 @@ public:
 
   void finish(int r) override
   {
-    assert(python_completion != nullptr);
+    assert(python_completion);
 
     dout(10) << "MonCommandCompletion::finish()" << dendl;
     {
@@ -85,7 +85,7 @@ public:
       Gil gil(pThreadState, true);
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
-      assert(set_fn != nullptr);
+      assert(set_fn);
 
       auto pyR = PyInt_FromLong(r);
       auto pyOutBl = PyString_FromString(outbl.to_str().c_str());
@@ -96,7 +96,7 @@ public:
       Py_DECREF(pyOutS);
 
       auto rtn = PyObject_CallObject(set_fn, args);
-      if (rtn != nullptr) {
+      if (rtn) {
 	Py_DECREF(rtn);
       }
       Py_DECREF(args);
@@ -128,7 +128,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   }
 
   auto set_fn = PyObject_GetAttrString(completion, "complete");
-  if (set_fn == nullptr) {
+  if (!set_fn) {
     ceph_abort();  // TODO raise python exception instead
   } else {
     assert(PyCallable_Check(set_fn));
