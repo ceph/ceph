@@ -391,6 +391,17 @@ void md_config_t::show_config(Formatter *f)
   _show_config(NULL, f);
 }
 
+void md_config_t::config_options(Formatter *f)
+{
+  Mutex::Locker l(lock);
+  f->open_array_section("options");
+  for (const auto& i: schema) {
+    const Option &opt = i.second;
+    opt.dump(f);
+  }
+  f->close_section();
+}
+
 void md_config_t::_show_config(std::ostream *out, Formatter *f)
 {
   if (out) {

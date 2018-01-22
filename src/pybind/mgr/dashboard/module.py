@@ -750,6 +750,28 @@ class Module(MgrModule):
                     toplevel_data=json.dumps(self._toplevel_data(), indent=2),
                     content_data=json.dumps(self._servers(), indent=2)
                 )
+            
+            @cherrypy.expose
+            def config_options(self, service="any"):
+                template = env.get_template("config_options.html")
+                return template.render(
+                    url_prefix = global_instance().url_prefix,
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(self._toplevel_data(), indent=2),
+                    content_data=json.dumps(self.config_options_data(service), indent=2)
+                )
+
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def config_options_data(self, service):
+                options = {}
+                options = global_instance().get("config_options")
+
+                return {
+                    'options': options,
+                    'service': service,
+                }
 
             def _servers(self):
                 return {
