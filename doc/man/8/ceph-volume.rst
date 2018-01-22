@@ -135,6 +135,26 @@ Positional arguments:
   ``/path/to/sda1`` for regular devices.
 
 
+**zap**
+Zaps the given logical volume or partition. If given a path to a logical
+volume it must be in the format of vg/lv. Any filesystems present
+on the given lv or partition will be removed and all data will be purged.
+
+However, the lv or partition will be kept intact.
+
+Usage, for logical volumes::
+
+      ceph-volume lvm zap {vg/lv}
+
+Usage, for logical partitions::
+
+      ceph-volume lvm zap /dev/sdc1
+
+Positional arguments:
+
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
+  ``/path/to/sda1`` for regular devices.
+
 Availability
 ============
 
