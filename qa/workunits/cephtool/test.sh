@@ -2347,7 +2347,7 @@ function test_mon_cephdf_commands()
   # pool section:
   # RAW USED The near raw used per pool in raw total
 
-  ceph osd pool create cephdf_for_test 32 32 replicated
+  ceph osd pool create cephdf_for_test 1 1 replicated
   ceph osd pool application enable cephdf_for_test rados
   ceph osd pool set cephdf_for_test size 2
 
