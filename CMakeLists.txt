@@ -344,31 +344,11 @@ set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
 CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-# nss or cryptopp?
-option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
-if (${WITH_NSS})
-  find_package(NSS REQUIRED)
-    set(USE_NSS 1)
-    find_package(NSPR REQUIRED)
-    set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-else ()
-  find_package(cryptopp REQUIRED)
-    set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
-    set(USE_CRYPTOPP 1)
-endif (${WITH_NSS})
-
-option(WITH_SSL "SSL build selected" ON)
-if(USE_NSS)
-  #nss
-  set(SSL_LIBRARIES ${NSS_LIBRARIES})
-  message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
-else(USE_NSS)
-  #openssl
-  find_package(OpenSSL REQUIRED)
-  set(USE_OPENSSL ON)
-  set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
-  message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
-endif(USE_NSS)
+find_package(NSS REQUIRED)
+find_package(NSPR REQUIRED)
+set(USE_NSS 1)
+set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
+set(SSL_LIBRARIES ${NSS_LIBRARIES})
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
@@ -417,10 +397,7 @@ endif(WITH_RADOSGW)
 
 
 if (WITH_RADOSGW)
-  if (NOT DEFINED OPENSSL_FOUND)
-    message(STATUS "Looking for openssl anyways, because radosgw selected")
-    find_package(OpenSSL)
-  endif()
+  find_package(OpenSSL)
   if (OPENSSL_FOUND)
     execute_process(
       COMMAND
