@@ -2369,7 +2369,7 @@ void pg_stat_t::dump_brief(Formatter *f) const
 
 void pg_stat_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(25, 22, bl);
+  ENCODE_START(24, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -2410,9 +2410,10 @@ void pg_stat_t::encode(bufferlist &bl) const
   encode(last_peered, bl);
   encode(last_became_peered, bl);
   encode(pin_stats_invalid, bl);
-  encode(state, bl);
-  encode(purged_snaps, bl);
   encode(snaptrimq_len, bl);
+  __u32 top_state = (state >> 32);
+  encode(top_state, bl);
+  encode(purged_snaps, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2468,14 +2469,14 @@ void pg_stat_t::decode(bufferlist::iterator &bl)
   decode(tmp, bl);
   pin_stats_invalid = tmp;
   if (struct_v >= 23) {
-    decode(state, bl);
-  } else {
-    state = old_state;
-  }
-  if (struct_v >= 24) {
-    decode(purged_snaps, bl);
-    if (struct_v >= 25) {
-      decode(snaptrimq_len, bl);
+    decode(snaptrimq_len, bl);
+    if (struct_v >= 24) {
+      __u32 top_state;
+      decode(top_state, bl);
+      state = (uint64_t)old_state | ((uint64_t)top_state << 32);
+      decode(purged_snaps, bl);
+    } else {
+      state = old_state;
     }
   }
   DECODE_FINISH(bl);
