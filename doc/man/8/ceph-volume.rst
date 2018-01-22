@@ -108,6 +108,33 @@ Positional arguments:
 
 * <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
 
+**list**
+List devices or logical volumes associated with Ceph. An association is
+determined if a device has information relating to an OSD. This is
+verified by querying LVM's metadata and correlating it with devices.
+
+The lvs associated with the OSD need to have been prepared previously by
+ceph-volume so that all needed tags and metadata exist.
+
+Usage::
+
+    ceph-volume lvm list
+
+List a particular device, reporting all metadata about it::
+
+    ceph-volume lvm list /dev/sda1
+
+List a logical volume, along with all its metadata (vg is a volume
+group, and lv the logical volume name)::
+
+    ceph-volume lvm list {vg/lv}
+
+Positional arguments:
+
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
+  ``/path/to/sda1`` for regular devices.
+
+
 Availability
 ============
 
