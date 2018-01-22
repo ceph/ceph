@@ -55,6 +55,9 @@ You can see currently enabled modules with::
 
   $ ceph mgr module ls
 
+Currently you will need to manually generate the frontend code.
+Instructions can be found in `./frontend/README.md`.
+
 In order to be able to log in, you need to define a username and password, which
 will be stored in the MON's configuration database::
 

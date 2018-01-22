@@ -58,7 +58,18 @@ class Module(MgrModule):
         cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
                                                    Auth.check_auth)
 
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        fe_dir = os.path.join(current_dir, 'frontend/dist')
+        config = {
+            '/': {
+                "tools.staticdir.on": True,
+                'tools.staticdir.dir': fe_dir,
+                'tools.staticdir.index': "index.html"
+            }
+        }
+
         cherrypy.tree.mount(Module.ApiRoot(self), "/api")
+        cherrypy.tree.mount(Module.StaticRoot(), '/', config=config)
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
         cherrypy.engine.block()
@@ -88,3 +99,6 @@ class Module(MgrModule):
                                 .format(ctrl.__name__, ctrl._cp_path_))
                 ins = ctrl()
                 setattr(Module.ApiRoot, ctrl._cp_path_, ins)
+
+    class StaticRoot(object):
+        pass
