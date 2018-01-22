@@ -2371,7 +2371,8 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     OSDOp& osd_op = *p;
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
-	op.op == CEPH_OSD_OP_SET_CHUNK) {
+	op.op == CEPH_OSD_OP_SET_CHUNK || 
+	op.op == CEPH_OSD_OP_TIER_PROMOTE) {
       return cache_result_t::NOOP;
     }
   }
@@ -2381,6 +2382,10 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     if (op->may_write() || write_ordered) {
       do_proxy_write(op, obc);
     } else {
+      // promoted object 
+      if (obc->obs.oi.size != 0) {
+	return cache_result_t::NOOP;
+      }
       do_proxy_read(op, obc);
     }
     return cache_result_t::HANDLED_PROXY;
@@ -3557,17 +3562,48 @@ class PromoteManifestCallback: public PrimaryLogPG::CopyCallback {
   ObjectContextRef obc;
   PrimaryLogPG *pg;
   utime_t start;
+  PrimaryLogPG::OpContext *ctx;
+  PrimaryLogPG::CopyCallbackResults promote_results;
 public:
-  PromoteManifestCallback(ObjectContextRef obc_, PrimaryLogPG *pg_)
+  PromoteManifestCallback(ObjectContextRef obc_, PrimaryLogPG *pg_, PrimaryLogPG::OpContext *ctx = NULL)
     : obc(obc_),
       pg(pg_),
-      start(ceph_clock_now()) {}
+      start(ceph_clock_now()), ctx(ctx) {}
 
   void finish(PrimaryLogPG::CopyCallbackResults results) override {
     PrimaryLogPG::CopyResults *results_data = results.get<1>();
     int r = results.get<0>();
-    pg->finish_promote_manifest(r, results_data, obc);
+    if (ctx) {
+      promote_results = results;
+      pg->execute_ctx(ctx);
+    } else {
+      pg->finish_promote_manifest(r, results_data, obc);
+    }
     pg->osd->logger->tinc(l_osd_tier_promote_lat, ceph_clock_now() - start);
+  }
+  friend struct PromoteFinisher;
+};
+
+struct PromoteFinisher : public PrimaryLogPG::OpFinisher {
+  PromoteManifestCallback *promote_callback;
+
+  PromoteFinisher(PromoteManifestCallback *promote_callback)
+    : promote_callback(promote_callback) {
+  }
+
+  int execute() override {
+    if (promote_callback->ctx->obc->obs.oi.manifest.is_redirect()) {
+      promote_callback->ctx->pg->finish_promote(promote_callback->promote_results.get<0>(),
+						promote_callback->promote_results.get<1>(),
+						promote_callback->obc);
+    } else if (promote_callback->ctx->obc->obs.oi.manifest.is_chunked()) {
+      promote_callback->ctx->pg->finish_promote_manifest(promote_callback->promote_results.get<0>(),
+						promote_callback->promote_results.get<1>(),
+						promote_callback->obc);
+    } else {
+      assert(0 == "unrecognized manifest type");
+    }
+    return 0;
   }
 };
 
@@ -3611,15 +3647,24 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
   }
 
   CopyCallback *cb;
-  object_locator_t my_oloc = oloc;
-  my_oloc.pool = pool.info.tier_of;
+  object_locator_t my_oloc;
+  hobject_t src_hoid;
   if (!obc->obs.oi.has_manifest()) {
+    my_oloc = oloc;
+    my_oloc.pool = pool.info.tier_of;
+    src_hoid = obc->obs.oi.soid;
     cb = new PromoteCallback(obc, this);
   } else {
     if (obc->obs.oi.manifest.is_chunked()) {
+      src_hoid = obc->obs.oi.soid;
       cb = new PromoteManifestCallback(obc, this);
+    } else if (obc->obs.oi.manifest.is_redirect()) {
+      object_locator_t src_oloc(obc->obs.oi.manifest.redirect_target);
+      my_oloc = src_oloc;
+      src_hoid = obc->obs.oi.manifest.redirect_target;
+      cb = new PromoteCallback(obc, this);
     } else {
-      assert(0);
+      assert(0 == "unrecognized manifest type");
     }
   }
 
@@ -3627,7 +3672,7 @@ void PrimaryLogPG::promote_object(ObjectContextRef obc,
                    CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
                    CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |
                    CEPH_OSD_COPY_FROM_FLAG_RWORDERED;
-  start_copy(cb, obc, obc->obs.oi.soid, my_oloc, 0, flags,
+  start_copy(cb, obc, src_hoid, my_oloc, 0, flags,
 	     obc->obs.oi.soid.snap == CEPH_NOSNAP,
 	     src_fadvise_flags, 0);
 
@@ -5492,6 +5537,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_PIN:
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
+    case CEPH_OSD_OP_TIER_PROMOTE:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -6680,6 +6726,64 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	dout(10) << "set-chunked oid:" << oi.soid << " user_version: " << oi.user_version 
 		 << " chunk_info: " << chunk_info << dendl;
+      }
+
+      break;
+
+    case CEPH_OSD_OP_TIER_PROMOTE:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < CEPH_RELEASE_LUMINOUS) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (!obs.oi.has_manifest()) {
+	  result = 0;
+	  break;
+	}
+
+	if (op_finisher == nullptr) {
+	  PromoteManifestCallback *cb;
+	  object_locator_t my_oloc;
+	  hobject_t src_hoid;
+
+	  if (obs.oi.manifest.is_chunked()) {
+	    src_hoid = obs.oi.soid;
+	    cb = new PromoteManifestCallback(ctx->obc, this, ctx);
+	  } else if (obs.oi.manifest.is_redirect()) {
+	    object_locator_t src_oloc(obs.oi.manifest.redirect_target);
+	    my_oloc = src_oloc;
+	    src_hoid = obs.oi.manifest.redirect_target;
+	    cb = new PromoteManifestCallback(ctx->obc, this, ctx);
+	  } else {
+	    assert(0 == "unrecognized manifest type");
+	  }
+          ctx->op_finishers[ctx->current_osd_subop_num].reset(
+            new PromoteFinisher(cb));
+	  unsigned flags = CEPH_OSD_COPY_FROM_FLAG_IGNORE_OVERLAY |
+			   CEPH_OSD_COPY_FROM_FLAG_IGNORE_CACHE |
+			   CEPH_OSD_COPY_FROM_FLAG_MAP_SNAP_CLONE |
+			   CEPH_OSD_COPY_FROM_FLAG_RWORDERED;
+	  unsigned src_fadvise_flags = LIBRADOS_OP_FLAG_FADVISE_SEQUENTIAL;
+	  start_copy(cb, ctx->obc, src_hoid, my_oloc, 0, flags,
+		     obs.oi.soid.snap == CEPH_NOSNAP,
+		     src_fadvise_flags, 0);
+
+	  dout(10) << "tier-promote oid:" << oi.soid << " manifest: " << obs.oi.manifest << dendl;
+	  result = -EINPROGRESS;
+	} else {
+	  result = op_finisher->execute();
+	  assert(result == 0);
+	  ctx->op_finishers.erase(ctx->current_osd_subop_num);
+	}
       }
 
       break;
@@ -8426,8 +8530,14 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
   if (!obc->obs.oi.has_manifest()) {
     _copy_some(obc, cop);
   } else {
-    auto p = obc->obs.oi.manifest.chunk_map.begin();
-    _copy_some_manifest(obc, cop, p->first);
+    if (obc->obs.oi.manifest.is_redirect()) {
+      _copy_some(obc, cop);
+    } else if (obc->obs.oi.manifest.is_chunked()) {
+      auto p = obc->obs.oi.manifest.chunk_map.begin();
+      _copy_some_manifest(obc, cop, p->first);
+    } else {
+      assert(0 == "unrecognized manifest type");
+    }
   }
 }
 
@@ -8814,7 +8924,6 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
   if (obj_cop->failed) {
     return;
   }                                                                                                                  
-
   if (!chunk_data.outdata.length()) {
     r = -EIO;
     obj_cop->failed = true;
@@ -8831,6 +8940,18 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 
   {
     OpContextUPtr ctx = simple_opc_create(obj_cop->obc);
+    if (!ctx->lock_manager.take_write_lock(
+	  obj_cop->obc->obs.oi.soid,
+	  obj_cop->obc)) {
+      // recovery op can take read lock. 
+      // so need to wait for recovery completion 
+      r = -EAGAIN;
+      obj_cop->failed = true;
+      close_op_ctx(ctx.release());
+      goto out;
+    }
+    dout(20) << __func__ << " took lock on obc, " << obj_cop->obc->rwstate << dendl;
+
     PGTransaction *t = ctx->op_t.get();
     ObjectState& obs = ctx->new_obs;
     for (auto p : obj_cop->chunk_cops) {
@@ -8842,10 +8963,10 @@ void PrimaryLogPG::process_copy_chunk_manifest(hobject_t oid, ceph_tid_t tid, in
 	      p.second->dest_obj_fadvise_flags);
       dout(20) << __func__ << " offset: " << p.second->cursor.data_offset 
 	      << " length: " << sub_chunk.outdata.length() << dendl;
-      sub_chunk.outdata.clear();
       write_update_size_and_usage(ctx->delta_stats, obs.oi, ctx->modified_ranges,
 				  p.second->cursor.data_offset, sub_chunk.outdata.length());
       obs.oi.manifest.chunk_map[p.second->cursor.data_offset].flags = 0; // clean
+      sub_chunk.outdata.clear();
     }
     obs.oi.clear_data_digest();
     ctx->at_version = get_next_version(); 
@@ -9159,7 +9280,9 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
   OpContextUPtr tctx =  simple_opc_create(obc);
   tctx->at_version = get_next_version();
 
-  ++tctx->delta_stats.num_objects;
+  if (!obc->obs.oi.has_manifest()) {
+    ++tctx->delta_stats.num_objects;
+  }
   if (soid.snap < CEPH_NOSNAP)
     ++tctx->delta_stats.num_object_clones;
   tctx->new_obs.exists = true;
@@ -9246,7 +9369,7 @@ void PrimaryLogPG::finish_promote_manifest(int r, CopyResults *results,
   dout(10) << __func__ << " " << soid << " r=" << r
 	   << " uv" << results->user_version << dendl;
 
-  if (r == -ECANCELED) {
+  if (r == -ECANCELED || r == -EAGAIN) {
     return;
   }
 

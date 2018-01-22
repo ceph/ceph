@@ -625,6 +625,12 @@ void librados::ObjectWriteOperation::set_chunk(uint64_t src_offset,
 	       tgt_ioctx.io_ctx_impl->oloc, object_t(tgt_oid), tgt_offset);
 }
 
+void librados::ObjectWriteOperation::tier_promote()
+{
+  ::ObjectOperation *o = &impl->o;
+  o->tier_promote();
+}
+
 void librados::ObjectWriteOperation::tmap_put(const bufferlist &bl)
 {
   ::ObjectOperation *o = &impl->o;

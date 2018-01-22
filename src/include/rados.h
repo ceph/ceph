@@ -313,6 +313,7 @@ extern int ceph_release_from_features(uint64_t features);
 	/* Extensible */						    \
 	f(SET_REDIRECT,	__CEPH_OSD_OP(WR, DATA, 39),	"set-redirect")	    \
 	f(SET_CHUNK,	__CEPH_OSD_OP(WR, DATA, 40),	"set-chunk")	    \
+	f(TIER_PROMOTE,	__CEPH_OSD_OP(WR, DATA, 41),	"tier-promote")	    \
 									    \
 	/** attrs **/							    \
 	/* read */							    \
