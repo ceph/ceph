@@ -19,7 +19,7 @@ need to be supplied. For example::
 
     ceph-volume lvm activate --bluestore 0 0263644D-0BF1-4D6D-BC34-28BD98AE3BC8
 
-.. note:: The UUID is stored in the ``osd_fsid`` file in the OSD path, which is
+.. note:: The UUID is stored in the ``fsid`` file in the OSD path, which is
           generated when :ref:`ceph-volume-lvm-prepare` is used.
 
 requiring uuids
