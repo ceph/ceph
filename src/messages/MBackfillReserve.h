@@ -27,6 +27,7 @@ public:
     REQUEST = 0,
     GRANT = 1,
     REJECT = 2,
+    CANCEL = 3
   };
   uint32_t type;
   uint32_t priority;
@@ -56,6 +57,9 @@ public:
       break;
     case REJECT:
       out << "REJECT ";
+      break;
+    case CANCEL:
+      out << "CANCEL ";
       break;
     }
     out << " pgid: " << pgid << ", query_epoch: " << query_epoch;

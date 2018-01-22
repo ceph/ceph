@@ -1577,7 +1577,19 @@ public:
       *out << "DeferRecovery: delay " << delay;
     }
   };
-
+  struct UnfoundBackfill : boost::statechart::event<UnfoundBackfill> {
+    explicit UnfoundBackfill() {}
+    void print(std::ostream *out) const {
+      *out << "UnfoundBackfill";
+    }
+  };
+  struct UnfoundRecovery : boost::statechart::event<UnfoundRecovery> {
+    explicit UnfoundRecovery() {}
+    void print(std::ostream *out) const {
+      *out << "UnfoundRecovery";
+    }
+  };
+protected:
   TrivialEvent(Initialize)
   TrivialEvent(Load)
   TrivialEvent(GotInfo)
@@ -1855,7 +1867,9 @@ public:
 	boost::statechart::custom_reaction< Backfilled >,
 	boost::statechart::custom_reaction< AllReplicasActivated >,
 	boost::statechart::custom_reaction< DeferRecovery >,
-	boost::statechart::custom_reaction< DeferBackfill >
+	boost::statechart::custom_reaction< DeferBackfill >,
+	boost::statechart::custom_reaction< UnfoundRecovery >,
+	boost::statechart::custom_reaction< UnfoundBackfill >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1871,6 +1885,12 @@ public:
 	return discard_event();
       }
       boost::statechart::result react(const DeferBackfill& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const UnfoundRecovery& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const UnfoundBackfill& evt) {
 	return discard_event();
       }
     };
@@ -1901,11 +1921,13 @@ public:
       typedef boost::mpl::list<
 	boost::statechart::transition< Backfilled, Recovered >,
 	boost::statechart::custom_reaction< DeferBackfill >,
+	boost::statechart::custom_reaction< UnfoundBackfill >,
 	boost::statechart::custom_reaction< RemoteReservationRejected >
 	> reactions;
       explicit Backfilling(my_context ctx);
       boost::statechart::result react(const RemoteReservationRejected& evt);
       boost::statechart::result react(const DeferBackfill& evt);
+      boost::statechart::result react(const UnfoundBackfill& evt);
       void exit();
     };
 
@@ -1945,10 +1967,15 @@ public:
     struct NotRecovering : boost::statechart::state< NotRecovering, Active>, NamedState {
       typedef boost::mpl::list<
 	boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-	boost::statechart::custom_reaction< DeferRecovery >
+	boost::statechart::custom_reaction< DeferRecovery >,
+	boost::statechart::custom_reaction< UnfoundRecovery >
 	> reactions;
       explicit NotRecovering(my_context ctx);
       boost::statechart::result react(const DeferRecovery& evt) {
+	/* no-op */
+	return discard_event();
+      }
+      boost::statechart::result react(const UnfoundRecovery& evt) {
 	/* no-op */
 	return discard_event();
       }
@@ -1968,7 +1995,9 @@ public:
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< Activate >,
 	boost::statechart::custom_reaction< DeferRecovery >,
-	boost::statechart::custom_reaction< DeferBackfill >
+	boost::statechart::custom_reaction< DeferBackfill >,
+	boost::statechart::custom_reaction< UnfoundRecovery >,
+	boost::statechart::custom_reaction< UnfoundBackfill >
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const MInfoRec& infoevt);
@@ -1980,6 +2009,12 @@ public:
 	return discard_event();
       }
       boost::statechart::result react(const DeferBackfill& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const UnfoundRecovery& evt) {
+	return discard_event();
+      }
+      boost::statechart::result react(const UnfoundBackfill& evt) {
 	return discard_event();
       }
     };
@@ -2049,6 +2084,7 @@ public:
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< AllReplicasRecovered >,
 	boost::statechart::custom_reaction< DeferRecovery >,
+	boost::statechart::custom_reaction< UnfoundRecovery >,
 	boost::statechart::custom_reaction< RequestBackfill >
 	> reactions;
       explicit Recovering(my_context ctx);
@@ -2056,6 +2092,7 @@ public:
       void release_reservations(bool cancel = false);
       boost::statechart::result react(const AllReplicasRecovered &evt);
       boost::statechart::result react(const DeferRecovery& evt);
+      boost::statechart::result react(const UnfoundRecovery& evt);
       boost::statechart::result react(const RequestBackfill &evt);
     };
 
@@ -2343,17 +2380,18 @@ public:
   bool should_send_notify() const { return send_notify; }
 
   int get_state() const { return state; }
-  bool       is_active() const { return state_test(PG_STATE_ACTIVE); }
-  bool       is_activating() const { return state_test(PG_STATE_ACTIVATING); }
-  bool       is_peering() const { return state_test(PG_STATE_PEERING); }
-  bool       is_down() const { return state_test(PG_STATE_DOWN); }
-  bool       is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
-  bool       is_clean() const { return state_test(PG_STATE_CLEAN); }
-  bool       is_degraded() const { return state_test(PG_STATE_DEGRADED); }
-  bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
-
-  bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
-  bool       is_peered() const {
+  bool is_active() const { return state_test(PG_STATE_ACTIVE); }
+  bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
+  bool is_peering() const { return state_test(PG_STATE_PEERING); }
+  bool is_down() const { return state_test(PG_STATE_DOWN); }
+  bool is_recovery_unfound() const { return state_test(PG_STATE_RECOVERY_UNFOUND); }
+  bool is_backfill_unfound() const { return state_test(PG_STATE_BACKFILL_UNFOUND); }
+  bool is_incomplete() const { return state_test(PG_STATE_INCOMPLETE); }
+  bool is_clean() const { return state_test(PG_STATE_CLEAN); }
+  bool is_degraded() const { return state_test(PG_STATE_DEGRADED); }
+  bool is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
+  bool is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+  bool is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
 
@@ -2536,6 +2574,9 @@ public:
   void handle_create(RecoveryCtx *rctx);
   void handle_loaded(RecoveryCtx *rctx);
   void handle_query_state(Formatter *f);
+
+  // more work after the above, but with a RecoveryCtx
+  void find_unfound(epoch_t queued, RecoveryCtx *rctx);
 
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
