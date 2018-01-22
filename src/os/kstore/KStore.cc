@@ -1235,7 +1235,7 @@ int KStore::_do_read(
     _do_read_stripe(o, offset - stripe_off, &stripe);
     dout(30) << __func__ << " stripe " << offset - stripe_off << " got "
 	     << stripe.length() << dendl;
-    unsigned swant = std::min(stripe_size - stripe_off, length);
+    unsigned swant = std::min<unsigned>(stripe_size - stripe_off, length);
     if (stripe.length()) {
       if (swant == stripe.length()) {
 	bl.claim_append(stripe);
