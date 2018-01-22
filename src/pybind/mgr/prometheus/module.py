@@ -3,8 +3,9 @@ import json
 import errno
 import math
 import os
+import socket
 from collections import OrderedDict
-from mgr_module import MgrModule
+from mgr_module import MgrModule, MgrStandbyModule
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -137,8 +138,6 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self.notified = False
-        self.serving = False
         self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
@@ -229,10 +228,6 @@ class Module(MgrModule):
             )
 
         return metrics
-
-    def shutdown(self):
-        self.serving = False
-        pass
 
     def get_health(self):
         health = json.loads(self.get('health')['json'])
@@ -389,10 +384,13 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def metrics(self):
-                metrics = global_instance().collect()
-                cherrypy.response.headers['Content-Type'] = 'text/plain'
-                if metrics:
-                    return self.format_metrics(metrics)
+                if global_instance().have_mon_connection():
+                    metrics = global_instance().collect()
+                    cherrypy.response.headers['Content-Type'] = 'text/plain'
+                    if metrics:
+                        return self.format_metrics(metrics)
+                else:
+                    raise cherrypy.HTTPError(503, 'No MON connection')
 
         server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
         server_port = self.get_localized_config('server_port', DEFAULT_PORT)
@@ -401,11 +399,72 @@ class Module(MgrModule):
             (server_addr, server_port)
         )
 
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri('http://{0}:{1}/'.format(
+            socket.getfqdn() if server_addr == '::' else server_addr,
+            server_port
+        ))
+
         cherrypy.config.update({
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
             'engine.autoreload.on': False
         })
         cherrypy.tree.mount(Root(), "/")
+        self.log.info('Starting engine...')
         cherrypy.engine.start()
+        self.log.info('Engine started.')
         cherrypy.engine.block()
+
+    def shutdown(self):
+        self.log.info('Stopping engine...')
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.exit()
+        self.log.info('Stopped engine')
+
+
+class StandbyModule(MgrStandbyModule):
+    def serve(self):
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'engine.autoreload.on': False
+        })
+
+        module = self
+
+        class Root(object):
+
+            @cherrypy.expose
+            def index(self):
+                active_uri = module.get_active_uri()
+                return '''<!DOCTYPE html>
+<html>
+	<head><title>Ceph Exporter</title></head>
+	<body>
+		<h1>Ceph Exporter</h1>
+        <p><a href='{}metrics'>Metrics</a></p>
+	</body>
+</html>'''.format(active_uri)
+
+            @cherrypy.expose
+            def metrics(self):
+                cherrypy.response.headers['Content-Type'] = 'text/plain'
+                return ''
+
+        cherrypy.tree.mount(Root(), '/', {})
+        self.log.info('Starting engine...')
+        cherrypy.engine.start()
+        self.log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        self.log.info('Engine started.')
+
+    def shutdown(self):
+        self.log.info("Stopping engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        self.log.info("Stopped engine")
