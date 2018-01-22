@@ -50,6 +50,7 @@ static string obj_to_aws_path(const rgw_obj& obj)
             "host_style" <path | virtual>,
             "acl_mappings": [    # list of source uids and how they map into destination uids in the dest objects acls
             {
+              "type" : <id | email | uri>,   #  optional, default is id
               "source_id": <id>,
               "dest_id": <id>
             } ...
@@ -99,11 +100,31 @@ struct AWSSyncConfig_Connection {
   HostStyle host_style{PathStyle};
 
   struct ACLMapping {
+    ACLGranteeTypeEnum type{ACL_TYPE_CANON_USER};
     string source_id;
     string dest_id;
 
+    ACLMapping(ACLGranteeTypeEnum t,
+               const string& s,
+               const string& d) : type(t),
+                                  source_id(s),
+                                  dest_id(d) {}
+
     void dump_conf(CephContext *cct, JSONFormatter& jf) const {
       Formatter::ObjectSection os(jf, "acl_mapping");
+      string s;
+      switch (type) {
+        case ACL_TYPE_EMAIL_USER:
+          s = "email";
+          break;
+        case ACL_TYPE_GROUP:
+          s = "uri";
+          break;
+        default:
+          s = "id";
+          break;
+      }
+      encode_json("type", s, &jf);
       encode_json("source_id", source_id, &jf);
       encode_json("dest_id", dest_id, &jf);
     }
@@ -125,7 +146,16 @@ struct AWSSyncConfig_Connection {
 
     for (auto c : config["acl_mappings"].array()) {
       const string& source_id = c["source_id"];
-      acl_mappings[source_id] = ACLMapping{source_id, c["dest_id"]};
+      const string& type_str = c["type"];
+      ACLGranteeTypeEnum type;
+      if (type_str == "email") {
+        type = ACL_TYPE_EMAIL_USER;
+      } else if (type_str == "uri") {
+        type = ACL_TYPE_GROUP;
+      } else {
+        type = ACL_TYPE_CANON_USER;
+      }
+      acl_mappings.emplace(std::make_pair(source_id, ACLMapping(type, source_id, c["dest_id"])));
     }
   }
   void dump_conf(CephContext *cct, JSONFormatter& jf) const {
@@ -446,7 +476,12 @@ struct AWSSyncInstanceEnv {
   string id;
   std::unique_ptr<RGWRESTConn> default_conn;
 
-  map<string, std::unique_ptr<RGWRESTConn> > connections;
+  struct Connection {
+    AWSSyncConfig_Connection conf;
+    std::unique_ptr<RGWRESTConn> conn;
+  };
+
+  map<string, Connection> connections;
 
   AWSSyncInstanceEnv(const AWSSyncConfig& _conf) : conf(_conf) {}
 
@@ -469,23 +504,27 @@ struct AWSSyncInstanceEnv {
 
     for (auto i : conf.connections) {
       auto& c = i.second;
-      connections[c.connection_id].reset(new S3RESTConn(sync_env->cct,
-                                                        sync_env->store,
-                                                        id,
-                                                        { c.endpoint },
-                                                        c.key,
-                                                        c.host_style));
+
+      auto& dest = connections[c.connection_id];
+      dest.conn.reset(new S3RESTConn(sync_env->cct,
+                                     sync_env->store,
+                                     id,
+                                     { c.endpoint },
+                                     c.key,
+                                     c.host_style));
+      dest.conf = c;
 
     }
   }
 
-  int get_conn(RGWDataSyncEnv *sync_env, const rgw_bucket& bucket, RGWRESTConn **connection) const {
+  int get_conn(RGWDataSyncEnv *sync_env, const rgw_bucket& bucket, const AWSSyncConfig_Connection **conn_conf, RGWRESTConn **connection) const {
     const AWSSyncConfig::Target *target;
 
     if (!conf.find_target(bucket, &target) ||
         target->connection_id.empty()) {
       ldout(sync_env->cct, 20) << "Couldn't find configured target connection for bucket " << bucket.name << ", using default connection" << dendl;
 
+      *conn_conf = conf.default_conf.conn.get();
       *connection = default_conn.get();
       return 0;
     }
@@ -497,7 +536,8 @@ struct AWSSyncInstanceEnv {
       ldout(sync_env->cct, 0) << "ERROR: connection " << target->connection_id << " is not configured" << dendl;
       return -EINVAL;
     }
-    *connection = iter->second.get();
+    *connection = iter->second.conn.get();
+    *conn_conf = &iter->second.conf;
     return 0;
   }
 };
@@ -603,6 +643,7 @@ public:
 class RGWAWSStreamPutCRF : public RGWStreamWriteHTTPResourceCRF
 {
   RGWDataSyncEnv *sync_env;
+  const AWSSyncConfig_Connection *conf;
   RGWRESTConn *conn;
   rgw_obj dest_obj;
   string etag;
@@ -611,9 +652,10 @@ public:
                                RGWCoroutinesEnv *_env,
                                RGWCoroutine *_caller,
                                RGWDataSyncEnv *_sync_env,
+                               const AWSSyncConfig_Connection *_conf,
                                RGWRESTConn* _conn,
                                rgw_obj& _dest_obj) : RGWStreamWriteHTTPResourceCRF(_cct, _env, _caller, _sync_env->http_manager),
-                                                     sync_env(_sync_env), conn(_conn), dest_obj(_dest_obj) {
+                                                     sync_env(_sync_env), conf(_conf), conn(_conn), dest_obj(_dest_obj) {
   }
 
   int init() {
@@ -646,12 +688,22 @@ public:
     map<int, vector<string> > access_map;
 
     for (auto& grant : acl.get_grant_map()) {
-      auto& grantee = grant.first;
+      auto& orig_grantee = grant.first;
       auto& perm = grant.second;
+
+      string grantee;
+
+      auto iter = conf->acl_mappings.find(orig_grantee);
+      if (iter == conf->acl_mappings.end()) {
+        ldout(sync_env->cct, 20) << "acl_mappings: Could not find " << orig_grantee << " .. ignoring" << dendl;
+        continue;
+      }
+
+      grantee = iter->second.dest_id;
 
       string type;
 
-      switch (perm.get_type().get_type()) {
+      switch (iter->second.type) {
         case ACL_TYPE_CANON_USER:
           type = "id";
           break;
@@ -712,6 +764,8 @@ public:
         s.append(viter);
       }
 
+      ldout(sync_env->cct, 20) << "acl_mappings: set acl: " << header_str << "=" << s << dendl;
+
       new_attrs[header_str] = s;
     }
 
@@ -743,6 +797,7 @@ public:
 class RGWAWSStreamObjToCloudPlainCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   RGWRESTConn *source_conn;
+  const AWSSyncConfig_Connection *dest_conf;
   RGWRESTConn *dest_conn;
   rgw_obj src_obj;
   rgw_obj dest_obj;
@@ -757,10 +812,12 @@ public:
                                 RGWRESTConn *_source_conn,
                                 const rgw_obj& _src_obj,
                                 const rgw_sync_aws_src_obj_properties& _src_properties,
+                                const AWSSyncConfig_Connection *_dest_conf,
                                 RGWRESTConn *_dest_conn,
                                 const rgw_obj& _dest_obj) : RGWCoroutine(_sync_env->cct),
                                                    sync_env(_sync_env),
                                                    source_conn(_source_conn),
+                                                   dest_conf(_dest_conf),
                                                    dest_conn(_dest_conn),
                                                    src_obj(_src_obj),
                                                    dest_obj(_dest_obj),
@@ -774,7 +831,7 @@ public:
                                            src_properties));
 
       /* init output */
-      out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conn,
+      out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conf, dest_conn,
                                            dest_obj));
 
       yield call(new RGWStreamSpliceCR(cct, sync_env->http_manager, in_crf, out_crf));
@@ -792,6 +849,7 @@ public:
 class RGWAWSStreamObjToCloudMultipartPartCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   RGWRESTConn *source_conn;
+  const AWSSyncConfig_Connection *dest_conf;
   RGWRESTConn *dest_conn;
   rgw_obj src_obj;
   rgw_obj dest_obj;
@@ -811,6 +869,7 @@ public:
   RGWAWSStreamObjToCloudMultipartPartCR(RGWDataSyncEnv *_sync_env,
                                 RGWRESTConn *_source_conn,
                                 const rgw_obj& _src_obj,
+                                const AWSSyncConfig_Connection *_dest_conf,
                                 RGWRESTConn *_dest_conn,
                                 const rgw_obj& _dest_obj,
                                 const rgw_sync_aws_src_obj_properties& _src_properties,
@@ -819,6 +878,7 @@ public:
                                 string *_petag) : RGWCoroutine(_sync_env->cct),
                                                    sync_env(_sync_env),
                                                    source_conn(_source_conn),
+                                                   dest_conf(_dest_conf),
                                                    dest_conn(_dest_conn),
                                                    src_obj(_src_obj),
                                                    dest_obj(_dest_obj),
@@ -837,7 +897,7 @@ public:
       in_crf->set_range(part_info.ofs, part_info.size);
 
       /* init output */
-      out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conn,
+      out_crf.reset(new RGWAWSStreamPutCRF(cct, get_env(), this, sync_env, dest_conf, dest_conn,
                                            dest_obj));
 
       out_crf->set_multipart(upload_id, part_info.part_num, part_info.size);
@@ -1138,6 +1198,7 @@ class RGWAWSStreamObjToCloudMultipartCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   const AWSSyncConfig& conf;
   RGWRESTConn *source_conn;
+  const AWSSyncConfig_Connection *dest_conf;
   RGWRESTConn *dest_conn;
   rgw_obj src_obj;
   rgw_obj dest_obj;
@@ -1159,6 +1220,7 @@ public:
                                 const AWSSyncConfig& _conf,
                                 RGWRESTConn *_source_conn,
                                 const rgw_obj& _src_obj,
+                                const AWSSyncConfig_Connection *_dest_conf,
                                 RGWRESTConn *_dest_conn,
                                 const rgw_obj& _dest_obj,
                                 uint64_t _obj_size,
@@ -1166,6 +1228,7 @@ public:
                                                    sync_env(_sync_env),
                                                    conf(_conf),
                                                    source_conn(_source_conn),
+                                                   dest_conf(_dest_conf),
                                                    dest_conn(_dest_conn),
                                                    src_obj(_src_obj),
                                                    dest_obj(_dest_obj),
@@ -1224,6 +1287,7 @@ public:
 
           call(new RGWAWSStreamObjToCloudMultipartPartCR(sync_env,
                                                              source_conn, src_obj,
+                                                             dest_conf,
                                                              dest_conn, dest_obj,
                                                              status.src_properties,
                                                              status.upload_id,
@@ -1291,8 +1355,10 @@ int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result
 // maybe use Fetch Remote Obj instead?
 class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   const AWSSyncInstanceEnv& instance;
+
   RGWRESTConn *source_conn{nullptr};
   RGWRESTConn *dest_conn{nullptr};
+  const AWSSyncConfig_Connection *dest_conf{nullptr};
   bufferlist res;
   unordered_map <string, bool> bucket_created;
   string target_bucket_name;
@@ -1351,7 +1417,7 @@ public:
 
       instance.conf.get_target(bucket_info, key, &target_bucket_name, &target_obj_name);
 
-      ret = instance.get_conn(sync_env, bucket_info.bucket, &dest_conn);
+      ret = instance.get_conn(sync_env, bucket_info.bucket, &dest_conf, &dest_conn);
       if (ret < 0) {
         ldout(sync_env->cct, 0) << "ERROR: failed to get dest connection for bucket " << bucket_info.bucket << dendl;
         return set_cr_error(ret);
@@ -1413,9 +1479,11 @@ public:
         if (size < instance.conf.s3.multipart_sync_threshold) {
           call(new RGWAWSStreamObjToCloudPlainCR(sync_env, source_conn, src_obj,
                                                  src_properties,
+                                                 dest_conf,
                                                  dest_conn, dest_obj));
         } else {
-          call(new RGWAWSStreamObjToCloudMultipartCR(sync_env, instance.conf, source_conn, src_obj, dest_conn,
+          call(new RGWAWSStreamObjToCloudMultipartCR(sync_env, instance.conf, source_conn, src_obj,
+                                                     dest_conf, dest_conn,
                                                      dest_obj, size, src_properties));
         }
       }
@@ -1449,6 +1517,7 @@ public:
 class RGWAWSRemoveRemoteObjCBCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env{nullptr};
   RGWRESTConn *dest_conn{nullptr};
+  const AWSSyncConfig_Connection *dest_conf{nullptr};
   RGWBucketInfo bucket_info;
   rgw_obj_key key;
   ceph::real_time mtime;
@@ -1467,7 +1536,7 @@ public:
       yield {
         string path =  instance.conf.get_path(bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
-        ret = instance.get_conn(sync_env, bucket_info.bucket, &dest_conn);
+        ret = instance.get_conn(sync_env, bucket_info.bucket, &dest_conf, &dest_conn);
         if (ret < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to get dest connection for bucket " << bucket_info.bucket << dendl;
           return set_cr_error(ret);

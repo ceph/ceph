@@ -513,14 +513,20 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>
 int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
                                       RGWAccessControlPolicy& policy, bool send)
 {
+  map<string, string> other_headers;
+
   /* merge send headers */
   for (auto& attr: http_attrs) {
     const string& val = attr.second;
     const string& name = lowercase_dash_http_attr(attr.first);
-    if (name.compare(0, sizeof(RGW_AMZ_META_PREFIX) - 1, RGW_AMZ_META_PREFIX) == 0) {
+    if (name.compare(0, sizeof(RGW_AMZ_PREFIX) - 1, RGW_AMZ_PREFIX) == 0) {
       new_env.set(name, val);
       new_info.x_meta_map[name] = val;
     }
+  }
+
+  for (const auto& kv: new_env.get_map()) {
+    headers.emplace_back(kv);
   }
 
   /* update acl headers */
