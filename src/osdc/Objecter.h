@@ -335,13 +335,20 @@ struct ObjectOperation {
     void finish(int r) override {
       bufferlist::iterator iter = bl.begin();
       if (r >= 0) {
-	try {
-	  ::decode(*extents, iter);
-	  ::decode(*data_bl, iter);
-	} catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
-	}
+        // NOTE: it's possible the sub-op has not been executed but the result
+        // code remains zeroed. Avoid the costly exception handling on a
+        // potential IO path.
+        if (bl.length() > 0) {
+	  try {
+	    ::decode(*extents, iter);
+	    ::decode(*data_bl, iter);
+	  } catch (buffer::error& e) {
+	    if (prval)
+              *prval = -EIO;
+	  }
+        } else if (prval) {
+          *prval = -EIO;
+        }
       }
     }
   };
