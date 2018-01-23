@@ -72,9 +72,13 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      auth_registry(g_ceph_context,
+      auth_cluster_registry(g_ceph_context,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :
+                      g_conf->auth_supported),
+      auth_service_registry(g_ceph_context,
+                   g_conf->auth_supported.empty() ?
+                      g_conf->auth_service_required :
                       g_conf->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false)
@@ -146,7 +150,15 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     bool& is_valid,
     CryptoKey& session_key)
 {
-  auto handler = auth_registry.get_handler(protocol);
+  AuthAuthorizeHandler *handler = nullptr;
+  if (peer_type == CEPH_ENTITY_TYPE_OSD ||
+      peer_type == CEPH_ENTITY_TYPE_MON ||
+      peer_type == CEPH_ENTITY_TYPE_MDS ||
+      peer_type == CEPH_ENTITY_TYPE_MGR) {
+    handler = auth_cluster_registry.get_handler(protocol);
+  } else {
+    handler = auth_service_registry.get_handler(protocol);
+  }
   if (!handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;
