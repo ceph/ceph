@@ -335,9 +335,7 @@ void PaxosService::_active()
       return;
     }
   } else {
-    if (!mon->is_leader()) {
-      dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    }
+    dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
   }
 
   // wake up anyone who came in while we were proposing.  note that
