@@ -283,31 +283,40 @@ void objectstore_perf_stat_t::dump(Formatter *f) const
   f->dump_unsigned("apply_latency_ns", os_apply_latency_ns);
 }
 
-void objectstore_perf_stat_t::encode(bufferlist &bl) const
+void objectstore_perf_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  uint32_t commit_latency_ms = os_commit_latency_ns / 1000000;
-  uint32_t apply_latency_ms = os_apply_latency_ns / 1000000;
-  ENCODE_START(2, 1, bl);
-  encode(commit_latency_ms, bl); // for compatibility with older monitor.
-  encode(apply_latency_ms, bl); // for compatibility with older monitor.
-  encode(os_commit_latency_ns, bl);
-  encode(os_apply_latency_ns, bl);
+  uint8_t target_v = 2;
+  if (!HAVE_FEATURE(features, OS_PERF_STAT_NS)) {
+    target_v = 1;
+  }
+  ENCODE_START(target_v, target_v, bl);
+  if (target_v >= 2) {
+    encode(os_commit_latency_ns, bl);
+    encode(os_apply_latency_ns, bl);
+  } else {
+    constexpr auto NS_PER_MS = std::chrono::nanoseconds(1ms).count();
+    uint32_t commit_latency_ms = os_commit_latency_ns / NS_PER_MS;
+    uint32_t apply_latency_ms = os_apply_latency_ns / NS_PER_MS;
+    encode(commit_latency_ms, bl); // for compatibility with older monitor.
+    encode(apply_latency_ms, bl); // for compatibility with older monitor.
+  }
   ENCODE_FINISH(bl);
 }
 
 void objectstore_perf_stat_t::decode(bufferlist::iterator &bl)
 {
   DECODE_START(2, bl);
-  uint32_t commit_latency_ms;
-  uint32_t apply_latency_ms;
-  decode(commit_latency_ms, bl);
-  decode(apply_latency_ms, bl);
   if (struct_v >= 2) {
     decode(os_commit_latency_ns, bl);
     decode(os_apply_latency_ns, bl);
   } else {
-    os_commit_latency_ns = commit_latency_ms * (uint64_t) 1000000;
-    os_apply_latency_ns = apply_latency_ms * (uint64_t) 1000000;
+    uint32_t commit_latency_ms;
+    uint32_t apply_latency_ms;
+    decode(commit_latency_ms, bl);
+    decode(apply_latency_ms, bl);
+    constexpr auto NS_PER_MS = std::chrono::nanoseconds(1ms).count();
+    os_commit_latency_ns = commit_latency_ms * NS_PER_MS;
+    os_apply_latency_ns = apply_latency_ms * NS_PER_MS;
   }
   DECODE_FINISH(bl);
 }
@@ -343,7 +352,7 @@ void osd_stat_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void osd_stat_t::encode(bufferlist &bl) const
+void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(7, 2, bl);
   encode(kb, bl);
@@ -354,7 +363,7 @@ void osd_stat_t::encode(bufferlist &bl) const
   encode(hb_peers, bl);
   encode((uint32_t)0, bl);
   encode(op_queue_age_hist, bl);
-  encode(os_perf_stat, bl);
+  encode(os_perf_stat, bl, features);
   encode(up_from, bl);
   encode(seq, bl);
   encode(num_pgs, bl);
