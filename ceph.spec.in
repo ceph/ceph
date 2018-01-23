@@ -1379,7 +1379,12 @@ fi
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
+%if 0%{with python2}
 %{python_sitelib}/ceph_rest_api.py*
+%else
+%{python3_sitelib}/ceph_rest_api.py
+%{python3_sitelib}/__pycache__/ceph_rest_api.cpython*.py*
+%endif
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
