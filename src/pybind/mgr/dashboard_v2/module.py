@@ -3,6 +3,8 @@
 """
 openATTIC mgr plugin (based on CherryPy)
 """
+
+import bcrypt
 import os
 import cherrypy
 from cherrypy import tools
@@ -23,6 +25,16 @@ class Module(MgrModule):
     """
     Hello.
     """
+
+    COMMANDS = [
+        {
+            "cmd": "dashboard set-login-credentials "
+                   "name=username,type=CephString "
+                   "name=password,type=CephString",
+            "desc": "Set the login credentials",
+            "perm": "w"
+        }
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -52,7 +64,14 @@ class Module(MgrModule):
         self.log.info("Stopped server")
 
     def handle_command(self, cmd):
-        pass
+        if cmd['prefix'] == 'dashboard set-login-credentials':
+            self.set_localized_config('username', cmd['username'])
+            hashed_passwd = bcrypt.hashpw(cmd['password'], bcrypt.gensalt())
+            self.set_localized_config('password', hashed_passwd)
+            return 0, 'Username and password updated', ''
+        else:
+            return (-errno.EINVAL, '', 'Command not found \'{0}\''.format(
+                    cmd['prefix']))
 
     class HelloWorld(object):
 
