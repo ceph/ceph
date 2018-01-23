@@ -6,7 +6,6 @@
 #pragma push_macro("_ASSERT_H")
 #endif
 
-#include <boost/asio.hpp>
 #include <boost/intrusive_ptr.hpp>
 
 #ifdef NEED_ASSERT_H

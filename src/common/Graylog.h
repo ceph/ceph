@@ -4,7 +4,8 @@
 #ifndef __CEPH_LOG_GRAYLOG_H
 #define __CEPH_LOG_GRAYLOG_H
 
-#include <boost/asio.hpp>
+#include <boost/asio/ip/udp.hpp>
+#include <boost/asio/io_service.hpp>
 #include <boost/iostreams/filtering_stream.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 
