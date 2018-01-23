@@ -40,7 +40,8 @@ namespace rwl {
 
 static const uint64_t DEFAULT_POOL_SIZE = 10u<<30;
 static const uint64_t MIN_POOL_SIZE = 1u<<20;
-#define USABLE_SIZE (7.0 / 10)
+static const double USABLE_SIZE = (7.0 / 10);
+static const uint64_t BLOCK_ALLOC_OVERHEAD_BYTES = 16;
 static const uint8_t RWL_POOL_VERSION = 1;
 
 POBJ_LAYOUT_BEGIN(rbd_rwl);
@@ -54,20 +55,20 @@ struct WriteLogPmemEntry {
   uint64_t write_sequence_number;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
-  uint64_t first_pool_block;
+  TOID(uint8_t) write_data;
   struct {
     uint8_t entry_valid :1; /* if 0, this entry is free */
     uint8_t sync_point :1;  /* No data. No write sequence
 			       number. Marks sync point for this sync
 			       gen number */
     uint8_t sequenced :1;   /* write sequence number is valid */
-    uint8_t has_data :1;    /* first_pool_block field is valid */
+    uint8_t has_data :1;    /* write_data field is valid (else ignore) */
     uint8_t unmap :1;       /* has_data will be 0 if this
 			       is an unmap */
   };
   WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : sync_gen_number(0), write_sequence_number(0),
-      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), first_pool_block(0),
+      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), 
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
   }
   WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
@@ -84,8 +85,7 @@ struct WriteLogPmemEntry {
        << "sync_gen_number=" << entry.sync_gen_number << ", "
        << "write_sequence_number=" << entry.write_sequence_number << ", "
        << "image_offset_bytes=" << entry.image_offset_bytes << ", "
-       << "write_bytes=" << entry.write_bytes << ", "
-       << "first_pool_block=" << entry.first_pool_block;
+       << "write_bytes=" << entry.write_bytes;
     return os;
   };
 };
@@ -97,27 +97,25 @@ struct WriteLogPoolRoot {
     };
     uint64_t _u64;
   } header;
-  TOID(uint8_t) data_blocks;	         /* contiguous array of blocks */
   TOID(struct WriteLogPmemEntry) log_entries;   /* contiguous array of log entries */
-  uint64_t block_size;			         /* block size */
-  uint64_t num_blocks;		         /* total data blocks */
-  uint64_t num_log_entries;
-  uint64_t valid_entry_hint;    /* Start looking here for the oldest valid entry */
-  uint64_t free_entry_hint;     /* Start looking here for the next free entry */
+  uint32_t block_size;			         /* block size */
+  uint32_t num_log_entries;
+  uint32_t first_free_entry;     /* Entry following the newest valid entry */
+  uint32_t first_valid_entry;    /* Index of the oldest valid entry in the log */
 };
 
 class WriteLogEntry {
 public:
   WriteLogPmemEntry ram_entry;
-  uint64_t log_entry_index;
   WriteLogPmemEntry *pmem_entry;
-  uint8_t *pmem_block;
+  uint8_t *pmem_buffer;
+  uint32_t log_entry_index;
   uint32_t referring_map_entries;
   /* TODO: occlusion by subsequent writes */
   /* TODO: flush state: portions flushed, in-progress flushes */
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : ram_entry(image_offset_bytes, write_bytes), log_entry_index(0),
-      pmem_entry(NULL), pmem_block(NULL), referring_map_entries(0) {
+    : ram_entry(image_offset_bytes, write_bytes), pmem_entry(NULL), pmem_buffer(NULL),
+      log_entry_index(0), referring_map_entries(0) {
   }
   WriteLogEntry() {} 
   WriteLogEntry(const WriteLogEntry&) = delete;
@@ -127,8 +125,7 @@ public:
 				  WriteLogEntry &entry) {
     os << "ram_entry=[" << entry.ram_entry << "], "
        << "log_entry_index=" << entry.log_entry_index << ", "
-       << "pmem_entry=" << (void*)entry.pmem_entry << ", "
-       << "pmem_block=" << (void*)entry.pmem_block;
+       << "pmem_entry=" << (void*)entry.pmem_entry;
     return os;
   };
 };
@@ -176,6 +173,7 @@ class WriteLogOperation {
 public:
   WriteLogEntry *log_entry;
   bufferlist bl;
+  pobj_action buffer_alloc_action;
   Context *on_write_persist; /* Completion for things waiting on this write to persist */
   WriteLogOperation(WriteLogOperationSet *set, uint64_t image_offset_bytes, uint64_t write_bytes);
   ~WriteLogOperation();
@@ -411,25 +409,20 @@ private:
   PMEMobjpool *m_log_pool;
   uint64_t m_log_pool_size;
   
-  uint64_t m_total_log_entries;
-  uint64_t m_total_blocks;
-  uint64_t m_free_log_entries;
-  uint64_t m_free_blocks;
+  uint32_t m_total_log_entries;
+  uint32_t m_free_log_entries;
 
   ImageWriteback<ImageCtxT> m_image_writeback;
   FileImageCache<ImageCtxT> m_image_cache;
   WriteLogGuard m_write_log_guard;
   
-  /* When m_first_free_entry == m_last_free_entry, the log is empty */
+  /* 
+   * When m_first_free_entry == m_first_valid_entry, the log is
+   * empty. There is always at least one free entry, which can't be
+   * used.
+   */
   uint64_t m_first_free_entry;  /* Entries from here to m_first_valid_entry-1 are free */
   uint64_t m_first_valid_entry; /* Entries from here to m_first_free_entry-1 are valid */
-
-  /* When m_next_free_block == m_last_free_bloock, all blocks are free */
-  uint64_t m_next_free_block; /* Blocks from here to m_last_free_block are free */
-  uint64_t m_last_free_block;
-  
-  uint64_t m_free_entry_hint;
-  uint64_t m_valid_entry_hint;
 
   /* Starts at 0 for a new write log. Incremented on every flush. */
   uint64_t m_current_sync_gen;
@@ -444,7 +437,9 @@ private:
   
   util::AsyncOpTracker m_async_op_tracker;
 
+  mutable Mutex m_log_append_lock;
   mutable Mutex m_lock;
+  
   BlockGuard::BlockIOs m_deferred_block_ios;
   BlockGuard::BlockIOs m_detained_block_ios;
 
@@ -455,8 +450,6 @@ private:
   Finisher m_log_append_finisher;
   Finisher m_on_persist_finisher;
   
-  RWLock m_log_append_lock;
-
   WriteLogOperations m_ops_to_flush; /* Write ops neding flush in local log */
 
   WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
@@ -482,11 +475,11 @@ private:
   void schedule_append(WriteLogOperations &ops);
   void flush_then_append_scheduled_ops(void);
   void schedule_flush_and_append(WriteLogOperations &ops);
-  void flush_pmem_blocks(WriteLogOperations &ops);
+  void flush_pmem_buffer(WriteLogOperations &ops);
   void alloc_op_log_entries(WriteLogOperations &ops);
+  void flush_op_log_entries(WriteLogOperations &ops);
   int append_op_log_entries(WriteLogOperations &ops);
   void complete_op_log_entries(WriteLogOperations &ops, int r);
-  void alloc_and_append_entries(WriteLogOperations &ops);
 };
 
 } // namespace cache

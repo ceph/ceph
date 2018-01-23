@@ -360,22 +360,19 @@ template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
   : m_image_ctx(image_ctx), 
     m_log_pool(NULL), m_log_pool_size(DEFAULT_POOL_SIZE),
-    m_total_log_entries(0), m_total_blocks(0),
-    m_free_log_entries(0), m_free_blocks(0),
+    m_total_log_entries(0), m_free_log_entries(0), 
     m_image_writeback(image_ctx), m_image_cache(image_ctx),
     m_write_log_guard(image_ctx.cct),
     m_first_free_entry(0), m_first_valid_entry(0),
-    m_next_free_block(0), m_last_free_block(0),
-    m_free_entry_hint(0), m_valid_entry_hint(0),
     m_current_sync_gen(0), m_current_sync_point(NULL),
     m_last_op_sequence_num(0),
     m_persist_on_write_until_flush(true), m_persist_on_flush(false),
     m_flush_seen(false),
+    m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock"),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock"),
     m_persist_finisher(image_ctx.cct),
     m_log_append_finisher(image_ctx.cct),
     m_on_persist_finisher(image_ctx.cct),
-    m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock"),
     m_blocks_to_log_entries(image_ctx.cct) {
   m_persist_finisher.start();
   m_log_append_finisher.start();
@@ -551,16 +548,30 @@ template <typename I>
 void ReplicatedWriteLog<I>::append_scheduled_ops(void)
 {
   WriteLogOperations ops;
+  int append_result = 0;
+
   {
     Mutex::Locker locker(m_lock);
-    std::swap(ops, m_ops_to_append);
+    if (m_ops_to_append.empty()) {
+      return;
+    }
+  }
+  {
+    Mutex::Locker locker(m_log_append_lock);
+
+    {
+      Mutex::Locker locker(m_lock);
+      std::swap(ops, m_ops_to_append);
+    }
+    
+    if (ops.size()) {
+      alloc_op_log_entries(ops);
+      append_result = append_op_log_entries(ops);
+    }
   }
 
-  /* Ops subsequently scheduled for flush may finish before these,
-   * which is fine. We're unconcerned with completion order until we
-   * get to the log message append step. */
   if (ops.size()) {
-    alloc_and_append_entries(ops);
+    complete_op_log_entries(ops, append_result);
   }
 }
 
@@ -584,7 +595,7 @@ void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
 }
 
 /*
- * Performs the pme block flush on all scheduled ops, then schedules
+ * Performs the pmem buffer flush on all scheduled ops, then schedules
  * the log event append operation for all of them.
  */
 template <typename I>
@@ -600,7 +611,7 @@ void ReplicatedWriteLog<I>::flush_then_append_scheduled_ops(void)
    * which is fine. We're unconcerned with completion order until we
    * get to the log message append step. */
   if (ops.size()) {
-    flush_pmem_blocks(ops);
+    flush_pmem_buffer(ops);
     schedule_append(ops);
   }
 }
@@ -627,10 +638,10 @@ void ReplicatedWriteLog<I>::schedule_flush_and_append(WriteLogOperations &ops)
  * Flush the pmem regions for the data blocks of a set of operations
  */
 template <typename I>
-void ReplicatedWriteLog<I>::flush_pmem_blocks(WriteLogOperations &ops)
+void ReplicatedWriteLog<I>::flush_pmem_buffer(WriteLogOperations &ops)
 {
   for (auto &operation : ops) {
-    pmemobj_flush(m_log_pool, operation->log_entry->pmem_block, operation->log_entry->ram_entry.write_bytes);
+    pmemobj_flush(m_log_pool, operation->log_entry->pmem_buffer, operation->log_entry->ram_entry.write_bytes);
   }
   /* Drain once for all */
   pmemobj_drain(m_log_pool);
@@ -663,26 +674,73 @@ void ReplicatedWriteLog<I>::alloc_op_log_entries(WriteLogOperations &ops)
 }
 
 /*
- * Write and persist the (already allocated) write log entries for a
- * set of ops.
+ * Flush the persistent write log entries set of ops. The entries must
+ * be contiguous in persistemt memory.
+ */
+template <typename I>
+void ReplicatedWriteLog<I>::flush_op_log_entries(WriteLogOperations &ops)
+{
+  if (ops.empty()) return;
+
+  if (ops.size() > 1) {
+    assert(ops.front()->log_entry->pmem_entry < ops.back()->log_entry->pmem_entry);
+  }
+  
+  pmemobj_flush(m_log_pool,
+		ops.front()->log_entry->pmem_entry,
+		ops.size() * sizeof(*(ops.front()->log_entry->pmem_entry)));
+}
+
+/*
+ * Write and persist the (already allocated) write log entries and
+ * data buffer allocations for a set of ops. The data buffer for each
+ * of these must already have been persisted to its reserved area.
  */
 template <typename I>
 int ReplicatedWriteLog<I>::append_op_log_entries(WriteLogOperations &ops)
 {
   CephContext *cct = m_image_ctx.cct;
+  WriteLogOperations entries_to_flush;
+  TOID(struct WriteLogPoolRoot) pool_root;
+  pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
   
-  /* Write log entries */
-  TX_BEGIN(m_log_pool) {
-    for (auto &operation : ops) {
-      TX_MEMCPY(operation->log_entry->pmem_entry,
-		&operation->log_entry->ram_entry,
-		sizeof(operation->log_entry->ram_entry));
+  if (ops.empty()) return 0;
+
+  /* Write log entries to ring and persist */
+  for (auto &operation : ops) {
+    if (!entries_to_flush.empty()) {
+      /* Flush these and reset the list if the current entry wraps to the 
+       * tail of the ring */
+      if (entries_to_flush.back()->log_entry->log_entry_index >
+	  operation->log_entry->log_entry_index) {
+	flush_op_log_entries(entries_to_flush);
+	entries_to_flush.clear();
+      }
     }
+    *operation->log_entry->pmem_entry = operation->log_entry->ram_entry;
+    entries_to_flush.push_back(operation);
+  }
+  flush_op_log_entries(entries_to_flush);
+  
+  /* Drain once for all */
+  pmemobj_drain(m_log_pool);
+
+  /* 
+   * Atomically advance the log head pointer and publish the
+   * allocations for all the data buffers they refer to.
+   */
+  TX_BEGIN(m_log_pool) {
+    D_RW(pool_root)->first_free_entry = m_first_free_entry;
+    for (auto &operation : ops) {
+      pmemobj_tx_publish(&operation->buffer_alloc_action, 1);
+    }  
   } TX_ONCOMMIT {
   } TX_ONABORT {
     lderr(cct) << "failed to commit log entries (" << m_log_pool_name << ")" << dendl;
     return(-EIO);
+  } TX_FINALLY {
   } TX_END;
+  
   return 0;
 }
 
@@ -698,45 +756,6 @@ void ReplicatedWriteLog<I>::complete_op_log_entries(WriteLogOperations &ops, int
 	  op->complete(result);
 	}));
   }
-}
-
-/*
- * Allocate the (already resrved) write log entries for a set of operations, then
- * write and persist them all in a single transaction.
- *
- * Locking:
- * Acquires m_lock, m_log_append_lock
- */
-template <typename I>
-void ReplicatedWriteLog<I>::alloc_and_append_entries(WriteLogOperations &ops)
-{
-  int append_result = 0;
-  {
-    /*
-     * We hold a read lock on m_log_append_lock across the sequence of
-     * assigning a log entry location to each of these write log ops
-     * and persistently writing it. A write lock is then unavailable
-     * until this group of log messages is persisted. 
-     */
-    RWLock::RLocker appender_locker(m_log_append_lock);
-    alloc_op_log_entries(ops);
-    append_result = append_op_log_entries(ops);
-  }
-  {
-    /* 
-     * These log entries are persisted, but there may be log entries
-     * positioned before them being persisted by another thread that
-     * are not yet complete. If so, that thread will still hold the
-     * read lock. 
-     * 
-     * We acquire (momentarily) a write lock on m_log_append_lock
-     * before completing these write log ops to ensure we wait for
-     * concurrent log append operations since they may appear before
-     * these entries.
-     */
-    RWLock::WLocker completer_locker(m_log_append_lock);
-  }
-  complete_op_log_entries(ops, append_result);
 }
 
 template <typename I>
@@ -765,7 +784,6 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 
   ldout(cct, 6) << "write_req=" << write_req << " cell=" << write_req->get_cell() << dendl;
   ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
-  uint8_t *pmem_blocks = D_RW(D_RW(pool_root)->data_blocks);
 
   ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
 
@@ -781,8 +799,6 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     /* TODO: If there isn't space for this whole write, defer it */
     if (m_free_log_entries < write_req->image_extents.size()) {
       ldout(cct, 6) << "wait for " << write_req->image_extents.size() << " log entries" << dendl;
-    } else if (m_free_blocks < image_extents_summary.total_bytes / BLOCK_SIZE) {
-      ldout(cct, 6) << "wait for " << image_extents_summary.total_bytes / BLOCK_SIZE << " data blocks" << dendl;
     } else {
       for (auto &extent : write_req->image_extents) {
 	/* operation->on_write_persist connected to m_prior_log_entries_persisted Gather */
@@ -793,14 +809,15 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 
 	/* Reserve both log entry and data block space */
 	m_free_log_entries--;
-	m_free_blocks -= operation->log_entry->ram_entry.write_bytes / BLOCK_SIZE;
 
 	/* Allocate data blocks */
-	operation->log_entry->ram_entry.first_pool_block = m_next_free_block;
 	operation->log_entry->ram_entry.has_data = 1;
-	m_next_free_block = (m_next_free_block + 1) % m_total_blocks;
-	operation->log_entry->pmem_block =
-	  pmem_blocks + (operation->log_entry->ram_entry.first_pool_block * BLOCK_SIZE);
+	/* TODO: Handle failure */
+	operation->log_entry->ram_entry.write_data = pmemobj_reserve(m_log_pool,
+								     &operation->buffer_alloc_action,
+								     operation->log_entry->ram_entry.write_bytes,
+								     0 /* Object type */);
+	operation->log_entry->pmem_buffer = D_RW(operation->log_entry->ram_entry.write_data);
 	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;
 	if (set->m_persist_on_flush) {
 	  /* Persist on flush. Sequence #0 is never used. */
@@ -836,7 +853,7 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
   for (auto &operation : set->operations) {
     bufferlist::iterator i(&operation->bl);
     ldout(cct, 6) << operation->bl << dendl;
-    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_block);
+    i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_buffer);
   }
 
   if (set->m_persist_on_flush) {
@@ -1162,36 +1179,25 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 
     /* new pool, calculate and store metadata */
     size_t effective_pool_size = (size_t)(m_log_pool_size * USABLE_SIZE);
-    size_t small_write_size = BLOCK_SIZE + sizeof(struct WriteLogPmemEntry);
+    size_t small_write_size = BLOCK_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogPmemEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
-    m_valid_entry_hint = 0;
-    m_free_entry_hint = 0;
     /* Log ring empty */
     m_first_free_entry = 0;
     m_first_valid_entry = 0;
-    /* Block pool empty */
-    m_next_free_block = 0;
-    m_last_free_block = 0;
     TX_BEGIN(m_log_pool) {
       TX_ADD(pool_root);
       D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
-      D_RW(pool_root)->block_size = BLOCK_SIZE;
-      D_RW(pool_root)->num_blocks = num_small_writes-1; // leave one free
-      D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
-      D_RW(pool_root)->data_blocks = TX_ALLOC(uint8_t, num_small_writes * BLOCK_SIZE);
       D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
-      D_RW(pool_root)->valid_entry_hint = m_valid_entry_hint;
-      D_RW(pool_root)->free_entry_hint = m_free_entry_hint;
+      D_RW(pool_root)->block_size = BLOCK_SIZE;
+      D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
+      D_RW(pool_root)->first_free_entry = m_first_free_entry;
+      D_RW(pool_root)->first_valid_entry = m_first_valid_entry;
     } TX_ONCOMMIT {
       m_total_log_entries = D_RO(pool_root)->num_log_entries;
       m_free_log_entries = D_RO(pool_root)->num_log_entries;
-      m_total_blocks = D_RO(pool_root)->num_blocks;
-      m_free_blocks = D_RO(pool_root)->num_blocks;
     } TX_ONABORT {
       m_total_log_entries = 0;
-      m_total_blocks = 0;
       m_free_log_entries = 0;
-      m_free_blocks = 0;
       lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
       on_finish->complete(-1);
       return;
@@ -1220,15 +1226,13 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
     }
     m_total_log_entries = D_RO(pool_root)->num_log_entries;
     m_free_log_entries = D_RO(pool_root)->num_log_entries;
-    m_total_blocks = D_RO(pool_root)->num_blocks;
-    m_free_blocks = D_RO(pool_root)->num_blocks;
-    m_valid_entry_hint = D_RO(pool_root)->valid_entry_hint;
-    m_free_entry_hint = D_RO(pool_root)->free_entry_hint;
+    m_first_free_entry = D_RO(pool_root)->first_free_entry;
+    m_first_valid_entry = D_RO(pool_root)->first_valid_entry;
     /* TODO: Actually load all the log entries already persisted */
     /* TODO: Set m_current_sync_gen to the successor of the last one seen in the log */
     ldout(cct,5) << "pool " << m_log_pool_name << "has " << D_RO(pool_root)->num_log_entries <<
-      " log entries and " << D_RO(pool_root)->num_blocks << " data blocks" << dendl;
-    if (m_valid_entry_hint == m_free_entry_hint) {
+      " log entries" << dendl;
+    if (m_first_free_entry == m_first_valid_entry) {
       ldout(cct,5) << "write log is empy" << dendl;
     }
   }
