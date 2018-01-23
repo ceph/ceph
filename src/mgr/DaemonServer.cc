@@ -1539,7 +1539,6 @@ const char** DaemonServer::get_tracked_conf_keys() const
 void DaemonServer::handle_conf_change(const struct md_config_t *conf,
                                               const std::set <std::string> &changed)
 {
-  dout(4) << "ohai" << dendl;
   // We may be called within lock (via MCommand `config set`) or outwith the
   // lock (via admin socket `config set`), so handle either case.
   const bool initially_locked = lock.is_locked_by_me();

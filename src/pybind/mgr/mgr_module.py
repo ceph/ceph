@@ -1,8 +1,5 @@
 
 import ceph_module  # noqa
-#import ceph_osdmap  #noqa
-#import ceph_osdmap_incremental  #noqa
-#import ceph_crushmap  #noqa
 
 import json
 import logging
