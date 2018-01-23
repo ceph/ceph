@@ -47,7 +47,7 @@ public:
     using ceph::encode;
     paxos_encode();
     encode(fsid, payload);
-    encode(osd_stat, payload);
+    encode(osd_stat, payload, features);
     encode(pg_stat, payload);
     encode(epoch, payload);
     encode(had_map_for, payload);
