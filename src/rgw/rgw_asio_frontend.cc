@@ -63,6 +63,50 @@ void Pauser::wait()
 using tcp = boost::asio::ip::tcp;
 namespace beast = boost::beast;
 
+class StreamIO : public rgw::asio::ClientIO {
+  tcp::socket& stream;
+  beast::flat_buffer& buffer;
+ public:
+  StreamIO(tcp::socket& stream, rgw::asio::parser_type& parser,
+           beast::flat_buffer& buffer,
+           const tcp::endpoint& local_endpoint,
+           const tcp::endpoint& remote_endpoint)
+      : ClientIO(parser, local_endpoint, remote_endpoint),
+        stream(stream), buffer(buffer)
+  {}
+
+  size_t write_data(const char* buf, size_t len) override {
+    boost::system::error_code ec;
+    auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
+    if (ec) {
+      derr << "write_data failed: " << ec.message() << dendl;
+      throw rgw::io::Exception(ec.value(), std::system_category());
+    }
+    return bytes;
+  }
+
+  size_t recv_body(char* buf, size_t max) override {
+    auto& message = parser.get();
+    auto& body_remaining = message.body();
+    body_remaining.data = buf;
+    body_remaining.size = max;
+
+    while (body_remaining.size && !parser.is_done()) {
+      boost::system::error_code ec;
+      beast::http::read_some(stream, buffer, parser, ec);
+      if (ec == beast::http::error::partial_message ||
+          ec == beast::http::error::need_buffer) {
+        break;
+      }
+      if (ec) {
+        derr << "failed to read body: " << ec.message() << dendl;
+        throw rgw::io::Exception(ec.value(), std::system_category());
+      }
+    }
+    return max - body_remaining.size;
+  }
+};
+
 void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
                        boost::asio::yield_context yield)
 {
@@ -106,7 +150,9 @@ void handle_connection(RGWProcessEnv& env, tcp::socket& socket,
     // process the request
     RGWRequest req{env.store->get_new_req_id()};
 
-    rgw::asio::ClientIO real_client{socket, parser, buffer};
+    StreamIO real_client{socket, parser, buffer,
+                         socket.local_endpoint(),
+                         socket.remote_endpoint()};
 
     auto real_client_io = rgw::io::add_reordering(
                             rgw::io::add_buffering(cct,
