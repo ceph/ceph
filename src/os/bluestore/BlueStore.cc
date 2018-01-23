@@ -9507,7 +9507,7 @@ int BlueStore::queue_transactions(
 
   // we're immediately readable (unlike FileStore)
   for (auto c : on_applied_sync) {
-    c->complete(0);
+    c->complete(txc->rval);
   }
   for (auto c : on_applied) {
     // NOTE: these may complete out of order since some may be sync and some
@@ -10564,6 +10564,8 @@ int BlueStore::_do_alloc_write(
     if (r < 0) {
       derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
 	   << dendl;
+      txc->rval = r;
+      r = 0;
       return r;
     }
   }
