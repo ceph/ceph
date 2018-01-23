@@ -5,6 +5,25 @@ This is a revision of the legacy Ceph on-wire protocol that was
 implemented by the SimpleMessenger.  It addresses performance and
 security issues.
 
+Goals
+-----
+
+This protocol revision has several goals relative to the original protocol:
+
+* *Multiplexing*.  We will have multiple server entities (e.g.,
+  multiple OSDs and clients) coexisting in the same process.  We would
+  like to share the transport connection (e.g., TCP socket) whenever
+  possible.
+* *Signing*.  We will allow for traffic to be signed (but not
+  necessarily encrypted).
+* *Encryption*.  We will incorporate encryption over the wire.
+* *Flexible handshaking*.  The original protocol did not have a
+  sufficiently flexible protocol negotiation that allows for features
+  that were not required.
+* *Performance*.  We would like to provide for protocol features
+  (e.g., padding) that keep computation and memory copies out of the
+  fast path where possible.
+
 Definitions
 -----------
 
