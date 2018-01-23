@@ -16,9 +16,10 @@ Description
 ===========
 
 **ceph-fuse** is a FUSE (File system in USErspace) client for Ceph
-distributed file system. It will mount a ceph file system (specified
-via the -m option for described by ceph.conf (see below) at the
-specific mount point.
+distributed file system. It will mount a ceph file system specified
+via the -m option or described by ceph.conf (see below) at the
+specific mount point. See `Mount Ceph FS using FUSE`_ for detailed
+information.
 
 The file system can be unmounted with::
 
@@ -73,3 +74,5 @@ See also
 
 fusermount(8),
 :doc:`ceph <ceph>`\(8)
+
+.. _Mount Ceph FS using FUSE: ../../cephfs/fuse/
