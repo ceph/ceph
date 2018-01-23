@@ -1451,6 +1451,11 @@ uint8_t OSDMap::get_min_compat_client() const
   return CEPH_RELEASE_ARGONAUT;    // v0.48argonaut-206-g6f381af
 }
 
+uint8_t OSDMap::get_require_min_compat_client() const
+{
+  return require_min_compat_client;
+}
+
 void OSDMap::_calc_up_osd_features()
 {
   bool first = true;
