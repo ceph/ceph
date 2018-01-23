@@ -24,8 +24,17 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
     def serve(self):
-        cherrypy.config.update({'server.socket_host': '0.0.0.0',
-                                'server.socket_port': 8080,
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '8080')
+        if server_addr is None:
+            raise RuntimeError(
+                'no server_addr configured; '
+                'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'.format(
+                self.module_name, self.get_mgr_id()))
+        self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+
+        cherrypy.config.update({'server.socket_host': server_addr,
+                                'server.socket_port': int(server_port),
                                })
         cherrypy.tree.mount(Module.HelloWorld(self), "/")
         cherrypy.engine.start()
