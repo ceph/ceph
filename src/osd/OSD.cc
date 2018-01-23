@@ -5404,8 +5404,12 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
   } else if (osdmap->is_destroyed(whoami)) {
-    derr << "osdmap says I am destroyed, exiting" << dendl;
-    exit(0);
+    derr << "osdmap says I am destroyed" << dendl;
+    // provide a small margin so we don't livelock seeing if we
+    // un-destroyed ourselves.
+    if (osdmap->get_epoch() > newest - 1) {
+      exit(0);
+    }
   } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
