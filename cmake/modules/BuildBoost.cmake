@@ -56,6 +56,7 @@ function(do_build_boost version)
   set(BOOST_CXXFLAGS "-fPIC -w") # check on arm, etc <---XXX
   list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
 
+  list(FIND Boost_BUILD_COMPONENTS "python" with_python)
   string(REPLACE ";" "," boost_with_libs "${Boost_BUILD_COMPONENTS}")
   # build b2 and prepare the project-config.jam for boost
   set(configure_command
@@ -80,7 +81,35 @@ function(do_build_boost version)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
+
+  set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
+  # edit the user-config.jam so b2 will be able to use the specified
+  # toolset and python
+  file(WRITE ${user_config}
+    "using ${toolset}"
+    " : "
+    " : ${CMAKE_CXX_COMPILER}"
+    " ;\n")
+  if(with_python GREATER -1)
+    file(APPEND ${user_config}
+      "using python"
+      " : ${python_ver}"
+      " : ${PYTHON_EXECUTABLE}"
+      " : ${PYTHON_INCLUDE_DIRS}"
+      " : ${PYTHON_LIBRARIES}"
+      " ;\n")
+  endif()
+  list(APPEND b2 --user-config=${user_config})
+
   list(APPEND b2 toolset=${toolset})
+  if(with_python GREATER -1)
+    if(NOT PYTHONLIBS_FOUND)
+      message(FATAL_ERROR "Please call find_package(PythonLibs) first for building "
+        "Boost.Python")
+    endif()
+    set(python_ver ${PYTHON_VERSION_MAJOR}.${PYTHON_VERSION_MINOR})
+    list(APPEND b2 python=${python_ver})
+  endif()
 
   set(build_command
     ${b2} headers stage
@@ -126,11 +155,6 @@ function(do_build_boost version)
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND ${install_command}
     PREFIX "${boost_root_dir}")
-  ExternalProject_Get_Property(Boost source_dir)
-  # edit the user-config.jam so, so b2 will be able to use the specified
-  # toolset
-  file(WRITE ${source_dir}/user-config.jam
-    "using ${toolset} : : ${CMAKE_CXX_COMPILER} ;")
 endfunction()
 
 macro(build_boost version)
@@ -150,13 +174,19 @@ macro(build_boost version)
       add_library(Boost::${c} SHARED IMPORTED)
     endif()
     add_dependencies(Boost::${c} Boost)
+    if(c STREQUAL python AND PYTHON_VERSION_MAJOR EQUAL 3)
+      set(buildid 3)
+    else()
+      set(buildid "")
+    endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${CMAKE_STATIC_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_STATIC_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_STATIC_LIBRARY_SUFFIX})
     else()
       set(Boost_${upper_c}_LIBRARY
-        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${CMAKE_SHARED_LIBRARY_SUFFIX})
+        ${install_dir}/lib/${CMAKE_SHARED_LIBRARY_PREFIX}boost_${c}${buildid}${CMAKE_SHARED_LIBRARY_SUFFIX})
     endif()
+    unset(buildid)
     set_target_properties(Boost::${c} PROPERTIES
       INTERFACE_INCLUDE_DIRECTORIES "${Boost_INCLUDE_DIRS}"
       IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
