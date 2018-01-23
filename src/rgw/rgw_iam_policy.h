@@ -364,6 +364,13 @@ struct Condition {
     }
   };
 
+  struct ci_starts_with {
+    bool operator()(const std::string& s1,
+		    const std::string& s2) const {
+      return boost::istarts_with(s1, s2);
+    }
+  };
+
   template<typename F>
   static bool orrible(F&& f, const std::string& c,
 		      const std::vector<std::string>& v) {
@@ -395,6 +402,12 @@ struct Condition {
     }
     return false;
   }
+
+  template <typename F>
+  bool has_key_p(const std::string& _key, F p) const {
+    return p(key, _key);
+  }
+
 };
 
 std::ostream& operator <<(std::ostream& m, const Condition& c);
@@ -450,6 +463,25 @@ struct Policy {
   Effect eval(const Environment& e,
 	      boost::optional<const rgw::auth::Identity&> ida,
 	      std::uint64_t action, const ARN& resource) const;
+
+  template <typename F>
+  bool has_conditional(const string& conditional, F p) const {
+    for (const auto&s: statements){
+      if (std::any_of(s.conditions.begin(), s.conditions.end(),
+		      [&](const Condition& c) { return c.has_key_p(conditional, p);}))
+	return true;
+    }
+    return false;
+  }
+
+  bool has_conditional(const string& c) const {
+    return has_conditional(c, Condition::ci_equal_to());
+  }
+
+  bool has_partial_conditional(const string& c) const {
+    return has_conditional(c, Condition::ci_starts_with());
+  }
+
 };
 
 std::ostream& operator <<(ostream& m, const Policy& p);
