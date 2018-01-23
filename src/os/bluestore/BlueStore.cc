@@ -3885,6 +3885,8 @@ int BlueStore::BlueReadTrans::_do_read(
     // yes, at least one region isn't in cache
     if (!aio) {
       aio = std::make_unique<AioReadBatch>(store->cct);
+      Collection *c = static_cast<Collection *>(this->c.get());
+      aio->ioc.shard_hint = c->get_cid().hash_to_shard(store->cache_shards.size());
     }
 
     aio->queue_read_ctx(std::move(cr),
@@ -4636,7 +4638,8 @@ int BlueStore::_open_bdev(bool create)
 {
   assert(bdev == NULL);
   string p = path + "/block";
-  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
+  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this),
+                             cache_shards.size());
   int r = bdev->open(p);
   if (r < 0)
     goto fail;

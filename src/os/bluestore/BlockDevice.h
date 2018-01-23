@@ -47,6 +47,7 @@ private:
 public:
   CephContext* cct;
   void *priv;
+  size_t shard_hint = 0;
 #ifdef HAVE_SPDK
   void *nvme_task_first = nullptr;
   void *nvme_task_last = nullptr;
@@ -61,7 +62,9 @@ public:
   std::atomic_int num_running = {0};
   bool allow_eio;
 
-  explicit IOContext(CephContext* cct, void *p, bool allow_eio = false)
+  explicit IOContext(CephContext* cct,
+                     void *p,
+                     bool allow_eio = false)
     : cct(cct), priv(p), allow_eio(allow_eio)
     {}
 
@@ -129,7 +132,11 @@ public:
   virtual ~BlockDevice() = default;
 
   static BlockDevice *create(
-    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv);
+    CephContext* cct,
+    const std::string& path,
+    aio_callback_t cb,
+    void *cbpriv,
+    size_t max_shard_num = 1 /* no sharding */);
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 

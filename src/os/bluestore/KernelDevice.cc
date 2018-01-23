@@ -45,7 +45,7 @@ int KernelDevice::aio_service_t::start(CephContext* const cct)
     }
     return r;
   }
-  Thread::create("bstore_aio");
+  aio_thread->create("bstore_aio");
 
   return 0;
 }
@@ -54,7 +54,7 @@ void KernelDevice::aio_service_t::stop(CephContext* const cct)
 {
   dout(10) << __func__ << dendl;
   aio_stop = true;
-  Thread::join();
+  aio_thread->join();
   aio_stop = false;
   aio_queue.shutdown();
 }
@@ -65,15 +65,19 @@ void KernelDevice::aio_service_t::stop(CephContext* const cct)
 
 KernelDevice::KernelDevice(CephContext* cct,
                            aio_callback_t cb,
-			   void *cbpriv)
+			   void *cbpriv,
+		           size_t num_shards)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    aio_service(cct, this),
     injecting_crash(0)
 {
+  dout(0) << "!!!!!!!!!!! num_shards = " << num_shards << dendl;
+  for (size_t i = 0; i < num_shards; ++i) {
+    aio_services.emplace_back(cct, this);
+  }
 }
 
 int KernelDevice::_lock()
@@ -345,15 +349,30 @@ int KernelDevice::flush()
 
 int KernelDevice::_aio_start()
 {
-  if (aio) {
-    return aio_service.start(cct);
+  if (!aio) {
+    return 0;
   }
+
+  for (size_t i = 0; i < aio_services.size(); ++i) {
+    const int ret = aio_services[i].start(cct);
+    if (ret < 0) {
+      // oops, need to undo the partial state
+      while (i > 0) {
+        aio_services[--i].stop(cct);
+      }
+      return ret;
+    }
+  }
+
   return 0;
 }
 
 void KernelDevice::_aio_stop()
 {
-  if (aio) {
+  if (!aio) {
+    return;
+  }
+  for (auto& aio_service : aio_services) {
     aio_service.stop(cct);
   }
 }
@@ -545,6 +564,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
   }
 
   void *priv = static_cast<void*>(ioc);
+  auto& aio_service = \
+    aio_services[ioc->shard_hint % aio_services.size()];
   int r, retries = 0;
   r = aio_service.aio_queue.submit_batch(ioc->running_aios.begin(), e,
 					 pending, priv, &retries);

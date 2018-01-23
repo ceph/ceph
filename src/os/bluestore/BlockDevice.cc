@@ -84,7 +84,8 @@ void IOContext::release_running_aios()
 }
 
 BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
-				 aio_callback_t cb, void *cbpriv)
+				 aio_callback_t cb, void *cbpriv,
+                                 size_t max_shard_num)
 {
   string type = "kernel";
   char buf[PATH_MAX + 1];
@@ -117,7 +118,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 #endif
 #if defined(HAVE_LIBAIO)
   if (type == "kernel") {
-    return new KernelDevice(cct, cb, cbpriv);
+    return new KernelDevice(cct, cb, cbpriv, max_shard_num);
   }
 #endif
 #if defined(HAVE_SPDK)

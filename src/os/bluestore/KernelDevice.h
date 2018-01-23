@@ -17,6 +17,8 @@
 
 #include <atomic>
 
+#include <boost/container/static_vector.hpp>
+
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
 
@@ -38,30 +40,31 @@ class KernelDevice : public BlockDevice {
 
   std::atomic<bool> io_since_flush = {false};
   std::mutex flush_mutex;
+  std::atomic_int injecting_crash;
 
-  struct aio_service_t : private Thread {
-    KernelDevice* bdev;
-
+  struct aio_service_t {
     aio_queue_t aio_queue;
+    std::unique_ptr<Thread> aio_thread;
     bool aio_stop = false;
 
     explicit aio_service_t(CephContext* cct,
                            KernelDevice* const bdev)
-      : bdev(bdev),
-        aio_queue(cct->_conf->bdev_aio_max_queue_depth) {
+      : aio_queue(cct->_conf->bdev_aio_max_queue_depth),
+        aio_thread(make_lambda_thread([bdev, this]() {
+          // NOTE: the physical location of the object SHALL NOT change!
+          // Othwerwise we'll end with bstore_aios  interpreting random
+          // junks as their qio_queue or the stop signal.
+          bdev->_aio_thread(this->aio_queue, this->aio_stop);
+        })) {
     }
 
     int start(CephContext* cct);
     void stop(CephContext* cct);
-
-    void *entry() override {
-      bdev->_aio_thread(aio_queue, aio_stop);
-      return nullptr;
-    }
   };
-  aio_service_t aio_service;
-
-  std::atomic_int injecting_crash;
+  static constexpr size_t expected_max_shard_num = 16;
+  boost::container::static_vector<
+    aio_service_t,
+    expected_max_shard_num> aio_services;
 
   void _aio_thread(aio_queue_t& aio_queue, const bool& aio_stop);
   int _aio_start();
@@ -86,7 +89,8 @@ class KernelDevice : public BlockDevice {
 public:
   KernelDevice(CephContext* cct,
                aio_callback_t cb,
-               void *cbpriv);
+               void *cbpriv,
+               size_t max_shard_num);
 
   void aio_submit(IOContext *ioc) override;
 
