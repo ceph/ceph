@@ -3578,8 +3578,8 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     if (ret < 0) {
       ret = -errno;
     } else {
-      // ensure we extent file size, if needed
-      if (offset + len > (uint64_t)st.st_size) {
+      // ensure we extend file size, if needed
+      if (len > 0 && offset + len > (uint64_t)st.st_size) {
 	ret = ::ftruncate(**fd, offset + len);
 	if (ret < 0) {
 	  ret = -errno;
