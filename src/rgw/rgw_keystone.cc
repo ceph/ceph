@@ -179,16 +179,19 @@ int KeystoneToken::parse(CephContext * const cct,
          * must be in v3. Otherwise we can assume it's wrongly formatted. */
         JSONDecoder::decode_json("token", *this, &parser, true);
         token.id = token_str;
+	this->version = KeystoneApiVersion::VER_2;
       }
     } else if (version == KeystoneApiVersion::VER_3) {
       if (!JSONDecoder::decode_json("token", *this, &parser)) {
         /* If the token cannot be parsed according to V3, try V2. */
         JSONDecoder::decode_json("access", *this, &parser, true);
+	this->version = KeystoneApiVersion::VER_2;
       } else {
         /* v3 suceeded. We have to fill token.id from external input as it
          * isn't a part of the JSON response anymore. It has been moved
          * to X-Subject-Token HTTP header instead. */
         token.id = token_str;
+	this->version = KeystoneApiVersion::VER_3;
       }
     } else {
       return -ENOTSUP;

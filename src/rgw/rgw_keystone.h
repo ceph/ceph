@@ -71,6 +71,7 @@ public:
   Project project;
   User user;
   list<Role> roles;
+  KeystoneApiVersion version;
 
 public:
   // FIXME: default ctor needs to be eradicated here

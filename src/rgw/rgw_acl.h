@@ -26,6 +26,8 @@ using namespace std;
 #define RGW_PERM_ALL_S3          RGW_PERM_FULL_CONTROL
 #define RGW_PERM_INVALID         0xFF00
 
+struct req_state;
+
 enum ACLGranteeTypeEnum {
 /* numbers are encoded, should not change */
   ACL_TYPE_CANON_USER = 0,
@@ -204,7 +206,7 @@ public:
 
   virtual ~RGWAccessControlList() {}
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(req_state* s, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 3, bl);
@@ -302,9 +304,9 @@ public:
     acl.set_ctx(ctx);
   }
 
-  int get_perm(rgw_user& id, int perm_mask);
+  int get_perm(req_state *s, int perm_mask);
   int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
-  bool verify_permission(rgw_user& uid, int user_perm_mask, int perm);
+  bool verify_permission(req_state *s, int user_perm_mask, int perm);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);

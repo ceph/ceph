@@ -1299,6 +1299,9 @@ struct req_state {
   const char *os_auth_token;
   string swift_user;
   string swift_groups;
+  string keystone_project_id, keystone_project_name;
+  string keystone_user_id, keystone_user_name;
+  bool keystone_name_matching_ok;
   /* Content-Disposition override for TempURL of Swift API. */
   struct {
     string override;

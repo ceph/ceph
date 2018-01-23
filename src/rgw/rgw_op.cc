@@ -298,7 +298,7 @@ static int read_policy(RGWRados *store, struct req_state *s,
       return ret;
     rgw_user& owner = bucket_policy.get_owner().get_id();
     if (!s->system_request && owner.compare(s->user->user_id) != 0 &&
-        !bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
+        !bucket_policy.verify_permission(s, s->perm_mask,
 					RGW_PERM_READ))
       ret = -EACCES;
     else
@@ -2338,7 +2338,7 @@ int RGWPutObj::verify_permission()
 
     /* system request overrides permission checks */
     if (!s->system_request &&
-        !cs_policy.verify_permission(s->user->user_id, s->perm_mask,
+        !cs_policy.verify_permission(s, s->perm_mask,
 				     RGW_PERM_READ)) {
       return -EACCES;
     }
@@ -3501,7 +3501,7 @@ int RGWCopyObj::verify_permission()
       return op_ret;
 
     if (!s->system_request && /* system request overrides permission checks */
-        !src_policy.verify_permission(s->user->user_id, s->perm_mask,
+        !src_policy.verify_permission(s, s->perm_mask,
 				      RGW_PERM_READ))
       return -EACCES;
   }
@@ -3538,7 +3538,7 @@ int RGWCopyObj::verify_permission()
     return op_ret;
 
   if (!s->system_request && /* system request overrides permission checks */
-      !dest_bucket_policy.verify_permission(s->user->user_id, s->perm_mask,
+      !dest_bucket_policy.verify_permission(s, s->perm_mask,
 					    RGW_PERM_WRITE))
     return -EACCES;
 

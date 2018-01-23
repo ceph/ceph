@@ -83,6 +83,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uids
 	/* might be a HTTP referrer-based acl.  Not now (ever?) */
         ldout(cct, 10) << "Unknown designator: " << uid << dendl;
 	if (!result) result = -EUNKNOWN_DESIGNATOR;
+	// Todo: return smarter error to user.
       }
       acl.add_grant(&grant);
     } else {
@@ -92,12 +93,16 @@ int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uids
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping not so silently */
 	if (!result) result = -ENO_SUCH_USER;
+	// Todo: return smarter error to user.
       } else {
         grant.set_canon(user, grant_user.display_name, perm);
         acl.add_grant(&grant);
       }
     }
   }
+  // Someday! should build composite informative error message.
+  //	"Bad acl: unknown designator X, no such user Y."
+  // for now; just the common error return here.
   return result;
 }
 
