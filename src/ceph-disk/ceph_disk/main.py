@@ -3805,24 +3805,24 @@ def main_activate(args):
             LOG.info("activate: Journal not present, not starting, yet")
             return
 
-        if (not args.no_start_daemon and args.mark_init == 'none'):
-            command_check_call(
-                [
-                    'ceph-osd',
-                    '--cluster={cluster}'.format(cluster=cluster),
-                    '--id={osd_id}'.format(osd_id=osd_id),
-                    '--osd-data={path}'.format(path=osd_data),
-                    '--osd-journal={journal}'.format(journal=osd_journal),
-                ],
-            )
+    if (not args.no_start_daemon and args.mark_init == 'none'):
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster={cluster}'.format(cluster=cluster),
+                '--id={osd_id}'.format(osd_id=osd_id),
+                '--osd-data={path}'.format(path=osd_data),
+                '--osd-journal={journal}'.format(journal=osd_journal),
+            ],
+        )
 
-        if (not args.no_start_daemon and
-                args.mark_init not in (None, 'none')):
+    if (not args.no_start_daemon and
+            args.mark_init not in (None, 'none')):
 
-            start_daemon(
-                cluster=cluster,
-                osd_id=osd_id,
-            )
+        start_daemon(
+            cluster=cluster,
+            osd_id=osd_id,
+        )
 
 
 def main_activate_lockbox(args):
@@ -4173,10 +4173,10 @@ def main_activate_space(name, args):
             reactivate=args.reactivate,
         )
 
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
-        )
+    start_daemon(
+        cluster=cluster,
+        osd_id=osd_id,
+    )
 
 
 ###########################
