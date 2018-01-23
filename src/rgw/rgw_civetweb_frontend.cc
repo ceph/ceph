@@ -50,7 +50,6 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 int RGWCivetWebFrontend::run()
 {
   auto& conf_map = conf->get_config_map();
-  string port_str;
 
   set_conf_default(conf_map, "num_threads",
                    std::to_string(g_conf->rgw_thread_pool_size));
@@ -59,9 +58,23 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "validate_http_method", "no");
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
-  conf->get_val("port", "80", &port_str);
-  std::replace(port_str.begin(), port_str.end(), '+', ',');
-  conf_map.emplace("listening_ports", std::move(port_str));
+
+  std::string listening_ports;
+  // support multiple port= entries
+  auto range = conf_map.equal_range("port");
+  for (auto p = range.first; p != range.second; ++p) {
+    std::string port_str = p->second;
+    // support port= entries with multiple values
+    std::replace(port_str.begin(), port_str.end(), '+', ',');
+    if (!listening_ports.empty()) {
+      listening_ports.append(1, ',');
+    }
+    listening_ports.append(port_str);
+  }
+  if (listening_ports.empty()) {
+    listening_ports = "80";
+  }
+  conf_map.emplace("listening_ports", std::move(listening_ports));
 
   /* Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
    * based on pw_uid and pw_gid obtained from pw_name. */

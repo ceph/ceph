@@ -43,7 +43,8 @@ Options
 :Description: Sets the listening port number. For SSL-enabled ports, add an
               ``s`` suffix like ``443s``. To bind a specific IPv4 or IPv6
               address, use the form ``address:port``. Multiple endpoints
-              can be separated by ``+`` as in ``127.0.0.1:8000+443s``.
+              can either be separated by ``+`` as in ``127.0.0.1:8000+443s``,
+              or by providing multiple options as in ``port=8000 port=443s``.
 
 :Type: String
 :Default: ``7480``
