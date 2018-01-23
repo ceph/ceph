@@ -115,6 +115,8 @@ def get_api_pvs():
     Return the list of physical volumes configured for lvm and available in the
     system using flags to include common metadata associated with them like the uuid
 
+    This will only return physical volumes set up to work with LVM.
+
     Command and delimeted output, should look like::
 
         $ pvs --noheadings --separator=';' -o pv_name,pv_tags,pv_uuid
@@ -122,12 +124,10 @@ def get_api_pvs():
           /dev/sdv;;07A4F654-4162-4600-8EB3-88D1E42F368D
 
     """
-    fields = 'pv_name,pv_tags,pv_uuid'
+    fields = 'pv_name,pv_tags,pv_uuid,vg_name'
 
-    # note the use of `pvs -a` which will return every physical volume including
-    # ones that have not been initialized as "pv" by LVM
     stdout, stderr, returncode = process.call(
-        ['pvs', '-a', '--no-heading', '--separator=";"', '-o', fields]
+        ['pvs', '--no-heading', '--separator=";"', '-o', fields]
     )
 
     return _output_parser(stdout, fields)
@@ -211,6 +211,38 @@ def create_vg(name, *devices):
 
     vg = get_vg(vg_name=name)
     return vg
+
+
+def remove_vg(vg_name):
+    """
+    Removes a volume group.
+    """
+    fail_msg = "Unable to remove vg %s".format(vg_name)
+    process.run(
+        [
+            'vgremove',
+            '-v',  # verbose
+            '-f',  # force it
+            vg_name
+        ],
+        fail_msg=fail_msg,
+    )
+
+
+def remove_pv(pv_name):
+    """
+    Removes a physical volume.
+    """
+    fail_msg = "Unable to remove vg %s".format(pv_name)
+    process.run(
+        [
+            'pvremove',
+            '-v',  # verbose
+            '-f',  # force it
+            pv_name
+        ],
+        fail_msg=fail_msg,
+    )
 
 
 def remove_lv(path):

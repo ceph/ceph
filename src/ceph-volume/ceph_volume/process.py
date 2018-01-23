@@ -96,9 +96,11 @@ def run(command, **kw):
 
     :param command: The command to pass in to the remote subprocess.Popen as a list
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
+    :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
+    fail_msg = kw.pop('fail_msg', None)
     logger.info(command_msg)
     terminal.write(command_msg)
     terminal_logging = kw.pop('terminal_logging', True)
@@ -127,6 +129,10 @@ def run(command, **kw):
     returncode = process.wait()
     if returncode != 0:
         msg = "command returned non-zero exit status: %s" % returncode
+        if fail_msg:
+            logger.warning(fail_msg)
+            if terminal_logging:
+                terminal.warning(fail_msg)
         if stop_on_error:
             raise RuntimeError(msg)
         else:
