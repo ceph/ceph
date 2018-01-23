@@ -177,20 +177,8 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_mgr_id(self):
         return self._ceph_get_mgr_id()
 
-    def get_config(self, key, default=None):
-        """
-        Retrieve the value of a persistent configuration setting
-
-        :param str key:
-        :param default: the default value of the config if it is not found
-        :return: str
-        """
-        r = self._ceph_get_config(key)
-        if r is None:
-            return default
-        else:
-            return r
-
+    def get_config(self, key):
+        return self._ceph_get_config(key)
 
     def get_active_uri(self):
         return self._ceph_get_active_uri()
@@ -636,3 +624,4 @@ class MgrModule(ceph_module.BaseMgrModule):
         self._rados.connect()
 
         return self._rados
+    

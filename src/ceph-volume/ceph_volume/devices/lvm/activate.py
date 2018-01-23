@@ -201,12 +201,12 @@ class Activate(object):
         parser.add_argument(
             '--bluestore',
             action='store_true',
-            help='bluestore objectstore (default)',
+            help='filestore objectstore (not yet implemented)',
         )
         parser.add_argument(
             '--filestore',
             action='store_true',
-            help='filestore objectstore',
+            help='filestore objectstore (current default)',
         )
         if len(self.argv) == 0:
             print(sub_command_help)

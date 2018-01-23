@@ -190,7 +190,6 @@ public:
   friend class CopyFromCallback;
   friend class CopyFromFinisher;
   friend class PromoteCallback;
-  friend class PromoteFinisher;
 
   struct ProxyReadOp {
     OpRequestRef op;
