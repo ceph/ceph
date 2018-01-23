@@ -306,7 +306,7 @@ public:
   void get_filtered_pg_stats(const string& state, int64_t poolid, int64_t osdid,
                              bool primary, set<pg_t>& pgs);
   void recovery_summary(Formatter *f, list<string> *psl,
-                        const pool_stat_t& delta_sum) const;
+                        const pool_stat_t& pool_sum) const;
   void overall_recovery_summary(Formatter *f, list<string> *psl) const;
   void pool_recovery_summary(Formatter *f, list<string> *psl,
                              uint64_t poolid) const;
