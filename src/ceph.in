@@ -20,6 +20,7 @@ Foundation.  See file COPYING.
 """
 
 from __future__ import print_function
+from time import sleep
 import codecs
 import os
 import sys
@@ -1051,6 +1052,16 @@ def main():
         target = find_cmd_target(childargs)
     except Exception as e:
         print('error handling command target: {0}'.format(e), file=sys.stderr)
+        return 1
+
+    # ceph iostat
+    if len(childargs) > 0 and childargs[0] == 'iostat':
+        def call_iostat():
+            while 1:
+                subprocess.call([sys.argv[0], 'mgr', 'iostat'])
+                sleep(1)
+
+        run_in_thread(call_iostat)
         return 1
 
     # Repulsive hack to handle tell: lop off 'tell' and target
