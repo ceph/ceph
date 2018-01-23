@@ -17,3 +17,17 @@ openATTIC mgr module has been accepted and is providing basic functionality.
 The porting of the existing openATTIC functionality will be done in stages. The
 work is done by the openATTIC team and is currently tracked in the `openATTIC
 JIRA <https://tracker.openattic.org/browse/OP-3039>`_.
+
+Unit Testing
+____________
+
+To run the unit tests that reside in :emphasis:`tests/*` do::
+
+  UNITTEST=true py.test --cov=. tests/
+
+
+These tests depend on the following python libraries:
+ * pytest
+ * pytest-cov
+ * mock
+
