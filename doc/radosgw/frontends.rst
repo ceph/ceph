@@ -20,10 +20,23 @@ Options
 
 ``port``
 
-:Description: Sets the listening port number.
+:Description: Sets the listening port number. Can be specified multiple
+              times as in ``port=80 port=8000``.
 
 :Type: Integer
 :Default: ``80``
+
+
+``endpoint``
+
+:Description: Sets the listening address in the form ``address[:port]``,
+              where the address is an IPv4 address string in dotted decimal
+              form, or an IPv6 address in hexadecimal notation. The
+              optional port defaults to 80. Can be specified multiple times
+              as in ``endpoint=::1 endpoint=192.168.0.100:8000``.
+
+:Type: Integer
+:Default: None
 
 
 Civetweb
