@@ -440,9 +440,15 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 #option for Mgr
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
-  set(Python_ADDITIONAL_VERSIONS 2.7)
-  find_package(PythonInterp 2.7 REQUIRED)
-  find_package(PythonLibs 2.7 REQUIRED)
+  # Please specify 3 or 3.[0-7] if you want to build with python3 support.
+  # FindPyhonInterp and FindPythonLibs think they belong to different families.
+  set(MGR_PYTHON_VERSION "2.7" CACHE
+    STRING "minimal required version of python runtime for running mgr plugins. ")
+  find_package(PythonInterp ${MGR_PYTHON_VERSION} REQUIRED)
+  find_package(PythonLibs ${MGR_PYTHON_VERSION} REQUIRED)
+  set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
