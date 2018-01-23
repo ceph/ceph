@@ -13,7 +13,7 @@
 
 
 // Python.h comes first because otherwise it clobbers ceph's assert
-#include "Python.h"
+#include "PythonCompat.h"
 
 #include "PyModule.h"
 
