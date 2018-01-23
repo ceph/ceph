@@ -36,7 +36,8 @@ Before ``max_mds`` can be increased, the ``allow_multimds`` flag must be set.
 The following command sets this flag for a filesystem instance.
 
 ::
-    # ceph fs set <fs_name> cephfs allow_multimds true --yes-i-really-mean-it
+
+    # ceph fs set <fs_name> allow_multimds true --yes-i-really-mean-it
 
 Set ``max_mds`` to the desired number of ranks.  In the following examples
 the "fsmap" line of "ceph status" is shown to illustrate the expected

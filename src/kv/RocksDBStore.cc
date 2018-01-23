@@ -723,6 +723,9 @@ void RocksDBStore::get_statistics(Formatter *f)
     str.clear();
     db->GetProperty("rocksdb.cur-size-all-mem-tables", &str);
     f->dump_string("rocksdb_memtable_usage", str);
+    str.clear();
+    db->GetProperty("rocksdb.estimate-table-readers-mem", &str);
+    f->dump_string("rocksdb_index_filter_blocks_usage", str);
     f->close_section();
   }
 }

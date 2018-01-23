@@ -13,11 +13,7 @@
 
 #include <sstream>
 #include "Crypto.h"
-#ifdef USE_CRYPTOPP
-# include <cryptopp/modes.h>
-# include <cryptopp/aes.h>
-# include <cryptopp/filters.h>
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 # include <nspr.h>
 # include <nss.h>
 # include <pk11pub.h>
@@ -129,91 +125,7 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_CRYPTOPP
-# define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
-# define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
-
-class CryptoAESKeyHandler : public CryptoKeyHandler {
-public:
-  CryptoPP::AES::Encryption *enc_key;
-  CryptoPP::AES::Decryption *dec_key;
-
-  CryptoAESKeyHandler()
-    : enc_key(NULL),
-      dec_key(NULL) {}
-  ~CryptoAESKeyHandler() {
-    delete enc_key;
-    delete dec_key;
-  }
-
-  int init(const bufferptr& s, ostringstream& err) {
-    secret = s;
-
-    enc_key = new CryptoPP::AES::Encryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
-    dec_key = new CryptoPP::AES::Decryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
-
-    return 0;
-  }
-
-  int encrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const {
-    string ciphertext;
-    CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
-    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbc(
-      *enc_key, (const byte*)CEPH_AES_IV);
-    CryptoPP::StreamTransformationFilter stfEncryptor(cbc, sink);
-
-    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
-	 it != in.buffers().end(); ++it) {
-      const unsigned char *in_buf = (const unsigned char *)it->c_str();
-      stfEncryptor.Put(in_buf, it->length());
-    }
-    try {
-      stfEncryptor.MessageEnd();
-    } catch (CryptoPP::Exception& e) {
-      if (error) {
-	ostringstream oss;
-	oss << "encryptor.MessageEnd::Exception: " << e.GetWhat();
-	*error = oss.str();
-      }
-      return -1;
-    }
-    out.append((const char *)ciphertext.c_str(), ciphertext.length());
-    return 0;
-  }
-
-  int decrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const {
-    string decryptedtext;
-    CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
-    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbc(
-      *dec_key, (const byte*)CEPH_AES_IV );
-    CryptoPP::StreamTransformationFilter stfDecryptor(cbc, sink);
-    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
-	 it != in.buffers().end(); ++it) {
-      const unsigned char *in_buf = (const unsigned char *)it->c_str();
-      stfDecryptor.Put(in_buf, it->length());
-    }
-
-    try {
-      stfDecryptor.MessageEnd();
-    } catch (CryptoPP::Exception& e) {
-      if (error) {
-	ostringstream oss;
-	oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
-	*error = oss.str();
-      }
-      return -1;
-    }
-
-    out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
-    return 0;
-  }
-};
-
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 // when we say AES, we mean AES-128
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16

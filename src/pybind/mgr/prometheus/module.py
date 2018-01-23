@@ -3,8 +3,9 @@ import json
 import errno
 import math
 import os
+import socket
 from collections import OrderedDict
-from mgr_module import MgrModule
+from mgr_module import MgrModule, MgrStandbyModule
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
@@ -55,6 +56,8 @@ DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
 OSD_STATUS = ['weight', 'up', 'in']
+
+OSD_STATS = ['apply_latency_ms', 'commit_latency_ms']
 
 POOL_METADATA = ('pool_id', 'name')
 
@@ -137,8 +140,6 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
-        self.notified = False
-        self.serving = False
         self.metrics = self._setup_static_metrics()
         self.schema = OrderedDict()
         _global_instance['plugin'] = self
@@ -202,6 +203,15 @@ class Module(MgrModule):
                 'OSD status {}'.format(state),
                 ('ceph_daemon',)
             )
+        for stat in OSD_STATS:
+            path = 'osd_{}'.format(stat)
+            self.log.debug("init: creating {}".format(path))
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                'OSD stat {}'.format(stat),
+                ('ceph_daemon',)
+            )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -229,10 +239,6 @@ class Module(MgrModule):
             )
 
         return metrics
-
-    def shutdown(self):
-        self.serving = False
-        pass
 
     def get_health(self):
         health = json.loads(self.get('health')['json'])
@@ -276,6 +282,16 @@ class Module(MgrModule):
                 except KeyError:
                     self.log.warn("skipping pg in unknown state {}".format(state))
 
+    def get_osd_stats(self):
+        osd_stats = self.get('osd_stats')
+        for osd in osd_stats['osd_stats']:
+            id_ = osd['osd']
+            for stat in OSD_STATS:
+                status = osd['perf_stat'][stat]
+                self.metrics['osd_{}'.format(stat)].set(
+                    status,
+                    ('osd.{}'.format(id_),))
+
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
         osd_devices = self.get('osd_map_crush')['devices']
@@ -284,7 +300,7 @@ class Module(MgrModule):
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
-            self.metrics['osd_metadata'].set(0, (
+            self.metrics['osd_metadata'].set(1, (
                 c_addr,
                 dev_class['class'],
                 id_,
@@ -308,7 +324,7 @@ class Module(MgrModule):
             if osd_dev_node and osd_hostname:
                 self.log.debug("Got dev for osd {0}: {1}/{2}".format(
                     id_, osd_hostname, osd_dev_node))
-                self.metrics['disk_occupation'].set(0, (
+                self.metrics['disk_occupation'].set(1, (
                     osd_hostname,
                     osd_dev_node,
                     "osd.{0}".format(id_)
@@ -320,11 +336,12 @@ class Module(MgrModule):
         for pool in osd_map['pools']:
             id_ = pool['pool']
             name = pool['pool_name']
-            self.metrics['pool_metadata'].set(0, (id_, name))
+            self.metrics['pool_metadata'].set(1, (id_, name))
 
     def collect(self):
         self.get_health()
         self.get_df()
+        self.get_osd_stats()
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
@@ -389,10 +406,13 @@ class Module(MgrModule):
 
             @cherrypy.expose
             def metrics(self):
-                metrics = global_instance().collect()
-                cherrypy.response.headers['Content-Type'] = 'text/plain'
-                if metrics:
-                    return self.format_metrics(metrics)
+                if global_instance().have_mon_connection():
+                    metrics = global_instance().collect()
+                    cherrypy.response.headers['Content-Type'] = 'text/plain'
+                    if metrics:
+                        return self.format_metrics(metrics)
+                else:
+                    raise cherrypy.HTTPError(503, 'No MON connection')
 
         server_addr = self.get_localized_config('server_addr', DEFAULT_ADDR)
         server_port = self.get_localized_config('server_port', DEFAULT_PORT)
@@ -401,11 +421,72 @@ class Module(MgrModule):
             (server_addr, server_port)
         )
 
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri('http://{0}:{1}/'.format(
+            socket.getfqdn() if server_addr == '::' else server_addr,
+            server_port
+        ))
+
         cherrypy.config.update({
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
             'engine.autoreload.on': False
         })
         cherrypy.tree.mount(Root(), "/")
+        self.log.info('Starting engine...')
         cherrypy.engine.start()
+        self.log.info('Engine started.')
         cherrypy.engine.block()
+
+    def shutdown(self):
+        self.log.info('Stopping engine...')
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.exit()
+        self.log.info('Stopped engine')
+
+
+class StandbyModule(MgrStandbyModule):
+    def serve(self):
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', DEFAULT_PORT)
+        self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'engine.autoreload.on': False
+        })
+
+        module = self
+
+        class Root(object):
+
+            @cherrypy.expose
+            def index(self):
+                active_uri = module.get_active_uri()
+                return '''<!DOCTYPE html>
+<html>
+	<head><title>Ceph Exporter</title></head>
+	<body>
+		<h1>Ceph Exporter</h1>
+        <p><a href='{}metrics'>Metrics</a></p>
+	</body>
+</html>'''.format(active_uri)
+
+            @cherrypy.expose
+            def metrics(self):
+                cherrypy.response.headers['Content-Type'] = 'text/plain'
+                return ''
+
+        cherrypy.tree.mount(Root(), '/', {})
+        self.log.info('Starting engine...')
+        cherrypy.engine.start()
+        self.log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        self.log.info('Engine started.')
+
+    def shutdown(self):
+        self.log.info("Stopping engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        self.log.info("Stopped engine")
