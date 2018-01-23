@@ -61,13 +61,13 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
   conf->get_val("port", "80", &port_str);
   std::replace(port_str.begin(), port_str.end(), '+', ',');
-  conf_map["listening_ports"] = port_str;
+  conf_map.emplace("listening_ports", std::move(port_str));
 
   /* Set run_as_user. This will cause civetweb to invoke setuid() and setgid()
    * based on pw_uid and pw_gid obtained from pw_name. */
   std::string uid_string = g_ceph_context->get_set_uid_string();
   if (! uid_string.empty()) {
-    conf_map["run_as_user"] = std::move(uid_string);
+    conf_map.emplace("run_as_user", std::move(uid_string));
   }
 
   /* Prepare options for CivetWeb. */
