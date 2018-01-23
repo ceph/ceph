@@ -2845,7 +2845,7 @@ void PG::_update_blocked_by()
 {
   // set a max on the number of blocking peers we report. if we go
   // over, report a random subset.  keep the result sorted.
-  unsigned keep = std::min<unsigned>(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
+  unsigned keep = std::min(blocked_by.size(), cct->_conf->osd_max_pg_blocked_by);
   unsigned skip = blocked_by.size() - keep;
   info.stats.blocked_by.clear();
   info.stats.blocked_by.resize(keep);
@@ -6171,10 +6171,6 @@ void PG::handle_create(RecoveryCtx *rctx)
   ActMap evt2;
   recovery_state.handle_event(evt2, rctx);
   write_if_dirty(*rctx->transaction);
-
-  rctx->on_applied->add(make_lambda_context([this]() {
-    update_store_with_options();
-  }));
 }
 
 void PG::handle_query_state(Formatter *f)
@@ -6188,7 +6184,7 @@ void PG::update_store_with_options()
 {
   auto r = osd->store->set_collection_opts(coll, pool.info.opts);
   if(r < 0 && r != -EOPNOTSUPP) {
-    derr << __func__ << " set_collection_opts returns error:" << r << dendl;
+    derr << __func__ << "set_collection_opts returns error:" << r << dendl;
   }
 }
 
@@ -6326,6 +6322,13 @@ PG::RecoveryState::Initial::Initial(my_context ctx)
     NamedState(context< RecoveryMachine >().pg, "Initial")
 {
   context< RecoveryMachine >().log_enter(state_name);
+}
+
+boost::statechart::result PG::RecoveryState::Initial::react(const Initialize& l)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  pg->update_store_with_options();
+  return transit< Reset >();
 }
 
 boost::statechart::result PG::RecoveryState::Initial::react(const Load& l)

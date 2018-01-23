@@ -550,12 +550,14 @@ int librados::RadosClient::wait_for_osdmap()
 
     if (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
       ldout(cct, 10) << __func__ << " waiting" << dendl;
+      utime_t start = ceph_clock_now();
       while (objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch)) == 0) {
         if (timeout.is_zero()) {
           cond.Wait(lock);
         } else {
-          int r = cond.WaitInterval(lock, timeout);
-          if (r == ETIMEDOUT) {
+          cond.WaitInterval(lock, timeout);
+          utime_t elapsed = ceph_clock_now() - start;
+          if (elapsed > timeout) {
             lderr(cct) << "timed out waiting for first osdmap from monitors"
                        << dendl;
             return -ETIMEDOUT;
