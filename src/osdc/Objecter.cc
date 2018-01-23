@@ -708,8 +708,8 @@ void Objecter::_send_linger_ping(LingerOp *info)
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
-  MOSDOp *m = _prepare_osd_op(o);
   o->tid = ++last_tid;
+  MOSDOp *m = _prepare_osd_op(o);
   _session_op_assign(info->session, o);
   _send_op(o, m);
   info->ping_tid = o->tid;
@@ -2446,6 +2446,9 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     op->target.flags |= CEPH_OSD_FLAG_FULL_TRY;
   }
 
+  if (op->tid == 0)
+    op->tid = ++last_tid;
+
   bool need_send = false;
 
   if (osdmap->get_epoch() < epoch_barrier) {
@@ -2484,9 +2487,6 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   }
 
   OSDSession::unique_lock sl(s->lock);
-  if (op->tid == 0)
-    op->tid = ++last_tid;
-
   ldout(cct, 10) << "_op_submit oid " << op->target.base_oid
 		 << " '" << op->target.base_oloc << "' '"
 		 << op->target.target_oloc << "' " << op->ops << " tid "
