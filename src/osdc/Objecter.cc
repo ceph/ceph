@@ -3182,9 +3182,9 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   // op->session->lock is locked
 
   // backoff?
-  hobject_t hoid = op->target.get_hobj();
   auto p = op->session->backoffs.find(op->target.actual_pgid);
   if (p != op->session->backoffs.end()) {
+    hobject_t hoid = op->target.get_hobj();
     auto q = p->second.lower_bound(hoid);
     if (q != p->second.begin()) {
       --q;
