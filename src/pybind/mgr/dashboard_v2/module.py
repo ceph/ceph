@@ -3,17 +3,21 @@
 """
 openATTIC mgr plugin (based on CherryPy)
 """
-
+import os
 import cherrypy
 from cherrypy import tools
 
 from mgr_module import MgrModule
 
+# cherrypy likes to sys.exit on error.  don't let it take us down too!
+def os_exit_noop(*args):
+    pass
+
+os._exit = os_exit_noop
+
 """
 openATTIC CherryPy Module
 """
-
-
 class Module(MgrModule):
 
     """
@@ -38,11 +42,14 @@ class Module(MgrModule):
                                })
         cherrypy.tree.mount(Module.HelloWorld(self), "/")
         cherrypy.engine.start()
-        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        self.log.info("Waiting for engine...")
+        cherrypy.engine.block()
+        self.log.info("Engine done.")
 
     def shutdown(self):
-        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
-        cherrypy.engine.stop()
+        self.log.info("Stopping server...")
+        cherrypy.engine.exit()
+        self.log.info("Stopped server")
 
     def handle_command(self, cmd):
         pass
