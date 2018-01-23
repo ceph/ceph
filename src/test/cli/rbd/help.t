@@ -105,6 +105,7 @@ Skip test on FreeBSD as it generates different output there.
       status                            Show the status of this image.
       trash list (trash ls)             List trash images.
       trash move (trash mv)             Move an image to the trash.
+      trash purge                       Remove all expired images from trash.
       trash remove (trash rm)           Remove an image from trash.
       trash restore                     Restore an image from trash.
       unmap                             Unmap a rbd device that was used by the
@@ -1567,19 +1568,39 @@ Skip test on FreeBSD as it generates different output there.
     --pretty-format      pretty formatting (json and xml)
   
   rbd help trash move
-  usage: rbd trash move [--pool <pool>] [--image <image>] [--delay <delay>] 
+  usage: rbd trash move [--pool <pool>] [--image <image>] 
+                        [--expires-at <expires-at>] 
                         <image-spec> 
   
   Move an image to the trash.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/]<image-name>)
+    <image-spec>            image specification
+                            (example: [<pool-name>/]<image-name>)
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --image arg          image name
-    --delay arg          time delay in seconds until effectively remove the image
+    -p [ --pool ] arg       pool name
+    --image arg             image name
+    --expires-at arg (=now) set the expiration time of an image so it can be
+                            purged when it is stale
+  
+  rbd help trash purge
+  usage: rbd trash purge [--pool <pool>] [--no-progress] 
+                         [--expired-before <expired-before>] 
+                         [--threshold <threshold>] 
+                         <pool-name> 
+  
+  Remove all expired images from trash.
+  
+  Positional arguments
+    <pool-name>           pool name
+  
+  Optional arguments
+    -p [ --pool ] arg     pool name
+    --no-progress         disable progress output
+    --expired-before date purges images that expired before the given date
+    --threshold arg       purges images until the current pool data usage is
+                          reduced to X%, value range: 0.0-1.0
   
   rbd help trash remove
   usage: rbd trash remove [--pool <pool>] [--image-id <image-id>] 

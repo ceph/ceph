@@ -81,8 +81,6 @@ static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
 static const std::string NO_ERROR("no-error");
 
-static const std::string DELAY("delay");
-
 static const std::string LIMIT("limit");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
