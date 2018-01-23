@@ -62,7 +62,10 @@ protected:
   PyModuleRegistry &py_modules;
   LogChannelRef clog, audit_clog;
 
-  AuthAuthorizeHandlerRegistry auth_registry;
+  // Authentication methods for cluster peers
+  AuthAuthorizeHandlerRegistry auth_cluster_registry;
+  // Authentication methods for clients
+  AuthAuthorizeHandlerRegistry auth_service_registry;
 
   // Connections for daemons, and clients with service names set
   // (i.e. those MgrClients that are allowed to send MMgrReports)
