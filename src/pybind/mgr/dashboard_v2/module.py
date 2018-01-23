@@ -9,6 +9,7 @@ import os
 import cherrypy
 from cherrypy import tools
 
+from auth import Auth
 from mgr_module import MgrModule
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -52,7 +53,22 @@ class Module(MgrModule):
         cherrypy.config.update({'server.socket_host': server_addr,
                                 'server.socket_port': int(server_port),
                                })
-        cherrypy.tree.mount(Module.HelloWorld(self), "/")
+        auth = Auth(self)
+        cherrypy.tools.autenticate = cherrypy.Tool('before_handler', auth.check_auth)
+        noauth_required_config = {
+            '/': {
+                'tools.autenticate.on': False,
+                'tools.sessions.on': True
+            }
+        }
+        auth_required_config = {
+            '/': {
+                'tools.autenticate.on': True,
+                'tools.sessions.on': True
+            }
+        }
+        cherrypy.tree.mount(auth, "/api/auth", config=noauth_required_config)
+        cherrypy.tree.mount(Module.HelloWorld(self), "/api/hello", config=auth_required_config)
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
         cherrypy.engine.block()
