@@ -234,7 +234,7 @@ public:
 	     << " length: " << rand_length <<  " target oid " << oid2.str() 
 	     << " tgt_offset: " << rand_tgt_offset << std::endl;
 	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			      context.pool_name, rand_tgt_offset, m_stats);
+			      context.low_tier_pool_name, rand_tgt_offset, m_stats);
 	return true;
       }
     } else if (m_op == make_manifest_end + 1) {

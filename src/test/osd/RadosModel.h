@@ -2328,12 +2328,15 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
+    if (tgt_pool_name.empty()) ceph_abort();
+
     context->find_object(oid, &src_value); 
     context->find_object(oid_tgt, &tgt_value);
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_chunk(offset, length, context->io_ctx, context->prefix+oid_tgt, tgt_offset);
+    op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		 context->prefix+oid_tgt, tgt_offset);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
