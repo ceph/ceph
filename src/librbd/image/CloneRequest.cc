@@ -315,7 +315,7 @@ void CloneRequest<I>::handle_refresh(int r) {
 
   if (r < 0 || !snap_protected) {
     m_r_saved = -EINVAL;
-    send_remove_child();
+    send_close();
     return;
   }
 
@@ -356,7 +356,7 @@ void CloneRequest<I>::handle_metadata_list(int r) {
     } else {
       lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
       m_r_saved = r;
-      send_remove_child();
+      send_close();
     }
     return;
   }
@@ -400,7 +400,7 @@ void CloneRequest<I>::handle_metadata_set(int r) {
   if (r < 0) {
     lderr(m_cct) << "couldn't set metadata: " << cpp_strerror(r) << dendl;
     m_r_saved = r;
-    send_remove_child();
+    send_close();
   } else {
     get_mirror_mode();
   }
@@ -441,7 +441,7 @@ void CloneRequest<I>::handle_get_mirror_mode(int r) {
                  << dendl;
 
     m_r_saved = r;
-    send_remove_child();
+    send_close();
   } else {
     if (m_mirror_mode == cls::rbd::MIRROR_MODE_POOL ||
 	!m_non_primary_global_image_id.empty()) {
@@ -474,10 +474,8 @@ void CloneRequest<I>::handle_enable_mirror(int r) {
     lderr(m_cct) << "failed to enable mirroring: " << cpp_strerror(r)
                << dendl;
     m_r_saved = r;
-    send_remove_child();
-  } else {
-    send_close();
   }
+  send_close();
 }
 
 template <typename I>
@@ -511,33 +509,6 @@ void CloneRequest<I>::handle_close(int r) {
   } else {
     send_remove();
   }
-}
-
-template <typename I>
-void CloneRequest<I>::send_remove_child() {
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
-
-  librados::ObjectWriteOperation op;
-  cls_client::remove_child(&op, m_pspec, m_id);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_remove_child>(this);
-  int r = m_ioctx.aio_operate(RBD_CHILDREN, comp, &op);
-  assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_remove_child(int r) {
-  ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-     lderr(m_cct) << "Error removing failed clone from list of children: "
-		  << cpp_strerror(r) << dendl;
-  }
-
-  send_close();
 }
 
 template <typename I>
