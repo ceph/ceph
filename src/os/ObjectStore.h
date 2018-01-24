@@ -1793,6 +1793,27 @@ public:
     return false;
   }
 
+  struct async_read_params_t {
+    uint64_t offset = 0;
+    uint64_t length = 0;
+    ceph::bufferlist* outbl = nullptr;
+    Context* on_complete = nullptr;
+    uint32_t flags = 0;
+
+    async_read_params_t(
+      const uint64_t offset,
+      const uint64_t length,
+      ceph::bufferlist* const outbl,
+      Context* const on_complete,
+      const uint32_t flags)
+    : offset(offset),
+      length(length),
+      outbl(outbl),
+      on_complete(on_complete),
+      flags(flags) {
+    }
+  };
+
   /**
    * fiemap -- get extent map of data of an object
    *
