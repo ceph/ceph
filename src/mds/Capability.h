@@ -16,13 +16,15 @@
 #ifndef CEPH_CAPABILITY_H
 #define CEPH_CAPABILITY_H
 
-#include "include/counter.h"
 #include "include/buffer_fwd.h"
+#include "include/counter.h"
+#include "include/mempool.h"
 #include "include/xlist.h"
 
 #include "common/config.h"
 
 #include "mdstypes.h"
+
 
 /*
 
@@ -66,6 +68,8 @@ namespace ceph {
 
 class Capability : public Counter<Capability> {
 public:
+  MEMPOOL_CLASS_HELPERS();
+
   struct Export {
     int64_t cap_id;
     int32_t wanted;
@@ -137,7 +141,7 @@ public:
   ceph_seq_t issue(unsigned c) {
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
-      _revokes.push_back(revoke_info(_pending, last_sent, last_issue));
+      _revokes.emplace_back(_pending, last_sent, last_issue);
       _pending = c;
       _issued |= c;
     } else if (~_pending & c) {
@@ -165,8 +169,9 @@ public:
   }
   void _calc_issued() {
     _issued = _pending;
-    for (list<revoke_info>::iterator p = _revokes.begin(); p != _revokes.end(); ++p)
-      _issued |= p->before;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
   }
   void confirm_receipt(ceph_seq_t seq, unsigned caps) {
     if (seq == last_sent) {
@@ -341,7 +346,7 @@ private:
   //  - add new caps to _pending
   //  - track revocations in _revokes list
   __u32 _pending, _issued;
-  list<revoke_info> _revokes;
+  mempool::mds_co::list<revoke_info> _revokes;
 
   ceph_seq_t last_sent;
   ceph_seq_t last_issue;
