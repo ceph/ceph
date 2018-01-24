@@ -14,3 +14,4 @@ tasks:
 - cephfs_test_runner:
     modules:
       - tasks.cephfs.test_scrub_checks
+      - tasks.cephfs.test_scrub
