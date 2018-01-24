@@ -1593,6 +1593,10 @@ int RGWHandler_REST_SWIFT::authorize()
 
       *(s->user) = einfo;
     }
+  } else {
+    if (! s->account_name.empty()) {
+      s->bucket_tenant = s->account_name;
+    }
   }
 
   return 0;
