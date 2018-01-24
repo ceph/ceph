@@ -1,15 +1,15 @@
 # -*- coding: utf-8 -*-
-
 """
 openATTIC mgr plugin (based on CherryPy)
 """
+from __future__ import absolute_import
 
-import bcrypt
+
 import os
 import cherrypy
 from cherrypy import tools
 
-from auth import Auth
+from .auth import Auth
 from mgr_module import MgrModule
 
 
@@ -55,7 +55,8 @@ class Module(MgrModule):
                                 'server.socket_port': int(server_port),
                                })
         auth = Auth(self)
-        cherrypy.tools.autenticate = cherrypy.Tool('before_handler', auth.check_auth)
+        cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
+                                                   auth.check_auth)
         noauth_required_config = {
             '/': {
                 'tools.autenticate.on': False,
@@ -69,7 +70,8 @@ class Module(MgrModule):
             }
         }
         cherrypy.tree.mount(auth, "/api/auth", config=noauth_required_config)
-        cherrypy.tree.mount(Module.HelloWorld(self), "/api/hello", config=auth_required_config)
+        cherrypy.tree.mount(Module.HelloWorld(self), "/api/hello",
+                            config=auth_required_config)
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
         cherrypy.engine.block()
@@ -83,7 +85,7 @@ class Module(MgrModule):
     def handle_command(self, cmd):
         if cmd['prefix'] == 'dashboard set-login-credentials':
             self.set_localized_config('username', cmd['username'])
-            hashed_passwd = bcrypt.hashpw(cmd['password'], bcrypt.gensalt())
+            hashed_passwd = Auth.password_hash(cmd['password'])
             self.set_localized_config('password', hashed_passwd)
             return 0, 'Username and password updated', ''
         else:
