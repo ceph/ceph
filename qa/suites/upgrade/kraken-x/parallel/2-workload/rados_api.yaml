@@ -8,4 +8,6 @@ workload:
         clients:
           client.0:
             - cls
+        env:
+          CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.snapshots_namespaces'
     - print: "**** done cls 2-workload"
