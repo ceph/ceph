@@ -27,8 +27,8 @@ class AuthTest(helper.CPWebCase):
                             config={'/': {'tools.autenticate.on': True}})
         module.set_localized_config('session-expire','2')
         module.set_localized_config('username','admin')
-        module.set_localized_config('password',
-            '$2b$12$KunrLI/uq7pqjvwUcAhIZu.B1dAGZ3liB8KFIJUOqZC.5/bEEmBQG')
+        pass_hash = Auth.password_hash('admin')
+        module.set_localized_config('password', pass_hash)
 
     def test_login_valid(self):
         sess_mock = RamSession()

@@ -3,7 +3,10 @@
 import bcrypt
 import cherrypy
 import time
+import sys
+
 from cherrypy import tools
+
 
 class Auth(object):
     """
@@ -11,17 +14,27 @@ class Auth(object):
 
     Supported config-keys:
 
-      | KEY             | DEFAULT | DESCR                                                        |
-      --------------------------------------------------------------------------------------------
-      | username        | None    | Username                                                     |
-      | password        | None    | Password encrypted using bcrypt                              |
-      | session-expire  | 1200    | Session will expire after <expires> seconds without activity |
+      | KEY             | DEFAULT | DESCR                                     |
+      ------------------------------------------------------------------------|
+      | username        | None    | Username                                  |
+      | password        | None    | Password encrypted using bcrypt           |
+      | session-expire  | 1200    | Session will expire after <expires>       |
+      |                           | seconds without activity                  |
     """
 
     SESSION_KEY = '_username'
     SESSION_KEY_TS = '_username_ts'
 
     DEFAULT_SESSION_EXPIRE = 1200
+
+    @staticmethod
+    def password_hash(password, salt_password=None):
+        if not salt_password:
+            salt_password = bcrypt.gensalt()
+        if sys.version_info > (3, 0):
+            return bcrypt.hashpw(password, salt_password)
+        else:
+            return bcrypt.hashpw(password.encode('utf8'), salt_password)
 
     def __init__(self, module):
         self.module = module
@@ -34,7 +47,8 @@ class Auth(object):
         now = int(time.time())
         config_username = self.module.get_localized_config('username', None)
         config_password = self.module.get_localized_config('password', None)
-        hash_password = bcrypt.hashpw(password.encode('utf8'), config_password)
+        hash_password = Auth.password_hash(password,
+                                           config_password)
         if username == config_username and hash_password == config_password:
             cherrypy.session.regenerate()
             cherrypy.session[Auth.SESSION_KEY] = username
@@ -57,10 +71,12 @@ class Auth(object):
         username = cherrypy.session.get(Auth.SESSION_KEY)
         if not username:
             self.log.debug("Unauthorized")
-            raise cherrypy.HTTPError(401,
-                                     'You are not authorized to access that resource')
+            raise cherrypy.HTTPError(401, 'You are not authorized to access '
+                                          'that resource')
         now = int(time.time())
-        expires = int(self.module.get_localized_config('session-expire', Auth.DEFAULT_SESSION_EXPIRE))
+        expires = int(self.module.get_localized_config(
+                        'session-expire',
+                        Auth.DEFAULT_SESSION_EXPIRE))
         if expires > 0:
             username_ts = cherrypy.session.get(Auth.SESSION_KEY_TS, None)
             if username_ts and username_ts < now - expires:
@@ -68,5 +84,6 @@ class Auth(object):
                 cherrypy.session[Auth.SESSION_KEY_TS] = None
                 self.log.debug("Session expired.")
                 raise cherrypy.HTTPError(401,
-                                         'Session expired. You are not authorized to access that resource')
+                                         'Session expired. You are not '
+                                         'authorized to access that resource')
         cherrypy.session[Auth.SESSION_KEY_TS] = now
