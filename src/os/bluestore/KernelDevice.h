@@ -24,6 +24,8 @@
 #include "BlockDevice.h"
 
 class KernelDevice : public BlockDevice {
+  friend class aio_service_t;
+
   int fd_direct, fd_buffered;
   std::string path;
   FS *fs;
@@ -37,24 +39,33 @@ class KernelDevice : public BlockDevice {
   std::atomic<bool> io_since_flush = {false};
   std::mutex flush_mutex;
 
-  aio_queue_t aio_queue;
-  bool aio_stop;
+  struct aio_service_t : private Thread {
+    KernelDevice* bdev;
 
-  struct AioCompletionThread : public Thread {
-    KernelDevice *bdev;
-    explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
-    void *entry() override {
-      bdev->_aio_thread();
-      return NULL;
+    aio_queue_t aio_queue;
+    bool aio_stop = false;
+
+    explicit aio_service_t(CephContext* cct,
+                           KernelDevice* const bdev)
+      : bdev(bdev),
+        aio_queue(cct->_conf->bdev_aio_max_queue_depth) {
     }
-  } aio_thread;
+
+    int start(CephContext* cct);
+    void stop(CephContext* cct);
+
+    void *entry() override {
+      bdev->_aio_thread(aio_queue, aio_stop);
+      return nullptr;
+    }
+  };
+  aio_service_t aio_service;
 
   std::atomic_int injecting_crash;
 
-  void _aio_thread();
+  void _aio_thread(aio_queue_t& aio_queue, const bool& aio_stop);
   int _aio_start();
   void _aio_stop();
-
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
@@ -73,7 +84,9 @@ class KernelDevice : public BlockDevice {
   void debug_aio_unlink(aio_t& aio);
 
 public:
-  KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv);
+  KernelDevice(CephContext* cct,
+               aio_callback_t cb,
+               void *cbpriv);
 
   void aio_submit(IOContext *ioc) override;
 

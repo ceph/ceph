@@ -30,17 +30,48 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
 #undef dout_prefix
+#define dout_prefix *_dout << "bdev(" << this << " " << ") "
+
+int KernelDevice::aio_service_t::start(CephContext* const cct)
+{
+  dout(10) << __func__ << dendl;
+  int r = aio_queue.init();
+  if (r < 0) {
+    if (r == -EAGAIN) {
+      derr << __func__ << " io_setup(2) failed with EAGAIN; "
+           << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+    } else {
+      derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+    }
+    return r;
+  }
+  Thread::create("bstore_aio");
+
+  return 0;
+}
+
+void KernelDevice::aio_service_t::stop(CephContext* const cct)
+{
+  dout(10) << __func__ << dendl;
+  aio_stop = true;
+  Thread::join();
+  aio_stop = false;
+  aio_queue.shutdown();
+}
+
+
+#undef dout_prefix
 #define dout_prefix *_dout << "bdev(" << this << " " << path << ") "
 
-KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv)
+KernelDevice::KernelDevice(CephContext* cct,
+                           aio_callback_t cb,
+			   void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd_direct(-1),
     fd_buffered(-1),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    aio_queue(cct->_conf->bdev_aio_max_queue_depth),
-    aio_stop(false),
-    aio_thread(this),
+    aio_service(cct, this),
     injecting_crash(0)
 {
 }
@@ -315,18 +346,7 @@ int KernelDevice::flush()
 int KernelDevice::_aio_start()
 {
   if (aio) {
-    dout(10) << __func__ << dendl;
-    int r = aio_queue.init();
-    if (r < 0) {
-      if (r == -EAGAIN) {
-	derr << __func__ << " io_setup(2) failed with EAGAIN; "
-	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
-      } else {
-	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
-      }
-      return r;
-    }
-    aio_thread.create("bstore_aio");
+    return aio_service.start(cct);
   }
   return 0;
 }
@@ -334,15 +354,11 @@ int KernelDevice::_aio_start()
 void KernelDevice::_aio_stop()
 {
   if (aio) {
-    dout(10) << __func__ << dendl;
-    aio_stop = true;
-    aio_thread.join();
-    aio_stop = false;
-    aio_queue.shutdown();
+    aio_service.stop(cct);
   }
 }
 
-void KernelDevice::_aio_thread()
+void KernelDevice::_aio_thread(aio_queue_t& aio_queue, const bool& aio_stop)
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
@@ -530,8 +546,8 @@ void KernelDevice::aio_submit(IOContext *ioc)
 
   void *priv = static_cast<void*>(ioc);
   int r, retries = 0;
-  r = aio_queue.submit_batch(ioc->running_aios.begin(), e, 
-			     pending, priv, &retries);
+  r = aio_service.aio_queue.submit_batch(ioc->running_aios.begin(), e,
+					 pending, priv, &retries);
   
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
