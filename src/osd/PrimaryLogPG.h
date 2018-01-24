@@ -1223,7 +1223,7 @@ protected:
     );
 
   int prepare_transaction(OpContext *ctx);
-  list<pair<OpRequestRef, OpContext*> > in_progress_async_reads;
+  std::unordered_map<OpContext*, OpRequestRef> in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
   
   // pg on-disk content

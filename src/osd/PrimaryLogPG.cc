@@ -367,14 +367,8 @@ void PrimaryLogPG::OpContext::finish_read(PrimaryLogPG *pg)
   --inflightreads;
   if (async_reads_complete()) {
     assert(pg->in_progress_async_reads.size());
-    // Async reads on replicated pools aren't strictly ordered
-    // anymore.
-    assert(!pg->pool.info.is_erasure() ||
-           pg->in_progress_async_reads.front().second == this);
-    pg->in_progress_async_reads.remove_if(
-      [this](const std::pair<OpRequestRef, OpContext*>& v) {
-      return v.second == this;
-    });
+    // Async reads aren't strictly ordered anymore.
+    pg->in_progress_async_reads.erase(this);
 
     // Restart the op context now that all reads have been
     // completed. Read failures will be handled by the op finisher.
@@ -3627,7 +3621,7 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   if (result == -EINPROGRESS || pending_async_reads) {
     // come back later.
     if (pending_async_reads) {
-      in_progress_async_reads.push_back(make_pair(op, ctx));
+      in_progress_async_reads.emplace(ctx, op);
       ctx->start_async_reads(this);
     }
     return;
@@ -11461,10 +11455,10 @@ void PrimaryLogPG::clear_async_reads()
   dout(10) << __func__ << dendl;
   for(auto& i : in_progress_async_reads) {
     dout(10) << "clear ctx: "
-             << "OpRequestRef " << i.first
-             << " OpContext " << i.second
+             << "OpRequestRef " << i.second
+             << " OpContext " << i.first
              << dendl;
-    close_op_ctx(i.second);
+    close_op_ctx(i.first);
   }
 }
 
@@ -11648,13 +11642,12 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction *t)
   }
   objects_blocked_on_cache_full.clear();
 
-  for (list<pair<OpRequestRef, OpContext*> >::iterator i =
-         in_progress_async_reads.begin();
+  for (auto i = in_progress_async_reads.begin();
        i != in_progress_async_reads.end();
        in_progress_async_reads.erase(i++)) {
-    close_op_ctx(i->second);
+    close_op_ctx(i->first);
     if (is_primary())
-      requeue_op(i->first);
+      requeue_op(i->second);
   }
 
   // this will requeue ops we were working on but didn't finish, and
