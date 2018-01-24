@@ -1051,7 +1051,8 @@ class Filesystem(MDSCluster):
         else:
             return True
 
-    def rados(self, args, pool=None, namespace=None, stdin_data=None):
+    def rados(self, args, pool=None, namespace=None, stdin_data=None,
+              stdin_file=None):
         """
         Call into the `rados` CLI from an MDS
         """
@@ -1069,6 +1070,10 @@ class Filesystem(MDSCluster):
         args = ([os.path.join(self._prefix, "rados"), "-p", pool] +
                 (["--namespace", namespace] if namespace else []) +
                 args)
+
+        if stdin_file is not None:
+            args = ["bash", "-c", "cat " + stdin_file + " | " + " ".join(args)]
+
         p = remote.run(
             args=args,
             stdin=stdin_data,
