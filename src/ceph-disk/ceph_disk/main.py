@@ -1871,6 +1871,11 @@ class Prepare(object):
             dest='prepare_key_template',
         )
         parser.add_argument(
+            '--lockbox-partition-number',
+            default=None,
+            help='partition number on lockbox/data device',
+        )
+        parser.add_argument(
             '--journal-partition-number',
             default=None,
             help='partition number on journal device',
@@ -1883,22 +1888,12 @@ class Prepare(object):
         parser.add_argument(
             '--data-partition-size',
             default=None,
-            help='partition size on lockbox/data device',
+            help='partition size in MB on data device used for Filestore. Bluestore defaults to 100MB',
         )
         parser.add_argument(
-            '--lockbox-partition-number',
+            '--block-partition-number',
             default=None,
-            help='partition number on lockbox/data device',
-        )
-        parser.add_argument(
-            '--block-db-partition-number',
-            default=None,
-            help='partition number on block db device',
-        )
-        parser.add_argument(
-            '--block-db-partition-size',
-            default=None,
-            help='partition size on block db device',
+            help='partition number on block device',
         )
         return parser
 
@@ -2297,8 +2292,8 @@ class PrepareBluestoreBlock(PrepareSpace):
             return 0  # get as much space as possible
 
     def desired_partition_number(self):
-        if self.args.block_db_partition_number is not None:
-            num = int(self.args.block_db_partition_number)
+        if self.args.block_partition_number is not None:
+            num = int(self.args.block_partition_number)
         elif self.args.block == self.args.data:
             num = 2
         else:
