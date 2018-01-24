@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume import process, conf, decorators, terminal
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
+from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.systemd import systemctl
 from ceph_volume.api import lvm as api
 
@@ -18,6 +19,8 @@ def activate_filestore(lvs):
     osd_lv = lvs.get(lv_tags={'ceph.type': 'data'})
     if not osd_lv:
         raise RuntimeError('Unable to find a data LV for filestore activation')
+    is_encrypted = osd_lv.tags.get('ceph.encrypted', '0') == '1'
+
     osd_id = osd_lv.tags['ceph.osd_id']
     conf.cluster = osd_lv.tags['ceph.cluster_name']
     # it may have a volume with a journal
@@ -28,15 +31,30 @@ def activate_filestore(lvs):
     if not osd_journal_lv:
         # must be a disk partition, by quering blkid by the uuid we are ensuring that the
         # device path is always correct
-        osd_journal = disk.get_device_from_partuuid(osd_lv.tags['ceph.journal_uuid'])
+        journal_uuid = osd_lv.tags['ceph.journal_uuid']
+        osd_journal = disk.get_device_from_partuuid(journal_uuid)
     else:
+        journal_uuid = osd_journal_lv.lv_uuid
         osd_journal = osd_lv.tags['ceph.journal_device']
 
     if not osd_journal:
         raise RuntimeError('unable to detect an lv or device journal for OSD %s' % osd_id)
 
+    # this is done here, so that previous checks that ensure path availability
+    # and correctness can still be enforced, and report if any issues are found
+    if is_encrypted:
+        lockbox_secret = osd_lv.tags['ceph.cephx_lockbox_secret']
+        # this keyring writing is idempotent
+        encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
+        dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        encryption_utils.luks_open(dmcrypt_secret, osd_lv.lv_path, osd_lv.lv_uuid)
+        encryption_utils.luks_open(dmcrypt_secret, osd_journal, journal_uuid)
+
+        osd_journal = '/dev/mapper/%s' % journal_uuid
+        source = '/dev/mapper/%s' % osd_lv.lv_uuid
+    else:
+        source = osd_lv.lv_path
     # mount the osd
-    source = osd_lv.lv_path
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     if not system.device_is_mounted(source, destination=destination):
         process.run(['mount', '-v', source, destination])
@@ -57,7 +75,7 @@ def activate_filestore(lvs):
     terminal.success("ceph-volume lvm activate successful for osd ID: %s" % osd_id)
 
 
-def get_osd_device_path(osd_lv, lvs, device_type):
+def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
     """
     ``device_type`` can be one of ``db``, ``wal`` or ``block`` so that
     we can query ``lvs`` (a ``Volumes`` object) and fallback to querying the uuid
@@ -67,6 +85,8 @@ def get_osd_device_path(osd_lv, lvs, device_type):
     are optional
     """
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
+    is_encrypted = osd_lv.tags.get('ceph.encrypted', '0') == '1'
+    logger.debug('Found block device (%s) with encryption: %s', osd_lv.name, is_encrypted)
     uuid_tag = 'ceph.%s_uuid' % device_type
     device_uuid = osd_lv.tags.get(uuid_tag)
     if not device_uuid:
@@ -74,10 +94,16 @@ def get_osd_device_path(osd_lv, lvs, device_type):
 
     device_lv = lvs.get(lv_uuid=device_uuid)
     if device_lv:
+        if is_encrypted:
+            encryption_utils.luks_open(dmcrypt_secret, device_lv.lv_path, device_uuid)
+            return '/dev/mapper/%s' % device_uuid
         return device_lv.lv_path
     else:
         # this could be a regular device, so query it with blkid
         physical_device = disk.get_device_from_partuuid(device_uuid)
+        if physical_device and is_encrypted:
+            encryption_utils.luks_open(dmcrypt_secret, physical_device, device_uuid)
+            return '/dev/mapper/%s' % device_uuid
         return physical_device or None
     return None
 
@@ -85,11 +111,11 @@ def get_osd_device_path(osd_lv, lvs, device_type):
 def activate_bluestore(lvs):
     # find the osd
     osd_lv = lvs.get(lv_tags={'ceph.type': 'block'})
+    is_encrypted = osd_lv.tags.get('ceph.encrypted', '0') == '1'
+    dmcrypt_secret = None
     osd_id = osd_lv.tags['ceph.osd_id']
     conf.cluster = osd_lv.tags['ceph.cluster_name']
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
-    db_device_path = get_osd_device_path(osd_lv, lvs, 'db')
-    wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal')
 
     # mount on tmpfs the osd directory
     osd_path = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
@@ -102,15 +128,28 @@ def activate_bluestore(lvs):
         link_path = os.path.join(osd_path, link_name)
         if os.path.exists(link_path):
             os.unlink(os.path.join(osd_path, link_name))
+    # encryption is handled here, before priming the OSD dir
+    if is_encrypted:
+        osd_lv_path = '/dev/mapper/%s' % osd_lv.lv_uuid
+        lockbox_secret = osd_lv.tags['ceph.cephx_lockbox_secret']
+        encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
+        dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+        encryption_utils.luks_open(dmcrypt_secret, osd_lv.lv_path, osd_lv.lv_uuid)
+    else:
+        osd_lv_path = osd_lv.lv_path
+
+    db_device_path = get_osd_device_path(osd_lv, lvs, 'db', dmcrypt_secret=dmcrypt_secret)
+    wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal', dmcrypt_secret=dmcrypt_secret)
+
     # Once symlinks are removed, the osd dir can be 'primed again.
     process.run([
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
-        'prime-osd-dir', '--dev', osd_lv.lv_path,
+        'prime-osd-dir', '--dev', osd_lv_path,
         '--path', osd_path])
     # always re-do the symlink regardless if it exists, so that the block,
     # block.wal, and block.db devices that may have changed can be mapped
     # correctly every time
-    process.run(['ln', '-snf', osd_lv.lv_path, os.path.join(osd_path, 'block')])
+    process.run(['ln', '-snf', osd_lv_path, os.path.join(osd_path, 'block')])
     system.chown(os.path.join(osd_path, 'block'))
     system.chown(osd_path)
     if db_device_path:
