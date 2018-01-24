@@ -560,7 +560,7 @@ public:
 
   // -- distributed state --
 protected:
-  // file capabilities FIXME Capability not part of mempool
+  // file capabilities
   using cap_map = mempool::mds_co::map<client_t, Capability*>;
   cap_map client_caps;         // client -> caps
   mempool::mds_co::compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
