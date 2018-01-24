@@ -16,6 +16,9 @@
 #ifndef CEPH_THREAD_H
 #define CEPH_THREAD_H
 
+#include <memory>
+#include <utility>
+
 #include <pthread.h>
 #include <sys/types.h>
 
@@ -55,5 +58,31 @@ class Thread {
   int set_ioprio(int cls, int prio);
   int set_affinity(int cpuid);
 };
+
+
+template <typename F>
+class LambdaThread : public Thread {
+  F f;
+
+  void* entry() override final {
+    // TODO: use SFINAE to forward the result if F's return type
+    // is void*. This should be possible with a thing in type of
+    // std::result_of.
+    // Anyway, a lot of derivates just call their main loops and
+    // never go with something different than nullptr, so Lambda
+    // Thread still can be useful and help avoid making closures
+    // manually.
+    f();
+    return nullptr;
+  }
+
+public:
+  LambdaThread(F &&f) : f(std::forward<F>(f)) {}
+};
+
+template <typename F>
+std::unique_ptr<LambdaThread<F>> make_lambda_thread(F &&f) {
+  return std::make_unique<LambdaThread<F>>(std::move(f));
+}
 
 #endif
