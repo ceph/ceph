@@ -112,33 +112,6 @@ BuildRequires:	sharutils
 BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 %endif
-%if 0%{with make_check}
-%if 0%{?fedora} || 0%{?rhel}
-%if 0%{with python2}
-BuildRequires:	python-cherrypy
-BuildRequires:	python-pecan
-BuildRequires:	python-werkzeug
-%else
-BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-pecan
-BuildRequires:	python%{python3_pkgversion}-werkzeug
-%endif
-%endif
-%if 0%{?suse_version}
-%if 0%{with python2}
-BuildRequires:	python-CherryPy
-BuildRequires:	python-Werkzeug
-BuildRequires:	python-pecan
-BuildRequires:	python-numpy-devel
-%else
-BuildRequires:	python%{python3_pkgversion}-CherryPy
-BuildRequires:	python%{python3_pkgversion}-Werkzeug
-BuildRequires:	python%{python3_pkgversion}-pecan
-BuildRequires:	python%{python3_pkgversion}-numpy-devel
-%endif
-%endif
-BuildRequires:	socat
-%endif
 BuildRequires:	bc
 BuildRequires:	gperf
 BuildRequires:  cmake
@@ -186,6 +159,9 @@ BuildRequires:	python%{python3_pkgversion}-requests
 BuildRequires:	python%{python3_pkgversion}-virtualenv
 %endif
 BuildRequires:	snappy-devel
+%if 0%{with make_check}
+BuildRequires:	socat
+%endif
 BuildRequires:	udev
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
@@ -254,6 +230,33 @@ BuildRequires:	python34-Cython
 BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools
 BuildRequires:	python3-Cython
+%endif
+# distro-conditional make check dependencies
+%if 0%{with make_check}
+%if 0%{?fedora} || 0%{?rhel}
+%if 0%{with python2}
+BuildRequires:	python-cherrypy
+BuildRequires:	python-pecan
+BuildRequires:	python-werkzeug
+%else
+BuildRequires:	python%{python3_pkgversion}-cherrypy
+BuildRequires:	python%{python3_pkgversion}-pecan
+BuildRequires:	python%{python3_pkgversion}-werkzeug
+%endif
+%endif
+%if 0%{?suse_version}
+%if 0%{with python2}
+BuildRequires:	python-CherryPy
+BuildRequires:	python-Werkzeug
+BuildRequires:	python-pecan
+BuildRequires:	python-numpy-devel
+%else
+BuildRequires:	python%{python3_pkgversion}-CherryPy
+BuildRequires:	python%{python3_pkgversion}-Werkzeug
+BuildRequires:	python%{python3_pkgversion}-pecan
+BuildRequires:	python%{python3_pkgversion}-numpy-devel
+%endif
+%endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
