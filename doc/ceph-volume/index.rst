@@ -53,6 +53,7 @@ This page will be updated when that happens.
    systemd
    lvm/index
    lvm/activate
+   lvm/encryption
    lvm/prepare
    lvm/create
    lvm/scan

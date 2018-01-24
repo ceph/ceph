@@ -12,7 +12,8 @@ Synopsis
 | **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
 |                 [--log-path LOG_PATH]
 
-| **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare* ]
+| **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
+| *zap* | *list*]
 
 Description
 ===========
@@ -71,6 +72,7 @@ Optional arguments:
 * [--journal-size GB]   Size (in GB) A logical group name or a path to a logical volume
 * [--bluestore]         Use the bluestore objectstore (default)
 * [--filestore]         Use the filestore objectstore
+* [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--osd-id OSD_ID]     Reuse an existing OSD id
 * [--osd-fsid OSD_FSID] Reuse an existing OSD fsid
 
@@ -107,6 +109,53 @@ so that all needed tags and metadata exist.
 Positional arguments:
 
 * <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
+
+**list**
+List devices or logical volumes associated with Ceph. An association is
+determined if a device has information relating to an OSD. This is
+verified by querying LVM's metadata and correlating it with devices.
+
+The lvs associated with the OSD need to have been prepared previously by
+ceph-volume so that all needed tags and metadata exist.
+
+Usage::
+
+    ceph-volume lvm list
+
+List a particular device, reporting all metadata about it::
+
+    ceph-volume lvm list /dev/sda1
+
+List a logical volume, along with all its metadata (vg is a volume
+group, and lv the logical volume name)::
+
+    ceph-volume lvm list {vg/lv}
+
+Positional arguments:
+
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
+  ``/path/to/sda1`` for regular devices.
+
+
+**zap**
+Zaps the given logical volume or partition. If given a path to a logical
+volume it must be in the format of vg/lv. Any filesystems present
+on the given lv or partition will be removed and all data will be purged.
+
+However, the lv or partition will be kept intact.
+
+Usage, for logical volumes::
+
+      ceph-volume lvm zap {vg/lv}
+
+Usage, for logical partitions::
+
+      ceph-volume lvm zap /dev/sdc1
+
+Positional arguments:
+
+* <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
+  ``/path/to/sda1`` for regular devices.
 
 Availability
 ============
