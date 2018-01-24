@@ -120,7 +120,12 @@ public:
      * 2. initialize target objects (using write op)
      * 3. wait for set-* completion
      */
-    int copy_manifest_end = m_objects*2;
+    int copy_manifest_end = 0;
+    if (m_set_chunk) {
+      copy_manifest_end = m_objects*2;
+    } else {
+      copy_manifest_end = m_objects*3;
+    }
     int make_manifest_end = copy_manifest_end;
     if (m_set_chunk) {
       /* make 10 chunks per an object*/
@@ -146,13 +151,18 @@ public:
       return true;
     } else if (m_op <= copy_manifest_end) {
 	stringstream oid, oid2;
-	int _oid = m_op-m_objects;
+	//int _oid = m_op-m_objects;
+	int _oid = m_op % m_objects + 1;
 	oid << _oid;
 	if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
 	}
-	oid2 << _oid << " " << context.low_tier_pool_name;
-	if ((_oid) % 2) {
+	int _oid2 = m_op - m_objects + 1;
+	if (_oid2 > copy_manifest_end - m_objects) {
+	  _oid2 -= (copy_manifest_end - m_objects);
+	}
+	oid2 << _oid2 << " " << context.low_tier_pool_name;
+	if ((_oid2) % 2) {
 	  oid2 << " " << string(300, 'm');
 	}
 	cout << m_op << ": " << "copy oid " << oid.str() << " target oid " 
@@ -170,6 +180,13 @@ public:
 	oid2 << _oid << " " << context.low_tier_pool_name;
 	if ((_oid) % 2) {
 	  oid2 << " " << string(300, 'm');
+	}
+	if (context.oid_in_use.count(oid.str())) {
+	  /* previous copy is not finished */
+	  op = NULL;
+	  m_op--;
+	  cout << m_op << " retry set_redirect !" << std::endl;
+	  return true;
 	}
 	cout << m_op << ": " << "set_redirect oid " << oid.str() << " target oid " 
 	      << oid2.str() << std::endl;
@@ -237,6 +254,7 @@ public:
 	if (t_op % 2) {
 	  oid << " " << string(300, 'm');
 	}
+	cout << " redirect_not_in_use: " << oid.str() << std::endl;
 	context.oid_redirect_not_in_use.insert(oid.str());
       }
     }
