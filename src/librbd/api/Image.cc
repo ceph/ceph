@@ -54,10 +54,6 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
                             PoolImageIds *pool_image_ids)
 {
   CephContext *cct = ictx->cct;
-  int r = ictx->state->refresh_if_required();
-  if (r < 0) {
-    return r;
-  }
 
   // no children for non-layered or old format image
   if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->snap_lock)) {
@@ -68,7 +64,7 @@ int Image<I>::list_children(I *ictx, const ParentSpec &parent_spec,
   // search all pools for children depending on this snapshot
   librados::Rados rados(ictx->md_ctx);
   std::list<std::pair<int64_t, std::string> > pools;
-  r = rados.pool_list2(pools);
+  int r = rados.pool_list2(pools);
   if (r < 0) {
     lderr(cct) << "error listing pools: " << cpp_strerror(r) << dendl;
     return r;
