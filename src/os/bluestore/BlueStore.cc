@@ -3484,8 +3484,218 @@ bufferlist BlueStore::OmapIteratorImpl::value()
   return it->value();
 }
 
+// =======================================================
 
-// =====================================
+// RegionReader and descendants
+#undef dout_context
+#define dout_context store->cct
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore(" << store->path << ") "
+
+BlueStore::RegionReaderRef BlueStore::RegionReader::create_or_update(
+  BlueStore::RegionReaderRef&& current,
+  BlueStore* const store,
+  BlueStore::BlobRef bptr,
+  const uint64_t logical_offset,
+  const uint64_t blob_offset,
+  const uint64_t length)
+{
+  RegionReaderRef ret = std::move(current);
+  if (! ret) {
+    if (bptr->get_blob().is_compressed()) {
+      ret = std::make_unique<CompressedRegionReader>(store, bptr);
+    } else {
+      ret = std::make_unique<PlainRegionReader>(store, bptr);
+    }
+  }
+  ret->add_region_hint(logical_offset, blob_offset, length);
+  return ret;
+}
+
+int BlueStore::RegionReader::_verify_csum(
+  const ghobject_t& oid,
+  const bluestore_blob_t* blob,
+  const uint64_t blob_xoffset,
+  const bufferlist& bl,
+  const uint64_t logical_offset)
+{
+  PerfGuard(store->logger, l_bluestore_csum_lat);
+  int bad;
+  uint64_t bad_csum;
+  int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
+  if (r < 0) {
+    if (r == -1) {
+      PExtentVector pex;
+      blob->map(
+	bad,
+	blob->get_csum_chunk_size(),
+	[&](uint64_t offset, uint64_t length) {
+	  pex.emplace_back(bluestore_pextent_t(offset, length));
+          return 0;
+	});
+      derr << __func__ << " bad "
+           << Checksummer::get_csum_type_string(blob->csum_type)
+           << "/0x" << std::hex << blob->get_csum_chunk_size()
+           << " checksum at blob offset 0x" << bad
+           << ", got 0x" << bad_csum << ", expected 0x"
+           << blob->get_csum_item(bad / blob->get_csum_chunk_size())
+           << std::dec << ", device location " << pex
+           << ", logical extent 0x" << std::hex
+           << (logical_offset + bad - blob_xoffset) << "~"
+           << blob->get_csum_chunk_size() << std::dec
+           << ", object " << oid
+           << dendl;
+    } else {
+      derr << __func__ << " failed with exit code: " << cpp_strerror(r)
+           << dendl;
+    }
+  }
+  return r;
+}
+
+boost::optional<ceph::bufferlist>
+BlueStore::CompressedRegionReader::_decompress(
+  ceph::bufferlist& source)
+{
+  PerfGuard(store->logger, l_bluestore_decompress_lat);
+
+  ceph::bufferlist::iterator i = source.begin();
+  bluestore_compression_header_t chdr;
+  ::decode(chdr, i);
+  int alg = int(chdr.type);
+  CompressorRef cp = store->compressor;
+  if (!cp || (int)cp->get_type() != alg) {
+    cp = Compressor::create(store->cct, alg);
+  }
+
+  if (!cp.get()) {
+    // if compressor isn't available - error, because cannot return
+    // decompressed data?
+    derr << __func__ << " can't load decompressor " << alg << dendl;
+    return boost::none;
+  } else {
+    ceph::bufferlist result;
+    const auto r = cp->decompress(i, chdr.length, result);
+    if (r < 0) {
+      derr << __func__ << " decompression failed with exit code " << r
+           << dendl;
+      return boost::none;
+    } else {
+      return result;
+    }
+  }
+}
+
+int BlueStore::PlainRegionReader::issue_io(
+  BlueStore::RegionReader::io_issuer_t io_func)
+{
+  // read the pieces
+  for (auto& reg : regions2read) {
+    // determine how much of the blob to read
+    uint64_t chunk_size = bptr->get_blob().get_chunk_size(store->block_size);
+    reg.r_off = reg.blob_xoffset;
+    uint64_t r_len = reg.length;
+    reg.front = reg.r_off % chunk_size;
+    if (reg.front) {
+      reg.r_off -= reg.front;
+      r_len += reg.front;
+    }
+    unsigned tail = r_len % chunk_size;
+    if (tail) {
+      r_len += chunk_size - tail;
+    }
+
+    dout(20) << __func__ << "    region 0x" << std::hex << reg.logical_offset
+             << ": 0x" << reg.blob_xoffset << "~" << reg.length
+             << " reading 0x" << reg.r_off << "~" << r_len
+             << std::dec << dendl;
+
+    // read it
+    const auto r = bptr->get_blob().map(reg.r_off, r_len,
+      std::bind(io_func, std::placeholders::_1,
+                std::placeholders::_2, &reg.bl, 1));
+    if (r < 0) {
+      derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
+           << dendl;
+      if (r == -EIO) {
+        // propagate EIO to caller
+        return r;
+      }
+      assert(r == 0);
+    }
+    assert(reg.bl.length() == r_len);
+  }
+  return 0;
+}
+
+int BlueStore::PlainRegionReader::postprocess(
+  ready_regions_t& ready_regions,
+  const bool buffered)
+{
+  for (auto& reg : regions2read) {
+    // move to RegionReader
+    if (_verify_csum(oid, &bptr->get_blob(), reg.r_off, reg.bl,
+                     reg.logical_offset) < 0) {
+      return -EIO;
+    }
+    if (buffered) {
+      // do we need a lock here?
+      bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
+    				 reg.r_off, reg.bl);
+    }
+    // prune and keep result
+    ready_regions[reg.logical_offset].substr_of(
+      reg.bl, reg.front, reg.length);
+  }
+  return 0;
+}
+
+
+int BlueStore::CompressedRegionReader::issue_io(
+  BlueStore::RegionReader::io_issuer_t io_func)
+{
+  // read the whole thing
+  const auto r = bptr->get_blob().map(
+    0, bptr->get_blob().get_ondisk_length(),
+    std::bind(io_func, std::placeholders::_1, std::placeholders::_2,
+              &compressed_bl, regions2read.size()));
+  if (r < 0) {
+    derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
+         << dendl;
+    if (r == -EIO) {
+      // propagate EIO to caller
+      return r;
+    }
+    assert(r == 0);
+  }
+  return 0;
+}
+
+int BlueStore::CompressedRegionReader::postprocess(
+  ready_regions_t& ready_regions,
+  const bool buffered)
+{
+  if (_verify_csum(oid, &bptr->get_blob(), 0, compressed_bl,
+                   regions2read.front().logical_offset) < 0) {
+    return -EIO;
+  }
+
+  boost::optional<ceph::bufferlist> raw_bl = _decompress(compressed_bl);
+  if (!raw_bl) {
+    return -EIO;
+  }
+  if (buffered) {
+    bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
+                                   0, *raw_bl);
+  }
+  for (auto& i : regions2read) {
+    ready_regions[i.logical_offset].substr_of(*raw_bl, i.blob_xoffset,
+                                              i.length);
+  }
+  return 0;
+}
+
+// =======================================================
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << path << ") "
@@ -6598,26 +6808,6 @@ BlueStore::_consult_cache(
 }
 
 
-BlueStore::RegionReaderRef BlueStore::RegionReader::create_or_update(
-  BlueStore::RegionReaderRef&& current,
-  BlueStore* const store,
-  BlueStore::BlobRef bptr,
-  const uint64_t logical_offset,
-  const uint64_t blob_offset,
-  const uint64_t length)
-{
-  RegionReaderRef ret = std::move(current);
-  if (! ret) {
-    if (bptr->get_blob().is_compressed()) {
-      ret = std::make_unique<CompressedRegionReader>(store, bptr);
-    } else {
-      ret = std::make_unique<PlainRegionReader>(store, bptr);
-    }
-  }
-  ret->add_region_hint(logical_offset, blob_offset, length);
-  return ret;
-}
-
 bool BlueStore::_do_read_is_buffered(const uint32_t op_flags) const
 {
   // generally, don't buffer anything, unless the client explicitly
@@ -6636,132 +6826,6 @@ bool BlueStore::_do_read_is_buffered(const uint32_t op_flags) const
   }
 
   return false;
-}
-
-#define pderr(parent)                           \
-{                                               \
-  CephContext* cct = parent->cct;               \
-  const std::string& path = parent->path;       \
-  derr
-
-#define pdout(parent, level)                    \
-{                                               \
-  CephContext* cct = parent->cct;               \
-  const std::string& path = parent->path;       \
-  dout(level)
-
-#define pdendl                                  \
-  dendl;                                        \
-}
-
-int BlueStore::PlainRegionReader::issue_io(
-  BlueStore::RegionReader::io_issuer_t io_func)
-{
-  // read the pieces
-  for (auto& reg : regions2read) {
-    // determine how much of the blob to read
-    uint64_t chunk_size = bptr->get_blob().get_chunk_size(store->block_size);
-    reg.r_off = reg.blob_xoffset;
-    uint64_t r_len = reg.length;
-    reg.front = reg.r_off % chunk_size;
-    if (reg.front) {
-      reg.r_off -= reg.front;
-      r_len += reg.front;
-    }
-    unsigned tail = r_len % chunk_size;
-    if (tail) {
-      r_len += chunk_size - tail;
-    }
-
-    pdout(store, 20) << __func__ << "    region 0x" << std::hex
-                     << reg.logical_offset
-                     << ": 0x" << reg.blob_xoffset << "~" << reg.length
-                     << " reading 0x" << reg.r_off << "~" << r_len
-                     << std::dec << pdendl;
-
-    // read it
-    const auto r = bptr->get_blob().map(reg.r_off, r_len,
-      std::bind(io_func, std::placeholders::_1,
-                std::placeholders::_2, &reg.bl, 1));
-    if (r < 0) {
-      pderr(store) << __func__ << " bdev-read failed: " << cpp_strerror(r)
-                   << pdendl;
-      if (r == -EIO) {
-        // propagate EIO to caller
-        return r;
-      }
-      assert(r == 0);
-    }
-    assert(reg.bl.length() == r_len);
-  }
-  return 0;
-}
-
-int BlueStore::PlainRegionReader::postprocess(
-  ready_regions_t& ready_regions,
-  const bool buffered)
-{
-  for (auto& reg : regions2read) {
-    // move to RegionReader
-    if (_verify_csum(oid, &bptr->get_blob(), reg.r_off, reg.bl,
-                     reg.logical_offset) < 0) {
-      return -EIO;
-    }
-    if (buffered) {
-      // do we need a lock here?
-      bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
-    				 reg.r_off, reg.bl);
-    }
-    // prune and keep result
-    ready_regions[reg.logical_offset].substr_of(
-      reg.bl, reg.front, reg.length);
-  }
-  return 0;
-}
-
-
-int BlueStore::CompressedRegionReader::issue_io(
-  BlueStore::RegionReader::io_issuer_t io_func)
-{
-  // read the whole thing
-  const auto r = bptr->get_blob().map(
-    0, bptr->get_blob().get_ondisk_length(),
-    std::bind(io_func, std::placeholders::_1, std::placeholders::_2,
-              &compressed_bl, regions2read.size()));
-  if (r < 0) {
-    pderr(store) << __func__ << " bdev-read failed: " << cpp_strerror(r)
-                 << pdendl;
-    if (r == -EIO) {
-      // propagate EIO to caller
-      return r;
-    }
-    assert(r == 0);
-  }
-  return 0;
-}
-
-int BlueStore::CompressedRegionReader::postprocess(
-  ready_regions_t& ready_regions,
-  const bool buffered)
-{
-  if (_verify_csum(oid, &bptr->get_blob(), 0, compressed_bl,
-                   regions2read.front().logical_offset) < 0) {
-    return -EIO;
-  }
-
-  boost::optional<ceph::bufferlist> raw_bl = _decompress(compressed_bl);
-  if (!raw_bl) {
-    return -EIO;
-  }
-  if (buffered) {
-    bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
-                                   0, *raw_bl);
-  }
-  for (auto& i : regions2read) {
-    ready_regions[i.logical_offset].substr_of(*raw_bl, i.blob_xoffset,
-                                              i.length);
-  }
-  return 0;
 }
 
 int BlueStore::_do_read(
@@ -6883,79 +6947,46 @@ ceph::bufferlist BlueStore::_do_read_compose_result(
   return bl;
 }
 
-int BlueStore::RegionReader::_verify_csum(
-  const ghobject_t& oid,
-  const bluestore_blob_t* blob,
-  const uint64_t blob_xoffset,
-  const bufferlist& bl,
-  const uint64_t logical_offset)
+ceph::bufferlist BlueStore::_do_read_compose_sparse_result(
+  BlueStore::ready_regions_t& ready_regions,
+  const size_t offset,
+  const size_t length)
 {
-  PerfGuard(store->logger, l_bluestore_csum_lat);
-  int bad;
-  uint64_t bad_csum;
-  int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
-  if (r < 0) {
-    if (r == -1) {
-      PExtentVector pex;
-      blob->map(
-	bad,
-	blob->get_csum_chunk_size(),
-	[&](uint64_t offset, uint64_t length) {
-	  pex.emplace_back(bluestore_pextent_t(offset, length));
-          return 0;
-	});
-      pderr(store) << __func__ << " bad "
-                   << Checksummer::get_csum_type_string(blob->csum_type)
-                   << "/0x" << std::hex << blob->get_csum_chunk_size()
-                   << " checksum at blob offset 0x" << bad
-                   << ", got 0x" << bad_csum << ", expected 0x"
-                   << blob->get_csum_item(bad / blob->get_csum_chunk_size())
-                   << std::dec << ", device location " << pex
-                   << ", logical extent 0x" << std::hex
-                   << (logical_offset + bad - blob_xoffset) << "~"
-                   << blob->get_csum_chunk_size() << std::dec
-                   << ", object " << oid
-                   << pdendl;
+  auto pr = ready_regions.begin();
+  const auto pr_end = ready_regions.end();
+  uint64_t pos = 0;
+  std::map<uint64_t, uint64_t> extents;
+  ceph::bufferlist data_bl;
+  while (pos < length) {
+    if (pr != pr_end && pr->first == pos + offset) {
+      dout(30) << __func__ << " assemble 0x" << std::hex << pos
+	       << ": data from 0x" << pr->first << "~" << pr->second.length()
+	       << std::dec << dendl;
+
+      extents.emplace(pr->first, pr->second.length());
+      data_bl.claim_append(pr->second);
+
+      pos += pr->second.length();
+      ++pr;
     } else {
-      pderr(store) << __func__ << " failed with exit code: "
-                   << cpp_strerror(r) << pdendl;
+      uint64_t l = length - pos;
+      if (pr != pr_end) {
+        assert(pr->first > pos + offset);
+	l = pr->first - (pos + offset);
+      }
+      dout(30) << __func__ << " skipping 0x" << std::hex << pos
+	       << ": zeros for 0x" << (pos + offset) << "~" << l
+	       << std::dec << dendl;
+      pos += l;
     }
   }
-  return r;
-}
+  assert(pos == length);
+  assert(pr == pr_end);
 
-boost::optional<ceph::bufferlist>
-BlueStore::CompressedRegionReader::_decompress(
-  ceph::bufferlist& source)
-{
-  PerfGuard(store->logger, l_bluestore_decompress_lat);
-
-  ceph::bufferlist::iterator i = source.begin();
-  bluestore_compression_header_t chdr;
-  ::decode(chdr, i);
-  int alg = int(chdr.type);
-  CompressorRef cp = store->compressor;
-  if (!cp || (int)cp->get_type() != alg) {
-    cp = Compressor::create(store->cct, alg);
-  }
-
-  if (!cp.get()) {
-    // if compressor isn't available - error, because cannot return
-    // decompressed data?
-    pderr(store) << __func__ << " can't load decompressor " << alg
-                 << pdendl;
-    return boost::none;
-  } else {
-    ceph::bufferlist result;
-    const auto r = cp->decompress(i, chdr.length, result);
-    if (r < 0) {
-      pderr(store) << __func__ << " decompression failed with exit code "
-                   << r << pdendl;
-      return boost::none;
-    } else {
-      return result;
-    }
-  }
+  ceph::bufferlist retbl;
+  ::encode(extents, retbl);
+  ::encode_destructively(data_bl, retbl);
+  return retbl;
 }
 
 // this stores fiemap into interval_set, other variations
