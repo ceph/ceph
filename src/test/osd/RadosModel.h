@@ -2434,16 +2434,22 @@ public:
     context->oid_redirect_in_use.insert(oid_tgt);
     context->oid_redirect_not_in_use.erase(oid_tgt);
 
+    if (tgt_pool_name.empty()) ceph_abort();
+
     context->find_object(oid, &src_value); 
     if(!context->redirect_objs[oid].empty()) {
-      /* update target's user_version */
-      rd_op.stat(NULL, NULL, NULL);
+      /* copy_from oid --> oid_tgt */
       comp = context->rados.aio_create_completion();
-      context->io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
-			    librados::OPERATION_ORDER_READS_WRITES,
-			    NULL);
+      string src = context->prefix+oid;
+      op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
+					   librados::OPERATION_ORDER_READS_WRITES);
       comp->wait_for_safe();
-      context->update_object_version(oid_tgt, comp->get_version64());
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
       comp->release();
 
       /* unset redirect target */
@@ -2465,23 +2471,6 @@ public:
 
       context->oid_redirect_not_in_use.insert(context->redirect_objs[oid]);
       context->oid_redirect_in_use.erase(context->redirect_objs[oid]);
-
-      /* copy_from oid_tgt --> oid */
-      comp = context->rados.aio_create_completion();
-      context->find_object(oid_tgt, &tgt_value);
-      string src = context->prefix+oid_tgt;
-      op.copy_from(src.c_str(), context->io_ctx, tgt_value.version);
-      context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
-				  librados::OPERATION_ORDER_READS_WRITES);
-      comp->wait_for_safe();
-      if ((r = comp->get_return_value())) {
-	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
-	     << r << std::endl;
-	ceph_abort();
-      }
-      context->update_object_full(oid, tgt_value);
-      context->update_object_version(oid, comp->get_version64());
-      comp->release();
     }
 
     comp = context->rados.aio_create_completion();
@@ -2499,15 +2488,27 @@ public:
     context->update_object_version(oid, comp->get_version64());
     comp->release();
 
+    comp = context->rados.aio_create_completion();
+    rd_op.stat(NULL, NULL, NULL);
+    context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
+     			  librados::OPERATION_ORDER_READS_WRITES |
+     			  librados::OPERATION_IGNORE_REDIRECT,
+     			  NULL);
+    comp->wait_for_safe();
+    if ((r = comp->get_return_value())) {
+      cerr << "Error: oid " << oid_tgt << " stat returned error code "
+	   << r << std::endl;
+      ceph_abort();
+    }
+    uint64_t tgt_version = comp->get_version64();
+    comp->release();
+    
+    
     context->find_object(oid, &src_value); 
-    context->find_object(oid_tgt, &tgt_value);
-
-    if (!src_value.deleted() && !tgt_value.deleted())
-      context->update_object_full(oid, tgt_value);
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_redirect(context->prefix+oid_tgt, context->io_ctx, tgt_value.version);
+    op.set_redirect(context->prefix+oid_tgt, context->low_tier_io_ctx, tgt_version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
