@@ -1,42 +1,89 @@
-openATTIC Module for Ceph Manager
-=================================
+Dashboard and Administration Module for Ceph Manager (aka "Dashboard v2")
+=========================================================================
 
-This module is an ongoing project to convert the `openATTIC openATTIC Ceph
-management and monitoring tool <https://openattic.org/>`_ (both the backend and
-WebUI) into a Ceph Manager module.
+Overview
+--------
 
-The current openATTIC backend implementation is based on Django and the Django
-REST framework. The plan is to convert the backend code to use the CherryPy
-framework and a custom REST API implementation instead.
+The original Ceph Manager Dashboard started out as a simple read-only view into
+various run-time information and performance data of a Ceph cluster.
 
-The current WebUI implementation is written using AngularJS 1.x JavaScript
-framework. The upstream openATTIC project already has plans to move to
-Angular/TypeScript; this migration will be performed at a later stage, once the
-openATTIC mgr module has been accepted and is providing basic functionality.
+However, there is a `growing demand <http://pad.ceph.com/p/mimic-dashboard>`_
+for adding more web-based management capabilities, to make it easier for
+administrators that prefer a WebUI over the command line.
 
-The porting of the existing openATTIC functionality will be done in stages. The
-work is done by the openATTIC team and is currently tracked in the `openATTIC
-JIRA <https://tracker.openattic.org/browse/OP-3039>`_.
+This module is an ongoing project to add a native web based monitoring and
+administration application to Ceph Manager. It aims at becoming a successor of
+the existing dashboard, which provides read-only functionality and uses a
+simpler architecture to achieve the original goal.
+
+The code and architecture of this module is derived from and inspired by the
+`openATTIC Ceph management and monitoring tool <https://openattic.org/>`_ (both
+the backend and WebUI). The development is actively driven by the team behind
+openATTIC.
+
+The intention is to reuse as much of the existing openATTIC code as possible,
+while adapting it to the different environment. The current openATTIC backend
+implementation is based on Django and the Django REST framework, the Manager
+module's backend code will use the CherryPy framework and a custom REST API
+implementation instead.
+
+The WebUI implementation will be developed using Angular/TypeScript, merging
+both functionality from the existing dashboard as well as adding new
+functionality originally developed for the standalone version of openATTIC.
+
+The porting and migration of the existing openATTIC and dashboard functionality
+will be done in stages. The tasks are currently tracked in the `openATTIC team's
+JIRA instance <https://tracker.openattic.org/browse/OP-3039>`_.
+
+Enabling and Starting the Dashboard
+-----------------------------------
+
+The Python backend code of this module requires a number of Python modules to be
+installed. They are listed in file ``requirements.txt``.  Using `pip
+<https://pypi.python.org/pypi/pip>`_ you may install all required dependencies
+by issuing ``pip -r requirements.txt``.
+
+If you're using the `ceph-dev-docker development environment
+<https://github.com/ricardoasmarques/ceph-dev-docker/>`_, simply run
+``./install_deps.sh`` from the current directory to install them.
+
+Start the Dashboard module by running::
+
+  $ ceph mgr module enable dashboard_v2
+
+You can see currently enabled modules with::
+
+  $ ceph mgr module ls
+
+In order to be able to log in, you need to define a username and password, which
+will be stored in the MON's configuration database::
+
+  $ ceph dashboard set-login-credentials <username> <password>
+
+The password will be stored as a hash using ``bcrypt``.
+
+The WebUI should then be reachable on TCP port 8080.
 
 Unit Testing and Linting
-________________________
+------------------------
 
-We included a tox configuration file that will run the unit tests under
-python2 and python3, as well as, linting tools to guarantee the uniformity of
-code.
+We included a ``tox`` configuration file that will run the unit tests under
+Python 2 and 3, as well as linting tools to guarantee the uniformity of code.
+
+You need to install ``tox`` before running it. To install ``tox`` in your
+system, either install it via your operating system's package management
+tools, e.g. by running ``dnf install python3-tox`` on Fedora Linux.
+
+Alternatively, you can use Python's native package installation method::
+
+  $ pip install tox
 
 To run tox, run the following command in the root directory (where ``tox.ini``
-is located) do::
+is located)::
 
-  tox
+  $ tox
 
-If you just want to run a single tox environement, for instance only run the
-linting tools, do::
+If you just want to run a single tox environment, for instance only run the
+linting tools::
 
-  tox -e lint
-
-Also don't forget to install tox before running it. To install tox in your
-system do::
-
-  pip install tox
-
+  $ tox -e lint
