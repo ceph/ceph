@@ -96,6 +96,14 @@ for spec in ceph.spec.in alpine/APKBUILD.in; do
         sed "s/@RPM_RELEASE@/$rpm_release/g" |
         sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
 done
+
+. /etc/os-release
+case $ID in
+    opensuse|suse|sles)
+        sed -i -e "s/^Release:.*/&.<B_CNT>/" ceph.spec
+        ;;
+esac
+
 ln -s . $outfile
 tar cvf $outfile.version.tar $outfile/src/.git_version $outfile/ceph.spec $outfile/alpine/APKBUILD
 # NOTE: If you change this version number make sure the package is available
