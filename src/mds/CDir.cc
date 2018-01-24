@@ -1791,6 +1791,9 @@ CDentry *CDir::_load_dentry(
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
+      } else if (g_conf->get_val<bool>("mds_hack_allow_loading_invalid_metadata")) {
+	dout(20) << "hack: adding duplicate dentry for " << *in << dendl;
+	dn = add_primary_dentry(dname, in, first, last);
       } else {
         dout(0) << "_fetched  badness: got (but i already had) " << *in
                 << " mode " << in->inode.mode
