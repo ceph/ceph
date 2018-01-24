@@ -296,12 +296,6 @@ public:
     EXPECT_CALL(mock_image_ctx, destroy());
   }
 
-  void expect_remove_child(librados::IoCtx& io_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _, _, _))
-      .WillOnce(Return(r));
-  }
-
   void expect_remove(MockRemoveRequest& mock_remove_request, int r) {
     EXPECT_CALL(mock_remove_request, send())
       .WillOnce(Invoke([this, &mock_remove_request, r]() {
@@ -485,7 +479,6 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
   MockRefreshRequest mock_refresh_request;
   expect_refresh(mock_refresh_request, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -523,7 +516,6 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
 
   expect_metadata_list(mock_image_ctx, {{"key", {}}}, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -562,7 +554,6 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
   expect_metadata_list(mock_image_ctx, {{"key", {}}}, 0);
   expect_metadata_set(m_ioctx, mock_image_ctx, {{"key", {}}}, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -603,7 +594,6 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_mirror_mode_get(mock_image_ctx, cls::rbd::MIRROR_MODE_POOL, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -647,7 +637,6 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
   MockMirrorEnableRequest mock_mirror_enable_request;
   expect_mirror_enable(mock_mirror_enable_request, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -687,41 +676,6 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
 
   expect_close(mock_image_ctx, -EINVAL);
-
-  C_SaferCond ctx;
-  ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockImageCloneRequest, RemoveChildError) {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  MockTestImageCtx mock_image_ctx(*image_ctx);
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
-  expect_is_snap_protected(mock_image_ctx, true, 0);
-
-  MockCreateRequest mock_create_request;
-  expect_create(mock_create_request, 0);
-
-  expect_open(mock_image_ctx, 0);
-  expect_set_parent(mock_image_ctx, 0);
-  expect_add_child(m_ioctx, 0);
-
-  MockRefreshRequest mock_refresh_request;
-  expect_refresh(mock_refresh_request, -EINVAL);
-
-  expect_remove_child(m_ioctx, -EPERM);
-  expect_close(mock_image_ctx, 0);
-
-  MockRemoveRequest mock_remove_request;
-  expect_remove(mock_remove_request, 0);
 
   C_SaferCond ctx;
   ImageOptions clone_opts;

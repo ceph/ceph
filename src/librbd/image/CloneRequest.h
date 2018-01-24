@@ -62,8 +62,8 @@ private:
    * |               | \              /  |
    * |               |  *<-----------/   v
    * |               |                REFRESH
-   * |               |                /  |                     
-   * |   CLEAN DIR_CHILDREN <--------/   v            (meta is empty)
+   * |               |                   |
+   * |               |                   v            (meta is empty)
    * |               |\         GET META IN PARENT  . . . . . . .
    * |               | \              /  |                      .
    * v               |  *<-----------/   v     (journaling disabled)           .
@@ -147,9 +147,6 @@ private:
 
   void send_remove();
   void handle_remove(int r);
-
-  void send_remove_child();
-  void handle_remove_child(int r);
 
   void complete(int r);
 };
