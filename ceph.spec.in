@@ -48,6 +48,7 @@
 %endif
 %if 0%{?suse_version} >= 1500
 %bcond_with python2
+%global _defined_if_python2_absent 1
 %else
 %bcond_without python2
 %endif
@@ -60,6 +61,9 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+# define _python_buildid macro which will expand to the empty string when
+# building with python2
+%global _python_buildid %{?_defined_if_python2_absent:%{python3_pkgversion}}
 
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
@@ -142,22 +146,11 @@ BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
-%if 0%{with python2}
-BuildRequires:	python
-BuildRequires:	python-devel
-BuildRequires:	python-nose
-BuildRequires:	python-requests
-BuildRequires:	python-virtualenv
-%else
-BuildRequires:	python%{python3_pkgversion}
-%if 0%{?suse_version}
-BuildRequires:	python%{python3_pkgversion}-base
-%endif
-BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-nose
-BuildRequires:	python%{python3_pkgversion}-requests
-BuildRequires:	python%{python3_pkgversion}-virtualenv
-%endif
+BuildRequires:	python%{_python_buildid}
+BuildRequires:	python%{_python_buildid}-devel
+BuildRequires:	python%{_python_buildid}-nose
+BuildRequires:	python%{_python_buildid}-requests
+BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	snappy-devel
 %if 0%{with make_check}
 BuildRequires:	socat
@@ -189,15 +182,10 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:  cunit-devel
-%if 0%{with python2}
-BuildRequires:	python-Cython
-BuildRequires:	python-PrettyTable
-BuildRequires:	python-Sphinx
-%else
-BuildRequires:	python%{python3_pkgversion}-Cython
-BuildRequires:	python%{python3_pkgversion}-PrettyTable
-BuildRequires:	python%{python3_pkgversion}-Sphinx
-%endif
+BuildRequires:	python%{_python_buildid}-base
+BuildRequires:	python%{_python_buildid}-Cython
+BuildRequires:	python%{_python_buildid}-PrettyTable
+BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel}
@@ -211,15 +199,9 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-%if 0%{with python2}
-BuildRequires:	Cython
-BuildRequires:	python-prettytable
-BuildRequires:	python-sphinx
-%else
-BuildRequires:	Cython%{python3_pkgversion}
-BuildRequires:	python%{python3_pkgversion}-prettytable
-BuildRequires:	python%{python3_pkgversion}-sphinx
-%endif
+BuildRequires:	Cython%{_python_buildid}
+BuildRequires:	python%{_python_buildid}-prettytable
+BuildRequires:	python%{_python_buildid}-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
@@ -234,28 +216,15 @@ BuildRequires:	python3-Cython
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{with python2}
-BuildRequires:	python-cherrypy
-BuildRequires:	python-pecan
-BuildRequires:	python-werkzeug
-%else
-BuildRequires:	python%{python3_pkgversion}-cherrypy
-BuildRequires:	python%{python3_pkgversion}-pecan
-BuildRequires:	python%{python3_pkgversion}-werkzeug
-%endif
+BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-pecan
+BuildRequires:	python%{_python_buildid}-werkzeug
 %endif
 %if 0%{?suse_version}
-%if 0%{with python2}
-BuildRequires:	python-CherryPy
-BuildRequires:	python-Werkzeug
-BuildRequires:	python-pecan
-BuildRequires:	python-numpy-devel
-%else
-BuildRequires:	python%{python3_pkgversion}-CherryPy
-BuildRequires:	python%{python3_pkgversion}-Werkzeug
-BuildRequires:	python%{python3_pkgversion}-pecan
-BuildRequires:	python%{python3_pkgversion}-numpy-devel
-%endif
+BuildRequires:	python%{_python_buildid}-CherryPy
+BuildRequires:	python%{_python_buildid}-Werkzeug
+BuildRequires:	python%{_python_buildid}-pecan
+BuildRequires:	python%{_python_buildid}-numpy-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -301,22 +270,15 @@ Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
 Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
-%if 0%{with python2}
-Requires:      python
-Requires:      python-requests
-Requires:      python-setuptools
-%else
-Requires:      python%{python3_pkgversion}
-Requires:      python%{python3_pkgversion}-requests
-Requires:      python%{python3_pkgversion}-setuptools
-%endif
-Requires:      grep
-Requires:      xfsprogs
-Requires:      logrotate
-Requires:      util-linux
 Requires:      cryptsetup
 Requires:      findutils
+Requires:      grep
+Requires:      logrotate
 Requires:      psmisc
+Requires:      python%{_python_buildid}-requests
+Requires:      python%{_python_buildid}-setuptools
+Requires:      util-linux
+Requires:      xfsprogs
 Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon
@@ -332,34 +294,17 @@ Group:		System/Filesystems
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
-%if 0%{with python2}
-Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-rbd = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-cephfs = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-rgw = %{_epoch_prefix}%{version}-%{release}
-%else
-Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rbd = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-cephfs = %{_epoch_prefix}%{version}-%{release}
-Requires:	python%{python3_pkgversion}-rgw = %{_epoch_prefix}%{version}-%{release}
-%endif
+Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-cephfs = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-rgw = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{with python2}
-Requires:	python-prettytable
-Requires:	python-requests
-%else
-Requires:	python%{python3_pkgversion}-prettytable
-Requires:	python%{python3_pkgversion}-requests
-%endif
+Requires:	python%{_python_buildid}-prettytable
+Requires:	python%{_python_buildid}-requests
 %endif
 %if 0%{?suse_version}
-%if 0%{with python2}
-Requires:	python-PrettyTable
-Requires:	python-requests
-%else
-Requires:	python%{python3_pkgversion}-PrettyTable
-Requires:	python%{python3_pkgversion}-requests
-%endif
+Requires:	python%{_python_buildid}-PrettyTable
+Requires:	python%{_python_buildid}-requests
 %endif
 %{?systemd_requires}
 %if 0%{?suse_version}
@@ -388,18 +333,10 @@ Group:		System/Filesystems
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 # For ceph-rest-api
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{with python2}
-Requires:      python-flask
-%else
-Requires:      python%{python3_pkgversion}-flask
-%endif
+Requires:      python%{_python_buildid}-flask
 %endif
 %if 0%{?suse_version}
-%if 0%{with python2}
-Requires:      python-Flask
-%else
-Requires:      python%{python3_pkgversion}-Flask
-%endif
+Requires:      python%{_python_buildid}-Flask
 %endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
@@ -414,36 +351,19 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
-%if 0%{with python2}
-Requires:       python-cherrypy
-Requires:       python-jinja2
-Requires:       python-pecan
-Requires:       python-werkzeug
-Requires:       pyOpenSSL
-%else
-Requires:       python%{python3_pkgversion}-cherrypy
-Requires:       python%{python3_pkgversion}-jinja2
-Requires:       python%{python3_pkgversion}-pecan
-Requires:       python%{python3_pkgversion}-werkzeug
-Requires:       pyOpenSSL%{python3_pkgversion}
-%endif
+Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-jinja2
+Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-werkzeug
+Requires:       pyOpenSSL%{_python_buildid}
 %endif
 %if 0%{?suse_version}
-%if 0%{with python2}
-Requires:       python-CherryPy
-Requires:       python-Jinja2
-Requires:       python-Werkzeug
-Requires:       python-pecan
-Requires:       python-pyOpenSSL
-Recommends:     python-influxdb
-%else
-Requires:       python%{python3_pkgversion}-CherryPy
-Requires:       python%{python3_pkgversion}-Jinja2
-Requires:       python%{python3_pkgversion}-Werkzeug
-Requires:       python%{python3_pkgversion}-pecan
-Requires:       python%{python3_pkgversion}-pyOpenSSL
-Recommends:     python%{python3_pkgversion}-influxdb
-%endif
+Requires:       python%{_python_buildid}-CherryPy
+Requires:       python%{_python_buildid}-Jinja2
+Requires:       python%{_python_buildid}-Werkzeug
+Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-pyOpenSSL
+Recommends:     python%{_python_buildid}-influxdb
 %endif
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
