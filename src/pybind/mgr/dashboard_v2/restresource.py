@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*-
+import inspect
 import json
 
 import cherrypy
@@ -8,12 +10,26 @@ def _takes_json(func):
         content_length = int(cherrypy.request.headers['Content-Length'])
         body = cherrypy.request.body.read(content_length)
         if not body:
-            raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'.format(content_length))
+            raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'
+                                          .format(content_length))
         try:
             data = json.loads(body.decode('utf-8'))
         except Exception as e:
-            raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'.format(str(e)))
-        return func(data, *args, **kwargs)
+            raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
+                                          .format(str(e)))
+        if hasattr(func, '_args_from_json_'):
+            f_args = inspect.getargspec(func).args
+            n_args = []
+            for arg in args:
+                n_args.append(arg)
+            for arg in f_args[1:]:
+                if arg in data:
+                    n_args.append(data[arg])
+                    data.pop(arg)
+            kwargs.update(data)
+            return func(*n_args, **kwargs)
+        else:
+            return func(data, *args, **kwargs)
     return inner
 
 
@@ -89,12 +105,17 @@ class RESTResource(object):
         if not method:
             self._not_implemented(is_element)
 
-        if cherrypy.request.method != 'DELETE':
-            method = _returns_json(method)
-
         if cherrypy.request.method not in ['GET', 'DELETE']:
             method = _takes_json(method)
+
+        if cherrypy.request.method != 'DELETE':
+            method = _returns_json(method)
 
         cherrypy.response.status = status_code
 
         return method(*vpath, **params)
+
+    @staticmethod
+    def args_from_json(func):
+        func._args_from_json_ = True
+        return func
