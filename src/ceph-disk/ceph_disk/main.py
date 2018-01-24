@@ -891,6 +891,23 @@ def verify_not_in_use(dev, check_partitions=False):
                             'mapping (dm-crypt?)'
                             % partition, ','.join(holders))
 
+def verify_partition_not_in_use(partition, check_partition=False):
+    """
+    Verify if a given partition is in use (e.g. mounted or
+    in use by device-mapper).
+
+    :raises: Error if partition is in use.
+    """
+    if not os.path.exists(partition):
+        return
+    if is_mounted(partition):
+        raise Error('Partition is mounted', partition)
+    holders = is_held(partition)
+    if holders:
+        raise Error('Partition %s is in use by a device-mapper '
+                    'mapping (dm-crypt?)'
+                    % partition, ','.join(holders))
+
 
 def must_be_one_line(line):
     """
@@ -1853,6 +1870,36 @@ class Prepare(object):
             default='{statedir}/bootstrap-osd/{cluster}.keyring',
             dest='prepare_key_template',
         )
+        parser.add_argument(
+            '--journal-partition-number',
+            default=None,
+            help='partition number on journal device',
+        )
+        parser.add_argument(
+            '--data-partition-number',
+            default=None,
+            help='partition number on data device',
+        )
+        parser.add_argument(
+            '--data-partition-size',
+            default=None,
+            help='partition size on lockbox/data device',
+        )
+        parser.add_argument(
+            '--lockbox-partition-number',
+            default=None,
+            help='partition number on lockbox/data device',
+        )
+        parser.add_argument(
+            '--block-db-partition-number',
+            default=None,
+            help='partition number on block db device',
+        )
+        parser.add_argument(
+            '--block-db-partition-size',
+            default=None,
+            help='partition size on block db device',
+        )
         return parser
 
     @staticmethod
@@ -2222,7 +2269,9 @@ class PrepareJournal(PrepareSpace):
         ))
 
     def desired_partition_number(self):
-        if self.args.journal == self.args.data:
+        if self.args.journal_partition_number is not None:
+            num = int(self.args.journal_partition_number)
+        elif self.args.journal == self.args.data:
             # we're sharing the disk between osd data and journal;
             # make journal be partition number 2
             num = 2
@@ -2242,10 +2291,15 @@ class PrepareBluestoreBlock(PrepareSpace):
         super(PrepareBluestoreBlock, self).__init__(args)
 
     def get_space_size(self):
-        return 0  # get as much space as possible
+        if self.args.block_db_partition_size is not None:
+            return int(self.args.block_db_partition_size)
+        else:
+            return 0  # get as much space as possible
 
     def desired_partition_number(self):
-        if self.args.block == self.args.data:
+        if self.args.block_db_partition_number is not None:
+            num = int(self.args.block_db_partition_number)
+        elif self.args.block == self.args.data:
             num = 2
         else:
             num = 0
@@ -2347,7 +2401,10 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 3
+        if self.args.lockbox_partition_number is not None:
+            partition_number = int(self.args.lockbox_partition_number)
+        else:
+            partition_number = 3
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
@@ -2487,7 +2544,11 @@ class Lockbox(object):
                 command_check_call(args)
 
     def prepare(self):
-        verify_not_in_use(self.args.lockbox, check_partitions=True)
+        if self.args.lockbox_partition_number is not None:
+            partition_number = self.args.lockbox_partition_number
+        else:
+            partition_number = 3
+        verify_partition_not_in_use(self.args.lockbox + str(partition_number), check_partition=True)
         self.set_or_create_partition()
         self.populate()
 
@@ -2599,8 +2660,11 @@ class PrepareData(object):
         if not os.path.exists(self.args.data):
             raise Error('data path for device does not exist',
                         self.args.data)
-        verify_not_in_use(self.args.data,
-                          check_partitions=not self.args.dmcrypt)
+        if self.args.data_partition_number is not None:
+            partition_number = self.args.data_partition_number
+        else:
+            partition_number = 1
+        verify_partition_not_in_use(self.args.data + str(partition_number), check_partition=True)
 
     def set_variables(self):
         if self.args.fs_type is None:
@@ -2644,11 +2708,18 @@ class PrepareData(object):
 
     def create_data_partition(self):
         device = Device.factory(self.args.data, self.args)
-        partition_number = 1
+        if self.args.data_partition_number is not None:
+            partition_number = int(self.args.data_partition_number)
+        else:
+            partition_number = 1
+        if self.args.data_partition_size is not None:
+            partition_size = int(self.args.data_partition_size)
+        else:
+            partition_size = self.get_space_size()
         device.create_partition(uuid=self.args.osd_uuid,
                                 name='data',
                                 num=partition_number,
-                                size=self.get_space_size())
+                                size=partition_size)
         return device.get_partition(partition_number)
 
     def set_data_partition(self):
