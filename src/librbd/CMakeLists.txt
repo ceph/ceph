@@ -46,6 +46,7 @@ set(librbd_internal_srcs
   image/CloneRequest.cc
   image/CloseRequest.cc
   image/CreateRequest.cc
+  image/DetachChildRequest.cc
   image/OpenRequest.cc
   image/RefreshParentRequest.cc
   image/RefreshRequest.cc
