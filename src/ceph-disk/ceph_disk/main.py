@@ -42,11 +42,22 @@ import pwd
 import grp
 import textwrap
 import glob
+import warnings
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
 KEY_MANAGEMENT_MODE_V1 = 'ceph-mon v1'
+
+DEPRECATION_WARNING = """
+*******************************************************************************
+This tool is now deprecated in favor of ceph-volume.
+It is recommended to use ceph-volume for OSD deployments. For details see:
+
+    http://docs.ceph.com/docs/master/ceph-volume/#migrating
+
+*******************************************************************************
+"""
 
 PTYPE = {
     'regular': {
@@ -871,7 +882,7 @@ def get_partition_base_mpath(dev):
 
 def is_partition(dev):
     """
-    Check whether a given device path is a partition or a full disk.
+    Check whether a given device path is a partition
     """
     if is_mpath(dev):
         return is_partition_mpath(dev)
@@ -891,7 +902,7 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
 
-    raise Error('not a disk or partition', dev)
+    raise Error('not a disk partition', dev)
 
 
 def is_mounted(dev):
@@ -967,6 +978,24 @@ def verify_not_in_use(dev, check_partitions=False):
                             % partition, ','.join(holders))
 
 
+def verify_partition_not_in_use(partition, check_partition=False):
+    """
+    Verify if a given partition is in use (e.g. mounted or
+    in use by device-mapper).
+
+    :raises: Error if partition is in use.
+    """
+    if not os.path.exists(partition):
+        return
+    if is_mounted(partition):
+        raise Error('Partition is mounted', partition)
+    holders = is_held(partition)
+    if holders:
+        raise Error('Partition %s is in use by a device-mapper '
+                    'mapping (dm-crypt?)'
+                    % partition, ','.join(holders))
+
+
 def must_be_one_line(line):
     """
     Checks if given line is really one single line.
@@ -1024,8 +1053,8 @@ def write_one_line(parent, name, text):
     with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
-    path_set_context(tmp)
     os.rename(tmp, path)
+    path_set_context(path)
 
 
 def init_get():
@@ -1254,7 +1283,8 @@ def get_fsid(cluster):
     :return: The fsid or raises Error.
     """
     fsid = get_conf_with_default(cluster=cluster, variable='fsid')
-    if fsid is None:
+    # uuids from boost always default to 'the empty uuid'
+    if fsid == '00000000-0000-0000-0000-000000000000':
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
 
@@ -1288,6 +1318,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
@@ -1527,10 +1559,11 @@ def get_free_partition_index(dev):
 
 
 def check_journal_reqs(args):
+    log_file = "/var/log/ceph/$cluster-osd-check.log"
     _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1538,7 +1571,7 @@ def check_journal_reqs(args):
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1546,7 +1579,7 @@ def check_journal_reqs(args):
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -2009,6 +2042,41 @@ class Prepare(object):
             action='store_true', default=None,
             help='let many prepare\'s run in parallel',
         )
+        parser.add_argument(
+            '--lockbox-partition-number',
+            default=None,
+            help='partition number on lockbox device',
+        )
+        parser.add_argument(
+            '--journal-partition-number',
+            default=None,
+            help='partition number on journal device',
+        )
+        parser.add_argument(
+            '--data-partition-number',
+            default=None,
+            help='partition number on data device',
+        )
+        parser.add_argument(
+            '--data-partition-size',
+            default=None,
+            help='partition size in MB on data device used for Filestore. Bluestore defaults to 100MB',
+        )
+        parser.add_argument(
+            '--block-partition-number',
+            default=None,
+            help='partition number on block device',
+        )
+        parser.add_argument(
+            '--block-db-partition-number',
+            default=None,
+            help='partition number on block db device',
+        )
+        parser.add_argument(
+            '--block-wal-partition-number',
+            default=None,
+            help='partition number on block wal device',
+        )
         return parser
 
     @staticmethod
@@ -2442,7 +2510,9 @@ class PrepareJournal(PrepareSpace):
         ))
 
     def desired_partition_number(self):
-        if self.args.journal == self.args.data:
+        if self.args.journal_partition_number is not None:
+            num = int(self.args.journal_partition_number)
+        elif self.args.journal == self.args.data:
             # we're sharing the disk between osd data and journal;
             # make journal be partition number 2
             num = 2
@@ -2473,7 +2543,9 @@ class PrepareBluestoreBlock(PrepareSpace):
             return int(block_size) / 1048576  # MB
 
     def desired_partition_number(self):
-        if self.args.block == self.args.data:
+        if self.args.block_partition_number is not None:
+            num = int(self.args.block_partition_number)
+        elif self.args.block == self.args.data:
             num = 2
         else:
             num = 0
@@ -2509,7 +2581,9 @@ class PrepareBluestoreBlockDB(PrepareSpace):
             return int(block_db_size) / 1048576  # MB
 
     def desired_partition_number(self):
-        if getattr(self.args, 'block.db') == self.args.data:
+        if self.args.block_db_partition_number is not None:
+            num = int(self.args.block_db_partition_number)
+        elif getattr(self.args, 'block.db') == self.args.data:
             num = 3
         else:
             num = 0
@@ -2547,7 +2621,9 @@ class PrepareBluestoreBlockWAL(PrepareSpace):
             return int(block_size) / 1048576  # MB
 
     def desired_partition_number(self):
-        if getattr(self.args, 'block.wal') == self.args.data:
+        if self.args.block_wal_partition_number is not None:
+            num = int(self.args.block_wal_partition_number)
+        elif getattr(self.args, 'block.wal') == self.args.data:
             num = 4
         else:
             num = 0
@@ -2712,7 +2788,10 @@ class Lockbox(object):
 
     def create_partition(self):
         self.device = Device.factory(self.args.lockbox, argparse.Namespace())
-        partition_number = 5
+        if self.args.lockbox_partition_number is not None:
+            partition_number = int(self.args.lockbox_partition_number)
+        else:
+            partition_number = 5
         self.device.create_partition(uuid=self.args.lockbox_uuid,
                                      name='lockbox',
                                      num=partition_number,
@@ -2728,8 +2807,8 @@ class Lockbox(object):
             ptype = self.partition.get_ptype()
             ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
-                LOG.warning('incorrect partition UUID: %s, expected %s'
-                            % (ptype, str(ready)))
+                LOG.warning('incorrect partition UUID: %s, expected %s',
+                            ptype, str(ready))
         else:
             LOG.debug('Creating osd partition on %s',
                       self.args.lockbox)
@@ -2773,12 +2852,12 @@ class Lockbox(object):
     def populate(self):
         maybe_mkdir(os.path.join(STATEDIR, 'osd-lockbox'))
         args = ['mkfs', '-t', 'ext4', self.partition.get_dev()]
-        LOG.debug('Creating lockbox fs on %s: ' + str(" ".join(args)))
+        LOG.debug('Creating lockbox fs: %s', " ".join(args))
         command_check_call(args)
         path = self.get_mount_point()
         maybe_mkdir(path)
         args = ['mount', '-t', 'ext4', self.partition.get_dev(), path]
-        LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+        LOG.debug('Mounting lockbox: %s', " ".join(args))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
         if self.args.cluster_uuid is None:
@@ -2837,7 +2916,11 @@ class Lockbox(object):
                 command_check_call(args)
 
     def prepare(self):
-        verify_not_in_use(self.args.lockbox, check_partitions=True)
+        if self.args.lockbox_partition_number is not None:
+            partition_number = self.args.lockbox_partition_number
+        else:
+            partition_number = 5
+        verify_partition_not_in_use(self.args.lockbox + str(partition_number), check_partition=True)
         self.set_or_create_partition()
         self.populate()
 
@@ -2954,8 +3037,11 @@ class PrepareData(object):
         if not os.path.exists(self.args.data):
             raise Error('data path for device does not exist',
                         self.args.data)
-        verify_not_in_use(self.args.data,
-                          check_partitions=not self.args.dmcrypt)
+        if self.args.data_partition_number is not None:
+            partition_number = self.args.data_partition_number
+        else:
+            partition_number = 1
+        verify_partition_not_in_use(self.args.data + str(partition_number), check_partition=True)
 
     def set_variables(self):
         if self.args.fs_type is None:
@@ -2999,11 +3085,18 @@ class PrepareData(object):
 
     def create_data_partition(self):
         device = Device.factory(self.args.data, self.args)
-        partition_number = 1
+        if self.args.data_partition_number is not None:
+            partition_number = int(self.args.data_partition_number)
+        else:
+            partition_number = 1
+        if self.args.data_partition_size is not None:
+            partition_size = int(self.args.data_partition_size)
+        else:
+            partition_size = self.get_space_size()
         device.create_partition(uuid=self.args.osd_uuid,
                                 name='data',
                                 num=partition_number,
-                                size=self.get_space_size())
+                                size=partition_size)
         return device.get_partition(partition_number)
 
     def set_data_partition(self):
@@ -5645,6 +5738,8 @@ def make_zap_parser(subparsers):
 
 
 def main(argv):
+    # Deprecate from the very beginning
+    warnings.warn(DEPRECATION_WARNING)
     args = parse_args(argv)
 
     setup_logging(args.verbose, args.log_stdout)
@@ -5664,9 +5759,19 @@ def main(argv):
     CEPH_PREF_GROUP = args.setgroup
 
     if args.verbose:
-        args.func(args)
+        try:
+            args.func(args)
+        except Exception:
+            # warn on any exception when running with verbosity
+            warnings.warn(DEPRECATION_WARNING)
+            # but still raise the original issue
+            raise
+
     else:
         main_catch(args.func, args)
+
+    # if there aren't any errors, still log again at the very bottom
+    warnings.warn(DEPRECATION_WARNING)
 
 
 def setup_logging(verbose, log_stdout):
@@ -5694,6 +5799,8 @@ def main_catch(func, args):
         func(args)
 
     except Error as e:
+        # warn on generic 'error' exceptions
+        warnings.warn(DEPRECATION_WARNING)
         raise SystemExit(
             '{prog}: {msg}'.format(
                 prog=args.prog,
@@ -5702,6 +5809,8 @@ def main_catch(func, args):
         )
 
     except CephDiskException as error:
+        # warn on ceph-disk exceptions
+        warnings.warn(DEPRECATION_WARNING)
         exc_name = error.__class__.__name__
         raise SystemExit(
             '{prog} {exc_name}: {msg}'.format(
