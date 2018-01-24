@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/image/RemoveRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/internal.h"
@@ -9,10 +10,10 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/image/DetachChildRequest.h"
 #include "librbd/journal/RemoveRequest.h"
-#include "librbd/image/RemoveRequest.h"
-#include "librbd/operation/TrimRequest.h"
 #include "librbd/mirror/DisableRequest.h"
+#include "librbd/operation/TrimRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -364,41 +365,29 @@ void RemoveRequest<I>::handle_trim_image(int r) {
     return;
   }
 
-  remove_child();
+  detach_child();
 }
 
 template<typename I>
-void RemoveRequest<I>::remove_child() {
+void RemoveRequest<I>::detach_child() {
   ldout(m_cct, 20) << dendl;
 
-  m_image_ctx->parent_lock.get_read();
-  ParentInfo parent_info = m_image_ctx->parent_md;
-  m_image_ctx->parent_lock.put_read();
-
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::remove_child(&op, parent_info.spec, m_image_id);
-
-  using klass = RemoveRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_remove_child>(this);
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_CHILDREN, rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
+  auto ctx = create_context_callback<
+    RemoveRequest<I>, &RemoveRequest<I>::handle_detach_child>(this);
+  auto req = DetachChildRequest<I>::create(*m_image_ctx, ctx);
+  req->send();
 }
 
 template<typename I>
-void RemoveRequest<I>::handle_remove_child(int r) {
+void RemoveRequest<I>::handle_detach_child(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == -ENOENT) {
-    r = 0;
-  } else if (r < 0) {
-    lderr(m_cct) << "error removing child from children list: "
+  if (r < 0) {
+    lderr(m_cct) << "failed to detach child from parent: "
                  << cpp_strerror(r) << dendl;
     send_close_image(r);
     return;
   }
-
 
   send_disable_mirror();
 }
