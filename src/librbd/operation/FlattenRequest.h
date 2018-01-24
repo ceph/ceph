@@ -43,7 +43,7 @@ private:
    * <start>
    *    |
    *    v
-   * STATE_FLATTEN_OBJECTS ---> STATE_UPDATE_CHILDREN . . . .
+   * STATE_FLATTEN_OBJECTS ---> STATE_DETACH_CHILD  . . . . .
    *           .                         |                  .
    *           .                         |                  .
    *           .                         v                  .
@@ -57,13 +57,13 @@ private:
    *
    * @endverbatim
    *
-   * The _UPDATE_CHILDREN state will be skipped if the image has one or
+   * The _DETACH_CHILD state will be skipped if the image has one or
    * more snapshots. The _UPDATE_HEADER state will be skipped if the
    * image was concurrently flattened by another client.
    */
   enum State {
     STATE_FLATTEN_OBJECTS,
-    STATE_UPDATE_CHILDREN,
+    STATE_DETACH_CHILD,
     STATE_UPDATE_HEADER
   };
 
@@ -74,8 +74,8 @@ private:
 
   ParentSpec m_parent_spec;
 
+  bool send_detach_child();
   bool send_update_header();
-  bool send_update_children();
 };
 
 } // namespace operation
