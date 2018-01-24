@@ -566,14 +566,11 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   return ret;
 }
 
-void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const std::string& key, const std::string& val){
-    e[key] = val;
-}
-
-
-void rgw_add_to_iam_environment(rgw::IAM::Environment& e, const char* key, const char* val){
-  if (key != nullptr && val != nullptr)
-    e[key] = val;
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, std::string_view val){
+  // This variant just adds non empty key pairs to IAM env., values can be empty
+  // in certain cases like tagging
+  if (!key.empty())
+    e.emplace(key,val);
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
@@ -625,7 +622,6 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
     }
   }
 }
-
 
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
@@ -3067,9 +3063,7 @@ int RGWPutObj::verify_permission()
   if (s->iam_policy) {
     rgw_add_grant_to_iam_environment(s->env, s);
 
-    if (!s->canned_acl.empty()){
-      rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
-    }
+    rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
 
     if (obj_tags != nullptr && obj_tags->count() > 0){
       auto tags = obj_tags->get_tags();
@@ -4722,9 +4716,7 @@ int RGWPutACLs::verify_permission()
 {
   bool perm;
 
-  if (!s->canned_acl.empty()){
-    rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
-  }
+  rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
 
   rgw_add_grant_to_iam_environment(s->env, s);
   if (!s->object.empty()) {
