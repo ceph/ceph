@@ -341,6 +341,7 @@ class ObjectCacher {
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
+    bool can_merge_bh(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len) const;
