@@ -4070,9 +4070,10 @@ void Client::trim_caps(MetaSession *s, int max)
 
   int trimmed = 0;
   xlist<Cap*>::iterator p = s->caps.begin();
+  std::set<InodeRef> anchor; /* prevent put_inode from deleting all caps during traversal */
   while ((caps_size - trimmed) > max && !p.end()) {
     Cap *cap = *p;
-    Inode *in = cap->inode;
+    InodeRef in(cap->inode);
 
     // Increment p early because it will be invalidated if cap
     // is deleted inside remove_cap
@@ -4082,16 +4083,16 @@ void Client::trim_caps(MetaSession *s, int max)
       int mine = cap->issued | cap->implemented;
       int oissued = in->auth_cap ? in->auth_cap->issued : 0;
       // disposable non-auth cap
-      if (!(get_caps_used(in) & ~oissued & mine)) {
+      if (!(get_caps_used(in.get()) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
 	remove_cap(cap, true);
+        /* N.B. no need to push onto anchor, as we are only removing one cap */
 	trimmed++;
       }
     } else {
       ldout(cct, 20) << " trying to trim dentries for " << *in << dendl;
       bool all = true;
       set<Dentry*>::iterator q = in->dn_set.begin();
-      InodeRef tmp_ref(in);
       while (q != in->dn_set.end()) {
 	Dentry *dn = *q++;
 	if (dn->lru_is_expireable()) {
@@ -4102,6 +4103,8 @@ void Client::trim_caps(MetaSession *s, int max)
 	    // the end of this function.
 	    _schedule_invalidate_dentry_callback(dn, true);
 	  }
+          ldout(cct, 20) << " anchoring inode: " << in->ino << dendl;
+          anchor.insert(in);
 	  trim_dentry(dn);
         } else {
           ldout(cct, 20) << "  not expirable: " << dn->name << dendl;
@@ -4114,6 +4117,8 @@ void Client::trim_caps(MetaSession *s, int max)
       }
     }
   }
+  ldout(cct, 20) << " clearing anchored inodes" << dendl;
+  anchor.clear();
 
   caps_size = s->caps.size();
   if (caps_size > max)
