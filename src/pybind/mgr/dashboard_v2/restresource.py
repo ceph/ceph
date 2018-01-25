@@ -5,12 +5,14 @@ import cherrypy
 
 def _takes_json(func):
     def inner(*args, **kwargs):
-        body = cherrypy.request.body.read()
+        content_length = int(cherrypy.request.headers['Content-Length'])
+        body = cherrypy.request.body.read(content_length)
+        if not body:
+            raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'.format(content_length))
         try:
             data = json.loads(body.decode('utf-8'))
-        except json.JSONDecodeError as e:
-            raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                          .format(str(e)))
+        except Exception as e:
+            raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'.format(str(e)))
         return func(data, *args, **kwargs)
     return inner
 
