@@ -14,6 +14,7 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
   CEPH_OUT_DIR=$VSTART_DEST/out
+  CEPH_ASOK_DIR=$VSTART_DEST/out
 fi
 
 # for running out of the CMake build directory
@@ -332,7 +333,9 @@ else
         fi
         [ -e "$conf_fn" ] && rm -- "$conf_fn"
     else
-        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf --show-config-value admin_socket)`
+        fi
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
