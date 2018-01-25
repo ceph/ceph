@@ -10,7 +10,7 @@ from mock import patch
 from .helper import ApiControllerTestCase
 from ..tools import RESTController
 
-
+# pylint: disable=W0613
 class FooResource(RESTController):
     elems = []
 
@@ -30,7 +30,7 @@ class FooResource(RESTController):
     def bulk_delete(self):
         FooResource.elems = []
 
-
+# pylint: disable=C0102
 class Root(object):
     foo = FooResource()
 

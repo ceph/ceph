@@ -21,4 +21,3 @@ class SimpleCPTest(ApiControllerTestCase):
     def test_echo_args(self):
         self._post("/api/echo1", {'msg': 'Hello World'})
         self.assertStatus('201 Created')
-

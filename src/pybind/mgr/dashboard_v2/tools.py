@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=W0212
 from __future__ import absolute_import
 
 import importlib
@@ -130,7 +131,7 @@ class RESTController(object):
         is_element = len(vpath) > 0
 
         (method_name, status_code) = self._method_mapping[
-                (cherrypy.request.method, is_element)]
+            (cherrypy.request.method, is_element)]
         method = getattr(self, method_name, None)
         if not method:
             self._not_implemented(is_element)
@@ -150,6 +151,7 @@ class RESTController(object):
         func._args_from_json_ = True
         return func
 
+    # pylint: disable=W1505
     @staticmethod
     def _takes_json(func):
         def inner(*args, **kwargs):
@@ -157,25 +159,28 @@ class RESTController(object):
             body = cherrypy.request.body.read(content_length)
             if not body:
                 raise cherrypy.HTTPError(400, 'Empty body. Content-Length={}'
-                                              .format(content_length))
+                                         .format(content_length))
             try:
                 data = json.loads(body.decode('utf-8'))
             except Exception as e:
                 raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                              .format(str(e)))
+                                         .format(str(e)))
             if hasattr(func, '_args_from_json_'):
-                f_args = inspect.getargspec(func).args
+                if sys.version_info > (3, 0):
+                    f_args = list(inspect.signature(func).parameters.keys())
+                else:
+                    f_args = inspect.getargspec(func).args[1:]
                 n_args = []
                 for arg in args:
                     n_args.append(arg)
-                for arg in f_args[1:]:
+                for arg in f_args:
                     if arg in data:
                         n_args.append(data[arg])
                         data.pop(arg)
                 kwargs.update(data)
                 return func(*n_args, **kwargs)
-            else:
-                return func(data, *args, **kwargs)
+
+            return func(data, *args, **kwargs)
         return inner
 
     @staticmethod

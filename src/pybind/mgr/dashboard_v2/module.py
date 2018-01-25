@@ -4,10 +4,10 @@ openATTIC mgr plugin (based on CherryPy)
 """
 from __future__ import absolute_import
 
-
+import errno
 import os
+
 import cherrypy
-from cherrypy import tools
 from mgr_module import MgrModule
 
 from .controllers.auth import Auth
@@ -15,10 +15,12 @@ from .tools import load_controllers
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
+# pylint: disable=W0613
 def os_exit_noop(*args):
     pass
 
 
+# pylint: disable=W0212
 os._exit = os_exit_noop
 
 
@@ -37,9 +39,6 @@ class Module(MgrModule):
         }
     ]
 
-    def __init__(self, *args, **kwargs):
-        super(Module, self).__init__(*args, **kwargs)
-
     def serve(self):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
@@ -48,13 +47,13 @@ class Module(MgrModule):
                 'no server_addr configured; '
                 'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'
                 .format(self.module_name, self.get_mgr_id()))
-        self.log.info("server_addr: %s server_port: %s" % (server_addr,
-                                                           server_port))
+        self.log.info("server_addr: %s server_port: %s", server_addr,
+                      server_port)
 
         cherrypy.config.update({
-                                'server.socket_host': server_addr,
-                                'server.socket_port': int(server_port),
-                               })
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+        })
         cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
                                                    Auth.check_auth)
 
@@ -86,9 +85,9 @@ class Module(MgrModule):
             hashed_passwd = Auth.password_hash(cmd['password'])
             self.set_localized_config('password', hashed_passwd)
             return 0, 'Username and password updated', ''
-        else:
-            return (-errno.EINVAL, '', 'Command not found \'{0}\''.format(
-                    cmd['prefix']))
+
+        return (-errno.EINVAL, '', 'Command not found \'{0}\''
+                .format(cmd['prefix']))
 
     class ApiRoot(object):
         def __init__(self, mgrmod):

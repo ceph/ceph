@@ -1,20 +1,24 @@
 # -*- coding: utf-8 -*-
 
-from mock import Mock
 
 class BasePyOSDMap(object):
     pass
 
+
 class BasePyOSDMapIncremental(object):
     pass
+
 
 class BasePyCRUSH(object):
     pass
 
+
 class BaseMgrStandbyModule(object):
     pass
 
+
 class BaseMgrModule(object):
+    # pylint: disable=W0613
     def __init__(self, py_modules_ptr, this_ptr):
         self.config_key_map = {}
 
@@ -32,5 +36,3 @@ class BaseMgrModule(object):
 
     def _ceph_log(self, *args):
         pass
-
-
