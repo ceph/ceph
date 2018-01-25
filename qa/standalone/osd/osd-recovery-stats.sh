@@ -281,19 +281,21 @@ function TEST_recovery_sizedown() {
 }
 
 # [1] -> [1,2]
-# degraded 200 -> 100
+# degraded 300 -> 200
 # active+recovering+undersized+degraded
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                                 STATE_STAMP                VERSION REPORTED UP    UP_PRIMARY ACTING ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         100                  0     200         0       0     0 100      100 active+recovering+undersized+degraded 2017-11-17 17:16:15.302943  13'500   16:643 [1,2]          1  [1,2]              1        0'0 2017-11-17 17:15:34.985563             0'0 2017-11-17 17:15:34.985563
+# 1.0         100                  0     300         0       0     0 100      100 active+recovering+undersized+degraded 2017-11-17 17:16:15.302943  13'500   16:643 [1,2]          1  [1,2]              1        0'0 2017-11-17 17:15:34.985563             0'0 2017-11-17 17:15:34.985563
 function TEST_recovery_undersized() {
     local dir=$1
 
+    local osds=3
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd $dir 0 || return 1
-    run_osd $dir 1 || return 1
-    run_osd $dir 2 || return 1
+    for i in $(seq 0 $(expr $osds - 1))
+    do
+      run_osd $dir $i || return 1
+    done
 
     create_pool $poolname 1 1
     ceph osd pool set $poolname size 1
@@ -310,7 +312,7 @@ function TEST_recovery_undersized() {
 
     ceph osd set norecover
     # Mark any osd not the primary (only 1 replica so also has no replica)
-    for i in 0 1 2
+    for i in $(seq 0 $(expr $osds - 1))
     do
       if [ $i = $primary ];
       then
@@ -319,12 +321,12 @@ function TEST_recovery_undersized() {
       ceph osd out osd.$i
       break
     done
-    ceph osd pool set test size 3
+    ceph osd pool set test size 4
     ceph osd unset norecover
     ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
     # Give extra sleep time because code below doesn't have the sophistication of wait_for_clean()
     sleep 10
-    flush_pg_stats
+    flush_pg_stats || return 1
 
     # Wait for recovery to finish
     # Can't use wait_for_clean() because state goes from active+recovering+undersized+degraded
@@ -347,13 +349,9 @@ function TEST_recovery_undersized() {
     primary=$(get_primary $poolname obj1)
     local log=$dir/osd.${primary}.log
 
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
-
-    local degraded=$(expr $objects \* 2)
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
-    below_margin $FIRST $degraded || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
-    above_margin $LAST $objects || return 1
+    local first_degraded=$(expr $objects \* 3)
+    local last_degraded=$(expr $objects \* 2)
+    check $PG $log $first_degraded $last_degraded 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
