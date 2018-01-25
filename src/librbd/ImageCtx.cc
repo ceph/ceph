@@ -1006,7 +1006,9 @@ struct C_InvalidateCache : public Context {
         "rbd_mirroring_replay_delay", false)(
         "rbd_skip_partial_discard", false)(
         "rbd_persistent_cache_enabled", false)(
-        "rbd_rwl_enabled", false);
+        "rbd_rwl_enabled", false)(
+        "rbd_rwl_size", false)(
+        "rbd_rwl_path", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1069,6 +1071,8 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(blkin_trace_all, bool);
     ASSIGN_OPTION(persistent_cache_enabled, bool);
     ASSIGN_OPTION(rwl_enabled, bool);
+    ASSIGN_OPTION(rwl_size, uint64_t);
+    ASSIGN_OPTION(rwl_path, std::string);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

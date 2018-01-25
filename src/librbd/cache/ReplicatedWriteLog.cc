@@ -297,6 +297,9 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
   return true;
 }
 
+/**
+ * A chain of requests that stops lon the first failure
+ */
 struct C_BlockIORequest : public Context {
   CephContext *m_cct;
   C_BlockIORequest *next_block_request;
@@ -312,13 +315,14 @@ struct C_BlockIORequest : public Context {
   virtual void finish(int r) override {
     ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
 
-    assert(NULL != next_block_request);
-    if (r < 0) {
-      // abort the chain of requests upon failure
-      next_block_request->complete(r);
-    } else {
-      // execute next request in chain
-      next_block_request->send();
+    if (NULL != next_block_request) {
+      if (r < 0) {
+	// abort the chain of requests upon failure
+	next_block_request->complete(r);
+      } else {
+	// execute next request in chain
+	next_block_request->send();
+      }
     }
   }
 
@@ -326,6 +330,10 @@ struct C_BlockIORequest : public Context {
   virtual const char *get_name() const = 0;
 };
 
+/**
+ * A request that can be deferred in a BlockGuard to sequence
+ * overlapping operatoins.
+ */
 struct C_GuardedBlockIORequest : public C_BlockIORequest {
 private:
   CephContext *m_cct;
@@ -333,6 +341,10 @@ private:
 public:
   C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
     : C_BlockIORequest(cct, next_block_request), m_cct(cct), m_cell(NULL) {
+    ldout(m_cct, 99) << this << dendl;
+  }
+  C_GuardedBlockIORequest(CephContext *cct)
+    : C_BlockIORequest(cct, NULL), m_cct(cct), m_cell(NULL) {
     ldout(m_cct, 99) << this << dendl;
   }
   ~C_GuardedBlockIORequest() {
@@ -503,7 +515,7 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
   std::atomic<bool> m_user_req_completed;
   C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
 		 bufferlist&& bl, int fadvise_flags, Context *user_req)
-    : C_GuardedBlockIORequest(cct, NULL), m_cct(cct), image_extents(std::move(image_extents)),
+    : C_GuardedBlockIORequest(cct), m_cct(cct), image_extents(std::move(image_extents)),
       bl(std::move(bl)), fadvise_flags(fadvise_flags),
       user_req(user_req), _on_finish(NULL), m_user_req_completed(false) {
     ldout(m_cct, 99) << this << dendl;
@@ -522,7 +534,7 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
       ldout(m_cct, 20) << this << " user req already completed" << dendl;
     }
   }
-  
+
   virtual void send() override {
     /* Should never be called */
     ldout(m_cct, 6) << this << " unexpected" << dendl;
@@ -534,7 +546,7 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
     complete_user_request(r);
     _on_finish->complete(0);
   }
-  
+
   virtual const char *get_name() const override {
     return "C_WriteRequest";
   }  
@@ -844,8 +856,6 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 	m_async_op_tracker.finish_op();
       });
 
-  m_blocks_to_log_entries.add_entries(log_entries);
-  
   /* All extent ops subs created */
   set->m_extent_ops->activate();
   
@@ -856,6 +866,8 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_buffer);
   }
 
+  m_blocks_to_log_entries.add_entries(log_entries);
+  
   if (set->m_persist_on_flush) {
     /* 
      * We're done with the caller's buffer, and not guaranteeing
@@ -1145,15 +1157,14 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   ldout(cct, 20) << dendl;
   TOID(struct WriteLogPoolRoot) pool_root;
 
-  ldout(cct,5) << "rbd_rwl_enabled:" << cct->_conf->get_val<bool>("rbd_rwl_enabled") << dendl;
-  ldout(cct,5) << "rbd_rwl_size:" << cct->_conf->get_val<uint64_t>("rbd_rwl_size") << dendl;
-  std::string rwl_path = cct->_conf->get_val<std::string>("rbd_rwl_path");
-  ldout(cct,5) << "rbd_rwl_path:" << rwl_path << dendl;
+  ldout(cct,5) << "rwl_enabled:" << m_image_ctx.rwl_enabled << dendl;
+  ldout(cct,5) << "rwl_size:" << m_image_ctx.rwl_size << dendl;
+  std::string rwl_path = m_image_ctx.rwl_path;
+  ldout(cct,5) << "rwl_path:" << m_image_ctx.rwl_path << dendl;
 
   std::string log_pool_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".pool";
   std::string log_poolset_name = rwl_path + "/rbd-rwl." + m_image_ctx.id + ".poolset";
   m_log_pool_size = ceph::max(cct->_conf->get_val<uint64_t>("rbd_rwl_size"), MIN_POOL_SIZE);
-  //m_policy->set_block_count(m_image_ctx.size / BLOCK_SIZE);
 
   if (access(log_poolset_name.c_str(), F_OK) == 0) {
     m_log_pool_name = log_poolset_name;

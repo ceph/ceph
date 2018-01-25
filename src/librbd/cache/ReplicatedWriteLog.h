@@ -215,7 +215,9 @@ public:
 };
 
 class GuardedRequestFunctionContext : public Context {
+private:
   std::atomic<bool> m_callback_invoked;
+  boost::function<void(BlockGuardCell*)> m_callback;
 public:
   GuardedRequestFunctionContext(boost::function<void(BlockGuardCell*)> &&callback)
     : m_callback_invoked(false), m_callback(std::move(callback)) { }
@@ -233,8 +235,6 @@ public:
       m_callback(cell);
     }
   }
-private:
-  boost::function<void(BlockGuardCell*)> m_callback;
 };
 
 struct GuardedRequest {

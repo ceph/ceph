@@ -201,7 +201,9 @@ namespace librbd {
 
     bool persistent_cache_enabled;
     bool rwl_enabled;
-
+    uint64_t rwl_size;
+    std::string rwl_path;
+    
     LibrbdAdminSocketHook *asok_hook;
 
     exclusive_lock::Policy *exclusive_lock_policy = nullptr;
