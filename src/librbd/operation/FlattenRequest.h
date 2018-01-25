@@ -43,11 +43,11 @@ private:
    * <start>
    *    |
    *    v
-   * STATE_FLATTEN_OBJECTS ---> STATE_UPDATE_HEADER . . . . .
+   * STATE_FLATTEN_OBJECTS ---> STATE_UPDATE_CHILDREN . . . .
    *           .                         |                  .
    *           .                         |                  .
    *           .                         v                  .
-   *           .               STATE_UPDATE_CHILDREN        .
+   *           .               STATE_UPDATE_HEADER          .
    *           .                         |                  .
    *           .                         |                  .
    *           .                         \---> <finish> < . .
@@ -63,8 +63,8 @@ private:
    */
   enum State {
     STATE_FLATTEN_OBJECTS,
-    STATE_UPDATE_HEADER,
-    STATE_UPDATE_CHILDREN
+    STATE_UPDATE_CHILDREN,
+    STATE_UPDATE_HEADER
   };
 
   uint64_t m_overlap_objects;
@@ -73,7 +73,6 @@ private:
   State m_state = STATE_FLATTEN_OBJECTS;
 
   ParentSpec m_parent_spec;
-  bool m_ignore_enoent = false;
 
   bool send_update_header();
   bool send_update_children();

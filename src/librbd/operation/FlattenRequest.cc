@@ -66,7 +66,7 @@ bool FlattenRequest<I>::should_complete(int r) {
   if (r == -ERESTART) {
     ldout(cct, 5) << "flatten operation interrupted" << dendl;
     return true;
-  } else if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
+  } else if (r < 0 && r != -ENOENT) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
@@ -75,14 +75,14 @@ bool FlattenRequest<I>::should_complete(int r) {
   switch (m_state) {
   case STATE_FLATTEN_OBJECTS:
     ldout(cct, 5) << "FLATTEN_OBJECTS" << dendl;
-    return send_update_header();
-
-  case STATE_UPDATE_HEADER:
-    ldout(cct, 5) << "UPDATE_HEADER" << dendl;
     return send_update_children();
 
   case STATE_UPDATE_CHILDREN:
     ldout(cct, 5) << "UPDATE_CHILDREN" << dendl;
+    return send_update_header();
+
+  case STATE_UPDATE_HEADER:
+    ldout(cct, 5) << "UPDATE_HEADER" << dendl;
     return true;
 
   default:
@@ -133,7 +133,6 @@ bool FlattenRequest<I>::send_update_header() {
     }
     m_parent_spec = image_ctx.parent_md.spec;
   }
-  m_ignore_enoent = true;
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
@@ -163,7 +162,7 @@ bool FlattenRequest<I>::send_update_children() {
   RWLock::RLocker snap_locker(image_ctx.snap_lock);
   if ((image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
       !image_ctx.snaps.empty()) {
-    return true;
+    return send_update_header();
   }
 
   ldout(cct, 2) << "removing child from children list..." << dendl;
