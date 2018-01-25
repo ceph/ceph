@@ -273,6 +273,7 @@ public:
     const hobject_t &soid,
     const object_stat_sum_t &delta_stats) override;
   void on_primary_error(const hobject_t &oid, eversion_t v) override;
+  void backfill_add_missing(const hobject_t &oid, eversion_t v) override;
   void remove_missing_object(const hobject_t &oid,
 			     eversion_t v,
 			     Context *on_complete) override;
@@ -1805,8 +1806,7 @@ public:
     bufferlist *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    map<string, bufferlist> *out,
-    bool user_only = false);
+    map<string, bufferlist> *out);
 };
 
 inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
