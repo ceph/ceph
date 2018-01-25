@@ -2987,7 +2987,7 @@ void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
   if (auth_cap)
     ::decode(in->get_mds_caps_wanted(), blp);
   if (!cap_map.empty() ||
-      (auth_cap && !in->get_mds_caps_wanted().empty())) {
+      (auth_cap && (in->get_caps_wanted() & ~CEPH_CAP_PIN))) {
     peer_exports[in].swap(cap_map);
     in->get(CInode::PIN_IMPORTINGCAPS);
   }
