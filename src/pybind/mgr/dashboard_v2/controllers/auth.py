@@ -6,12 +6,11 @@ import cherrypy
 import time
 import sys
 
-from ..restresource import RESTResource
-from ..tools import ApiController, AuthRequired
+from ..tools import ApiController, AuthRequired, RESTController
 
 
 @ApiController('auth')
-class Auth(RESTResource):
+class Auth(RESTController):
     """
     Provide login and logout actions.
 
@@ -34,7 +33,7 @@ class Auth(RESTResource):
         self._mod = Auth._mgr_module_
         self._log = self._mod.log
 
-    @RESTResource.args_from_json
+    @RESTController.args_from_json
     def create(self, username, password):
         now = time.time()
         config_username = self._mod.get_localized_config('username', None)

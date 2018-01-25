@@ -3,8 +3,7 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from ..restresource import RESTResource
-from ..tools import ApiController, AuthRequired
+from ..tools import ApiController, AuthRequired, RESTController
 
 
 @ApiController('ping')
@@ -16,13 +15,13 @@ class Ping(object):
 
 
 @ApiController('echo1')
-class EchoArgs(RESTResource):
-    @RESTResource.args_from_json
+class EchoArgs(RESTController):
+    @RESTController.args_from_json
     def create(self, msg):
         return {'echo': msg}
 
 
 @ApiController('echo2')
-class Echo(RESTResource):
+class Echo(RESTController):
     def create(self, data):
         return {'echo': data['msg']}

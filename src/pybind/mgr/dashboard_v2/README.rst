@@ -116,17 +116,16 @@ Reload the dashboard plugin, and then you can access the above controller
 from the web browser using the URL http://mgr_hostname:8080/api/ping2
 
 We also provide a simple mechanism to create REST based controllers using the
-``RESTResource`` class.
+``RESTController`` class.
 
 For example, we can adapt the above controller to return JSON when accessing
 the endpoint with a GET request::
 
   import cherrypy
-  from ..restresource import RESTResource
-  from ..tools import ApiController
+  from ..tools import ApiController, RESTController
 
   @ApiController('ping2')
-  class Ping2(RESTResource):
+  class Ping2(RESTController):
     def list(self):
       return {"msg": "Hello"}
 
@@ -140,12 +139,11 @@ add the ``AuthRequired`` decorator to your controller class.
 Example::
 
   import cherrypy
-  from ..restresource import RESTResource
-  from ..tools import ApiController, AuthRequired
+  from ..tools import ApiController, AuthRequired, RESTController
 
   @ApiController('ping2')
-  @AuthRequired
-  class Ping2(RESTResource):
+  @AuthRequired()
+  class Ping2(RESTController):
     def list(self):
       return {"msg": "Hello"}
 
