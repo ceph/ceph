@@ -633,3 +633,19 @@ class MgrModule(ceph_module.BaseMgrModule):
         self._rados.connect()
 
         return self._rados
+
+    @staticmethod
+    def can_run():
+        """
+        Implement this function to report whether the module's dependencies
+        are met.  For example, if the module needs to import a particular
+        dependency to work, then use a try/except around the import at
+        file scope, and then report here if the import failed.
+
+        This will be called in a blocking way from the C++ code, so do not
+        do any I/O that could block in this function.
+
+        :return a 2-tuple consisting of a boolean and explanatory string
+        """
+
+        return True, ""

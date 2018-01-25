@@ -1332,37 +1332,80 @@ bool DaemonServer::handle_command(MCommand *m)
     }
   }
 
-  // None of the special native commands, 
-  ActivePyModule *handler = nullptr;
+  // Resolve the command to the name of the module that will
+  // handle it (if the command exists)
+  std::string handler_name;
   auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
     dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
     if (pyc_prefix == prefix) {
-      handler = pyc.handler;
+      handler_name = pyc.module_name;
       break;
     }
   }
 
-  if (handler == nullptr) {
+  // Was the command unfound?
+  if (handler_name.empty()) {
     ss << "No handler found for '" << prefix << "'";
     dout(4) << "No handler found for '" << prefix << "'" << dendl;
     cmdctx->reply(-EINVAL, ss);
     return true;
-  } else {
-    // Okay, now we have a handler to call, but we must not call it
-    // in this thread, because the python handlers can do anything,
-    // including blocking, and including calling back into mgr.
-    dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
-    finisher.queue(new FunctionContext([cmdctx, handler](int r_) {
-      std::stringstream ds;
-      std::stringstream ss;
-      int r = handler->handle_command(cmdctx->cmdmap, &ds, &ss);
-      cmdctx->odata.append(ds);
-      cmdctx->reply(r, ss);
-    }));
-    return true;
   }
+
+  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+    std::stringstream ss;
+
+    // Validate that the module is enabled
+    PyModuleRef module = py_modules.get_module(handler_name);
+    if (!module->is_enabled()) {
+      ss << "Module '" << handler_name << "' is not enabled (required by "
+            "command '" << prefix << "'): use `ceph mgr module enable "
+            << handler_name << "` to enable it";
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EOPNOTSUPP, ss);
+      return;
+    }
+
+    // Hack: allow the self-test method to run on unhealthy modules.
+    // Fix this in future by creating a special path for self test rather
+    // than having the hook be a normal module command.
+    std::string self_test_prefix = handler_name + " " + "self-test";
+
+    // Validate that the module is healthy
+    bool accept_command;
+    if (module->is_loaded()) {
+      if (module->get_can_run() && !module->is_failed()) {
+        // Healthy module
+        accept_command = true;
+      } else if (self_test_prefix == prefix) {
+        // Unhealthy, but allow because it's a self test command
+        accept_command = true;
+      } else {
+        accept_command = false;
+        ss << "Module '" << handler_name << "' has experienced an error and "
+              "cannot handle commands: " << module->get_error_string();
+      }
+    } else {
+      // Module not loaded
+      accept_command = false;
+      ss << "Module '" << handler_name << "' failed to load and "
+            "cannot handle commands: " << module->get_error_string();
+    }
+
+    if (!accept_command) {
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EIO, ss);
+      return;
+    }
+
+    std::stringstream ds;
+    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, &ds, &ss);
+    cmdctx->odata.append(ds);
+    cmdctx->reply(r, ss);
+  }));
+  return true;
 }
 
 void DaemonServer::_prune_pending_service_map()

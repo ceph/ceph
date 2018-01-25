@@ -18,6 +18,8 @@
 #include "common/LogClient.h"
 #include "mgr/Gil.h"
 
+#include "PyModule.h"
+
 /**
  * Implement the pattern of calling serve() on a module in a thread,
  * until shutdown() is called.
@@ -25,16 +27,10 @@
 class PyModuleRunner
 {
 protected:
-  const std::string module_name;
+  // Info about the module we're going to run
+  PyModuleRef py_module;
 
-  // Passed in by whoever loaded our python module and looked up
-  // the symbols in it.
-  PyObject *pClass = nullptr;
-
-  // Passed in by whoever created our subinterpreter for us
-  SafeThreadState pMyThreadState = nullptr;
-
-  // Populated when we construct our instance of pClass in load()
+  // Populated by descendent class
   PyObject *pClassInstance = nullptr;
 
   LogChannelRef clog;
@@ -50,32 +46,28 @@ protected:
     void *entry() override;
   };
 
+
 public:
   int serve();
   void shutdown();
   void log(int level, const std::string &record);
 
   PyModuleRunner(
-      const std::string &module_name_,
-      PyObject *pClass_,
-      const SafeThreadState &pMyThreadState_,
+      PyModuleRef py_module_,
       LogChannelRef clog_)
     : 
-      module_name(module_name_),
-      pClass(pClass_), pMyThreadState(pMyThreadState_),
+      py_module(py_module_),
       clog(clog_),
       thread(this)
   {
-    assert(pClass != nullptr);
-    assert(pMyThreadState.ts != nullptr);
-    assert(!module_name.empty());
+    assert(py_module != nullptr);
   }
 
   ~PyModuleRunner();
 
   PyModuleRunnerThread thread;
 
-  std::string const &get_name() const { return module_name; }
+  std::string const &get_name() const { return py_module->get_name(); }
 };
 
 

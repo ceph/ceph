@@ -12,7 +12,6 @@
  */
 
 // Include this first to get python headers earlier
-#include "BaseMgrModule.h"
 #include "Gil.h"
 
 #include "common/errno.h"
@@ -321,26 +320,23 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   }
 }
 
-int ActivePyModules::start_one(std::string const &module_name,
-    PyObject *pClass, const SafeThreadState &pMyThreadState)
+int ActivePyModules::start_one(PyModuleRef py_module)
 {
   Mutex::Locker l(lock);
 
-  assert(modules.count(module_name) == 0);
+  assert(modules.count(py_module->get_name()) == 0);
 
-  modules[module_name].reset(new ActivePyModule(
-      module_name, pClass,
-      pMyThreadState, clog));
+  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
 
-  int r = modules[module_name]->load(this);
+  int r = modules[py_module->get_name()]->load(this);
   if (r != 0) {
     return r;
   } else {
-    dout(4) << "Starting thread for " << module_name << dendl;
+    dout(4) << "Starting thread for " << py_module->get_name() << dendl;
     // Giving Thread the module's module_name member as its
     // char* thread name: thread must not outlive module class lifetime.
-    modules[module_name]->thread.create(
-        modules[module_name]->get_name().c_str());
+    modules[py_module->get_name()]->thread.create(
+        py_module->get_name().c_str());
 
     return 0;
   }
@@ -494,34 +490,6 @@ void ActivePyModules::set_config(const std::string &module_name,
     dout(0) << "mon returned " << set_cmd.r << ": " << set_cmd.outs << dendl;
   }
 }
-
-std::vector<ModuleCommand> ActivePyModules::get_py_commands() const
-{
-  Mutex::Locker l(lock);
-
-  std::vector<ModuleCommand> result;
-  for (const auto& i : modules) {
-    auto module = i.second.get();
-    auto mod_commands = module->get_commands();
-    for (auto j : mod_commands) {
-      result.push_back(j);
-    }
-  }
-
-  return result;
-}
-
-std::vector<MonCommand> ActivePyModules::get_commands() const
-{
-  std::vector<ModuleCommand> commands = get_py_commands();
-  std::vector<MonCommand> result;
-  for (auto &pyc: commands) {
-    result.push_back({pyc.cmdstring, pyc.helpstring, "mgr",
-                        pyc.perm, "cli", MonCommand::FLAG_MGR});
-  }
-  return result;
-}
-
 
 std::map<std::string, std::string> ActivePyModules::get_services() const
 {
@@ -715,6 +683,18 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
   if (p != modules.end()) {
     p->second->set_health_checks(std::move(checks));
   }
+}
+
+int ActivePyModules::handle_command(
+  std::string const &module_name,
+  const cmdmap_t &cmdmap,
+  std::stringstream *ds,
+  std::stringstream *ss)
+{
+  lock.Lock();
+  auto mod = modules.at(module_name).get();
+  lock.Unlock();
+  return mod->handle_command(cmdmap, ds, ss);
 }
 
 void ActivePyModules::get_health_checks(health_check_map_t *checks)
