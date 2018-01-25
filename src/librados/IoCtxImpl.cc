@@ -1239,6 +1239,15 @@ int librados::IoCtxImpl::aio_cancel(AioCompletionImpl *c)
   return objecter->op_cancel(c->tid, -ECANCELED);
 }
 
+int librados::IoCtxImpl::aio_cancel_all()
+{
+  objecter->op_cancel_all(-EIO);
+  objecter->command_op_cancel_all(-EIO);
+  objecter->pool_op_cancel_all(-EIO);
+  objecter->pool_stat_op_cancel_all(-EIO);
+  objecter->statfs_op_cancel_all(-EIO);
+}
+
 
 int librados::IoCtxImpl::hit_set_list(uint32_t hash, AioCompletionImpl *c,
 			      std::list< std::pair<time_t, time_t> > *pls)

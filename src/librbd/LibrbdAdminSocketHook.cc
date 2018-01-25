@@ -54,6 +54,19 @@ private:
   ImageCtx *ictx;
 };
 
+struct CancelOpCommand : public LibrbdAdminSocketCommand {
+public:
+  explicit CancelOpCommand(ImageCtx *ictx) : ictx(ictx) {}
+
+  bool call(stringstream *ss) override {
+    ictx->data_ctx.aio_cancel_all();
+    return true;
+  }
+
+private:
+  ImageCtx *ictx;
+};
+
 LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   admin_socket(ictx->cct->get_admin_socket()) {
 
@@ -77,6 +90,13 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
 				     " cache");
   if (r == 0) {
     commands[command] = new InvalidateCacheCommand(ictx);
+  }
+
+  command = "rbd aio cancel " + imagename;
+  r = admin_socket->register_command(command, command, this,
+				     "cancel all aio requests for image " + imagename);
+  if (r == 0) {
+    commands[command] = new CancelOpCommand(ictx);
   }
 }
 

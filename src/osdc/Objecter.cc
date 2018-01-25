@@ -2596,6 +2596,52 @@ start:
   return ret;
 }
 
+int Objecter::op_cancel(OSDSession *s, int r, int64_t pool, bool writes_only) {
+  std::vector<ceph_tid_t> to_cancel;
+  OSDSession::shared_lock sl(s->lock);
+  for (auto op_i = s->ops.begin(); op_i != s->ops.end(); ++op_i) {
+    if (pool == -1 || op_i->second->target.target_oloc.pool == pool) {
+      if (writes_only) {
+        if (op_i->second->target.flags & CEPH_OSD_FLAG_WRITE) {
+          to_cancel.push_back(op_i->first);
+        }
+      } else {
+        to_cancel.push_back(op_i->first);
+      }
+    }
+  }
+  sl.unlock();
+  for (auto titer = to_cancel.begin(); titer != to_cancel.end(); ++titer) {
+    int cancel_result = op_cancel(s, *titer, r);
+    // We hold rwlock across search and cancellation, so cancels
+    // should always succeed
+    assert(cancel_result == 0);
+  }
+  return to_cancel.size();
+}
+
+epoch_t Objecter::op_cancel_all(int r, int64_t pool, bool writes_only)
+{
+  unique_lock wl(rwlock);
+
+  bool found = false;
+  found = op_cancel(homeless_session, r, pool, writes_only) > 0;
+
+  for (auto siter = osd_sessions.begin(); siter != osd_sessions.end(); ++siter) {
+    OSDSession *s = siter->second;
+    found = found | (op_cancel(s, r, pool, writes_only) > 0);
+  }
+
+  const epoch_t epoch = osdmap->get_epoch();
+
+  wl.unlock();
+
+  if (found) {
+    return epoch;
+  } else {
+    return -1;
+  }
+}
 
 epoch_t Objecter::op_cancel_writes(int r, int64_t pool)
 {
@@ -4162,6 +4208,21 @@ int Objecter::pool_op_cancel(ceph_tid_t tid, int r)
   return 0;
 }
 
+int Objecter::pool_op_cancel_all(int r)
+{
+  vector<ceph_tid_t> to_cancel;
+  {
+    unique_lock wl(rwlock);
+    for (auto it = pool_ops.begin(); it != pool_ops.end(); ++it) {
+      to_cancel.push_back(it->first);
+    }
+  }
+  for (auto it = to_cancel.begin(); it != to_cancel.end(); ++it) {
+    pool_op_cancel(*it, r);
+  }
+  return 0;
+}
+
 void Objecter::_finish_pool_op(PoolOp *op, int r)
 {
   // rwlock is locked unique
@@ -4266,6 +4327,21 @@ int Objecter::pool_stat_op_cancel(ceph_tid_t tid, int r)
   return 0;
 }
 
+int Objecter::pool_stat_op_cancel_all(int r)
+{
+  vector<ceph_tid_t> to_cancel;
+  {
+    unique_lock wl(rwlock);
+    for (auto it = poolstat_ops.begin(); it != poolstat_ops.end(); ++it) {
+      to_cancel.push_back(it->first);
+    }
+  }
+  for (auto it = to_cancel.begin(); it != to_cancel.end(); ++it) {
+    pool_stat_op_cancel(*it, r);
+  }
+  return 0;
+}
+
 void Objecter::_finish_pool_stat_op(PoolStatOp *op, int r)
 {
   // rwlock is locked unique
@@ -4363,6 +4439,21 @@ int Objecter::statfs_op_cancel(ceph_tid_t tid, int r)
   if (op->onfinish)
     op->onfinish->complete(r);
   _finish_statfs_op(op, r);
+  return 0;
+}
+
+int Objecter::statfs_op_cancel_all(int r)
+{
+  vector<ceph_tid_t> to_cancel;
+  {
+    unique_lock wl(rwlock);
+    for (auto it = statfs_ops.begin(); it != statfs_ops.end(); ++it) {
+      to_cancel.push_back(it->first);
+    }
+  }
+  for (auto it = to_cancel.begin(); it != to_cancel.end(); ++it) {
+    statfs_op_cancel(*it, r);
+  }
   return 0;
 }
 
@@ -4952,6 +5043,33 @@ int Objecter::command_op_cancel(OSDSession *s, ceph_tid_t tid, int r)
   OSDSession::unique_lock sl(op->session->lock);
   _finish_command(op, r, "");
   sl.unlock();
+  return 0;
+}
+
+int Objecter::command_op_cancel(OSDSession *s, int r)
+{
+  vector<CommandOp*> to_cancel;
+  {
+    OSDSession::shared_lock sl(s->lock);
+    for (auto it = s->command_ops.begin(); it != s->command_ops.end(); ++it) {
+      to_cancel.push_back(it->second);
+    }
+    sl.unlock();
+  }
+  for (auto it = to_cancel.begin(); it != to_cancel.end(); ++it) {
+    _command_cancel_map_check(*it);
+    _finish_command(*it, r, "");
+  }
+  return 0;
+}
+
+int Objecter::command_op_cancel_all(int r)
+{
+  unique_lock wl(rwlock);
+  command_op_cancel(homeless_session, r);
+  for (auto it = osd_sessions.begin(); it != osd_sessions.end(); ++it) {
+    command_op_cancel(it->second, r);
+  }
   return 0;
 }
 

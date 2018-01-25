@@ -1659,6 +1659,7 @@ public:
   void _assign_command_session(CommandOp *c, shunique_lock &sul);
   void _send_command(CommandOp *c);
   int command_op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int command_op_cancel_all(int r);
   void _finish_command(CommandOp *c, int r, string rs);
   void handle_command_reply(MCommandReply *m);
 
@@ -2200,10 +2201,13 @@ public:
   /// cancel an in-progress request with the given return code
 private:
   int op_cancel(OSDSession *s, ceph_tid_t tid, int r);
+  int op_cancel(OSDSession *s, int r, int64_t pool, bool writes_only);
   int _op_cancel(ceph_tid_t tid, int r);
+  int command_op_cancel(OSDSession *s, int r);
 public:
   int op_cancel(ceph_tid_t tid, int r);
   int op_cancel(const vector<ceph_tid_t>& tidls, int r);
+  epoch_t op_cancel_all(int r, int64_t pool=-1, bool writes_only=false);
 
   /**
    * Any write op which is in progress at the start of this call shall no
@@ -2936,6 +2940,7 @@ public:
 
   void handle_pool_op_reply(MPoolOpReply *m);
   int pool_op_cancel(ceph_tid_t tid, int r);
+  int pool_op_cancel_all(int r);
 
   // --------------------------
   // pool stats
@@ -2946,6 +2951,7 @@ public:
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
+  int pool_stat_op_cancel_all(int r);
   void _finish_pool_stat_op(PoolStatOp *op, int r);
 
   // ---------------------------
@@ -2957,6 +2963,7 @@ public:
   void get_fs_stats(struct ceph_statfs& result, boost::optional<int64_t> poolid,
 		    Context *onfinish);
   int statfs_op_cancel(ceph_tid_t tid, int r);
+  int statfs_op_cancel_all(int r);
   void _finish_statfs_op(StatfsOp *op, int r);
 
   // ---------------------------

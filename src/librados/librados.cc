@@ -2053,6 +2053,10 @@ int librados::IoCtx::aio_cancel(librados::AioCompletion *c)
   return io_ctx_impl->aio_cancel(c->pc);
 }
 
+int librados::IoCtx::aio_cancel_all() {
+  return io_ctx_impl->aio_cancel_all();
+}
+
 int librados::IoCtx::watch(const string& oid, uint64_t ver, uint64_t *cookie,
 			   librados::WatchCtx *ctx)
 {

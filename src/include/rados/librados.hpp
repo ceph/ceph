@@ -1074,6 +1074,7 @@ namespace librados
      * @returns 0 on success, negative error code on failure
      */
     int aio_cancel(AioCompletion *c);
+    int aio_cancel_all();
 
     int aio_exec(const std::string& oid, AioCompletion *c, const char *cls, const char *method,
 	         bufferlist& inbl, bufferlist *outbl);
