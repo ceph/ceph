@@ -67,7 +67,7 @@ are like locks.  Sometimes, for example when another client needs access,
 the MDS will request clients release their capabilities.  If the client
 is unresponsive or buggy, it might fail to do so promptly or fail to do
 so at all.  This message appears if a client has taken longer than
-``mds_revoke_cap_timeout`` (default 60s) to comply.
+``mds_session_timeout`` (default 60s) to comply.
 
 Message: "Client *name* failing to respond to cache pressure"
 Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY

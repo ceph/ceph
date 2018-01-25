@@ -184,7 +184,8 @@ int rgw_link_bucket(RGWRados* const store,
                     const rgw_user& user_id,
                     rgw_bucket& bucket,
                     ceph::real_time creation_time,
-                    bool update_entrypoint)
+                    bool update_entrypoint,
+                    bool update_stats)
 {
   int ret;
   string& tenant_name = bucket.tenant;
@@ -217,7 +218,7 @@ int rgw_link_bucket(RGWRados* const store,
   rgw_get_buckets_obj(user_id, buckets_obj_id);
 
   rgw_raw_obj obj(store->get_zone_params().user_uid_pool, buckets_obj_id);
-  ret = store->cls_user_add_bucket(obj, new_bucket);
+  ret = store->cls_user_add_bucket(obj, new_bucket, update_stats);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: error adding bucket to directory: "
                            << cpp_strerror(-ret) << dendl;
@@ -567,7 +568,7 @@ int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children)
     return ret;
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, info);
+  ret = rgw_bucket_sync_user_stats(store, info.owner, info);
   if ( ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -728,27 +729,17 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
     return ret;
   }
 
-  ret = rgw_bucket_sync_user_stats(store, bucket.tenant, info);
+  ret = rgw_bucket_sync_user_stats(store, info.owner, info);
   if (ret < 0) {
      dout(1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
 
   RGWObjVersionTracker objv_tracker;
 
-  ret = rgw_bucket_delete_bucket_obj(store, bucket.tenant, bucket.name, objv_tracker);
+  ret = store->delete_bucket(info, objv_tracker);
   if (ret < 0) {
-    lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << "with ret as " << ret << dendl;
+    lderr(store->ctx()) << "ERROR: could not remove bucket " << bucket.name << dendl;
     return ret;
-  }
-
-  if (!store->is_syncing_bucket_meta(bucket)) {
-    RGWObjVersionTracker objv_tracker;
-    string entry = bucket.get_key();
-    ret = rgw_bucket_instance_remove_entry(store, entry, &objv_tracker);
-    if (ret < 0) {
-      lderr(store->ctx()) << "ERROR: could not remove bucket instance entry" << bucket.name << "with ret as " << ret << dendl;
-      return ret;
-    }
   }
 
   ret = rgw_unlink_bucket(store, info.owner, bucket.tenant, bucket.name, false);
@@ -901,7 +892,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, std::string *err_msg)
     }
 
     r = rgw_link_bucket(store, user_info.user_id, bucket_info.bucket,
-                        ceph::real_time());
+                        ceph::real_time(),true, op_state.will_update_stats());
     if (r < 0) {
       return r;
     }

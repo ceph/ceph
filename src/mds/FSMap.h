@@ -37,15 +37,6 @@
 class CephContext;
 class health_check_map_t;
 
-#define MDS_FEATURE_INCOMPAT_BASE CompatSet::Feature(1, "base v0.20")
-#define MDS_FEATURE_INCOMPAT_CLIENTRANGES CompatSet::Feature(2, "client writeable ranges")
-#define MDS_FEATURE_INCOMPAT_FILELAYOUT CompatSet::Feature(3, "default file layouts on dirs")
-#define MDS_FEATURE_INCOMPAT_DIRINODE CompatSet::Feature(4, "dir inode in separate object")
-#define MDS_FEATURE_INCOMPAT_ENCODING CompatSet::Feature(5, "mds uses versioned encoding")
-#define MDS_FEATURE_INCOMPAT_OMAPDIRFRAG CompatSet::Feature(6, "dirfrag is stored in omap")
-#define MDS_FEATURE_INCOMPAT_INLINE CompatSet::Feature(7, "mds uses inline data")
-#define MDS_FEATURE_INCOMPAT_NOANCHOR CompatSet::Feature(8, "no anchor table")
-
 #define MDS_FS_NAME_DEFAULT "cephfs"
 
 /**
@@ -132,6 +123,7 @@ public:
       standby_daemons(rhs.standby_daemons),
       standby_epochs(rhs.standby_epochs)
   {
+    filesystems.clear();
     for (const auto &i : rhs.filesystems) {
       const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
@@ -149,6 +141,7 @@ public:
     standby_daemons = rhs.standby_daemons;
     standby_epochs = rhs.standby_epochs;
 
+    filesystems.clear();
     for (const auto &i : rhs.filesystems) {
       const auto &fs = i.second;
       filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);

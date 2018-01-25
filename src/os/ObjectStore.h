@@ -1060,6 +1060,8 @@ public:
      * newly provided data. More sophisticated implementations of
      * ObjectStore will omit the untouched data and store it as a
      * "hole" in the file.
+     *
+     * Note that a 0-length write does not affect the size of the object.
      */
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const bufferlist& write_data, uint32_t flags = 0) {
@@ -1085,6 +1087,11 @@ public:
      * zero out the indicated byte range within an object. Some
      * ObjectStore instances may optimize this to release the
      * underlying storage space.
+     *
+     * If the zero range extends beyond the end of the object, the object
+     * size is extended, just as if we were writing a buffer full of zeros.
+     * EXCEPT if the length is 0, in which case (just like a 0-length write)
+     * we do not adjust the object size.
      */
     void zero(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len) {
       Op* _op = _get_next_op();

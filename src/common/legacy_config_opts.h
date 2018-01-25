@@ -222,7 +222,6 @@ OPTION(mon_osd_prime_pg_temp, OPT_BOOL)  // prime osdmap with pg mapping changes
 OPTION(mon_osd_prime_pg_temp_max_time, OPT_FLOAT)  // max time to spend priming
 OPTION(mon_osd_prime_pg_temp_max_estimate, OPT_FLOAT) // max estimate of pg total before we do all pgs in parallel
 OPTION(mon_osd_pool_ec_fast_read, OPT_BOOL) // whether turn on fast read on the pool or not
-OPTION(mon_stat_smooth_intervals, OPT_INT)  // smooth stats over last N PGMap maps
 OPTION(mon_election_timeout, OPT_FLOAT)  // on election proposer, max waiting time for all ACKs
 OPTION(mon_lease, OPT_FLOAT)       // lease interval
 OPTION(mon_lease_renew_interval_factor, OPT_FLOAT) // on leader, to renew the lease
@@ -233,7 +232,6 @@ OPTION(mon_clock_drift_allowed, OPT_FLOAT) // allowed clock drift between monito
 OPTION(mon_clock_drift_warn_backoff, OPT_FLOAT) // exponential backoff for clock drift warnings
 OPTION(mon_timecheck_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval (seconds)
 OPTION(mon_timecheck_skew_interval, OPT_FLOAT) // on leader, timecheck (clock drift check) interval when in presence of a skew (seconds)
-OPTION(mon_pg_stuck_threshold, OPT_INT) // number of seconds after which pgs can be considered stuck inactive, unclean, etc (see doc/control.rst under dump_stuck for more info)
 OPTION(mon_pg_min_inactive, OPT_U64) // the number of PGs which have to be inactive longer than 'mon_pg_stuck_threshold' before health goes into ERR. 0 means disabled, never go into ERR.
 OPTION(mon_pg_warn_max_object_skew, OPT_FLOAT) // max skew few average in objects per pg
 OPTION(mon_pg_warn_min_objects, OPT_INT)  // do not warn below this object #
@@ -273,7 +271,6 @@ OPTION(mon_health_to_clog, OPT_BOOL)
 OPTION(mon_health_to_clog_interval, OPT_INT)
 OPTION(mon_health_to_clog_tick_interval, OPT_DOUBLE)
 OPTION(mon_health_preluminous_compat, OPT_BOOL)
-OPTION(mon_health_max_detail, OPT_INT) // max detailed pgs to report in health detail
 OPTION(mon_data_avail_crit, OPT_INT)
 OPTION(mon_data_avail_warn, OPT_INT)
 OPTION(mon_data_size_warn, OPT_U64) // issue a warning when the monitor's data store goes over 15GB (in bytes)
@@ -437,12 +434,11 @@ OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
 OPTION(mds_blacklist_interval, OPT_FLOAT)  // how long to blacklist failed nodes
 
-OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client idle
+OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout
 OPTION(mds_session_blacklist_on_evict, OPT_BOOL)  // whether to blacklist clients whose sessions are dropped via admin commands
 
 OPTION(mds_sessionmap_keys_per_op, OPT_U32)    // how many sessions should I try to load/store in a single OMAP operation?
-OPTION(mds_revoke_cap_timeout, OPT_FLOAT)    // detect clients which aren't revoking caps
 OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
@@ -461,7 +457,6 @@ OPTION(mds_log_max_events, OPT_INT)
 OPTION(mds_log_events_per_segment, OPT_INT)
 OPTION(mds_log_segment_size, OPT_INT)  // segment size for mds log, default to default file_layout_t
 OPTION(mds_log_max_segments, OPT_U32)
-OPTION(mds_log_max_expiring, OPT_INT)
 OPTION(mds_bal_export_pin, OPT_BOOL)  // allow clients to pin directory trees to ranks
 OPTION(mds_bal_sample_interval, OPT_DOUBLE)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT)

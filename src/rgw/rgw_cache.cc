@@ -17,10 +17,13 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
     return -ENOENT;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
+  auto iter = cache_map.find(name);
+  if (iter == cache_map.end() ||
+      (expiry.count() &&
+       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry)) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
-    if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
+    if (perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
 
@@ -136,11 +139,7 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
   ObjectCacheEntry& entry = iter->second;
   ObjectCacheInfo& target = entry.info;
 
-  for (list<pair<RGWChainedCache *, string> >::iterator iiter = entry.chained_entries.begin();
-       iiter != entry.chained_entries.end(); ++iiter) {
-    RGWChainedCache *chained_cache = iiter->first;
-    chained_cache->invalidate(iiter->second);
-  }
+  invalidate_lru(entry);
 
   entry.chained_entries.clear();
   entry.gen++;
@@ -231,8 +230,11 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<str
     }
     map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
     ldout(cct, 10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
-    if (map_iter != cache_map.end())
+    if (map_iter != cache_map.end()) {
+      ObjectCacheEntry& entry = map_iter->second;
+      invalidate_lru(entry);
       cache_map.erase(map_iter);
+    }
     lru.pop_front();
     lru_size--;
   }
@@ -262,6 +264,15 @@ void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter
   lru.erase(lru_iter);
   lru_size--;
   lru_iter = lru.end();
+}
+
+void ObjectCache::invalidate_lru(ObjectCacheEntry& entry)
+{
+  for (list<pair<RGWChainedCache *, string> >::iterator iter = entry.chained_entries.begin();
+       iter != entry.chained_entries.end(); ++iter) {
+    RGWChainedCache *chained_cache = iter->first;
+    chained_cache->invalidate(iter->second);
+  }
 }
 
 void ObjectCache::set_enabled(bool status)

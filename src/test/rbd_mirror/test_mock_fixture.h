@@ -21,6 +21,10 @@ namespace librbd {
 class MockImageCtx;
 }
 
+ACTION_P(CopyInBufferlist, str) {
+  arg0->append(str);
+}
+
 ACTION_P(CompleteContext, r) {
   arg0->complete(r);
 }

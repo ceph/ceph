@@ -40,7 +40,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& o
 
 int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
-                       rgw_cache_entry_info *cache_info)
+                       rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
 {
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
@@ -64,7 +64,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, const rgw_pool
 
     rop.read_params.cache_info = cache_info;
 
-    ret = rop.read(0, request_len - 1, bl, objv_tracker);
+    ret = rop.read(0, request_len - 1, bl, objv_tracker, refresh_version);
     if (ret == -ECANCELED) {
       /* raced, restart */
       if (!original_readv.empty()) {

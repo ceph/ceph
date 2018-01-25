@@ -963,7 +963,8 @@ struct C_InvalidateCache : public Context {
     return true;
   }
 
-  void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta) {
+  void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta,
+                                bool thread_safe) {
     ldout(cct, 20) << __func__ << dendl;
     std::map<string, bool> configs = boost::assign::map_list_of(
         "rbd_non_blocking_aio", false)(
@@ -1052,13 +1053,16 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_interval, int64_t);
     ASSIGN_OPTION(journal_object_flush_bytes, int64_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
-    ASSIGN_OPTION(journal_pool, std::string);
     ASSIGN_OPTION(journal_max_payload_bytes, uint64_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
+
+    if (thread_safe) {
+      ASSIGN_OPTION(journal_pool, std::string);
+    }
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

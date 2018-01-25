@@ -987,9 +987,11 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("mon_stat_smooth_intervals", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_stat_smooth_intervals", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(6)
-    .set_description(""),
+    .set_min(1)
+    .add_service("mgr")
+    .set_description("number of PGMaps stats over which we calc the average read/write throughput of the whole cluster"),
 
     Option("mon_election_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
@@ -1029,7 +1031,9 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_stuck_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
-    .set_description(""),
+    .set_description("number of seconds after which pgs can be considered stuck inactive, unclean, etc")
+    .set_long_description("see doc/control.rst under dump_stuck for more info")
+    .add_service("mgr"),
 
     Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
@@ -1045,19 +1049,23 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pg_warn_max_object_skew", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(10.0)
-    .set_description(""),
+    .set_description("max skew few average in objects per pg")
+    .add_service("mgr"),
 
     Option("mon_pg_warn_min_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10000)
-    .set_description(""),
+    .set_description("do not warn below this object #")
+    .add_service("mgr"),
 
     Option("mon_pg_warn_min_pool_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
-    .set_description(""),
+    .set_description("do not warn on pools below this object #")
+    .add_service("mgr"),
 
     Option("mon_pg_check_down_all_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.5)
-    .set_description(""),
+    .set_description("threshold of down osds after which we check all pgs")
+    .add_service("mgr"),
 
     Option("mon_cache_target_full_warn_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.66)
@@ -1208,9 +1216,9 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Warn about the health JSON format change in preluminous JSON fields"),
 
-    Option("mon_health_max_detail", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_health_max_detail", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50)
-    .set_description(""),
+    .set_description("max detailed pgs to report in health detail"),
 
     Option("mon_health_log_update_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
@@ -1492,11 +1500,13 @@ std::vector<Option> get_global_options() {
 
     Option("mon_pool_quota_warn_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("percent of quota at which to issue warnings")
+    .add_service("mgr"),
 
     Option("mon_pool_quota_crit_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("percent of quota at which to issue errors")
+    .add_service("mgr"),
 
     Option("crush_location", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
@@ -4223,6 +4233,10 @@ std::vector<Option> get_global_options() {
     Option("debug_deliberately_leak_memory", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+      
+    Option("debug_asserts_on_shutdown", Option::TYPE_BOOL,Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Enable certain asserts to check for refcounting bugs on shutdown; see http://tracker.ceph.com/issues/21738"),
   });
 }
 
@@ -5042,6 +5056,26 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(60 * 10)
     .set_description(""),
+
+    Option("rgw_cache_expiry_interval", Option::TYPE_UINT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(900)
+    .set_description("Number of seconds before entries in the bucket info "
+		     "cache are assumed stale and re-fetched. Zero is never.")
+    .add_tag("performance")
+    .add_service("rgw")
+    .set_long_description("The Rados Gateway stores metadata about buckets in "
+			  "an internal cache. This should be kept consistent "
+			  "by the OSD's relaying notify events between "
+			  "multiple watching RGW processes. In the event "
+			  "that this notification protocol fails, bounding "
+			  "the length of time that any data in the cache will "
+			  "be assumed valid will ensure that any RGW instance "
+			  "that falls out of sync will eventually recover. "
+			  "This seems to be an issue mostly for large numbers "
+			  "of RGW instances under heavy use. If you would like "
+			  "to turn off cache expiry, set this value to zero."),
+
   });
 }
 
@@ -5464,10 +5498,6 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description(""),
 
-    Option("mds_revoke_cap_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
-    .set_description(""),
-
     Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .set_description(""),
@@ -5534,10 +5564,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_log_max_segments", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
-
-    Option("mds_log_max_expiring", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(20)
     .set_description(""),
 
     Option("mds_bal_export_pin", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)

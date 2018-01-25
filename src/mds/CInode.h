@@ -772,7 +772,7 @@ public:
   void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::iterator& bl);
 
-  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features) {
+  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
     assert(is_auth());
     
     // relax locks?
@@ -783,7 +783,7 @@ public:
     ::encode(nonce, bl);
     
     _encode_base(bl, features);
-    _encode_locks_state_for_replica(bl);
+    _encode_locks_state_for_replica(bl, need_recover);
   }
   void decode_replica(bufferlist::iterator& p, bool is_new) {
     __u32 nonce;
@@ -811,11 +811,11 @@ public:
   void _decode_base(bufferlist::iterator& p);
   void _encode_locks_full(bufferlist& bl);
   void _decode_locks_full(bufferlist::iterator& p);
-  void _encode_locks_state_for_replica(bufferlist& bl);
+  void _encode_locks_state_for_replica(bufferlist& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
   void _decode_locks_state(bufferlist::iterator& p, bool is_new);
   void _decode_locks_rejoin(bufferlist::iterator& p, std::list<MDSInternalContextBase*>& waiters,
-			    std::list<SimpleLock*>& eval_locks);
+			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
   // -- import/export --
   void encode_export(bufferlist& bl);

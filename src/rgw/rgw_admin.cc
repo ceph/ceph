@@ -928,7 +928,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_RESHARD_LIST;
     if (strcmp(cmd, "status") == 0)
       return OPT_RESHARD_STATUS;
-    if (strcmp(cmd, "execute") == 0)
+    if (strcmp(cmd, "process") == 0)
       return OPT_RESHARD_PROCESS;
     if (strcmp(cmd, "cancel") == 0)
       return OPT_RESHARD_CANCEL;
@@ -2856,7 +2856,10 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT_ROLE_POLICY_PUT
                           && opt_cmd != OPT_ROLE_POLICY_LIST
                           && opt_cmd != OPT_ROLE_POLICY_GET
-                          && opt_cmd != OPT_ROLE_POLICY_DELETE) {
+                          && opt_cmd != OPT_ROLE_POLICY_DELETE
+                          && opt_cmd != OPT_RESHARD_ADD
+                          && opt_cmd != OPT_RESHARD_CANCEL
+                          && opt_cmd != OPT_RESHARD_STATUS) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }

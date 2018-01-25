@@ -585,56 +585,53 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
   rgw::IAM::Environment e;
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:CurrentTime"),
-	    std::forward_as_tuple(std::to_string(
-				    ceph::real_clock::to_time_t(t))));
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:EpochTime"),
-	    std::forward_as_tuple(ceph::to_iso_8601(t)));
+  e.emplace("aws:CurrentTime", std::to_string(ceph::real_clock::to_time_t(t)));
+  e.emplace("aws:EpochTime", ceph::to_iso_8601(t));
   // TODO: This is fine for now, but once we have STS we'll need to
   // look and see. Also this won't work with the IdentityApplier
   // model, since we need to know the actual credential.
-  e.emplace(std::piecewise_construct,
-	    std::forward_as_tuple("aws:PrincipalType"),
-	    std::forward_as_tuple("User"));
+  e.emplace("aws:PrincipalType", "User");
 
   auto i = m.find("HTTP_REFERER");
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:Referer"),
-	      std::forward_as_tuple(i->second));
+    e.emplace("aws:Referer", i->second);
   }
 
   // These seem to be the semantics, judging from rest_rgw_s3.cc
   i = m.find("SERVER_PORT_SECURE");
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:SecureTransport"),
-	      std::forward_as_tuple("true"));
+    e.emplace("aws:SecureTransport", "true");
   }
 
-  i = m.find("HTTP_HOST");
+  const auto remote_addr_param = s->cct->_conf->rgw_remote_addr_param;
+  if (remote_addr_param.length()) {
+    i = m.find(remote_addr_param);
+  } else {
+    i = m.find("REMOTE_ADDR");
+  }
   if (i != m.end()) {
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:SourceIp"),
-	      std::forward_as_tuple(i->second));
+    const string* ip = &(i->second);
+    string temp;
+    if (remote_addr_param == "HTTP_X_FORWARDED_FOR") {
+      const auto comma = ip->find(',');
+      if (comma != string::npos) {
+	temp.assign(*ip, 0, comma);
+	ip = &temp;
+      }
+    }
+    e.emplace("aws:SourceIp", *ip);
   }
 
   i = m.find("HTTP_USER_AGENT"); {
   if (i != m.end())
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:UserAgent"),
-	      std::forward_as_tuple(i->second));
+    e.emplace("aws:UserAgent", i->second);
   }
 
   if (s->user) {
     // What to do about aws::userid? One can have multiple access
     // keys so that isn't really suitable. Do we have a durable
     // identifier that can persist through name changes?
-    e.emplace(std::piecewise_construct,
-	      std::forward_as_tuple("aws:username"),
-	      std::forward_as_tuple(s->user->user_id.id));
+    e.emplace("aws:username", s->user->user_id.id);
   }
   return e;
 }
@@ -646,6 +643,37 @@ void rgw_bucket_object_pre_exec(struct req_state *s)
 
   dump_bucket_from_state(s);
 }
+
+// So! Now and then when we try to update bucket information, the
+// bucket has changed during the course of the operation. (Or we have
+// a cache consistency problem that Watch/Notify isn't ruling out
+// completely.)
+//
+// When this happens, we need to update the bucket info and try
+// again. We have, however, to try the right *part* again.  We can't
+// simply re-send, since that will obliterate the previous update.
+//
+// Thus, callers of this function should include everything that
+// merges information to be changed into the bucket information as
+// well as the call to set it.
+//
+// The called function must return an integer, negative on error. In
+// general, they should just return op_ret.
+namespace {
+template<typename F>
+int retry_raced_bucket_write(RGWRados* g, req_state* s, const F& f) {
+  auto r = f();
+  for (auto i = 0u; i < 15u && r == -ECANCELED; ++i) {
+    r = g->try_refresh_bucket_info(s->bucket_info, nullptr,
+				   &s->bucket_attrs);
+    if (r >= 0) {
+      r = f();
+    }
+  }
+  return r;
+}
+}
+
 
 int RGWGetObj::verify_permission()
 {
@@ -884,6 +912,20 @@ static bool validate_cors_rule_method(RGWCORSRule *rule, const char *req_meth) {
     return false;
   }
 
+  return true;
+}
+
+static bool validate_cors_rule_header(RGWCORSRule *rule, const char *req_hdrs) {
+  if (req_hdrs) {
+    vector<string> hdrs;
+    get_str_vec(req_hdrs, hdrs);
+    for (const auto& hdr : hdrs) {
+      if (!rule->is_header_allowed(hdr.c_str(), hdr.length())) {
+        dout(5) << "Header " << hdr << " is not registered in this rule" << dendl;
+        return false;
+      }
+    }
+  }
   return true;
 }
 
@@ -2024,16 +2066,7 @@ void RGWStatAccount::execute()
 
 int RGWGetBucketVersioning::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3GetBucketVersioning,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2049,16 +2082,7 @@ void RGWGetBucketVersioning::execute()
 
 int RGWSetBucketVersioning::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3PutBucketVersioning,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketVersioning);
 }
 
 void RGWSetBucketVersioning::pre_exec()
@@ -2080,15 +2104,18 @@ void RGWSetBucketVersioning::execute()
     }
   }
 
-  if (enable_versioning) {
-    s->bucket_info.flags |= BUCKET_VERSIONED;
-    s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
-  } else {
-    s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      if (enable_versioning) {
+	s->bucket_info.flags |= BUCKET_VERSIONED;
+	s->bucket_info.flags &= ~BUCKET_VERSIONS_SUSPENDED;
+      } else {
+	s->bucket_info.flags |= (BUCKET_VERSIONED | BUCKET_VERSIONS_SUSPENDED);
+      }
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(),
-					  &s->bucket_attrs);
+      return store->put_bucket_instance_info(s->bucket_info, false, real_time(),
+					     &s->bucket_attrs);
+    });
+
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name
 		     << " returned err=" << op_ret << dendl;
@@ -2098,17 +2125,7 @@ void RGWSetBucketVersioning::execute()
 
 int RGWGetBucketWebsite::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-                           rgw::IAM::s3GetBucketWebsite,
-                           ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketWebsite);
 }
 
 void RGWGetBucketWebsite::pre_exec()
@@ -2119,23 +2136,13 @@ void RGWGetBucketWebsite::pre_exec()
 void RGWGetBucketWebsite::execute()
 {
   if (!s->bucket_info.has_website) {
-    op_ret = -ENOENT;
+    op_ret = -ERR_NO_SUCH_WEBSITE_CONFIGURATION;
   }
 }
 
 int RGWSetBucketWebsite::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-                           rgw::IAM::s3PutBucketWebsite,
-                           ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketWebsite);
 }
 
 void RGWSetBucketWebsite::pre_exec()
@@ -2158,10 +2165,14 @@ void RGWSetBucketWebsite::execute()
     }
   }
 
-  s->bucket_info.has_website = true;
-  s->bucket_info.website_conf = website_conf;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = true;
+      s->bucket_info.website_conf = website_conf;
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false,
+					       real_time(), &s->bucket_attrs);
+      return op_ret;
+    });
 
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -2170,10 +2181,7 @@ void RGWSetBucketWebsite::execute()
 
 int RGWDeleteBucketWebsite::verify_permission()
 {
-  if (s->user->user_id.compare(s->bucket_owner.get_id()) != 0)
-    return -EACCES;
-
-  return 0;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteBucketWebsite);
 }
 
 void RGWDeleteBucketWebsite::pre_exec()
@@ -2183,10 +2191,13 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
-  s->bucket_info.has_website = false;
-  s->bucket_info.website_conf = RGWBucketWebsiteConf();
-
-  op_ret = store->put_bucket_instance_info(s->bucket_info, false, real_time(), &s->bucket_attrs);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      s->bucket_info.has_website = false;
+      s->bucket_info.website_conf = RGWBucketWebsiteConf();
+      op_ret = store->put_bucket_instance_info(s->bucket_info, false,
+					       real_time(), &s->bucket_attrs);
+      return op_ret;
+    });
   if (op_ret < 0) {
     ldout(s->cct, 0) << "NOTICE: put_bucket_info on bucket=" << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
@@ -2239,6 +2250,13 @@ int RGWListBucket::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
+  if (!prefix.empty())
+    s->env.emplace("s3:prefix", prefix);
+
+  if (!delimiter.empty())
+    s->env.emplace("s3:delimiter", delimiter);
+
+  s->env.emplace("s3:max-keys", std::to_string(max));
 
   if (!verify_bucket_permission(s,
 				list_versions ?
@@ -2311,25 +2329,12 @@ void RGWListBucket::execute()
 
 int RGWGetBucketLogging::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLogging);
 }
 
 int RGWGetBucketLocation::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3GetBucketLocation,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
 }
 
 int RGWCreateBucket::verify_permission()
@@ -4027,55 +4032,61 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  /* Encode special metadata first as we're using std::map::emplace under
-   * the hood. This method will add the new items only if the map doesn't
-   * contain such keys yet. */
-  if (has_policy) {
-    if (s->dialect.compare("swift") == 0) {
-	auto old_policy = \
-          static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
-	auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
-	new_policy->filter_merge(policy_rw_mask, old_policy);
-	policy = *new_policy;
-    }
-    buffer::list bl;
-    policy.encode(bl);
-    emplace_attr(RGW_ATTR_ACL, std::move(bl));
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      /* Encode special metadata first as we're using std::map::emplace under
+       * the hood. This method will add the new items only if the map doesn't
+       * contain such keys yet. */
+      if (has_policy) {
+	if (s->dialect.compare("swift") == 0) {
+	  auto old_policy =						\
+	    static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
+	  auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
+	  new_policy->filter_merge(policy_rw_mask, old_policy);
+	  policy = *new_policy;
+	}
+	buffer::list bl;
+	policy.encode(bl);
+	emplace_attr(RGW_ATTR_ACL, std::move(bl));
+      }
 
-  if (has_cors) {
-    buffer::list bl;
-    cors_config.encode(bl);
-    emplace_attr(RGW_ATTR_CORS, std::move(bl));
-  }
+      if (has_cors) {
+	buffer::list bl;
+	cors_config.encode(bl);
+	emplace_attr(RGW_ATTR_CORS, std::move(bl));
+      }
 
-  /* It's supposed that following functions WILL NOT change any special
-   * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-  prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
-  populate_with_generic_attrs(s, attrs);
+      /* It's supposed that following functions WILL NOT change any
+       * special attributes (like RGW_ATTR_ACL) if they are already
+       * present in attrs. */
+      prepare_add_del_attrs(s->bucket_attrs, rmattr_names, attrs);
+      populate_with_generic_attrs(s, attrs);
 
-  /* According  to the Swift's behaviour and its container_quota WSGI middleware
-   * implementation: anyone with write permissions is able to set the bucket
-   * quota. This stays in contrast to account quotas that can be set only by
-   * clients holding reseller admin privileges. */
-  op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
-  if (op_ret < 0) {
-    return;
-  }
+      /* According to the Swift's behaviour and its container_quota
+       * WSGI middleware implementation: anyone with write permissions
+       * is able to set the bucket quota. This stays in contrast to
+       * account quotas that can be set only by clients holding
+       * reseller admin privileges. */
+      op_ret = filter_out_quota_info(attrs, rmattr_names, s->bucket_info.quota);
+      if (op_ret < 0) {
+	return op_ret;
+      }
 
-  if (swift_ver_location) {
-    s->bucket_info.swift_ver_location = *swift_ver_location;
-    s->bucket_info.swift_versioning = (! swift_ver_location->empty());
-  }
+      if (swift_ver_location) {
+	s->bucket_info.swift_ver_location = *swift_ver_location;
+	s->bucket_info.swift_versioning = (!swift_ver_location->empty());
+      }
 
-  /* Web site of Swift API. */
-  filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
-  s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
+      /* Web site of Swift API. */
+      filter_out_website(attrs, rmattr_names, s->bucket_info.website_conf);
+      s->bucket_info.has_website = !s->bucket_info.website_conf.is_empty();
 
-  /* Setting attributes also stores the provided bucket info. Due to this
-   * fact, the new quota settings can be serialized with the same call. */
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
+      /* Setting attributes also stores the provided bucket info. Due
+       * to this fact, the new quota settings can be serialized with
+       * the same call. */
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				    &s->bucket_info.objv_tracker);
+      return op_ret;
+    });
 }
 
 int RGWPutMetadataObject::verify_permission()
@@ -4828,6 +4839,25 @@ void RGWPutLC::execute()
   RGWLCXMLParser_S3 parser(s->cct);
   RGWLifecycleConfiguration_S3 new_config(s->cct);
 
+  content_md5 = s->info.env->get("HTTP_CONTENT_MD5");
+  if (content_md5 == nullptr) {
+    op_ret = -ERR_INVALID_REQUEST;
+    s->err.message = "Missing required header for this request: Content-MD5";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    return;
+  }
+
+  std::string content_md5_bin;
+  try {
+    content_md5_bin = rgw::from_base64(boost::string_view(content_md5));
+  } catch (...) {
+    s->err.message = "Request header Content-MD5 contains character "
+                     "that is not base64 encoded.";
+    ldout(s->cct, 5) << s->err.message << dendl;
+    op_ret = -ERR_BAD_DIGEST;
+    return;
+  }
+
   if (!parser.init()) {
     op_ret = -EINVAL;
     return;
@@ -4838,6 +4868,21 @@ void RGWPutLC::execute()
     return;
 
   ldout(s->cct, 15) << "read len=" << len << " data=" << (data ? data : "") << dendl;
+
+  MD5 data_hash;
+  unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  data_hash.Update(reinterpret_cast<const byte*>(data), len);
+  data_hash.Final(data_hash_res);
+
+  if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
+    op_ret = -ERR_BAD_DIGEST;
+    s->err.message = "The Content-MD5 you specified did not match what we received.";
+    ldout(s->cct, 5) << s->err.message
+                     << " Specified content md5: " << content_md5
+                     << ", calculated content md5: " << data_hash_res
+                     << dendl;
+    return;
+  }
 
   if (!parser.parse(data, len, 1)) {
     op_ret = -ERR_MALFORMED_XML;
@@ -4957,16 +5002,7 @@ void RGWDeleteLC::execute()
 
 int RGWGetCORS::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3PutBucketCORS,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
 }
 
 void RGWGetCORS::execute()
@@ -4984,16 +5020,7 @@ void RGWGetCORS::execute()
 
 int RGWPutCORS::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3PutBucketCORS,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWPutCORS::execute()
@@ -5012,18 +5039,17 @@ void RGWPutCORS::execute()
     }
   }
 
-  map<string, bufferlist> attrs = s->bucket_attrs;
-  attrs[RGW_ATTR_CORS] = cors_bl;
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      map<string, bufferlist> attrs = s->bucket_attrs;
+      attrs[RGW_ATTR_CORS] = cors_bl;
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    });
 }
 
 int RGWDeleteCORS::verify_permission()
 {
-  if (false == s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return -EACCES;
-  }
-
-  return 0;
+  // No separate delete permission
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWDeleteCORS::execute()
@@ -5033,32 +5059,35 @@ void RGWDeleteCORS::execute()
     return;
 
   bufferlist bl;
-  rgw_raw_obj obj;
   if (!cors_exist) {
     dout(2) << "No CORS configuration set yet for this bucket" << dendl;
     op_ret = -ENOENT;
     return;
   }
-  store->get_bucket_instance_obj(s->bucket, obj);
-  store->set_prefetch_data(s->obj_ctx, obj);
-  map<string, bufferlist> orig_attrs, attrs, rmattrs;
-  map<string, bufferlist>::iterator iter;
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      rgw_raw_obj obj;
+      store->get_bucket_instance_obj(s->bucket, obj);
+      store->set_prefetch_data(s->obj_ctx, obj);
+      map<string, bufferlist> orig_attrs, attrs, rmattrs;
+      map<string, bufferlist>::iterator iter;
 
-  op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
-  if (op_ret < 0)
-    return;
+      op_ret = get_system_obj_attrs(store, s, obj, orig_attrs, NULL, &s->bucket_info.objv_tracker);
+      if (op_ret < 0)
+	return op_ret;
 
-  /* only remove meta attrs */
-  for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
-    const string& name = iter->first;
-    dout(10) << "DeleteCORS : attr: " << name << dendl;
-    if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
-      rmattrs[name] = iter->second;
-    } else if (attrs.find(name) == attrs.end()) {
-      attrs[name] = iter->second;
-    }
-  }
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+      /* only remove meta attrs */
+      for (iter = orig_attrs.begin(); iter != orig_attrs.end(); ++iter) {
+	const string& name = iter->first;
+	dout(10) << "DeleteCORS : attr: " << name << dendl;
+	if (name.compare(0, (sizeof(RGW_ATTR_CORS) - 1), RGW_ATTR_CORS) == 0) {
+	  rmattrs[name] = iter->second;
+	} else if (attrs.find(name) == attrs.end()) {
+	  attrs[name] = iter->second;
+	}
+      }
+      return rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				  &s->bucket_info.objv_tracker);
+    });
 }
 
 void RGWOptionsCORS::get_response_params(string& hdrs, string& exp_hdrs, unsigned *max_age) {
@@ -5075,6 +5104,11 @@ int RGWOptionsCORS::validate_cors_request(RGWCORSConfiguration *cc) {
   if (!validate_cors_rule_method(rule, req_meth)) {
     return -ENOENT;
   }
+
+  if (!validate_cors_rule_header(rule, req_hdrs)) {
+    return -ENOENT;
+  }
+
   return 0;
 }
 
@@ -5116,13 +5150,7 @@ void RGWOptionsCORS::execute()
 
 int RGWGetRequestPayment::verify_permission()
 {
-  if (s->iam_policy &&
-      s->iam_policy->eval(s->env, *s->auth.identity,
-			  rgw::IAM::s3GetBucketRequestPayment,
-			  ARN(s->bucket)) != Effect::Allow) {
-      return -EACCES;
-  }
-  return 0;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketRequestPayment);
 }
 
 void RGWGetRequestPayment::pre_exec()
@@ -5137,16 +5165,7 @@ void RGWGetRequestPayment::execute()
 
 int RGWSetRequestPayment::verify_permission()
 {
-  if (s->iam_policy) {
-    if (s->iam_policy->eval(s->env, *s->auth.identity,
-			    rgw::IAM::s3PutBucketRequestPayment,
-			    ARN(s->bucket)) == Effect::Allow) {
-      return 0;
-    }
-  } else if (s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
-    return 0;
-  }
-  return -EACCES;
+  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketRequestPayment);
 }
 
 void RGWSetRequestPayment::pre_exec()
@@ -6877,15 +6896,15 @@ void RGWPutBucketPolicy::execute()
   }
 
   try {
-    Policy p(s->cct, s->bucket_tenant, in_data);
-    auto attrs = s->bucket_attrs;
-    attrs[RGW_ATTR_IAM_POLICY].clear();
-    attrs[RGW_ATTR_IAM_POLICY].append(p.text);
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				  &s->bucket_info.objv_tracker);
-    if (op_ret == -ECANCELED) {
-      op_ret = 0; /* lost a race, but it's ok because policies are immutable */
-    }
+    const Policy p(s->cct, s->bucket_tenant, in_data);
+    op_ret = retry_raced_bucket_write(store, s, [&p, this] {
+	auto attrs = s->bucket_attrs;
+	attrs[RGW_ATTR_IAM_POLICY].clear();
+	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+	op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				      &s->bucket_info.objv_tracker);
+	return op_ret;
+      });
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 20) << "failed to parse policy: " << e.what() << dendl;
     op_ret = -EINVAL;
@@ -6953,11 +6972,11 @@ int RGWDeleteBucketPolicy::verify_permission()
 
 void RGWDeleteBucketPolicy::execute()
 {
-  auto attrs = s->bucket_attrs;
-  attrs.erase(RGW_ATTR_IAM_POLICY);
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
-				&s->bucket_info.objv_tracker);
-  if (op_ret == -ECANCELED) {
-    op_ret = 0; /* lost a race, but it's ok because policies are immutable */
-  }
+  op_ret = retry_raced_bucket_write(store, s, [this] {
+      auto attrs = s->bucket_attrs;
+      attrs.erase(RGW_ATTR_IAM_POLICY);
+      op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
+				    &s->bucket_info.objv_tracker);
+      return op_ret;
+    });
 }

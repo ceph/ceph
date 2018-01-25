@@ -1931,6 +1931,12 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
     // waiters
     if (flushes_in_progress == 0) {
       requeue_ops(waiting_for_peered);
+    } else if (!waiting_for_peered.empty()) {
+      dout(10) << __func__ << " flushes in progress, moving "
+	       << waiting_for_peered.size() << " items to waiting_for_flush"
+	       << dendl;
+      assert(waiting_for_flush.empty());
+      waiting_for_flush.swap(waiting_for_peered);
     }
   }
 
@@ -6498,6 +6504,37 @@ PG::RecoveryState::Backfilling::react(const DeferBackfill &c)
 }
 
 boost::statechart::result
+PG::RecoveryState::Backfilling::react(const UnfoundBackfill &c)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "backfill has unfound, can't continue" << dendl;
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+
+  pg->state_set(PG_STATE_BACKFILL_UNFOUND);
+  pg->state_clear(PG_STATE_BACKFILLING);
+
+  for (set<pg_shard_t>::iterator it = pg->backfill_targets.begin();
+       it != pg->backfill_targets.end();
+       ++it) {
+    assert(*it != pg->pg_whoami);
+    ConnectionRef con = pg->osd->get_con_osd_cluster(
+      it->osd, pg->get_osdmap()->get_epoch());
+    if (con) {
+      pg->osd->send_message_osd_cluster(
+        new MBackfillReserve(
+	  MBackfillReserve::REJECT,
+	  spg_t(pg->info.pgid.pgid, it->shard),
+	  pg->get_osdmap()->get_epoch()),
+	con.get());
+    }
+  }
+
+  pg->waiting_on_backfill.clear();
+
+  return transit<NotBackfilling>();
+}
+
+boost::statechart::result
 PG::RecoveryState::Backfilling::react(const RemoteReservationRejected &)
 {
   PG *pg = context< RecoveryMachine >().pg;
@@ -6678,6 +6715,7 @@ void PG::RecoveryState::NotBackfilling::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_BACKFILL_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notbackfilling_latency, dur);
 }
@@ -6696,6 +6734,7 @@ void PG::RecoveryState::NotRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->state_clear(PG_STATE_RECOVERY_UNFOUND);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_notrecovering_latency, dur);
 }
@@ -7072,6 +7111,18 @@ PG::RecoveryState::Recovering::react(const DeferRecovery &evt)
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
   release_reservations(true);
   pg->schedule_recovery_retry(evt.delay);
+  return transit<NotRecovering>();
+}
+
+boost::statechart::result
+PG::RecoveryState::Recovering::react(const UnfoundRecovery &evt)
+{
+  PG *pg = context< RecoveryMachine >().pg;
+  ldout(pg->cct, 10) << "recovery has unfound, can't continue" << dendl;
+  pg->state_set(PG_STATE_RECOVERY_UNFOUND);
+  pg->state_clear(PG_STATE_RECOVERING);
+  pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
+  release_reservations(true);
   return transit<NotRecovering>();
 }
 
@@ -7458,6 +7509,13 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
   // waiters
   if (pg->flushes_in_progress == 0) {
     pg->requeue_ops(pg->waiting_for_peered);
+  } else if (!pg->waiting_for_peered.empty()) {
+    ldout(pg->cct, 10) << __func__ << " flushes in progress, moving "
+		       << pg->waiting_for_peered.size()
+		       << " items to waiting_for_flush"
+		       << dendl;
+    assert(pg->waiting_for_flush.empty());
+    pg->waiting_for_flush.swap(pg->waiting_for_peered);
   }
 
   pg->on_activate();

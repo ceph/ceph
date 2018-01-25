@@ -73,7 +73,7 @@ Context *OpenRequest<I>::handle_v1_detect_header(int *result) {
 
     m_image_ctx->old_format = true;
     m_image_ctx->header_oid = util::old_header_name(m_image_ctx->name);
-    m_image_ctx->apply_metadata({});
+    m_image_ctx->apply_metadata({}, true);
 
     send_register_watch();
   }
@@ -466,7 +466,7 @@ Context *OpenRequest<I>::handle_v2_apply_metadata(int *result) {
     }
   }
 
-  m_image_ctx->apply_metadata(m_metadata);
+  m_image_ctx->apply_metadata(m_metadata, true);
 
   send_register_watch();
   return nullptr;
