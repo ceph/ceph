@@ -22,9 +22,7 @@
 #include "global/signal_handler.h"
 
 #include "mgr/MgrContext.h"
-#include "mgr/mgr_commands.h"
 
-//#include "MgrPyModule.h"
 #include "DaemonServer.h"
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrDigest.h"
@@ -218,8 +216,8 @@ void Mgr::init()
 
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
-  py_module_registry->active_start(loaded_config, daemon_state, cluster_state, *monc,
-      clog, *objecter, *client, finisher);
+  py_module_registry->active_start(loaded_config, daemon_state, cluster_state,
+      *monc, clog, *objecter, *client, finisher);
 
   dout(4) << "Complete." << dendl;
   initializing = false;
@@ -622,16 +620,6 @@ void Mgr::tick()
 {
   dout(10) << dendl;
   server.send_report();
-}
-
-std::vector<MonCommand> Mgr::get_command_set() const
-{
-  Mutex::Locker l(lock);
-
-  std::vector<MonCommand> commands = mgr_commands;
-  std::vector<MonCommand> py_commands = py_module_registry->get_commands();
-  commands.insert(commands.end(), py_commands.begin(), py_commands.end());
-  return commands;
 }
 
 std::map<std::string, std::string> Mgr::get_services() const

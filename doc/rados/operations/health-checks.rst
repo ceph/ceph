@@ -21,6 +21,38 @@ that are defined by ceph-mgr python modules.
 Definitions
 ===========
 
+Manager
+-------
+
+MGR_MODULE_DEPENDENCY
+_____________________
+
+An enabled manager module is failing its dependency check.  This health check
+should come with an explanatory message from the module about the problem.
+
+For example, a module might report that a required package is not installed:
+install the required package and restart your manager daemons.
+
+This health check is only applied to enabled modules.  If a module is
+not enabled, you can see whether it is reporting dependency issues in
+the output of `ceph module ls`.
+
+
+MGR_MODULE_ERROR
+________________
+
+A manager module has experienced an unexpected error.  Typically,
+this means an unhandled exception was raised from the module's `serve`
+function.  The human readable description of the error may be obscurely
+worded if the exception did not provide a useful description of itself.
+
+This health check may indicate a bug: please open a Ceph bug report if you
+think you have encountered a bug.
+
+If you believe the error is transient, you may restart your manager
+daemon(s), or use `ceph mgr fail` on the active daemon to prompt
+a failover to another daemon.
+
 
 OSDs
 ----
