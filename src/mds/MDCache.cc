@@ -8379,8 +8379,8 @@ struct C_MDC_OpenInoTraverseDir : public MDCacheContext {
       mdcache->handle_open_ino(msg, r);
       return;
     }
-    assert(mdcache->opening_inodes.count(ino));
-    mdcache->_open_ino_traverse_dir(ino, mdcache->opening_inodes[ino], r);
+    auto& info = mdcache->opening_inodes.at(ino);
+    mdcache->_open_ino_traverse_dir(ino, info, r);
   }
 };
 
@@ -8397,8 +8397,7 @@ void MDCache::_open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err
 {
   dout(10) << "_open_ino_backtrace_fetched ino " << ino << " errno " << err << dendl;
 
-  assert(opening_inodes.count(ino));
-  open_ino_info_t& info = opening_inodes[ino];
+  open_ino_info_t& info = opening_inodes.at(ino);
 
   CInode *in = get_inode(ino);
   if (in) {
@@ -8473,8 +8472,7 @@ void MDCache::_open_ino_parent_opened(inodeno_t ino, int ret)
 {
   dout(10) << "_open_ino_parent_opened ino " << ino << " ret " << ret << dendl;
 
-  assert(opening_inodes.count(ino));
-  open_ino_info_t& info = opening_inodes[ino];
+  open_ino_info_t& info = opening_inodes.at(ino);
 
   CInode *in = get_inode(ino);
   if (in) {
@@ -8830,8 +8828,9 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSInternalContextBase* fin,
   dout(10) << "open_ino " << ino << " pool " << pool << " want_replica "
 	   << want_replica << dendl;
 
-  if (opening_inodes.count(ino)) {
-    open_ino_info_t& info = opening_inodes[ino];
+  auto it = opening_inodes.find(ino);
+  if (it != opening_inodes.end()) {
+    open_ino_info_t& info = it->second;
     if (want_replica) {
       info.want_replica = true;
       if (want_xlocked && !info.want_xlocked) {
