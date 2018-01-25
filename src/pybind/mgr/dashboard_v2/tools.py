@@ -249,8 +249,7 @@ class RESTController(BaseController):
     @staticmethod
     def _returns_json(func):
         def inner(*args, **kwargs):
-            cherrypy.serving.response.headers['Content-Type'] = \
-                    'application/json'
+            cherrypy.response.headers['Content-Type'] = 'application/json'
             ret = func(*args, **kwargs)
             return json.dumps(ret).encode('utf8')
         return inner
