@@ -24,6 +24,11 @@ operation that happens in the remote zones. The following docs are written with
 the example of a zone using `elasticsearch sync module`_, the process would be similar
 for configuring any sync plugin
 
+.. toctree::
+   :maxdepth: 1
+
+   ElasticSearch Sync Module <elastic-sync-module>
+
 .. note ``rgw`` is the default sync plugin and there is no need to explicitly
    configure this
 
