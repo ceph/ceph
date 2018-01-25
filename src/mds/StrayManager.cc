@@ -728,6 +728,7 @@ void StrayManager::truncate(CDentry *dn)
   assert(to > 0);
 
   PurgeItem item;
+  item.action = PurgeItem::TRUNCATE_FILE;
   item.ino = in->inode.ino;
   item.layout = in->inode.layout;
   item.snapc = *snapc;
