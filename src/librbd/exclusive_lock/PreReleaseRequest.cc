@@ -301,6 +301,21 @@ void PreReleaseRequest<I>::send_unlock() {
 
 template <typename I>
 void PreReleaseRequest<I>::finish() {
+  {
+    m_journal = nullptr;
+    m_object_map = nullptr;
+    RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+    std::swap(m_object_map, m_image_ctx.object_map);
+    std::swap(m_journal, m_image_ctx.journal);
+  }
+  if (m_journal != nullptr) {
+    delete m_journal;
+    m_journal = nullptr;
+  }
+  if (m_object_map != nullptr) {
+    delete m_object_map;
+    m_object_map = nullptr;
+  }
   m_on_finish->complete(m_error_result);
   delete this;
 }
