@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import bcrypt
-import cherrypy
 import time
 import sys
 
-from ..tools import ApiController, AuthRequired, RESTController
+import bcrypt
+import cherrypy
+
+from ..tools import ApiController, RESTController
 
 
 @ApiController('auth')
@@ -30,6 +31,7 @@ class Auth(RESTController):
     DEFAULT_SESSION_EXPIRE = 1200.0
 
     def __init__(self):
+        # pylint: disable=E1101
         self._mod = Auth._mgr_module_
         self._log = self._mod.log
 
@@ -46,10 +48,10 @@ class Auth(RESTController):
             cherrypy.session[Auth.SESSION_KEY_TS] = now
             self._log.debug("Login successful")
             return {'username': username}
-        else:
-            cherrypy.response.status = 403
-            self._log.debug("Login fail")
-            return {'detail': 'Invalid credentials'}
+
+        cherrypy.response.status = 403
+        self._log.debug("Login fail")
+        return {'detail': 'Invalid credentials'}
 
     def bulk_delete(self):
         self._log.debug("Logout successful")
@@ -62,8 +64,7 @@ class Auth(RESTController):
             salt_password = bcrypt.gensalt()
         if sys.version_info > (3, 0):
             return bcrypt.hashpw(password, salt_password)
-        else:
-            return bcrypt.hashpw(password.encode('utf8'), salt_password)
+        return bcrypt.hashpw(password.encode('utf8'), salt_password)
 
     @staticmethod
     def check_auth():
@@ -76,8 +77,7 @@ class Auth(RESTController):
                                           'that resource')
         now = time.time()
         expires = float(module.get_localized_config(
-                        'session-expire',
-                        Auth.DEFAULT_SESSION_EXPIRE))
+            'session-expire', Auth.DEFAULT_SESSION_EXPIRE))
         if expires > 0:
             username_ts = cherrypy.session.get(Auth.SESSION_KEY_TS, None)
             if username_ts and float(username_ts) < (now - expires):
