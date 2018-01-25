@@ -38,3 +38,10 @@
   make the number of PGs per OSD exceed the configured
   ``mon_max_pg_per_osd`` limit.  The option can be adjusted if it
   is really necessary to create a pool with more PGs.
+
+12.2.3
+------
+
+* The RBD C API's rbd_discard method now enforces a maximum length of
+  2GB to match the C++ API's Image::discard method. This restriction
+  prevents overflow of the result code.
