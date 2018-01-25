@@ -25,7 +25,7 @@ function main {
     while [ "$#" -gt 0 ]; do
         case "$1" in
             -h|--help)
-                printf '%s: [--no-cache] <branch> <enviornment>\n' "$0"
+                printf '%s: [--no-cache] <branch>[:sha1] <enviornment>\n' "$0"
                 exit 0
                 ;;
             --no-cache)
@@ -40,15 +40,20 @@ function main {
     done
 
     if [ -z "$1" ]; then
-        printf "specify the branch [default \"master\"]: "
-        read branch
-        if [ -z "$branch" ]; then
-            branch=master
+        printf "specify the branch [default \"master:latest\"]: "
+        read source
+        if [ -z "$source" ]; then
+            source=master:latest
         fi
     else
         branch="$1"
     fi
-    printf "branch: %s\n" "$branch"
+    sha=${branch##*:}
+    if [ -z "$sha" ]; then
+        sha=latest
+    fi
+    branch=${branch%%:*}
+    printf "branch: %s\nsha1: %s\n" "$branch" "$sha"
 
     if [ -z "$2" ]; then
         printf "specify the build environment [default \"centos:7\"]: "
@@ -69,7 +74,7 @@ function main {
         user="$(whoami)"
     fi
 
-    image="${user}/ceph-ci:${branch}-${env/:/-}"
+    image="${user}/ceph-ci:${branch}:${sha}-${env/:/-}"
 
     T=$(mktemp -d)
     pushd "$T"
@@ -84,7 +89,7 @@ RUN apt-get update --yes --quiet && \
     apt-get install --yes --quiet screen wget gdb software-properties-common python-software-properties apt-transport-https
 COPY cephdev.asc cephdev.asc
 RUN apt-key add cephdev.asc
-RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/latest/${env/://}/repo)" && \
+RUN add-apt-repository "\$(wget --quiet -O - https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/${env/://}/repo)" && \
     apt-get update --yes && \
     apt-get install --yes --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg
 EOF
@@ -96,7 +101,7 @@ FROM ${env}
 WORKDIR /root
 RUN yum update -y && \
     yum install -y screen epel-release wget psmisc ca-certificates gdb
-RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/latest/centos/7/repo && \
+RUN wget -O /etc/yum.repos.d/ceph-dev.repo https://shaman.ceph.com/api/repos/ceph/${branch}/${sha}/centos/7/repo && \
     yum clean all && \
     yum upgrade -y && \
     yum install -y ceph ceph-debuginfo ceph-fuse
