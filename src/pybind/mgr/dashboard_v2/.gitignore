@@ -3,6 +3,7 @@ htmlcov
 .tox
 coverage.xml
 junit.xml
+__pycache__
 
 # IDE
 .vscode
