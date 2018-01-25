@@ -18,6 +18,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::image::CloneRequest: "
 
+#define MAX_KEYS 64
+
 namespace librbd {
 namespace image {
 
@@ -333,10 +335,11 @@ void CloneRequest<I>::handle_refresh(int r) {
 
 template <typename I>
 void CloneRequest<I>::send_metadata_list() {
-  ldout(m_cct, 20) << this << " " << __func__ << dendl;
+  ldout(m_cct, 20) << this << " " << __func__ << ": "
+                   << "start_key=" << m_last_metadata_key << dendl;
 
   librados::ObjectReadOperation op;
-  cls_client::metadata_list_start(&op, "", 0);
+  cls_client::metadata_list_start(&op, m_last_metadata_key, 0);
 
   using klass = CloneRequest<I>;
   librados::AioCompletion *comp =
@@ -351,19 +354,34 @@ template <typename I>
 void CloneRequest<I>::handle_metadata_list(int r) {
   ldout(m_cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
+  map<string, bufferlist> metadata;
   if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    r = cls_client::metadata_list_finish(&it, &m_pairs);
+    r = cls_client::metadata_list_finish(&it, &metadata);
   }
 
-  if (r < 0 && r != -EOPNOTSUPP && r != -EIO) {
-    lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
-    m_r_saved = r;
-    send_remove_child();
-  } else if (r == 0 && !m_pairs.empty()) {
-    send_metadata_set();
+  if (r < 0) {
+    if (r == -EOPNOTSUPP || r == -EIO) {
+      ldout(m_cct, 10) << "config metadata not supported by OSD" << dendl;
+      get_mirror_mode();
+    } else {
+      lderr(m_cct) << "couldn't list metadata: " << cpp_strerror(r) << dendl;
+      m_r_saved = r;
+      send_remove_child();
+    }
+
+    return;
+  }
+
+  if (!metadata.empty()) {
+    m_pairs.insert(metadata.begin(), metadata.end());
+    m_last_metadata_key = m_pairs.rbegin()->first;
+  }
+
+  if (metadata.size() == MAX_KEYS) {
+    send_metadata_list();
   } else {
-    get_mirror_mode();
+    send_metadata_set();
   }
 }
 
