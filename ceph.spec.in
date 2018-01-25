@@ -15,30 +15,35 @@
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 #
 %bcond_without ocf
-%bcond_without cephfs_java
-%if 0%{?suse_version}
-%bcond_with ceph_test_package
-%else
-%bcond_without ceph_test_package
-%endif
 %bcond_with make_check
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
 %bcond_without tcmalloc
 %endif
-%bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%bcond_without ceph_test_package
+%bcond_without cephfs_java
+%bcond_without lttng
+%global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
+%bcond_with ceph_test_package
+%bcond_with cephfs_java
+#Compat macro for new _fillupdir macro introduced in Nov 2017
+%if ! %{defined _fillupdir}
+%global _fillupdir /var/adm/fillup-templates
 %endif
-
-# LTTng-UST enabled on Fedora, RHEL 6+, and SLE (not openSUSE)
-%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version}
-%if ! 0%{?is_opensuse}
+%if 0%{?is_opensuse}
 %bcond_without lttng
+%else
+%ifarch x86_64 aarch64
+%bcond_without lttng
+%else
+%bcond_with lttng
+%endif
 %endif
 %endif
 
@@ -77,8 +82,9 @@ License:	LGPL-2.1 and CC-BY-SA-1.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and 
 Group:		System/Filesystems
 %endif
 URL:		http://ceph.com/
-Source0:	https://download.ceph.com/tarballs/@TARBALL_BASENAME@.tar.bz2
+Source0:	%{?_remote_tarball_prefix}@TARBALL_BASENAME@.tar.bz2
 %if 0%{?suse_version}
+# _insert_obs_source_lines_here
 %if 0%{?is_opensuse}
 ExclusiveArch:  x86_64 aarch64 ppc64 ppc64le
 %else
@@ -143,6 +149,7 @@ BuildRequires:	make
 BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
+BuildRequires:  procps
 BuildRequires:	python
 BuildRequires:	python-devel
 BuildRequires:	python-nose
@@ -741,7 +748,9 @@ This package contains the Java libraries for the Ceph File System.
 
 %package -n rados-objclass-devel
 Summary:        RADOS object class development kit
-Group:          Development/Libraries
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
 Requires:       librados2-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
@@ -802,7 +811,8 @@ for i in /usr/{lib64,lib}/jvm/java/include{,/linux}; do
 done
 %endif
 
-%if %{with lowmem_builder}
+%if 0%{?suse_version}
+# the following setting fixed an OOM condition we once encountered in the OBS
 RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize=32768"
 %endif
 export RPM_OPT_FLAGS=`echo $RPM_OPT_FLAGS | sed -e 's/i386/i486/'`
@@ -811,18 +821,29 @@ export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
 
+# Parallel build settings ...
+CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
+CEPH_SMP_NCPUS=$(echo "$CEPH_MFLAGS_JOBS" | sed 's/-j//')
+%if 0%{?__isa_bits} == 32
+# 32-bit builds can use 3G memory max, which is not enough even for -j2
+CEPH_SMP_NCPUS="1"
+%endif
+# do not eat all memory
+echo "Available memory:"
+free -h
+echo "System limits:"
+ulimit -a
+if test -n "$CEPH_SMP_NCPUS" -a "$CEPH_SMP_NCPUS" -gt 1 ; then
+    mem_per_process=1800
+    max_mem=$(LANG=C free -m | sed -n "s|^Mem: *\([0-9]*\).*$|\1|p")
+    max_jobs="$(($max_mem / $mem_per_process))"
+    test "$CEPH_SMP_NCPUS" -gt "$max_jobs" && CEPH_SMP_NCPUS="$max_jobs" && echo "Warning: Reducing build parallelism to -j$max_jobs because of memory limits"
+    test "$CEPH_SMP_NCPUS" -le 0 && CEPH_SMP_NCPUS="1" && echo "Warning: Not using parallel build at all because of memory limits"
+fi
+export CEPH_SMP_NCPUS
+export CEPH_MFLAGS_JOBS="-j$CEPH_SMP_NCPUS"
+
 env | sort
-
-%if %{with lowmem_builder}
-%if 0%{?jobs} > 8
-%define _smp_mflags -j8
-%endif
-%endif
-
-# unlimit _smp_mflags in system macro if not set above
-%define _smp_ncpus_max 0
-# extract the number of processors for use with cmake
-%define _smp_ncpus %(echo %{_smp_mflags} | sed 's/-j//')
 
 mkdir build
 cd build
@@ -867,19 +888,17 @@ cmake .. \
 %else
     -DWITH_BOOST_CONTEXT=OFF \
 %endif
-    -DBOOST_J=%{_smp_ncpus}
+    -DBOOST_J=$CEPH_SMP_NCPUS
 
-make %{?_smp_mflags}
+make "$CEPH_MFLAGS_JOBS"
 
 
 %if 0%{with make_check}
 %check
 # run in-tree unittests
 cd build
-ctest %{?_smp_mflags}
-
+ctest "$CEPH_MFLAGS_JOBS"
 %endif
-
 
 
 %install
@@ -893,7 +912,7 @@ install -m 0644 -D src/etc-rbdmap %{buildroot}%{_sysconfdir}/ceph/rbdmap
 install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_sysconfdir}/sysconfig/ceph
 %endif
 %if 0%{?suse_version}
-install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_localstatedir}/adm/fillup-templates/sysconfig.%{name}
+install -m 0644 -D etc/sysconfig/ceph %{buildroot}%{_fillupdir}/sysconfig.%{name}
 %endif
 install -m 0644 -D systemd/ceph.tmpfiles.d %{buildroot}%{_tmpfilesdir}/ceph-common.conf
 install -m 0644 -D systemd/50-ceph.preset %{buildroot}%{_libexecdir}/systemd/system-preset/50-ceph.preset
@@ -977,7 +996,7 @@ rm -rf %{buildroot}
 %config(noreplace) %{_sysconfdir}/sysconfig/ceph
 %endif
 %if 0%{?suse_version}
-%{_localstatedir}/adm/fillup-templates/sysconfig.*
+%{_fillupdir}/sysconfig.*
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
 %config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
