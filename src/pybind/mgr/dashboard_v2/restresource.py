@@ -17,7 +17,7 @@ def _takes_json(func):
 
 def _returns_json(func):
     def inner(*args, **kwargs):
-        cherrypy.serving.response.headers['Content-Type'] = "application/json"
+        cherrypy.serving.response.headers['Content-Type'] = 'application/json'
         ret = func(*args, **kwargs)
         return json.dumps(ret).encode('utf8')
     return inner
@@ -53,16 +53,16 @@ class RESTResource(object):
     """
 
     _cp_config = {
-                  'request.error_page': {'default': json_error_page},
-                  }
+        'request.error_page': {'default': json_error_page},
+    }
 
     def _not_implemented(self, is_element):
         methods = [method
                    for ((method, _is_element), (meth, _))
                    in self._method_mapping.items()
                    if _is_element == is_element and hasattr(self, meth)]
-        cherrypy.response.headers["Allow"] = ",".join(methods)
-        raise cherrypy.HTTPError(405, "Method not implemented.")
+        cherrypy.response.headers['Allow'] = ','.join(methods)
+        raise cherrypy.HTTPError(405, 'Method not implemented.')
 
     _method_mapping = {
         ('GET', False): ('list', 200),

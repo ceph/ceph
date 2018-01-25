@@ -53,24 +53,25 @@ class Auth(object):
             cherrypy.session.regenerate()
             cherrypy.session[Auth.SESSION_KEY] = username
             cherrypy.session[Auth.SESSION_KEY_TS] = now
-            self.log.debug("Login successful")
+            self.log.debug('Login successful')
             return {'username': username}
         else:
             cherrypy.response.status = 403
-            self.log.debug("Login fail")
+            self.log.debug('Login fail')
             return {'detail': 'Invalid credentials'}
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['POST'])
     def logout(self):
-        self.log.debug("Logout successful")
+        self.log.debug('Logout successful')
         cherrypy.session[Auth.SESSION_KEY] = None
         cherrypy.session[Auth.SESSION_KEY_TS] = None
 
     def check_auth(self):
         username = cherrypy.session.get(Auth.SESSION_KEY)
         if not username:
-            self.log.debug("Unauthorized")
+            self.log.debug('Unauthorized access to {}'.format(cherrypy.url(
+                relative='server')))
             raise cherrypy.HTTPError(401, 'You are not authorized to access '
                                           'that resource')
         now = int(time.time())
@@ -82,7 +83,7 @@ class Auth(object):
             if username_ts and username_ts < now - expires:
                 cherrypy.session[Auth.SESSION_KEY] = None
                 cherrypy.session[Auth.SESSION_KEY_TS] = None
-                self.log.debug("Session expired.")
+                self.log.debug('Session expired.')
                 raise cherrypy.HTTPError(401,
                                          'Session expired. You are not '
                                          'authorized to access that resource')
