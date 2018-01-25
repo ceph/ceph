@@ -110,6 +110,7 @@ bool ManagedLock<I>::is_lock_owner(Mutex &lock) const {
   case STATE_LOCKED:
   case STATE_REACQUIRING:
   case STATE_PRE_SHUTTING_DOWN:
+  case STATE_SHUTTING_DOWN:
   case STATE_POST_ACQUIRING:
   case STATE_PRE_RELEASING:
     lock_owner = true;
@@ -750,6 +751,11 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
     m_state = STATE_SHUTTING_DOWN;
   }
 
+  if (r < 0) {
+    post_release_lock_handler(true, r, create_context_callback<
+            ManagedLock<I>, &ManagedLock<I>::handle_shutdown_post_release>(this));
+    return;
+  }
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, cookie,
