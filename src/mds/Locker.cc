@@ -2542,26 +2542,9 @@ void Locker::_do_null_snapflush(CInode *head_in, client_t client, snapid_t last)
 
     if (clients.count(client)) {
       dout(10) << " doing async NULL snapflush on " << snapid << " from client." << client << dendl;
-      CInode *sin = mdcache->get_inode(head_in->ino(), snapid);
-      if (!sin) {
-	// hrm, look forward until we find the inode. 
-	//  (we can only look it up by the last snapid it is valid for)
-	dout(10) << " didn't have " << head_in->ino() << " snapid " << snapid << dendl;
-	for (compact_map<snapid_t, set<client_t> >::iterator q = p;  // p is already at next entry
-	     q != head_in->client_need_snapflush.end();
-	     ++q) {
-	  dout(10) << " trying snapid " << q->first << dendl;
-	  sin = mdcache->get_inode(head_in->ino(), q->first);
-	  if (sin) {
-	    assert(sin->first <= snapid);
-	    break;
-	  }
-	  dout(10) << " didn't have " << head_in->ino() << " snapid " << q->first << dendl;
-	}
-	if (!sin && head_in->is_multiversion())
-	  sin = head_in;
-	assert(sin);
-      }
+      CInode *sin = mdcache->pick_inode_snap(head_in, snapid - 1);
+      assert(sin);
+      assert(sin->first <= snapid);
       _do_snap_update(sin, snapid, 0, sin->first - 1, client, NULL, NULL);
       head_in->remove_need_snapflush(sin, snapid, client);
     }
@@ -2696,29 +2679,21 @@ void Locker::handle_client_caps(MClientCaps *m)
     mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  CInode *in = head_in;
-  if (follows > 0) {
-    in = mdcache->pick_inode_snap(head_in, follows);
-    if (in != head_in)
-      dout(10) << " head inode " << *head_in << dendl;
-  }
-  dout(10) << "  cap inode " << *in << dendl;
+  dout(10) << " head inode " << *head_in << dendl;
 
   Capability *cap = 0;
-  cap = in->get_client_cap(client);
-  if (!cap && in != head_in)
-    cap = head_in->get_client_cap(client);
+  cap = head_in->get_client_cap(client);
   if (!cap) {
-    dout(7) << "handle_client_caps no cap for client." << client << " on " << *in << dendl;
+    dout(7) << "handle_client_caps no cap for client." << client << " on " << *head_in << dendl;
     m->put();
     return;
   }  
   assert(cap);
 
   // freezing|frozen?
-  if (should_defer_client_cap_frozen(in)) {
-    dout(7) << "handle_client_caps freezing|frozen on " << *in << dendl;
-    in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
+  if (should_defer_client_cap_frozen(head_in)) {
+    dout(7) << "handle_client_caps freezing|frozen on " << *head_in << dendl;
+    head_in->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, m));
     return;
   }
   if (ceph_seq_cmp(m->get_mseq(), cap->get_mseq()) < 0) {
@@ -2732,14 +2707,21 @@ void Locker::handle_client_caps(MClientCaps *m)
 
   // flushsnap?
   if (op == CEPH_CAP_OP_FLUSHSNAP) {
-    if (!in->is_auth()) {
-      dout(7) << " not auth, ignoring flushsnap on " << *in << dendl;
+    if (!head_in->is_auth()) {
+      dout(7) << " not auth, ignoring flushsnap on " << *head_in << dendl;
       goto out;
     }
 
-    SnapRealm *realm = in->find_snaprealm();
+    SnapRealm *realm = head_in->find_snaprealm();
     snapid_t snap = realm->get_snap_following(follows);
     dout(10) << "  flushsnap follows " << follows << " -> snap " << snap << dendl;
+
+    CInode *in = head_in;
+    if (snap != CEPH_NOSNAP) {
+      in = mdcache->pick_inode_snap(head_in, snap - 1);
+      if (in != head_in)
+	dout(10) << " snapped inode " << *in << dendl;
+    }
 
     // we can prepare the ack now, since this FLUSHEDSNAP is independent of any
     // other cap ops.  (except possibly duplicate FLUSHSNAP requests, but worst
@@ -2768,7 +2750,6 @@ void Locker::handle_client_caps(MClientCaps *m)
 
       if (in != head_in)
 	head_in->remove_need_snapflush(in, snap, client);
-      
     } else {
       dout(7) << " not expecting flushsnap " << snap << " from client." << client << " on " << *in << dendl;
       if (ack)
@@ -2780,14 +2761,18 @@ void Locker::handle_client_caps(MClientCaps *m)
   if (cap->get_cap_id() != m->get_cap_id()) {
     dout(7) << " ignoring client capid " << m->get_cap_id() << " != my " << cap->get_cap_id() << dendl;
   } else {
-    // intermediate snap inodes
-    while (in != head_in) {
-      assert(in->last != CEPH_NOSNAP);
-      if (in->is_auth() && m->get_dirty()) {
-	dout(10) << " updating intermediate snapped inode " << *in << dendl;
-	_do_cap_update(in, NULL, m->get_dirty(), follows, m);
+    CInode *in = head_in;
+    if (follows > 0) {
+      in = mdcache->pick_inode_snap(head_in, follows);
+      // intermediate snap inodes
+      while (in != head_in) {
+	assert(in->last != CEPH_NOSNAP);
+	if (in->is_auth() && m->get_dirty()) {
+	  dout(10) << " updating intermediate snapped inode " << *in << dendl;
+	  _do_cap_update(in, NULL, m->get_dirty(), follows, m);
+	}
+	in = mdcache->pick_inode_snap(head_in, in->last);
       }
-      in = mdcache->pick_inode_snap(head_in, in->last);
     }
  
     // head inode, and cap

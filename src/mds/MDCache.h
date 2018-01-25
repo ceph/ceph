@@ -123,7 +123,8 @@ class MDCache {
   LRU lru;   // dentry lru for expiring items from cache
   LRU bottom_lru; // dentries that should be trimmed ASAP
  protected:
-  ceph::unordered_map<vinodeno_t,CInode*> inode_map;  // map of inodes by ino
+  ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
+  map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
   CInode *root;                            // root inode
   CInode *myin;                            // .ceph/mds%d dir
 
@@ -200,6 +201,8 @@ public:
   void force_readonly();
 
   DecayRate decayrate;
+
+  int num_shadow_inodes;
 
   int num_inodes_with_caps;
 
@@ -762,14 +765,24 @@ public:
 
   // inode_map
   bool have_inode(vinodeno_t vino) {
-    return inode_map.count(vino) ? true:false;
+    if (vino.snapid == CEPH_NOSNAP)
+      return inode_map.count(vino.ino) ? true : false;
+    else
+      return snap_inode_map.count(vino) ? true : false;
   }
   bool have_inode(inodeno_t ino, snapid_t snap=CEPH_NOSNAP) {
     return have_inode(vinodeno_t(ino, snap));
   }
   CInode* get_inode(vinodeno_t vino) {
-    if (have_inode(vino))
-      return inode_map[vino];
+    if (vino.snapid == CEPH_NOSNAP) {
+      auto p = inode_map.find(vino.ino);
+      if (p != inode_map.end())
+	return p->second;
+    } else {
+      auto p = snap_inode_map.find(vino);
+      if (p != snap_inode_map.end())
+	return p->second;
+    }
     return NULL;
   }
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
@@ -1181,7 +1194,7 @@ public:
   CInode *hack_pick_random_inode() {
     assert(!inode_map.empty());
     int n = rand() % inode_map.size();
-    ceph::unordered_map<vinodeno_t,CInode*>::iterator p = inode_map.begin();
+    auto p = inode_map.begin();
     while (n--) ++p;
     return p->second;
   }
