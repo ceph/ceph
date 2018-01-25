@@ -83,7 +83,71 @@ is located)::
 
   $ tox
 
+
 If you just want to run a single tox environment, for instance only run the
 linting tools::
 
   $ tox -e lint
+
+Developer Notes
+---------------
+
+How to add a new controller?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you want to add a new endpoint to the backend, you just need to add
+a class decorated with ``ApiController`` in a python file located under the
+``controllers`` directory. The dashboard plugin will automatically load your
+new controller upon start.
+
+For example create a file ``ping2.py`` under ``controllers`` directory with the
+following code::
+
+  import cherrypy
+  from ..tools import ApiController
+
+  @ApiController('ping2')
+  class Ping2(object):
+    @cherrypy.expose
+    def default(self, *args):
+      return "Hello"
+
+Reload the dashboard plugin, and then you can access the above controller
+from the web browser using the URL http://mgr_hostname:8080/api/ping2
+
+We also provide a simple mechanism to create REST based controllers using the
+``RESTResource`` class.
+
+For example, we can adapt the above controller to return JSON when accessing
+the endpoint with a GET request::
+
+  import cherrypy
+  from ..restresource import RESTResource
+  from ..tools import ApiController
+
+  @ApiController('ping2')
+  class Ping2(RESTResource):
+    def list(self):
+      return {"msg": "Hello"}
+
+
+How to restrict access to a controller?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you require that only authenticated users can access you controller, just
+add the ``AuthRequired`` decorator to your controller class.
+
+Example::
+
+  import cherrypy
+  from ..restresource import RESTResource
+  from ..tools import ApiController, AuthRequired
+
+  @ApiController('ping2')
+  @AuthRequired
+  class Ping2(RESTResource):
+    def list(self):
+      return {"msg": "Hello"}
+
+Now only authenticated users will be able to "ping" your controller.
+
