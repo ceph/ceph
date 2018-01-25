@@ -1,5 +1,5 @@
-<oa-navigation></oa-navigation>
-
-<div class="container-fluid">
+<oa-navigation *ngIf="!isLogginActive()"></oa-navigation>
+<div class="container-fluid"
+     [ngClass]="{'full-height':isLogginActive()}">
   <router-outlet></router-outlet>
 </div>
