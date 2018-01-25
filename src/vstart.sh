@@ -14,6 +14,7 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_CONF_PATH=$VSTART_DEST
   CEPH_DEV_DIR=$VSTART_DEST/dev
   CEPH_OUT_DIR=$VSTART_DEST/out
+  CEPH_ASOK_DIR=$VSTART_DEST/out
 fi
 
 get_cmake_variable() {
@@ -360,7 +361,9 @@ else
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
     else
-        CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
+	if [ -z "$CEPH_ASOK_DIR" ]; then
+            CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
+        fi
         # -k is implied... (doesn't make sense otherwise)
         overwrite_conf=0
     fi
