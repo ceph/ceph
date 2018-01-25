@@ -794,8 +794,10 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
 
 int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 {
+  int secs;
+
   if (cct->_conf->rgw_lc_debug_interval > 0) {
-	int secs = start + cct->_conf->rgw_lc_debug_interval - now;
+	secs = start + cct->_conf->rgw_lc_debug_interval - now;
 	if (secs < 0)
 	  secs = 0;
 	return (secs);
@@ -815,8 +817,9 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   bdt.tm_min = start_minute;
   bdt.tm_sec = 0;
   nt = mktime(&bdt);
+  secs = nt - tt;
 
-  return (nt+24*60*60 - tt);
+  return secs>0 ? secs : secs+24*60*60;
 }
 
 void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfiguration*>& o)
