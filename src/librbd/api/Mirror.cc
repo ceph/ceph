@@ -6,7 +6,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "cls/rbd/cls_rbd_client.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"

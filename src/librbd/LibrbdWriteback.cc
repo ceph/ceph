@@ -16,7 +16,6 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
 #include "librbd/LibrbdWriteback.h"
-#include "librbd/ObjectMap.h"
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"

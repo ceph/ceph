@@ -12,7 +12,6 @@
 #include "journal/ReplayEntry.h"
 #include "journal/Settings.h"
 #include "journal/Utils.h"
-#include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatchSpec.h"
