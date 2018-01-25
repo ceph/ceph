@@ -2656,8 +2656,8 @@ void PG::_update_calc_stats()
       // Add to missing_target_objects up to target elements (num_objects missing)
       assert(target >= missing_target_objects.size());
       unsigned needed = target - missing_target_objects.size();
-      for (; needed; --needed)
-	missing_target_objects.insert(make_pair(num_objects, pg_shard_t(pg_shard_t::NO_OSD)));
+      if (needed)
+        missing_target_objects.insert(make_pair(num_objects * needed, pg_shard_t(pg_shard_t::NO_OSD)));
     } else {
       for (unsigned i = 0 ; i < num_shards; ++i) {
         shard_id_t shard(i);
