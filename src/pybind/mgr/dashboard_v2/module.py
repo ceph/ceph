@@ -8,9 +8,10 @@ from __future__ import absolute_import
 import os
 import cherrypy
 from cherrypy import tools
-
-from .auth import Auth
 from mgr_module import MgrModule
+
+from .controllers.auth import Auth
+from .tools import load_controllers
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -54,24 +55,10 @@ class Module(MgrModule):
                                 'server.socket_host': server_addr,
                                 'server.socket_port': int(server_port),
                                })
-        auth = Auth(self)
         cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
-                                                   auth.check_auth)
-        noauth_required_config = {
-            '/': {
-                'tools.autenticate.on': False,
-                'tools.sessions.on': True
-            }
-        }
-        auth_required_config = {
-            '/': {
-                'tools.autenticate.on': True,
-                'tools.sessions.on': True
-            }
-        }
-        cherrypy.tree.mount(auth, "/api/auth", config=noauth_required_config)
-        cherrypy.tree.mount(Module.HelloWorld(self), "/api/hello",
-                            config=auth_required_config)
+                                                   Auth.check_auth)
+
+        cherrypy.tree.mount(Module.ApiRoot(self), "/api")
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
         cherrypy.engine.block()
@@ -92,32 +79,12 @@ class Module(MgrModule):
             return (-errno.EINVAL, '', 'Command not found \'{0}\''.format(
                     cmd['prefix']))
 
-    class HelloWorld(object):
-
-        """
-
-        Hello World.
-
-        """
-
-        def __init__(self, module):
-            self.module = module
-            self.log = module.log
-            self.log.warn("Initiating WebServer CherryPy")
-
-        @cherrypy.expose
-        def index(self):
-            """
-            WS entrypoint
-            """
-
-            return "Hello World!"
-
-        @cherrypy.expose
-        @tools.json_out()
-        def ping(self):
-            """
-            Ping endpoint
-            """
-
-            return "pong"
+    class ApiRoot(object):
+        def __init__(self, mgrmod):
+            ctrls = load_controllers(mgrmod)
+            mgrmod.log.debug("loaded controllers: {}".format(ctrls))
+            for ctrl in ctrls:
+                mgrmod.log.warn("adding controller: {} -> {}"
+                                .format(ctrl.__name__, ctrl._cp_path_))
+                ins = ctrl()
+                setattr(Module.ApiRoot, ctrl._cp_path_, ins)
