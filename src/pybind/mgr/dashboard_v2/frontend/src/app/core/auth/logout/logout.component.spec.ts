@@ -1,14 +1,13 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { NavigationComponent } from './navigation.component';
-import { LogoutComponent } from '../../auth/logout/logout.component';
-import { RouterTestingModule } from '@angular/router/testing';
+import { LogoutComponent } from './logout.component';
 import { SharedModule } from '../../../shared/shared.module';
+import { RouterTestingModule } from '@angular/router/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 
-describe('NavigationComponent', () => {
-  let component: NavigationComponent;
-  let fixture: ComponentFixture<NavigationComponent>;
+describe('LogoutComponent', () => {
+  let component: LogoutComponent;
+  let fixture: ComponentFixture<LogoutComponent>;
 
   beforeEach(async(() => {
     TestBed.configureTestingModule({
@@ -18,7 +17,6 @@ describe('NavigationComponent', () => {
         HttpClientTestingModule
       ],
       declarations: [
-        NavigationComponent,
         LogoutComponent
       ]
     })
@@ -26,7 +24,7 @@ describe('NavigationComponent', () => {
   }));
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(NavigationComponent);
+    fixture = TestBed.createComponent(LogoutComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

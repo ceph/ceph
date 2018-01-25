@@ -20,6 +20,8 @@
       "prefix": "oa",
       "styles": [
         "../node_modules/bootstrap/dist/css/bootstrap.css",
+        "../node_modules/ng2-toastr/bundles/ng2-toastr.min.css",
+        "../node_modules/font-awesome/css/font-awesome.css",
         "styles.scss"
       ],
       "scripts": [],

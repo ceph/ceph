@@ -319,6 +319,151 @@ ul.task-queue-pagination {
   padding-top: 10px;
 }
 
+/* Navbar */
+.navbar-openattic {
+  margin-bottom: 0;
+  background: #474544;
+  border: 0;
+  border-radius: 0;
+  border-top: 4px solid #288cea;
+  font-size: 1.2em;
+}
+.navbar-openattic .navbar-header {
+  display: flex;
+  float: none;
+}
+.navbar-openattic .navbar-toggle {
+  margin-left: auto;
+  border: 0;
+}
+.navbar-openattic .navbar-toggle:focus,
+.navbar-openattic .navbar-toggle:hover {
+  background-color: transparent;
+  outline: 0;
+}
+.navbar-openattic .navbar-toggle .icon-bar {
+  background-color: #ececec;
+}
+.navbar-openattic .navbar-toggle:focus .icon-bar,
+.navbar-openattic .navbar-toggle:hover .icon-bar {
+  -webkit-box-shadow: 0 0 3px #fff;
+  box-shadow: 0 0 3px #fff;
+}
+.navbar-openattic .navbar-collapse {
+  padding: 0;
+}
+.navbar-openattic .navbar-nav>li>a,
+.navbar-openattic .navbar-nav>li>.oa-navbar>a {
+  color: #ececec;
+  line-height: 1;
+  padding: 10px 20px;
+  position: relative;
+  display: block;
+  text-decoration: none;
+}
+.navbar-openattic .navbar-nav>li>a:focus,
+.navbar-openattic .navbar-nav>li>a:hover,
+.navbar-openattic .navbar-nav>li>.oa-navbar>a:focus,
+.navbar-openattic .navbar-nav>li>.oa-navbar>a:hover {
+  color: #ececec;
+}
+.navbar-openattic .navbar-nav>li>a:hover,
+.navbar-openattic .navbar-nav>li>.oa-navbar>a:hover {
+  background-color: #505050;
+}
+.navbar-openattic .navbar-nav>.open>a,
+.navbar-openattic .navbar-nav>.open>a:hover,
+.navbar-openattic .navbar-nav>.open>a:focus,
+.navbar-openattic .navbar-nav>.open>.oa-navbar>a,
+.navbar-openattic .navbar-nav>.open>.oa-navbar>a:hover,
+.navbar-openattic .navbar-nav>.open>.oa-navbar>a:focus {
+  color: #ececec;
+  border-color: transparent;
+  background-color: transparent;
+}
+.navbar-openattic .navbar-primary>li>a {
+  border: 0;
+}
+.navbar-openattic .navbar-primary>.active>a,
+.navbar-openattic .navbar-primary>.active>a:hover,
+.navbar-openattic .navbar-primary>.active>a:focus {
+  color: #ececec;
+  background-color: #288cea;
+  border: 0;
+}
+.navbar-openattic .navbar-utility a,
+.navbar-openattic .navbar-utility .fa{
+  font-size: 1.0em;
+}
+.navbar-openattic .navbar-utility>.active>a {
+  color: #ececec;
+  background-color: #505050;
+}
+.navbar-openattic .navbar-utility>li>.open>a,
+.navbar-openattic .navbar-utility>li>.open>a:hover,
+.navbar-openattic .navbar-utility>li>.open>a:focus {
+  color: #ececec;
+  border-color: transparent;
+  background-color: transparent;
+}
+@media (min-width: 768px) {
+  .navbar-openattic .navbar-primary>li>a {
+    border-bottom: 4px solid transparent;
+  }
+  .navbar-openattic .navbar-primary>.active>a,
+  .navbar-openattic .navbar-primary>.active>a:hover,
+  .navbar-openattic .navbar-primary>.active>a:focus {
+    background-color: transparent;
+    border-bottom: 4px solid #288cea;
+  }
+  .navbar-openattic .navbar-utility {
+    border-bottom: 0;
+    font-size: 11px;
+    position: absolute;
+    right: 0;
+    top: 0;
+  }
+}
+@media (max-width: 767px) {
+  .navbar-openattic .navbar-nav {
+    margin: 0;
+  }
+  .navbar-openattic .navbar-collapse,
+  .navbar-openattic .navbar-form {
+    border-color: #ececec;
+  }
+  .navbar-openattic .navbar-collapse {
+    padding: 0;
+  }
+  .navbar-nav .open .dropdown-menu {
+    padding-top: 0;
+    padding-bottom: 0;
+    background-color: #505050;
+  }
+  .navbar-nav .open .dropdown-menu .dropdown-header,
+  .navbar-nav .open .dropdown-menu>li>a {
+    padding: 5px 15px 5px 35px;
+  }
+  .navbar-openattic .navbar-nav .open .dropdown-menu>li>a {
+    color: #ececec;
+  }
+  .navbar-openattic .navbar-nav .open .dropdown-menu>.active>a {
+    color: #ececec;
+    background-color: #288cea;
+  }
+  .navbar-openattic .navbar-nav>li>a:hover {
+    background-color: #288cea;
+  }
+  .navbar-openattic .navbar-utility {
+    border-top: 1px solid #ececec;
+  }
+  .navbar-openattic .navbar-primary>.active>a,
+  .navbar-openattic .navbar-primary>.active>a:hover,
+  .navbar-openattic .navbar-primary>.active>a:focus {
+    background-color: #288cea;
+  }
+}
+
 /* Navs */
 .nav-tabs {
   margin-bottom: 15px;
