@@ -1,12 +1,13 @@
+# -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
 import json
 
 import cherrypy
 from cherrypy.lib.sessions import RamSession
-from cherrypy.test import helper
 from mock import patch
 
+from .helper import ApiControllerTestCase
 from ..tools import RESTController
 
 
@@ -33,15 +34,16 @@ class FooResource(RESTController):
 class Root(object):
     foo = FooResource()
 
-class RESTControllerTest(helper.CPWebCase):
+class RESTControllerTest(ApiControllerTestCase):
     @staticmethod
     def setup_server():
+        ApiControllerTestCase.setup_test([])
         cherrypy.tree.mount(Root())
 
     def test_empty(self):
-        self.getPage("/foo", method='DELETE')
+        self._delete("/foo")
         self.assertStatus(204)
-        self.getPage("/foo")
+        self._get("/foo")
         self.assertStatus('200 OK')
         self.assertHeader('Content-Type', 'application/json')
         self.assertBody('[]')
@@ -51,16 +53,12 @@ class RESTControllerTest(helper.CPWebCase):
         with patch('cherrypy.session', sess_mock, create=True):
             body = json.dumps({'a': 'b'})
             for _ in range(5):
-
-                self.getPage("/foo", method='POST', body=body, headers=[
-                    ('Content-Type', 'application/json'),
-                    ('Content-Length', str(len(body)))
-                ])
+                self._post("/foo", {'a': 'b'})
                 self.assertBody(body)
                 self.assertStatus(201)
                 self.assertHeader('Content-Type', 'application/json')
 
-            self.getPage("/foo")
+            self._get("/foo")
             self.assertStatus('200 OK')
             self.assertHeader('Content-Type', 'application/json')
             self.assertBody(json.dumps([{'a': 'b'}] * 5))
