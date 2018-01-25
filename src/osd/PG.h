@@ -1710,6 +1710,36 @@ protected:
     friend class RecoveryMachine;
 
     /* States */
+    // Initial
+    // Reset
+    // Start
+    //   Started
+    //     Primary
+    //       WaitActingChange
+    //       Peering
+    //         GetInfo
+    //         GetLog
+    //         GetMissing
+    //         WaitUpThru
+    //         Incomplete
+    //       Active
+    //         Activating
+    //         Clean
+    //         Recovered
+    //         Backfilling
+    //         WaitRemoteBackfillReserved
+    //         WaitLocalBackfillReserved
+    //         NotBackfilling
+    //         NotRecovering
+    //         Recovering
+    //         WaitRemoteRecoveryReserved
+    //         WaitLocalRecoveryReserved
+    //     ReplicaActive
+    //       RepNotRecovering
+    //       RepRecovering
+    //       RepWaitBackfillReserved
+    //       RepWaitRecoveryReserved
+    //     Stray
 
     struct Crashed : boost::statechart::state< Crashed, RecoveryMachine >, NamedState {
       explicit Crashed(my_context ctx);
@@ -1872,8 +1902,9 @@ protected:
 	boost::statechart::custom_reaction< AllReplicasActivated >,
 	boost::statechart::custom_reaction< DeferRecovery >,
 	boost::statechart::custom_reaction< DeferBackfill >,
-	boost::statechart::custom_reaction< UnfoundRecovery >,
-	boost::statechart::custom_reaction< UnfoundBackfill >
+  boost::statechart::custom_reaction< UnfoundRecovery >,
+	boost::statechart::custom_reaction< UnfoundBackfill >,
+	boost::statechart::custom_reaction< DoRecovery>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
       boost::statechart::result react(const ActMap&);
@@ -1892,9 +1923,12 @@ protected:
 	return discard_event();
       }
       boost::statechart::result react(const UnfoundRecovery& evt) {
-	return discard_event();
+  return discard_event();
       }
       boost::statechart::result react(const UnfoundBackfill& evt) {
+  return discard_event();
+      }
+      boost::statechart::result react(const DoRecovery&) {
 	return discard_event();
       }
     };
@@ -2396,6 +2430,7 @@ protected:
   bool       is_undersized() const { return state_test(PG_STATE_UNDERSIZED); }
 
   bool       is_scrubbing() const { return state_test(PG_STATE_SCRUBBING); }
+  bool       is_remapped() const { return state_test(PG_STATE_REMAPPED); }
   bool       is_peered() const {
     return state_test(PG_STATE_ACTIVE) || state_test(PG_STATE_PEERED);
   }
