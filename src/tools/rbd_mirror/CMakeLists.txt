@@ -31,6 +31,7 @@ set(rbd_mirror_internal
   image_replayer/PrepareRemoteImageRequest.cc
   image_replayer/ReplayStatusFormatter.cc
   image_sync/ImageCopyRequest.cc
+  image_sync/MetadataCopyRequest.cc
   image_sync/ObjectCopyRequest.cc
   image_sync/SnapshotCopyRequest.cc
   image_sync/SnapshotCreateRequest.cc
