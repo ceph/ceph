@@ -434,12 +434,11 @@ OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
 OPTION(mds_blacklist_interval, OPT_FLOAT)  // how long to blacklist failed nodes
 
-OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client idle
+OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout
 OPTION(mds_session_blacklist_on_evict, OPT_BOOL)  // whether to blacklist clients whose sessions are dropped via admin commands
 
 OPTION(mds_sessionmap_keys_per_op, OPT_U32)    // how many sessions should I try to load/store in a single OMAP operation?
-OPTION(mds_revoke_cap_timeout, OPT_FLOAT)    // detect clients which aren't revoking caps
 OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
 OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
