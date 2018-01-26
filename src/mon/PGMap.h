@@ -101,7 +101,7 @@ public:
   void print_oneline_summary(Formatter *f, ostream *out) const;
 
   void recovery_summary(Formatter *f, list<string> *psl,
-                        const pool_stat_t& delta_sum) const;
+                        const pool_stat_t& pool_sum) const;
   void overall_recovery_summary(Formatter *f, list<string> *psl) const;
   void pool_recovery_summary(Formatter *f, list<string> *psl,
                              uint64_t poolid) const;

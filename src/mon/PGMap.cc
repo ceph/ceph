@@ -392,53 +392,53 @@ void PGMapDigest::print_oneline_summary(Formatter *f, ostream *out) const
 }
 
 void PGMapDigest::recovery_summary(Formatter *f, list<string> *psl,
-                             const pool_stat_t& delta_sum) const
+                             const pool_stat_t& pool_sum) const
 {
-  if (delta_sum.stats.sum.num_objects_degraded && delta_sum.stats.sum.num_object_copies > 0) {
-    double pc = (double)delta_sum.stats.sum.num_objects_degraded /
-                (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+  if (pool_sum.stats.sum.num_objects_degraded && pool_sum.stats.sum.num_object_copies > 0) {
+    double pc = (double)pool_sum.stats.sum.num_objects_degraded /
+                (double)pool_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
-      f->dump_unsigned("degraded_objects", delta_sum.stats.sum.num_objects_degraded);
-      f->dump_unsigned("degraded_total", delta_sum.stats.sum.num_object_copies);
+      f->dump_unsigned("degraded_objects", pool_sum.stats.sum.num_objects_degraded);
+      f->dump_unsigned("degraded_total", pool_sum.stats.sum.num_object_copies);
       f->dump_float("degraded_ratio", pc / 100.0);
     } else {
       ostringstream ss;
-      ss << delta_sum.stats.sum.num_objects_degraded
-         << "/" << delta_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
+      ss << pool_sum.stats.sum.num_objects_degraded
+         << "/" << pool_sum.stats.sum.num_object_copies << " objects degraded (" << b << "%)";
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_misplaced && delta_sum.stats.sum.num_object_copies > 0) {
-    double pc = (double)delta_sum.stats.sum.num_objects_misplaced /
-                (double)delta_sum.stats.sum.num_object_copies * (double)100.0;
+  if (pool_sum.stats.sum.num_objects_misplaced && pool_sum.stats.sum.num_object_copies > 0) {
+    double pc = (double)pool_sum.stats.sum.num_objects_misplaced /
+                (double)pool_sum.stats.sum.num_object_copies * (double)100.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
-      f->dump_unsigned("misplaced_objects", delta_sum.stats.sum.num_objects_misplaced);
-      f->dump_unsigned("misplaced_total", delta_sum.stats.sum.num_object_copies);
+      f->dump_unsigned("misplaced_objects", pool_sum.stats.sum.num_objects_misplaced);
+      f->dump_unsigned("misplaced_total", pool_sum.stats.sum.num_object_copies);
       f->dump_float("misplaced_ratio", pc / 100.0);
     } else {
       ostringstream ss;
-      ss << delta_sum.stats.sum.num_objects_misplaced
-         << "/" << delta_sum.stats.sum.num_object_copies << " objects misplaced (" << b << "%)";
+      ss << pool_sum.stats.sum.num_objects_misplaced
+         << "/" << pool_sum.stats.sum.num_object_copies << " objects misplaced (" << b << "%)";
       psl->push_back(ss.str());
     }
   }
-  if (delta_sum.stats.sum.num_objects_unfound && delta_sum.stats.sum.num_objects) {
-    double pc = (double)delta_sum.stats.sum.num_objects_unfound /
-                (double)delta_sum.stats.sum.num_objects * (double)100.0;
+  if (pool_sum.stats.sum.num_objects_unfound && pool_sum.stats.sum.num_objects) {
+    double pc = (double)pool_sum.stats.sum.num_objects_unfound /
+                (double)pool_sum.stats.sum.num_objects * (double)100.0;
     char b[20];
     snprintf(b, sizeof(b), "%.3lf", pc);
     if (f) {
-      f->dump_unsigned("unfound_objects", delta_sum.stats.sum.num_objects_unfound);
-      f->dump_unsigned("unfound_total", delta_sum.stats.sum.num_objects);
+      f->dump_unsigned("unfound_objects", pool_sum.stats.sum.num_objects_unfound);
+      f->dump_unsigned("unfound_total", pool_sum.stats.sum.num_objects);
       f->dump_float("unfound_ratio", pc / 100.0);
     } else {
       ostringstream ss;
-      ss << delta_sum.stats.sum.num_objects_unfound
-         << "/" << delta_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
+      ss << pool_sum.stats.sum.num_objects_unfound
+         << "/" << pool_sum.stats.sum.num_objects << " objects unfound (" << b << "%)";
       psl->push_back(ss.str());
     }
   }
@@ -500,11 +500,11 @@ void PGMapDigest::pool_recovery_rate_summary(Formatter *f, ostream *out,
 void PGMapDigest::pool_recovery_summary(Formatter *f, list<string> *psl,
                                   uint64_t poolid) const
 {
-  auto p = per_pool_sum_delta.find(poolid);
-  if (p == per_pool_sum_delta.end())
+  auto p = pg_pool_sum.find(poolid);
+  if (p == pg_pool_sum.end())
     return;
 
-  recovery_summary(f, psl, p->second.first);
+  recovery_summary(f, psl, p->second);
 }
 
 void PGMapDigest::client_io_rate_summary(Formatter *f, ostream *out,
