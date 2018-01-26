@@ -10,6 +10,8 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/Utils.h"
+#include "librbd/image/CloneRequest.h"
 #include "librbd/internal.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -158,7 +160,74 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     return -ENOSYS;
   }
 
-  int r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
+  ParentSpec parent_spec;
+  {
+    RWLock::RLocker snap_locker(src->snap_lock);
+    RWLock::RLocker parent_locker(src->parent_lock);
+
+    // use oldest snapshot or HEAD for parent spec
+    if (!src->snap_info.empty()) {
+      parent_spec = src->snap_info.begin()->second.parent.spec;
+    } else {
+      parent_spec = src->parent_md.spec;
+    }
+  }
+
+  int r;
+  if (parent_spec.pool_id == -1) {
+    r = create(dest_md_ctx, destname, "", src_size, opts, "", "", false);
+  } else {
+    librados::Rados rados(src->md_ctx);
+    librados::IoCtx parent_io_ctx;
+    r = rados.ioctx_create2(parent_spec.pool_id, parent_io_ctx);
+    if (r < 0) {
+      lderr(cct) << "failed to open source parent pool: "
+                 << cpp_strerror(r) << dendl;
+      return r;
+    }
+    ImageCtx *src_parent_image_ctx =
+      new ImageCtx("", parent_spec.image_id, nullptr, parent_io_ctx, false);
+    r = src_parent_image_ctx->state->open(true);
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "failed to open source parent image: "
+                   << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+    std::string snap_name;
+    {
+      RWLock::RLocker parent_snap_locker(src_parent_image_ctx->snap_lock);
+      auto it = src_parent_image_ctx->snap_info.find(parent_spec.snap_id);
+      if (it == src_parent_image_ctx->snap_info.end()) {
+        return -ENOENT;
+      }
+      snap_name = it->second.name;
+    }
+
+    C_SaferCond cond;
+    src_parent_image_ctx->state->snap_set(cls::rbd::UserSnapshotNamespace(),
+                                          snap_name, &cond);
+    r = cond.wait();
+    if (r < 0) {
+      if (r != -ENOENT) {
+        lderr(cct) << "failed to set snapshot: " << cpp_strerror(r) << dendl;
+      }
+      return r;
+    }
+
+    C_SaferCond ctx;
+    std::string dest_id = util::generate_image_id(dest_md_ctx);
+    auto *req = image::CloneRequest<I>::create(
+      src_parent_image_ctx, dest_md_ctx, destname, dest_id, opts,
+      "", "", src->op_work_queue, &ctx);
+    req->send();
+    r = ctx.wait();
+    int close_r = src_parent_image_ctx->state->close();
+    if (r == 0 && close_r < 0) {
+      r = close_r;
+    }
+  }
   if (r < 0) {
     lderr(cct) << "header creation failed" << dendl;
     return r;
