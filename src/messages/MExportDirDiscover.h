@@ -20,6 +20,8 @@
 
 class MExportDirDiscover : public Message {
 private:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
   mds_rank_t from = -1;
   dirfrag_t dirfrag;
   filepath path;
@@ -34,10 +36,10 @@ private:
 
 protected:
   MExportDirDiscover() :     
-    Message{MSG_MDS_EXPORTDIRDISCOVER},
+    Message{MSG_MDS_EXPORTDIRDISCOVER, HEAD_VERSION, COMPAT_VERSION},
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    Message{MSG_MDS_EXPORTDIRDISCOVER},
+    Message{MSG_MDS_EXPORTDIRDISCOVER, HEAD_VERSION, COMPAT_VERSION},
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }

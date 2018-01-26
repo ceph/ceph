@@ -57,14 +57,14 @@ public:
 
 protected:
   ~MDirUpdate() {}
-  MDirUpdate() : Message{MSG_MDS_DIRUPDATE} {}
+  MDirUpdate() : Message(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    Message{MSG_MDS_DIRUPDATE}, from_mds(f), dirfrag(dirfrag),
+    Message(MSG_MDS_DIRUPDATE, HEAD_VERSION, COMPAT_VERSION), from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
@@ -88,6 +88,8 @@ protected:
   mutable int tried_discover = 0; // XXX HACK
 
 private:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
   template<class T, typename... Args>
   friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

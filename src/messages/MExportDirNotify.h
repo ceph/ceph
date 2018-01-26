@@ -19,6 +19,9 @@
 
 class MExportDirNotify : public Message {
 private:
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
+
   dirfrag_t base;
   bool ack;
   pair<__s32,__s32> old_auth, new_auth;
@@ -33,9 +36,10 @@ private:
   list<dirfrag_t>& get_bounds() { return bounds; }
 
 protected:
-  MExportDirNotify() {}
+  MExportDirNotify() :
+    Message{MSG_MDS_EXPORTDIRNOTIFY, HEAD_VERSION, COMPAT_VERSION} {}
   MExportDirNotify(dirfrag_t i, uint64_t tid, bool a, pair<__s32,__s32> oa, pair<__s32,__s32> na) :
-    Message{MSG_MDS_EXPORTDIRNOTIFY},
+    Message{MSG_MDS_EXPORTDIRNOTIFY, HEAD_VERSION, COMPAT_VERSION},
     base(i), ack(a), old_auth(oa), new_auth(na) {
     set_tid(tid);
   }

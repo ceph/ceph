@@ -2453,7 +2453,7 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
 
   CDentry *straydn = NULL;
   if (m->straybl.length() > 0) {
-    straydn = mdcache->add_replica_stray(m->straybl, from);
+    mdcache->decode_replica_stray(straydn, m->straybl, from);
     ceph_assert(straydn);
     m->straybl.clear();
   }
@@ -6939,7 +6939,7 @@ bool Server::_rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, vector<CD
   req->srcdnpath = filepath(trace.front()->get_dir()->ino());
   for (auto dn : trace)
     req->srcdnpath.push_dentry(dn->get_name());
-  mdcache->replicate_stray(straydn, who, req->straybl);
+  mdcache->encode_replica_stray(straydn, who, req->straybl);
   if (mdr->more()->desti_srnode)
     encode(*mdr->more()->desti_srnode, req->desti_snapbl);
 
@@ -7863,7 +7863,7 @@ bool Server::_rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, set<mds_
   for (auto dn : dsttrace)
     req->destdnpath.push_dentry(dn->get_name());
   if (straydn)
-    mdcache->replicate_stray(straydn, who, req->straybl);
+    mdcache->encode_replica_stray(straydn, who, req->straybl);
 
   if (mdr->more()->srci_srnode)
     encode(*mdr->more()->srci_srnode, req->srci_snapbl);

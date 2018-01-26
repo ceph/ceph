@@ -20,18 +20,19 @@
 
 class MInodeFileCaps : public Message {
 private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
   inodeno_t ino;
   __u32     caps = 0;
 
- public:
-
+public:
   inodeno_t get_ino() const { return ino; }
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : Message{MSG_MDS_INODEFILECAPS} {}
+  MInodeFileCaps() : Message(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    Message{MSG_MDS_INODEFILECAPS} {
+    Message(MSG_MDS_INODEFILECAPS, HEAD_VERSION, COMPAT_VERSION) {
     this->ino = ino;
     this->caps = caps;
   }
