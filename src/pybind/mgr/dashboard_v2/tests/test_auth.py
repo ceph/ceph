@@ -32,6 +32,19 @@ class AuthTest(ControllerTestCase):
         cls._mgr_module.set_localized_config('password',
                                              Auth.password_hash('admin'))
 
+    def setUp(self):
+        self._mgr_module.set_localized_config('session-expire', '2')
+        self._mgr_module.set_localized_config('username', 'admin')
+        self._mgr_module.set_localized_config('password',
+                                              Auth.password_hash('admin'))
+
+    def test_a_set_login_credentials(self):
+        Auth.set_login_credentials('admin2', 'admin2')
+        user = self._mgr_module.get_localized_config('username')
+        passwd = self._mgr_module.get_localized_config('password')
+        self.assertEqual(user, 'admin2')
+        self.assertEqual(passwd, Auth.password_hash('admin2', passwd))
+
     def test_login_valid(self):
         sess_mock = RamSession()
         with patch('cherrypy.session', sess_mock, create=True):
