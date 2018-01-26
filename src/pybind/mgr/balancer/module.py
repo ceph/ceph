@@ -50,10 +50,11 @@ class MappingState:
         return 0.0
 
 class Plan:
-    def __init__(self, name, ms):
+    def __init__(self, name, ms, pools):
         self.mode = 'unknown'
         self.name = name
         self.initial = ms
+        self.pools = pools
 
         self.osd_weights = {}
         self.compat_ws = {}
@@ -222,7 +223,7 @@ class Module(MgrModule):
             "perm": "r",
         },
         {
-            "cmd": "balancer optimize name=plan,type=CephString",
+            "cmd": "balancer optimize name=plan,type=CephString name=pools,type=CephString,n=N,req=false",
             "desc": "Run optimizer to create a new plan",
             "perm": "rw",
         },
@@ -299,7 +300,18 @@ class Module(MgrModule):
                                   'current cluster')
             return (0, self.evaluate(ms, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
-            plan = self.plan_create(command['plan'])
+            pools = []
+            if 'pools' in command:
+                pools = command['pools']
+            osdmap = self.get_osdmap()
+            valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+            invalid_pool_names = []
+            for p in pools:
+                if p not in valid_pool_names:
+                    invalid_pool_names.append(p)
+            if len(invalid_pool_names):
+                return (-errno.EINVAL, '', 'pools %s not found' % invalid_pool_names)
+            plan = self.plan_create(command['plan'], osdmap, pools)
             self.optimize(plan)
             return (0, '', '')
         elif command['prefix'] == 'balancer rm':
@@ -355,7 +367,7 @@ class Module(MgrModule):
             if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
-                plan = self.plan_create(name)
+                plan = self.plan_create(name, self.get_osdmap(), [])
                 if self.optimize(plan):
                     self.execute(plan)
                 self.plan_rm(name)
@@ -363,10 +375,12 @@ class Module(MgrModule):
             self.event.wait(sleep_interval)
             self.event.clear()
 
-    def plan_create(self, name):
-        plan = Plan(name, MappingState(self.get_osdmap(),
-                                       self.get("pg_dump"),
-                                       'plan %s initial' % name))
+    def plan_create(self, name, osdmap, pools):
+        plan = Plan(name,
+                    MappingState(osdmap,
+                                 self.get("pg_dump"),
+                                 'plan %s initial' % name),
+                    pools)
         self.plans[name] = plan
         return plan
 
@@ -610,7 +624,10 @@ class Module(MgrModule):
         max_deviation = float(self.get_config('upmap_max_deviation', .01))
 
         ms = plan.initial
-        pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
+        if len(plan.pools):
+            pools = plan.pools
+        else: # all
+            pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
         if len(pools) == 0:
             self.log.info('no pools, nothing to do')
             return False
