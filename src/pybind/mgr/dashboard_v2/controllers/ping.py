@@ -11,7 +11,7 @@ from ..tools import ApiController, AuthRequired, RESTController
 class Ping(object):
     @cherrypy.expose
     def default(self):
-        return "pong"
+        return 'pong'
 
 
 @ApiController('echo1')

@@ -22,11 +22,11 @@ class Ping(object):
 class AuthTest(ControllerTestCase):
     @classmethod
     def setup_test(cls):
-        cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
+        cherrypy.tools.authenticate = cherrypy.Tool('before_handler',
                                                    Auth.check_auth)
 
         cherrypy.tree.mount(Ping(), "/api/test",
-                            config={'/': {'tools.autenticate.on': True}})
+                            config={'/': {'tools.authenticate.on': True}})
         cls._mgr_module.set_localized_config('session-expire', '2')
         cls._mgr_module.set_localized_config('username', 'admin')
         cls._mgr_module.set_localized_config('password',

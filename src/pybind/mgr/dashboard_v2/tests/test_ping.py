@@ -10,7 +10,7 @@ from ..controllers.ping import Ping
 class PingTest(ControllerTestCase):
     @classmethod
     def setup_test(cls):
-        Ping._cp_config['tools.autenticate.on'] = False
+        Ping._cp_config['tools.authenticate.on'] = False
 
     def test_ping(self):
         self.getPage("/api/ping")
