@@ -4,6 +4,7 @@ htmlcov
 coverage.xml
 junit*xml
 __pycache__
+.cache
 
 # IDE
 .vscode
