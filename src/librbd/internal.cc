@@ -594,6 +594,14 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 	  return r;
 	}
 
+        if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+            !imctx->snaps.empty()) {
+          lderr(cct) << "snapshot in-use by " << pool << "/" << imctx->name
+                     << dendl;
+          imctx->state->close();
+          return -EBUSY;
+        }
+
 	librbd::NoOpProgressContext prog_ctx;
 	r = imctx->operations->flatten(prog_ctx);
 	if (r < 0) {
@@ -601,21 +609,6 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 		     << cpp_strerror(r) << dendl;
           imctx->state->close();
 	  return r;
-	}
-
-	if ((imctx->features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
-	    !imctx->snaps.empty()) {
-	  imctx->parent_lock.get_read();
-	  ParentInfo parent_info = imctx->parent_md;
-	  imctx->parent_lock.put_read();
-
-	  r = cls_client::remove_child(&imctx->md_ctx, RBD_CHILDREN,
-				       parent_info.spec, imctx->id);
-	  if (r < 0 && r != -ENOENT) {
-	    lderr(cct) << "error removing child from children list" << dendl;
-	    imctx->state->close();
-	    return r;
-	  }
 	}
 
 	r = imctx->state->close();
