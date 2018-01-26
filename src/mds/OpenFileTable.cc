@@ -13,6 +13,7 @@
  */
 
 #include "mds/CInode.h"
+#include "mds/CDir.h"
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "osdc/Objecter.h"
@@ -108,6 +109,29 @@ void OpenFileTable::remove_inode(CInode *in)
     assert(p->second.nref == 1);
   }
   put_ref(in);
+}
+
+void OpenFileTable::add_dirfrag(CDir *dir)
+{
+  dout(10) << __func__ << " " << *dir << dendl;
+  assert(!dir->state_test(CDir::STATE_TRACKEDBYOFT));
+  dir->state_set(CDir::STATE_TRACKEDBYOFT);
+  auto ret = dirfrags.insert(dir->dirfrag());
+  assert(ret.second);
+  get_ref(dir->get_inode());
+  dirty_items.emplace(dir->ino(), 0);
+}
+
+void OpenFileTable::remove_dirfrag(CDir *dir)
+{
+  dout(10) << __func__ << " " << *dir << dendl;
+  assert(dir->state_test(CDir::STATE_TRACKEDBYOFT));
+  dir->state_clear(CDir::STATE_TRACKEDBYOFT);
+  auto p = dirfrags.find(dir->dirfrag());
+  assert(p != dirfrags.end());
+  dirfrags.erase(p);
+  dirty_items.emplace(dir->ino(), 0);
+  put_ref(dir->get_inode());
 }
 
 void OpenFileTable::notify_link(CInode *in)
@@ -246,11 +270,31 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
 
   using ceph::encode;
   for (auto& it : dirty_items) {
+    list<frag_t> fgls;
     auto p = anchor_map.find(it.first);
+    if (p != anchor_map.end()) {
+      for (auto q = dirfrags.lower_bound(dirfrag_t(it.first, 0));
+	   q != dirfrags.end() && q->ino == it.first;
+	   ++q)
+	fgls.push_back(q->frag);
+    }
+
     if (first_commit) {
       auto q = loaded_anchor_map.find(it.first);
       if (q != loaded_anchor_map.end()) {
 	bool same = (p != anchor_map.end() && p->second == q->second);
+	if (same) {
+	  auto r = loaded_dirfrags.lower_bound(dirfrag_t(it.first, 0));
+	  for (auto fg : fgls) {
+	    if (r == loaded_dirfrags.end() || !(*r == dirfrag_t(it.first, fg))) {
+	      same = false;
+	      break;
+	    }
+	    ++r;
+	  }
+	  if (same && r != loaded_dirfrags.end() && r->ino == it.first)
+	    same = false;
+	}
 	loaded_anchor_map.erase(q);
 	if (same)
 	  continue;
@@ -264,9 +308,9 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     if (p != anchor_map.end()) {
       bufferlist bl;
       encode(p->second, bl);
+      encode(fgls, bl);
 
       write_size += bl.length() + sizeof(__u32);
-
       to_update[key].swap(bl);
     } else {
       to_remove.emplace(key);
@@ -290,6 +334,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       }
     }
     loaded_anchor_map.clear();
+    loaded_dirfrags.clear();
   }
 
   commit_func(true);
@@ -325,8 +370,10 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
   if (op_r < 0) {
     derr << __func__ << " got " << cpp_strerror(op_r) << dendl;
     clear_on_commit = true;
-    if (!first)
+    if (!first) {
       loaded_anchor_map.clear();
+      loaded_dirfrags.clear();
+    }
     goto out;
   }
 
@@ -357,11 +404,17 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
       decode(anchor, p);
       assert(ino == anchor.ino);
       anchor.auth = MDS_RANK_NONE;
+
+      list<frag_t> fgls;
+      decode(fgls, p);
+      for (auto fg : fgls)
+	loaded_dirfrags.insert(loaded_dirfrags.end(), dirfrag_t(anchor.ino, fg));
     }
   } catch (buffer::error &e) {
     derr << __func__ << ": corrupted header/values: " << e.what() << dendl;
     clear_on_commit = true;
     loaded_anchor_map.clear();
+    loaded_dirfrags.clear();
     goto out;
   }
 
@@ -464,8 +517,8 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
   num_opening_inodes--;
   if (num_opening_inodes == 0) {
     if (prefetch_state == DIR_INODES)  {
-      prefetch_state = FILE_INODES;
-      _prefetch_inodes();
+      prefetch_state = DIRFRAGS;
+      _prefetch_dirfrags();
     } else if (prefetch_state == FILE_INODES) {
       prefetch_state = DONE;
       logseg_destroyed_inos.clear();
@@ -475,6 +528,68 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
     } else {
       assert(0);
     }
+  }
+}
+
+void OpenFileTable::_prefetch_dirfrags()
+{
+  dout(10) << __func__ << dendl;
+  assert(prefetch_state == DIRFRAGS);
+
+  MDCache *mdcache = mds->mdcache;
+  list<CDir*> fetch_queue;
+
+  CInode *last_in = nullptr;
+  for (auto df : loaded_dirfrags) {
+    CInode *diri;
+    if (last_in && last_in->ino() == df.ino) {
+      diri = last_in;
+    } else {
+      diri = mdcache->get_inode(df.ino);
+      if (!diri)
+	continue;
+      last_in = diri;
+    }
+    if (diri->state_test(CInode::STATE_REJOINUNDEF))
+      continue;
+
+    CDir *dir = diri->get_dirfrag(df.frag);
+    if (dir) {
+      if (dir->is_auth() && !dir->is_complete())
+	fetch_queue.push_back(dir);
+    } else {
+      list<frag_t> fgls;
+      diri->dirfragtree.get_leaves_under(df.frag, fgls);
+      for (auto fg : fgls) {
+	if (diri->is_auth()) {
+	  dir = diri->get_or_open_dirfrag(mdcache, fg);
+	} else {
+	  dir = diri->get_dirfrag(fg);
+	}
+	if (dir && dir->is_auth() && !dir->is_complete())
+	  fetch_queue.push_back(dir);
+      }
+    }
+  }
+
+  MDSGatherBuilder gather(g_ceph_context);
+  for (auto dir : fetch_queue) {
+    if (dir->state_test(CDir::STATE_REJOINUNDEF))
+      assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
+    dir->fetch(gather.new_sub());
+  }
+
+  auto finish_func = [this](int r) {
+    prefetch_state = FILE_INODES;
+    _prefetch_inodes();
+  };
+  if (gather.has_subs()) {
+    gather.set_finisher(
+	new MDSInternalContextWrapper(mds,
+	  new FunctionContext(finish_func)));
+    gather.activate();
+  } else {
+    finish_func(0);
   }
 }
 

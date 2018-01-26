@@ -91,7 +91,8 @@ public:
   static const unsigned STATE_ASSIMRSTAT =    (1<<15);  // assimilating inode->frag rstats
   static const unsigned STATE_DIRTYDFT =      (1<<16);  // dirty dirfragtree
   static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
-  static const unsigned STATE_AUXSUBTREE =    (1<<18);  // no subtree merge
+  static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
+  static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -106,14 +107,16 @@ public:
    STATE_IMPORTBOUND |
    STATE_EXPORTBOUND |
    STATE_FROZENTREE |
-   STATE_STICKY);
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_EXPORT_KEPT = 
   (STATE_EXPORTING |
    STATE_IMPORTBOUND |
    STATE_EXPORTBOUND |
    STATE_FROZENTREE |
    STATE_FROZENDIR |
-   STATE_STICKY);
+   STATE_STICKY |
+   STATE_TRACKEDBYOFT);
   static const unsigned MASK_STATE_FRAGMENT_KEPT = 
   (STATE_DIRTY |
    STATE_EXPORTBOUND |
@@ -337,6 +340,8 @@ protected:
 
   int num_dirty;
 
+  int num_inodes_with_caps = 0;
+
   // state
   version_t committing_version;
   version_t committed_version;
@@ -428,6 +433,8 @@ protected:
   int get_num_dirty() const {
     return num_dirty;
   }
+
+  void adjust_num_inodes_with_caps(int d);
 
   int64_t get_frag_size() const {
     return get_projected_fnode()->fragstat.size();

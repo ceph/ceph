@@ -30,6 +30,8 @@ public:
 
   void add_inode(CInode *in);
   void remove_inode(CInode *in);
+  void add_dirfrag(CDir *dir);
+  void remove_dirfrag(CDir *dir);
   void notify_link(CInode *in);
   void notify_unlink(CInode *in);
   bool is_any_dirty() const { return !dirty_items.empty(); }
@@ -65,6 +67,7 @@ protected:
   MDSRank *mds;
 
   map<inodeno_t, Anchor> anchor_map;
+  set<dirfrag_t> dirfrags;
 
   std::map<inodeno_t, unsigned> dirty_items; // ino -> dirty state
   static const unsigned DIRTY_NEW = 1;
@@ -82,6 +85,7 @@ protected:
   void _commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin);
 
   map<inodeno_t, Anchor> loaded_anchor_map;
+  set<dirfrag_t> loaded_dirfrags;
   list<MDSInternalContextBase*> waiting_for_load;
   bool load_done = false;
 
@@ -92,14 +96,16 @@ protected:
 
   enum {
     DIR_INODES = 1,
-    FILE_INODES = 2,
-    DONE = 3,
+    DIRFRAGS = 2,
+    FILE_INODES = 3,
+    DONE = 4,
   };
   unsigned prefetch_state = 0;
   unsigned num_opening_inodes = 0;
   list<MDSInternalContextBase*> waiting_for_prefetch;
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
+  void _prefetch_dirfrags();
 
   std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
