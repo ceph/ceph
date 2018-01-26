@@ -11,7 +11,7 @@ import cherrypy
 from mgr_module import MgrModule
 
 from .controllers.auth import Auth
-from .tools import load_controllers
+from .tools import load_controllers, json_error_page
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -54,7 +54,8 @@ class Module(MgrModule):
             cherrypy.config.update({
                 'server.socket_host': server_addr,
                 'server.socket_port': int(server_port),
-                'engine.autoreload.on': False
+                'engine.autoreload.on': False,
+                'error_page.default': json_error_page
             })
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler',
                                                     Auth.check_auth)

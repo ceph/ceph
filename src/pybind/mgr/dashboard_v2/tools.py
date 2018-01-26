@@ -69,7 +69,8 @@ def load_controllers(mgrmodule):
     return controllers
 
 
-def _json_error_page(status, message, traceback, version):
+def json_error_page(status, message, traceback, version):
+    cherrypy.response.headers['Content-Type'] = 'application/json'
     return json.dumps(dict(status=status, detail=message, traceback=traceback,
                            version=version))
 
@@ -104,7 +105,7 @@ class BaseController(six.with_metaclass(BaseControllerMeta, object)):
     _mgr_module = None
 
     _cp_config_default = {
-        'request.error_page': {'default': _json_error_page},
+        'request.error_page': {'default': json_error_page},
     }
 
     @property
@@ -194,7 +195,7 @@ class RESTController(BaseController):
     @cherrypy.expose
     def default(self, *vpath, **params):
         cherrypy.config.update({
-            'error_page.default': _json_error_page})
+            'error_page.default': json_error_page})
         obj_key, detail_route_name = self.split_vpath(vpath)
         method, status_code = self._get_method(obj_key, detail_route_name)
 
