@@ -1595,21 +1595,24 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   }
 
   // destroyed inodes
-  for (vector<inodeno_t>::iterator p = destroyed_inodes.begin();
-       p != destroyed_inodes.end();
-       ++p) {
-    CInode *in = mds->mdcache->get_inode(*p);
-    if (in) {
-      dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
-      CDentry *parent = in->get_parent_dn();
-      mds->mdcache->remove_inode(in);
-      if (parent) {
-        dout(10) << "EMetaBlob.replay unlinked from dentry " << *parent << dendl;
-        assert(parent->get_linkage()->is_null());
+  if (!destroyed_inodes.empty()) {
+    for (vector<inodeno_t>::iterator p = destroyed_inodes.begin();
+	p != destroyed_inodes.end();
+	++p) {
+      CInode *in = mds->mdcache->get_inode(*p);
+      if (in) {
+	dout(10) << "EMetaBlob.replay destroyed " << *p << ", dropping " << *in << dendl;
+	CDentry *parent = in->get_parent_dn();
+	mds->mdcache->remove_inode(in);
+	if (parent) {
+	  dout(10) << "EMetaBlob.replay unlinked from dentry " << *parent << dendl;
+	  assert(parent->get_linkage()->is_null());
+	}
+      } else {
+	dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
       }
-    } else {
-      dout(10) << "EMetaBlob.replay destroyed " << *p << ", not in cache" << dendl;
     }
+    mds->mdcache->open_file_table.note_destroyed_inos(logseg->seq, destroyed_inodes);
   }
 
   // client requests

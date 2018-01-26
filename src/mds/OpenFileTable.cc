@@ -468,6 +468,8 @@ void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
       _prefetch_inodes();
     } else if (prefetch_state == FILE_INODES) {
       prefetch_state = DONE;
+      logseg_destroyed_inos.clear();
+      destroyed_inos_set.clear();
       finish_contexts(g_ceph_context, waiting_for_prefetch);
       waiting_for_prefetch.clear();
     } else {
@@ -492,7 +494,14 @@ void OpenFileTable::_prefetch_inodes()
 
   MDCache *mdcache = mds->mdcache;
 
+  if (destroyed_inos_set.empty()) {
+    for (auto& it : logseg_destroyed_inos)
+      destroyed_inos_set.insert(it.second.begin(), it.second.end());
+  }
+
   for (auto& it : loaded_anchor_map) {
+    if (destroyed_inos_set.count(it.first))
+	continue;
     if (it.second.d_type == DT_DIR) {
       if (prefetch_state != DIR_INODES)
 	continue;
@@ -553,4 +562,20 @@ bool OpenFileTable::should_log_open(CInode *in)
       return false;
   }
   return true;
+}
+
+void OpenFileTable::note_destroyed_inos(uint64_t seq, const vector<inodeno_t>& inos)
+{
+   auto& vec = logseg_destroyed_inos[seq];
+   vec.insert(vec.end(), inos.begin(), inos.end());
+}
+
+void OpenFileTable::trim_destroyed_inos(uint64_t seq)
+{
+  auto p = logseg_destroyed_inos.begin();
+  while (p != logseg_destroyed_inos.end()) {
+    if (p->first >= seq)
+      break;
+    logseg_destroyed_inos.erase(p++);
+  }
 }
