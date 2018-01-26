@@ -86,9 +86,7 @@ class Module(MgrModule):
 
     def handle_command(self, cmd):
         if cmd['prefix'] == 'dashboard set-login-credentials':
-            self.set_localized_config('username', cmd['username'])
-            hashed_passwd = Auth.password_hash(cmd['password'])
-            self.set_localized_config('password', hashed_passwd)
+            Auth.set_login_credentials(cmd['username'], cmd['password'])
             return 0, 'Username and password updated', ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''

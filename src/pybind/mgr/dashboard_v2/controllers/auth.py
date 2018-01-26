@@ -88,3 +88,9 @@ class Auth(RESTController):
                                          'Session expired. You are not '
                                          'authorized to access that resource')
         cherrypy.session[Auth.SESSION_KEY_TS] = now
+
+    @staticmethod
+    def set_login_credentials(username, password):
+        Auth._mgr_module_.set_localized_config('username', username)
+        hashed_passwd = Auth.password_hash(password)
+        Auth._mgr_module_.set_localized_config('password', hashed_passwd)
