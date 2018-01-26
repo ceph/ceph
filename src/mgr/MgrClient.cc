@@ -279,7 +279,8 @@ void MgrClient::send_report()
 	  type.nick = data.nick;
 	}
 	type.type = data.type;
-        type.priority = perf_counters.get_adjusted_priority(data.prio);
+       type.priority = perf_counters.get_adjusted_priority(data.prio);
+	type.unit = data.unit;
 	report->declare_types.push_back(std::move(type));
 	session->declared.insert(path);
       }

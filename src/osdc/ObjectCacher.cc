@@ -680,9 +680,9 @@ void ObjectCacher::perf_start()
   plb.add_u64_counter(l_objectcacher_cache_ops_miss,
 		      "cache_ops_miss", "Miss operations");
   plb.add_u64_counter(l_objectcacher_cache_bytes_hit,
-		      "cache_bytes_hit", "Hit data");
+		      "cache_bytes_hit", "Hit data", NULL, 0, unit_t(BYTES));
   plb.add_u64_counter(l_objectcacher_cache_bytes_miss,
-		      "cache_bytes_miss", "Miss data");
+		      "cache_bytes_miss", "Miss data", NULL, 0, unit_t(BYTES));
   plb.add_u64_counter(l_objectcacher_data_read,
 		      "data_read", "Read data");
   plb.add_u64_counter(l_objectcacher_data_written,
@@ -696,7 +696,7 @@ void ObjectCacher::perf_start()
 		      "Write operations, delayed due to dirty limits");
   plb.add_u64_counter(l_objectcacher_write_bytes_blocked,
 		      "write_bytes_blocked",
-		      "Write data blocked on dirty limit");
+		      "Write data blocked on dirty limit", NULL, 0, unit_t(BYTES));
   plb.add_time(l_objectcacher_write_time_blocked, "write_time_blocked",
 	       "Time spent blocking a write due to dirty limits");
 
