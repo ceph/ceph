@@ -355,6 +355,9 @@ public:
   const PGLog &get_log() const override {
     return pg_log;
   }
+  void add_local_next_event(const pg_log_entry_t& e) {
+    pg_log.missing_add_next_entry(e);
+  }
   bool pgb_is_primary() const override {
     return is_primary();
   }

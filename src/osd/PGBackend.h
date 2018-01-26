@@ -166,6 +166,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const = 0;
 
      virtual const pg_missing_tracker_t &get_local_missing() const = 0;
+     virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
      virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(

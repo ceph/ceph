@@ -663,8 +663,12 @@ public:
 
   const pg_missing_tracker_t& get_missing() const { return missing; }
 
-  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have) {
-    missing.add(oid, need, have, false);
+  void missing_add(const hobject_t& oid, eversion_t need, eversion_t have, bool is_delete=false) {
+    missing.add(oid, need, have, is_delete);
+  }
+
+  void missing_add_next_entry(const pg_log_entry_t& e) {
+    missing.add_next_event(e);
   }
 
   //////////////////// get or set log ////////////////////
