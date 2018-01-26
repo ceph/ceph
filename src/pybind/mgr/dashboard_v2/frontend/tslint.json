@@ -118,13 +118,13 @@
     "directive-selector": [
       true,
       "attribute",
-      "oa",
+      "cd",
       "camelCase"
     ],
     "component-selector": [
       true,
       "element",
-      "oa",
+      "cd",
       "kebab-case"
     ],
     "angular-whitespace": [true, "check-interpolation"],
