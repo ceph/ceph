@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 import { AuthService } from '../../../shared/services/auth.service';
 
 @Component({
-  selector: 'oa-logout',
+  selector: 'cd-logout',
   templateUrl: './logout.component.html',
   styleUrls: ['./logout.component.scss']
 })

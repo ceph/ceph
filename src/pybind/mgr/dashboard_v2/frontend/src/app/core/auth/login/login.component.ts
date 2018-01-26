@@ -6,7 +6,7 @@ import { Router } from '@angular/router';
 import { ToastsManager } from 'ng2-toastr';
 
 @Component({
-  selector: 'oa-login',
+  selector: 'cd-login',
   templateUrl: './login.component.html',
   styleUrls: ['./login.component.scss']
 })

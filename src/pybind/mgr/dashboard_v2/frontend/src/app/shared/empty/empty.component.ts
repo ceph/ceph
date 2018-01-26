@@ -1,7 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
 @Component({
-  selector: 'oa-empty',
+  selector: 'cd-empty',
   templateUrl: './empty.component.html',
   styleUrls: ['./empty.component.scss']
 })
