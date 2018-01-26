@@ -571,6 +571,10 @@ int main(int argc, char **argv)
     } else if (strcmp(argv[i], "--set_chunk") == 0) {
       set_chunk = true;
     } else if (strcmp(argv[i], "--low_tier_pool") == 0) {
+      /*
+       * disallow redirect or chunk object into the same pool
+       * to prevent the race. see https://github.com/ceph/ceph/pull/20096
+       */
       low_tier_pool_name = argv[++i];
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
