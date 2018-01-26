@@ -13,7 +13,7 @@
 
 #pragma once
 
-#include "Python.h"
+#include "PythonCompat.h"
 
 #include <string>
 #include <map>

@@ -37,9 +37,6 @@ std::string PyModuleRegistry::config_prefix;
 
 
 
-#undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "
-
 int PyModuleRegistry::init(const MgrMap &map)
 {
   Mutex::Locker locker(lock);
@@ -53,7 +50,13 @@ int PyModuleRegistry::init(const MgrMap &map)
   config_prefix = std::string(g_conf->name.get_type_str()) + "/";
 
   // Set up global python interpreter
+#if PY_MAJOR_VERSION >= 3
+#define WCHAR(s) L ## #s
+  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(PYTHON_EXECUTABLE)));
+#undef WCHAR
+#else
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
+#endif
   Py_InitializeEx(0);
 
   // Let CPython know that we will be calling it back from other
