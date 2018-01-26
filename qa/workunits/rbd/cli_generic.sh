@@ -81,6 +81,22 @@ test_others() {
     rbd snap ls testimg4 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg4 | grep '.*snap1.*'
 
+    # deep copy clone-image
+    rbd snap rm testimg4@snap1
+    rbd snap rm testimg5@snap1
+    rbd rm testimg4
+    rbd rm testimg5
+    rbd snap protect testimg1@snap1
+    rbd clone testimg1@snap1 testimg4
+    rbd snap create testimg4@snap2
+    rbd deep copy testimg4 testimg5
+    rbd info testimg5 | grep 'size 256 MB'
+    rbd snap ls testimg5 | grep -v 'SNAPID' | wc -l | grep 1
+    rbd snap ls testimg5 | grep '.*snap2.*'
+    rbd flatten testimg4
+    rbd flatten testimg5
+    rbd snap unprotect testimg1@snap1
+
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
     rbd export testimg3 /tmp/img3.new

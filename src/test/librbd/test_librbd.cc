@@ -1082,6 +1082,7 @@ TEST_F(TestLibRBD, TestCopyPP)
 TEST_F(TestLibRBD, TestDeepCopy)
 {
   REQUIRE_FORMAT_V2();
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, create_pool(true).c_str(), &ioctx);
@@ -1092,10 +1093,16 @@ TEST_F(TestLibRBD, TestDeepCopy)
   rbd_image_t image;
   rbd_image_t image2;
   rbd_image_t image3;
+  rbd_image_t image4;
+  rbd_image_t image5;
+  rbd_image_t image6;
   int order = 0;
   std::string name = get_temp_image_name();
   std::string name2 = get_temp_image_name();
   std::string name3 = get_temp_image_name();
+  std::string name4 = get_temp_image_name();
+  std::string name5 = get_temp_image_name();
+  std::string name6 = get_temp_image_name();
 
   uint64_t size = 2 << 20;
 
@@ -1172,6 +1179,67 @@ TEST_F(TestLibRBD, TestDeepCopy)
     key = "key" + stringify(i);
     val = "value" + stringify(i);
     ASSERT_EQ(0, rbd_metadata_get(image3, key.c_str(), value, &value_len));
+    ASSERT_STREQ(val.c_str(), value);
+
+    value_len = sizeof(value);
+  }
+
+  ASSERT_EQ(0, rbd_snap_create(image, "deep_snap"));
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, "deep_snap"));
+  ASSERT_EQ(0, rbd_snap_protect(image, "deep_snap"));
+  ASSERT_EQ(0, rbd_clone3(ioctx, name.c_str(), "deep_snap", ioctx,
+            name4.c_str(), opts));
+
+  ASSERT_EQ(4, test_ls(ioctx, 4, name.c_str(), name2.c_str(), name3.c_str(),
+            name4.c_str()));
+  ASSERT_EQ(0, rbd_open(ioctx, name4.c_str(), &image4, NULL));
+  BOOST_SCOPE_EXIT_ALL( (&image4) ) {
+    ASSERT_EQ(0, rbd_close(image4));
+  };
+  ASSERT_EQ(0, rbd_snap_create(image4, "deep_snap"));
+
+  ASSERT_EQ(0, rbd_deep_copy(image4, ioctx, name5.c_str(), opts));
+  ASSERT_EQ(5, test_ls(ioctx, 5, name.c_str(), name2.c_str(), name3.c_str(),
+            name4.c_str(), name5.c_str()));
+  ASSERT_EQ(0, rbd_open(ioctx, name5.c_str(), &image5, NULL));
+  BOOST_SCOPE_EXIT_ALL( (&image5) ) {
+    ASSERT_EQ(0, rbd_close(image5));
+  };
+  ASSERT_EQ(0, rbd_metadata_list(image5, "", 70, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, sum_key_len);
+  ASSERT_EQ(vals_len, sum_value_len);
+
+  for (int i = 1; i <= 70; i++) {
+    key = "key" + stringify(i);
+    val = "value" + stringify(i);
+    ASSERT_EQ(0, rbd_metadata_get(image5, key.c_str(), value, &value_len));
+    ASSERT_STREQ(val.c_str(), value);
+
+    value_len = sizeof(value);
+  }
+
+  ASSERT_EQ(0, rbd_deep_copy_with_progress(image4, ioctx, name6.c_str(), opts,
+                                           print_progress_percent, NULL));
+  ASSERT_EQ(6, test_ls(ioctx, 6, name.c_str(), name2.c_str(), name3.c_str(),
+            name4.c_str(), name5.c_str(), name6.c_str()));
+
+  keys_len = sizeof(keys);
+  vals_len = sizeof(vals);
+  ASSERT_EQ(0, rbd_open(ioctx, name6.c_str(), &image6, NULL));
+  BOOST_SCOPE_EXIT_ALL( (&image6) ) {
+    ASSERT_EQ(0, rbd_close(image6));
+  };
+  ASSERT_EQ(0, rbd_metadata_list(image6, "", 70, keys, &keys_len, vals,
+                                 &vals_len));
+  ASSERT_EQ(keys_len, sum_key_len);
+  ASSERT_EQ(vals_len, sum_value_len);
+
+  for (int i = 1; i <= 70; i++) {
+    key = "key" + stringify(i);
+    val = "value" + stringify(i);
+    ASSERT_EQ(0, rbd_metadata_get(image6, key.c_str(), value, &value_len));
     ASSERT_STREQ(val.c_str(), value);
 
     value_len = sizeof(value);
