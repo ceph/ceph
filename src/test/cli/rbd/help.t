@@ -14,6 +14,7 @@ Skip test on FreeBSD as it generates different output there.
       clone                             Clone a snapshot into a COW child image.
       copy (cp)                         Copy src image to dest.
       create                            Create an empty image.
+      deep copy (deep cp)               Deep copy src image to dest.
       diff                              Print extents that differ since a
                                         previous snap, or image creation.
       disk-usage (du)                   Show disk usage stats for pool, image or
@@ -298,6 +299,53 @@ Skip test on FreeBSD as it generates different output there.
     --journal-object-size arg size of journal objects
     --journal-pool arg        pool for journal objects
     -s [ --size ] arg         image size (in M/G/T) [default: M]
+  
+  Image Features:
+    (*) supports enabling/disabling on existing images
+    (-) supports disabling-only on existing images
+    (+) enabled by default for new images if features not specified
+  
+  rbd help deep copy
+  usage: rbd deep copy [--pool <pool>] [--image <image>] [--snap <snap>] 
+                       [--dest-pool <dest-pool>] [--dest <dest>] 
+                       [--order <order>] [--object-size <object-size>] 
+                       [--image-feature <image-feature>] [--image-shared] 
+                       [--stripe-unit <stripe-unit>] 
+                       [--stripe-count <stripe-count>] [--data-pool <data-pool>] 
+                       [--journal-splay-width <journal-splay-width>] 
+                       [--journal-object-size <journal-object-size>] 
+                       [--journal-pool <journal-pool>] [--no-progress] 
+                       <source-image-or-snap-spec> <dest-image-spec> 
+  
+  Deep copy src image to dest.
+  
+  Positional arguments
+    <source-image-or-snap-spec>  source image or snapshot specification
+                                 (example:
+                                 [<pool-name>/]<image-name>[@<snap-name>])
+    <dest-image-spec>            destination image specification
+                                 (example: [<pool-name>/]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg            source pool name
+    --image arg                  source image name
+    --snap arg                   source snapshot name
+    --dest-pool arg              destination pool name
+    --dest arg                   destination image name
+    --order arg                  object order [12 <= order <= 25]
+    --object-size arg            object size in B/K/M [4K <= object size <= 32M]
+    --image-feature arg          image features
+                                 [layering(+), exclusive-lock(+*),
+                                 object-map(+*), fast-diff(+*), deep-flatten(+-),
+                                 journaling(*)]
+    --image-shared               shared image
+    --stripe-unit arg            stripe unit in B/K/M
+    --stripe-count arg           stripe count
+    --data-pool arg              data pool
+    --journal-splay-width arg    number of active journal objects
+    --journal-object-size arg    size of journal objects
+    --journal-pool arg           pool for journal objects
+    --no-progress                disable progress output
   
   Image Features:
     (*) supports enabling/disabling on existing images

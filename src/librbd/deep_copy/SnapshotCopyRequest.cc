@@ -133,7 +133,9 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
       bool src_unprotected;
       r = m_src_image_ctx->is_snap_unprotected(snap_seq_it->first,
                                                &src_unprotected);
-      ldout(m_cct, 20) << "m_src_image_ctx->is_snap_unprotected("<< snap_seq_it->first << "): r=" << r << ", src_unprotected=" << src_unprotected << dendl;
+      ldout(m_cct, 20) << "m_src_image_ctx->is_snap_unprotected("
+                       << snap_seq_it->first << "): r=" << r
+                       << ", src_unprotected=" << src_unprotected << dendl;
       if (r == -ENOENT) {
         src_unprotected = true;
         r = 0;
