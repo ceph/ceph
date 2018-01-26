@@ -104,7 +104,7 @@ struct FeatureMap {
 
   void dump(Formatter *f) const {
     for (auto& p : m) {
-      f->open_object_section(ceph_entity_type_name(p.first));
+      f->open_array_section(ceph_entity_type_name(p.first));
       for (auto& q : p.second) {
 	f->open_object_section("group");
         std::stringstream ss;
