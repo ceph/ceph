@@ -16,11 +16,12 @@
             setTimeout(refresh, 5000);
 
             rivets.formatters.service_list = function(services) {
-                var strings = [];
+ 	         var result = ""
                 $.each(services, function(i, svc) {
-                    strings.push(svc.type + "." + svc.id);
+	             result += "<a href={{url_prefix}}/perf_counters/" + svc.type + "/" + svc.id + ">" + svc.type + "." + svc.id + "</a>, " ;
                 });
-                return strings.join(", ");
+	         result = result.slice(0, -2);
+                return result;
             };
 
             rivets.bind($("#content"), content_data);
@@ -55,8 +56,7 @@
                     <td>
                         {server.hostname}
                     </td>
-                    <td>
-                        {server.services | service_list}
+                    <td rv-html="server.services | service_list">
                     </td>
                     <td>
                         {server.ceph_version | short_version}
