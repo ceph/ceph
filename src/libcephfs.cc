@@ -100,7 +100,7 @@ public:
     if (ret)
       goto fail;
 
-    default_perms = Client::pick_my_perms(cct);
+    default_perms = Client::default_perms();
     inited = true;
     return 0;
 

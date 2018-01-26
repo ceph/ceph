@@ -265,9 +265,6 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   _dir_vxattrs_name_size = _vxattrs_calcu_name_size(_dir_vxattrs);
   _file_vxattrs_name_size = _vxattrs_calcu_name_size(_file_vxattrs);
 
-  user_id = cct->_conf->client_mount_uid;
-  group_id = cct->_conf->client_mount_gid;
-
   acl_type = NO_ACL;
   if (cct->_conf->client_acl_type == "posix_acl")
     acl_type = POSIX_ACL;
