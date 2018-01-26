@@ -165,6 +165,19 @@ void ceph_userperm_destroy(UserPerm *perm);
 struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount);
 
 /**
+ * Set cmount's default permissions
+ *
+ * @param cmount the mount info handle
+ * @param perm permissions to set to default for mount
+ *
+ * Every cmount has a default set of credentials. This sets copies the given
+ * permissions to the ones in the cmount. Must be done after ceph_init
+ *
+ * Returns 0 on success, and -EISCONN if the cmount is already mounted.
+ */
+int ceph_mount_perms_set(struct ceph_mount_info *cmount, UserPerm *perm);
+
+/**
  * @defgroup libcephfs_h_init Setup and Teardown
  * These are the first and last functions that should be called
  * when using libcephfs.
