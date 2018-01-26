@@ -72,6 +72,16 @@ namespace {
     {"flush", log_flush, METH_VARARGS, "flush"},
     {nullptr, nullptr, 0, nullptr}
   };
+
+#if PY_MAJOR_VERSION >= 3
+  static PyModuleDef ceph_logger_module = {
+    PyModuleDef_HEAD_INIT,
+    "ceph_logger",
+    nullptr,
+    -1,
+    log_methods,
+  };
+#endif
 }
 
 
@@ -159,34 +169,60 @@ int PyModule::load(PyThreadState *pMainThreadState)
       pMyThreadState.set(thread_state);
       // Some python modules do not cope with an unpopulated argv, so lets
       // fake one.  This step also picks up site-packages into sys.path.
+#if PY_MAJOR_VERSION >= 3
+      const wchar_t *argv[] = {L"ceph-mgr"};
+      PySys_SetArgv(1, (wchar_t**)argv);
+#else
       const char *argv[] = {"ceph-mgr"};
       PySys_SetArgv(1, (char**)argv);
+#endif
 
       if (g_conf->daemonize) {
-        auto py_logger = Py_InitModule("ceph_logger", log_methods);
 #if PY_MAJOR_VERSION >= 3
+        auto py_logger = PyModule_Create(&ceph_logger_module);
         PySys_SetObject("stderr", py_logger);
         PySys_SetObject("stdout", py_logger);
 #else
+        auto py_logger = Py_InitModule("ceph_logger", log_methods);
         PySys_SetObject(const_cast<char*>("stderr"), py_logger);
         PySys_SetObject(const_cast<char*>("stdout"), py_logger);
 #endif
       }
 
       // Configure sys.path to include mgr_module_path
-      std::string sys_path = std::string(Py_GetPath()) + ":" + get_site_packages()
-                             + ":" + g_conf->get_val<std::string>("mgr_module_path");
-      dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
-
+      string paths = (":" + get_site_packages() +
+		      ":" + g_conf->get_val<std::string>("mgr_module_path"));
+#if PY_MAJOR_VERSION >= 3
+      wstring sys_path(Py_GetPath() + wstring(begin(paths), end(paths)));
+      PySys_SetPath(const_cast<wchar_t*>(sys_path.c_str()));
+      dout(10) << "Computed sys.path '"
+	       << string(begin(sys_path), end(sys_path)) << "'" << dendl;
+#else
+      string sys_path(Py_GetPath() + paths);
       PySys_SetPath(const_cast<char*>(sys_path.c_str()));
+      dout(10) << "Computed sys.path '" << sys_path << "'" << dendl;
+#endif
     }
 
-    PyMethodDef ModuleMethods[] = {
+    static PyMethodDef module_methods[] = {
       {nullptr}
     };
+#if PY_MAJOR_VERSION >= 3
+    static PyModuleDef ceph_module_def = {
+      PyModuleDef_HEAD_INIT,
+      "ceph_module",
+      nullptr,
+      -1,
+      module_methods,
+    };
+#endif
 
     // Initialize module
-    PyObject *ceph_module = Py_InitModule("ceph_module", ModuleMethods);
+#if PY_MAJOR_VERSION >= 3
+    PyObject *ceph_module = PyModule_Create(&ceph_module_def);
+#else
+    PyObject *ceph_module = Py_InitModule("ceph_module", module_methods);
+#endif
     assert(ceph_module != nullptr);
 
     auto load_class = [ceph_module](const char *name, PyTypeObject *type)
