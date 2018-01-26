@@ -1035,11 +1035,22 @@ rm -rf %{buildroot}
 %endif
 %{_unitdir}/ceph-disk@.service
 %{_unitdir}/ceph.target
+%if 0%{with python2}
 %{python_sitelib}/ceph_detect_init*
 %{python_sitelib}/ceph_disk*
+%else
+%{python3_sitelib}/ceph_detect_init*
+%{python3_sitelib}/ceph_disk*
+%endif
+%if 0%{with python2}
 %dir %{python_sitelib}/ceph_volume
 %{python_sitelib}/ceph_volume/*
 %{python_sitelib}/ceph_volume-*
+%else
+%dir %{python3_sitelib}/ceph_volume
+%{python3_sitelib}/ceph_volume/*
+%{python3_sitelib}/ceph_volume-*
+%endif
 %{_mandir}/man8/ceph-deploy.8*
 %{_mandir}/man8/ceph-detect-init.8*
 %{_mandir}/man8/ceph-create-keys.8*
