@@ -42,6 +42,7 @@ import grp
 import textwrap
 import glob
 
+
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
@@ -1662,15 +1663,15 @@ class Device(object):
                 return PTYPE['regular']['lockbox']['tobe']
         if self.ptype_map is None:
             partition = DevicePartition.factory(
-                path=self.path, dev=None, args=self.args)
+                path=self.path, dev=None, name=name, args=self.args)
             self.ptype_map = partition.ptype_map
         return self.ptype_map[name]['tobe']
 
-    def get_partition(self, num):
+    def get_partition(self, num, name):
         if num not in self.partitions:
             dev = get_partition_dev(self.path, num)
             partition = DevicePartition.factory(
-                path=self.path, dev=dev, args=self.args)
+                path=self.path, dev=dev, name=name, args=self.args)
             partition.set_partition_number(num)
             self.partitions[num] = partition
         return self.partitions[num]
@@ -1731,8 +1732,8 @@ class DevicePartition(object):
 
     @staticmethod
     @retry(OSError)
-    def factory(path, dev, args):
-        dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
+    def factory(path, dev, name, args):
+        dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, args)
         if ((path is not None and is_mpath(path)) or
                 (dev is not None and is_mpath(dev))):
             partition = DevicePartitionMultipath(args)
@@ -1759,7 +1760,7 @@ class DevicePartitionCrypt(DevicePartition):
         self.osd_dm_key = None
         self.cryptsetup_parameters = CryptHelpers.get_cryptsetup_parameters(
             self.args)
-        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(self.args)
+        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(None, self.args)
         self.dmcrypt_keysize = CryptHelpers.get_dmcrypt_keysize(self.args)
 
     def setup_crypt(self):
@@ -1856,6 +1857,11 @@ class Prepare(object):
             '--dmcrypt',
             action='store_true', default=None,
             help='encrypt DATA and/or JOURNAL devices with dm-crypt',
+        )
+        parser.add_argument(
+            '--journal-non-dmcrypt',
+            action='store_true', default=None,
+            help='do not dmcrypt JOURNAL devices',
         )
         parser.add_argument(
             '--dmcrypt-key-dir',
@@ -2188,7 +2194,9 @@ class PrepareSpace(object):
         self.space_symlink = '/dev/disk/by-partuuid/{uuid}'.format(
             uuid=getattr(self.args, self.name + '_uuid'))
 
-        if self.args.dmcrypt:
+        if 'journal' in self.name and self.args.journal_non_dmcrypt:
+            LOG.info('not encrypting journal')
+        elif self.args.dmcrypt:
             self.space_dmcrypt = self.space_symlink
             self.space_symlink = '/dev/mapper/{uuid}'.format(
                 uuid=getattr(self.args, self.name + '_uuid'))
@@ -2214,7 +2222,7 @@ class PrepareSpace(object):
             size=self.space_size,
             num=num)
 
-        partition = device.get_partition(num)
+        partition = device.get_partition(num, self.name)
 
         LOG.debug('%s is GPT partition %s',
                   self.name.capitalize(),
@@ -2324,7 +2332,7 @@ class CryptHelpers(object):
             cluster=args.cluster,
             variable='osd_dmcrypt_key_size',
         )
-        dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
+        dmcrypt_type = CryptHelpers.get_dmcrypt_type(None, args)
         if dmcrypt_type == 'luks':
             if dmcrypt_keysize_str is None:
                 # As LUKS will hash the 'passphrase' in .luks.key
@@ -2349,7 +2357,10 @@ class CryptHelpers(object):
             return 0
 
     @staticmethod
-    def get_dmcrypt_type(args):
+    def get_dmcrypt_type(name, args):
+        LOG.info(name)
+        if 'journal' in str(name) and hasattr(args, 'dmcrypt') and args.dmcrypt and hasattr(args, 'journal_non_dmcrypt') and args.journal_non_dmcrypt:
+            return None
         if hasattr(args, 'dmcrypt') and args.dmcrypt:
             dmcrypt_type = get_conf(
                 cluster=args.cluster,
@@ -2404,7 +2415,7 @@ class Lockbox(object):
                                      name='lockbox',
                                      num=partition_number,
                                      size=10)  # MB
-        return self.device.get_partition(partition_number)
+        return self.device.get_partition(partition_number, 'lockbox')
 
     def set_or_create_partition(self):
         if is_partition(self.args.lockbox):
@@ -2715,7 +2726,7 @@ class PrepareData(object):
                                 name='data',
                                 num=partition_number,
                                 size=partition_size)
-        return device.get_partition(partition_number)
+        return device.get_partition(partition_number, 'data')
 
     def set_data_partition(self):
         if is_partition(self.args.data):
@@ -3547,7 +3558,7 @@ def main_activate_lockbox(args):
 
 def main_activate_lockbox_protected(args):
     partition = DevicePartition.factory(
-        path=None, dev=args.path, args=args)
+        path=None, dev=args.path, name='lockbox', args=args)
 
     lockbox = Lockbox(args)
     lockbox.set_partition(partition)
