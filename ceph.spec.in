@@ -46,6 +46,12 @@
 %endif
 %endif
 %endif
+%if 0%{?suse_version} >= 1500
+%bcond_with python2
+%global _defined_if_python2_absent 1
+%else
+%bcond_without python2
+%endif
 
 %if %{with selinux}
 # get selinux policy version
@@ -55,6 +61,9 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+# define _python_buildid macro which will expand to the empty string when
+# building with python2
+%global _python_buildid %{?_defined_if_python2_absent:%{python3_pkgversion}}
 
 # unify libexec for all targets
 %global _libexecdir %{_exec_prefix}/lib
@@ -107,19 +116,6 @@ BuildRequires:	sharutils
 BuildRequires:	checkpolicy
 BuildRequires:	selinux-policy-devel
 %endif
-%if 0%{with make_check}
-%if 0%{?fedora} || 0%{?rhel}
-BuildRequires:	python-cherrypy
-BuildRequires:	python-werkzeug
-%endif
-%if 0%{?suse_version}
-BuildRequires:	python-CherryPy
-BuildRequires:	python-Werkzeug
-BuildRequires:	python-numpy-devel
-%endif
-BuildRequires:	python-pecan
-BuildRequires:	socat
-%endif
 BuildRequires:	bc
 BuildRequires:	gperf
 BuildRequires:  cmake
@@ -150,12 +146,15 @@ BuildRequires:	parted
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
-BuildRequires:	python
-BuildRequires:	python-devel
-BuildRequires:	python-nose
-BuildRequires:	python-requests
-BuildRequires:	python-virtualenv
+BuildRequires:	python%{_python_buildid}
+BuildRequires:	python%{_python_buildid}-devel
+BuildRequires:	python%{_python_buildid}-nose
+BuildRequires:	python%{_python_buildid}-requests
+BuildRequires:	python%{_python_buildid}-virtualenv
 BuildRequires:	snappy-devel
+%if 0%{with make_check}
+BuildRequires:	socat
+%endif
 BuildRequires:	udev
 BuildRequires:	util-linux
 BuildRequires:	valgrind-devel
@@ -183,9 +182,10 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:  cunit-devel
-BuildRequires:	python-Cython
-BuildRequires:	python-PrettyTable
-BuildRequires:	python-Sphinx
+BuildRequires:	python%{_python_buildid}-base
+BuildRequires:	python%{_python_buildid}-Cython
+BuildRequires:	python%{_python_buildid}-PrettyTable
+BuildRequires:	python%{_python_buildid}-Sphinx
 BuildRequires:  rdma-core-devel
 %endif
 %if 0%{?fedora} || 0%{?rhel}
@@ -199,9 +199,9 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-BuildRequires:	Cython
-BuildRequires:	python-prettytable
-BuildRequires:	python-sphinx
+BuildRequires:	Cython%{_python_buildid}
+BuildRequires:	python%{_python_buildid}-prettytable
+BuildRequires:	python%{_python_buildid}-sphinx
 %endif
 # python34-... for RHEL, python3-... for all other supported distros
 %if 0%{?rhel}
@@ -212,6 +212,20 @@ BuildRequires:	python34-Cython
 BuildRequires:	python3-devel
 BuildRequires:	python3-setuptools
 BuildRequires:	python3-Cython
+%endif
+# distro-conditional make check dependencies
+%if 0%{with make_check}
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-pecan
+BuildRequires:	python%{_python_buildid}-werkzeug
+%endif
+%if 0%{?suse_version}
+BuildRequires:	python%{_python_buildid}-CherryPy
+BuildRequires:	python%{_python_buildid}-Werkzeug
+BuildRequires:	python%{_python_buildid}-pecan
+BuildRequires:	python%{_python_buildid}-numpy-devel
+%endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
 %if %{with lttng}
@@ -256,16 +270,15 @@ Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
 Requires:      ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
-Requires:      python
-Requires:      python-requests
-Requires:      python-setuptools
-Requires:      grep
-Requires:      xfsprogs
-Requires:      logrotate
-Requires:      util-linux
 Requires:      cryptsetup
 Requires:      findutils
+Requires:      grep
+Requires:      logrotate
 Requires:      psmisc
+Requires:      python%{_python_buildid}-requests
+Requires:      python%{_python_buildid}-setuptools
+Requires:      util-linux
+Requires:      xfsprogs
 Requires:      which
 %if 0%{?suse_version}
 Recommends:    ntp-daemon
@@ -281,17 +294,18 @@ Group:		System/Filesystems
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-rbd = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-cephfs = %{_epoch_prefix}%{version}-%{release}
-Requires:	python-rgw = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-cephfs = %{_epoch_prefix}%{version}-%{release}
+Requires:	python%{_python_buildid}-rgw = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
-Requires:	python-prettytable
+Requires:	python%{_python_buildid}-prettytable
+Requires:	python%{_python_buildid}-requests
 %endif
 %if 0%{?suse_version}
-Requires:	python-PrettyTable
+Requires:	python%{_python_buildid}-PrettyTable
+Requires:	python%{_python_buildid}-requests
 %endif
-Requires:	python-requests
 %{?systemd_requires}
 %if 0%{?suse_version}
 Requires(pre):	pwdutils
@@ -319,10 +333,10 @@ Group:		System/Filesystems
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 # For ceph-rest-api
 %if 0%{?fedora} || 0%{?rhel}
-Requires:      python-flask
+Requires:      python%{_python_buildid}-flask
 %endif
 %if 0%{?suse_version}
-Requires:      python-Flask
+Requires:      python%{_python_buildid}-Flask
 %endif
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
@@ -337,19 +351,20 @@ Group:          System/Filesystems
 %endif
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
-Requires:       python-cherrypy
-Requires:       python-jinja2
-Requires:       python-werkzeug
-Requires:       pyOpenSSL
+Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-jinja2
+Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-werkzeug
+Requires:       pyOpenSSL%{_python_buildid}
 %endif
 %if 0%{?suse_version}
-Requires: 	python-CherryPy
-Requires:       python-Jinja2
-Requires:       python-Werkzeug
-Requires:       python-pyOpenSSL
-Recommends:     python-influxdb
+Requires:       python%{_python_buildid}-CherryPy
+Requires:       python%{_python_buildid}-Jinja2
+Requires:       python%{_python_buildid}-Werkzeug
+Requires:       python%{_python_buildid}-pecan
+Requires:       python%{_python_buildid}-pyOpenSSL
+Recommends:     python%{_python_buildid}-influxdb
 %endif
-Requires:       python-pecan
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
@@ -500,10 +515,11 @@ Obsoletes:	librgw2-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS gateway client library.
 
+%if 0%{with python2}
 %package -n python-rgw
 Summary:	Python 2 libraries for the RADOS gateway
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
@@ -511,11 +527,12 @@ Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rgw
 This package contains Python 2 libraries for interacting with Cephs RADOS
 gateway.
+%endif
 
 %package -n python%{python3_pkgversion}-rgw
 Summary:	Python 3 libraries for the RADOS gateway
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
@@ -523,21 +540,23 @@ Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{relea
 This package contains Python 3 libraries for interacting with Cephs RADOS
 gateway.
 
+%if 0%{with python2}
 %package -n python-rados
 Summary:	Python 2 libraries for the RADOS object store
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rados
 This package contains Python 2 libraries for interacting with Cephs RADOS
 object store.
+%endif
 
 %package -n python%{python3_pkgversion}-rados
 Summary:	Python 3 libraries for the RADOS object store
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	python%{python3_pkgversion}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
@@ -602,10 +621,11 @@ Obsoletes:	librbd1-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use RADOS block device.
 
+%if 0%{with python2}
 %package -n python-rbd
 Summary:	Python 2 libraries for the RADOS block device
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
@@ -613,11 +633,12 @@ Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rbd
 This package contains Python 2 libraries for interacting with Cephs RADOS
 block device.
+%endif
 
 %package -n python%{python3_pkgversion}-rbd
 Summary:	Python 3 libraries for the RADOS block device
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
@@ -655,10 +676,11 @@ Obsoletes:	libcephfs2-devel < %{_epoch_prefix}%{version}-%{release}
 This package contains libraries and headers needed to develop programs
 that use Cephs distributed file system.
 
+%if 0%{with python2}
 %package -n python-cephfs
 Summary:	Python 2 libraries for Ceph distributed file system
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
@@ -668,11 +690,12 @@ Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-cephfs
 This package contains Python 2 libraries for interacting with Cephs distributed
 file system.
+%endif
 
 %package -n python%{python3_pkgversion}-cephfs
 Summary:	Python 3 libraries for Ceph distributed file system
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
@@ -680,16 +703,18 @@ Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{relea
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
 
+%if 0%{with python2}
 %package -n python%{python3_pkgversion}-ceph-argparse
 Summary:	Python 3 utility libraries for Ceph CLI
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 %description -n python%{python3_pkgversion}-ceph-argparse
 This package contains types and routines for Python 3 used by the Ceph CLI as
 well as the RESTful interface. These have to do with querying the daemons for
 command-description information, validating user command input against those
 descriptions, and submitting the command to the appropriate daemon.
+%endif
 
 %if 0%{with ceph_test_package}
 %package -n ceph-test
@@ -775,10 +800,11 @@ populated file-systems.
 
 %endif
 
+%if 0%{with python2}
 %package -n python-ceph-compat
 Summary:	Compatibility package for Cephs python libraries
 %if 0%{?suse_version}
-Group:		Development/Languages/Python
+Group:		Development/Libraries/Python
 %endif
 Obsoletes:	python-ceph
 Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
@@ -791,6 +817,7 @@ This is a compatibility package to accommodate python-ceph split into
 python-rados, python-rbd, python-rgw and python-cephfs. Packages still
 depending on python-ceph should be fixed to depend on python-rados,
 python-rbd, python-rgw or python-cephfs instead.
+%endif
 
 #################################################################################
 # common
@@ -859,6 +886,12 @@ cmake .. \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
     -DWITH_PYTHON3=ON \
+%if %{with python2}
+    -DWITH_PYTHON2=ON \
+%else
+    -DWITH_PYTHON2=OFF \
+    -DMGR_PYTHON_VERSION=3 \
+%endif
     -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
@@ -1124,8 +1157,15 @@ fi
 %config %{_sysconfdir}/bash_completion.d/radosgw-admin
 %config(noreplace) %{_sysconfdir}/ceph/rbdmap
 %{_unitdir}/rbdmap.service
+%if 0%{with python2}
 %{python_sitelib}/ceph_argparse.py*
 %{python_sitelib}/ceph_daemon.py*
+%else
+%{python3_sitelib}/ceph_argparse.py
+%{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
+%{python3_sitelib}/ceph_daemon.py
+%{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
+%endif
 %dir %{_udevrulesdir}
 %{_udevrulesdir}/50-rbd.rules
 %attr(3770,ceph,ceph) %dir %{_localstatedir}/log/ceph/
@@ -1271,7 +1311,12 @@ fi
 %{_bindir}/ceph-monstore-tool
 %{_mandir}/man8/ceph-mon.8*
 %{_mandir}/man8/ceph-rest-api.8*
+%if 0%{with python2}
 %{python_sitelib}/ceph_rest_api.py*
+%else
+%{python3_sitelib}/ceph_rest_api.py
+%{python3_sitelib}/__pycache__/ceph_rest_api.cpython*.py*
+%endif
 %{_unitdir}/ceph-mon@.service
 %{_unitdir}/ceph-mon.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mon
@@ -1547,9 +1592,11 @@ fi
 %{_bindir}/librados-config
 %{_mandir}/man8/librados-config.8*
 
+%if 0%{with python2}
 %files -n python-rados
 %{python_sitearch}/rados.so
 %{python_sitearch}/rados-*.egg-info
+%endif
 
 %files -n python%{python3_pkgversion}-rados
 %{python3_sitearch}/rados.cpython*.so
@@ -1601,17 +1648,21 @@ fi
 %{_includedir}/rados/rgw_file.h
 %{_libdir}/librgw.so
 
+%if 0%{with python2}
 %files -n python-rgw
 %{python_sitearch}/rgw.so
 %{python_sitearch}/rgw-*.egg-info
+%endif
 
 %files -n python%{python3_pkgversion}-rgw
 %{python3_sitearch}/rgw.cpython*.so
 %{python3_sitearch}/rgw-*.egg-info
 
+%if 0%{with python2}
 %files -n python-rbd
 %{python_sitearch}/rbd.so
 %{python_sitearch}/rbd-*.egg-info
+%endif
 
 %files -n python%{python3_pkgversion}-rbd
 %{python3_sitearch}/rbd.cpython*.so
@@ -1630,10 +1681,12 @@ fi
 %{_includedir}/cephfs/ceph_statx.h
 %{_libdir}/libcephfs.so
 
+%if 0%{with python2}
 %files -n python-cephfs
 %{python_sitearch}/cephfs.so
 %{python_sitearch}/cephfs-*.egg-info
 %{python_sitelib}/ceph_volume_client.py*
+%endif
 
 %files -n python%{python3_pkgversion}-cephfs
 %{python3_sitearch}/cephfs.cpython*.so
@@ -1641,11 +1694,13 @@ fi
 %{python3_sitelib}/ceph_volume_client.py
 %{python3_sitelib}/__pycache__/ceph_volume_client.cpython*.py*
 
+%if 0%{with python2}
 %files -n python%{python3_pkgversion}-ceph-argparse
 %{python3_sitelib}/ceph_argparse.py
 %{python3_sitelib}/__pycache__/ceph_argparse.cpython*.py*
 %{python3_sitelib}/ceph_daemon.py
 %{python3_sitelib}/__pycache__/ceph_daemon.cpython*.py*
+%endif
 
 %if 0%{with ceph_test_package}
 %files -n ceph-test
@@ -1793,9 +1848,11 @@ exit 0
 
 %endif # with selinux
 
+%if 0%{with python2}
 %files -n python-ceph-compat
 # We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
 # actually build this meta package.
+%endif
 
 
 %changelog
