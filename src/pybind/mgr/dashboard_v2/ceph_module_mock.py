@@ -23,10 +23,10 @@ class BaseMgrModule(object):
         self.config_key_map = {}
 
     def _ceph_get_version(self):
-        return "ceph-13.0.0"
+        return 'ceph-13.0.0'
 
     def _ceph_get_mgr_id(self):
-        return "x"
+        return 'x'
 
     def _ceph_set_config(self, key, value):
         self.config_key_map[key] = value

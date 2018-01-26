@@ -46,15 +46,15 @@ class Auth(RESTController):
             cherrypy.session.regenerate()
             cherrypy.session[Auth.SESSION_KEY] = username
             cherrypy.session[Auth.SESSION_KEY_TS] = now
-            self._log.debug("Login successful")
+            self._log.debug('Login successful')
             return {'username': username}
 
         cherrypy.response.status = 403
-        self._log.debug("Login fail")
+        self._log.debug('Login failed')
         return {'detail': 'Invalid credentials'}
 
     def bulk_delete(self):
-        self._log.debug("Logout successful")
+        self._log.debug('Logout successful')
         cherrypy.session[Auth.SESSION_KEY] = None
         cherrypy.session[Auth.SESSION_KEY_TS] = None
 
@@ -83,7 +83,7 @@ class Auth(RESTController):
             if username_ts and float(username_ts) < (now - expires):
                 cherrypy.session[Auth.SESSION_KEY] = None
                 cherrypy.session[Auth.SESSION_KEY_TS] = None
-                module.log.debug("Session expired.")
+                module.log.debug('Session expired')
                 raise cherrypy.HTTPError(401,
                                          'Session expired. You are not '
                                          'authorized to access that resource')

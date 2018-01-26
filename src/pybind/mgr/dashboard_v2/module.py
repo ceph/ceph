@@ -31,11 +31,11 @@ class Module(MgrModule):
 
     COMMANDS = [
         {
-            "cmd": "dashboard set-login-credentials "
-                   "name=username,type=CephString "
-                   "name=password,type=CephString",
-            "desc": "Set the login credentials",
-            "perm": "w"
+            'cmd': 'dashboard set-login-credentials '
+                   'name=username,type=CephString '
+                   'name=password,type=CephString',
+            'desc': 'Set the login credentials',
+            'perm': 'w'
         }
     ]
 
@@ -47,7 +47,7 @@ class Module(MgrModule):
                 'no server_addr configured; '
                 'try "ceph config-key put mgr/{}/{}/server_addr <ip>"'
                 .format(self.module_name, self.get_mgr_id()))
-        self.log.info("server_addr: %s server_port: %s", server_addr,
+        self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
 
         if not in_unittest:
@@ -55,34 +55,34 @@ class Module(MgrModule):
                 'server.socket_host': server_addr,
                 'server.socket_port': int(server_port),
             })
-        cherrypy.tools.autenticate = cherrypy.Tool('before_handler',
-                                                   Auth.check_auth)
+        cherrypy.tools.authenticate = cherrypy.Tool('before_handler',
+                                                    Auth.check_auth)
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         fe_dir = os.path.join(current_dir, 'frontend/dist')
         config = {
             '/': {
-                "tools.staticdir.on": True,
+                'tools.staticdir.on': True,
                 'tools.staticdir.dir': fe_dir,
-                'tools.staticdir.index': "index.html"
+                'tools.staticdir.index': 'index.html'
             }
         }
 
-        cherrypy.tree.mount(Module.ApiRoot(self), "/api")
+        cherrypy.tree.mount(Module.ApiRoot(self), '/api')
         cherrypy.tree.mount(Module.StaticRoot(), '/', config=config)
 
     def serve(self):
         self.configure_cherrypy()
 
         cherrypy.engine.start()
-        self.log.info("Waiting for engine...")
+        self.log.info('Waiting for engine...')
         cherrypy.engine.block()
-        self.log.info("Engine done.")
+        self.log.info('Engine done')
 
     def shutdown(self):
-        self.log.info("Stopping server...")
+        self.log.info('Stopping server...')
         cherrypy.engine.exit()
-        self.log.info("Stopped server")
+        self.log.info('Stopped server')
 
     def handle_command(self, cmd):
         if cmd['prefix'] == 'dashboard set-login-credentials':
@@ -95,9 +95,9 @@ class Module(MgrModule):
     class ApiRoot(object):
         def __init__(self, mgrmod):
             ctrls = load_controllers(mgrmod)
-            mgrmod.log.debug("loaded controllers: {}".format(ctrls))
+            mgrmod.log.debug('Loaded controllers: {}'.format(ctrls))
             for ctrl in ctrls:
-                mgrmod.log.info("adding controller: {} -> /api/{}"
+                mgrmod.log.info('Adding controller: {} -> /api/{}'
                                 .format(ctrl.__name__, ctrl._cp_path_))
                 ins = ctrl()
                 setattr(Module.ApiRoot, ctrl._cp_path_, ins)

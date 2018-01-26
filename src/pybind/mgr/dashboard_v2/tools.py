@@ -19,12 +19,12 @@ def ApiController(path):
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {
                 'tools.sessions.on': True,
-                'tools.autenticate.on': False
+                'tools.authenticate.on': False
             }
         else:
             cls._cp_config['tools.sessions.on'] = True
-            if 'tools.autenticate.on' not in cls._cp_config:
-                cls._cp_config['tools.autenticate.on'] = False
+            if 'tools.authenticate.on' not in cls._cp_config:
+                cls._cp_config['tools.authenticate.on'] = False
         return cls
     return decorate
 
@@ -33,10 +33,10 @@ def AuthRequired(enabled=True):
     def decorate(cls):
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = {
-                'tools.autenticate.on': enabled
+                'tools.authenticate.on': enabled
             }
         else:
-            cls._cp_config['tools.autenticate.on'] = enabled
+            cls._cp_config['tools.authenticate.on'] = enabled
         return cls
     return decorate
 
@@ -49,7 +49,7 @@ def load_controllers(mgrmodule):
         sys.path.append(mgr_dir)
 
     controllers = []
-    ctrls_path = "{}/controllers".format(dashboard_dir)
+    ctrls_path = '{}/controllers'.format(dashboard_dir)
     mods = [mod for _, mod, _ in pkgutil.iter_modules([ctrls_path])]
     for mod_name in mods:
         mod = importlib.import_module('.controllers.{}'.format(mod_name),
