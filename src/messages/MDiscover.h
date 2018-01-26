@@ -24,6 +24,9 @@
 
 class MDiscover : public Message {
 private:
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
+
   inodeno_t       base_ino;          // 1 -> root
   frag_t          base_dir_frag;
 
@@ -47,7 +50,7 @@ private:
   void set_base_dir_frag(frag_t f) { base_dir_frag = f; }
 
 protected:
-  MDiscover() : Message{MSG_MDS_DISCOVER} { }
+  MDiscover() : Message(MSG_MDS_DISCOVER, HEAD_VERSION, COMPAT_VERSION) { }
   MDiscover(inodeno_t base_ino_,
 	    frag_t base_frag_,
 	    snapid_t s,

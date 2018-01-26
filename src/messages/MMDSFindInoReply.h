@@ -19,13 +19,15 @@
 #include "include/filepath.h"
 
 class MMDSFindInoReply : public Message {
+  static const int HEAD_VERSION = 1;
+  static const int COMPAT_VERSION = 1;
 public:
   ceph_tid_t tid = 0;
   filepath path;
 
 protected:
-  MMDSFindInoReply() : Message{MSG_MDS_FINDINOREPLY} {}
-  MMDSFindInoReply(ceph_tid_t t) : Message{MSG_MDS_FINDINOREPLY}, tid(t) {}
+  MMDSFindInoReply() : Message{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION} {}
+  MMDSFindInoReply(ceph_tid_t t) : Message{MSG_MDS_FINDINOREPLY, HEAD_VERSION, COMPAT_VERSION}, tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:

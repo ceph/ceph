@@ -662,26 +662,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void encode_store(bufferlist& bl, uint64_t features);
   void decode_store(bufferlist::const_iterator& bl);
 
-  void encode_replica(mds_rank_t rep, bufferlist& bl, uint64_t features, bool need_recover) {
-    ceph_assert(is_auth());
-    
-    __u32 nonce = add_replica(rep);
-    using ceph::encode;
-    encode(nonce, bl);
-    
-    _encode_base(bl, features);
-    _encode_locks_state_for_replica(bl, need_recover);
-  }
-  void decode_replica(bufferlist::const_iterator& p, bool is_new) {
-    using ceph::decode;
-    __u32 nonce;
-    decode(nonce, p);
-    replica_nonce = nonce;
-    
-    _decode_base(p);
-    _decode_locks_state(p, is_new);
-  }
-
   void add_dir_waiter(frag_t fg, MDSContext *c);
   void take_dir_waiting(frag_t fg, MDSContext::vec& ls);
   bool is_waiting_for_dir(frag_t fg) {
@@ -697,7 +677,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void _decode_locks_full(bufferlist::const_iterator& p);
   void _encode_locks_state_for_replica(bufferlist& bl, bool need_recover);
   void _encode_locks_state_for_rejoin(bufferlist& bl, int rep);
-  void _decode_locks_state(bufferlist::const_iterator& p, bool is_new);
+  void _decode_locks_state_for_replica(bufferlist::const_iterator& p, bool is_new);
   void _decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters,
 			    std::list<SimpleLock*>& eval_locks, bool survivor);
 
@@ -721,8 +701,27 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   SimpleLock* get_lock(int type) override;
 
   void set_object_info(MDSCacheObjectInfo &info) override;
+
   void encode_lock_state(int type, bufferlist& bl) override;
   void decode_lock_state(int type, const bufferlist& bl) override;
+  void encode_lock_iauth(bufferlist& bl);
+  void decode_lock_iauth(bufferlist::const_iterator& p);
+  void encode_lock_ilink(bufferlist& bl);
+  void decode_lock_ilink(bufferlist::const_iterator& p);
+  void encode_lock_idft(bufferlist& bl);
+  void decode_lock_idft(bufferlist::const_iterator& p);
+  void encode_lock_ifile(bufferlist& bl);
+  void decode_lock_ifile(bufferlist::const_iterator& p);
+  void encode_lock_inest(bufferlist& bl);
+  void decode_lock_inest(bufferlist::const_iterator& p);
+  void encode_lock_ixattr(bufferlist& bl);
+  void decode_lock_ixattr(bufferlist::const_iterator& p);
+  void encode_lock_isnap(bufferlist& bl);
+  void decode_lock_isnap(bufferlist::const_iterator& p);
+  void encode_lock_iflock(bufferlist& bl);
+  void decode_lock_iflock(bufferlist::const_iterator& p);
+  void encode_lock_ipolicy(bufferlist& bl);
+  void decode_lock_ipolicy(bufferlist::const_iterator& p);
 
   void _finish_frag_update(CDir *dir, MutationRef& mut);
 

@@ -395,31 +395,6 @@ bool CDentry::is_freezing() const
   return dir->is_freezing();
 }
 
-void CDentry::decode_replica(bufferlist::const_iterator& p, bool is_new)
-{
-  __u32 nonce;
-  decode(nonce, p);
-  replica_nonce = nonce;
-  
-  decode(first, p);
-
-  inodeno_t rino;
-  unsigned char rdtype;
-  decode(rino, p);
-  decode(rdtype, p);
-  lock.decode_state(p, is_new);
-
-  bool need_recover;
-  decode(need_recover, p);
-
-  if (is_new) {
-    if (rino)
-      dir->link_remote_inode(this, rino, rdtype);
-    if (need_recover)
-      lock.mark_need_recover();
-  }
-}
-
 // ----------------------------
 // locking
 
