@@ -3504,6 +3504,8 @@ void Client::queue_cap_snap(Inode *in, SnapContext& old_snapc)
     capsnap.btime = in->btime;
     capsnap.xattrs = in->xattrs;
     capsnap.xattr_version = in->xattr_version;
+    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
+    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
  
     if (used & CEPH_CAP_FILE_WR) {
       ldout(cct, 10) << "queue_cap_snap WR used on " << *in << dendl;
@@ -3525,8 +3527,13 @@ void Client::finish_cap_snap(Inode *in, CapSnap &capsnap, int used)
   capsnap.ctime = in->ctime;
   capsnap.time_warp_seq = in->time_warp_seq;
   capsnap.change_attr = in->change_attr;
-
   capsnap.dirty |= in->caps_dirty();
+
+  /* Only reset it if it wasn't set before */
+  if (capsnap.cap_dirtier_uid == -1) {
+    capsnap.cap_dirtier_uid = in->cap_dirtier_uid;
+    capsnap.cap_dirtier_gid = in->cap_dirtier_gid;
+  }
 
   if (capsnap.dirty & CEPH_CAP_FILE_WR) {
     capsnap.inline_data = in->inline_data;
@@ -3586,10 +3593,8 @@ void Client::flush_snaps(Inode *in, bool all_again)
 
     MClientCaps *m = new MClientCaps(CEPH_CAP_OP_FLUSHSNAP, in->ino, in->snaprealm->ino, 0, mseq,
 				     cap_epoch_barrier);
-    if (user_id >= 0)
-      m->caller_uid = user_id;
-    if (group_id >= 0)
-      m->caller_gid = group_id;
+    m->caller_uid = capsnap.cap_dirtier_uid;
+    m->caller_gid = capsnap.cap_dirtier_gid;
 
     m->set_client_tid(capsnap.flush_tid);
     m->head.snap_follows = p.first;
