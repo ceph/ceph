@@ -1021,17 +1021,17 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
-  if (op->op)
+  if (op->op) {
     op->op->pg_trace.event("issue replication ops");
-
-  if (parent->get_actingbackfill_shards().size() > 1) {
-    ostringstream ss;
-    set<pg_shard_t> replicas = parent->get_actingbackfill_shards();
-    replicas.erase(parent->whoami_shard());
-    ss << "waiting for subops from " << replicas;
-    if (op->op)
+    if (parent->get_actingbackfill_shards().size() > 1) {
+      ostringstream ss;
+      set<pg_shard_t> replicas = parent->get_actingbackfill_shards();
+      replicas.erase(parent->whoami_shard());
+      ss << "waiting for subops from " << replicas;
       op->op->mark_sub_op_sent(ss.str());
+    }
   }
+
   for (set<pg_shard_t>::const_iterator i =
 	 parent->get_actingbackfill_shards().begin();
        i != parent->get_actingbackfill_shards().end();
