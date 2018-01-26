@@ -4,24 +4,12 @@ from __future__ import absolute_import
 
 import json
 
-import cherrypy
 from cherrypy.test import helper
 
 from ..module import Module
-from ..tools import load_controller
 
 
-class ApiControllerTestCase(helper.CPWebCase):
-    @staticmethod
-    def setup_test(controllers, authentication=True):
-        module = Module('dashboard', None, None)
-        ApiControllerTestCase._mgr_module = module
-        for ctrl in controllers:
-            cls = load_controller(module, ctrl)
-            if not authentication:
-                cls._cp_config['tools.autenticate.on'] = False
-            cherrypy.tree.mount(cls(), '/api/{}'.format(cls._cp_path_))
-
+class RequestHelper(object):
     def _request(self, url, method, data=None):
         if not data:
             b = None
@@ -43,3 +31,19 @@ class ApiControllerTestCase(helper.CPWebCase):
 
     def _put(self, url, data=None):
         self._request(url, 'PUT', data)
+
+    def assertJsonBody(self, data):
+        self.assertBody(json.dumps(data))
+
+
+class ControllerTestCase(helper.CPWebCase, RequestHelper):
+    @classmethod
+    def setup_server(cls):
+        module = Module('dashboard', None, None)
+        cls._mgr_module = module
+        module.configure_cherrypy(True)
+        cls.setup_test()
+
+    @classmethod
+    def setup_test(cls):
+        pass
