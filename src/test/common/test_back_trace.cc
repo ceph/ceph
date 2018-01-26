@@ -32,13 +32,16 @@ TEST(BackTrace, Basic) {
   const unsigned lineno = 1;
   ASSERT_GT(lines.size(), lineno);
   ASSERT_EQ(lines[0].find(pretty_version_to_str()), 1U);
-  std::regex e{"^ 1: "
 #ifdef __FreeBSD__
-		 "<foo.*>\\s"
-		 "at\\s.*$"};
+  std::regex e{"^ 1: "
+               "<foo.*>\\s"
+               "at\\s.*$"};
 #else
-		 "\\(foo.*\\)\\s"
-		 "\\[0x[[:xdigit:]]+\\]$"};
+  std::regex e{"^ 1: " /*index*/
+               ".*" /*object file name*/
+               "\\(foo.*\\)\\s" /*function name, with offset*/
+               "\\[0x[[:xdigit:]]+\\]" /*load address, absolute*/
+               "$"};
 #endif
   EXPECT_TRUE(std::regex_match(lines[lineno], e));
 }

@@ -58,6 +58,36 @@ void install_sighandler(int signum, signal_handler_t handler, int flags)
     char message[SIG2STR_MAX];
     sig2str(signum,message);
     snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
+            "%d when trying to install a signal handler for %s\n",
+             ret, message);
+#else
+    snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
+            "%d when trying to install a signal handler for %s\n",
+             ret, sig_str(signum));
+#endif
+    dout_emergency(buf);
+    exit(1);
+  }
+}
+
+void install_sighandler(int signum, signal_action_t action, int flags)
+{
+  int ret;
+  struct sigaction oldact;
+  struct sigaction act;
+  memset(&act, 0, sizeof(act));
+
+  act.sa_sigaction = action;
+  sigemptyset(&act.sa_mask);
+  act.sa_flags = flags | SA_SIGINFO;
+
+  ret = sigaction(signum, &act, &oldact);
+  if (ret != 0) {
+    char buf[1024];
+#if defined(__sun)
+    char message[SIG2STR_MAX];
+    sig2str(signum,message);
+    snprintf(buf, sizeof(buf), "install_sighandler: sigaction returned "
 	    "%d when trying to install a signal handler for %s\n",
 	     ret, message);
 #else
@@ -94,7 +124,6 @@ static void reraise_fatal(int signum)
   }
   exit(1);
 }
-
 
 // /etc/os-release looks like
 //
@@ -138,7 +167,59 @@ static int parse_from_os_release(
   return 0;
 }
 
-static void handle_fatal_signal(int signum)
+#ifdef __x86_64__
+void handler_dump_arch(std::ostream& out, siginfo_t* info, ucontext_t* ctx) {
+  struct {
+    uint32_t no;
+    char name[4];
+  } dump_registers[] = {
+      {REG_RAX, "rax"},
+      {REG_RBX, "rbx"},
+      {REG_RCX, "rcx"},
+      {REG_RDX, "rdx"},
+      {REG_RSI, "rsi"},
+      {REG_RDI, "rdi"},
+      {REG_RSP, "rsp"},
+      {REG_RBP, "rbp"},
+      {REG_R8, "r8 "},
+      {REG_R9, "r9 "},
+      {REG_R10, "r10"},
+      {REG_R11, "r11"},
+      {REG_R12, "r12"},
+      {REG_R13, "r13"},
+      {REG_R14, "r14"},
+      {REG_R15, "r15"},
+      {REG_RIP, "rip"},
+  };
+  for(auto& reg:dump_registers) {
+    int64_t value = ctx->uc_mcontext.gregs[reg.no];
+    if (value < 1e9 && value > -1e9)
+      out << reg.name << " 0x" << std::hex << std::setw(16) << std::setfill('0') << value <<
+	" " << std::setw(0) << std::dec << value << std::endl;
+    else
+      out << reg.name << " 0x" << std::hex << std::setw(16) << std::setfill('0') << value << std::endl;
+  }
+
+#ifdef HAVE_EXECINFO_H
+  void* value = (void*)ctx->uc_mcontext.gregs[REG_RIP];
+
+  char** strings = backtrace_symbols(&value, 1);
+  if (strings) {
+    std::string_view object_elf;
+    std::string function;
+    uint64_t offset;
+    std::tie(object_elf, function, offset) = BackTrace::split_backtrace_line(strings[0]);
+    out << "IP is at " << object_elf << ":" << function <<
+      "+0x" << std::hex << offset << std::dec << std::endl;
+    free(strings);
+  }
+#endif
+}
+#else
+void handler_dump_arch(std::ostream& out, siginfo_t* info, ucontext_t* ctx) {}
+#endif
+
+static void handle_fatal_signal(int signum, siginfo_t* info, void* ctx)
 {
   // This code may itself trigger a SIGSEGV if the heap is corrupt. In that
   // case, SA_RESETHAND specifies that the default signal handler--
@@ -167,6 +248,11 @@ static void handle_fatal_signal(int signum)
   BackTrace bt(1);
   ostringstream oss;
   bt.print(oss);
+
+  if (signum == SIGILL || signum == SIGFPE || signum == SIGSEGV || signum == SIGBUS) {
+    if (info != nullptr && ctx != nullptr)
+      handler_dump_arch(oss, info, (ucontext_t*)ctx);
+  }
   dout_emergency(oss.str());
 
   char base[PATH_MAX] = { 0 };
@@ -279,7 +365,7 @@ static void handle_fatal_signal(int signum)
     // dump to log.  this uses the heap extensively, but we're better
     // off trying than not.
     derr << buf << std::endl;
-    bt.print(*_dout);
+    *_dout << oss.str();
     *_dout << " NOTE: a copy of the executable, or `objdump -rdS <executable>` "
 	   << "is needed to interpret this.\n"
 	   << dendl;
