@@ -4234,7 +4234,7 @@ void RGWCompleteMultipart::execute()
   meta_obj.set_in_extra_data(true);
   meta_obj.index_hash_source = s->object.name;
 
-  auto raw_oid = meta_obj.bucket.bucket_id + "_" + meta_obj.get_object();
+  auto raw_oid = meta_obj.bucket.marker + "_" + meta_obj.get_object();
 
   /*take a cls lock on meta_obj to prevent racing completions (or retries)
     from deleting the parts*/
