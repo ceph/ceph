@@ -67,7 +67,7 @@
 			    <th>Open Sessions</th>
 			</thead>
 			<tr rv-each-mon="in_quorum" style="font-size:15px;height:80px">
-			    <td style="font-weight:bold">{mon.name}</td>
+			    <td style="font-weight:bold"><a rv-href="mon.url_perf">{mon.name}</a></td>
 			    <td>{mon.rank}</td>
 			    <td>{mon.public_addr}</td>
 			    <td><span class="inlinesparkline" style="font-size:30px">{ mon.stats.num_sessions | sparkline_data }</span></td>
@@ -87,7 +87,7 @@
 		    <th>Public Addr</th>
 		</thead>
 		<tr rv-each-mon="out_quorum" class="font-size:15px;height:80px">
-		    <td style="font-weight:bold">{mon.name}</td>
+		    <td style="font-weight:bold"><a rv-href="mon.url_perf">{mon.name}</a></td>
 		    <td>{mon.rank}</td>
 		    <td>{mon.public_addr}</td>
 		</tr>
