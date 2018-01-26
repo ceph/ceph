@@ -97,7 +97,13 @@ struct inconsistent_obj_wrapper;
 
      virtual void failed_push(const list<pg_shard_t> &from, const hobject_t &soid) = 0;
      
+     virtual void finish_degraded_object(const hobject_t& oid) = 0;
      virtual void cancel_pull(const hobject_t &soid) = 0;
+
+     virtual void backfill_add_missing(
+       const hobject_t &oid,
+       eversion_t v
+       ) = 0;
 
      /**
       * Bless a context
