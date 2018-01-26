@@ -58,6 +58,9 @@ public:
 
   bool should_log_open(CInode *in);
 
+  void note_destroyed_inos(uint64_t seq, const vector<inodeno_t>& inos);
+  void trim_destroyed_inos(uint64_t seq);
+
 protected:
   MDSRank *mds;
 
@@ -97,6 +100,9 @@ protected:
   list<MDSInternalContextBase*> waiting_for_prefetch;
   void _open_ino_finish(inodeno_t ino, int r);
   void _prefetch_inodes();
+
+  std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
+  std::set<inodeno_t> destroyed_inos_set;
 
   friend class C_IO_OFT_Load;
   friend class C_IO_OFT_Save;
