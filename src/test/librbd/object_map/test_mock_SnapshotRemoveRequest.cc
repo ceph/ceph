@@ -268,26 +268,44 @@ TEST_F(TestMockObjectMapSnapshotRemoveRequest, ScrubCleanObjects) {
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  librbd::NoOpProgressContext prog_ctx;
+  uint64_t size = 4294967296; // 4GB = 1024 * 4MB
+  ASSERT_EQ(0, resize(ictx, size));
+  
+  // update image objectmap for snap inherit 
+  ceph::BitVector<2> object_map;
+  object_map.resize(1024);
+  for (uint64_t i = 512; i < object_map.size(); ++i) {
+    object_map[i] = i % 2 == 0 ? OBJECT_EXISTS : OBJECT_NONEXISTENT;
+  }
+  
+  C_SaferCond cond_ctx1;
+  {
+    librbd::ObjectMap om(*ictx, ictx->snap_id);
+    RWLock::RLocker owner_locker(ictx->owner_lock);
+    RWLock::WLocker snap_locker(ictx->snap_lock);
+    om.set_object_map(object_map);
+    om.aio_save(&cond_ctx1);
+  }
+  ASSERT_EQ(0, cond_ctx1.wait());
   ASSERT_EQ(0, snap_create(*ictx, "snap1"));
   ASSERT_EQ(0, ictx->state->refresh_if_required());
 
-  uint64_t snap_id = ictx->snap_info.rbegin()->first;
-
-  ceph::BitVector<2> object_map;
-  object_map.resize(1024);
+  // simutate the image objectmap state after creating snap
   for (uint64_t i = 512; i < object_map.size(); ++i) {
     object_map[i] = i % 2 == 0 ? OBJECT_EXISTS_CLEAN : OBJECT_NONEXISTENT;
   }
 
-  C_SaferCond cond_ctx;
+  C_SaferCond cond_ctx2;
+  uint64_t snap_id = ictx->snap_info.rbegin()->first;
   AsyncRequest<> *request = new SnapshotRemoveRequest(
-    *ictx, &object_map, snap_id, &cond_ctx);
+    *ictx, &object_map, snap_id, &cond_ctx2);
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
     RWLock::WLocker snap_locker(ictx->snap_lock);
     request->send();
   }
-  ASSERT_EQ(0, cond_ctx.wait());
+  ASSERT_EQ(0, cond_ctx2.wait());
 
   for (uint64_t i = 512; i < object_map.size(); ++i) {
     ASSERT_EQ(i % 2 == 0 ? OBJECT_EXISTS : OBJECT_NONEXISTENT,
