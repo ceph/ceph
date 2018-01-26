@@ -10067,6 +10067,11 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     projected_log.add(entry);
   }
 
+  for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
+           i != peer_missing.end();
+           ++i) {
+    dout(10) << __func__ << " shard " << i->first << " before missing " << (i->second).get_items() << dendl;
+  }
   for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
        i != async_recovery_targets.end();
        ++i) {
@@ -10074,6 +10079,12 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     for (auto &&entry: ctx->log) {
       peer_missing[*i].add_next_event(entry);
     }
+  }
+
+  for (map<pg_shard_t, pg_missing_t>::iterator i = peer_missing.begin();
+           i != peer_missing.end();
+           ++i) {
+    dout(10) << __func__ << " shard " << i->first << " after add next missing " << (i->second).get_items() << dendl;
   }
 
   for (set<pg_shard_t>::const_iterator i = acting_recovery_backfill.begin();
