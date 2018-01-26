@@ -425,6 +425,83 @@ function TEST_recovery_erasure_remapped() {
 
 main osd-recovery-stats "$@"
 
+function TEST_recovery_multi() {
+    local dir=$1
+
+    local osds=6
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for i in $(seq 0 $(expr $osds - 1))
+    do
+      run_osd $dir $i || return 1
+    done
+
+    create_pool $poolname 1 1
+    ceph osd pool set $poolname size 3
+    ceph osd pool set $poolname min_size 1
+
+    wait_for_clean || return 1
+
+    rados -p $poolname put obj1 /dev/null
+
+    local primary=$(get_primary $poolname obj1)
+    local otherosd=$(get_not_primary $poolname obj1)
+
+    ceph osd set noout
+    ceph osd set norecover
+    kill $(cat $dir/osd.${otherosd}.pid)
+    ceph osd down osd.${otherosd}
+
+    local half=$(expr $objects / 2)
+    for i in $(seq 2 $half)
+    do
+	rados -p $poolname put obj$i /dev/null
+    done
+
+    kill $(cat $dir/osd.${primary}.pid)
+    ceph osd down osd.${primary}
+    run_osd $dir ${otherosd}
+    sleep 3
+
+    for i in $(seq $(expr $half + 1) $objects)
+    do
+	rados -p $poolname put obj$i /dev/null
+    done
+
+    local PG=$(get_pg $poolname obj1)
+    local otherosd=$(get_not_primary $poolname obj$objects)
+
+    ceph osd unset noout
+    ceph osd out osd.$primary osd.$otherosd
+    run_osd $dir ${primary}
+    sleep 3
+
+    ceph osd pool set test size 4
+    ceph osd unset norecover
+    ceph tell osd.$(get_primary $poolname obj1) debug kick_recovery_wq 0
+    sleep 2
+
+    wait_for_clean || return 1
+
+    # Get new primary
+    primary=$(get_primary $poolname obj1)
+
+    local log=$dir/osd.${primary}.log
+    check $PG $log 399 0 300 0 || return 1
+
+    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
+
+    # This is the value of set into MISSING_ON_PRIMARY
+    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    below_margin $FIRST 99 || return 1
+    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    above_margin $LAST 0 || return 1
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+
 # Local Variables:
 # compile-command: "make -j4 && ../qa/run-standalone.sh osd-recovery-stats.sh"
 # End:
