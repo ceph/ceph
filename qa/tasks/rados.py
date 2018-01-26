@@ -147,6 +147,8 @@ def task(ctx, config):
         args.extend(['--set_redirect'])
     if config.get('set_chunk', False):
         args.extend(['--set_chunk'])
+    if config.get('low_tier_pool', None):
+        args.extend(['--low_tier_pool', config.get('low_tier_pool', None)])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([
