@@ -21,23 +21,23 @@ import { ServicesModule } from './services/services.module';
     ServicesModule,
     DataTableModule
   ],
+  declarations: [
+    PasswordButtonDirective
+  ],
   exports: [
-    PipesModule,
     ComponentsModule,
+    PipesModule,
     ServicesModule,
     PasswordButtonDirective,
     DataTableModule
-  ],
-  declarations: [
-    PasswordButtonDirective
   ],
   providers: [
     AuthService,
     AuthStorageService,
     AuthGuardService,
-    HostService,
     PoolService,
-    FormatterService
-  ]
+    FormatterService,
+    HostService
+  ],
 })
 export class SharedModule {}

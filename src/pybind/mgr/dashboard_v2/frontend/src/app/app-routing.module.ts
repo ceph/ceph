@@ -8,6 +8,7 @@ import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
+import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import {
   PerformanceCounterComponent
@@ -40,6 +41,7 @@ const routes: Routes = [
   { path: 'cephfs/:id', component: CephfsComponent, canActivate: [AuthGuardService] },
   { path: 'configuration', component: ConfigurationComponent, canActivate: [AuthGuardService] },
   { path: '404', component: NotFoundComponent },
+  { path: 'osd', component: OsdListComponent, canActivate: [AuthGuardService] },
   { path: '**', redirectTo: '/404'}
 ];
 

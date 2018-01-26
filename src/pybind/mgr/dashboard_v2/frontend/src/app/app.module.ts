@@ -5,6 +5,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastModule, ToastOptions } from 'ng2-toastr/ng2-toastr';
 
+import { AccordionModule, TabsModule } from 'ngx-bootstrap';
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
 import { CephModule } from './ceph/ceph.module';
@@ -24,6 +25,7 @@ export class CustomOption extends ToastOptions {
     AppComponent
   ],
   imports: [
+    HttpClientModule,
     BrowserModule,
     BrowserAnimationsModule,
     ToastModule.forRoot(),
@@ -32,6 +34,8 @@ export class CustomOption extends ToastOptions {
     CoreModule,
     SharedModule,
     CephModule,
+    AccordionModule.forRoot(),
+    TabsModule.forRoot(),
     HttpClientModule,
     BrowserAnimationsModule
   ],
