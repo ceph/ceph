@@ -151,7 +151,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     are not permitted to implement commands and they do not receive
     any notifications.
 
-    They only have access to the mgrmap (for acecssing service URI info
+    They only have access to the mgrmap (for accessing service URI info
     from their active peer), and to configuration settings (read only).
     """
 
