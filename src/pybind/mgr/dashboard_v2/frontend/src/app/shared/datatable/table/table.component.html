@@ -86,3 +86,9 @@
              let-value="value">
   <a [routerLink]="[row.cdLink]">{{ value }}</a>
 </ng-template>
+
+<ng-template #perSecondTpl
+             let-row="row"
+             let-value="value">
+  {{ value }} /s
+</ng-template>
