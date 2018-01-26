@@ -2892,10 +2892,11 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
       containing_realm = find_snaprealm();
     containing_realm->inodes_with_caps.push_back(&item_caps);
     dout(10) << __func__ << " first cap, joining realm " << *containing_realm << dendl;
-  }
 
-  if (client_caps.empty())
     mdcache->num_inodes_with_caps++;
+    if (parent)
+      parent->dir->adjust_num_inodes_with_caps(1);
+  }
   
   Capability *cap = new Capability(this, ++mdcache->last_cap_id, client);
   assert(client_caps.count(client) == 0);
@@ -2936,6 +2937,8 @@ void CInode::remove_client_cap(client_t client)
     item_caps.remove_myself();
     containing_realm = NULL;
     mdcache->num_inodes_with_caps--;
+    if (parent)
+      parent->dir->adjust_num_inodes_with_caps(-1);
   }
 
   //clean up advisory locks

@@ -289,6 +289,18 @@ bool CDir::check_rstats(bool scrub)
   return good;
 }
 
+void CDir::adjust_num_inodes_with_caps(int d)
+{
+  // FIXME: smarter way to decide if adding 'this' to open file table
+  if (num_inodes_with_caps == 0 && d > 0)
+    cache->open_file_table.add_dirfrag(this);
+  else if (num_inodes_with_caps > 0 && num_inodes_with_caps == -d)
+    cache->open_file_table.remove_dirfrag(this);
+
+  num_inodes_with_caps += d;
+  assert(num_inodes_with_caps >= 0);
+}
+
 CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
@@ -569,6 +581,8 @@ void CDir::link_inode_work( CDentry *dn, CInode *in)
 
   if (in->state_test(CInode::STATE_TRACKEDBYOFT))
     inode->mdcache->open_file_table.notify_link(in);
+  if (in->is_any_caps())
+    adjust_num_inodes_with_caps(1);
   
   // adjust auth pin count
   if (in->auth_pins + in->nested_auth_pins)
@@ -648,6 +662,8 @@ void CDir::unlink_inode_work( CDentry *dn )
 
     if (in->state_test(CInode::STATE_TRACKEDBYOFT))
       inode->mdcache->open_file_table.notify_unlink(in);
+    if (in->is_any_caps())
+      adjust_num_inodes_with_caps(-1);
     
     // unlink auth_pin count
     if (in->auth_pins + in->nested_auth_pins)
@@ -840,6 +856,9 @@ void CDir::steal_dentry(CDentry *dn)
       if (pi->accounted_rstat.rctime > fnode.rstat.rctime)
 	fnode.rstat.rctime = pi->accounted_rstat.rctime;
 
+      if (in->is_any_caps())
+	adjust_num_inodes_with_caps(1);
+
       // move dirty inode rstat to new dirfrag
       if (in->is_dirty_rstat())
 	dirty_rstat_inodes.push_back(&in->dirty_rstat_item);
@@ -921,6 +940,7 @@ void CDir::finish_old_fragment(list<MDSInternalContextBase*>& waiters, bool repl
 
   num_head_items = num_head_null = 0;
   num_snap_items = num_snap_null = 0;
+  adjust_num_inodes_with_caps(-num_inodes_with_caps);
 
   // this mirrors init_fragment_pins()
   if (is_auth()) 
