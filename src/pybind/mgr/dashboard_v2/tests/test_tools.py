@@ -1,14 +1,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import json
-
 import cherrypy
 from cherrypy.lib.sessions import RamSession
+from cherrypy.test import helper
 from mock import patch
 
-from .helper import ApiControllerTestCase
+from .helper import RequestHelper
 from ..tools import RESTController
+
 
 # pylint: disable=W0613
 class FooResource(RESTController):
@@ -30,14 +30,22 @@ class FooResource(RESTController):
     def bulk_delete(self):
         FooResource.elems = []
 
+
+class FooArgs(RESTController):
+    @RESTController.args_from_json
+    def set(self, code, name):
+        return {'code': code, 'name': name}
+
+
 # pylint: disable=C0102
 class Root(object):
     foo = FooResource()
+    fooargs = FooArgs()
 
-class RESTControllerTest(ApiControllerTestCase):
-    @staticmethod
-    def setup_server():
-        ApiControllerTestCase.setup_test([])
+
+class RESTControllerTest(helper.CPWebCase, RequestHelper):
+    @classmethod
+    def setup_server(cls):
         cherrypy.tree.mount(Root())
 
     def test_empty(self):
@@ -51,14 +59,22 @@ class RESTControllerTest(ApiControllerTestCase):
     def test_fill(self):
         sess_mock = RamSession()
         with patch('cherrypy.session', sess_mock, create=True):
-            body = json.dumps({'a': 'b'})
+            data = {'a': 'b'}
             for _ in range(5):
-                self._post("/foo", {'a': 'b'})
-                self.assertBody(body)
+                self._post("/foo", data)
+                self.assertJsonBody(data)
                 self.assertStatus(201)
                 self.assertHeader('Content-Type', 'application/json')
 
             self._get("/foo")
             self.assertStatus('200 OK')
             self.assertHeader('Content-Type', 'application/json')
-            self.assertBody(json.dumps([{'a': 'b'}] * 5))
+            self.assertJsonBody([data] * 5)
+
+    def test_not_implemented(self):
+        self._put("/foo")
+        self.assertStatus(405)
+
+    def test_args_from_json(self):
+        self._put("/fooargs/hello", {'name': 'world'})
+        self.assertJsonBody({'code': 'hello', 'name': 'world'})

@@ -63,14 +63,6 @@ def load_controllers(mgrmodule):
     return controllers
 
 
-def load_controller(mgrmodule, cls):
-    ctrls = load_controllers(mgrmodule)
-    for ctrl in ctrls:
-        if ctrl.__name__ == cls:
-            return ctrl
-    raise Exception("Controller class '{}' not found".format(cls))
-
-
 def _json_error_page(status, message, traceback, version):
     return json.dumps(dict(status=status, detail=message, traceback=traceback,
                            version=version))
