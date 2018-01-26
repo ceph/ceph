@@ -2669,9 +2669,11 @@ int object_map_snap_add(cls_method_context_t hctx, bufferlist *in,
   }
 
   bool updated = false;
-  for (uint64_t i = 0; i < object_map.size(); ++i) {
-    if (object_map[i] == OBJECT_EXISTS) {
-      object_map[i] = OBJECT_EXISTS_CLEAN;
+  auto it = object_map.begin();
+  auto end_it = object_map.end();
+  for (; it != end_it; ++it) {
+    if (*it == OBJECT_EXISTS) {
+      *it = OBJECT_EXISTS_CLEAN;
       updated = true;
     }
   }
@@ -2712,12 +2714,19 @@ int object_map_snap_remove(cls_method_context_t hctx, bufferlist *in,
   }
 
   bool updated = false;
-  for (uint64_t i = 0; i < dst_object_map.size(); ++i) {
-    if (dst_object_map[i] == OBJECT_EXISTS_CLEAN &&
-        (i >= src_object_map.size() || src_object_map[i] == OBJECT_EXISTS)) {
-      dst_object_map[i] = OBJECT_EXISTS;
+  auto src_it = src_object_map.begin();
+  auto dst_it = dst_object_map.begin();
+  auto dst_it_end = dst_object_map.end();
+  uint64_t i = 0;
+  for (; dst_it != dst_it_end; ++dst_it) {
+    if (*dst_it == OBJECT_EXISTS_CLEAN &&
+        (i >= src_object_map.size() || *src_it == OBJECT_EXISTS)) {
+      *dst_it = OBJECT_EXISTS;
       updated = true;
     }
+    if (i < src_object_map.size())
+      ++src_it;
+    ++i;
   }
 
   if (updated) {
