@@ -104,6 +104,12 @@
   $ rbd cp foo@snap bar@snap
   rbd: destination snapname specified for a command that doesn't use it
   [22]
+  $ rbd deep cp foo bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [22]
+  $ rbd deep cp foo@snap bar@snap
+  rbd: destination snapname specified for a command that doesn't use it
+  [22]
   $ rbd mv foo bar@snap
   rbd: destination snapname specified for a command that doesn't use it
   [22]
