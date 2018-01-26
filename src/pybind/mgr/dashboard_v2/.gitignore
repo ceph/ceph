@@ -1,8 +1,8 @@
-.coverage
+.coverage*
 htmlcov
 .tox
 coverage.xml
-junit.xml
+junit*xml
 __pycache__
 
 # IDE
