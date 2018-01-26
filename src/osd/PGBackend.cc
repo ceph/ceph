@@ -714,6 +714,7 @@ void PGBackend::be_compare_scrubmaps(
 	  // Track possible shard to use as authoritative, if needed
 	  // There are errors, without identifying the shard
 	  object_errors.insert(j->first);
+	  errorstream << pgid << " : soid " << *k << " " << ss.str() << "\n";
 	} else {
 	  // XXX: The auth shard might get here that we don't know
 	  // that it has the "correct" data.
