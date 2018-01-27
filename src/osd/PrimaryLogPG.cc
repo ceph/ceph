@@ -84,27 +84,6 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
-struct PrimaryLogPG::C_OSD_OnApplied : Context {
-  PrimaryLogPGRef pg;
-  epoch_t epoch;
-  eversion_t v;
-  C_OSD_OnApplied(
-    PrimaryLogPGRef pg,
-    epoch_t epoch,
-    eversion_t v)
-    : pg(pg), epoch(epoch), v(v) {}
-  bool sync_finish(int r) override {
-    pg->op_applied(v);
-    return true;
-  }
-  void finish(int) override {
-    pg->lock();
-    if (!pg->pg_has_reset_since(epoch))
-      pg->op_applied(v);
-    pg->unlock();
-  }
-};
-
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -9965,10 +9944,7 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
 void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 {
   dout(10) << "op_applied version " << applied_version << dendl;
-  if (applied_version == eversion_t())
-    return;
-  assert(applied_version > last_update_applied);
-  assert(applied_version <= info.last_update);
+  assert(applied_version == info.last_update);
   last_update_applied = applied_version;
   if (is_primary()) {
     if (scrubber.active) {
@@ -10329,10 +10305,9 @@ void PrimaryLogPG::submit_log_entries(
       };
       t.register_on_commit(
 	new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
-      t.register_on_applied(
-	new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
       int r = osd->store->queue_transaction(ch, std::move(t), NULL);
       assert(r == 0);
+      op_applied(info.last_update);
     });
 }
 
@@ -11303,13 +11278,12 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
       t.register_on_commit(complete);
     }
   }
-  t.register_on_applied(
-    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int tr = osd->store->queue_transaction(
     ch,
     std::move(t),
     nullptr);
   assert(tr == 0);
+  op_applied(info.last_update);
 }
 
 void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
