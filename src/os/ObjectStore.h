@@ -498,6 +498,11 @@ public:
     Transaction(const Transaction& other) = default;
     Transaction& operator=(const Transaction& other) = default;
 
+    // expose object_index for FileStore::Op's benefit
+    const map<ghobject_t, __le32>& get_object_index() const {
+      return object_index;
+    }
+
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
       if (!c) return;
