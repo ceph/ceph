@@ -4258,7 +4258,6 @@ int PG::build_scrub_map_chunk(
   while (pos.empty()) {
     pos.deep = deep;
     map.valid_through = info.last_update;
-    ch->flush();
 
     // objects
     vector<ghobject_t> rollback_obs;
@@ -4665,7 +4664,6 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
-	  ch->flush();
 	  ret = get_pgbackend()->objects_list_partial(
 	    start,
 	    min,
