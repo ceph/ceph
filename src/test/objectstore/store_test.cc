@@ -1873,8 +1873,9 @@ TEST_P(StoreTest, MultiSmallWriteSameBlock) {
     t.write(cid, a, 9000, 5, bl, 0);
     u.write(cid, a, 10, 5, bl, 0);
     u.write(cid, a, 7000, 5, bl, 0);
+    t.register_on_commit(&c);
     vector<ObjectStore::Transaction> v = {t, u};
-    store->queue_transactions(ch, v, nullptr, &c);
+    store->queue_transactions(ch, v);
   }
   {
     ObjectStore::Transaction t, u;
@@ -1884,8 +1885,9 @@ TEST_P(StoreTest, MultiSmallWriteSameBlock) {
     t.write(cid, a, 6000, 5, bl, 0);
     u.write(cid, a, 610, 5, bl, 0);
     u.write(cid, a, 11000, 5, bl, 0);
+    t.register_on_commit(&d);
     vector<ObjectStore::Transaction> v = {t, u};
-    store->queue_transactions(ch, v, nullptr, &d);
+    store->queue_transactions(ch, v);
   }
   c.wait();
   d.wait();
@@ -3696,7 +3698,8 @@ public:
     in_flight_objects.insert(new_obj);
     if (!contents.count(new_obj))
       contents[new_obj] = Object();
-    int status = store->queue_transaction(ch, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3727,9 +3730,8 @@ public:
     contents[new_obj].attrs = contents[old_obj].attrs;
     contents[new_obj].data = contents[old_obj].data;
     contents.erase(old_obj);
-    int status = store->queue_transaction(
-      ch, std::move(t),
-      new C_SyntheticOnStash(this, old_obj, new_obj));
+    t.register_on_applied(new C_SyntheticOnStash(this, old_obj, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3761,9 +3763,8 @@ public:
     contents[new_obj].attrs = contents[old_obj].attrs;
     contents[new_obj].data = contents[old_obj].data;
 
-    int status = store->queue_transaction(
-      ch, std::move(t),
-      new C_SyntheticOnClone(this, old_obj, new_obj));
+    t.register_on_applied(new C_SyntheticOnClone(this, old_obj, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3843,8 +3844,8 @@ public:
       value.swap(dstdata);
     }
 
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnClone(this, old_obj, new_obj));
+    t.register_on_applied(new C_SyntheticOnClone(this, old_obj, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3892,8 +3893,8 @@ public:
     t.write(cid, new_obj, offset, len, bl);
     ++in_flight;
     in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3926,8 +3927,8 @@ public:
       bl.swap(data);
     }
 
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnReadable(this, obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -3967,8 +3968,8 @@ public:
     t.zero(cid, new_obj, offset, len);
     ++in_flight;
     in_flight_objects.insert(new_obj);
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnReadable(this, new_obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, new_obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -4057,8 +4058,8 @@ public:
     t.setattrs(cid, obj, attrs);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnReadable(this, obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -4156,8 +4157,8 @@ public:
     contents[obj].attrs.erase(it->first);
     ++in_flight;
     in_flight_objects.insert(obj);
-    int status = store->queue_transaction(
-      ch, std::move(t), new C_SyntheticOnReadable(this, obj));
+    t.register_on_applied(new C_SyntheticOnReadable(this, obj));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 
@@ -4275,7 +4276,8 @@ public:
     available_objects.erase(to_remove);
     in_flight_objects.insert(to_remove);
     contents.erase(to_remove);
-    int status = store->queue_transaction(ch, std::move(t), new C_SyntheticOnReadable(this, to_remove));
+    t.register_on_applied(new C_SyntheticOnReadable(this, to_remove));
+    int status = store->queue_transaction(ch, std::move(t));
     return status;
   }
 

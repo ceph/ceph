@@ -159,20 +159,3 @@ ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
 
   return out << "Transaction(" << &tx << ")"; 
 }
-int ObjectStore::queue_transactions(
-  CollectionHandle& ch,
-  vector<Transaction>& tls,
-  Context *onreadable,
-  Context *oncommit,
-  Context *onreadable_sync,
-  Context *oncomplete,
-  TrackedOpRef op = TrackedOpRef())
-{
-  RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(oncomplete));
-  Context *_onreadable = new Wrapper<RunOnDeleteRef>(
-    onreadable, _complete);
-  Context *_oncommit = new Wrapper<RunOnDeleteRef>(
-    oncommit, _complete);
-  return queue_transactions(ch, tls, _onreadable, _oncommit,
-			    onreadable_sync, op);
-}

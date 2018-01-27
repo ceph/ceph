@@ -7395,11 +7395,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
+  t.register_on_applied(new C_OnMapApply(&service, std::move(pinned_maps), last));
+  t.register_on_commit(new C_OnMapCommit(this, start, last, m));
   store->queue_transaction(
     service.meta_ch,
-    std::move(t),
-    new C_OnMapApply(&service, std::move(pinned_maps), last),
-    new C_OnMapCommit(this, start, last, m), 0);
+    std::move(t));
   service.publish_superblock(superblock);
 }
 
@@ -8230,10 +8230,13 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL,
-      TrackedOpRef(), handle);
+      std::move(*ctx.transaction), TrackedOpRef(), handle);
     assert(tr == 0);
     delete (ctx.transaction);
     for (auto pg : ctx.created_pgs) {
@@ -8268,9 +8271,13 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     delete ctx.on_safe;
     assert(ctx.created_pgs.empty());
   } else {
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
+      std::move(*ctx.transaction), TrackedOpRef(),
       handle);
     for (auto pg : ctx.created_pgs) {
       pg->ch = store->open_collection(pg->coll);

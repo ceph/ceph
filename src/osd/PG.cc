@@ -6272,11 +6272,11 @@ void PG::_delete_some()
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
+    t.register_on_applied(fin);
+    t.register_on_commit(fin);
     osd->store->queue_transaction(
       ch,
-      std::move(t),
-      fin,
-      fin);
+      std::move(t));
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
@@ -6287,12 +6287,12 @@ void PG::_delete_some()
     PGLog::clear_info_log(info.pgid, &t);
     t.remove_collection(coll);
     PGRef pgref(this);
+    // keep pg ref around until txn completes to avoid any issues
+    // with Sequencer lifecycle (seen w/ filestore).
+    t.register_on_applied(new ContainerContext<PGRef>(pgref));
+    t.register_on_commit(new ContainerContext<PGRef>(pgref));
     int r = osd->store->queue_transaction(
-      osd->meta_ch, std::move(t),
-      // keep pg ref around until txn completes to avoid any issues
-      // with Sequencer lifecycle (seen w/ filestore).
-      new ContainerContext<PGRef>(pgref),
-      new ContainerContext<PGRef>(pgref));
+      osd->meta_ch, std::move(t));
     assert(r == 0);
 
     osd->finish_pg_delete(this);
