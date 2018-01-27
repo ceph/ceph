@@ -1510,67 +1510,6 @@ void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
   map_bl_inc_cache.add(e, bl);
 }
 
-void OSDService::pin_map_inc_bl(epoch_t e, bufferlist &bl)
-{
-  Mutex::Locker l(map_cache_lock);
-  // cache a contiguous buffer
-  if (bl.get_num_buffers() > 1) {
-    bl.rebuild();
-  }
-  map_bl_inc_cache.pin(e, bl);
-}
-
-void OSDService::pin_map_bl(epoch_t e, bufferlist &bl)
-{
-  Mutex::Locker l(map_cache_lock);
-  // cache a contiguous buffer
-  if (bl.get_num_buffers() > 1) {
-    bl.rebuild();
-  }
-  map_bl_cache.pin(e, bl);
-}
-
-void OSDService::clear_map_bl_cache_pins(epoch_t e)
-{
-  // do not rip cache out from under PGs who are processing maps
-  epoch_t min_pg_epoch = get_min_pg_epoch();
-  if (!min_pg_epoch) {
-    // no pgs, use latest osdmap epoch here
-    min_pg_epoch = osdmap->get_epoch();
-  }
-
-  Mutex::Locker l(map_cache_lock);
-  if (e) {
-    map_cache_pinned_epoch = e;
-  }
-  epoch_t actual;
-  if (map_cache_pinned_epoch > min_pg_epoch) {
-    dout(10) << __func__ << " adjusting pin bound " << map_cache_pinned_epoch
-	     << " -> min_pg_epoch " << min_pg_epoch
-	     << dendl;
-    actual = min_pg_epoch;
-    map_cache_pinned_low = true;
-  } else {
-    actual = map_cache_pinned_epoch;
-    if (map_cache_pinned_low) {
-      dout(10) << __func__ << " dropped min_pg_epoch adjustment, back to "
-	       << map_cache_pinned_epoch << dendl;
-      map_cache_pinned_low = false;
-    }
-  }
-  dout(20) << __func__ << " actual " << actual << dendl;
-  map_bl_inc_cache.clear_pinned(actual);
-  map_bl_cache.clear_pinned(actual);
-}
-
-void OSDService::check_map_bl_cache_pins()
-{
-  if (!map_cache_pinned_low) {
-    return;
-  }
-  clear_map_bl_cache_pins(0);
-}
-
 int OSDService::get_deleted_pool_pg_num(int64_t pool)
 {
   Mutex::Locker l(map_cache_lock);
@@ -4939,11 +4878,6 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(10) << "tick" << dendl;
 
-  // make sure map cache pin bound is properly adjusted (it may be set
-  // artificially low if the last maps were injested when pg map processing
-  // was behind).
-  service.check_map_bl_cache_pins();
-
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
   }
@@ -7079,19 +7013,6 @@ struct C_OnMapCommit : public Context {
   }
 };
 
-struct C_OnMapApply : public Context {
-  OSDService *service;
-  map<epoch_t,OSDMapRef> pinned_maps;
-  epoch_t e;
-  C_OnMapApply(OSDService *service,
-	       map<epoch_t,OSDMapRef> &&pinned_maps,
-	       epoch_t e)
-    : service(service), pinned_maps(std::move(pinned_maps)), e(e) {}
-  void finish(int r) override {
-    service->clear_map_bl_cache_pins(e);
-  }
-};
-
 void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 {
   Mutex::Locker l(osdmap_subscribe_lock);
@@ -7155,7 +7076,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // off of disk. Otherwise these maps will probably not stay in the cache,
   // and reading those OSDMaps before they are actually written can result
   // in a crash. 
-  map<epoch_t,OSDMapRef> pinned_maps;
+  map<epoch_t,OSDMapRef> added_maps;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
 	    << monc->get_fsid() << dendl;
@@ -7276,8 +7197,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
-      pin_map_bl(e, bl);
-      pinned_maps[e] = add_map(o);
+      added_maps[e] = add_map(o);
 
       got_full_map(e);
       continue;
@@ -7289,7 +7209,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       ghobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::meta(), oid, 0, bl.length(), bl);
-      pin_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
       if (e > 1) {
@@ -7334,8 +7253,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
-      pin_map_bl(e, fbl);
-      pinned_maps[e] = add_map(o);
+      added_maps[e] = add_map(o);
       continue;
     }
 
@@ -7370,7 +7288,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for deleted pools
   OSDMapRef lastmap;
-  for (auto& i : pinned_maps) {
+  for (auto& i : added_maps) {
     if (!lastmap) {
       lastmap = get_map(i.first - 1);
     }
@@ -7395,7 +7313,6 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
-  t.register_on_applied(new C_OnMapApply(&service, std::move(pinned_maps), last));
   t.register_on_commit(new C_OnMapCommit(this, start, last, m));
   store->queue_transaction(
     service.meta_ch,
