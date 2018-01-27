@@ -632,7 +632,7 @@ bool PrimaryLogPG::is_degraded_or_backfilling_object(const hobject_t& soid)
     if (peer_missing_entry != peer_missing.end() &&
 	peer_missing_entry->second.get_items().count(soid)) {
       if (async_recovery_targets.count(peer))
-	return false;
+	continue;
       else
 	return true;
     }
