@@ -923,8 +923,7 @@ void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const ZTracer::Trace &trace,
-  Context *on_local_applied_sync)
+  const ZTracer::Trace &trace)
 {
   if (msg)
     msg->mark_started();
@@ -964,10 +963,6 @@ void ECBackend::handle_sub_write(
       ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  if (on_local_applied_sync) {
-    dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
-    localt.register_on_applied_sync(on_local_applied_sync);
-  }
   localt.register_on_commit(
     get_parent()->bless_context(
       new SubWriteCommitted(
@@ -1466,7 +1461,6 @@ void ECBackend::submit_transaction(
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
-  Context *on_local_applied_sync,
   Context *on_all_applied,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -1483,7 +1477,6 @@ void ECBackend::submit_transaction(
   op->roll_forward_to = std::max(roll_forward_to, committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
-  op->on_local_applied_sync = on_local_applied_sync;
   op->on_all_applied = on_all_applied;
   op->on_all_commit = on_all_commit;
   op->tid = tid;
@@ -1494,7 +1487,6 @@ void ECBackend::submit_transaction(
   
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
-  dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 }
 
 void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
@@ -1966,7 +1958,6 @@ bool ECBackend::try_reads_to_commit()
   op->remote_read.clear();
   op->remote_read_result.clear();
 
-  dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
@@ -2022,13 +2013,11 @@ bool ECBackend::try_reads_to_commit()
     }
   }
   if (should_write_local) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	local_write_op,
-	op->trace,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+    handle_sub_write(
+      get_parent()->whoami_shard(),
+      op->client_op,
+      local_write_op,
+      op->trace);
   }
 
   for (auto i = op->on_write.begin();

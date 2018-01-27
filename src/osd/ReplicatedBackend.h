@@ -365,7 +365,6 @@ public:
     const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
-    Context *on_local_applied_sync,
     Context *on_all_applied,
     Context *on_all_commit,
     ceph_tid_t tid,
