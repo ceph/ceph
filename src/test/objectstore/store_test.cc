@@ -2421,7 +2421,6 @@ TEST_P(StoreTest, SimpleAttrTest) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ch->flush();
   {
     bool empty;
     int r = store->collection_empty(ch, &empty);
@@ -2441,7 +2440,6 @@ TEST_P(StoreTest, SimpleAttrTest) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ch->flush();
   {
     bool empty;
     int r = store->collection_empty(ch, &empty);
@@ -2500,7 +2498,6 @@ TEST_P(StoreTest, SimpleListTest) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ch->flush();
   {
     set<ghobject_t> saw;
     vector<ghobject_t> objects;
@@ -2565,7 +2562,6 @@ TEST_P(StoreTest, ListEndTest) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ch->flush();
   {
     ghobject_t end(hobject_t(sobject_t("object_100", CEPH_NOSNAP)),
 		   ghobject_t::NO_GEN, shard_id_t(1));
@@ -2648,7 +2644,6 @@ TEST_P(StoreTest, MultipoolListTest) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  ch->flush();
   {
     vector<ghobject_t> objects;
     ghobject_t next, current;
@@ -3318,8 +3313,6 @@ TEST_P(StoreTest, ManyObjectTest) {
     ASSERT_TRUE(!store->stat(ch, *i, &buf));
   }
 
-  ch->flush();
-
   set<ghobject_t> listed, listed2;
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
@@ -3578,7 +3571,6 @@ public:
   }
   void shutdown() {
     while (1) {
-      ch->flush();
       vector<ghobject_t> objects;
       int r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 				     10, &objects, 0);
@@ -3617,7 +3609,6 @@ public:
   }
 
   void wait_for_done() {
-    ch->flush();
     Mutex::Locker locker(lock);
     while (in_flight)
       cond.Wait(lock);
@@ -4188,7 +4179,6 @@ public:
     EnterExit ee("scan");
     while (in_flight)
       cond.Wait(lock);
-    ch->flush();
     vector<ghobject_t> objects;
     set<ghobject_t> objects_set, objects_set2;
     ghobject_t next, current;
@@ -4610,7 +4600,6 @@ TEST_P(StoreTest, HashCollisionTest) {
   }
   }
   vector<ghobject_t> objects;
-  ch->flush();
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(), INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   set<ghobject_t> listed(objects.begin(), objects.end());
@@ -4708,7 +4697,6 @@ TEST_P(StoreTest, ScrubTest) {
     ASSERT_EQ(r, 0);
   }
 
-  ch->flush();
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
@@ -5184,7 +5172,6 @@ void colsplittest(
     ASSERT_EQ(r, 0);
   }
 
-  ch->flush();
   ObjectStore::Transaction t;
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
@@ -5205,7 +5192,6 @@ void colsplittest(
     }
   }
 
-  ch->flush();
   objects.clear();
   r = store->collection_list(tch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
@@ -5483,8 +5469,6 @@ TEST_P(StoreTest, BigRGWObjectName) {
     r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-
-  ch->flush();
 
   {
     vector<ghobject_t> objects;

@@ -1208,7 +1208,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	}
 
 	hobject_t current = lower_bound;
-	ch->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
 	  list_size,
@@ -1365,7 +1364,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
 	hobject_t next;
 	hobject_t current = response.handle;
-	ch->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
 	  list_size,
@@ -13000,7 +12998,6 @@ void PrimaryLogPG::update_range(
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
-    ch->flush();
     if (last_update_applied >= info.log_tail) {
       bi->version = last_update_applied;
     } else {
