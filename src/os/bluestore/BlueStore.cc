@@ -8986,14 +8986,14 @@ int BlueStore::queue_transactions(
   ThreadPool::TPHandle *handle)
 {
   FUNCTRACE(cct);
-  list<Context *> on_applied, on_commit, on_applied_sync;
+  list<Context *> on_applied, on_commit;
   ObjectStore::Transaction::collect_contexts(
-    tls, &on_applied, &on_commit, &on_applied_sync);
+    tls, &on_applied, &on_commit);
 
   if (cct->_conf->objectstore_blackhole) {
     dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
 	    << dendl;
-    for (auto& l : { on_applied, on_commit, on_applied_sync }) {
+    for (auto& l : { on_applied, on_commit }) {
       for (auto c : l) {
 	delete c;
       }
@@ -9062,9 +9062,6 @@ int BlueStore::queue_transactions(
   _txc_state_proc(txc);
 
   // we're immediately readable (unlike FileStore)
-  for (auto c : on_applied_sync) {
-    c->complete(0);
-  }
   for (auto c : on_applied) {
     // NOTE: these may complete out of order since some may be sync and some
     // may be async.

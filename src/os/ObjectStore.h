@@ -228,20 +228,14 @@ public:
    * objects (Context) for any combination of the three classes of
    * callbacks:
    *
-   *    on_applied_sync, on_applied, and on_commit.
+   *    on_applied, and on_commit.
    *
-   * The "on_applied" and "on_applied_sync" callbacks are invoked when
+   * The "on_applied" callbacks are invoked when
    * the modifications requested by the Transaction are visible to
    * subsequent ObjectStore operations, i.e., the results are
-   * readable. The only conceptual difference between on_applied and
-   * on_applied_sync is the specific thread and locking environment in
-   * which the callbacks operate.  "on_applied_sync" is called
-   * directly by an ObjectStore execution thread. It is expected to
-   * execute quickly and must not acquire any locks of the calling
-   * environment. Conversely, "on_applied" is called from the separate
+   * readable. "on_applied" is called from the separate
    * Finisher thread, meaning that it can contend for calling
-   * environment locks. NB, on_applied and on_applied_sync are
-   * sometimes called on_readable and on_readable_sync.
+   * environment locks.
    *
    * The "on_commit" callback is also called from the Finisher thread
    * and indicates that all of the mutations have been durably
@@ -281,9 +275,7 @@ public:
    * == any of the four portions of an object as described above) is
    * altered by a transaction (including deletion), the caller
    * promises not to attempt to read that element while the
-   * transaction is pending (here pending means from the time of
-   * issuance until the "on_applied_sync" callback has been
-   * received). Violations of isolation need not be detected by
+   * transaction is pending. Violations of isolation need not be detected by
    * ObjectStore and there is no corresponding error mechanism for
    * reporting an isolation violation (crashing would be the
    * appropriate way to report an isolation violation if detected).
@@ -450,7 +442,6 @@ public:
 
     list<Context *> on_applied;
     list<Context *> on_commit;
-    list<Context *> on_applied_sync;
 
   public:
     Transaction() = default;
@@ -475,8 +466,7 @@ public:
       op_bl(std::move(other.op_bl)),
       op_ptr(std::move(other.op_ptr)),
       on_applied(std::move(other.on_applied)),
-      on_commit(std::move(other.on_commit)),
-      on_applied_sync(std::move(other.on_applied_sync)) {
+      on_commit(std::move(other.on_commit)) {
       other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
@@ -494,7 +484,6 @@ public:
       op_ptr = std::move(other.op_ptr);
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
-      on_applied_sync = std::move(other.on_applied_sync);
       other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
@@ -518,10 +507,6 @@ public:
       if (!c) return;
       on_commit.push_back(c);
     }
-    void register_on_applied_sync(Context *c) {
-      if (!c) return;
-      on_applied_sync.push_back(c);
-    }
     void register_on_complete(Context *c) {
       if (!c) return;
       RunOnDeleteRef _complete (std::make_shared<RunOnDelete>(c));
@@ -532,34 +517,26 @@ public:
     static void collect_contexts(
       vector<Transaction>& t,
       Context **out_on_applied,
-      Context **out_on_commit,
-      Context **out_on_applied_sync) {
+      Context **out_on_commit) {
       assert(out_on_applied);
       assert(out_on_commit);
-      assert(out_on_applied_sync);
-      list<Context *> on_applied, on_commit, on_applied_sync;
+      list<Context *> on_applied, on_commit;
       for (auto& i : t) {
 	on_applied.splice(on_applied.end(), i.on_applied);
 	on_commit.splice(on_commit.end(), i.on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
       }
       *out_on_applied = C_Contexts::list_to_context(on_applied);
       *out_on_commit = C_Contexts::list_to_context(on_commit);
-      *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
     }
     static void collect_contexts(
       vector<Transaction>& t,
       list<Context*> *out_on_applied,
-      list<Context*> *out_on_commit,
-      list<Context*> *out_on_applied_sync) {
+      list<Context*> *out_on_commit) {
       assert(out_on_applied);
       assert(out_on_commit);
-      assert(out_on_applied_sync);
       for (auto& i : t) {
 	out_on_applied->splice(out_on_applied->end(), i.on_applied);
 	out_on_commit->splice(out_on_commit->end(), i.on_commit);
-	out_on_applied_sync->splice(out_on_applied_sync->end(),
-				    i.on_applied_sync);
       }
     }
 
@@ -568,9 +545,6 @@ public:
     }
     Context *get_on_commit() {
       return C_Contexts::list_to_context(on_commit);
-    }
-    Context *get_on_applied_sync() {
-      return C_Contexts::list_to_context(on_applied_sync);
     }
 
     void set_fadvise_flags(uint32_t flags) {
@@ -585,7 +559,6 @@ public:
       std::swap(data, other.data);
       std::swap(on_applied, other.on_applied);
       std::swap(on_commit, other.on_commit);
-      std::swap(on_applied_sync, other.on_applied_sync);
 
       std::swap(coll_index, other.coll_index);
       std::swap(object_index, other.object_index);
@@ -717,7 +690,6 @@ public:
       data.fadvise_flags |= other.data.fadvise_flags;
       on_applied.splice(on_applied.end(), other.on_applied);
       on_commit.splice(on_commit.end(), other.on_commit);
-      on_applied_sync.splice(on_applied_sync.end(), other.on_applied_sync);
 
       //append coll_index & object_index
       vector<__le32> cm(other.coll_index.size());

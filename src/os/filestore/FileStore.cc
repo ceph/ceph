@@ -2038,7 +2038,6 @@ ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
 
 FileStore::Op *FileStore::build_op(vector<Transaction>& tls,
 				   Context *onreadable,
-				   Context *onreadable_sync,
 				   TrackedOpRef osd_op)
 {
   uint64_t bytes = 0, ops = 0;
@@ -2053,7 +2052,6 @@ FileStore::Op *FileStore::build_op(vector<Transaction>& tls,
   o->start = ceph_clock_now();
   o->tls = std::move(tls);
   o->onreadable = onreadable;
-  o->onreadable_sync = onreadable_sync;
   o->ops = ops;
   o->bytes = bytes;
   o->osd_op = osd_op;
@@ -2123,7 +2121,7 @@ void FileStore::_do_op(OpSequencer *osr, ThreadPool::TPHandle &handle)
   o->trace.event("op_apply_finish");
   apply_manager.op_apply_finish(o->op);
   dout(10) << __FUNC__ << ": " << o << " seq " << o->op << " r = " << r
-	   << ", finisher " << o->onreadable << " " << o->onreadable_sync << dendl;
+	   << ", finisher " << o->onreadable << dendl;
 }
 
 void FileStore::_finish_op(OpSequencer *osr)
@@ -2145,9 +2143,6 @@ void FileStore::_finish_op(OpSequencer *osr)
 
   logger->tinc(l_filestore_apply_latency, lat);
 
-  if (o->onreadable_sync) {
-    o->onreadable_sync->complete(0);
-  }
   if (o->onreadable) {
     apply_finishers[osr->id % m_apply_finisher_num]->queue(o->onreadable);
   }
@@ -2177,9 +2172,8 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
 {
   Context *onreadable;
   Context *ondisk;
-  Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
-    tls, &onreadable, &ondisk, &onreadable_sync);
+    tls, &onreadable, &ondisk);
 
   if (cct->_conf->objectstore_blackhole) {
     dout(0) << __FUNC__ << ": objectstore_blackhole = TRUE, dropping transaction"
@@ -2188,8 +2182,6 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
     ondisk = nullptr;
     delete onreadable;
     onreadable = nullptr;
-    delete onreadable_sync;
-    onreadable_sync = nullptr;
     return 0;
   }
 
@@ -2210,7 +2202,7 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
   }
 
   if (journal && journal->is_writeable() && !m_filestore_journal_trailing) {
-    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    Op *o = build_op(tls, onreadable, osd_op);
 
     //prepare and encode transactions data out of lock
     bufferlist tbl;
@@ -2262,7 +2254,7 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
   }
 
   if (!journal) {
-    Op *o = build_op(tls, onreadable, onreadable_sync, osd_op);
+    Op *o = build_op(tls, onreadable, osd_op);
     dout(5) << __FUNC__ << ": (no journal) " << o << " " << tls << dendl;
 
     if (handle)
@@ -2322,9 +2314,6 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
 
   // start on_readable finisher after we queue journal item, as on_readable callback
   // is allowed to delete the Transaction
-  if (onreadable_sync) {
-    onreadable_sync->complete(r);
-  }
   apply_finishers[osr->id % m_apply_finisher_num]->queue(onreadable, r);
 
   submit_manager.op_submit_finish(op);
@@ -2348,8 +2337,6 @@ void FileStore::_journaled_ahead(OpSequencer *osr, Op *o, Context *ondisk)
   list<Context*> to_queue;
   osr->dequeue_journal(&to_queue);
 
-  // do ondisk completions async, to prevent any onreadable_sync completions
-  // getting blocked behind an ondisk completion.
   if (ondisk) {
     dout(10) << " queueing ondisk " << ondisk << dendl;
     ondisk_finishers[osr->id % m_ondisk_finisher_num]->queue(ondisk);

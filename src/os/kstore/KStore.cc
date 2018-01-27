@@ -1983,11 +1983,6 @@ void KStore::_txc_finish_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
 
-  // warning: we're calling onreadable_sync inside the sequencer lock
-  if (txc->onreadable_sync) {
-    txc->onreadable_sync->complete(0);
-    txc->onreadable_sync = NULL;
-  }
   if (txc->onreadable) {
     finisher.queue(txc->onreadable);
     txc->onreadable = NULL;
@@ -2129,9 +2124,8 @@ int KStore::queue_transactions(
 {
   Context *onreadable;
   Context *ondisk;
-  Context *onreadable_sync;
   ObjectStore::Transaction::collect_contexts(
-    tls, &onreadable, &ondisk, &onreadable_sync);
+    tls, &onreadable, &ondisk);
 
   // set up the sequencer
   Collection *c = static_cast<Collection*>(ch.get());
@@ -2141,7 +2135,6 @@ int KStore::queue_transactions(
   // prepare
   TransContext *txc = _txc_create(osr);
   txc->onreadable = onreadable;
-  txc->onreadable_sync = onreadable_sync;
   txc->oncommit = ondisk;
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
