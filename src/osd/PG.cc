@@ -3053,7 +3053,7 @@ void PG::upgrade(ObjectStore *store)
   write_if_dirty(t);
 
   ObjectStore::CollectionHandle ch = store->open_collection(coll);
-  int r = store->queue_transaction(ch, std::move(t), nullptr);
+  int r = store->queue_transaction(ch, std::move(t));
   if (r != 0) {
     derr << __func__ << ": queue_transaction returned "
 	 << cpp_strerror(r) << dendl;
@@ -3522,7 +3522,7 @@ void PG::read_state(ObjectStore *store)
   PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
   handle_loaded(&rctx);
   write_if_dirty(*rctx.transaction);
-  store->queue_transaction(ch, std::move(*rctx.transaction), nullptr);
+  store->queue_transaction(ch, std::move(*rctx.transaction));
   delete rctx.transaction;
 }
 
@@ -4185,7 +4185,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 			    << "...repaired";
 	}
 	snap_mapper.add_oid(hoid, obj_snaps, &_t);
-	r = osd->store->queue_transaction(ch, std::move(t), nullptr);
+	r = osd->store->queue_transaction(ch, std::move(t));
 	if (r != 0) {
 	  derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 	       << dendl;
@@ -4232,7 +4232,7 @@ void PG::_repair_oinfo_oid(ScrubMap &smap)
       o.attrs[OI_ATTR] = bp;
 
       t.setattr(coll, ghobject_t(hoid), OI_ATTR, bl);
-      int r = osd->store->queue_transaction(ch, std::move(t), nullptr);
+      int r = osd->store->queue_transaction(ch, std::move(t));
       if (r != 0) {
 	derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 	     << dendl;
@@ -6209,7 +6209,7 @@ void PG::update_store_on_load()
       lderr(cct) << __func__ << " setting bit width to " << bits << dendl;
       ObjectStore::Transaction t;
       t.collection_set_bits(coll, bits);
-      osd->store->queue_transaction(ch, std::move(t), nullptr);
+      osd->store->queue_transaction(ch, std::move(t));
     }
   }
 }
@@ -6277,11 +6277,11 @@ void PG::_delete_some()
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
+    t.register_on_applied(fin);
+    t.register_on_commit(fin);
     osd->store->queue_transaction(
       ch,
-      std::move(t),
-      fin,
-      fin);
+      std::move(t));
   } else {
     dout(20) << __func__ << " finished" << dendl;
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
@@ -6292,12 +6292,13 @@ void PG::_delete_some()
     PGLog::clear_info_log(info.pgid, &t);
     t.remove_collection(coll);
     PGRef pgref(this);
+    // keep pg ref around until txn completes to avoid any issues
+    // with Sequencer lifecycle (seen w/ filestore).
+    t.register_on_applied(new ContainerContext<PGRef>(pgref));
+    t.register_on_commit(new ContainerContext<PGRef>(pgref));
+    t.register_on_applied(new ContainerContext<PGRef>(pgref));
     int r = osd->store->queue_transaction(
-      osd->meta_ch, std::move(t),
-      // keep pg ref around until txn completes to avoid any issues
-      // with Sequencer lifecycle (seen w/ filestore).
-      new ContainerContext<PGRef>(pgref),
-      new ContainerContext<PGRef>(pgref));
+      osd->meta_ch, std::move(t));
     assert(r == 0);
 
     osd->finish_pg_delete(this);
