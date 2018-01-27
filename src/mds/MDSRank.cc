@@ -2630,6 +2630,12 @@ void MDSRank::create_logger()
     mds_plb.add_u64_counter(
       l_mds_imported_inodes, "imported_inodes", "Imported inodes", "imi",
       PerfCountersBuilder::PRIO_INTERESTING);
+    mds_plb.add_u64_counter(l_mds_openino_dir_fetch, "openino_dir_fetch",
+			    "OpenIno incomplete directory fetchings");
+    mds_plb.add_u64_counter(l_mds_openino_backtrace_fetch, "openino_backtrace_fetch",
+			    "OpenIno backtrace fetchings");
+    mds_plb.add_u64_counter(l_mds_openino_peer_discover, "openino_peer_discover",
+			    "OpenIno peer inode discovers");
     logger = mds_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(logger);
   }

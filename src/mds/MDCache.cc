@@ -8555,6 +8555,8 @@ void MDCache::_open_ino_fetch_dir(inodeno_t ino, MMDSOpenIno *m, CDir *dir, bool
   if (dir->state_test(CDir::STATE_REJOINUNDEF))
     assert(dir->get_inode()->dirfragtree.is_leaf(dir->get_frag()));
   dir->fetch(new C_MDC_OpenInoTraverseDir(this, ino, m, parent));
+  if (mds->logger)
+    mds->logger->inc(l_mds_openino_dir_fetch);
 }
 
 int MDCache::open_ino_traverse_dir(inodeno_t ino, MMDSOpenIno *m,
@@ -8745,6 +8747,8 @@ void MDCache::do_open_ino_peer(inodeno_t ino, open_ino_info_t& info)
     if (info.discover || !info.fetch_backtrace)
       pa = &info.ancestors;
     mds->send_message_mds(new MMDSOpenIno(info.tid, ino, pa), peer);
+    if (mds->logger)
+      mds->logger->inc(l_mds_openino_peer_discover);
   }
 }
 
@@ -9619,6 +9623,8 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
 {
   object_t oid = CInode::get_object_name(ino, frag_t(), "");
   mds->objecter->getxattr(oid, object_locator_t(pool), "parent", CEPH_NOSNAP, &bl, 0, fin);
+  if (mds->logger)
+    mds->logger->inc(l_mds_openino_backtrace_fetch);
 }
 
 
