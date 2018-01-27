@@ -6283,7 +6283,6 @@ void PG::_delete_some()
     PGRef pgref(this);
     // keep pg ref around until txn completes to avoid any issues
     // with Sequencer lifecycle (seen w/ filestore).
-    t.register_on_applied(new ContainerContext<PGRef>(pgref));
     t.register_on_commit(new ContainerContext<PGRef>(pgref));
     t.register_on_applied(new ContainerContext<PGRef>(pgref));
     int r = osd->store->queue_transaction(
