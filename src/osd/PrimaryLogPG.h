@@ -310,11 +310,11 @@ public:
   }
   void queue_transaction(ObjectStore::Transaction&& t,
 			 OpRequestRef op) override {
-    osd->store->queue_transaction(ch, std::move(t), 0, 0, 0, op);
+    osd->store->queue_transaction(ch, std::move(t), op);
   }
   void queue_transactions(vector<ObjectStore::Transaction>& tls,
 			  OpRequestRef op) override {
-    osd->store->queue_transactions(ch, tls, 0, 0, 0, op, NULL);
+    osd->store->queue_transactions(ch, tls, op, NULL);
   }
   epoch_t get_epoch() const override {
     return get_osdmap()->get_epoch();

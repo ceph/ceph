@@ -12254,13 +12254,13 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ++active_pushes;
 
-	      osd->store->queue_transaction(ch, std::move(t),
-					    new C_OSD_AppliedRecoveredObject(this, obc),
-					    new C_OSD_CommittedPushedObject(
-					      this,
-					      get_osdmap()->get_epoch(),
-					      info.last_complete),
-					    new C_OSD_OndiskWriteUnlock(obc));
+	      t.register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
+	      t.register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
+	      t.register_on_commit(new C_OSD_CommittedPushedObject(
+				     this,
+				     get_osdmap()->get_epoch(),
+				     info.last_complete));
+	      osd->store->queue_transaction(ch, std::move(t));
 	      continue;
 	    }
 	  } else {

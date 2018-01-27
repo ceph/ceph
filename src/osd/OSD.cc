@@ -1886,7 +1886,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
     t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
-    ret = store->queue_transaction(ch, std::move(t), nullptr);
+    ret = store->queue_transaction(ch, std::move(t));
     if (ret) {
       derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
 	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
@@ -2649,7 +2649,7 @@ int OSD::init()
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
     ObjectStore::Transaction t;
     write_superblock(t);
-    r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    r = store->queue_transaction(service.meta_ch, std::move(t));
     if (r < 0)
       goto out;
   }
@@ -2659,7 +2659,7 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
-    r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    r = store->queue_transaction(service.meta_ch, std::move(t));
     if (r < 0)
       goto out;
   }
@@ -3485,7 +3485,7 @@ int OSD::shutdown()
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
-  int r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  int r = store->queue_transaction(service.meta_ch, std::move(t));
   if (r) {
     derr << "OSD::shutdown: error writing superblock: "
 	 << cpp_strerror(r) << dendl;
@@ -3747,13 +3747,13 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
         if (++removed > cct->_conf->osd_target_transaction_size) {
-          store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+          store->queue_transaction(service.meta_ch, std::move(t));
           t = ObjectStore::Transaction();
           removed = 0;
         }
       }
       if (removed) {
-        store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+        store->queue_transaction(service.meta_ch, std::move(t));
       }
     }
   }
@@ -3787,14 +3787,14 @@ void OSD::recursive_remove_collection(CephContext* cct,
       ceph_abort();
     t.remove(tmp, *p);
     if (removed > cct->_conf->osd_target_transaction_size) {
-      int r = store->queue_transaction(ch, std::move(t), nullptr);
+      int r = store->queue_transaction(ch, std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
       removed = 0;
     }
   }
   t.remove_collection(tmp);
-  int r = store->queue_transaction(ch, std::move(t), nullptr);
+  int r = store->queue_transaction(ch, std::move(t));
   assert(r == 0);
 
   C_SaferCond waiter;
@@ -5097,7 +5097,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       val.append(valstr);
       newattrs[key] = val;
       t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
-      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5109,7 +5109,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
-      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5121,7 +5121,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
-      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5150,7 +5150,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
-      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
 	ss << "error=" << r;
       else
@@ -7398,11 +7398,11 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
+  t.register_on_applied(new C_OnMapApply(&service, std::move(pinned_maps), last));
+  t.register_on_commit(new C_OnMapCommit(this, start, last, m));
   store->queue_transaction(
     service.meta_ch,
-    std::move(t),
-    new C_OnMapApply(&service, std::move(pinned_maps), last),
-    new C_OnMapCommit(this, start, last, m), 0);
+    std::move(t));
   service.publish_superblock(superblock);
 }
 
@@ -8233,10 +8233,13 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL,
-      TrackedOpRef(), handle);
+      std::move(*ctx.transaction), TrackedOpRef(), handle);
     assert(tr == 0);
     delete (ctx.transaction);
     for (auto pg : ctx.created_pgs) {
@@ -8271,9 +8274,13 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     delete ctx.on_safe;
     assert(ctx.created_pgs.empty());
   } else {
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
+      std::move(*ctx.transaction), TrackedOpRef(),
       handle);
     for (auto pg : ctx.created_pgs) {
       pg->ch = store->open_collection(pg->coll);
