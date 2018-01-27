@@ -303,34 +303,9 @@ private:
       _register_apply(o);
       o->trace.keyval("queue depth", q.size());
     }
-    void _register_apply(Op *o) {
-      if (o->registered_apply)
-	return;
-      o->registered_apply = true;
-      for (auto& t : o->tls) {
-	for (auto& i : t.get_object_index()) {
-	  ++applying[i.first];
-	}
-      }
-    }
-    void _unregister_apply(Op *o) {
-      assert(o->registered_apply);
-      for (auto& t : o->tls) {
-	for (auto& i : t.get_object_index()) {
-	  auto p = applying.find(i.first);
-	  assert(p != applying.end());
-	  if (--p->second == 0) {
-	    applying.erase(p);
-	  }
-	}
-      }
-    }
-    void wait_for_apply(const ghobject_t& oid) {
-      Mutex::Locker l(qlock);
-      while (applying.count(oid)) {
-	cond.Wait(qlock);
-      }
-    }
+    void _register_apply(Op *o);
+    void _unregister_apply(Op *o);
+    void wait_for_apply(const ghobject_t& oid);
     Op *peek_queue() {
       Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
