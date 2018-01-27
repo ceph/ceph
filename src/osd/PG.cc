@@ -6213,18 +6213,12 @@ void PG::update_store_on_load()
 struct C_DeleteMore : public Context {
   PGRef pg;
   epoch_t epoch;
-  int count = 2;
   C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
   void finish(int r) override {
     ceph_abort();
   }
   void complete(int r) override {
     assert(r == 0);
-    // complete will be called exactly count times; only the last time will actualy
-    // complete.
-    if (--count) {
-      return;
-    }
     pg->lock();
     if (!pg->pg_has_reset_since(epoch)) {
       pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
@@ -6273,7 +6267,6 @@ void PG::_delete_some()
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, e);
-    t.register_on_applied(fin);
     t.register_on_commit(fin);
     osd->store->queue_transaction(
       ch,
@@ -8199,7 +8192,6 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   pg->on_removal(t);
   RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
   Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
-  rctx->on_applied->contexts.push_back(fin);
   rctx->on_safe->contexts.push_back(fin);
 }
 
