@@ -11,7 +11,7 @@ import cherrypy
 from mgr_module import MgrModule
 
 from .controllers.auth import Auth
-from .tools import load_controllers, json_error_page
+from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -50,15 +50,21 @@ class Module(MgrModule):
         self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
 
+        # Initialize custom handlers.
+        cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
+        cherrypy.tools.session_expire_at_browser_close = SessionExpireAtBrowserCloseTool()
+
+        # Apply the 'global' CherryPy configuration.
+        config = {
+            'engine.autoreload.on': False
+        }
         if not in_unittest:
-            cherrypy.config.update({
+            config.update({
                 'server.socket_host': server_addr,
                 'server.socket_port': int(server_port),
-                'engine.autoreload.on': False,
                 'error_page.default': json_error_page
             })
-        cherrypy.tools.authenticate = cherrypy.Tool('before_handler',
-                                                    Auth.check_auth)
+        cherrypy.config.update(config)
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
         fe_dir = os.path.join(current_dir, 'frontend/dist')

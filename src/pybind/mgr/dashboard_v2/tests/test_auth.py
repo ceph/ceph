@@ -10,6 +10,7 @@ from mock import patch
 
 from .helper import ControllerTestCase
 from ..controllers.auth import Auth
+from ..tools import Session
 
 
 class Ping(object):
@@ -48,7 +49,41 @@ class AuthTest(ControllerTestCase):
             self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
             self.assertStatus('201 Created')
             self.assertJsonBody({"username": "admin"})
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), 'admin')
+            self.assertEqual(sess_mock.get(Session.USERNAME), 'admin')
+
+    def test_login_stay_signed_in(self):
+        sess_mock = RamSession()
+        with patch('cherrypy.session', sess_mock, create=True):
+            self._post("/api/auth", {
+                'username': 'admin',
+                'password': 'admin',
+                'stay_signed_in': True})
+            self.assertStatus('201 Created')
+            self.assertEqual(sess_mock.get(
+                Session.EXPIRE_AT_BROWSER_CLOSE), False)
+            for _, content in self.cookies:
+                parts = map(str.strip, content.split(';'))
+                parts = {k: v for k, v in (part.split('=') for part in parts)}
+                if Session.NAME in parts:
+                    self.assertIn('expires', parts)
+                    self.assertIn('Max-Age', parts)
+
+    def test_login_not_stay_signed_in(self):
+        sess_mock = RamSession()
+        with patch('cherrypy.session', sess_mock, create=True):
+            self._post("/api/auth", {
+                'username': 'admin',
+                'password': 'admin',
+                'stay_signed_in': False})
+            self.assertStatus('201 Created')
+            self.assertEqual(sess_mock.get(
+                Session.EXPIRE_AT_BROWSER_CLOSE), True)
+            for _, content in self.cookies:
+                parts = map(str.strip, content.split(';'))
+                parts = {k: v for k, v in (part.split('=') for part in parts)}
+                if Session.NAME in parts:
+                    self.assertNotIn('expires', parts)
+                    self.assertNotIn('Max-Age', parts)
 
     def test_login_invalid(self):
         sess_mock = RamSession()
@@ -56,35 +91,35 @@ class AuthTest(ControllerTestCase):
             self._post("/api/auth", {'username': 'admin', 'password': 'inval'})
             self.assertStatus('403 Forbidden')
             self.assertJsonBody({"detail": "Invalid credentials"})
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), None)
+            self.assertEqual(sess_mock.get(Session.USERNAME), None)
 
     def test_logout(self):
         sess_mock = RamSession()
         with patch('cherrypy.session', sess_mock, create=True):
             self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), 'admin')
+            self.assertEqual(sess_mock.get(Session.USERNAME), 'admin')
             self._delete("/api/auth")
             self.assertStatus('204 No Content')
             self.assertBody('')
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), None)
+            self.assertEqual(sess_mock.get(Session.USERNAME), None)
 
     def test_session_expire(self):
         sess_mock = RamSession()
         with patch('cherrypy.session', sess_mock, create=True):
             self._post("/api/auth", {'username': 'admin', 'password': 'admin'})
             self.assertStatus('201 Created')
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), 'admin')
+            self.assertEqual(sess_mock.get(Session.USERNAME), 'admin')
             self._post("/api/test/ping")
             self.assertStatus('200 OK')
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), 'admin')
+            self.assertEqual(sess_mock.get(Session.USERNAME), 'admin')
             time.sleep(3)
             self._post("/api/test/ping")
             self.assertStatus('401 Unauthorized')
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), None)
+            self.assertEqual(sess_mock.get(Session.USERNAME), None)
 
     def test_unauthorized(self):
         sess_mock = RamSession()
         with patch('cherrypy.session', sess_mock, create=True):
             self._post("/api/test/ping")
             self.assertStatus('401 Unauthorized')
-            self.assertEqual(sess_mock.get(Auth.SESSION_KEY), None)
+            self.assertEqual(sess_mock.get(Session.USERNAME), None)
