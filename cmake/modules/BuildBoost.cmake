@@ -212,10 +212,6 @@ macro(build_boost version)
 endmacro()
 
 function(maybe_add_boost_dep target)
-  get_target_property(imported ${target} IMPORTED)
-  if(imported)
-    return()
-  endif()
   get_target_property(type ${target} TYPE)
   if(NOT type MATCHES "OBJECT_LIBRARY|STATIC_LIBRARY|SHARED_LIBRARY|EXECUTABLE")
     return()
@@ -234,7 +230,10 @@ endfunction()
 # override add_library() to add Boost headers dependency
 function(add_library target)
   _add_library(${target} ${ARGN})
-  maybe_add_boost_dep(${target})
+  # can't add dependencies to aliases or imported libraries
+  if (NOT ";${ARGN};" MATCHES ";(ALIAS|IMPORTED);")
+    maybe_add_boost_dep(${target})
+  endif()
 endfunction()
 
 function(add_executable target)
