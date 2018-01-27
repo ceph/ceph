@@ -66,6 +66,8 @@ public:
 protected:
   MDSRank *mds;
 
+  version_t omap_version = 0;
+
   map<inodeno_t, Anchor> anchor_map;
   set<dirfrag_t> dirfrags;
 
@@ -80,19 +82,36 @@ protected:
 
   object_t get_object_name() const;
 
+  enum {
+    JOURNAL_NONE = 0,
+    JOURNAL_START = 1,
+    JOURNAL_FINISH = 2,
+  };
+  int journal_state = 0;
+
   bool clear_on_commit = false;
   unsigned num_pending_commit = 0;
+  void _encode_header(bufferlist& bl);
   void _commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin);
 
+  std::map<std::string, bufferlist> loaded_journal;
   map<inodeno_t, Anchor> loaded_anchor_map;
   set<dirfrag_t> loaded_dirfrags;
   list<MDSInternalContextBase*> waiting_for_load;
   bool load_done = false;
 
+  void _reset_states() {
+    journal_state = JOURNAL_NONE;
+    clear_on_commit = true;
+    loaded_journal.clear();
+    loaded_anchor_map.clear();
+    loaded_dirfrags.clear();
+  }
   void _load_finish(int op_r, int header_r, int values_r,
 		    bool first, bool more,
                     bufferlist &header_bl,
 		    std::map<std::string, bufferlist> &values);
+  void _recover_finish(int r);
 
   enum {
     DIR_INODES = 1,
@@ -110,6 +129,7 @@ protected:
   std::map<uint64_t, vector<inodeno_t> > logseg_destroyed_inos;
   std::set<inodeno_t> destroyed_inos_set;
 
+  friend class C_IO_OFT_Recover;
   friend class C_IO_OFT_Load;
   friend class C_IO_OFT_Save;
   friend class C_OFT_OpenInoFinish;

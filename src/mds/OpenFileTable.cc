@@ -179,6 +179,12 @@ object_t OpenFileTable::get_object_name() const
   return object_t(s);
 }
 
+void OpenFileTable::_encode_header(bufferlist &bl)
+{
+  encode(omap_version, bl);
+  encode((__u8)journal_state, bl);
+}
+
 class C_IO_OFT_Save : public MDSIOContextBase {
 protected:
   OpenFileTable *oft;
@@ -213,10 +219,10 @@ void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSInternalContextBa
 void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_prio)
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
-  const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
-
   assert(log_seq >= committing_log_seq);
   committing_log_seq = log_seq;
+
+  omap_version++;
 
   C_GatherBuilder gather(g_ceph_context,
 			 new C_OnFinisher(new C_IO_OFT_Save(this, log_seq, c),
@@ -226,12 +232,14 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
   object_t oid = get_object_name();
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
 
-  bool first = true;
+  const unsigned max_write_size = mds->mdcache->max_dir_commit_size;
   unsigned write_size = 0;
-  std::map<string, bufferlist> to_update;
-  std::set<string> to_remove;
+  unsigned journal_idx = 0;
+  std::set<string> journal_keys;
+  std::map<string, bufferlist> to_update, journaled_update;
+  std::set<string> to_remove, journaled_remove;
 
-  auto commit_func = [&](bool last) {
+  auto journal_func = [&]() {
     ObjectOperation op;
     op.priority = op_prio;
 
@@ -241,14 +249,48 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       clear_on_commit = false;
     }
 
-    if (last) {
+    if (journal_idx == 0) {
+      assert(journal_state == JOURNAL_NONE);
+      journal_state = JOURNAL_START;
       bufferlist header;
-      encode(log_seq, header);
+      _encode_header(header);
       op.omap_set_header(header);
-    } else if (first) {
-      // make incomplete
+    }
+
+    bufferlist bl;
+    encode(omap_version, bl);
+    encode(to_update, bl);
+    encode(to_remove, bl);
+
+    char key[32];
+    snprintf(key, sizeof(key), "_journal.%x", journal_idx++);
+    journal_keys.insert(key);
+    std::map<string, bufferlist> tmp_map;
+    tmp_map[key].swap(bl);
+    op.omap_set(tmp_map);
+
+    mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
+			  gather.new_sub());
+
+    journaled_update.merge(to_update);
+    journaled_remove.merge(to_remove);
+    to_update.clear();
+    to_remove.clear();
+  };
+
+  auto commit_func = [&](bool update_header) {
+    ObjectOperation op;
+    op.priority = op_prio;
+
+    if (clear_on_commit) {
+      op.omap_clear();
+      op.set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
+      clear_on_commit = false;
+    }
+
+    if (update_header) {
       bufferlist header;
-      encode((uint64_t)0, header);
+      _encode_header(header);
       op.omap_set_header(header);
     }
 
@@ -260,8 +302,6 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(), 0,
 			  gather.new_sub());
 
-    first = false;
-    write_size = 0;
     to_update.clear();
     to_remove.clear();
   };
@@ -317,9 +357,11 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     }
 
     if (write_size >= max_write_size) {
-      commit_func(false);
+      journal_func();
+      write_size = 0;
     }
   }
+
   dirty_items.clear();
 
   if (first_commit) {
@@ -330,14 +372,53 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
       to_remove.emplace(key);
 
       if (write_size >= max_write_size) {
-	commit_func(false);
+	journal_func();
+	write_size = 0;
       }
     }
     loaded_anchor_map.clear();
     loaded_dirfrags.clear();
   }
 
-  commit_func(true);
+  if (journal_idx > 0 && (!to_update.empty() || !to_remove.empty())) {
+    journal_func();
+    write_size = 0;
+  }
+
+  if (journaled_update.empty() && journaled_remove.empty()) {
+    assert(journal_state == JOURNAL_NONE);
+    commit_func(true);
+  } else {
+    assert(to_update.empty() && to_remove.empty());
+    assert(journal_state == JOURNAL_START);
+    journal_state = JOURNAL_FINISH;
+    bool first = true;
+    for (auto& it : journaled_update) {
+      write_size += it.first.length() + sizeof(__u32);
+      write_size += it.second.length() + sizeof(__u32);
+      to_update[it.first].swap(it.second);
+
+      if (write_size >= max_write_size) {
+	commit_func(first);
+	first = false;
+	write_size = 0;
+      }
+    }
+    for (auto& key : journaled_remove) {
+      write_size += key.length() + sizeof(__u32);
+      to_remove.emplace(key);
+
+      if (write_size >= max_write_size) {
+	commit_func(first);
+	first = false;
+	write_size = 0;
+      }
+    }
+
+    journal_state = JOURNAL_NONE;
+    to_remove.insert(journal_keys.begin(), journal_keys.end());
+    commit_func(true);
+  }
 
   num_pending_commit++;
   gather.activate();
@@ -362,59 +443,88 @@ public:
   }
 };
 
+class C_IO_OFT_Recover : public MDSIOContextBase {
+protected:
+  OpenFileTable *oft;
+  MDSRank *get_mds() override { return oft->mds; }
+public:
+  C_IO_OFT_Recover(OpenFileTable *t) : oft(t) {}
+  void finish(int r) {
+    oft->_recover_finish(r);
+  }
+};
+
+void OpenFileTable::_recover_finish(int r)
+{
+  if (r < 0) {
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+    _reset_states();
+  } else {
+    dout(10) << __func__ << ": load complete" << dendl;
+  }
+
+  load_done = true;
+  finish_contexts(g_ceph_context, waiting_for_load);
+  waiting_for_load.clear();
+}
+
 void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 				 bool first, bool more,
 				 bufferlist &header_bl,
 				 std::map<std::string, bufferlist> &values)
 {
+  using ceph::decode;
+  int err = -EINVAL;
+
+  auto decode_func = [this](inodeno_t ino, bufferlist &bl) {
+    bufferlist::iterator p = bl.begin();
+
+    auto it = loaded_anchor_map.emplace_hint(loaded_anchor_map.end(),
+					    std::piecewise_construct,
+					    std::make_tuple(ino),
+					    std::make_tuple());
+    Anchor& anchor = it->second;
+    decode(anchor, p);
+    assert(ino == anchor.ino);
+    anchor.auth = MDS_RANK_NONE;
+
+    list<frag_t> fgls;
+    decode(fgls, p);
+    for (auto fg : fgls)
+      loaded_dirfrags.insert(loaded_dirfrags.end(), dirfrag_t(anchor.ino, fg));
+  };
+
   if (op_r < 0) {
     derr << __func__ << " got " << cpp_strerror(op_r) << dendl;
-    clear_on_commit = true;
-    if (!first) {
-      loaded_anchor_map.clear();
-      loaded_dirfrags.clear();
-    }
+    err = op_r;
     goto out;
   }
 
   try {
-    using ceph::decode;
     if (first) {
       bufferlist::iterator p = header_bl.begin();
-      uint64_t log_seq;
-      decode(log_seq, p);
-      committed_log_seq = committing_log_seq = log_seq;
-      if (log_seq == 0) {
-	dout(1) << __func__ << ": incomplete values" << dendl;
-	goto out;
-      }
+      decode(omap_version, p);
+      __u8 tmp_state;
+      decode(tmp_state, p);
+      journal_state = tmp_state;
     }
 
     for (auto& it : values) {
+      if (it.first.compare(0, 9, "_journal.") == 0) {
+	if (journal_state == JOURNAL_FINISH) {
+	  loaded_journal[it.first].swap(it.second);
+	} else { // incomplete journal
+	  loaded_journal[it.first].length();
+	}
+	continue;
+      }
+
       inodeno_t ino;
       sscanf(it.first.c_str(), "%llx", (unsigned long long*)&ino.val);
-
-      auto r = loaded_anchor_map.emplace_hint(loaded_anchor_map.end(),
-					      std::piecewise_construct,
-					      std::make_tuple(ino),
-					      std::make_tuple());
-      Anchor& anchor = r->second;
-
-      bufferlist::iterator p = it.second.begin();
-      decode(anchor, p);
-      assert(ino == anchor.ino);
-      anchor.auth = MDS_RANK_NONE;
-
-      list<frag_t> fgls;
-      decode(fgls, p);
-      for (auto fg : fgls)
-	loaded_dirfrags.insert(loaded_dirfrags.end(), dirfrag_t(anchor.ino, fg));
+      decode_func(ino, it.second);
     }
   } catch (buffer::error &e) {
     derr << __func__ << ": corrupted header/values: " << e.what() << dendl;
-    clear_on_commit = true;
-    loaded_anchor_map.clear();
-    loaded_dirfrags.clear();
     goto out;
   }
 
@@ -433,8 +543,94 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     return;
   }
 
+  // replay journal
+  if (loaded_journal.empty()) {
+    assert(journal_state == JOURNAL_NONE);
+  } else {
+      dout(10) << __func__ << ": recover journal" << dendl;
+      std::vector<ObjectOperation> op_vec;
+      try {
+	for (auto& it : loaded_journal) {
+	  if (journal_state != JOURNAL_FINISH)
+	    continue;
+	  bufferlist::iterator p = it.second.begin();
+	  version_t version;
+	  std::map<string, bufferlist> to_update;
+	  std::set<string> to_remove;
+	  decode(version, p);
+	  if (version != omap_version)
+	    continue;
+	  decode(to_update, p);
+	  decode(to_remove, p);
+	  it.second.clear();
+
+	  for (auto& q : to_update) {
+	    inodeno_t ino;
+	    sscanf(q.first.c_str(), "%llx", (unsigned long long*)&ino.val);
+	    decode_func(ino, q.second);
+	  }
+	  for (auto& q : to_remove) {
+	    inodeno_t ino;
+	    sscanf(q.c_str(), "%llx",(unsigned long long*)&ino.val);
+	    assert(ino.val > 0);
+	    loaded_anchor_map.erase(ino);
+	    auto r = loaded_dirfrags.lower_bound(dirfrag_t(ino, 0));
+	    while (r != loaded_dirfrags.end() && r->ino == ino)
+	      loaded_dirfrags.erase(r++);
+	  }
+
+	  op_vec.resize(op_vec.size() + 1);
+	  ObjectOperation& op = op_vec.back();
+	  op.priority = CEPH_MSG_PRIO_HIGH;
+	  if (!to_update.empty())
+	    op.omap_set(to_update);
+	  if (!to_remove.empty())
+	    op.omap_rm_keys(to_remove);
+	}
+      } catch (buffer::error &e) {
+	derr << __func__ << ": corrupted journal: " << e.what() << dendl;
+	goto out;
+      }
+
+      journal_state = JOURNAL_NONE;
+      op_vec.resize(op_vec.size() + 1);
+      ObjectOperation& op = op_vec.back();
+      {
+	bufferlist header;
+	_encode_header(header);
+	op.omap_set_header(header);
+      }
+      {
+	// remove journal
+	std::set<string> to_remove;
+	for (auto &it : loaded_journal)
+	  to_remove.emplace(it.first);
+	op.omap_rm_keys(to_remove);
+      }
+      loaded_journal.clear();
+
+      C_GatherBuilder gather(g_ceph_context,
+			     new C_OnFinisher(new C_IO_OFT_Recover(this),
+					      mds->finisher));
+      object_t oid = get_object_name();
+      object_locator_t oloc(mds->mdsmap->get_metadata_pool());
+      SnapContext snapc;
+
+      for (auto& op : op_vec) {
+	mds->objecter->mutate(oid, oloc, op, snapc, ceph::real_clock::now(),
+			      0, gather.new_sub());
+      }
+      gather.activate();
+      return;
+  }
+
+  err = 0;
   dout(10) << __func__ << ": load complete" << dendl;
 out:
+
+  if (err < 0)
+    _reset_states();
+
   load_done = true;
   finish_contexts(g_ceph_context, waiting_for_load);
   waiting_for_load.clear();
