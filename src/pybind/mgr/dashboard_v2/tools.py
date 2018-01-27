@@ -17,17 +17,19 @@ def ApiController(path):
     def decorate(cls):
         cls._cp_controller_ = True
         cls._cp_path_ = path
+        config = {
+            'tools.sessions.on': True,
+            'tools.sessions.name': Session.NAME,
+            'tools.session_expire_at_browser_close.on': True
+        }
         if not hasattr(cls, '_cp_config'):
             cls._cp_config = dict(cls._cp_config_default)
-            cls._cp_config.update({
-                'tools.sessions.on': True,
-                'tools.authenticate.on': False
-            })
+            config['tools.authenticate.on'] = False
         else:
             cls._cp_config.update(cls._cp_config_default)
-            cls._cp_config['tools.sessions.on'] = True
             if 'tools.authenticate.on' not in cls._cp_config:
-                cls._cp_config['tools.authenticate.on'] = False
+                config['tools.authenticate.on'] = False
+        cls._cp_config.update(config)
         return cls
     return decorate
 
@@ -270,3 +272,43 @@ def detail_route(methods):
         func.detail_route_methods = [m.upper() for m in methods]
         return func
     return decorator
+
+
+class Session(object):
+    """
+    This class contains all relevant settings related to cherrypy.session.
+    """
+    NAME = 'session_id'
+
+    # The keys used to store the information in the cherrypy.session.
+    USERNAME = '_username'
+    TS = '_ts'
+    EXPIRE_AT_BROWSER_CLOSE = '_expire_at_browser_close'
+
+    # The default values.
+    DEFAULT_EXPIRE = 1200.0
+
+
+class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
+    """
+    A CherryPi Tool which takes care that the cookie does not expire
+    at browser close if the 'Keep me logged in' checkbox was selected
+    on the login page.
+    """
+    def __init__(self):
+        cherrypy.Tool.__init__(self, 'before_finalize', self._callback)
+
+    def _callback(self):
+        # Shall the cookie expire at browser close?
+        expire_at_browser_close = cherrypy.session.get(
+            Session.EXPIRE_AT_BROWSER_CLOSE, True)
+        if expire_at_browser_close:
+            # Get the cookie and its name.
+            cookie = cherrypy.response.cookie
+            name = cherrypy.request.config.get(
+                'tools.sessions.name', Session.NAME)
+            # Make the cookie a session cookie by purging the
+            # fields 'expires' and 'max-age'.
+            if name in cookie:
+                del cookie[name]['expires']
+                del cookie[name]['max-age']

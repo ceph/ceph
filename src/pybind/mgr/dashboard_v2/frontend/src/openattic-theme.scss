@@ -793,53 +793,6 @@ h6{
 .login {
   height: 100%;
 }
-.login .utility-bar {
-  position: absolute;
-  margin: 0;
-  padding: 0;
-  top: 10px;
-  right: 10px;
-}
-.login .utility-bar>a {
-  color: #ececec;
-  line-height: 1;
-  padding: 10px 20px;
-  position: relative;
-  display: block;
-  text-decoration: none;
-}
-.login .utility-bar>a:focus,
-.login .utility-bar>a:hover {
-  color: #ffffff;
-}
-.login .utility-bar>a:hover {
-  background-color: #505050;
-}
-.login .open>a,
-.login .open>a:hover,
-.login .open>a:focus {
-  color: #ececec;
-  border-color: transparent;
-  background-color: transparent;
-}
-.login .utility-bar .dropdown-menu {
-  left: auto;
-  right: 0;
-}
-.login .icon-bar {
-  position: absolute;
-  margin: 0;
-  padding: 0;
-  bottom: 10px;
-  left: 10px;
-}
-.login .icon-bar>a {
-  color: #ececec;
-  text-decoration: none;
-}
-.login .icon-bar>a .fa-dark {
-  color: #474544;
-}
 .login .row {
   color: #ececec;
   background-color: #474544;
@@ -848,30 +801,12 @@ h6{
   margin-top: 0;
   margin-bottom: 30px;
 }
-.login .btn-password,
 .login .form-control {
   color: #ececec;
   background-color: #555555;
 }
-.login .col-lg-1, .login .col-lg-10, .login .col-lg-11, .login .col-lg-12, .login .col-lg-2, .login .col-lg-3,
-.login .col-lg-4, .login .col-lg-5, .login .col-lg-6, .login .col-lg-7, .login .col-lg-8, .login .col-lg-9 {
-  padding-left: 35px;
-  padding-right: 35px;
-}
-.login .col-md-1, .login .col-md-10, .login .col-md-11, .login .col-md-12, .login .col-md-2, .login .col-md-3,
-.login .col-md-4, .login .col-md-5, .login .col-md-6, .login .col-md-7, .login .col-md-8, .login .col-md-9 {
-  padding-left: 30px;
-  padding-right: 30px;
-}
-.login .col-sm-1, .login .col-sm-10, .login .col-sm-11, .login .col-sm-12, .login .col-sm-2, .login .col-sm-3,
-.login .col-sm-4, .login .col-sm-5, .login .col-sm-6, .login .col-sm-7, .login .col-sm-8, .login .col-sm-9 {
-  padding-left: 25px;
-  padding-right: 25px;
-}
-.login .col-xs-1, .col-xs-10, .login .col-xs-11, .login .col-xs-12, .login .col-xs-2, .login .col-xs-3,
-.login .col-xs-4, .login .col-xs-5, .login .col-xs-6, .login .col-xs-7, .login .col-xs-8, .login .col-xs-9 {
-  padding-left: 15px;
-  padding-right: 15px;
+.login .checkbox {
+  line-height: 20px;
 }
 
 /* Statistics */

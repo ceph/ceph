@@ -42,6 +42,17 @@
                *ngIf="(loginForm.submitted || password.dirty) && password.invalid">Password is required</div>
         </div>
 
+        <!-- Stay signed in -->
+        <div class="checkbox">
+          <label translate>
+            <input id="stay_signed_in"
+                   name="stay_signed_in"
+                   type="checkbox"
+                   [(ngModel)]="model.stay_signed_in">
+            Keep me logged in
+          </label>
+        </div>
+
         <input type="submit"
                class="btn btn-openattic btn-block"
                [disabled]="loginForm.invalid"
