@@ -9,7 +9,7 @@
 
 using namespace std;
 
-int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
+int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
   RWLock::RLocker l(lock);
 
@@ -119,7 +119,7 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
   return true;
 }
 
-void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
+void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
   RWLock::WLocker l(lock);
 
@@ -192,17 +192,17 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     target.version = info.version;
 }
 
-void ObjectCache::remove(string& name)
+bool ObjectCache::remove(const string& name)
 {
   RWLock::WLocker l(lock);
 
   if (!enabled) {
-    return;
+    return false;
   }
 
   map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
   if (iter == cache_map.end())
-    return;
+    return false;
 
   ldout(cct, 10) << "removing " << name << " from cache" << dendl;
   ObjectCacheEntry& entry = iter->second;
@@ -215,9 +215,11 @@ void ObjectCache::remove(string& name)
 
   remove_lru(name, iter->second.lru_iter);
   cache_map.erase(iter);
+  return true;
 }
 
-void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter)
+void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
+			    std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
     list<string>::iterator iter = lru.begin();
@@ -256,7 +258,8 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<str
   entry.lru_promotion_ts = lru_counter;
 }
 
-void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter)
+void ObjectCache::remove_lru(const string& name,
+			     std::list<string>::iterator& lru_iter)
 {
   if (lru_iter == lru.end())
     return;
