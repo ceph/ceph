@@ -1459,7 +1459,7 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
   }
   if (logger)
     logger->inc(l_osd_map_bl_cache_miss);
-  found = store->read(coll_t::meta(),
+  found = store->read(meta_ch,
 		      OSD::get_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found) {
@@ -1479,7 +1479,7 @@ bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
   }
   if (logger)
     logger->inc(l_osd_map_bl_cache_miss);
-  found = store->read(coll_t::meta(),
+  found = store->read(meta_ch,
 		      OSD::get_inc_osdmap_pobject_name(e), 0, 0, bl,
 		      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) >= 0;
   if (found) {
@@ -1581,7 +1581,7 @@ int OSDService::get_deleted_pool_pg_num(int64_t pool)
   dout(20) << __func__ << " " << pool << " loading" << dendl;
   ghobject_t oid = OSD::make_final_pool_info_oid(pool);
   bufferlist bl;
-  int r = store->read(coll_t::meta(), oid, 0, 0, bl);
+  int r = store->read(meta_ch, oid, 0, 0, bl);
   ceph_assert(r >= 0);
   auto blp = bl.begin();
   pg_pool_t pi;
@@ -1824,6 +1824,7 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
 
   OSDSuperblock sb;
   bufferlist sbbl;
+  ObjectStore::CollectionHandle ch;
 
   // if we are fed a uuid for this osd, use it.
   store->set_fsid(cct->_conf->osd_uuid);
@@ -1844,8 +1845,13 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     goto free_store;
   }
 
-  ret = store->read(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, 0, sbbl);
-  if (ret >= 0) {
+  ch = store->open_collection(coll_t::meta());
+  if (ch) {
+    ret = store->read(ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, sbbl);
+    if (ret < 0) {
+      derr << "OSD::mkfs: have meta collection but no superblock" << dendl;
+      goto free_store;
+    }
     /* if we already have superblock, check content of superblock */
     dout(0) << " have superblock" << dendl;
     bufferlist::iterator p;
@@ -2626,7 +2632,7 @@ int OSD::init()
       if (c.is_pg(&pgid) &&
 	  !osdmap->have_pg_pool(pgid.pool())) {
 	ghobject_t oid = make_final_pool_info_oid(pgid.pool());
-	if (!store->exists(coll_t::meta(), oid)) {
+	if (!store->exists(service.meta_ch, oid)) {
 	  derr << __func__ << " missing pg_pool_t for deleted pool "
 	       << pgid.pool() << " for pg " << pgid
 	       << "; please downgrade to luminous and allow "
@@ -2651,7 +2657,7 @@ int OSD::init()
   }
 
   // make sure snap mapper object exists
-  if (!store->exists(coll_t::meta(), OSD::make_snapmapper_oid())) {
+  if (!store->exists(service.meta_ch, OSD::make_snapmapper_oid())) {
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
@@ -3686,7 +3692,7 @@ void OSD::write_superblock(ObjectStore::Transaction& t)
 int OSD::read_superblock()
 {
   bufferlist bl;
-  int r = store->read(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
+  int r = store->read(service.meta_ch, OSD_SUPERBLOCK_GOBJECT, 0, 0, bl);
   if (r < 0)
     return r;
 
@@ -3715,7 +3721,9 @@ void OSD::clear_temp_objects()
     ghobject_t next;
     while (1) {
       vector<ghobject_t> objects;
-      store->collection_list(*p, next, ghobject_t::get_max(),
+      auto ch = store->open_collection(*p);
+      assert(ch);
+      store->collection_list(ch, next, ghobject_t::get_max(),
 			     store->get_ideal_list_max(),
 			     &objects, &next);
       if (objects.empty())
@@ -3767,7 +3775,7 @@ void OSD::recursive_remove_collection(CephContext* cct,
   SnapMapper mapper(cct, &driver, 0, 0, 0, pgid.shard);
 
   vector<ghobject_t> objects;
-  store->collection_list(tmp, ghobject_t(), ghobject_t::get_max(),
+  store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 			 INT_MAX, &objects, 0);
   generic_dout(10) << __func__ << " " << objects << dendl;
   // delete them.
@@ -3832,7 +3840,7 @@ PG* OSD::_make_pg(
     // pool was deleted; grab final pg_pool_t off disk.
     ghobject_t oid = make_final_pool_info_oid(pgid.pool());
     bufferlist bl;
-    int r = store->read(coll_t::meta(), oid, 0, 0, bl);
+    int r = store->read(service.meta_ch, oid, 0, 0, bl);
     ceph_assert(r >= 0);
     auto p = bl.begin();
     decode(pi, p);
@@ -5124,15 +5132,21 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       //Debug: Output entire omap
       bufferlist hdrbl;
       map<string, bufferlist> keyvals;
-      r = store->omap_get(coll_t(pgid), ghobject_t(obj), &hdrbl, &keyvals);
-      if (r >= 0) {
+      auto ch = store->open_collection(coll_t(pgid));
+      if (!ch) {
+	ss << "unable to open collection for " << pgid;
+	r = -ENOENT;
+      } else {
+	r = store->omap_get(ch, ghobject_t(obj), &hdrbl, &keyvals);
+	if (r >= 0) {
           ss << "header=" << string(hdrbl.c_str(), hdrbl.length());
           for (map<string, bufferlist>::iterator it = keyvals.begin();
-              it != keyvals.end(); ++it)
+	       it != keyvals.end(); ++it)
             ss << " key=" << (*it).first << " val="
                << string((*it).second.c_str(), (*it).second.length());
-      } else {
+	} else {
           ss << "error=" << r;
+	}
       }
     } else if (command == "truncobj") {
       int64_t trunclen;

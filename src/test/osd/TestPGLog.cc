@@ -2348,7 +2348,7 @@ public:
   hobject_t existing_oid, nonexistent_oid;
 
   void run_rebuild_missing_test(const map<hobject_t, pg_missing_item> &expected_missing_items) {
-    rebuild_missing_set_with_deletes(store.get(), test_coll, info);
+    rebuild_missing_set_with_deletes(store.get(), ch, info);
     ASSERT_EQ(expected_missing_items, missing.get_items());
   }
 };
@@ -2495,7 +2495,7 @@ public:
     auto orig_dups = log.dups;
     clear();
     ostringstream err;
-    read_log_and_missing(store.get(), test_coll, log_oid,
+    read_log_and_missing(store.get(), ch, log_oid,
 			 pg_info_t(), err, false);
     ASSERT_EQ(orig_dups.size(), log.dups.size());
     ASSERT_EQ(orig_dups, log.dups);

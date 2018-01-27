@@ -3211,28 +3211,27 @@ void FileStore::_do_transaction(
 // --------------------
 // objects
 
-bool FileStore::exists(const coll_t& _cid, const ghobject_t& oid)
+bool FileStore::exists(CollectionHandle& ch, const ghobject_t& oid)
 {
-  tracepoint(objectstore, exists_enter, _cid.c_str());
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, exists_enter, ch->cid.c_str());
   struct stat st;
-  bool retval = stat(cid, oid, &st) == 0;
+  bool retval = stat(ch, oid, &st) == 0;
   tracepoint(objectstore, exists_exit, retval);
   return retval;
 }
 
 int FileStore::stat(
-  const coll_t& _cid, const ghobject_t& oid, struct stat *st, bool allow_eio)
+  CollectionHandle& ch, const ghobject_t& oid, struct stat *st, bool allow_eio)
 {
-  tracepoint(objectstore, stat_enter, _cid.c_str());
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, stat_enter, ch->cid.c_str());
+  const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
   int r = lfn_stat(cid, oid, st);
   assert(allow_eio || !m_filestore_fail_eio || r != -EIO);
   if (r < 0) {
-    dout(10) << __FUNC__ << ": " << cid << "/" << oid
+    dout(10) << __FUNC__ << ": " << ch->cid << "/" << oid
 	     << " = " << r << dendl;
   } else {
-    dout(10) << __FUNC__ << ": " << cid << "/" << oid
+    dout(10) << __FUNC__ << ": " << ch->cid << "/" << oid
 	     << " = " << r
 	     << " (size " << st->st_size << ")" << dendl;
   }
@@ -3246,14 +3245,14 @@ int FileStore::stat(
 }
 
 int FileStore::set_collection_opts(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const pool_opts_t& opts)
 {
   return -EOPNOTSUPP;
 }
 
 int FileStore::read(
-  const coll_t& _cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
@@ -3261,8 +3260,8 @@ int FileStore::read(
   uint32_t op_flags)
 {
   int got;
-  tracepoint(objectstore, read_enter, _cid.c_str(), offset, len);
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, read_enter, ch->cid.c_str(), offset, len);
+  const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
 
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << dendl;
 
@@ -3447,24 +3446,24 @@ int FileStore::_do_seek_hole_data(int fd, uint64_t offset, size_t len,
 #endif
 }
 
-int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
+int FileStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     bufferlist& bl)
 {
   map<uint64_t, uint64_t> exomap;
-  int r = fiemap(_cid, oid, offset, len, exomap);
+  int r = fiemap(ch, oid, offset, len, exomap);
   if (r >= 0) {
     encode(exomap, bl);
   }
   return r;
 }
 
-int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
+int FileStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
                     uint64_t offset, size_t len,
                     map<uint64_t, uint64_t>& destmap)
 {
-  tracepoint(objectstore, fiemap_enter, _cid.c_str(), offset, len);
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, fiemap_enter, ch->cid.c_str(), offset, len);
+  const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
   destmap.clear();
 
   if ((!backend->has_seek_data_hole() && !backend->has_fiemap()) ||
@@ -4434,10 +4433,10 @@ bool FileStore::debug_mdata_eio(const ghobject_t &oid) {
 
 // objects
 
-int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *name, bufferptr &bp)
+int FileStore::getattr(CollectionHandle& ch, const ghobject_t& oid, const char *name, bufferptr &bp)
 {
-  tracepoint(objectstore, getattr_enter, _cid.c_str());
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, getattr_enter, ch->cid.c_str());
+  const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "'" << dendl;
   FDRef fd;
   int r = lfn_open(cid, oid, false, &fd);
@@ -4483,10 +4482,10 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
   }
 }
 
-int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bufferptr>& aset)
+int FileStore::getattrs(CollectionHandle& ch, const ghobject_t& oid, map<string,bufferptr>& aset)
 {
-  tracepoint(objectstore, getattrs_enter, _cid.c_str());
-  const coll_t& cid = !_need_temp_object_collection(_cid, oid) ? _cid : _cid.get_temp();
+  tracepoint(objectstore, getattrs_enter, ch->cid.c_str());
+  const coll_t& cid = !_need_temp_object_collection(ch->cid, oid) ? ch->cid : ch->cid.get_temp();
   set<string> omap_attrs;
   map<string, bufferlist> omap_aset;
   Index index;
@@ -4903,12 +4902,12 @@ bool FileStore::collection_exists(const coll_t& c)
   return ret;
 }
 
-int FileStore::collection_empty(const coll_t& c, bool *empty)
+int FileStore::collection_empty(const coll_t& cid, bool *empty)
 {
-  tracepoint(objectstore, collection_empty_enter, c.c_str());
-  dout(15) << __FUNC__ << ": " << c << dendl;
+  tracepoint(objectstore, collection_empty_enter, cid.c_str());
+  dout(15) << __FUNC__ << ": " << cid << dendl;
   Index index;
-  int r = get_index(c, &index);
+  int r = get_index(cid, &index);
   if (r < 0) {
     derr << __FUNC__ << ": get_index returned: " << cpp_strerror(r)
          << dendl;
@@ -4953,10 +4952,10 @@ int FileStore::_collection_set_bits(const coll_t& c, int bits)
   return r;
 }
 
-int FileStore::collection_bits(const coll_t& c)
+int FileStore::collection_bits(CollectionHandle& ch)
 {
   char fn[PATH_MAX];
-  get_cdir(c, fn, sizeof(fn));
+  get_cdir(ch->cid, fn, sizeof(fn));
   dout(15) << __FUNC__ << ": " << fn << dendl;
   int r;
   char n[PATH_MAX];
@@ -5061,12 +5060,12 @@ int FileStore::collection_list(const coll_t& c,
   return 0;
 }
 
-int FileStore::omap_get(const coll_t& _c, const ghobject_t &hoid,
+int FileStore::omap_get(CollectionHandle& ch, const ghobject_t &hoid,
 			bufferlist *header,
 			map<string, bufferlist> *out)
 {
-  tracepoint(objectstore, omap_get_enter, _c.c_str());
-  const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
+  tracepoint(objectstore, omap_get_enter, ch->cid.c_str());
+  const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -5089,13 +5088,13 @@ int FileStore::omap_get(const coll_t& _c, const ghobject_t &hoid,
 }
 
 int FileStore::omap_get_header(
-  const coll_t& _c,
+  CollectionHandle& ch,
   const ghobject_t &hoid,
   bufferlist *bl,
   bool allow_eio)
 {
-  tracepoint(objectstore, omap_get_header_enter, _c.c_str());
-  const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
+  tracepoint(objectstore, omap_get_header_enter, ch->cid.c_str());
+  const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -5117,10 +5116,10 @@ int FileStore::omap_get_header(
   return 0;
 }
 
-int FileStore::omap_get_keys(const coll_t& _c, const ghobject_t &hoid, set<string> *keys)
+int FileStore::omap_get_keys(CollectionHandle& ch, const ghobject_t &hoid, set<string> *keys)
 {
-  tracepoint(objectstore, omap_get_keys_enter, _c.c_str());
-  const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
+  tracepoint(objectstore, omap_get_keys_enter, ch->cid.c_str());
+  const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   int r = get_index(c, &index);
@@ -5142,12 +5141,12 @@ int FileStore::omap_get_keys(const coll_t& _c, const ghobject_t &hoid, set<strin
   return 0;
 }
 
-int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
+int FileStore::omap_get_values(CollectionHandle& ch, const ghobject_t &hoid,
 			       const set<string> &keys,
 			       map<string, bufferlist> *out)
 {
-  tracepoint(objectstore, omap_get_values_enter, _c.c_str());
-  const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
+  tracepoint(objectstore, omap_get_values_enter, ch->cid.c_str());
+  const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
   Index index;
   const char *where = "()";
@@ -5179,12 +5178,12 @@ int FileStore::omap_get_values(const coll_t& _c, const ghobject_t &hoid,
   return r;
 }
 
-int FileStore::omap_check_keys(const coll_t& _c, const ghobject_t &hoid,
+int FileStore::omap_check_keys(CollectionHandle& ch, const ghobject_t &hoid,
 			       const set<string> &keys,
 			       set<string> *out)
 {
-  tracepoint(objectstore, omap_check_keys_enter, _c.c_str());
-  const coll_t& c = !_need_temp_object_collection(_c, hoid) ? _c : _c.get_temp();
+  tracepoint(objectstore, omap_check_keys_enter, ch->cid.c_str());
+  const coll_t& c = !_need_temp_object_collection(ch->cid, hoid) ? ch->cid : ch->cid.get_temp();
   dout(15) << __FUNC__ << ": " << c << "/" << hoid << dendl;
 
   Index index;

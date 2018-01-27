@@ -800,7 +800,7 @@ public:
 			pg_missing_t& omissing, pg_shard_t from) const;
 
   void rebuild_missing_set_with_deletes(ObjectStore *store,
-					coll_t pg_coll,
+					ObjectStore::CollectionHandle& ch,
 					const pg_info_t &info);
 
 protected:
@@ -1251,7 +1251,7 @@ public:
 
   void read_log_and_missing(
     ObjectStore *store,
-    coll_t pg_coll,
+    ObjectStore::CollectionHandle& ch,
     ghobject_t pgmeta_oid,
     const pg_info_t &info,
     ostringstream &oss,
@@ -1259,7 +1259,7 @@ public:
     bool debug_verify_stored_missing = false
     ) {
     return read_log_and_missing(
-      store, pg_coll, pgmeta_oid, info,
+      store, ch, pgmeta_oid, info,
       log, missing, oss,
       tolerate_divergent_missing_log,
       &clear_divergent_priors,
@@ -1271,7 +1271,7 @@ public:
   template <typename missing_type>
   static void read_log_and_missing(
     ObjectStore *store,
-    coll_t pg_coll,
+    ObjectStore::CollectionHandle &ch,
     ghobject_t pgmeta_oid,
     const pg_info_t &info,
     IndexedLog &log,
@@ -1283,19 +1283,19 @@ public:
     set<string> *log_keys_debug = nullptr,
     bool debug_verify_stored_missing = false
     ) {
-    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << pg_coll
+    ldpp_dout(dpp, 20) << "read_log_and_missing coll " << ch->cid
 		       << " " << pgmeta_oid << dendl;
 
     // legacy?
     struct stat st;
-    int r = store->stat(pg_coll, pgmeta_oid, &st);
+    int r = store->stat(ch, pgmeta_oid, &st);
     assert(r == 0);
     assert(st.st_size == 0);
 
     // will get overridden below if it had been recorded
     eversion_t on_disk_can_rollback_to = info.last_update;
     eversion_t on_disk_rollback_info_trimmed_to = eversion_t();
-    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(pg_coll,
+    ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch,
 							      pgmeta_oid);
     map<eversion_t, hobject_t> divergent_priors;
     bool must_rebuild = false;
@@ -1387,7 +1387,7 @@ public:
 
 	  bufferlist bv;
 	  int r = store->getattr(
-	    pg_coll,
+	    ch,
 	    ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
 	    OI_ATTR,
 	    bv);
@@ -1441,7 +1441,7 @@ public:
 	    }
 	    bufferlist bv;
 	    int r = store->getattr(
-	      pg_coll,
+	      ch,
 	      ghobject_t(i.first, ghobject_t::NO_GEN, info.pgid.shard),
 	      OI_ATTR,
 	      bv);
@@ -1465,7 +1465,7 @@ public:
 	    did.insert(i->second);
 	    bufferlist bv;
 	    int r = store->getattr(
-	      pg_coll,
+	      ch,
 	      ghobject_t(i->second, ghobject_t::NO_GEN, info.pgid.shard),
 	      OI_ATTR,
 	      bv);
