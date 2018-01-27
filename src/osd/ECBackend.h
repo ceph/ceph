@@ -57,10 +57,6 @@ public:
     ) override;
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
-  void sub_write_applied(
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace);
   void sub_write_committed(
     ceph_tid_t tid,
     eversion_t version,
