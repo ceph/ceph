@@ -760,10 +760,7 @@ static int os_mkdir(const char *path, mode_t mode)
   }
 
   if (!t.empty()) {
-    fs->store->apply_transaction(ch, std::move(t));
-    C_SaferCond waiter;
-    if (!ch->flush_commit(&waiter))
-      waiter.wait();
+    fs->store->queue_transaction(ch, std::move(t));
   }
 
   return 0;
@@ -837,10 +834,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   }
 
   if (!t.empty()) {
-    fs->store->apply_transaction(ch, std::move(t));
-    C_SaferCond waiter;
-    if (!ch->flush_commit(&waiter))
-      waiter.wait();
+    fs->store->queue_transaction(ch, std::move(t));
   }
 
   if (pbl) {
@@ -972,10 +966,7 @@ int os_flush(const char *path, struct fuse_file_info *fi)
     return 0;
   }
 
-  fs->store->apply_transaction(ch, std::move(t));
-  C_SaferCond waiter;
-  if (!ch->flush_commit(&waiter))
-    waiter.wait();
+  fs->store->queue_transaction(ch, std::move(t));
 
   return 0;
 }
@@ -1049,10 +1040,7 @@ static int os_unlink(const char *path)
     return -EPERM;
   }
 
-  fs->store->apply_transaction(ch, std::move(t));
-  C_SaferCond waiter;
-  if (!ch->flush_commit(&waiter))
-    waiter.wait();
+  fs->store->queue_transaction(ch, std::move(t));
 
   return 0;
 }
@@ -1095,10 +1083,7 @@ static int os_truncate(const char *path, off_t size)
   ObjectStore::CollectionHandle ch = fs->store->open_collection(cid);
   ObjectStore::Transaction t;
   t.truncate(cid, oid, size);
-  fs->store->apply_transaction(ch, std::move(t));
-  C_SaferCond waiter;
-  if (!ch->flush_commit(&waiter))
-    waiter.wait();
+  fs->store->queue_transaction(ch, std::move(t));
   return 0;
 }
 

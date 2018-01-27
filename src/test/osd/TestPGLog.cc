@@ -2321,7 +2321,7 @@ public:
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(&osr, std::move(t));
     existing_oid = mk_obj(0);
     nonexistent_oid = mk_obj(1);
     ghobject_t existing_ghobj(existing_oid);
@@ -2332,7 +2332,7 @@ public:
     ObjectStore::Transaction t2;
     t2.touch(test_coll, ghobject_t(existing_oid));
     t2.setattr(test_coll, ghobject_t(existing_oid), OI_ATTR, enc_oi);
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t2)));
+    ASSERT_EQ(0u, store->queue_transaction(&osr, std::move(t2)));
     info.last_backfill = hobject_t::get_max();
     info.last_complete = eversion_t();
   }
@@ -2404,7 +2404,7 @@ public:
     ObjectStore::Transaction t;
     test_coll = coll_t(spg_t(pg_t(1, 1)));
     t.create_collection(test_coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(&osr, std::move(t));
   }
 
   void TearDown() override {
@@ -2490,7 +2490,7 @@ public:
     if (!km.empty()) {
       t.omap_setkeys(test_coll, log_oid, km);
     }
-    ASSERT_EQ(0u, store->apply_transaction(&osr, std::move(t)));
+    ASSERT_EQ(0u, store->queue_transaction(&osr, std::move(t)));
 
     auto orig_dups = log.dups;
     clear();

@@ -159,27 +159,6 @@ ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx) {
 
   return out << "Transaction(" << &tx << ")"; 
 }
-
-unsigned ObjectStore::apply_transactions(CollectionHandle& ch,
-					 vector<Transaction>& tls,
-					 Context *ondisk)
-{
-  // use op pool
-  Cond my_cond;
-  Mutex my_lock("ObjectStore::apply_transaction::my_lock");
-  int r = 0;
-  bool done;
-  C_SafeCond *onreadable = new C_SafeCond(&my_lock, &my_cond, &done, &r);
-
-  queue_transactions(ch, tls, onreadable, ondisk);
-
-  my_lock.Lock();
-  while (!done)
-    my_cond.Wait(my_lock);
-  my_lock.Unlock();
-  return r;
-}
-
 int ObjectStore::queue_transactions(
   CollectionHandle& ch,
   vector<Transaction>& tls,
