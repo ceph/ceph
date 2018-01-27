@@ -259,14 +259,6 @@ ObjectStore::CollectionHandle MemStore::create_new_collection(const coll_t& cid)
 // ---------------
 // read operations
 
-bool MemStore::exists(const coll_t& cid, const ghobject_t& oid)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return false;
-  return exists(c, oid);
-}
-
 bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
   Collection *c = static_cast<Collection*>(c_.get());
@@ -277,18 +269,6 @@ bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
   // Perform equivalent of c->get_object_(oid) != NULL. In C++11 the
   // shared_ptr needs to be compared to nullptr.
   return (bool)c->get_object(oid);
-}
-
-int MemStore::stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return stat(c, oid, st, allow_eio);
 }
 
 int MemStore::stat(
@@ -312,24 +292,10 @@ int MemStore::stat(
 }
 
 int MemStore::set_collection_opts(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const pool_opts_t& opts)
 {
   return -EOPNOTSUPP;
-}
-
-int MemStore::read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return read(c, oid, offset, len, bl, op_flags);
 }
 
 int MemStore::read(
@@ -359,22 +325,22 @@ int MemStore::read(
   return o->read(offset, l, bl);
 }
 
-int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+int MemStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
 		     uint64_t offset, size_t len, bufferlist& bl)
 {
   map<uint64_t, uint64_t> destmap;
-  int r = fiemap(cid, oid, offset, len, destmap);
+  int r = fiemap(ch, oid, offset, len, destmap);
   if (r >= 0)
     encode(destmap, bl);
   return r;
 }
 
-int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+int MemStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << " " << offset << "~"
+  dout(10) << __func__ << " " << ch->cid << " " << oid << " " << offset << "~"
 	   << len << dendl;
-  CollectionRef c = get_collection(cid);
+  Collection *c = static_cast<Collection*>(ch.get());
   if (!c)
     return -ENOENT;
 
@@ -389,15 +355,6 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
   destmap[offset] = l;
  out:
   return 0;
-}
-
-int MemStore::getattr(const coll_t& cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattr(c, oid, name, value);
 }
 
 int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
@@ -417,15 +374,6 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
   }
   value = o->xattr[k];
   return 0;
-}
-
-int MemStore::getattrs(const coll_t& cid, const ghobject_t& oid,
-		       map<string,bufferptr>& aset)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattrs(c, oid, aset);
 }
 
 int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
@@ -463,39 +411,33 @@ bool MemStore::collection_exists(const coll_t& cid)
   return coll_map.count(cid);
 }
 
-int MemStore::collection_empty(const coll_t& cid, bool *empty)
+int MemStore::collection_empty(CollectionHandle& ch, bool *empty)
 {
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(10) << __func__ << " " << ch->cid << dendl;
+  CollectionRef c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   *empty = c->object_map.empty();
   return 0;
 }
 
-int MemStore::collection_bits(const coll_t& cid)
+int MemStore::collection_bits(CollectionHandle& ch)
 {
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(10) << __func__ << " " << ch->cid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   return c->bits;
 }
 
-int MemStore::collection_list(const coll_t& cid,
+int MemStore::collection_list(CollectionHandle& ch,
 			      const ghobject_t& start,
 			      const ghobject_t& end,
 			      int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
 
-  dout(10) << __func__ << " cid " << cid << " start " << start
+  dout(10) << __func__ << " cid " << ch->cid << " start " << start
 	   << " end " << end << dendl;
   map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
@@ -510,21 +452,19 @@ int MemStore::collection_list(const coll_t& cid,
     else
       *next = p->first;
   }
-  dout(10) << __func__ << " cid " << cid << " got " << ls->size() << dendl;
+  dout(10) << __func__ << " cid " << ch->cid << " got " << ls->size() << dendl;
   return 0;
 }
 
 int MemStore::omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
 
   ObjectRef o = c->get_object(oid);
   if (!o)
@@ -536,17 +476,14 @@ int MemStore::omap_get(
 }
 
 int MemStore::omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio ///< [in] don't assert on eio
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  bool allow_eio ///< [in] don't assert on eio
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -556,16 +493,13 @@ int MemStore::omap_get_header(
 }
 
 int MemStore::omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
-    )
+  CollectionHandle& ch,              ///< [in] Collection containing oid
+  const ghobject_t &oid, ///< [in] Object containing omap
+  set<string> *keys      ///< [out] Keys defined on oid
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -578,17 +512,14 @@ int MemStore::omap_get_keys(
 }
 
 int MemStore::omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
-    )
+  CollectionHandle& ch,                    ///< [in] Collection containing oid
+  const ghobject_t &oid,       ///< [in] Object containing omap
+  const set<string> &keys,     ///< [in] Keys to get
+  map<string, bufferlist> *out ///< [out] Returned keys and values
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -604,17 +535,14 @@ int MemStore::omap_get_values(
 }
 
 int MemStore::omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const set<string> &keys, ///< [in] Keys to check
+  set<string> *out         ///< [out] Subset of keys defined on oid
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
@@ -674,14 +602,12 @@ public:
   }
 };
 
-ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
-							 const ghobject_t& oid)
+ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
+  CollectionHandle& ch,
+  const ghobject_t& oid)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return ObjectMap::ObjectMapIterator();
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return ObjectMap::ObjectMapIterator();

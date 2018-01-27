@@ -240,6 +240,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
 
   unsigned nadded = 0;
 
+  auto ch = fs.open_collection(coll_t::meta());
   OSDMap osdmap;
   for (auto e = std::max(last_committed+1, sb.oldest_map);
        e <= sb.newest_map; e++) {
@@ -250,7 +251,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     {
       const auto oid = OSD::get_inc_osdmap_pobject_name(e);
       bufferlist bl;
-      int nread = fs.read(coll_t::meta(), oid, 0, 0, bl);
+      int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
         cerr << "missing " << oid << std::endl;
         return -EINVAL;
@@ -285,7 +286,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
     {
       const auto oid = OSD::get_osdmap_pobject_name(e);
       bufferlist bl;
-      int nread = fs.read(coll_t::meta(), oid, 0, 0, bl);
+      int nread = fs.read(ch, oid, 0, 0, bl);
       if (nread <= 0) {
         cerr << "missing " << oid << std::endl;
         return -EINVAL;

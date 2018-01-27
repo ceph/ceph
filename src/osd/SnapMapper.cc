@@ -28,7 +28,7 @@ int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *out)
 {
-  return os->omap_get_values(cid, hoid, keys, out);
+  return os->omap_get_values(ch, hoid, keys, out);
 }
 
 int OSDriver::get_next(
@@ -36,7 +36,7 @@ int OSDriver::get_next(
   pair<std::string, bufferlist> *next)
 {
   ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(cid, hoid);
+    os->get_omap_iterator(ch, hoid);
   if (!iter) {
     ceph_abort();
     return -EINVAL;

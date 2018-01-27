@@ -442,19 +442,19 @@ public:
   CollectionHandle create_new_collection(const coll_t& c) override;
 
   using ObjectStore::exists;
-  bool exists(const coll_t& cid, const ghobject_t& oid) override;
+  bool exists(CollectionHandle& c, const ghobject_t& oid) override;
   using ObjectStore::stat;
   int stat(
-    const coll_t& cid,
+    CollectionHandle& c,
     const ghobject_t& oid,
     struct stat *st,
     bool allow_eio = false) override; // struct stat?
   int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) override;
   using ObjectStore::read;
   int read(
-    const coll_t& cid,
+    CollectionHandle& c,
     const ghobject_t& oid,
     uint64_t offset,
     size_t len,
@@ -468,21 +468,17 @@ public:
     uint32_t op_flags = 0);
 
   using ObjectStore::fiemap;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& bl) override;
-  int fiemap(const coll_t& cid, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+  int fiemap(CollectionHandle& c, const ghobject_t& oid, uint64_t offset, size_t len, bufferlist& outbl) override;
   using ObjectStore::getattr;
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferptr& value) override;
+  int getattr(CollectionHandle& c, const ghobject_t& oid, const char *name, bufferptr& value) override;
   using ObjectStore::getattrs;
-  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferptr>& aset) override;
+  int getattrs(CollectionHandle& c, const ghobject_t& oid, map<string,bufferptr>& aset) override;
 
   int list_collections(vector<coll_t>& ls) override;
   bool collection_exists(const coll_t& c) override;
-  int collection_empty(const coll_t& c, bool *empty) override;
-  int collection_bits(const coll_t& c) override;
-  int collection_list(
-    const coll_t& cid, const ghobject_t& start, const ghobject_t& end,
-    int max,
-    vector<ghobject_t> *ls, ghobject_t *next) override;
+  int collection_empty(CollectionHandle& c, bool *empty) override;
+  int collection_bits(CollectionHandle& c) override;
   int collection_list(
     CollectionHandle &c, const ghobject_t& start, const ghobject_t& end,
     int max,
@@ -490,7 +486,7 @@ public:
 
   using ObjectStore::omap_get;
   int omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
@@ -499,7 +495,7 @@ public:
   using ObjectStore::omap_get_header;
   /// Get omap header
   int omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
@@ -508,7 +504,7 @@ public:
   using ObjectStore::omap_get_keys;
   /// Get keys defined on oid
   int omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
+    CollectionHandle& c,              ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
     ) override;
@@ -516,7 +512,7 @@ public:
   using ObjectStore::omap_get_values;
   /// Get key values
   int omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
+    CollectionHandle& c,                    ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
@@ -525,7 +521,7 @@ public:
   using ObjectStore::omap_check_keys;
   /// Filters keys into out which are defined on oid
   int omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
+    CollectionHandle& c,                ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
@@ -533,7 +529,7 @@ public:
 
   using ObjectStore::get_omap_iterator;
   ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& cid,              ///< [in] collection
+    CollectionHandle& c,              ///< [in] collection
     const ghobject_t &oid  ///< [in] object
     ) override;
 

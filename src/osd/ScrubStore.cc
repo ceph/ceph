@@ -109,7 +109,7 @@ Store::create(ObjectStore* store,
 Store::Store(const coll_t& coll, const ghobject_t& oid, ObjectStore* store)
   : coll(coll),
     hoid(oid),
-    driver(store, coll, hoid),
+    driver(store, hoid),
     backend(&driver)
 {}
 
