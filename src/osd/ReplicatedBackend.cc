@@ -59,16 +59,6 @@ class PG_RecoveryQueueAsync : public Context {
 };
 }
 
-struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
-  ReplicatedBackend *pg;
-  RepModifyRef rm;
-  C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
-    : pg(pg), rm(r) {}
-  void finish(int r) override {
-    pg->repop_applied(rm);
-  }
-};
-
 struct ReplicatedBackend::C_OSD_RepModifyCommit : public Context {
   ReplicatedBackend *pg;
   RepModifyRef rm;
@@ -281,17 +271,6 @@ public:
     : pg(pg), op(op) {}
   void finish(int) override {
     pg->op_commit(op);
-  }
-};
-
-class C_OSD_OnOpApplied : public Context {
-  ReplicatedBackend *pg;
-  ReplicatedBackend::InProgressOp *op;
-public:
-  C_OSD_OnOpApplied(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
-    : pg(pg), op(op) {}
-  void finish(int) override {
-    pg->op_applied(op);
   }
 };
 
@@ -516,9 +495,6 @@ void ReplicatedBackend::submit_transaction(
     true,
     op_t);
   
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
   op_t.register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
@@ -527,6 +503,7 @@ void ReplicatedBackend::submit_transaction(
   tls.push_back(std::move(op_t));
 
   parent->queue_transactions(tls, op.op);
+  op_applied(&op);
 }
 
 void ReplicatedBackend::op_applied(
@@ -1139,14 +1116,12 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
-    parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
+  repop_applied(rm);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
