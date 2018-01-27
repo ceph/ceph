@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { AppRoutingModule } from '../../app-routing.module';
 import { SharedModule } from '../../shared/shared.module';
+import { RouterModule } from '@angular/router';
 
 @NgModule({
   imports: [
@@ -12,7 +13,8 @@ import { SharedModule } from '../../shared/shared.module';
     AuthModule,
     BsDropdownModule.forRoot(),
     AppRoutingModule,
-    SharedModule
+    SharedModule,
+    RouterModule
   ],
   declarations: [NavigationComponent],
   exports: [NavigationComponent]

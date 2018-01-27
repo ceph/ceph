@@ -3,17 +3,23 @@ import { CommonModule } from '@angular/common';
 import { AuthService } from './services/auth.service';
 import { AuthStorageService } from './services/auth-storage.service';
 import { AuthGuardService } from './services/auth-guard.service';
-import { EmptyComponent } from './empty/empty.component';
+import { PipesModule } from './pipes/pipes.module';
+import { HostService } from './services/host.service';
 
 @NgModule({
   imports: [
-    CommonModule
+    CommonModule,
+    PipesModule
   ],
-  declarations: [EmptyComponent],
+  declarations: [],
   providers: [
     AuthService,
     AuthStorageService,
-    AuthGuardService
+    AuthGuardService,
+    HostService
+  ],
+  exports: [
+    PipesModule
   ]
 })
 export class SharedModule { }
