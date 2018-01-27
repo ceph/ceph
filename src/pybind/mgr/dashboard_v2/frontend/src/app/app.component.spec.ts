@@ -4,6 +4,7 @@ import { AppComponent } from './app.component';
 import { CoreModule } from './core/core.module';
 import { SharedModule } from './shared/shared.module';
 import { ToastModule } from 'ng2-toastr';
+import { HostModule } from './ceph/host/host.module';
 
 describe('AppComponent', () => {
   beforeEach(async(() => {
@@ -12,7 +13,8 @@ describe('AppComponent', () => {
         RouterTestingModule,
         CoreModule,
         SharedModule,
-        ToastModule.forRoot()
+        ToastModule.forRoot(),
+        HostModule
       ],
       declarations: [
         AppComponent
