@@ -7077,6 +7077,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // and reading those OSDMaps before they are actually written can result
   // in a crash. 
   map<epoch_t,OSDMapRef> added_maps;
+  map<epoch_t,bufferlist> added_maps_bl;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
 	    << monc->get_fsid() << dendl;
@@ -7198,7 +7199,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
       added_maps[e] = add_map(o);
-
+      added_maps_bl[e] = bl;
       got_full_map(e);
       continue;
     }
@@ -7214,7 +7215,11 @@ void OSD::handle_osd_map(MOSDMap *m)
       if (e > 1) {
 	bufferlist obl;
         bool got = get_map_bl(e - 1, obl);
-        assert(got);
+	if (!got) {
+	  auto p = added_maps_bl.find(e - 1);
+	  assert(p != added_maps_bl.end());
+	  obl = p->second;
+	}
 	o->decode(obl);
       }
 
@@ -7254,6 +7259,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
       added_maps[e] = add_map(o);
+      added_maps_bl[e] = fbl;
       continue;
     }
 
