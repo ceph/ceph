@@ -353,7 +353,6 @@ void WorkloadGenerator::do_destroy_collection(ObjectStore::Transaction *t,
 					      C_StatState *stat)
 {  
   m_nr_runs = 0;
-  entry->m_osr.flush();
   vector<ghobject_t> ls;
   m_store->collection_list(entry->m_coll, ghobject_t(), ghobject_t::get_max(),
 			   INT_MAX, &ls, NULL);
