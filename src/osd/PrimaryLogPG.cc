@@ -11654,7 +11654,6 @@ void PrimaryLogPG::shutdown()
   lock();
   on_shutdown();
   unlock();
-  ch->flush();
 }
 
 void PrimaryLogPG::on_shutdown()
