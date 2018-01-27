@@ -449,7 +449,6 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &_log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
-  Context *on_local_applied_sync,
   Context *on_all_acked,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -517,7 +516,6 @@ void ReplicatedBackend::submit_transaction(
     true,
     op_t);
   
-  op_t.register_on_applied_sync(on_local_applied_sync);
   op_t.register_on_applied(
     parent->bless_context(
       new C_OSD_OnOpApplied(this, &op)));
