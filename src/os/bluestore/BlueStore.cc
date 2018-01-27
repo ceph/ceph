@@ -7234,6 +7234,7 @@ int BlueStore::collection_list(
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   Collection *c = static_cast<Collection *>(c_.get());
+  c->flush();
   dout(15) << __func__ << " " << c->cid
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;

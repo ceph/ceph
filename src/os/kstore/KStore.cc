@@ -1443,6 +1443,7 @@ int KStore::collection_list(
 
 {
   Collection *c = static_cast<Collection*>(c_.get());
+  c->flush();
   dout(15) << __func__ << " " << c->cid
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;

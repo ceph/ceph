@@ -686,6 +686,7 @@ public:
   int collection_list(CollectionHandle& c,
 		      const ghobject_t& start, const ghobject_t& end, int max,
 		      vector<ghobject_t> *ls, ghobject_t *next) override {
+    c->flush();
     return collection_list(c->cid, start, end, max, ls, next);
   }
   int collection_list(const coll_t& cid,
@@ -696,6 +697,7 @@ public:
   int collection_stat(const coll_t& c, struct stat *st);
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override {
+    c->flush();
     return collection_empty(c->cid, empty);
   }
   int collection_empty(const coll_t& cid, bool *empty);
