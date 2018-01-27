@@ -154,11 +154,12 @@ function TEST_recovery_erasure_out1() {
 }
 
 # [0, 1] -> [2,3,4,5]
-# degraded 2000 -> 0
+# degraded 1000 -> 0
+# misplaced 1000 -> 0
 # missing on primary 500 -> 0
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                      STATE_STAMP                VERSION REPORTED UP        UP_PRIMARY ACTING    ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         500                500     2000         0       0     0 500      500 active+recovering+degraded 2017-10-27 09:38:37.453438  22'500   25:394 [2,4,3,5]          2 [2,4,3,5]              2        0'0 2017-10-27 09:37:58.046748             0'0 2017-10-27 09:37:58.046748
+# 1.0         500                500     1000      1000       0     0 500      500 active+recovering+degraded 2017-10-27 09:38:37.453438  22'500   25:394 [2,4,3,5]          2 [2,4,3,5]              2        0'0 2017-10-27 09:37:58.046748             0'0 2017-10-27 09:37:58.046748
 function TEST_recovery_sizeup() {
     local dir=$1
 
@@ -198,16 +199,17 @@ function TEST_recovery_sizeup() {
     # Get new primary
     primary=$(get_primary $poolname obj1)
 
-    local degraded=$(expr $objects \* 4)
+    local degraded=$(expr $objects \* 2)
+    local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log $degraded 0 0 0 || return 1
+    check $PG $log $degraded 0 $misplaced 0 || return 1
 
     UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
 
     # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
     below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
     above_margin $LAST 0 || return 1
 
     delete_pool $poolname
@@ -215,12 +217,12 @@ function TEST_recovery_sizeup() {
 }
 
 # [0, 1, 2, 4] -> [3, 5]
-# degraded 1000 -> 0
+# misplaced 1000 -> 0
 # missing on primary 500 -> 0
 # active+recovering+degraded
 
 # PG_STAT OBJECTS MISSING_ON_PRIMARY DEGRADED MISPLACED UNFOUND BYTES LOG DISK_LOG STATE                      STATE_STAMP                VERSION REPORTED UP    UP_PRIMARY ACTING ACTING_PRIMARY LAST_SCRUB SCRUB_STAMP                LAST_DEEP_SCRUB DEEP_SCRUB_STAMP
-# 1.0         500                500      1000         0       0     0 500      500 active+recovering+degraded 2017-10-27 09:34:50.012261  22'500   27:118 [3,5]          3  [3,5]              3        0'0 2017-10-27 09:34:08.617248             0'0 2017-10-27 09:34:08.617248
+# 1.0         500                500         0      1000       0     0 500      500 active+recovering+degraded 2017-10-27 09:34:50.012261  22'500   27:118 [3,5]          3  [3,5]              3        0'0 2017-10-27 09:34:08.617248             0'0 2017-10-27 09:34:08.617248
 function TEST_recovery_sizedown() {
     local dir=$1
 
@@ -264,16 +266,16 @@ function TEST_recovery_sizedown() {
     # Get new primary
     primary=$(get_primary $poolname obj1)
 
-    local degraded=$(expr $objects \* 2)
+    local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log $degraded 0 0 0 || return 1
+    check $PG $log 0 0 $misplaced 0 || return 1
 
     UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
 
     # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
     below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats missing shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
     above_margin $LAST 0 || return 1
 
     delete_pool $poolname
