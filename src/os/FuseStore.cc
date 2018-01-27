@@ -250,6 +250,8 @@ static int os_getattr(const char *path, struct stat *stbuf)
   stbuf->st_gid = 0;
   stbuf->st_mode = S_IFREG | 0700;
 
+  auto ch = fs->store->open_collection(cid);
+
   switch (t) {
   case FN_OBJECT_OMAP:
   case FN_OBJECT_ATTR:
@@ -260,7 +262,10 @@ static int os_getattr(const char *path, struct stat *stbuf)
     {
       spg_t pgid;
       if (cid.is_pg(&pgid)) {
-	int bits = fs->store->collection_bits(cid);
+	if (!ch) {
+	  return -ENOENT;
+	}
+	int bits = fs->store->collection_bits(ch);
 	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
 	  // sorry, not part of this PG
 	  return -ENOENT;
@@ -274,7 +279,7 @@ static int os_getattr(const char *path, struct stat *stbuf)
   case FN_OBJECT_OMAP:
   case FN_OBJECT_ATTR:
   case FN_OBJECT:
-    if (!fs->store->exists(cid, oid))
+    if (!fs->store->exists(ch, oid))
       return -ENOENT;
     // fall-thru
   case FN_ALL:
@@ -293,15 +298,15 @@ static int os_getattr(const char *path, struct stat *stbuf)
     break;
 
   case FN_OBJECT_HASH:
-    if (!fs->store->exists(cid, oid))
+    if (!fs->store->exists(ch, oid))
       return -ENOENT;
     stbuf->st_size = 9;
     return 0;
 
   case FN_HASH_END:
-    if (!fs->store->collection_exists(cid))
+    if (!ch)
       return -ENOENT;
-    if (fs->store->collection_bits(cid) < 0)
+    if (fs->store->collection_bits(ch) < 0)
       return -ENOENT;
     // fall-thru
   case FN_HASH_START:
@@ -310,9 +315,9 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_HASH_BITS:
     {
-      if (!fs->store->collection_exists(cid))
+      if (!ch)
 	return -ENOENT;
-      int bits = fs->store->collection_bits(cid);
+      int bits = fs->store->collection_bits(ch);
       if (bits < 0)
 	return -ENOENT;
       char buf[8];
@@ -323,9 +328,9 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_DATA:
     {
-      if (!fs->store->exists(cid, oid))
+      if (!fs->store->exists(ch, oid))
 	return -ENOENT;
-      int r = fs->store->stat(cid, oid, stbuf);
+      int r = fs->store->stat(ch, oid, stbuf);
       if (r < 0)
 	return r;
     }
@@ -333,22 +338,22 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_OMAP_HEADER:
     {
-      if (!fs->store->exists(cid, oid))
+      if (!fs->store->exists(ch, oid))
 	return -ENOENT;
       bufferlist bl;
-      fs->store->omap_get_header(cid, oid, &bl);
+      fs->store->omap_get_header(ch, oid, &bl);
       stbuf->st_size = bl.length();
     }
     break;
 
   case FN_OBJECT_OMAP_VAL:
     {
-      if (!fs->store->exists(cid, oid))
+      if (!fs->store->exists(ch, oid))
 	return -ENOENT;
       set<string> k;
       k.insert(key);
       map<string,bufferlist> v;
-      fs->store->omap_get_values(cid, oid, k, &v);
+      fs->store->omap_get_values(ch, oid, k, &v);
       if (!v.count(key)) {
 	return -ENOENT;
       }
@@ -358,10 +363,10 @@ static int os_getattr(const char *path, struct stat *stbuf)
 
   case FN_OBJECT_ATTR_VAL:
     {
-      if (!fs->store->exists(cid, oid))
+      if (!fs->store->exists(ch, oid))
 	return -ENOENT;
       bufferptr v;
-      int r = fs->store->getattr(cid, oid, key.c_str(), v);
+      int r = fs->store->getattr(ch, oid, key.c_str(), v);
       if (r == -ENODATA)
 	r = -ENOENT;
       if (r < 0)
@@ -398,6 +403,8 @@ static int os_readdir(const char *path,
 
   std::lock_guard<std::mutex> l(fs->lock);
 
+  auto ch = fs->store->open_collection(cid);
+
   // we can't shift 32 bits or else off_t will go negative
   const int hash_shift = 31;
 
@@ -417,8 +424,11 @@ static int os_readdir(const char *path,
 
   case FN_COLLECTION:
     {
+      if (!ch) {
+	return -ENOENT;
+      }
       filler(buf, "bitwise_hash_start", NULL, 0);
-      if (fs->store->collection_bits(cid) >= 0) {
+      if (fs->store->collection_bits(ch) >= 0) {
 	filler(buf, "bitwise_hash_end", NULL, 0);
 	filler(buf, "bitwise_hash_bits", NULL, 0);
       }
@@ -426,7 +436,7 @@ static int os_readdir(const char *path,
       filler(buf, "by_bitwise_hash", NULL, 0);
       spg_t pgid;
       if (cid.is_pg(&pgid) &&
-	  fs->store->exists(cid, pgid.make_pgmeta_oid())) {
+	  fs->store->exists(ch, pgid.make_pgmeta_oid())) {
 	filler(buf, "pgmeta", NULL, 0);
       }
     }
@@ -476,7 +486,7 @@ static int os_readdir(const char *path,
       while (true) {
 	vector<ghobject_t> ls;
 	int r = fs->store->collection_list(
-	  cid, next, last, 1000, &ls, &next);
+	  ch, next, last, 1000, &ls, &next);
 	if (r < 0)
 	  return r;
 	for (auto p : ls) {
@@ -508,7 +518,7 @@ static int os_readdir(const char *path,
   case FN_OBJECT_OMAP:
     {
       set<string> keys;
-      fs->store->omap_get_keys(cid, oid, &keys);
+      fs->store->omap_get_keys(ch, oid, &keys);
       unsigned skip = offset;
       for (auto k : keys) {
 	if (skip) {
@@ -526,7 +536,7 @@ static int os_readdir(const char *path,
   case FN_OBJECT_ATTR:
     {
       map<string,bufferptr> aset;
-      fs->store->getattrs(cid, oid, aset);
+      fs->store->getattrs(ch, oid, aset);
       unsigned skip = offset;
       for (auto a : aset) {
 	if (skip) {
@@ -560,6 +570,8 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   std::lock_guard<std::mutex> l(fs->lock);
 
+  auto ch = fs->store->open_collection(cid);
+
   bufferlist *pbl = 0;
   switch (t) {
   case FN_TYPE:
@@ -586,10 +598,13 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_HASH_END:
     {
+      if (!ch) {
+	return -ENOENT;
+      }
       spg_t pgid;
       unsigned long h;
       if (cid.is_pg(&pgid)) {
-	int hash_bits = fs->store->collection_bits(cid);
+	int hash_bits = fs->store->collection_bits(ch);
 	if (hash_bits >= 0) {
 	  uint64_t rev_start = hobject_t::_reverse_bits(pgid.ps());
 	  uint64_t rev_end = (rev_start | (0xffffffff >> hash_bits));
@@ -609,7 +624,10 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 
   case FN_HASH_BITS:
     {
-      int r = fs->store->collection_bits(cid);
+      if (!ch) {
+	return -ENOENT;
+      }
+      int r = fs->store->collection_bits(ch);
       if (r < 0)
         return r;
       char buf[8];
@@ -634,7 +652,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       int r = fs->open_file(
 	path, fi,
 	[&](bufferlist *pbl) {
-	  return fs->store->read(cid, oid, 0, 0, *pbl);
+	  return fs->store->read(ch, oid, 0, 0, *pbl);
 	});
       if (r < 0) {
         return r;
@@ -648,7 +666,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 	path, fi,
 	[&](bufferlist *pbl) {
 	  bufferptr bp;
-	  int r = fs->store->getattr(cid, oid, key.c_str(), bp);
+	  int r = fs->store->getattr(ch, oid, key.c_str(), bp);
 	  if (r < 0)
 	    return r;
 	  pbl->append(bp);
@@ -667,7 +685,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
 	  set<string> k;
 	  k.insert(key);
 	  map<string,bufferlist> v;
-	  int r = fs->store->omap_get_values(cid, oid, k, &v);
+	  int r = fs->store->omap_get_values(ch, oid, k, &v);
 	  if (r < 0)
 	    return r;
 	  *pbl = v[key];
@@ -683,7 +701,7 @@ static int os_open(const char *path, struct fuse_file_info *fi)
       int r = fs->open_file(
 	path, fi,
 	[&](bufferlist *pbl) {
-	  return fs->store->omap_get_header(cid, oid, pbl);
+	  return fs->store->omap_get_header(ch, oid, pbl);
 	});
       if (r < 0)
        return r;
@@ -721,9 +739,13 @@ static int os_mkdir(const char *path, mode_t mode)
   switch (f) {
   case FN_OBJECT:
     {
+      ch = fs->store->open_collection(cid);
+      if (!ch) {
+	return -ENOENT;
+      }
       spg_t pgid;
       if (cid.is_pg(&pgid)) {
-	int bits = fs->store->collection_bits(cid);
+	int bits = fs->store->collection_bits(ch);
 	if (bits >= 0 && !oid.match(bits, pgid.ps())) {
 	  // sorry, not part of this PG
 	  return -EINVAL;
@@ -745,8 +767,7 @@ static int os_mkdir(const char *path, mode_t mode)
       mode = 0;
     }
     t.create_collection(cid, mode);
-
-    ch = fs->store->open_collection(coll_t::meta());
+    ch = fs->store->create_new_collection(cid);
     break;
 
   default:
@@ -795,7 +816,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
   case FN_OBJECT_DATA:
     {
       pbl = new bufferlist;
-      fs->store->read(cid, oid, 0, 0, *pbl);
+      fs->store->read(ch, oid, 0, 0, *pbl);
     }
     break;
 
@@ -803,7 +824,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
     {
       pbl = new bufferlist;
       bufferptr bp;
-      int r = fs->store->getattr(cid, oid, key.c_str(), bp);
+      int r = fs->store->getattr(ch, oid, key.c_str(), bp);
       if (r == -ENODATA) {
 	bufferlist empty;
 	t.setattr(cid, oid, key.c_str(), empty);
@@ -818,7 +839,7 @@ static int os_create(const char *path, mode_t mode, struct fuse_file_info *fi)
       set<string> k;
       k.insert(key);
       map<string,bufferlist> v;
-      fs->store->omap_get_values(cid, oid, k, &v);
+      fs->store->omap_get_values(ch, oid, k, &v);
       if (v.count(key) == 0) {
 	map<string,bufferlist> aset;
 	aset[key] = bufferlist();
@@ -990,7 +1011,7 @@ static int os_unlink(const char *path)
 
   std::lock_guard<std::mutex> l(fs->lock);
 
-  ObjectStore::CollectionHandle ch;
+  ObjectStore::CollectionHandle ch = fs->store->open_collection(cid);
   ObjectStore::Transaction t;
 
   switch (f) {
@@ -1024,7 +1045,7 @@ static int os_unlink(const char *path)
   case FN_COLLECTION:
     {
       bool empty;
-      int r = fs->store->collection_empty(cid, &empty);
+      int r = fs->store->collection_empty(ch, &empty);
       if (r < 0)
         return r;
       if (!empty)

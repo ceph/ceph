@@ -78,7 +78,7 @@ TEST_F(MemStoreClone, CloneRangeAllocated)
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
   ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -102,7 +102,7 @@ TEST_F(MemStoreClone, CloneRangeHole)
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
   ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -126,7 +126,7 @@ TEST_F(MemStoreClone, CloneRangeHoleStart)
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
   ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -151,7 +151,7 @@ TEST_F(MemStoreClone, CloneRangeHoleMiddle)
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
   ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -176,7 +176,7 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
   ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 

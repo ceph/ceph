@@ -6975,7 +6975,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool truncated = false;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, ghobject_t(soid)
+	    ch, ghobject_t(soid)
 	    );
 	  assert(iter);
 	  iter->upper_bound(start_after);
@@ -7022,7 +7022,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, ghobject_t(soid)
+	    ch, ghobject_t(soid)
 	    );
           if (!iter) {
             result = -ENOENT;
@@ -8422,7 +8422,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
       }
       bufferlist omap_data;
       ObjectMap::ObjectMapIterator iter =
-	osd->store->get_omap_iterator(coll, ghobject_t(oi.soid));
+	osd->store->get_omap_iterator(ch, ghobject_t(oi.soid));
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
       for (; iter->valid(); iter->next(false)) {
@@ -11753,7 +11753,7 @@ void PrimaryLogPG::_on_new_interval()
   dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
   if (!pg_log.get_missing().may_include_deletes &&
       get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
-    pg_log.rebuild_missing_set_with_deletes(osd->store, coll, info);
+    pg_log.rebuild_missing_set_with_deletes(osd->store, ch, info);
   }
   assert(pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
 }

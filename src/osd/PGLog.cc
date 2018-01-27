@@ -915,9 +915,10 @@ void PGLog::_write_log_and_missing(
     t.omap_rmkeys(coll, log_oid, to_remove);
 }
 
-void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
-					     coll_t pg_coll,
-					     const pg_info_t &info)
+void PGLog::rebuild_missing_set_with_deletes(
+  ObjectStore *store,
+  ObjectStore::CollectionHandle& ch,
+  const pg_info_t &info)
 {
   // save entries not generated from the current log (e.g. added due
   // to repair, EIO handling, or divergent_priors).
@@ -949,7 +950,7 @@ void PGLog::rebuild_missing_set_with_deletes(ObjectStore *store,
 
     bufferlist bv;
     int r = store->getattr(
-	pg_coll,
+      ch,
 	ghobject_t(i->soid, ghobject_t::NO_GEN, info.pgid.shard),
 	OI_ATTR,
 	bv);
