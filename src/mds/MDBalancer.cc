@@ -493,8 +493,14 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
 
     // Pass on to MDCache: note that the split might still not
     // happen if the checks in MDCache::can_fragment fail.
+    auto mds_bal_split_bits = g_conf->mds_bal_split_bits;
+    if (mds_bal_split_bits > 24) {
+      dout(10) << "mds_bal_split_bits: " << mds_bal_split_bits
+        << "Hard limit of mds_bal_split_bits is 24" << dendl;
+      return;
+    }
     dout(10) << __func__ << " splitting " << *split_dir << dendl;
-    mds->mdcache->split_dir(split_dir, g_conf->mds_bal_split_bits);
+    mds->mdcache->split_dir(split_dir, mds_bal_split_bits);
   };
 
   bool is_new = false;
