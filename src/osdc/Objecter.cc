@@ -51,15 +51,6 @@
 #include "common/errno.h"
 #include "common/EventTrace.h"
 
-using ceph::real_time;
-using ceph::real_clock;
-
-using ceph::mono_clock;
-using ceph::mono_time;
-
-using ceph::timespan;
-
-
 #define dout_subsys ceph_subsys_objecter
 #undef dout_prefix
 #define dout_prefix *_dout << messenger->get_myname() << ".objecter "
