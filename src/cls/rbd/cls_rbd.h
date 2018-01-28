@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef __CEPH_CLS_RBD_H
 #define __CEPH_CLS_RBD_H
 
@@ -61,12 +62,11 @@ struct cls_rbd_snap {
   snapid_t id;
   string name;
   uint64_t image_size;
-  uint64_t features;
   uint8_t protection_status;
   cls_rbd_parent parent;
   uint64_t flags;
   utime_t timestamp;
-  cls::rbd::SnapshotNamespaceOnDisk snapshot_namespace = {
+  cls::rbd::SnapshotNamespace snapshot_namespace = {
     cls::rbd::UserSnapshotNamespace{}};
 
   /// true if we have a parent
@@ -74,7 +74,7 @@ struct cls_rbd_snap {
     return parent.exists();
   }
 
-  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0), features(0),
+  cls_rbd_snap() : id(CEPH_NOSNAP), image_size(0),
 		   protection_status(RBD_PROTECTION_STATUS_UNPROTECTED),
                    flags(0), timestamp(utime_t())
     {}
@@ -83,7 +83,8 @@ struct cls_rbd_snap {
     encode(id, bl);
     encode(name, bl);
     encode(image_size, bl);
-    encode(features, bl);
+    uint64_t features = 0;
+    encode(features, bl); // unused -- preserve ABI
     encode(parent, bl);
     encode(protection_status, bl);
     encode(flags, bl);
@@ -96,7 +97,8 @@ struct cls_rbd_snap {
     decode(id, p);
     decode(name, p);
     decode(image_size, p);
-    decode(features, p);
+    uint64_t features;
+    decode(features, p); // unused -- preserve ABI
     if (struct_v >= 2) {
       decode(parent, p);
     }
@@ -118,7 +120,6 @@ struct cls_rbd_snap {
     f->dump_unsigned("id", id);
     f->dump_string("name", name);
     f->dump_unsigned("image_size", image_size);
-    f->dump_unsigned("features", features);
     if (has_parent()) {
       f->open_object_section("parent");
       parent.dump(f);
@@ -144,14 +145,12 @@ struct cls_rbd_snap {
     t->id = 1;
     t->name = "snap";
     t->image_size = 123456;
-    t->features = 123;
     t->flags = 31;
     o.push_back(t);
     t = new cls_rbd_snap;
     t->id = 2;
     t->name = "snap2";
     t->image_size = 12345678;
-    t->features = 1234;
     t->parent.pool = 1;
     t->parent.id = "parent";
     t->parent.snapid = 456;
@@ -164,15 +163,4 @@ struct cls_rbd_snap {
 };
 WRITE_CLASS_ENCODER(cls_rbd_snap)
 
-namespace group {
-
-  static const string RBD_GROUP_SNAP_KEY_PREFIX = "snapshot_";
-
-  std::string snap_key(std::string snap_id) {
-    ostringstream oss;
-    oss << RBD_GROUP_SNAP_KEY_PREFIX << snap_id;
-    return oss.str();
-  }
-}
-
-#endif
+#endif // __CEPH_CLS_RBD_H

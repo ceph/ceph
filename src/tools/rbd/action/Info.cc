@@ -56,6 +56,15 @@ static void format_features(Formatter *f, uint64_t features)
   format_bitmask(f, "feature", at::ImageFeatures::FEATURE_MAPPING, features);
 }
 
+static void format_op_features(Formatter *f, uint64_t op_features)
+{
+  static std::map<uint64_t, std::string> mapping = {
+    {RBD_OPERATION_FEATURE_CLONE_V2, RBD_OPERATION_FEATURE_NAME_CLONE_V2},
+    {RBD_OPERATION_FEATURE_GROUP, RBD_OPERATION_FEATURE_NAME_GROUP},
+    {RBD_OPERATION_FEATURE_SNAP_TRASH, RBD_OPERATION_FEATURE_NAME_SNAP_TRASH}};
+  format_bitmask(f, "op_feature", mapping, op_features);
+}
+
 static void format_flags(Formatter *f, uint64_t flags)
 {
   std::map<uint64_t, std::string> mapping = {
@@ -106,6 +115,12 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   if (r < 0)
     return r;
 
+  uint64_t op_features;
+  r = image.get_op_features(&op_features);
+  if (r < 0) {
+    return r;
+  }
+
   r = image.get_flags(&flags);
   if (r < 0) {
     return r;
@@ -130,25 +145,25 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   std::string prefix = image.get_block_name_prefix();
 
-  librbd::group_spec_t group_spec;
-  r = image.get_group(&group_spec);
+  librbd::group_info_t group_info;
+  r = image.get_group(&group_info, sizeof(group_info));
   if (r < 0) {
     return r;
   }
 
   std::string group_string = "";
-  if (RBD_GROUP_INVALID_POOL != group_spec.pool) {
+  if (RBD_GROUP_INVALID_POOL != group_info.pool) {
     std::string group_pool;
     librados::Rados rados(io_ctx);
     librados::IoCtx group_io_ctx;
-    r = rados.ioctx_create2(group_spec.pool, group_io_ctx);
+    r = rados.ioctx_create2(group_info.pool, group_io_ctx);
     if (r < 0) {
-      group_pool = "<missing group pool " + stringify(group_spec.pool) + ">";
+      group_pool = "<missing group pool " + stringify(group_info.pool) + ">";
     } else {
       group_pool = group_io_ctx.get_pool_name();
     }
 
-    group_string = group_pool + "/" + group_spec.name;
+    group_string = group_pool + "/" + group_info.name;
   }
 
   struct timespec create_timestamp;
@@ -197,6 +212,7 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
 
   if (!old_format) {
     format_features(f, features);
+    format_op_features(f, op_features);
     format_flags(f, flags);
   }
 
