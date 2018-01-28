@@ -207,7 +207,7 @@ void SnapEventBase::encode(bufferlist& bl) const {
   using ceph::encode;
   OpEventBase::encode(bl);
   encode(snap_name, bl);
-  encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  encode(snap_namespace, bl);
 }
 
 void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
@@ -216,16 +216,14 @@ void SnapEventBase::decode(__u8 version, bufferlist::iterator& it) {
   using ceph::decode;
   decode(snap_name, it);
   if (version >= 4) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
 void SnapEventBase::dump(Formatter *f) const {
   OpEventBase::dump(f);
   f->dump_string("snap_name", snap_name);
-  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+  snap_namespace.dump(f);
 }
 
 void SnapCreateEvent::encode(bufferlist &bl) const {
@@ -236,9 +234,7 @@ void SnapCreateEvent::decode(__u8 version, bufferlist::iterator& it) {
   using ceph::decode;
   SnapEventBase::decode(version, it);
   if (version == 3) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
@@ -579,7 +575,7 @@ void MirrorPeerSyncPoint::encode(bufferlist& bl) const {
   encode(snap_name, bl);
   encode(from_snap_name, bl);
   encode(object_number, bl);
-  encode(cls::rbd::SnapshotNamespaceOnDisk(snap_namespace), bl);
+  encode(snap_namespace, bl);
 }
 
 void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
@@ -588,9 +584,7 @@ void MirrorPeerSyncPoint::decode(__u8 version, bufferlist::iterator& it) {
   decode(from_snap_name, it);
   decode(object_number, it);
   if (version >= 2) {
-    cls::rbd::SnapshotNamespaceOnDisk sn;
-    decode(sn, it);
-    snap_namespace = sn.snapshot_namespace;
+    decode(snap_namespace, it);
   }
 }
 
@@ -600,7 +594,7 @@ void MirrorPeerSyncPoint::dump(Formatter *f) const {
   if (object_number) {
     f->dump_unsigned("object_number", *object_number);
   }
-  cls::rbd::SnapshotNamespaceOnDisk(snap_namespace).dump(f);
+  snap_namespace.dump(f);
 }
 
 void MirrorPeerClientMeta::encode(bufferlist& bl) const {

@@ -796,8 +796,8 @@ TEST_F(TestClsRbd, snapshots)
 
   ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
 
+  vector<cls::rbd::SnapshotInfo> snaps;
   vector<string> snap_names;
-  vector<cls::rbd::SnapshotNamespace> snap_namespaces;
   vector<uint64_t> snap_sizes;
   SnapContext snapc;
   vector<ParentInfo> parents;
@@ -807,11 +807,14 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
   ASSERT_EQ(0u, snapc.snaps.size());
   ASSERT_EQ(0u, snapc.seq);
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, snapc.snaps, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(0u, snaps.size());
+  ASSERT_EQ(0u, parents.size());
+  ASSERT_EQ(0u, protection_status.size());
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(0u, snap_names.size());
-  ASSERT_EQ(0u, snap_namespaces.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(0u, snap_timestamps.size());
@@ -821,13 +824,17 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps.size());
   ASSERT_EQ(0u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.seq);
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, snapc.snaps, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(1u, snaps.size());
+  ASSERT_EQ(1u, parents.size());
+  ASSERT_EQ(1u, protection_status.size());
+  ASSERT_EQ("snap1", snaps[0].name);
+  ASSERT_EQ(userSnapNamespace, snaps[0].snapshot_namespace);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
-  ASSERT_EQ(1u, snap_namespaces.size());
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -840,11 +847,8 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
-  ASSERT_EQ(1u, snap_namespaces.size());
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -858,11 +862,8 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(1u, snap_names.size());
   ASSERT_EQ("snap1", snap_names[0]);
-  ASSERT_EQ(1u, snap_namespaces.size());
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -875,11 +876,8 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0u, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(snap_names.size(), 1u);
   ASSERT_EQ(snap_names[0], "snap1");
-  ASSERT_EQ(1u, snap_namespaces.size());
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(snap_sizes[0], 10u);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -891,16 +889,21 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(0u, snapc.snaps[1]);
   ASSERT_EQ(1u, snapc.seq);
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, snapc.snaps, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(2u, snaps.size());
+  ASSERT_EQ(2u, parents.size());
+  ASSERT_EQ(2u, protection_status.size());
+  ASSERT_EQ("snap2", snaps[0].name);
+  ASSERT_EQ("snap1", snaps[1].name);
+  ASSERT_EQ(userSnapNamespace, snaps[0].snapshot_namespace);
+  ASSERT_EQ(userSnapNamespace, snaps[1].snapshot_namespace);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(2u, snap_names.size());
-  ASSERT_EQ(2u, snap_namespaces.size());
   ASSERT_EQ("snap2", snap_names[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ("snap1", snap_names[1]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(2u, snap_timestamps.size());
@@ -908,14 +911,10 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(0, snapshot_rename(&ioctx, oid, 0, "snap1-rename"));
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(2u, snap_names.size());
-  ASSERT_EQ(2u, snap_namespaces.size());
   ASSERT_EQ("snap2", snap_names[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ("snap1-rename", snap_names[1]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(2u, snap_timestamps.size());
@@ -925,13 +924,17 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(1u, snapc.snaps.size());
   ASSERT_EQ(1u, snapc.snaps[0]);
   ASSERT_EQ(1u, snapc.seq);
+  ASSERT_EQ(0, snapshot_get(&ioctx, oid, snapc.snaps, &snaps,
+                            &parents, &protection_status));
+  ASSERT_EQ(1u, snaps.size());
+  ASSERT_EQ(1u, parents.size());
+  ASSERT_EQ(1u, protection_status.size());
+  ASSERT_EQ("snap2", snaps[0].name);
+  ASSERT_EQ(userSnapNamespace, snaps[0].snapshot_namespace);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(1u, snap_names.size());
-  ASSERT_EQ(1u, snap_namespaces.size());
   ASSERT_EQ("snap2", snap_names[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -952,14 +955,10 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(2u, snap_names.size());
-  ASSERT_EQ(2u, snap_namespaces.size());
   ASSERT_EQ("snap3", snap_names[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(0u, snap_sizes[0]);
   ASSERT_EQ("snap2", snap_names[1]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[1]);
   ASSERT_EQ(10u, snap_sizes[1]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(2u, snap_timestamps.size());
@@ -979,11 +978,8 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(1u, snap_names.size());
-  ASSERT_EQ(1u, snap_namespaces.size());
   ASSERT_EQ("snap2", snap_names[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[0]);
   ASSERT_EQ(10u, snap_sizes[0]);
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(1u, snap_timestamps.size());
@@ -995,51 +991,10 @@ TEST_F(TestClsRbd, snapshots)
   ASSERT_EQ(large_snap_id, snapc.seq);
   ASSERT_EQ(0, snapshot_list(&ioctx, oid, snapc.snaps, &snap_names,
 			     &snap_sizes, &parents, &protection_status));
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
   ASSERT_EQ(0u, snap_names.size());
-  ASSERT_EQ(0u, snap_namespaces.size());
   ASSERT_EQ(0u, snap_sizes.size());
   ASSERT_EQ(0, snapshot_timestamp_list(&ioctx, oid, snapc.snaps, &snap_timestamps));
   ASSERT_EQ(0u, snap_timestamps.size());
-
-  ioctx.close();
-}
-
-TEST_F(TestClsRbd, snapshots_namespaces)
-{
-  cls::rbd::SnapshotNamespace groupSnapNamespace = cls::rbd::GroupSnapshotNamespace(5, "1018643c9869", "3338524f9933");
-  cls::rbd::SnapshotNamespace userSnapNamespace = cls::rbd::UserSnapshotNamespace();
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
-
-  string oid = get_temp_image_name();
-
-  ASSERT_EQ(0, create_image(&ioctx, oid, 10, 22, 0, oid, -1));
-
-  vector<cls::rbd::SnapshotNamespace> snap_namespaces;
-  SnapContext snapc;
-
-  ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
-  ASSERT_EQ(0u, snapc.snaps.size());
-  ASSERT_EQ(0u, snapc.seq);
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
-  ASSERT_EQ(0u, snap_namespaces.size());
-
-  ASSERT_EQ(0, snapshot_add(&ioctx, oid, 0, "snap1"));
-
-  librados::ObjectWriteOperation op;
-  ::librbd::cls_client::snapshot_add(&op, 1, "snap1", groupSnapNamespace);
-  int r = ioctx.operate(oid, &op);
-  ASSERT_EQ(0, r);
-
-  ASSERT_EQ(0, get_snapcontext(&ioctx, oid, &snapc));
-  ASSERT_EQ(2u, snapc.snaps.size());
-  ASSERT_EQ(1u, snapc.snaps[0]);
-  ASSERT_EQ(0u, snapc.snaps[1]);
-  ASSERT_EQ(1u, snapc.seq);
-  ASSERT_EQ(0, snapshot_namespace_list(&ioctx, oid, snapc.snaps, &snap_namespaces));
-  ASSERT_EQ(groupSnapNamespace, snap_namespaces[0]);
-  ASSERT_EQ(userSnapNamespace, snap_namespaces[1]);
 
   ioctx.close();
 }
@@ -1070,7 +1025,6 @@ TEST_F(TestClsRbd, snapshots_timestamps)
   ASSERT_LT(0U, snap_timestamps[0].tv.tv_sec);
   ioctx.close();
 }
-
 
 TEST_F(TestClsRbd, snapid_race)
 {
@@ -2154,7 +2108,7 @@ TEST_F(TestClsRbd, group_image_clean) {
   ASSERT_EQ(cls::rbd::GROUP_IMAGE_LINK_STATE_ATTACHED, ref_state);
 }
 
-TEST_F(TestClsRbd, image_add_group) {
+TEST_F(TestClsRbd, image_group_add) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2167,7 +2121,7 @@ TEST_F(TestClsRbd, image_add_group) {
   string group_id = "group_id";
 
   cls::rbd::GroupSpec spec(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec));
 
   map<string, bufferlist> vals;
   ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
@@ -2180,7 +2134,7 @@ TEST_F(TestClsRbd, image_add_group) {
   ASSERT_EQ(pool_id, val_spec.pool_id);
 }
 
-TEST_F(TestClsRbd, image_remove_group) {
+TEST_F(TestClsRbd, image_group_remove) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2193,10 +2147,10 @@ TEST_F(TestClsRbd, image_remove_group) {
   string group_id = "group_id";
 
   cls::rbd::GroupSpec spec(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec));
-  // Add reference in order to make sure that image_remove_group actually
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec));
+  // Add reference in order to make sure that image_group_remove actually
   // does something.
-  ASSERT_EQ(0, image_remove_group(&ioctx, image_id, spec));
+  ASSERT_EQ(0, image_group_remove(&ioctx, image_id, spec));
 
   map<string, bufferlist> vals;
   ASSERT_EQ(0, ioctx.omap_get_vals(image_id, "", RBD_GROUP_REF, 10, &vals));
@@ -2204,7 +2158,7 @@ TEST_F(TestClsRbd, image_remove_group) {
   ASSERT_EQ(0U, vals.size());
 }
 
-TEST_F(TestClsRbd, image_get_group) {
+TEST_F(TestClsRbd, image_group_get) {
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
 
@@ -2217,10 +2171,10 @@ TEST_F(TestClsRbd, image_get_group) {
   string group_id = "group_id_get_group_spec";
 
   cls::rbd::GroupSpec spec_add(group_id, pool_id);
-  ASSERT_EQ(0, image_add_group(&ioctx, image_id, spec_add));
+  ASSERT_EQ(0, image_group_add(&ioctx, image_id, spec_add));
 
   cls::rbd::GroupSpec spec;
-  ASSERT_EQ(0, image_get_group(&ioctx, image_id, &spec));
+  ASSERT_EQ(0, image_group_get(&ioctx, image_id, &spec));
 
   ASSERT_EQ(group_id, spec.group_id);
   ASSERT_EQ(pool_id, spec.pool_id);
@@ -2308,7 +2262,7 @@ TEST_F(TestClsRbd, group_snap_set) {
   auto it = keys.begin();
   ASSERT_EQ(1U, keys.size());
 
-  string snap_key = group::snap_key(snap.id);
+  string snap_key = "snapshot_" + stringify(snap.id);
   ASSERT_EQ(snap_key, *it);
 }
 
@@ -2399,7 +2353,7 @@ TEST_F(TestClsRbd, group_snap_remove) {
   auto it = keys.begin();
   ASSERT_EQ(1U, keys.size());
 
-  string snap_key = group::snap_key(snap.id);
+  string snap_key = "snapshot_" + stringify(snap.id);
   ASSERT_EQ(snap_key, *it);
 
   // Remove the snapshot
@@ -2524,6 +2478,7 @@ TEST_F(TestClsRbd, op_features)
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);
 
+  op_features = RBD_OPERATION_FEATURES_ALL;
   mask = RBD_OPERATION_FEATURES_ALL;
   ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
@@ -2541,7 +2496,7 @@ TEST_F(TestClsRbd, op_features)
                                     ~RBD_OPERATION_FEATURE_CLONE_V2;
   ASSERT_EQ(expected_op_features, actual_op_features);
 
-  mask = 0;
+  mask = RBD_OPERATION_FEATURES_ALL;
   ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
   ASSERT_EQ(0, get_features(&ioctx, oid, CEPH_NOSNAP, &features));
   ASSERT_EQ(0u, features);

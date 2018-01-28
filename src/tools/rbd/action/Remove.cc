@@ -74,18 +74,18 @@ int execute(const po::variables_map &vm,
     } else if (r == -EMLINK) {
       librbd::Image image;
       int image_r = utils::open_image(io_ctx, image_name, true, &image);
-      librbd::group_spec_t group_spec;
+      librbd::group_info_t group_info;
       if (image_r == 0) {
-	image_r = image.get_group(&group_spec);
+	image_r = image.get_group(&group_info, sizeof(group_info));
       }
       if (image_r == 0)
-	std::cerr << "rbd: error: image belongs to a consistency group "
-		  << group_spec.pool << "." << group_spec.name;
+	std::cerr << "rbd: error: image belongs to a group "
+		  << group_info.pool << "." << group_info.name;
       else
-	std::cerr << "rbd: error: image belongs to a consistency group";
+	std::cerr << "rbd: error: image belongs to a group";
 
       std::cerr << std::endl
-		<< "Remove the image from the consistency group and try again."
+		<< "Remove the image from the group and try again."
 		<< std::endl;
       image.close();
     } else {

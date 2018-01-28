@@ -319,30 +319,60 @@ struct UnknownSnapshotNamespace {
 std::ostream& operator<<(std::ostream& os, const UnknownSnapshotNamespace& ns);
 
 typedef boost::variant<UserSnapshotNamespace,
-		       GroupSnapshotNamespace,
-		       UnknownSnapshotNamespace> SnapshotNamespace;
+                       GroupSnapshotNamespace,
+                       UnknownSnapshotNamespace> SnapshotNamespaceVariant;
 
+struct SnapshotNamespace : public SnapshotNamespaceVariant {
 
-struct SnapshotNamespaceOnDisk {
+  SnapshotNamespace() {
+  }
 
-  SnapshotNamespaceOnDisk() : snapshot_namespace(UnknownSnapshotNamespace()) {}
-  SnapshotNamespaceOnDisk(const SnapshotNamespace &sn) : snapshot_namespace(sn) {}
-
-  SnapshotNamespace snapshot_namespace;
+  template <typename T>
+  SnapshotNamespace(T&& t) : SnapshotNamespaceVariant(std::forward<T>(t)) {
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
   void dump(Formatter *f) const;
 
-  static void generate_test_instances(std::list<SnapshotNamespaceOnDisk *> &o);
+  static void generate_test_instances(std::list<SnapshotNamespace*> &o);
 
-  inline bool operator==(const SnapshotNamespaceOnDisk& gsn) const {
-    return snapshot_namespace == gsn.snapshot_namespace;
+  inline bool operator==(const SnapshotNamespaceVariant& sn) const {
+    return static_cast<const SnapshotNamespaceVariant&>(*this) == sn;
+  }
+  inline bool operator<(const SnapshotNamespaceVariant& sn) const {
+    return static_cast<const SnapshotNamespaceVariant&>(*this) < sn;
   }
 };
-WRITE_CLASS_ENCODER(SnapshotNamespaceOnDisk);
+WRITE_CLASS_ENCODER(SnapshotNamespace);
 
-SnapshotNamespaceType get_snap_namespace_type(const SnapshotNamespace& snapshot_namespace);
+SnapshotNamespaceType get_snap_namespace_type(
+    const SnapshotNamespace& snapshot_namespace);
+
+struct SnapshotInfo {
+  snapid_t id = CEPH_NOSNAP;
+  cls::rbd::SnapshotNamespace snapshot_namespace = {UserSnapshotNamespace{}};
+  std::string name;
+  uint64_t image_size = 0;
+  utime_t timestamp;
+
+  SnapshotInfo() {
+  }
+  SnapshotInfo(snapid_t id,
+               const cls::rbd::SnapshotNamespace& snapshot_namespace,
+               const std::string& name, uint64_t image_size,
+               const utime_t& timestamp)
+    : id(id), snapshot_namespace(snapshot_namespace),
+      name(name), image_size(image_size), timestamp(timestamp) {
+  }
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::iterator& it);
+  void dump(Formatter *f) const;
+
+  static void generate_test_instances(std::list<SnapshotInfo*> &o);
+};
+WRITE_CLASS_ENCODER(SnapshotInfo);
 
 enum GroupSnapshotState {
   GROUP_SNAPSHOT_STATE_INCOMPLETE = 0,
