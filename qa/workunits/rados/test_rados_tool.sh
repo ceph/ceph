@@ -250,7 +250,9 @@ run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 write --format json --outpu
 run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 1 write --output "$TDIR/bench.json"
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --format json --no-cleanup
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand --format json
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 rand -f json
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq --format json
+run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 1 seq -f json
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-omap
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-object
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr
