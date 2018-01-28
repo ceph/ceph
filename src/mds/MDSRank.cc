@@ -845,6 +845,18 @@ bool MDSRank::is_stale_message(Message *m) const
   return false;
 }
 
+Session *MDSRank::get_session(Message *m)
+{
+  Session *session = static_cast<Session *>(m->get_connection()->get_priv());
+  if (session) {
+    dout(20) << "get_session have " << session << " " << session->info.inst
+	     << " state " << session->get_state_name() << dendl;
+    session->put();  // not carry ref
+  } else {
+    dout(20) << "get_session dne for " << m->get_source_inst() << dendl;
+  }
+  return session;
+}
 
 void MDSRank::send_message(Message *m, Connection *c)
 {
