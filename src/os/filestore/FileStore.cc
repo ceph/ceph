@@ -211,7 +211,6 @@ int FileStore::lfn_truncate(const coll_t& cid, const ghobject_t& oid, off_t leng
     int rc = backend->_crc_update_truncate(**fd, length);
     assert(rc >= 0);
   }
-  lfn_close(fd);
   assert(!m_filestore_fail_eio || r != -EIO);
   return r;
 }
@@ -2575,7 +2574,6 @@ int FileStore::_check_replay_guard(const coll_t& cid, const ghobject_t &oid,
     return 1;  // if file does not exist, there is no guard, and we can replay.
   }
   int ret = _check_replay_guard(**fd, spos);
-  lfn_close(fd);
   return ret;
 }
 
@@ -3276,7 +3274,6 @@ int FileStore::read(
   got = safe_pread(**fd, bptr.c_str(), len, offset);
   if (got < 0) {
     dout(10) << __FUNC__ << ": (" << cid << "/" << oid << ") pread error: " << cpp_strerror(got) << dendl;
-    lfn_close(fd);
     return got;
   }
   bptr.set_length(got);   // properly size the buffer
@@ -3299,8 +3296,6 @@ int FileStore::read(
       assert(0 == "bad crc on read");
     }
   }
-
-  lfn_close(fd);
 
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~"
 	   << got << "/" << len << dendl;
@@ -3474,8 +3469,6 @@ int FileStore::fiemap(const coll_t& _cid, const ghobject_t& oid,
     r = _do_fiemap(**fd, offset, len, &destmap);
   }
 
-  lfn_close(fd);
-
 done:
 
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << " num_extents=" << destmap.size() << " " << destmap << dendl;
@@ -3510,8 +3503,6 @@ int FileStore::_touch(const coll_t& cid, const ghobject_t& oid)
   int r = lfn_open(cid, oid, true, &fd);
   if (r < 0) {
     return r;
-  } else {
-    lfn_close(fd);
   }
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
@@ -3538,7 +3529,6 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
   if (r < 0) {
     derr << __FUNC__ << ": write_fd on " << cid << "/" << oid
          << " error: " << cpp_strerror(r) << dendl;
-    lfn_close(fd);
     goto out;
   }
   r = bl.length();
@@ -3558,8 +3548,6 @@ int FileStore::_write(const coll_t& cid, const ghobject_t& oid,
     wbthrottle.queue_wb(fd, oid, offset, len,
         fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
   }
- 
-  lfn_close(fd);
 
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " " << offset << "~" << len << " = " << r << dendl;
@@ -3586,7 +3574,6 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
     ret = ::fstat(**fd, &st);
     if (ret < 0) {
       ret = -errno;
-      lfn_close(fd);
       goto out;
     }
 
@@ -3601,12 +3588,10 @@ int FileStore::_zero(const coll_t& cid, const ghobject_t& oid, uint64_t offset, 
 	ret = ::ftruncate(**fd, offset + len);
 	if (ret < 0) {
 	  ret = -errno;
-	  lfn_close(fd);
 	  goto out;
 	}
       }
     }
-    lfn_close(fd);
 
     if (ret >= 0 && m_filestore_sloppy_crc) {
       int rc = backend->_crc_update_zero(**fd, offset, len);
@@ -3668,24 +3653,24 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
     r = ::ftruncate(**n, 0);
     if (r < 0) {
       r = -errno;
-      goto out3;
+      goto out;
     }
     struct stat st;
     r = ::fstat(**o, &st);
     if (r < 0) {
       r = -errno;
-      goto out3;
+      goto out;
     }
 
     r = _do_clone_range(**o, **n, 0, st.st_size, 0);
     if (r < 0) {
-      goto out3;
+      goto out;
     }
 
     dout(20) << "objectmap clone" << dendl;
     r = object_map->clone(oldoid, newoid, &spos);
     if (r < 0 && r != -ENOENT)
-      goto out3;
+      goto out;
   }
 
   {
@@ -3693,7 +3678,7 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
     map<string, bufferptr> aset;
     r = _fgetattrs(**o, aset);
     if (r < 0)
-      goto out3;
+      goto out;
 
     r = chain_fgetxattr(**o, XATTR_SPILL_OUT_NAME, buf, sizeof(buf));
     if (r >= 0 && !strncmp(buf, XATTR_NO_SPILL_OUT, sizeof(XATTR_NO_SPILL_OUT))) {
@@ -3704,20 +3689,17 @@ int FileStore::_clone(const coll_t& cid, const ghobject_t& oldoid, const ghobjec
                           sizeof(XATTR_SPILL_OUT));
     }
     if (r < 0)
-      goto out3;
+      goto out;
 
     r = _fsetattrs(**n, aset);
     if (r < 0)
-      goto out3;
+      goto out;
   }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
 
- out3:
-  lfn_close(n);
  out:
-  lfn_close(o);
  out2:
   dout(10) << __FUNC__ << ": " << cid << "/" << oldoid << " -> " << cid << "/" << newoid << " = " << r << dendl;
   assert(!m_filestore_fail_eio || r != -EIO);
@@ -3938,16 +3920,13 @@ int FileStore::_clone_range(const coll_t& oldcid, const ghobject_t& oldoid, cons
   }
   r = _do_clone_range(**o, **n, srcoff, len, dstoff);
   if (r < 0) {
-    goto out3;
+    goto out;
   }
 
   // clone is non-idempotent; record our work.
   _set_replay_guard(**n, spos, &newoid);
 
- out3:
-  lfn_close(n);
  out:
-  lfn_close(o);
  out2:
   dout(10) << __FUNC__ << ": " << oldcid << "/" << oldoid << " -> " << newcid << "/" << newoid << " "
 	   << srcoff << "~" << len << " to " << dstoff << " = " << r << dendl;
@@ -4430,7 +4409,6 @@ int FileStore::getattr(const coll_t& _cid, const ghobject_t& oid, const char *na
   char n[CHAIN_XATTR_MAX_NAME_LEN];
   get_attrname(name, n, CHAIN_XATTR_MAX_NAME_LEN);
   r = _fgetattr(**fd, n, bp);
-  lfn_close(fd);
   if (r == -ENODATA) {
     map<string, bufferlist> got;
     set<string> to_get;
@@ -4488,7 +4466,6 @@ int FileStore::getattrs(const coll_t& _cid, const ghobject_t& oid, map<string,bu
     spill_out = false;
 
   r = _fgetattrs(**fd, aset);
-  lfn_close(fd);
   fd = FDRef(); // defensive
   if (r < 0) {
     goto out;
@@ -4633,7 +4610,6 @@ int FileStore::_setattrs(const coll_t& cid, const ghobject_t& oid, map<string,bu
     }
   }
  out_close:
-  lfn_close(fd);
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
@@ -4678,7 +4654,6 @@ int FileStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *nam
     }
   }
  out_close:
-  lfn_close(fd);
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " '" << name << "' = " << r << dendl;
   return r;
@@ -4748,7 +4723,6 @@ int FileStore::_rmattrs(const coll_t& cid, const ghobject_t& oid,
   }
 
  out_close:
-  lfn_close(fd);
  out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " = " << r << dendl;
   return r;
@@ -5365,7 +5339,6 @@ int FileStore::_collection_add(const coll_t& c, const coll_t& oldcid, const ghob
   if (r == 0) {
     _close_replay_guard(**fd, spos);
   }
-  lfn_close(fd);
 
   dout(10) << __FUNC__ << ": " << c << "/" << o << " from " << oldcid << "/" << o << " = " << r << dendl;
   return r;
@@ -5435,7 +5408,6 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
 	  r == -EEXIST)    // crashed between link() and set_replay_guard()
 	r = 0;
 
-      lfn_close(fd);
       fd = FDRef();
 
       _inject_failure();
@@ -5459,7 +5431,6 @@ int FileStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& o
     // close guard on object so we don't do this again
     if (r == 0) {
       _close_replay_guard(**fd, spos, &o);
-      lfn_close(fd);
     }
   }
 
@@ -5730,7 +5701,6 @@ int FileStore::_set_alloc_hint(const coll_t& cid, const ghobject_t& oid,
     dout(20) << __FUNC__ << ": hint " << hint << " ret " << ret << dendl;
   }
 
-  lfn_close(fd);
 out:
   dout(10) << __FUNC__ << ": " << cid << "/" << oid << " object_size " << expected_object_size << " write_size " << expected_write_size << " = " << ret << dendl;
   assert(!m_filestore_fail_eio || ret != -EIO);
