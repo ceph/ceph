@@ -5,6 +5,8 @@
 #include <common/errno.h>
 #include "rgw_rest_conn.h"
 #include "rgw_admin_common.h"
+#include "rgw_sync.h"
+#include "rgw_data_sync.h"
 
 // Period, realm, zone , zonegroup , data sync, metadata sync
 
@@ -80,11 +82,11 @@ int handle_opt_realm_pull(const string& realm_id, const string& realm_name, cons
                           Formatter *formatter);
 
 int handle_opt_zonegroup_add(const string& zonegroup_id, const string& zonegroup_name, const string& zone_id,
-                             const string& zone_name, bool tier_type_specified, string& tier_type,
+                             const string& zone_name, bool tier_type_specified, string *tier_type,
                              const map<string, string, ltstr_nocase>& tier_config_add, bool sync_from_all_specified,
-                             bool sync_from_all, bool redirect_zone_set,
-                             string& redirect_zone, bool is_master_set, bool is_master, bool is_read_only_set,
-                             bool read_only, const list<string>& endpoints, list<string>& sync_from,
+                             bool *sync_from_all, bool redirect_zone_set, string *redirect_zone,
+                             bool is_master_set, bool *is_master, bool is_read_only_set,
+                             bool *read_only, const list<string>& endpoints, list<string>& sync_from,
                              list<string>& sync_from_rm, CephContext *context, RGWRados *store,
                              Formatter *formatter);
 
@@ -117,5 +119,57 @@ int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegr
 
 int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegroup_name,
                                 const string& zonegroup_new_name, CephContext *context, RGWRados *store);
+
+int handle_opt_zone_create(const string& zone_id, const string& zone_name, const string& zonegroup_id,
+                           const string& zonegroup_name, string& realm_id, const string& realm_name,
+                           const string& access_key, const string& secret_key, bool tier_type_specified,
+                           string *tier_type, const map<string, string, ltstr_nocase>& tier_config_add,
+                           bool sync_from_all_specified, bool *sync_from_all, bool redirect_zone_set,
+                           string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
+                           bool *read_only, const list<string>& endpoints, list<string>& sync_from,
+                           list<string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
+                           Formatter *formatter);
+
+int handle_opt_zone_default(const string& zone_id, const string& zone_name, const string& zonegroup_id,
+                            const string& zonegroup_name, CephContext *context, RGWRados *store);
+
+int handle_opt_zone_delete(const string& zone_id, const string& zone_name, const string& zonegroup_id,
+                           const string& zonegroup_name, CephContext *context, RGWRados *store);
+
+int handle_opt_zone_get(const string& zone_id, const string& zone_name, CephContext *context, RGWRados *store,
+                        Formatter *formatter);
+
+int handle_opt_zone_set(string& zone_name, const string& realm_id, const string& realm_name, const string& infile,
+                        bool set_default, CephContext *context, RGWRados *store, Formatter *formatter);
+
+int handle_opt_zone_list(CephContext *context, RGWRados *store, Formatter *formatter);
+
+int handle_opt_zone_modify(const string& zone_id, const string& zone_name, const string& zonegroup_id,
+                           const string& zonegroup_name, string& realm_id, const string& realm_name,
+                           const string& access_key, const string& secret_key, bool tier_type_specified,
+                           string *tier_type, const map<string, string, ltstr_nocase>& tier_config_add,
+                           const map<string, string, ltstr_nocase>& tier_config_rm,
+                           bool sync_from_all_specified, bool *sync_from_all, bool redirect_zone_set,
+                           string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
+                           bool *read_only, const list<string>& endpoints, list<string>& sync_from,
+                           list<string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
+                           Formatter *formatter);
+
+int handle_opt_zone_rename(const string& zone_id, const string& zone_name, const string& zone_new_name,
+                           const string& zonegroup_id, const string& zonegroup_name,
+                           CephContext *context, RGWRados *store);
+
+int handle_opt_metadata_sync_status(RGWRados *store, Formatter *formatter);
+
+int handle_opt_metadata_sync_init(RGWRados *store);
+
+int handle_opt_metadata_sync_run(RGWRados *store);
+
+int handle_opt_data_sync_status(const string& source_zone, RGWRados *store, Formatter *formatter);
+
+int handle_opt_data_sync_init(const string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store);
+
+int handle_opt_data_sync_run(const string& source_zone, RGWRados *store);
+
 
 #endif //CEPH_RGW_ADMIN_MULTISITE_H
