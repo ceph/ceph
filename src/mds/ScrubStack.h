@@ -31,7 +31,7 @@ protected:
   /// A finisher needed so that we don't re-enter kick_off_scrubs
   Finisher *finisher;
 
-  /// The stack of dentries we want to scrub
+  /// The stack of inodes we want to scrub
   elist<CInode*> inode_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress;
@@ -100,7 +100,7 @@ private:
    */
   void kick_off_scrubs();
   /**
-   * Push a indoe on top of the stack.
+   * Push a inode on top of the stack.
    */
   inline void push_inode(CInode *in);
   /**
@@ -114,7 +114,7 @@ private:
 
   /**
    * Scrub a file inode.
-   * @param in The indoe to scrub
+   * @param in The inode to scrub
    */
   void scrub_file_inode(CInode *in);
 
@@ -142,7 +142,7 @@ private:
    * 4) If all dirfrags have been scrubbed, scrub my inode.
    *
    * @param in The CInode to scrub as a directory
-   * @param added_dentries set to true if we pushed some of our children
+   * @param added_children set to true if we pushed some of our children
    * onto the ScrubStack
    * @param is_terminal set to true if there are no descendant dentries
    * remaining to start scrubbing.

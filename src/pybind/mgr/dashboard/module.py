@@ -32,7 +32,6 @@ from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 from types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
-import rados
 import rbd_iscsi
 import rbd_mirroring
 from rbd_ls import RbdLs, RbdPoolLs
@@ -125,9 +124,6 @@ class Module(MgrModule):
         self.log_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
         self.audit_buffer = collections.deque(maxlen=LOG_BUFFER_SIZE)
 
-        # Keep a librados instance for those that need it.
-        self._rados = None
-
         # Stateful instances of RbdLs, hold cached results.  Key to dict
         # is pool name.
         self.rbd_ls = {}
@@ -155,21 +151,6 @@ class Module(MgrModule):
 
         # A prefix for all URLs to use the dashboard with a reverse http proxy
         self.url_prefix = ''
-
-    @property
-    def rados(self):
-        """
-        A librados instance to be shared by any classes within
-        this mgr module that want one.
-        """
-        if self._rados:
-            return self._rados
-
-        ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
-
-        return self._rados
 
     def update_pool_stats(self):
         df = global_instance().get("df")
@@ -245,10 +226,6 @@ class Module(MgrModule):
         cherrypy.engine.exit()
         log.info("Stopped server")
 
-        log.info("Stopping librados...")
-        if self._rados:
-            self._rados.shutdown()
-        log.info("Stopped librados.")
 
     def get_latest(self, daemon_type, daemon_name, stat):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
@@ -799,6 +776,7 @@ class Module(MgrModule):
                 mon_status = global_instance().get_sync_object(MonStatus).data
                 for mon in mon_status["monmap"]["mons"]:
                     mon["stats"] = {}
+                    mon["url_perf"] = "/perf_counters/mon/" + mon["name"]
                     for counter in counters:
                         data = global_instance().get_counter("mon", mon["name"], counter)
                         if data is not None:
@@ -826,6 +804,43 @@ class Module(MgrModule):
             def servers_data(self):
                 return self._servers()
 
+            @cherrypy.expose
+            def perf_counters(self, service_type, service_id):
+                template = env.get_template("perf_counters.html")
+                toplevel_data = self._toplevel_data()
+                
+                return template.render(
+                    url_prefix = global_instance().url_prefix,
+                    ceph_version=global_instance().version,
+                    path_info=cherrypy.request.path_info,
+                    toplevel_data=json.dumps(toplevel_data, indent=2),
+                    content_data=json.dumps(self.perf_counters_data(service_type, service_id), indent=2)
+                )
+            
+            @cherrypy.expose
+            @cherrypy.tools.json_out()
+            def perf_counters_data(self, service_type, service_id):
+                schema = global_instance().get_perf_schema(service_type, str(service_id)).values()[0]
+                counters = []
+                
+                for key, value in sorted(schema.items()):
+                    counter = dict()
+                    counter["name"] = str(key)
+                    counter["description"] = value["description"]
+                    if global_instance()._stattype_to_str(value["type"]) == 'counter':
+                        counter["value"] = global_instance().get_rate(service_type, service_id, key)
+                        counter["unit"]  = "/s"
+                    else:
+                        counter["value"] = global_instance().get_latest(service_type, service_id, key)
+                        counter["unit"] = ""
+                    counters.append(counter)
+                                                    
+                return {
+                    'service_type': service_type,
+                    'service_id': service_id,
+                    'counters': counters,
+                }  
+                
             def _health(self):
                 # Fuse osdmap with pg_summary to get description of pools
                 # including their PG states
@@ -1045,7 +1060,8 @@ class Module(MgrModule):
                 return {
                     "osd": osd,
                     "osd_metadata": osd_metadata,
-                    "osd_histogram": histogram
+                    "osd_histogram": histogram,
+                    "url_perf": "/perf_counters/osd/" + str(osd_id)
                 }
 
             @cherrypy.expose
@@ -1219,6 +1235,7 @@ class Module(MgrModule):
 
                 return {
                     "rgw_id": rgw_id,
+                    "url_perf": "/perf_counters/rgw/" + str(rgw_id),
                     "rgw_metadata": to_sorted_array(rgw_metadata),
                     "rgw_status": to_sorted_array(rgw_status),
                 }

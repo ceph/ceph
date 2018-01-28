@@ -77,7 +77,8 @@ int do_list_snaps(librbd::Image& image, Formatter *f, bool all_snaps, librados::
       tt_str = tt_str.substr(0, tt_str.length() - 1);
     }
     librbd::snap_group_namespace_t group_snap;
-    int get_group_res = image.snap_get_group_namespace(s->id, &group_snap);
+    int get_group_res = image.snap_get_group_namespace(s->id, &group_snap,
+                                                       sizeof(group_snap));
 
     if (f) {
       f->open_object_section("snapshot");
@@ -242,7 +243,8 @@ void get_list_arguments(po::options_description *positional,
     (name.c_str(), po::bool_switch(), "list snapshots from all namespaces");
 }
 
-int execute_list(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -309,7 +311,8 @@ void get_create_arguments(po::options_description *positional,
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_create(const po::variables_map &vm) {
+int execute_create(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -349,7 +352,8 @@ void get_remove_arguments(po::options_description *positional,
     ("force", po::bool_switch(), "flatten children and unprotect snapshot if needed.");
 }
 
-int execute_remove(const po::variables_map &vm) {
+int execute_remove(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -426,7 +430,8 @@ void get_purge_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_purge(const po::variables_map &vm) {
+int execute_purge(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -498,7 +503,8 @@ void get_rollback_arguments(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_rollback(const po::variables_map &vm) {
+int execute_rollback(const po::variables_map &vm,
+                     const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -533,7 +539,8 @@ void get_protect_arguments(po::options_description *positional,
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_protect(const po::variables_map &vm) {
+int execute_protect(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -580,7 +587,8 @@ void get_unprotect_arguments(po::options_description *positional,
   at::add_image_id_option(options);
 }
 
-int execute_unprotect(const po::variables_map &vm) {
+int execute_unprotect(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -661,7 +669,8 @@ void get_set_limit_arguments(po::options_description *pos,
   at::add_limit_option(opt);
 }
 
-int execute_set_limit(const po::variables_map &vm) {
+int execute_set_limit(const po::variables_map &vm,
+                      const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -705,7 +714,8 @@ void get_clear_limit_arguments(po::options_description *pos,
   at::add_image_spec_options(pos, opt, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_clear_limit(const po::variables_map &vm) {
+int execute_clear_limit(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -742,7 +752,8 @@ void get_rename_arguments(po::options_description *positional,
   at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
 }
 
-int execute_rename(const po::variables_map &vm) {
+int execute_rename(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;

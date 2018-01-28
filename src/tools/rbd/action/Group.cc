@@ -19,7 +19,8 @@ namespace consgrp {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
-int execute_create(const po::variables_map &vm) {
+int execute_create(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -49,7 +50,8 @@ int execute_create(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_list(const po::variables_map &vm) {
+int execute_list(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
 
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
@@ -90,7 +92,8 @@ int execute_list(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_remove(const po::variables_map &vm) {
+int execute_remove(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -121,7 +124,8 @@ int execute_remove(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_add(const po::variables_map &vm) {
+int execute_add(const po::variables_map &vm,
+                const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   // Parse group data.
   std::string group_name;
@@ -172,7 +176,8 @@ int execute_add(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_remove_image(const po::variables_map &vm) {
+int execute_remove_image(const po::variables_map &vm,
+                         const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -245,7 +250,8 @@ int execute_remove_image(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_list_images(const po::variables_map &vm) {
+int execute_list_images(const po::variables_map &vm,
+                        const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string group_name;
   std::string pool_name;
@@ -278,9 +284,10 @@ int execute_list_images(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  std::vector<librbd::group_image_status_t> images;
+  std::vector<librbd::group_image_info_t> images;
 
-  r = rbd.group_image_list(io_ctx, group_name.c_str(), &images);
+  r = rbd.group_image_list(io_ctx, group_name.c_str(), &images,
+                           sizeof(librbd::group_image_info_t));
 
   if (r == -ENOENT)
     r = 0;
@@ -326,7 +333,8 @@ int execute_list_images(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_group_snap_create(const po::variables_map &vm) {
+int execute_group_snap_create(const po::variables_map &vm,
+                              const std::vector<std::string> &global_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -357,7 +365,8 @@ int execute_group_snap_create(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_group_snap_remove(const po::variables_map &vm) {
+  int execute_group_snap_remove(const po::variables_map &vm,
+                                const std::vector<std::string> &global_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -385,7 +394,8 @@ int execute_group_snap_remove(const po::variables_map &vm) {
   return r;
 }
 
-int execute_group_snap_rename(const po::variables_map &vm) {
+int execute_group_snap_rename(const po::variables_map &vm,
+                              const std::vector<std::string> &global_args) {
   size_t arg_index = 0;
 
   std::string group_name;
@@ -433,7 +443,8 @@ int execute_group_snap_rename(const po::variables_map &vm) {
   return 0;
 }
 
-int execute_group_snap_list(const po::variables_map &vm) {
+int execute_group_snap_list(const po::variables_map &vm,
+                            const std::vector<std::string> &ceph_global_args) {
   size_t arg_index = 0;
   std::string group_name;
   std::string pool_name;
@@ -466,9 +477,10 @@ int execute_group_snap_list(const po::variables_map &vm) {
   }
 
   librbd::RBD rbd;
-  std::vector<librbd::group_snap_spec_t> snaps;
+  std::vector<librbd::group_snap_info_t> snaps;
 
-  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps);
+  r = rbd.group_snap_list(io_ctx, group_name.c_str(), &snaps,
+                          sizeof(librbd::group_snap_info_t));
 
   if (r == -ENOENT) {
     r = 0;
@@ -629,22 +641,26 @@ Shell::Action action_add(
   {"group", "image", "add"}, {}, "Add an image to a group.",
   "", &get_add_arguments, &execute_add);
 Shell::Action action_remove_image(
-  {"group", "image", "remove"}, {}, "Remove an image from a group.",
-  "", &get_remove_image_arguments, &execute_remove_image);
+  {"group", "image", "remove"}, {"group", "image", "rm"},
+  "Remove an image from a group.", "",
+  &get_remove_image_arguments, &execute_remove_image);
 Shell::Action action_list_images(
-  {"group", "image", "list"}, {}, "List images in a group.",
-  "", &get_list_images_arguments, &execute_list_images);
+  {"group", "image", "list"}, {"group", "image", "ls"},
+  "List images in a group.", "",
+  &get_list_images_arguments, &execute_list_images);
 Shell::Action action_group_snap_create(
   {"group", "snap", "create"}, {}, "Make a snapshot of a group.",
   "", &get_group_snap_create_arguments, &execute_group_snap_create);
 Shell::Action action_group_snap_remove(
-  {"group", "snap", "remove"}, {"group", "snap", "rm"}, "Remove a snapshot from a group.",
+  {"group", "snap", "remove"}, {"group", "snap", "rm"},
+  "Remove a snapshot from a group.",
   "", &get_group_snap_remove_arguments, &execute_group_snap_remove);
 Shell::Action action_group_snap_rename(
   {"group", "snap", "rename"}, {}, "Rename group's snapshot.",
   "", &get_group_snap_rename_arguments, &execute_group_snap_rename);
 Shell::Action action_group_snap_list(
-  {"group", "snap", "list"}, {}, "List snapshots of a group.",
+  {"group", "snap", "list"}, {"group", "snap", "ls"},
+  "List snapshots of a group.",
   "", &get_group_snap_list_arguments, &execute_group_snap_list);
 } // namespace group
 } // namespace action

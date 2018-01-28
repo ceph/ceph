@@ -216,13 +216,7 @@ if(${ENABLE_COVERAGE})
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
-if(USE_NSS)
-  if(NSS_FOUND)
-    if(NSPR_FOUND)
-      set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${NSS_INCLUDE_DIR} -I${NSPR_INCLUDE_DIR}")
-    endif(NSPR_FOUND)
-  endif(NSS_FOUND)
-endif(USE_NSS)
+include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
 
 set(GCOV_PREFIX_STRIP 4)
 
@@ -268,19 +262,14 @@ if(WITH_CEPHFS_JAVA)
 endif()
 
 # Python stuff
-find_package(PythonInterp 2 REQUIRED)
-find_package(PythonLibs 2 REQUIRED)
+option(WITH_PYTHON2 "build python2 bindings" ON)
+if(WITH_PYTHON2)
+  find_package(PythonInterp 2 REQUIRED)
+  find_package(PythonLibs 2 REQUIRED)
+endif()
 
-option(WITH_PYTHON3 "build python3 bindings" "CHECK")
-if(WITH_PYTHON3 MATCHES "check|CHECK")
-  find_package(Python3Interp 3 QUIET)
-  find_package(Python3Libs 3 QUIET)
-  if(PYTHON3INTERP_FOUND AND PYTHON3LIBS_FOUND)
-    set(WITH_PYTHON3 ON)
-  else()
-    set(WITH_PYTHON3 OFF)
-  endif()
-elseif(WITH_PYTHON3)
+option(WITH_PYTHON3 "build python3 bindings" OFF)
+if(WITH_PYTHON3)
   find_package(Python3Interp 3 REQUIRED)
   find_package(Python3Libs 3 REQUIRED)
 endif()
@@ -536,6 +525,7 @@ set(libcommon_files
   common/dns_resolve.cc
   common/hostname.cc
   common/util.cc
+  librbd/Features.cc
   arch/probe.cc
   ${auth_files}
   ${mds_files})
@@ -738,6 +728,7 @@ if (WITH_MGR)
       mgr/ActivePyModules.cc
       mgr/OSDHealthMetricCollector.cc
       mgr/StandbyPyModules.cc
+      mgr/PyModule.cc
       mgr/PyModuleRegistry.cc
       mgr/PyModuleRunner.cc
       mgr/PyFormatter.cc
@@ -753,7 +744,7 @@ if (WITH_MGR)
                  $<TARGET_OBJECTS:heap_profiler_objs>)
   target_include_directories(ceph-mgr SYSTEM PRIVATE "${PYTHON_INCLUDE_DIRS}")
   target_link_libraries(ceph-mgr osdc client global-static ceph-common
-      Boost::python ${PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
+      Boost::python ${MGR_PYTHON_LIBRARIES} ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${ALLOC_LIBS})
   install(TARGETS ceph-mgr DESTINATION bin)
 endif (WITH_MGR)
 
@@ -1065,12 +1056,6 @@ if(WITH_RADOSGW)
 	"${CMAKE_SOURCE_DIR}/src/civetweb/include")
   set_property(TARGET civetweb_common_objs
     APPEND PROPERTY COMPILE_DEFINITIONS USE_IPV6=1)
-  if(USE_OPENSSL)
-    set_property(TARGET civetweb_common_objs
-      APPEND PROPERTY COMPILE_DEFINITIONS NO_SSL_DL=1)
-    target_include_directories(civetweb_common_objs SYSTEM PRIVATE
-      "${SSL_INCLUDE_DIR}")
-  endif(USE_OPENSSL)
   if (LIBSSL_SONAME)
     set_property(TARGET civetweb_common_objs
       APPEND PROPERTY COMPILE_DEFINITIONS SSL_LIB="${LIBSSL_SONAME}")

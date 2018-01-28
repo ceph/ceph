@@ -287,7 +287,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
        p != buffer_extents.end();
        ++p) {
     uint64_t tofs = p->first;
-    uint64_t tlen = p->second;
+    size_t tlen = p->second;
     ldout(cct, 30) << " be " << tofs << "~" << tlen << dendl;
     while (tlen > 0) {
       ldout(cct, 20) << "  t " << tofs << "~" << tlen
@@ -314,7 +314,7 @@ void Striper::StripedReadResult::add_partial_sparse_result(
       if (s->first > bl_off) {
 	// gap in sparse read result
 	pair<bufferlist, uint64_t>& r = partial[tofs];
-	size_t gap = std::min(s->first - bl_off, tlen);
+	size_t gap = std::min<size_t>(s->first - bl_off, tlen);
 	ldout(cct, 20) << "  s gap " << gap << ", skipping" << dendl;
 	r.second = gap;
 	total_intended_len += r.second;

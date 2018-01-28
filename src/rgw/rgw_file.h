@@ -1061,16 +1061,25 @@ namespace rgw {
 	/* make or re-use handle */
 	RGWFileHandle::Factory prototype(this, parent, fhk,
 					 obj_name, CREATE_FLAGS(flags));
+	uint32_t iflags{cohort::lru::FLAG_INITIAL};
 	fh = static_cast<RGWFileHandle*>(
 	  fh_lru.insert(&prototype,
 			cohort::lru::Edge::MRU,
-			cohort::lru::FLAG_INITIAL));
+			iflags));
 	if (fh) {
 	  /* lock fh (LATCHED) */
 	  if (flags & RGWFileHandle::FLAG_LOCK)
 	    fh->mtx.lock();
-	  /* inserts, releasing latch */
-	  fh_cache.insert_latched(fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
+	  if (likely(! (iflags & cohort::lru::FLAG_RECYCLE))) {
+	    /* inserts at cached insert iterator, releasing latch */
+	    fh_cache.insert_latched(
+	      fh, lat, RGWFileHandle::FHCache::FLAG_UNLOCK);
+	  } else {
+	    /* recycle step invalidates Latch */
+	    fh_cache.insert(
+	      fhk.fh_hk.object, fh, RGWFileHandle::FHCache::FLAG_NONE);
+	    lat.lock->unlock(); /* !LATCHED */
+	  }
 	  get<1>(fhr) |= RGWFileHandle::FLAG_CREATE;
 	  /* ref parent (non-initial ref cannot fail on valid object) */
 	  if (! parent->is_mount()) {

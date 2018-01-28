@@ -14,8 +14,8 @@
 
 #pragma once
 
-// Python.h comes first because otherwise it clobbers ceph's assert
-#include "Python.h"
+// First because it includes Python.h
+#include "PyModule.h"
 
 #include <string>
 #include <map>
@@ -26,37 +26,15 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
-class PyModule
-{
-private:
-  const std::string module_name;
-  std::string get_site_packages();
-  int load_subclass_of(const char* class_name, PyObject** py_class);
-public:
-  SafeThreadState pMyThreadState;
-  PyObject *pClass = nullptr;
-  PyObject *pStandbyClass = nullptr;
 
-  PyModule(const std::string &module_name_)
-    : module_name(module_name_)
-  {
-  }
-
-  ~PyModule();
-
-  int load(PyThreadState *pMainThreadState);
-
-  std::string get_name() const {
-    return module_name;
-  }
-};
 
 /**
  * This class is responsible for setting up the python runtime environment
  * and importing the python modules.
  *
  * It is *not* responsible for constructing instances of their BaseMgrModule
- * subclasses.
+ * subclasses: that is the job of ActiveMgrModule, which consumes the class
+ * references that we load here.
  */
 class PyModuleRegistry
 {
@@ -65,7 +43,7 @@ private:
 
   LogChannelRef clog;
 
-  std::map<std::string, std::unique_ptr<PyModule>> modules;
+  std::map<std::string, PyModuleRef> modules;
 
   std::unique_ptr<ActivePyModules> active_modules;
   std::unique_ptr<StandbyPyModules> standby_modules;
@@ -76,10 +54,28 @@ private:
   // before ClusterState exists.
   MgrMap mgr_map;
 
+  /**
+   * Discover python modules from local disk
+   */
+  std::set<std::string> probe_modules() const;
+
 public:
   static std::string config_prefix;
 
-  static void list_modules(std::set<std::string> *modules);
+  /**
+   * Get references to all modules (whether they have loaded and/or
+   * errored) or not.
+   */
+  std::list<PyModuleRef> get_modules() const
+  {
+    Mutex::Locker l(lock);
+    std::list<PyModuleRef> modules_out;
+    for (const auto &i : modules) {
+      modules_out.push_back(i.second);
+    }
+
+    return modules_out;
+  }
 
   PyModuleRegistry(LogChannelRef clog_)
     : clog(clog_)
@@ -131,6 +127,40 @@ public:
     std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
   }
 
+  std::vector<MonCommand> get_commands() const;
+  std::vector<ModuleCommand> get_py_commands() const;
+
+  /**
+   * module_name **must** exist, but does not have to be loaded
+   * or runnable.
+   */
+  PyModuleRef get_module(const std::string &module_name)
+  {
+    Mutex::Locker l(lock);
+    return modules.at(module_name);
+  }
+
+  /**
+   * Pass through command to the named module for execution.
+   *
+   * The command must exist in the COMMANDS reported by the module.  If it
+   * doesn't then this will abort.
+   *
+   * If ActivePyModules has not been instantiated yet then this will
+   * return EAGAIN.
+   */
+  int handle_command(
+    std::string const &module_name,
+    const cmdmap_t &cmdmap,
+    std::stringstream *ds,
+    std::stringstream *ss);
+
+  /**
+   * Pass through health checks reported by modules, and report any
+   * modules that have failed (i.e. unhandled exceptions in serve())
+   */
+  void get_health_checks(health_check_map_t *checks);
+
   // FIXME: breaking interface so that I don't have to go rewrite all
   // the places that call into these (for now)
   // >>>
@@ -149,21 +179,6 @@ public:
     }
   }
 
-  std::vector<MonCommand> get_commands() const
-  {
-    assert(active_modules);
-    return active_modules->get_commands();
-  }
-  std::vector<ModuleCommand> get_py_commands() const
-  {
-    assert(active_modules);
-    return active_modules->get_py_commands();
-  }
-  void get_health_checks(health_check_map_t *checks)
-  {
-    assert(active_modules);
-    active_modules->get_health_checks(checks);
-  }
   std::map<std::string, std::string> get_services() const
   {
     assert(active_modules);

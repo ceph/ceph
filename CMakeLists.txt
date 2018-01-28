@@ -226,7 +226,7 @@ if(WITH_BLUESTORE)
   set(HAVE_LIBAIO ${AIO_FOUND})
 endif()
 
-if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64")
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
   option(WITH_SPDK "Enable SPDK" ON)
 else()
   option(WITH_SPDK "Enable SPDK" OFF)
@@ -344,31 +344,11 @@ set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
 CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-# nss or cryptopp?
-option(WITH_NSS "Use NSS crypto and SSL implementations" ON)
-if (${WITH_NSS})
-  find_package(NSS REQUIRED)
-    set(USE_NSS 1)
-    find_package(NSPR REQUIRED)
-    set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
-else ()
-  find_package(cryptopp REQUIRED)
-    set(CRYPTO_LIBS ${CRYPTOPP_LIBRARIES})
-    set(USE_CRYPTOPP 1)
-endif (${WITH_NSS})
-
-option(WITH_SSL "SSL build selected" ON)
-if(USE_NSS)
-  #nss
-  set(SSL_LIBRARIES ${NSS_LIBRARIES})
-  message(STATUS "SSL with NSS selected (Libs: ${SSL_LIBRARIES})")
-else(USE_NSS)
-  #openssl
-  find_package(OpenSSL REQUIRED)
-  set(USE_OPENSSL ON)
-  set(SSL_LIBRARIES ${OPENSSL_LIBRARIES})
-  message(STATUS "SSL with OpenSSL selected (Libs: ${SSL_LIBRARIES})")
-endif(USE_NSS)
+find_package(NSS REQUIRED)
+find_package(NSPR REQUIRED)
+set(USE_NSS 1)
+set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES})
+set(SSL_LIBRARIES ${NSS_LIBRARIES})
 
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
@@ -417,10 +397,7 @@ endif(WITH_RADOSGW)
 
 
 if (WITH_RADOSGW)
-  if (NOT DEFINED OPENSSL_FOUND)
-    message(STATUS "Looking for openssl anyways, because radosgw selected")
-    find_package(OpenSSL)
-  endif()
+  find_package(OpenSSL)
   if (OPENSSL_FOUND)
     execute_process(
       COMMAND
@@ -463,9 +440,15 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 #option for Mgr
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
-  set(Python_ADDITIONAL_VERSIONS 2.7)
-  find_package(PythonInterp 2.7 REQUIRED)
-  find_package(PythonLibs 2.7 REQUIRED)
+  # Please specify 3 or 3.[0-7] if you want to build with python3 support.
+  # FindPyhonInterp and FindPythonLibs think they belong to different families.
+  set(MGR_PYTHON_VERSION "2.7" CACHE
+    STRING "minimal required version of python runtime for running mgr plugins. ")
+  find_package(PythonInterp ${MGR_PYTHON_VERSION} REQUIRED)
+  find_package(PythonLibs ${MGR_PYTHON_VERSION} REQUIRED)
+  set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 

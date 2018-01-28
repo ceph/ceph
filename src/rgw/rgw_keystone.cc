@@ -113,7 +113,7 @@ void rgw_get_token_id(const string& token, string& token_id)
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
   MD5 hash;
-  hash.Update((const ::byte *)token.c_str(), token.size());
+  hash.Update((const unsigned char *)token.c_str(), token.size());
   hash.Final(m);
 
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];

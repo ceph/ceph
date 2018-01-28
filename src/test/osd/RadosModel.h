@@ -67,7 +67,8 @@ enum TestOpType {
   TEST_OP_APPEND_EXCL,
   TEST_OP_SET_REDIRECT,
   TEST_OP_UNSET_REDIRECT,
-  TEST_OP_CHUNK_READ
+  TEST_OP_CHUNK_READ,
+  TEST_OP_TIER_PROMOTE
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -194,6 +195,8 @@ public:
   const bool no_sparse;
   bool pool_snaps;
   bool write_fadvise_dontneed;
+  string low_tier_pool_name;
+  librados::IoCtx low_tier_io_ctx;
   int snapname_num;
   map<string,string > redirect_objs;
 
@@ -206,6 +209,7 @@ public:
 		   bool no_sparse,
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
+		   const string &low_tier_pool_name,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -223,6 +227,7 @@ public:
     no_sparse(no_sparse),
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
+    low_tier_pool_name(low_tier_pool_name),
     snapname_num(0)
   {
   }
@@ -245,6 +250,13 @@ public:
     if (r < 0) {
       rados.shutdown();
       return r;
+    }
+    if (!low_tier_pool_name.empty()) {
+      r = rados.ioctx_create(low_tier_pool_name.c_str(), low_tier_io_ctx);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
     }
     bufferlist inbl;
     r = rados.mon_command(
@@ -2205,6 +2217,82 @@ public:
   }
 };
 
+class CopyOp : public TestOp {
+public:
+  string oid, oid_src, tgt_pool_name;
+  librados::ObjectWriteOperation op;
+  librados::ObjectReadOperation rd_op;
+  librados::AioCompletion *comp;
+  ObjectDesc src_value, tgt_value;
+  int done;
+  int r;
+  CopyOp(int n,
+	   RadosTestContext *context,
+	   const string &oid_src,
+	   const string &oid,
+	   const string &tgt_pool_name,
+	   TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      oid(oid), oid_src(oid_src), tgt_pool_name(tgt_pool_name),
+      comp(NULL), done(0), r(0) 
+  {}
+
+  void _begin() override
+  {
+    Mutex::Locker l(context->state_lock);
+    context->oid_in_use.insert(oid_src);
+    context->oid_not_in_use.erase(oid_src);
+
+    string src = context->prefix+oid_src;
+    context->find_object(oid_src, &src_value); 
+    op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+
+    cout << "copy op oid " << oid_src << " to " << oid << " tgt_pool_name " << tgt_pool_name <<  std::endl;
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion((void*) cb_arg, NULL,
+						&write_callback);
+    if (tgt_pool_name == context->low_tier_pool_name) {
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    } else {
+      context->io_ctx.aio_operate(context->prefix+oid, comp, &op);
+    }
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    Mutex::Locker l(context->state_lock);
+
+    if (info->id == 0) {
+      assert(comp->is_complete());
+      cout << num << ":  finishing copy op to oid " << oid << std::endl;
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " write returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
+    }
+
+    if (++done == 1) {
+      context->oid_in_use.erase(oid_src);
+      context->oid_not_in_use.insert(oid_src);
+      context->kick();
+    }
+  }
+
+  bool finished() override
+  {
+    return done == 1;
+  }
+
+  string getType() override
+  {
+    return "CopyOp";
+  }
+};
+
 class SetChunkOp : public TestOp {
 public:
   string oid, oid_tgt, tgt_pool_name;
@@ -2240,12 +2328,15 @@ public:
     context->oid_in_use.insert(oid);
     context->oid_not_in_use.erase(oid);
 
+    if (tgt_pool_name.empty()) ceph_abort();
+
     context->find_object(oid, &src_value); 
     context->find_object(oid_tgt, &tgt_value);
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_chunk(offset, length, context->io_ctx, context->prefix+oid_tgt, tgt_offset);
+    op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		 context->prefix+oid_tgt, tgt_offset);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2346,16 +2437,22 @@ public:
     context->oid_redirect_in_use.insert(oid_tgt);
     context->oid_redirect_not_in_use.erase(oid_tgt);
 
+    if (tgt_pool_name.empty()) ceph_abort();
+
     context->find_object(oid, &src_value); 
     if(!context->redirect_objs[oid].empty()) {
-      /* update target's user_version */
-      rd_op.stat(NULL, NULL, NULL);
+      /* copy_from oid --> oid_tgt */
       comp = context->rados.aio_create_completion();
-      context->io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
-			    librados::OPERATION_ORDER_READS_WRITES,
-			    NULL);
+      string src = context->prefix+oid;
+      op.copy_from(src.c_str(), context->io_ctx, src_value.version);
+      context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &op,
+					   librados::OPERATION_ORDER_READS_WRITES);
       comp->wait_for_safe();
-      context->update_object_version(oid_tgt, comp->get_version64());
+      if ((r = comp->get_return_value())) {
+	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
+	     << r << std::endl;
+	ceph_abort();
+      }
       comp->release();
 
       /* unset redirect target */
@@ -2377,23 +2474,6 @@ public:
 
       context->oid_redirect_not_in_use.insert(context->redirect_objs[oid]);
       context->oid_redirect_in_use.erase(context->redirect_objs[oid]);
-
-      /* copy_from oid_tgt --> oid */
-      comp = context->rados.aio_create_completion();
-      context->find_object(oid_tgt, &tgt_value);
-      string src = context->prefix+oid_tgt;
-      op.copy_from(src.c_str(), context->io_ctx, tgt_value.version);
-      context->io_ctx.aio_operate(context->prefix+oid, comp, &op,
-				  librados::OPERATION_ORDER_READS_WRITES);
-      comp->wait_for_safe();
-      if ((r = comp->get_return_value())) {
-	cerr << "Error: oid " << oid << " copy_from " << oid_tgt << " returned error code "
-	     << r << std::endl;
-	ceph_abort();
-      }
-      context->update_object_full(oid, tgt_value);
-      context->update_object_version(oid, comp->get_version64());
-      comp->release();
     }
 
     comp = context->rados.aio_create_completion();
@@ -2411,15 +2491,27 @@ public:
     context->update_object_version(oid, comp->get_version64());
     comp->release();
 
+    comp = context->rados.aio_create_completion();
+    rd_op.stat(NULL, NULL, NULL);
+    context->low_tier_io_ctx.aio_operate(context->prefix+oid_tgt, comp, &rd_op,
+     			  librados::OPERATION_ORDER_READS_WRITES |
+     			  librados::OPERATION_IGNORE_REDIRECT,
+     			  NULL);
+    comp->wait_for_safe();
+    if ((r = comp->get_return_value())) {
+      cerr << "Error: oid " << oid_tgt << " stat returned error code "
+	   << r << std::endl;
+      ceph_abort();
+    }
+    uint64_t tgt_version = comp->get_version64();
+    comp->release();
+    
+    
     context->find_object(oid, &src_value); 
-    context->find_object(oid_tgt, &tgt_value);
-
-    if (!src_value.deleted() && !tgt_value.deleted())
-      context->update_object_full(oid, tgt_value);
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_redirect(context->prefix+oid_tgt, context->io_ctx, tgt_value.version);
+    op.set_redirect(context->prefix+oid_tgt, context->low_tier_io_ctx, tgt_version);
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
@@ -2530,6 +2622,77 @@ public:
   string getType() override
   {
     return "UnsetRedirectOp";
+  }
+};
+
+class TierPromoteOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  ceph::shared_ptr<int> in_use;
+
+  TierPromoteOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+						      &write_callback);
+    context->state_lock.Unlock();
+
+    op.tier_promote();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op);
+    assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    context->state_lock.Lock();
+    assert(!done);
+    assert(completion->is_complete());
+
+    ObjectDesc oid_value;
+    context->find_object(oid, &oid_value);
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // sucess
+    } else {
+      assert(0 == "shouldn't happen");
+    }
+    context->update_object_version(oid, completion->get_version64());
+    context->find_object(oid, &oid_value);
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierPromoteOp";
   }
 };
 

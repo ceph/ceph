@@ -1152,6 +1152,10 @@ struct ObjectOperation {
     encode(tgt_offset, osd_op.indata);
   }
 
+  void tier_promote() {
+    add_op(CEPH_OSD_OP_TIER_PROMOTE);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1897,7 +1901,7 @@ public:
   ceph::timespan osd_timeout;
 
   MOSDOp *_prepare_osd_op(Op *op);
-  void _send_op(Op *op, MOSDOp *m = NULL);
+  void _send_op(Op *op);
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void finish_op(OSDSession *session, ceph_tid_t tid);
@@ -1965,7 +1969,6 @@ private:
   void _send_command_map_check(CommandOp *op);
   void _command_cancel_map_check(CommandOp *op);
 
-  void kick_requests(OSDSession *session);
   void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend, unique_lock& ul);
 

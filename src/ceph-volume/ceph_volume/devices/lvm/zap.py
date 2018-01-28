@@ -59,6 +59,23 @@ class Zap(object):
         logger.info("Zapping: %s", path)
         terminal.write("Zapping: %s" % path)
 
+        if args.destroy and not lv:
+            # check if there was a pv created with the
+            # name of device
+            pv = api.PVolumes().get(pv_name=device)
+            if pv:
+                logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
+                vg_name = pv.vg_name
+                logger.info("Destroying volume group %s because --destroy was given", vg_name)
+                terminal.write("Destroying volume group %s because --destroy was given" % vg_name)
+                api.remove_vg(vg_name)
+                logger.info("Destroying physical volume %s because --destroy was given", device)
+                terminal.write("Destroying physical volume %s because --destroy was given" % device)
+                api.remove_pv(device)
+            else:
+                logger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
+                terminal.write("Skipping --destroy because no associated physical volumes are found for %s" % device)
+
         wipefs(path)
         zap_data(path)
 
@@ -70,9 +87,10 @@ class Zap(object):
 
     def main(self):
         sub_command_help = dedent("""
-        Zaps the given logical volume or partition. If given a path to a logical
-        volume it must be in the format of vg/lv. Any filesystems present
-        on the given lv or partition will be removed and all data will be purged.
+        Zaps the given logical volume, raw device or partition for reuse by ceph-volume.
+        If given a path to a logical volume it must be in the format of vg/lv. Any
+        filesystems present on the given device, vg/lv, or partition will be removed and
+        all data will be purged.
 
         However, the lv or partition will be kept intact.
 
@@ -86,6 +104,19 @@ class Zap(object):
 
               ceph-volume lvm zap /dev/sdc1
 
+        If the --destroy flag is given and you are zapping a raw device or partition
+        then all vgs and lvs that exist on that raw device or partition will be destroyed.
+
+        This is especially useful if a raw device or partition was used by ceph-volume lvm create
+        or ceph-volume lvm prepare commands previously and now you want to reuse that device.
+
+        For example:
+
+          ceph-volume lvm zap /dev/sda --destroy
+
+        If the --destroy flag is given and you are zapping an lv then the lv is still
+        kept intact for reuse.
+
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm zap',
@@ -97,7 +128,13 @@ class Zap(object):
             'device',
             metavar='DEVICE',
             nargs='?',
-            help='Path to an lv (as vg/lv) or to a partition like /dev/sda1'
+            help='Path to an lv (as vg/lv), partition (as /dev/sda1) or device (as /dev/sda)'
+        )
+        parser.add_argument(
+            '--destroy',
+            action='store_true',
+            default=False,
+            help='Destroy all volume groups and logical volumes if you are zapping a raw device or partition',
         )
         if len(self.argv) == 0:
             print(sub_command_help)

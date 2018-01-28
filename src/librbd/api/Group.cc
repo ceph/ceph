@@ -7,6 +7,7 @@
 #include "librbd/api/Group.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
+#include "librbd/ImageWatcher.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
@@ -103,10 +104,8 @@ std::string calc_ind_image_snap_name(uint64_t pool_id,
 				     std::string snap_id)
 {
   std::stringstream ind_snap_name_stream;
-  ind_snap_name_stream << std::setw(16) << std::setfill('0') << std::hex <<
-			  pool_id <<
-			  "_" << group_id <<
-			  "_" << snap_id;
+  ind_snap_name_stream << ".group." << std::hex << pool_id << "_"
+                       << group_id << "_" << snap_id;
   return ind_snap_name_stream.str();
 }
 
@@ -184,12 +183,14 @@ int group_image_remove(librados::IoCtx& group_ioctx, string group_id,
     return r;
   }
 
-  r = cls_client::image_remove_group(&image_ioctx, image_header_oid,
+  r = cls_client::image_group_remove(&image_ioctx, image_header_oid,
 				     group_spec);
   if ((r < 0) && (r != -ENOENT)) {
     lderr(cct) << "couldn't remove group reference from image"
 	       << cpp_strerror(-r) << dendl;
     return r;
+  } else if (r >= 0) {
+    ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
   }
 
   r = cls_client::group_image_remove(&group_ioctx, group_header_oid, spec);
@@ -539,7 +540,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     return r;
   }
 
-  r = cls_client::image_add_group(&image_ioctx, image_header_oid, group_spec);
+  r = cls_client::image_group_add(&image_ioctx, image_header_oid, group_spec);
   if (r < 0) {
     lderr(cct) << "error adding group reference to image: "
 	       << cpp_strerror(-r) << dendl;
@@ -548,6 +549,7 @@ int Group<I>::image_add(librados::IoCtx& group_ioctx, const char *group_name,
     // Ignore errors in the clean up procedure.
     return r;
   }
+  ImageWatcher<>::notify_header_update(image_ioctx, image_header_oid);
 
   r = cls_client::group_image_set(&group_ioctx, group_header_oid,
 				  attached_st);
@@ -595,7 +597,7 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx, const char *group_name,
 template <typename I>
 int Group<I>::image_list(librados::IoCtx& group_ioctx,
 			 const char *group_name,
-			 std::vector<group_image_status_t>* images)
+			 std::vector<group_image_info_t>* images)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
@@ -620,7 +622,7 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
     }
 
     images->push_back(
-	group_image_status_t {
+	group_image_info_t {
 	   image_name,
 	   ioctx.get_id(),
 	   static_cast<group_image_state_t>(image_id.state)});
@@ -630,7 +632,7 @@ int Group<I>::image_list(librados::IoCtx& group_ioctx,
 }
 
 template <typename I>
-int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
+int Group<I>::image_get_group(I *ictx, group_info_t *group_info)
 {
   int r = ictx->state->refresh_if_required();
   if (r < 0)
@@ -648,11 +650,11 @@ int Group<I>::image_get_group(I *ictx, group_spec_t *group_spec)
 				 ictx->group_spec.group_id, &group_name);
     if (r < 0)
       return r;
-    group_spec->pool = ioctx.get_id();
-    group_spec->name = group_name;
+    group_info->pool = ioctx.get_id();
+    group_info->name = group_name;
   } else {
-    group_spec->pool = RBD_GROUP_INVALID_POOL;
-    group_spec->name = "";
+    group_info->pool = RBD_GROUP_INVALID_POOL;
+    group_info->name = "";
   }
 
   return 0;
@@ -858,8 +860,11 @@ remove_image_snaps:
     ictx->snap_lock.put_read();
     if (r >= 0) {
       ictx->operations->snap_remove(ne, snap_name.c_str(), on_finishes[i]);
+    } else {
+      // Ignore missing image snapshots. The whole snapshot could have been
+      // inconsistent.
+      on_finishes[i]->complete(0);
     }
-    // Ignore missing image snapshots. The whole snapshot could have been inconsistent.
   }
 
   for (int i = 0, n = on_finishes.size(); i < n; ++i) {
@@ -974,7 +979,7 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
 
 template <typename I>
 int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
-			std::vector<group_snap_spec_t> *snaps)
+			std::vector<group_snap_info_t> *snaps)
 {
   std::vector<cls::rbd::GroupSnapshot> cls_snaps;
 
@@ -985,7 +990,7 @@ int Group<I>::snap_list(librados::IoCtx& group_ioctx, const char *group_name,
 
   for (auto snap : cls_snaps) {
     snaps->push_back(
-	group_snap_spec_t {
+	group_snap_info_t {
 	   snap.name,
 	   static_cast<group_snap_state_t>(snap.state)});
 

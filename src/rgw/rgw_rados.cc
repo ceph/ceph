@@ -1929,7 +1929,7 @@ static uint32_t gen_short_zone_id(const std::string zone_id)
 {
   unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
   MD5 hash;
-  hash.Update((const ::byte *)zone_id.c_str(), zone_id.size());
+  hash.Update((const unsigned char *)zone_id.c_str(), zone_id.size());
   hash.Final(md5);
 
   uint32_t short_id;
@@ -4008,7 +4008,7 @@ int RGWRados::replace_region_with_zonegroup()
     unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     MD5 hash;
-    hash.Update((const ::byte *)new_realm_name.c_str(), new_realm_name.length());
+    hash.Update((const unsigned char *)new_realm_name.c_str(), new_realm_name.length());
     hash.Final(md5);
     buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
     string new_realm_id(md5_str);
@@ -9081,12 +9081,12 @@ static void generate_fake_tag(RGWRados *store, map<string, bufferlist>& attrset,
   unsigned char md5[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char md5_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   MD5 hash;
-  hash.Update((const ::byte *)manifest_bl.c_str(), manifest_bl.length());
+  hash.Update((const unsigned char *)manifest_bl.c_str(), manifest_bl.length());
 
   map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
   if (iter != attrset.end()) {
     bufferlist& bl = iter->second;
-    hash.Update((const ::byte *)bl.c_str(), bl.length());
+    hash.Update((const unsigned char *)bl.c_str(), bl.length());
   }
 
   hash.Final(md5);
@@ -12179,7 +12179,7 @@ int RGWRados::omap_get_all(rgw_raw_obj& obj, bufferlist& header,
   return 0;
 }
 
-int RGWRados::omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl)
+int RGWRados::omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl, bool must_exist)
 {
   rgw_rados_ref ref;
   int r = get_raw_obj_ref(obj, &ref);
@@ -12190,13 +12190,15 @@ int RGWRados::omap_set(rgw_raw_obj& obj, const std::string& key, bufferlist& bl)
 
   map<string, bufferlist> m;
   m[key] = bl;
-
-  r = ref.ioctx.omap_set(ref.oid, m);
-
+  ObjectWriteOperation op;
+  if (must_exist)
+    op.assert_exists();
+  op.omap_set(m);
+  r = ref.ioctx.operate(ref.oid, &op);
   return r;
 }
 
-int RGWRados::omap_set(rgw_raw_obj& obj, std::map<std::string, bufferlist>& m)
+int RGWRados::omap_set(rgw_raw_obj& obj, std::map<std::string, bufferlist>& m, bool must_exist)
 {
   rgw_rados_ref ref;
   int r = get_raw_obj_ref(obj, &ref);
@@ -12204,8 +12206,11 @@ int RGWRados::omap_set(rgw_raw_obj& obj, std::map<std::string, bufferlist>& m)
     return r;
   }
 
-  r = ref.ioctx.omap_set(ref.oid, m);
-
+  ObjectWriteOperation op;
+  if (must_exist)
+    op.assert_exists();
+  op.omap_set(m);
+  r = ref.ioctx.operate(ref.oid, &op);
   return r;
 }
 
@@ -12443,8 +12448,7 @@ int RGWRados::list_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id, stri
   librados::IoCtx index_ctx;
   map<int, string> oids;
   map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
-  map<int, string> bucket_instance_ids;
-  int r = open_bucket_index(bucket_info, index_ctx, oids, shard_id, &bucket_instance_ids);
+  int r = open_bucket_index(bucket_info, index_ctx, oids, shard_id);
   if (r < 0)
     return r;
 

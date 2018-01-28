@@ -29,10 +29,23 @@
 
   * The rbd CLI's "lock list" JSON and XML output has changed.
 
+  * The rbd CLI's "showmapped" JSON and XML output has changed.
+
 * The sample ``crush-location-hook`` script has been removed.  Its output is
   equivalent to the built-in default behavior, so it has been replaced with an
   example in the CRUSH documentation.
 
+* The "rcceph" script (systemd/ceph in the source code tree, shipped as
+  /usr/sbin/rcceph in the ceph-base package for CentOS and SUSE) has been
+  dropped. This script was used to perform admin operations (start, stop,
+  restart, etc.) on all OSD and/or MON daemons running on a given machine.
+  This functionality is provided by the systemd target units (ceph-osd.target,
+  ceph-mon.target, etc.).
+
+* The python-ceph-compat package is declared deprecated, and will be dropped
+  when all supported distros have completed the move to Python 3. It has
+  already been dropped from those supported distros where Python 3 is standard
+  and Python 2 is optional (currently only SUSE).
 
 >= 12.2.2
 ---------

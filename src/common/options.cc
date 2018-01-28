@@ -14,6 +14,9 @@
 // Definitions for enums
 #include "common/perf_counters.h"
 
+// rbd feature validation
+#include "librbd/Features.h"
+
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -2680,93 +2683,116 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_scrubs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("Maximum concurrent scrubs on a single OSD"),
 
     Option("osd_scrub_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
 
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Restrict scrubbing to this hour of the day or later")
+    .add_see_also("osd_scrub_end_hour"),
 
     Option("osd_scrub_end_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(24)
-    .set_description(""),
+    .set_description("Restrict scrubbing to hours of the day earlier than this")
+    .add_see_also("osd_scrub_begin_hour"),
 
     Option("osd_scrub_begin_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("The begin week day permits to scrub, include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+    .set_description("Restrict scrubbing to this day of the week or later")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_end_week_day"),
 
     Option("osd_scrub_end_week_day", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(7)
-    .set_description("The end week day permits to scrub, not include this day, 0 Sunday,1 Monday, .., 6 Saturday"),
+    .set_description("Restrict scrubbing to days of the week earlier than this")
+    .set_long_description("0 or 7 = Sunday, 1 = Monday, etc.")
+    .add_see_also("osd_scrub_begin_week_day"),
 
     Option("osd_scrub_load_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Allow scrubbing when system load divided by number of CPUs is below this value"),
 
     Option("osd_scrub_min_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_day)
-    .set_description(""),
+    .set_description("Scrub each PG no more often than this interval")
+    .add_see_also("osd_scrub_max_interval"),
 
     Option("osd_scrub_max_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Scrub each PG no less often than this interval")
+    .add_see_also("osd_scrub_min_interval"),
 
     Option("osd_scrub_interval_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.5)
-    .set_description(""),
+    .set_description("Ratio of scrub interval to randomly vary")
+    .set_long_description("This prevents a scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_scrub_min_interval"),
 
-    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    Option("osd_scrub_backoff_ratio", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(.66)
-    .set_description(""),
+    .set_description("Backoff ratio after a failed scrub scheduling attempt"),
 
     Option("osd_scrub_chunk_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Minimum number of objects to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_max"),
 
     Option("osd_scrub_chunk_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(25)
-    .set_description(""),
+    .set_description("Maximum number of object to scrub in a single chunk")
+    .add_see_also("osd_scrub_chunk_min"),
 
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Duration to inject a delay during scrubbing"),
 
     Option("osd_scrub_auto_repair", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("Automatically repair damaged objects detected during scrub"),
 
     Option("osd_scrub_auto_repair_num_errors", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Maximum number of detected errors to automatically repair")
+    .add_see_also("osd_scrub_auto_repair"),
+
+    Option("osd_scrub_max_preemptions", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Set the maximum number of times we will preempt a deep scrub due to a client operation before blocking client IO to complete the scrub"),
 
     Option("osd_deep_scrub_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(7_day)
-    .set_description(""),
+    .set_description("Deep scrub each PG (i.e., verify data checksums) at least this often"),
 
     Option("osd_deep_scrub_randomize_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0.15)
-    .set_description(""),
+    .set_description("Ratio of deep scrub interval to randomly vary")
+    .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
+    .add_see_also("osd_deep_scrub_interval"),
 
     Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(524288)
-    .set_description(""),
+    .set_description("Number of bytes to read from an object at a time during deep scrub"),
+
+    Option("osd_deep_scrub_keys", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1024)
+    .set_description("Number of keys to read from an object at a time during deep scrub"),
 
     Option("osd_deep_scrub_update_digest_min_age", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
-    .set_description(""),
+    .set_description("Update overall object digest only if object was last modified longer ago than this"),
 
     Option("osd_deep_scrub_large_omap_object_key_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(2000000)
-    .set_description("threshold for number of keys to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap keys than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
     Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1_G)
-    .set_description("threshold for summed size (bytes) of all key values to determine a large omap object")
+    .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_key_threshold"),
 
@@ -2949,6 +2975,10 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_verify_cached_snaps", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description(""),
+
+    Option("osd_debug_deep_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Inject an expensive sleep during deep scrub IO to make it easier to induce preemption"),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -3199,11 +3229,11 @@ std::vector<Option> get_global_options() {
 
     Option("osd_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Priority for scrub operations in work queue"),
 
     Option("osd_scrub_cost", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(50<<20)
-    .set_description(""),
+    .set_description("Cost for scrub operations in work queue"),
 
     Option("osd_requested_scrub_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(120)
@@ -5790,71 +5820,17 @@ static std::vector<Option> get_rbd_options() {
         "+4 -> exclusive-lock, +8 -> object-map, +16 -> fast-diff, "
         "+32 -> deep-flatten, +64 -> journaling, +128 -> data-pool")
     .set_safe()
-    .set_validator([](std::string *value, std::string *error_message){
-      static const std::map<std::string, uint64_t> FEATURE_MAP = {
-        {RBD_FEATURE_NAME_LAYERING, RBD_FEATURE_LAYERING},
-        {RBD_FEATURE_NAME_STRIPINGV2, RBD_FEATURE_STRIPINGV2},
-        {RBD_FEATURE_NAME_EXCLUSIVE_LOCK, RBD_FEATURE_EXCLUSIVE_LOCK},
-        {RBD_FEATURE_NAME_OBJECT_MAP, RBD_FEATURE_OBJECT_MAP},
-        {RBD_FEATURE_NAME_FAST_DIFF, RBD_FEATURE_FAST_DIFF},
-        {RBD_FEATURE_NAME_DEEP_FLATTEN, RBD_FEATURE_DEEP_FLATTEN},
-        {RBD_FEATURE_NAME_JOURNALING, RBD_FEATURE_JOURNALING},
-        {RBD_FEATURE_NAME_DATA_POOL, RBD_FEATURE_DATA_POOL},
-      };
-      static_assert((RBD_FEATURE_OPERATIONS << 1) > RBD_FEATURES_ALL,
-                    "new RBD feature added");
-
-      // convert user-friendly comma delimited feature name list to a bitmask
-      // that is used by the librbd API
-      uint64_t features = 0;
-      error_message->clear();
-
-      try {
-        features = boost::lexical_cast<decltype(features)>(*value);
-
-        uint64_t unsupported_features = (features & ~RBD_FEATURES_ALL);
-        if (unsupported_features != 0ull) {
-          features &= RBD_FEATURES_ALL;
-
-          std::stringstream ss;
-          ss << "ignoring unknown feature mask 0x"
-             << std::hex << unsupported_features;
-          *error_message = ss.str();
-        }
-        uint64_t internal_features = (features & RBD_FEATURES_INTERNAL);
-        if (internal_features != 0ULL) {
-          features &= ~RBD_FEATURES_INTERNAL;
-
-          std::stringstream ss;
-          ss << "ignoring internal feature mask 0x"
-             << std::hex << internal_features;
-          *error_message = ss.str();
-        }
-      } catch (const boost::bad_lexical_cast& ) {
-        int r = 0;
-        std::vector<std::string> feature_names;
-        boost::split(feature_names, *value, boost::is_any_of(","));
-        for (auto feature_name: feature_names) {
-          boost::trim(feature_name);
-          auto feature_it = FEATURE_MAP.find(feature_name);
-          if (feature_it != FEATURE_MAP.end()) {
-            features += feature_it->second;
-          } else {
-            if (!error_message->empty()) {
-              *error_message += ", ";
-            }
-            *error_message += "ignoring unknown feature " + feature_name;
-            r = -EINVAL;
-          }
-        }
-
-        if (features == 0 && r == -EINVAL) {
-          features = RBD_FEATURES_DEFAULT;
-        }
-      }
-      *value = stringify(features);
-      return 0;
-    }),
+    .set_validator([](std::string *value, std::string *error_message) {
+	ostringstream ss;
+	uint64_t features = librbd::rbd_features_from_string(*value, &ss);
+	// Leave this in integer form to avoid breaking Cinder.  Someday
+	// we would like to present this in string form instead...
+	*value = stringify(features);
+	if (ss.str().size()) {
+	  return -EINVAL;
+	}
+	return 0;
+      }),
 
     Option("rbd_op_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
@@ -5929,7 +5905,7 @@ static std::vector<Option> get_rbd_options() {
     .set_description("threshold for issuing a sparse-read")
     .set_long_description("minimum number of sequential bytes to read against "
                           "an object before issuing a sparse-read request to "
-                          "the cluster. 0 implies it must be a full object read"
+                          "the cluster. 0 implies it must be a full object read "
                           "to issue a sparse-read, 1 implies always use "
                           "sparse-read, and any value larger than the maximum "
                           "object size will disable sparse-read for all "

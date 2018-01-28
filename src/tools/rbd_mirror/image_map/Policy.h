@@ -71,6 +71,19 @@ private:
     utime_t map_time;                                                         // (re)mapped time
   };
 
+  // for the lack of a better function name
+  bool is_state_retriable(StateTransition::State state) {
+    return state == StateTransition::STATE_UPDATE_MAPPING ||
+           state == StateTransition::STATE_REMOVE_MAPPING ||
+           state == StateTransition::STATE_ASSOCIATED;
+  }
+  // can the state machine transit advance (on success) or rollback
+  // (on failure).
+  bool can_transit(const ActionState &action_state, int r) {
+    assert(m_map_lock.is_locked());
+    return r == 0 || action_state.transition.error_state;
+  }
+
   void set_image_mapped_timestamp(const std::string &global_image_id, utime_t time) {
     assert(m_map_lock.is_wlocked());
 
@@ -91,7 +104,8 @@ private:
   std::set<std::string> m_dead_instances;
 
   bool is_idle_state(StateTransition::State state) {
-    if (state == StateTransition::STATE_ASSOCIATED ||
+    if (state == StateTransition::STATE_UNASSIGNED ||
+        state == StateTransition::STATE_ASSOCIATED ||
         state == StateTransition::STATE_DISASSOCIATED) {
       return true;
     }
@@ -115,7 +129,6 @@ private:
 
   bool queue_action(const std::string &global_image_id, const Action &action);
   bool actions_pending(const std::string &global_image_id, const RWLock &lock);
-  bool remove_pending(const std::string &glolbal_image_id);
 
   LookupInfo lookup(const std::string &global_image_id, const RWLock &lock);
   void map(const std::string &global_image_id,
@@ -132,8 +145,11 @@ private:
                                   StateTransition::ActionType action_type, StateTransition::State state);
   void post_execute_state_callback(const std::string &global_image_id, StateTransition::State state);
 
-  bool is_transition_complete(StateTransition::ActionType action_type, StateTransition::State *state);
-  bool perform_transition(ActionState *action_state, Action *action);
+  void rollback(ActionState *action_state);
+  bool advance(const std::string &global_image_id, ActionState *action_state, Action *action);
+
+  bool perform_transition(const std::string &global_image_id, ActionState *action_state,
+                          Action *action, bool transition_error);
   bool abort_or_retry(ActionState *action_state, Action *action);
 
 protected:

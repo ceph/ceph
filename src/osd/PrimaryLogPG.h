@@ -190,6 +190,7 @@ public:
   friend class CopyFromCallback;
   friend class CopyFromFinisher;
   friend class PromoteCallback;
+  friend class PromoteFinisher;
 
   struct ProxyReadOp {
     OpRequestRef op;
@@ -850,7 +851,7 @@ protected:
     if (!to_req.empty()) {
       // requeue at front of scrub blocking queue if we are blocked by scrub
       for (auto &&p: to_req) {
-	if (scrubber.write_blocked_by_scrub(p.first.get_head())) {
+	if (write_blocked_by_scrub(p.first.get_head())) {
           for (auto& op : p.second) {
             op->mark_delayed("waiting for scrub");
           }
@@ -1841,6 +1842,9 @@ public:
   void on_shutdown();
   bool check_failsafe_full(ostream &ss) override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
+  bool maybe_preempt_replica_scrub(const hobject_t& oid) override {
+    return write_blocked_by_scrub(oid);
+  }
   int rep_repair_primary_object(const hobject_t& soid, OpRequestRef op);
 
   // attr cache handling

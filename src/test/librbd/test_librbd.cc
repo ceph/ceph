@@ -70,7 +70,7 @@ void register_test_librbd() {
 static int get_features(bool *old_format, uint64_t *features)
 {
   const char *c = getenv("RBD_FEATURES");
-  if (c) {
+  if (c && strlen(c) > 0) {
     stringstream ss;
     ss << c;
     ss >> *features;

@@ -1180,7 +1180,7 @@ static int iterate_user_manifest_parts(CephContext * const cct,
 
       obj_ofs += obj_size;
       if (pobj_sum) {
-        etag_sum.Update((const ::byte *)ent.meta.etag.c_str(),
+        etag_sum.Update((const unsigned char *)ent.meta.etag.c_str(),
                         ent.meta.etag.length());
       }
 
@@ -1518,7 +1518,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
                       << " etag=" << part.etag
                       << dendl;
 
-    etag_sum.Update((const ::byte *)entry.etag.c_str(),
+    etag_sum.Update((const unsigned char *)entry.etag.c_str(),
                     entry.etag.length());
 
     slo_parts[total_len] = part;
@@ -2932,7 +2932,7 @@ void RGWDeleteBucket::execute()
 
 int RGWPutObj::verify_permission()
 {
-  if (copy_source) {
+  if (! copy_source.empty()) {
 
     RGWAccessControlPolicy cs_acl(s->cct);
     boost::optional<Policy> policy;
@@ -2945,8 +2945,8 @@ int RGWPutObj::verify_permission()
     store->set_prefetch_data(s->obj_ctx, obj);
 
     /* check source object permissions */
-    if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, policy,
-			cs_bucket, cs_object) < 0) {
+    if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl,
+			policy, cs_bucket, cs_object) < 0) {
       return -EACCES;
     }
 
@@ -3118,9 +3118,8 @@ int RGWPutObjProcessor_Multipart::do_complete(size_t accounted_size,
   rgw_raw_obj raw_meta_obj;
 
   store->obj_to_raw(s->bucket_info.placement_rule, meta_obj, &raw_meta_obj);
-
-  r = store->omap_set(raw_meta_obj, p, bl);
-
+  const bool must_exist = true;// detect races with abort
+  r = store->omap_set(raw_meta_obj, p, bl, must_exist);
   return r;
 }
 
@@ -3406,7 +3405,7 @@ void RGWPutObj::execute()
     bufferlist data;
     if (fst > lst)
       break;
-    if (!copy_source) {
+    if (copy_source.empty()) {
       len = get_data(data);
     } else {
       uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
@@ -3424,7 +3423,7 @@ void RGWPutObj::execute()
     }
 
     if (need_calc_md5) {
-      hash.Update((const ::byte *)data.c_str(), data.length());
+      hash.Update((const unsigned char *)data.c_str(), data.length());
     }
 
     /* update torrrent */
@@ -3570,7 +3569,7 @@ void RGWPutObj::execute()
     encode(*slo_info, manifest_bl);
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
 
-    hash.Update((::byte *)slo_info->raw_data, slo_info->raw_data_len);
+    hash.Update((unsigned char *)slo_info->raw_data, slo_info->raw_data_len);
     complete_etag(hash, &etag);
     ldout(s->cct, 10) << __func__ << ": calculated md5 for user manifest: " << etag << dendl;
   }
@@ -3760,7 +3759,7 @@ void RGWPostObj::execute()
         break;
       }
 
-      hash.Update((const ::byte *)data.c_str(), data.length());
+      hash.Update((const unsigned char *)data.c_str(), data.length());
       op_ret = put_data_and_throttle(filter, data, ofs, false);
 
       ofs += len;
@@ -4281,11 +4280,12 @@ void RGWDeleteObj::execute()
   }
 }
 
-
-bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name, rgw_obj_key& key)
+bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
+				     string& bucket_name,
+				     rgw_obj_key& key)
 {
-  string name_str;
-  string params_str;
+  boost::string_view name_str;
+  boost::string_view params_str;
 
   size_t pos = url_src.find('?');
   if (pos == string::npos) {
@@ -4295,27 +4295,27 @@ bool RGWCopyObj::parse_copy_location(const string& url_src, string& bucket_name,
     params_str = url_src.substr(pos + 1);
   }
 
-  std::string dec_src = url_decode(name_str);
-  const char *src = dec_src.c_str();
+  boost::string_view dec_src{name_str};
+  if (dec_src[0] == '/')
+    dec_src.remove_prefix(1);
 
-  if (*src == '/') ++src;
-
-  string str(src);
-
-  pos = str.find('/');
+  pos = dec_src.find('/');
   if (pos ==string::npos)
     return false;
 
-  bucket_name = str.substr(0, pos);
-  key.name = str.substr(pos + 1);
+  boost::string_view bn_view{dec_src.substr(0, pos)};
+  bucket_name = std::string{bn_view.data(), bn_view.size()};
+
+  boost::string_view kn_view{dec_src.substr(pos + 1)};
+  key.name = std::string{kn_view.data(), kn_view.size()};
 
   if (key.name.empty()) {
     return false;
   }
 
-  if (!params_str.empty()) {
+  if (! params_str.empty()) {
     RGWHTTPArgs args;
-    args.set(params_str);
+    args.set(params_str.to_string());
     args.parse();
 
     key.instance = args.get("versionId", NULL);
@@ -4835,7 +4835,7 @@ void RGWPutLC::execute()
 
   MD5 data_hash;
   unsigned char data_hash_res[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  data_hash.Update(reinterpret_cast<const ::byte*>(data), len);
+  data_hash.Update(reinterpret_cast<const unsigned char*>(data), len);
   data_hash.Final(data_hash_res);
 
   if (memcmp(data_hash_res, content_md5_bin.c_str(), CEPH_CRYPTO_MD5_DIGESTSIZE) != 0) {
@@ -5420,7 +5420,7 @@ void RGWCompleteMultipart::execute()
 
       hex_to_buf(obj_iter->second.etag.c_str(), petag,
 		CEPH_CRYPTO_MD5_DIGESTSIZE);
-      hash.Update((const ::byte *)petag, sizeof(petag));
+      hash.Update((const unsigned char *)petag, sizeof(petag));
 
       RGWUploadPartInfo& obj_part = obj_iter->second;
 
@@ -5477,7 +5477,7 @@ void RGWCompleteMultipart::execute()
       accounted_size += obj_part.accounted_size;
     }
   } while (truncated);
-  hash.Final((::byte *)final_etag);
+  hash.Final((unsigned char *)final_etag);
 
   buf_to_hex((unsigned char *)final_etag, sizeof(final_etag), final_etag_str);
   snprintf(&final_etag_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2],  sizeof(final_etag_str) - CEPH_CRYPTO_MD5_DIGESTSIZE * 2,
@@ -6403,7 +6403,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
       op_ret = len;
       return op_ret;
     } else if (len > 0) {
-      hash.Update((const ::byte *)data.c_str(), data.length());
+      hash.Update((const unsigned char *)data.c_str(), data.length());
       op_ret = put_data_and_throttle(filter, data, ofs, false);
       if (op_ret < 0) {
         ldout(s->cct, 20) << "processor->thottle_data() returned ret="

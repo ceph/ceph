@@ -1249,10 +1249,12 @@ bool OSDService::can_inc_scrubs_pending()
 
   if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
     dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active
+	     << ")" << dendl;
     can_inc = true;
   } else {
-    dout(20) << __func__ << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << __func__ << " " << scrubs_pending << " + " << scrubs_active
+	     << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
 
   return can_inc;
@@ -5402,8 +5404,12 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
   } else if (osdmap->is_destroyed(whoami)) {
-    derr << "osdmap says I am destroyed, exiting" << dendl;
-    exit(0);
+    derr << "osdmap says I am destroyed" << dendl;
+    // provide a small margin so we don't livelock seeing if we
+    // un-destroyed ourselves.
+    if (osdmap->get_epoch() > newest - 1) {
+      exit(0);
+    }
   } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {

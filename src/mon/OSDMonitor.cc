@@ -4046,7 +4046,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  f->dump_string("poolname", osdmap.pool_name[p->first]);
 	  f->close_section();
 	} else {
-	  ds << p->first << ' ' << osdmap.pool_name[p->first] << ',';
+	  ds << p->first << ' ' << osdmap.pool_name[p->first];
+	  if (next(p) != osdmap.pools.end()) {
+	    ds << '\n';
+	  }
 	}
       }
     }
@@ -5187,16 +5190,22 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   string erasure_code_profile;
   stringstream ss;
   string rule_name;
+  int ret = 0;
   if (m->auid)
-    return prepare_new_pool(m->name, m->auid, m->crush_rule, rule_name,
+    ret =  prepare_new_pool(m->name, m->auid, m->crush_rule, rule_name,
 			    0, 0,
                             erasure_code_profile,
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
   else
-    return prepare_new_pool(m->name, session->auid, m->crush_rule, rule_name,
+    ret = prepare_new_pool(m->name, session->auid, m->crush_rule, rule_name,
 			    0, 0,
                             erasure_code_profile,
 			    pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, &ss);
+
+  if (ret < 0) {
+    dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
+  }
+  return ret;
 }
 
 int OSDMonitor::crush_rename_bucket(const string& srcname,
@@ -5738,7 +5747,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   r = prepare_pool_crush_rule(pool_type, erasure_code_profile,
 				 crush_rule_name, &crush_rule, ss);
   if (r) {
-    dout(10) << " prepare_pool_crush_rule returns " << r << dendl;
+    dout(10) << "prepare_pool_crush_rule returns " << r << dendl;
     return r;
   }
   if (g_conf->mon_osd_crush_smoke_test) {
@@ -5753,7 +5762,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
     r = tester.test_with_fork(g_conf->mon_lease);
     auto duration = ceph::coarse_mono_clock::now() - start;
     if (r < 0) {
-      dout(10) << " tester.test_with_fork returns " << r
+      dout(10) << "tester.test_with_fork returns " << r
 	       << ": " << err.str() << dendl;
       *ss << "crush test failed with " << r << ": " << err.str();
       return r;
@@ -5764,12 +5773,12 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   unsigned size, min_size;
   r = prepare_pool_size(pool_type, erasure_code_profile, &size, &min_size, ss);
   if (r) {
-    dout(10) << " prepare_pool_size returns " << r << dendl;
+    dout(10) << "prepare_pool_size returns " << r << dendl;
     return r;
   }
   r = check_pg_num(-1, pg_num, size, ss);
   if (r) {
-    dout(10) << " prepare_pool_size returns " << r << dendl;
+    dout(10) << "check_pg_num returns " << r << dendl;
     return r;
   }
 
@@ -5780,7 +5789,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   uint32_t stripe_width = 0;
   r = prepare_pool_stripe_width(pool_type, erasure_code_profile, &stripe_width, ss);
   if (r) {
-    dout(10) << " prepare_pool_stripe_width returns " << r << dendl;
+    dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
   }
   
@@ -5981,7 +5990,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
        if (err == 0) {
 	 k = erasure_code->get_data_chunk_count();
        } else {
-	 ss << __func__ << " get_erasure_code failed: " << tmp.rdbuf();
+	 ss << __func__ << " get_erasure_code failed: " << tmp.str();
 	 return err;
        }
 
@@ -6034,8 +6043,8 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
     if (new_pgs > g_conf->mon_osd_max_split_count * expected_osds) {
       ss << "specified pg_num " << n << " is too large (creating "
 	 << new_pgs << " new PGs on ~" << expected_osds
-	 << " OSDs exceeds per-OSD max of " << g_conf->mon_osd_max_split_count
-	 << ')';
+	 << " OSDs exceeds per-OSD max with mon_osd_max_split_count of "
+         << g_conf->mon_osd_max_split_count << ')';
       return -E2BIG;
     }
     p.set_pg_num(n);
@@ -7239,12 +7248,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   cmd_getval(cct, cmdmap, "prefix", prefix);
 
   int64_t osdid;
-  string name;
-  bool osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  string osd_name;
+  bool osdid_present = false;
+  if (prefix != "osd pg-temp" &&
+      prefix != "osd pg-upmap" &&
+      prefix != "osd pg-upmap-items") {  // avoid commands with non-int id arg
+    osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
+  }
   if (osdid_present) {
     ostringstream oss;
     oss << "osd." << osdid;
-    name = oss.str();
+    osd_name = oss.str();
   }
 
   // Even if there's a pending state with changes that could affect
@@ -7775,7 +7789,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     if (!osdmap.exists(osdid)) {
       err = -ENOENT;
-      ss << name << " does not exist. Create it before updating the crush map";
+      ss << osd_name
+	 << " does not exist. Create it before updating the crush map";
       goto reply;
     }
 
@@ -7796,14 +7811,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (prefix == "osd crush set"
         && !_get_stable_crush().item_exists(osdid)) {
       err = -ENOENT;
-      ss << "unable to set item id " << osdid << " name '" << name
+      ss << "unable to set item id " << osdid << " name '" << osd_name
          << "' weight " << weight << " at location " << loc
          << ": does not exist";
       goto reply;
     }
 
     dout(5) << "adding/updating crush item id " << osdid << " name '"
-      << name << "' weight " << weight << " at location "
+      << osd_name << "' weight " << weight << " at location "
       << loc << dendl;
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
@@ -7812,10 +7827,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (prefix == "osd crush set" ||
         newcrush.check_item_loc(cct, osdid, loc, (int *)NULL)) {
       action = "set";
-      err = newcrush.update_item(cct, osdid, weight, name, loc);
+      err = newcrush.update_item(cct, osdid, weight, osd_name, loc);
     } else {
       action = "add";
-      err = newcrush.insert_item(cct, osdid, weight, name, loc);
+      err = newcrush.insert_item(cct, osdid, weight, osd_name, loc);
       if (err == 0)
         err = 1;
     }
@@ -7824,15 +7839,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
 
     if (err == 0 && !_have_pending_crush()) {
-      ss << action << " item id " << osdid << " name '" << name << "' weight "
-        << weight << " at location " << loc << ": no change";
+      ss << action << " item id " << osdid << " name '" << osd_name
+	 << "' weight " << weight << " at location " << loc << ": no change";
       goto reply;
     }
 
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-    ss << action << " item id " << osdid << " name '" << name << "' weight "
-      << weight << " at location " << loc << " to crush map";
+    ss << action << " item id " << osdid << " name '" << osd_name << "' weight "
+       << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
 						      get_last_committed() + 1));
@@ -7843,7 +7858,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       // osd crush create-or-move <OsdName> <initial_weight> <loc1> [<loc2> ...]
       if (!osdmap.exists(osdid)) {
 	err = -ENOENT;
-	ss << name << " does not exist.  create it before updating the crush map";
+	ss << osd_name
+	   << " does not exist.  create it before updating the crush map";
 	goto reply;
       }
 
@@ -7861,22 +7877,25 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
-      dout(0) << "create-or-move crush item name '" << name << "' initial_weight " << weight
-	      << " at location " << loc << dendl;
+      dout(0) << "create-or-move crush item name '" << osd_name
+	      << "' initial_weight " << weight << " at location " << loc
+	      << dendl;
 
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
 
-      err = newcrush.create_or_move_item(cct, osdid, weight, name, loc);
+      err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc);
       if (err == 0) {
-	ss << "create-or-move updated item name '" << name << "' weight " << weight
+	ss << "create-or-move updated item name '" << osd_name
+	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	break;
       }
       if (err > 0) {
 	pending_inc.crush.clear();
 	newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
-	ss << "create-or-move updating item name '" << name << "' weight " << weight
+	ss << "create-or-move updating item name '" << osd_name
+	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	getline(ss, rs);
 	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -7888,7 +7907,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush move") {
     do {
       // osd crush move <name> <loc1> [<loc2> ...]
-
+      string name;
       string args;
       vector<string> argvec;
       cmd_getval(cct, cmdmap, "name", name);
@@ -10164,6 +10183,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     bool implicit_rule_creation = false;
+    int64_t expected_num_objects = 0;
     string rule_name;
     cmd_getval(cct, cmdmap, "rule", rule_name);
     string erasure_code_profile;
@@ -10201,9 +10221,26 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
+      cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                 expected_num_objects, int64_t(0));
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
-      rule_name = erasure_code_profile;
+      //     and put expected_num_objects to rule field
+      if (erasure_code_profile != "") { // cmd is from CLI
+        if (rule_name != "") {
+          string interr;
+          expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
+          if (interr.length()) {
+            ss << "error parsing integer value '" << rule_name << "': " << interr;
+            err = -EINVAL;
+            goto reply;
+          }
+        }
+        rule_name = erasure_code_profile;
+      } else { // cmd is well-formed
+        cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                   expected_num_objects, int64_t(0));
+      }
     }
 
     if (!implicit_rule_creation && rule_name != "") {
@@ -10217,8 +10254,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
     }
 
-    int64_t expected_num_objects;
-    cmd_getval(cct, cmdmap, "expected_num_objects", expected_num_objects, int64_t(0));
     if (expected_num_objects < 0) {
       ss << "'expected_num_objects' must be non-negative";
       err = -EINVAL;
