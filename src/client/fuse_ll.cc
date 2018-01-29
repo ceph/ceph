@@ -161,6 +161,15 @@ static void fuse_ll_lookup(fuse_req_t req, fuse_ino_t parent, const char *name)
   UserPerm perms(ctx->uid, ctx->gid);
   GET_GROUPS(perms, req);
 
+  if (!i1)
+  {
+    r = cfuse->client->lookup_ino(parent, perms, &i1);
+    if (r < 0) {
+      fuse_reply_err(req, -r);
+      return;
+    }
+  }
+
   memset(&fe, 0, sizeof(fe));
   r = cfuse->client->ll_lookup(i1, name, &fe.attr, &i2, perms);
   if (r >= 0) {
@@ -945,6 +954,8 @@ static void do_init(void *data, fuse_conn_info *conn)
     if(conn->capable & FUSE_CAP_DONT_MASK)
       conn->want |= FUSE_CAP_DONT_MASK;
   }
+  if(conn->capable & FUSE_CAP_EXPORT_SUPPORT)
+    conn->want |= FUSE_CAP_EXPORT_SUPPORT;
 #endif
 
   if (cfuse->fd_on_success) {
