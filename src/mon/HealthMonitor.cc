@@ -21,7 +21,6 @@
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
-#include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
 
 #include "messages/MMonHealthChecks.h"
