@@ -259,7 +259,7 @@ int main(int argc, const char *argv[])
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(ch, std::move(t));
+    os->queue_transaction(ch, std::move(t), nullptr);
   }
 
   // create the objects
@@ -273,7 +273,7 @@ int main(int argc, const char *argv[])
 
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(ch, std::move(t));
+      int r = os->queue_transaction(ch, std::move(t), nullptr);
       assert(r == 0);
     }
   } else {
@@ -281,7 +281,7 @@ int main(int argc, const char *argv[])
 
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(ch, std::move(t));
+    int r = os->queue_transaction(ch, std::move(t), nullptr);
     assert(r == 0);
   }
 
@@ -313,7 +313,7 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(ch, std::move(t));
+  os->queue_transaction(ch, std::move(t), nullptr);
 
   os->umount();
   return 0;

@@ -1420,14 +1420,6 @@ public:
     static void generate_test_instances(list<Transaction*>& o);
   };
 
-  // synchronous wrappers
-  unsigned apply_transaction(CollectionHandle& ch, Transaction&& t, Context *ondisk=0) {
-    vector<Transaction> tls;
-    tls.push_back(std::move(t));
-    return apply_transactions(ch, tls, ondisk);
-  }
-  unsigned apply_transactions(CollectionHandle& ch, vector<Transaction>& tls, Context *ondisk=0);
-
   int queue_transaction(CollectionHandle& ch, Transaction&& t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef(),

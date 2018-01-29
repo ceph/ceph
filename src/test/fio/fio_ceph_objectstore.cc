@@ -170,7 +170,7 @@ int destroy_collections(
     ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
     t.remove(coll.cid, pgmeta_oid);
     t.remove_collection(coll.cid);
-    int r = os->apply_transaction(coll.ch, std::move(t));
+    int r = os->queue_transaction(coll.ch, std::move(t));
     if (r && !failed) {
       derr << "Engine cleanup failed with " << cpp_strerror(-r) << dendl;
       failed = true;
@@ -204,7 +204,7 @@ int init_collections(std::unique_ptr<ObjectStore>& os,
       ObjectStore::Transaction t;
       t.create_collection(cid, split_bits);
       t.write(cid, OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
-      int r = os->apply_transaction(ch, std::move(t));
+      int r = os->queue_transaction(ch, std::move(t));
 
       if (r < 0) {
 	derr << "Failure to write OSD superblock: " << cpp_strerror(-r) << dendl;
@@ -230,7 +230,7 @@ int init_collections(std::unique_ptr<ObjectStore>& os,
       t.create_collection(coll.cid, split_bits);
       ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
       t.touch(coll.cid, pgmeta_oid);
-      int r = os->apply_transaction(coll.ch, std::move(t));
+      int r = os->queue_transaction(coll.ch, std::move(t));
       if (r) {
 	derr << "Engine init failed with " << cpp_strerror(-r) << dendl;
 	destroy_collections(os, collections);
@@ -437,7 +437,7 @@ Job::Job(Engine* engine, const thread_data* td)
     auto& oid = objects.back().oid;
     t.touch(coll.cid, oid);
     t.truncate(coll.cid, oid, file_size);
-    int r = engine->os->apply_transaction(coll.ch, std::move(t));
+    int r = engine->os->queue_transaction(coll.ch, std::move(t));
     if (r) {
       engine->deref();
       throw std::system_error(r, std::system_category(), "job init");
@@ -453,7 +453,7 @@ Job::~Job()
     // remove our objects
     for (auto& obj : objects) {
       t.remove(obj.coll.cid, obj.oid);
-      int r = engine->os->apply_transaction(obj.coll.ch, std::move(t));
+      int r = engine->os->queue_transaction(obj.coll.ch, std::move(t));
       if (r && !failed) {
 	derr << "job cleanup failed with " << cpp_strerror(-r) << dendl;
 	failed = true;
