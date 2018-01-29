@@ -1403,6 +1403,7 @@ OPTION(rgw_usage_log_flush_threshold, OPT_INT) // threshold to flush pending log
 OPTION(rgw_usage_log_tick_interval, OPT_INT) // flush pending log data every X seconds
 OPTION(rgw_init_timeout, OPT_INT) // time in seconds
 OPTION(rgw_mime_types_file, OPT_STR)
+OPTION(rgw_gc_threads, OPT_INT) // the size of gc process threadpool
 OPTION(rgw_gc_max_objs, OPT_INT)
 OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work

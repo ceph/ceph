@@ -10,10 +10,12 @@
 #include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
+#include "common/WorkQueue.h"
 #include "rgw_common.h"
 #include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
-
+#include <list>
+#include <mutex>
 #include <atomic>
 
 class RGWGC {
@@ -22,6 +24,7 @@ class RGWGC {
   int max_objs;
   string *obj_names;
   std::atomic<bool> down_flag = { false };
+  ThreadPool tp;
 
   int tag_index(const string& tag);
 
@@ -38,8 +41,71 @@ class RGWGC {
   };
 
   GCWorker *worker;
+
 public:
-  RGWGC() : cct(NULL), store(NULL), max_objs(0), obj_names(NULL), worker(NULL) {}
+  struct GCJob {
+    cls_rgw_gc_obj_info *info;
+    utime_t end;
+
+    std::list<string> *remove_tags;
+    std::mutex *lock;
+    GCJob(cls_rgw_gc_obj_info *_info, utime_t _end, std::list<string> *_remove_tags, std::mutex *_lock)
+      :info(_info), end(_end), remove_tags(_remove_tags), lock(_lock){}
+  };
+
+  class RGWGCWQ : public ThreadPool::WorkQueue<GCJob> {
+    RGWGC *gc;
+    std::list<GCJob*> job_queue;
+  public:
+    RGWGCWQ(const std::string &name, ThreadPool *tp, RGWGC *_gc)
+    : ThreadPool::WorkQueue<GCJob>(name, 0, 0, tp), gc(_gc) {}
+    ~RGWGCWQ(){ clear(); }
+
+    bool _enqueue(GCJob *item) override{
+      job_queue.push_back(item);
+      return true;
+    }
+    void _dequeue(GCJob *item) override {
+      if (job_queue.empty()) {
+        item = nullptr;
+        return;
+      }
+      item = job_queue.front();
+      job_queue.pop_front();
+    }
+    GCJob *_dequeue() override {
+      if (job_queue.empty())
+        return nullptr;
+      GCJob *item = job_queue.front();
+      job_queue.pop_front();
+      return item;
+    }
+    bool _empty() override {
+      return job_queue.empty();
+    }
+    void _clear() override {
+      while(!job_queue.empty()){
+        GCJob *item = job_queue.front();
+        job_queue.pop_front();
+        if(item) delete item;
+      }
+    }
+    void _process(GCJob *item, ThreadPool::TPHandle &tp_handle) override;
+    void _process_finish(GCJob *item) override {
+      if(item) delete item;
+    }
+  };
+
+private:
+  RGWGCWQ gc_wq;
+  friend class RGWGCWQ;
+
+public:
+  RGWGC(CephContext *_cct, RGWRados *_store, const int num_threads)
+    : cct(_cct), store(_store),
+      max_objs(0), obj_names(NULL),
+      tp(cct, "RGWGC::tp", "tp_gc_process", num_threads),
+      worker(NULL), gc_wq("RGWGCWQ", &tp, this) {}
   ~RGWGC() {
     stop_processor();
     finalize();
@@ -50,7 +116,7 @@ public:
   int defer_chain(const string& tag, bool sync);
   int remove(int index, const std::list<string>& tags);
 
-  void initialize(CephContext *_cct, RGWRados *_store);
+  void initialize();
   void finalize();
 
   int list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);

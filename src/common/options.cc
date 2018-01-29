@@ -5226,6 +5226,10 @@ std::vector<Option> get_rgw_options() {
         "content type is not specified, RGW will use data from this file to assign "
         "a content type to the object."),
 
+    Option("rgw_gc_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+        .set_default(3)
+        .set_description("The number of threads in gc process thread pool"),
+
     Option("rgw_gc_max_objs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description("Number of shards for garbage collector data")

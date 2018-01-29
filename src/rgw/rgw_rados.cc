@@ -4506,8 +4506,8 @@ int RGWRados::init_complete()
 
   pools_initialized = true;
 
-  gc = new RGWGC();
-  gc->initialize(cct, this);
+  gc = new RGWGC(cct, this, cct->_conf->rgw_gc_threads);
+  gc->initialize();
 
   obj_expirer = new RGWObjectExpirer(this);
 

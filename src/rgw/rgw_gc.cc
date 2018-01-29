@@ -19,10 +19,7 @@ static string gc_oid_prefix = "gc";
 static string gc_index_lock_name = "gc_process";
 
 
-void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
-  cct = _cct;
-  store = _store;
-
+void RGWGC::initialize() {
   max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
 
   obj_names = new string[max_objs];
@@ -33,10 +30,12 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     snprintf(buf, 32, ".%d", i);
     obj_names[i].append(buf);
   }
+  tp.start();
 }
 
 void RGWGC::finalize()
 {
+  tp.stop();
   delete[] obj_names;
 }
 
@@ -127,11 +126,66 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
   return 0;
 }
 
+void RGWGC::RGWGCWQ::_process(GCJob *item, ThreadPool::TPHandle &tp_handle)
+{
+  // disable timeout
+  tp_handle.suspend_tp_timeout();
+
+  cls_rgw_gc_obj_info& info = *(item->info);
+  IoCtx* ctx = new IoCtx;
+  string last_pool;
+  bool remove_tag;
+  std::list<cls_rgw_obj>::iterator liter;
+  cls_rgw_obj_chain& chain = info.chain;
+
+  utime_t now = ceph_clock_now();
+  if (now >= item->end) goto done;
+  int ret;
+  remove_tag = true;
+  for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
+    cls_rgw_obj& obj = *liter;
+    if (obj.pool != last_pool) {
+      delete ctx;
+      ctx = new IoCtx;
+      ret = rgw_init_ioctx(gc->store->get_rados_handle(), obj.pool, *ctx);
+      if (ret < 0) {
+        dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool
+                << dendl;
+        continue;
+      }
+      last_pool = obj.pool;
+    }
+    ctx->locator_set_key(obj.loc);
+    const string& oid = obj.key.name; /* just stored raw oid there */
+    dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name
+            << dendl;
+    ObjectWriteOperation op;
+    cls_refcount_put(op, info.tag, true);
+    ret = ctx->operate(oid, &op);
+    if (ret == -ENOENT) ret = 0;
+    if (ret < 0) {
+      remove_tag = false;
+      dout(0) << "failed to remove " << obj.pool << ":" << oid << "@"
+              << obj.loc << dendl;
+    }
+    if (gc->going_down())  // leave early, even if tag isn't removed, it's ok
+      goto done;
+  }
+  if (remove_tag) {
+    std::lock_guard<std::mutex> lock(*(item->lock));
+    item->remove_tags->push_back(info.tag);
+  }
+  done:
+    if(ctx) delete ctx;
+    return ;
+}
+
 int RGWGC::process(int index, int max_secs, bool expired_only)
 {
   rados::cls::lock::Lock l(gc_index_lock_name);
   utime_t end = ceph_clock_now();
   std::list<string> remove_tags;
+  std::mutex remove_tags_lock;
 
   /* max_secs should be greater than zero. We don't want a zero max_secs
    * to be translated as no timeout, since we'd then need to break the
@@ -155,7 +209,6 @@ int RGWGC::process(int index, int max_secs, bool expired_only)
   string marker;
   string next_marker;
   bool truncated;
-  IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
@@ -170,57 +223,17 @@ int RGWGC::process(int index, int max_secs, bool expired_only)
     string last_pool;
     std::list<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      bool remove_tag;
-      cls_rgw_gc_obj_info& info = *iter;
-      std::list<cls_rgw_obj>::iterator liter;
-      cls_rgw_obj_chain& chain = info.chain;
-
       utime_t now = ceph_clock_now();
-      if (now >= end)
+      if (now >= end) {
+        gc_wq.clear();
+        gc_wq.drain();
         goto done;
-
-      remove_tag = true;
-      for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
-        cls_rgw_obj& obj = *liter;
-
-        if (obj.pool != last_pool) {
-          delete ctx;
-          ctx = new IoCtx;
-	  ret = rgw_init_ioctx(store->get_rados_handle(), obj.pool, *ctx);
-	  if (ret < 0) {
-	    dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
-	    continue;
-	  }
-          last_pool = obj.pool;
-        }
-
-        ctx->locator_set_key(obj.loc);
-
-        const string& oid = obj.key.name; /* just stored raw oid there */
-
-	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
-	ObjectWriteOperation op;
-	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(oid, &op);
-	if (ret == -ENOENT)
-	  ret = 0;
-        if (ret < 0) {
-          remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
-        }
-
-        if (going_down()) // leave early, even if tag isn't removed, it's ok
-          goto done;
       }
-      if (remove_tag) {
-        remove_tags.push_back(info.tag);
-#define MAX_REMOVE_CHUNK 16
-        if (remove_tags.size() > MAX_REMOVE_CHUNK) {
-          RGWGC::remove(index, remove_tags);
-          remove_tags.clear();
-        }
-      }
+      GCJob *job = new GCJob(&(*iter), end, &remove_tags, &remove_tags_lock);
+      gc_wq.queue(job);
     }
+    // wait all threads finish current job
+    gc_wq.drain();
     if (!remove_tags.empty()) {
       RGWGC::remove(index, remove_tags);
       remove_tags.clear();
@@ -231,7 +244,6 @@ done:
   if (!remove_tags.empty())
     RGWGC::remove(index, remove_tags);
   l.unlock(&store->gc_pool_ctx, obj_names[index]);
-  delete ctx;
   return 0;
 }
 
