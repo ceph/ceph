@@ -5659,7 +5659,7 @@ int trash_get(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string key = trash::image_key(id);
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, key, out);
-  if (r != -ENOENT) {
+  if (r < 0 && r != -ENOENT) {
     CLS_ERR("error reading image from trash '%s': '%s'", id.c_str(),
             cpp_strerror(r).c_str());
   }
