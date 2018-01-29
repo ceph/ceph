@@ -49,8 +49,8 @@ def prepare_filestore(device, journal, secrets, tags, id_=None, fsid=None):
     json_secrets = json.dumps(secrets)
     # allow re-using an existing fsid, in case prepare failed
     fsid = fsid or system.generate_uuid()
-    # allow re-using an id, in case a prepare failed
-    osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
+    # reuse a given ID if it exists, otherwise create a new ID
+    osd_id = prepare_utils.check_id(id_) or prepare_utils.create_id(fsid, json_secrets)
 
     # encryption-only operations
     if secrets.get('dmcrypt_key'):
@@ -110,7 +110,7 @@ def prepare_bluestore(block, wal, db, secrets, tags, id_=None, fsid=None):
     # allow re-using an existing fsid, in case prepare failed
     fsid = fsid or system.generate_uuid()
     # allow re-using an id, in case a prepare failed
-    osd_id = id_ or prepare_utils.create_id(fsid, json_secrets)
+    osd_id = prepare_utils.check_id(id_) or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=True)
     # symlink the block
@@ -251,8 +251,8 @@ class Prepare(object):
         crush_device_class = args.crush_device_class
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
-        # allow re-using an id, in case a prepare failed
-        self.osd_id = args.osd_id or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
+        # reuse a given ID if it exists, otherwise create a new ID
+        self.osd_id = prepare_utils.check_id(args.osd_id) or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
         tags = {
             'ceph.osd_fsid': osd_fsid,
             'ceph.osd_id': self.osd_id,
