@@ -6096,9 +6096,10 @@ void FileStore::OpSequencer::_register_apply(Op *o)
   o->registered_apply = true;
   for (auto& t : o->tls) {
     for (auto& i : t.get_object_index()) {
-      ++applying[i.first];
-      dout(20) << __func__ << " " << o << " " << i.first << " now " << applying[i.first]
-	       << dendl;
+      uint32_t key = i.first.hobj.get_hash();
+      applying.emplace(make_pair(key, &i.first));
+      dout(20) << __func__ << " " << o << " " << i.first << " ("
+	       << &i.first << ")" << dendl;
     }
   }
 }
@@ -6108,14 +6109,21 @@ void FileStore::OpSequencer::_unregister_apply(Op *o)
   assert(o->registered_apply);
   for (auto& t : o->tls) {
     for (auto& i : t.get_object_index()) {
-      auto p = applying.find(i.first);
-      assert(p != applying.end());
-      if (--p->second == 0) {
-	dout(20) << __func__ << " " << o << " " << i.first << " now 0, removing" << dendl;
-	applying.erase(p);
-      } else {
-	dout(20) << __func__ << " " << o << " " << i.first << " now " << p->second << dendl;
+      uint32_t key = i.first.hobj.get_hash();
+      auto p = applying.find(key);
+      bool removed = false;
+      while (p != applying.end() &&
+	     p->first == key) {
+	if (p->second == &i.first) {
+	  dout(20) << __func__ << " " << o << " " << i.first << " ("
+		   << &i.first << ")" << dendl;
+	  applying.erase(p);
+	  removed = true;
+	  break;
+	}
+	++p;
       }
+      assert(removed);
     }
   }
 }
@@ -6123,9 +6131,22 @@ void FileStore::OpSequencer::_unregister_apply(Op *o)
 void FileStore::OpSequencer::wait_for_apply(const ghobject_t& oid)
 {
   Mutex::Locker l(qlock);
-  while (applying.count(oid)) {
-    dout(20) << __func__ << " " << oid << " waiting" << dendl;
-    cond.Wait(qlock);
+  uint32_t key = oid.hobj.get_hash();
+retry:
+  while (true) {
+    // search all items in hash slot for a matching object
+    auto p = applying.find(key);
+    while (p != applying.end() &&
+	   p->first == key) {
+      if (*p->second == oid) {
+	dout(20) << __func__ << " " << oid << " waiting on " << p->second
+		 << dendl;
+	cond.Wait(qlock);
+	goto retry;
+      }
+      ++p;
+    }
+    break;
   }
   dout(20) << __func__ << " " << oid << " done" << dendl;
 }
