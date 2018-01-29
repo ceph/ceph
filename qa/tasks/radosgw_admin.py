@@ -908,7 +908,7 @@ def task(ctx, config):
         stdin=StringIO(json.dumps(out)),
         check_status=True)
 
-    (err, out) = rgwadmin(ctx, client, ['zone', 'get','--rgw-zone','default'])
+    (err, out) = rgwadmin(ctx, client, ['zone', 'get'])
     assert len(out) > 0
     assert len(out['placement_pools']) == orig_placement_pools + 1
 
@@ -917,6 +917,9 @@ def task(ctx, config):
 	'--placement-id', 'new-placement']
 
     (err, out) = rgwadmin(ctx, client, zonecmd, check_status=True)
+
+    # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
 
 import sys
 from tasks.radosgw_admin import task
