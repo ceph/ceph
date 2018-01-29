@@ -559,7 +559,8 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     } else if (session->is_killing()) {
       // destroy session, close connection
       if (session->connection != NULL) {
-        session->connection->mark_down();
+	session->connection->mark_down();
+	session->connection->set_priv(NULL);
       }
       mds->sessionmap.remove_session(session);
     } else {
