@@ -168,6 +168,17 @@ echo "including src/.git_version, ceph.spec"
 
 (git rev-parse HEAD ; echo $version) 2> /dev/null > src/.git_version
 
+source /etc/os-release
+case $ID in
+    opensuse*|suse|sles)
+        if [ "x$rpm_release" != "x0" ] ; then
+            rpm_release=$(echo $rpm_release | sed 's/.g/+g/')
+            rpm_version="${rpm_version}.${rpm_release}"
+            rpm_release="0"
+        fi
+        ;;
+esac
+
 for spec in ceph.spec.in; do
     cat $spec |
         sed "s/@PROJECT_VERSION@/$rpm_version/g" |
