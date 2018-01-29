@@ -152,3 +152,55 @@ Example::
 
 Now only authenticated users will be able to "ping" your controller.
 
+
+How to access the manager module instance from a controller?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Each controller class annoted with the ``ApiController`` decorator is injected
+with a class property that points to the manager module global instance. The
+property is named ``mgr``.
+
+Example::
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+  @ApiController('servers')
+  class Servers(RESTController):
+    def list(self):
+      self.logger.debug('Listing available servers')
+      return {'servers': self.mgr.list_servers()}
+
+We also inject a class property ``logger`` that is provided by the module class
+to easily add log messages.
+
+
+How to write a unit test for a controller?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+We provide a test helper class called ``ControllerTestCase`` to easily create
+unit tests for your controller.
+
+If we want to write a unit test for the above ``Ping2`` controller, create a
+``test_ping2.py`` file under the ``tests`` directory with the following code::
+
+  from .helper import ControllerTestCase
+  from .controllers.ping2 import Ping2
+
+  class Ping2Test(ControllerTestCase):
+      @classmethod
+      def setup_test(cls):
+          Ping2._cp_config['tools.authentica.on'] = False
+
+      def test_ping2(self):
+          self._get("/api/ping2")
+          self.assertStatus(200)
+          self.assertJsonBody({'msg': 'Hello'})
+
+The ``ControllerTestCase`` class will call the dashboard module code that loads
+the controllers and initializes the CherryPy webserver. Then it will call the
+``setup_test()`` class method to execute additional instructions that each test
+case needs to add to the test.
+In the example above we use the ``setup_test()`` method to disable the
+authentication handler for the ``Ping2`` controller.
+
