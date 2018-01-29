@@ -1778,7 +1778,7 @@ public:
     INDEX
   };
 
-  struct AioReadBatch : public AioContext {
+  struct AioReadBatch final : public AioContext {
     struct read_ctx_t {
       async_read_params_t params;
       cache_response_t cache_response;

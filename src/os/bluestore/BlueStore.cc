@@ -3524,7 +3524,7 @@ void BlueStore::AioReadBatch::aio_finish(BlueStore* const store)
   }
 
   on_all_complete->complete(0);
-  delete this;
+  delete static_cast<AioReadBatch*>(this);
 }
 
 // =======================================================
