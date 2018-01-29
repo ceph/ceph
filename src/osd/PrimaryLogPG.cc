@@ -5655,7 +5655,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		 op.extent.length, op.extent.truncate_size,
 		 op.extent.truncate_seq);
       if (op_finisher == nullptr) {
-	result = do_sparse_read(ctx, osd_op);
+	if (osd->store->get_type() == "bluestore")
+	  result = do_read(ctx, osd_op);
+	else
+	  result = do_sparse_read(ctx, osd_op);
       } else {
 	result = op_finisher->execute();
       }
