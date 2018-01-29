@@ -97,28 +97,27 @@ class Plan:
 
 
 class Eval:
-    root_ids = {}        # root name -> id
-    pool_name = {}       # pool id -> pool name
-    pool_id = {}         # pool name -> id
-    pool_roots = {}      # pool name -> root name
-    root_pools = {}      # root name -> pools
-    target_by_root = {}  # root name -> target weight map
-    count_by_pool = {}
-    count_by_root = {}
-    actual_by_pool = {}  # pool -> by_* -> actual weight map
-    actual_by_root = {}  # pool -> by_* -> actual weight map
-    total_by_pool = {}   # pool -> by_* -> total
-    total_by_root = {}   # root -> by_* -> total
-    stats_by_pool = {}   # pool -> by_* -> stddev or avg -> value
-    stats_by_root = {}   # root -> by_* -> stddev or avg -> value
-
-    score_by_pool = {}
-    score_by_root = {}
-
-    score = 0.0
-
     def __init__(self, ms):
         self.ms = ms
+        self.root_ids = {}        # root name -> id
+        self.pool_name = {}       # pool id -> pool name
+        self.pool_id = {}         # pool name -> id
+        self.pool_roots = {}      # pool name -> root name
+        self.root_pools = {}      # root name -> pools
+        self.target_by_root = {}  # root name -> target weight map
+        self.count_by_pool = {}
+        self.count_by_root = {}
+        self.actual_by_pool = {}  # pool -> by_* -> actual weight map
+        self.actual_by_root = {}  # pool -> by_* -> actual weight map
+        self.total_by_pool = {}   # pool -> by_* -> total
+        self.total_by_root = {}   # root -> by_* -> total
+        self.stats_by_pool = {}   # pool -> by_* -> stddev or avg -> value
+        self.stats_by_root = {}   # root -> by_* -> stddev or avg -> value
+
+        self.score_by_pool = {}
+        self.score_by_root = {}
+
+        self.score = 0.0
 
     def show(self, verbose=False):
         if verbose:
