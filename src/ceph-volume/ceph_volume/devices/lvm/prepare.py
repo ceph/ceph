@@ -37,7 +37,7 @@ def prepare_dmcrypt(key, device, device_type, tags):
     return '/dev/mapper/%s' % uuid
 
 
-def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
+def prepare_filestore(device, journal, secrets, tags, id_=None, fsid=None):
     """
     :param device: The name of the logical volume to work with
     :param journal: similar to device but can also be a regular/plain disk
@@ -46,6 +46,11 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
     :param fsid: The OSD fsid, also known as the OSD UUID
     """
     cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
+    json_secrets = json.dumps(secrets)
+    # allow re-using an existing fsid, in case prepare failed
+    fsid = fsid or system.generate_uuid()
+    # reuse a given ID if it exists, otherwise create a new ID
+    osd_id = prepare_utils.check_id(id_) or prepare_utils.create_id(fsid, json_secrets)
 
     # encryption-only operations
     if secrets.get('dmcrypt_key'):
@@ -79,7 +84,7 @@ def prepare_filestore(device, journal, secrets, tags, osd_id, fsid):
         )
 
 
-def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
+def prepare_bluestore(block, wal, db, secrets, tags, id_=None, fsid=None):
     """
     :param block: The name of the logical volume for the bluestore data
     :param wal: a regular/plain disk or logical volume, to be used for block.wal
@@ -89,6 +94,7 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
     :param fsid: The OSD fsid, also known as the OSD UUID
     """
     cephx_secret = secrets.get('cephx_secret', prepare_utils.create_key())
+    json_secrets = json.dumps(secrets)
     # encryption-only operations
     if secrets.get('dmcrypt_key'):
         # If encrypted, there is no need to create the lockbox keyring file because
@@ -101,6 +107,10 @@ def prepare_bluestore(block, wal, db, secrets, tags, osd_id, fsid):
         wal = prepare_dmcrypt(key, wal, 'wal', tags)
         db = prepare_dmcrypt(key, db, 'db', tags)
 
+    # allow re-using an existing fsid, in case prepare failed
+    fsid = fsid or system.generate_uuid()
+    # allow re-using an id, in case a prepare failed
+    osd_id = prepare_utils.check_id(id_) or prepare_utils.create_id(fsid, json_secrets)
     # create the directory
     prepare_utils.create_osd_path(osd_id, tmpfs=True)
     # symlink the block
@@ -242,7 +252,7 @@ class Prepare(object):
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
         # reuse a given ID if it exists, otherwise create a new ID
-        self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), osd_id=args.osd_id)
+        self.osd_id = prepare_utils.check_id(args.osd_id) or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
         tags = {
             'ceph.osd_fsid': osd_fsid,
             'ceph.osd_id': self.osd_id,
@@ -273,8 +283,8 @@ class Prepare(object):
                 journal_device,
                 secrets,
                 tags,
-                self.osd_id,
-                osd_fsid,
+                id_=self.osd_id,
+                fsid=osd_fsid,
             )
         elif args.bluestore:
             block_lv = self.get_lv(args.data)
@@ -298,8 +308,8 @@ class Prepare(object):
                 db_device,
                 secrets,
                 tags,
-                self.osd_id,
-                osd_fsid,
+                id_=self.osd_id,
+                fsid=osd_fsid,
             )
 
     def main(self):
