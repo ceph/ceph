@@ -532,7 +532,7 @@ bool parse_rfc2616(const char *s, struct tm *t)
 bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_format)
 {
   memset(t, 0, sizeof(*t));
-  const char *p;
+  const char *p = nullptr;
 
   if (!s)
     s = "";
