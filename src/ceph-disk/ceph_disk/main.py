@@ -42,7 +42,6 @@ import grp
 import textwrap
 import glob
 
-
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
@@ -1738,9 +1737,9 @@ class DevicePartition(object):
                 (dev is not None and is_mpath(dev))):
             partition = DevicePartitionMultipath(args)
         elif dmcrypt_type == 'luks':
-            partition = DevicePartitionCryptLuks(args)
+            partition = DevicePartitionCryptLuks(name, args)
         elif dmcrypt_type == 'plain':
-            partition = DevicePartitionCryptPlain(args)
+            partition = DevicePartitionCryptPlain(name, args)
         else:
             partition = DevicePartition(args)
         partition.set_dev(dev)
@@ -1755,13 +1754,13 @@ class DevicePartitionMultipath(DevicePartition):
 
 class DevicePartitionCrypt(DevicePartition):
 
-    def __init__(self, args):
+    def __init__(self, name, args):
         super(DevicePartitionCrypt, self).__init__(args)
         self.osd_dm_key = None
         self.cryptsetup_parameters = CryptHelpers.get_cryptsetup_parameters(
             self.args)
-        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(None, self.args)
-        self.dmcrypt_keysize = CryptHelpers.get_dmcrypt_keysize(self.args)
+        self.dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, self.args)
+        self.dmcrypt_keysize = CryptHelpers.get_dmcrypt_keysize(name, self.args)
 
     def setup_crypt(self):
         pass
@@ -1864,6 +1863,11 @@ class Prepare(object):
             help='do not dmcrypt JOURNAL devices',
         )
         parser.add_argument(
+            '--journal-dmcrypt',
+            action='store_true', default=None,
+            help='dmcrypt JOURNAL devices',
+        )
+        parser.add_argument(
             '--dmcrypt-key-dir',
             metavar='KEYDIR',
             default='/etc/ceph/dmcrypt-keys',
@@ -1941,8 +1945,11 @@ class Prepare(object):
 class PrepareFilestore(Prepare):
 
     def __init__(self, args):
-        if args.dmcrypt:
+        if args.dmcrypt or args.journal_dmcrypt:
+            self.dmcrypt = True
             self.lockbox = Lockbox(args)
+        else:
+            self.dmcrypt = False
         self.data = PrepareFilestoreData(args)
         self.journal = PrepareJournal(args)
 
@@ -1953,7 +1960,7 @@ class PrepareFilestore(Prepare):
         ]
 
     def prepare_locked(self):
-        if self.data.args.dmcrypt:
+        if self.data.args.dmcrypt or self.dmcrypt:
             self.lockbox.prepare()
         self.data.prepare(self.journal)
 
@@ -2196,6 +2203,10 @@ class PrepareSpace(object):
 
         if 'journal' in self.name and self.args.journal_non_dmcrypt:
             LOG.info('not encrypting journal')
+        elif 'journal' in self.name and self.args.journal_dmcrypt and self.args.dmcrypt is None:
+            self.space_dmcrypt = self.space_symlink
+            self.space_symlink = '/dev/mapper/{uuid}'.format(
+                uuid=getattr(self.args, self.name + '_uuid'))
         elif self.args.dmcrypt:
             self.space_dmcrypt = self.space_symlink
             self.space_symlink = '/dev/mapper/{uuid}'.format(
@@ -2327,12 +2338,12 @@ class CryptHelpers(object):
             return shlex.split(cryptsetup_parameters_str)
 
     @staticmethod
-    def get_dmcrypt_keysize(args):
+    def get_dmcrypt_keysize(name, args):
         dmcrypt_keysize_str = get_conf(
             cluster=args.cluster,
             variable='osd_dmcrypt_key_size',
         )
-        dmcrypt_type = CryptHelpers.get_dmcrypt_type(None, args)
+        dmcrypt_type = CryptHelpers.get_dmcrypt_type(name, args)
         if dmcrypt_type == 'luks':
             if dmcrypt_keysize_str is None:
                 # As LUKS will hash the 'passphrase' in .luks.key
@@ -2361,7 +2372,7 @@ class CryptHelpers(object):
         LOG.info(name)
         if 'journal' in str(name) and hasattr(args, 'dmcrypt') and args.dmcrypt and hasattr(args, 'journal_non_dmcrypt') and args.journal_non_dmcrypt:
             return None
-        if hasattr(args, 'dmcrypt') and args.dmcrypt:
+        elif hasattr(args, 'dmcrypt') and args.dmcrypt or 'journal' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt or 'lockbox' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt:
             dmcrypt_type = get_conf(
                 cluster=args.cluster,
                 variable='osd_dmcrypt_type',
@@ -2384,6 +2395,7 @@ class Lockbox(object):
         self.args = args
         self.partition = None
         self.device = None
+        self.name = 'lockbox'
 
         if hasattr(self.args, 'lockbox') and self.args.lockbox is None:
             self.args.lockbox = self.args.data
@@ -2434,7 +2446,7 @@ class Lockbox(object):
             self.partition = self.create_partition()
 
     def create_key(self):
-        key_size = CryptHelpers.get_dmcrypt_keysize(self.args)
+        key_size = CryptHelpers.get_dmcrypt_keysize(self.name, self.args)
         key = open('/dev/urandom', 'rb').read(key_size / 8)
         base64_key = base64.b64encode(key)
         cluster = self.args.cluster
@@ -5022,6 +5034,11 @@ def make_activate_parser(subparsers):
     )
     activate_parser.add_argument(
         '--dmcrypt',
+        action='store_true', default=None,
+        help='map DATA and/or JOURNAL devices with dm-crypt',
+    )
+    activate_parser.add_argument(
+        '--journal-dmcrypt',
         action='store_true', default=None,
         help='map DATA and/or JOURNAL devices with dm-crypt',
     )
