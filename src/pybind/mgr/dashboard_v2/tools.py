@@ -57,7 +57,8 @@ def load_controllers(mgrmodule):
         for _, cls in mod.__dict__.items():
             if isinstance(cls, type) and hasattr(cls, '_cp_controller_'):
                 # found controller
-                cls._mgr_module_ = mgrmodule
+                cls.mgr = mgrmodule
+                cls.logger = mgrmodule.log
                 controllers.append(cls)
 
     return controllers
