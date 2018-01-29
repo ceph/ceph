@@ -2463,7 +2463,7 @@ TEST_F(TestClsRbd, op_features)
   string oid = get_temp_image_name();
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
-  uint64_t op_features = RBD_OPERATION_FEATURE_CLONE_V2;
+  uint64_t op_features = RBD_OPERATION_FEATURE_CLONE_PARENT;
   uint64_t mask = ~RBD_OPERATION_FEATURES_ALL;
   ASSERT_EQ(-EINVAL, op_features_set(&ioctx, oid, op_features, mask));
 
@@ -2488,12 +2488,12 @@ TEST_F(TestClsRbd, op_features)
   ASSERT_EQ(RBD_FEATURE_OPERATIONS, features);
 
   op_features = 0;
-  mask = RBD_OPERATION_FEATURE_CLONE_V2;
+  mask = RBD_OPERATION_FEATURE_CLONE_PARENT;
   ASSERT_EQ(0, op_features_set(&ioctx, oid, op_features, mask));
   ASSERT_EQ(0, op_features_get(&ioctx, oid, &actual_op_features));
 
   uint64_t expected_op_features = RBD_OPERATION_FEATURES_ALL &
-                                    ~RBD_OPERATION_FEATURE_CLONE_V2;
+                                    ~RBD_OPERATION_FEATURE_CLONE_PARENT;
   ASSERT_EQ(expected_op_features, actual_op_features);
 
   mask = RBD_OPERATION_FEATURES_ALL;
