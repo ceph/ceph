@@ -47,6 +47,8 @@ CachedPrebufferedStreambuf::create(prebuffered_data* data)
     streambuf = new CachedPrebufferedStreambuf();
   } else {
     streambuf = t_os.streambuf;
+    // reset ios flags (failbit, badbit) from previous use
+    streambuf->get_ostream().clear();
   }
   streambuf->data = data;
   streambuf->setp(data->m_buf, data->m_buf + data->m_buf_len);
