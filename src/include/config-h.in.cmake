@@ -321,4 +321,7 @@
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
 
+/* Defined if boost::context is available */
+#cmakedefine HAVE_BOOST_CONTEXT
+
 #endif /* CONFIG_H */
