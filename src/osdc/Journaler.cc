@@ -633,19 +633,16 @@ void Journaler::_do_flush(unsigned amount)
       ldout(cct, 10) << "_do_flush wanted to do " << flush_pos << "~" << len
 		     << " already too close to prezero_pos " << prezero_pos
 		     << ", zeroing first" << dendl;
-      waiting_for_zero = true;
+      waiting_for_zero_pos = flush_pos + len;
       return;
     }
     if (static_cast<uint64_t>(newlen) < len) {
       ldout(cct, 10) << "_do_flush wanted to do " << flush_pos << "~" << len
 		     << " but hit prezero_pos " << prezero_pos
 		     << ", will do " << flush_pos << "~" << newlen << dendl;
+      waiting_for_zero_pos = flush_pos + len;
       len = newlen;
-    } else {
-      waiting_for_zero = false;
     }
-  } else {
-    waiting_for_zero = false;
   }
   ldout(cct, 10) << "_do_flush flushing " << flush_pos << "~" << len << dendl;
 
@@ -853,8 +850,8 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
       pending_zero.erase(b);
     }
 
-    if (waiting_for_zero) {
-      _do_flush();
+    if (waiting_for_zero_pos > flush_pos) {
+      _do_flush(waiting_for_zero_pos - flush_pos);
     }
   } else {
     pending_zero.insert(start, len);
