@@ -201,8 +201,6 @@ namespace rgw {
 	  if (req.matched) {
 	    /* we need rgw object's key name equal to file name, if
 	     * not return NULL */
-#if 0 /* original behavior which motivated FLAG_EXACT_MATCH
-       * no longer reproduces */
 	    if ((flags & RGWFileHandle::FLAG_EXACT_MATCH) &&
 		!req.exact_matched) {
 	      lsubdout(get_context(), rgw, 15)
@@ -211,7 +209,6 @@ namespace rgw {
 		<< path << dendl;
 	      goto done;
 	    }
-#endif
 	    fhr = lookup_fh(parent, path,
 			    RGWFileHandle::FLAG_CREATE|
 			    ((req.is_dir) ?
