@@ -93,6 +93,8 @@ void Option::dump(Formatter *f) const
   f->open_object_section("option");
   f->dump_string("name", name);
 
+  f->dump_string("units", unit_to_str(unit));
+
   f->dump_string("type", type_to_str(type));
 
   f->dump_string("level", level_to_str(level));
@@ -676,7 +678,8 @@ std::vector<Option> get_global_options() {
 
     Option("ms_dispatch_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100_M)
-    .set_description(""),
+    .set_description("")
+    .set_unit(Option::BYTES),
 
     Option("ms_bind_ipv6", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -1069,7 +1072,8 @@ std::vector<Option> get_global_options() {
     .set_default(60)
     .set_description("number of seconds after which pgs can be considered stuck inactive, unclean, etc")
     .set_long_description("see doc/control.rst under dump_stuck for more info")
-    .add_service("mgr"),
+    .add_service("mgr")
+    .set_unit(Option::SEC),
 
     Option("mon_pg_min_inactive", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
@@ -4422,7 +4426,8 @@ std::vector<Option> get_global_options() {
     Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
     .add_service("mgr")
-    .set_description("Period in seconds of beacon messages to monitor"),
+    .set_description("Period in seconds of beacon messages to monitor")
+    .set_unit(Option::SEC),  
 
     Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_BASIC)
     .set_default(5)
@@ -4432,11 +4437,13 @@ std::vector<Option> get_global_options() {
                           "time series data collection from daemons.  Adjust "
                           "upwards if the manager CPU load is too high, or "
                           "if you simply do not require the most up to date "
-                          "performance counter data."),
+                          "performance counter data.")
+    .set_unit(Option::SEC),  
 
     Option("mgr_client_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128_M)
-    .add_service("mgr"),
+    .add_service("mgr")
+    .set_unit(Option::BYTES),  
 
     Option("mgr_client_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
@@ -4444,15 +4451,17 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_osd_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512_M)
-    .add_service("mgr"),
-
+    .add_service("mgr")
+    .set_unit(Option::BYTES),  
+      
     Option("mgr_osd_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(8192)
     .add_service("mgr"),
 
     Option("mgr_mds_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128_M)
-    .add_service("mgr"),
+    .add_service("mgr")
+    .set_unit(Option::BYTES),  
 
     Option("mgr_mds_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
@@ -4460,7 +4469,8 @@ std::vector<Option> get_global_options() {
 
     Option("mgr_mon_bytes", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128_M)
-    .add_service("mgr"),
+    .add_service("mgr")
+    .set_unit(Option::BYTES),  
 
     Option("mgr_mon_messages", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(128)
@@ -4474,19 +4484,22 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .add_service("mgr")
     .set_description("Period in seconds from last beacon to manager dropping "
-                     "state about a monitored service (RGW, rbd-mirror etc)"),
-
+                     "state about a monitored service (RGW, rbd-mirror etc)")
+    .set_unit(Option::SEC),
+      
     Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)
     .add_service("mon")
     .set_description("Period in seconds between monitor-to-manager "
-                     "health/status updates"),
+                     "health/status updates")
+    .set_unit(Option::SEC),    
 
     Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .add_service("mon")
     .set_description("Period in seconds from last beacon to monitor marking "
-                     "a manager daemon as failed"),
+                     "a manager daemon as failed")
+    .set_unit(Option::SEC),    
 
     Option("mon_mgr_inactive_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
@@ -4495,15 +4508,17 @@ std::vector<Option> get_global_options() {
                      "cluster may have no active manager")
     .set_long_description("This grace period enables the cluster to come "
                           "up cleanly without raising spurious health check "
-                          "failures about managers that aren't online yet"),
-
+                          "failures about managers that aren't online yet")
+    .set_unit(Option::SEC),
+      
     Option("mon_mgr_mkfs_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .add_service("mon")
     .set_description("Period in seconds that the cluster may have no active "
                      "manager before this is reported as an ERR rather than "
-                     "a WARN"),
-
+                     "a WARN")
+    .set_unit(Option::SEC),
+      
     Option("mutex_perf_counter", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
