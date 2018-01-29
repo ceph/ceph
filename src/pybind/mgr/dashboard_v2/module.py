@@ -25,6 +25,7 @@ from . import logger, mgr
 from .controllers.auth import Auth
 from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
                    NotificationQueue
+from .settings import options_command_list, handle_option_command
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -65,6 +66,7 @@ class Module(MgrModule):
             'perm': 'w'
         }
     ]
+    COMMANDS.extend(options_command_list())
 
     @property
     def url_prefix(self):
@@ -169,6 +171,9 @@ class Module(MgrModule):
         logger.info("Stopped librados.")
 
     def handle_command(self, cmd):
+        res = handle_option_command(cmd)
+        if res[0] != -errno.ENOSYS:
+            return res
         if cmd['prefix'] == 'dashboard set-login-credentials':
             Auth.set_login_credentials(cmd['username'], cmd['password'])
             return 0, 'Username and password updated', ''
