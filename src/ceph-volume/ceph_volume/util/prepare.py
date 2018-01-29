@@ -106,6 +106,36 @@ def check_id(osd_id):
     return any([str(osd['id']) == str(osd_id) for osd in osds])
 
 
+def check_id(osd_id):
+    """
+    Checks to see if an osd ID exists or not. Returns True
+    if it does exist, False if it doesn't.
+
+    :param osd_id: The osd ID to check
+    """
+    if not osd_id:
+        return False
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    stdout, stderr, returncode = process.call(
+        [
+            'ceph',
+            '--cluster', conf.cluster,
+            '--name', 'client.bootstrap-osd',
+            '--keyring', bootstrap_keyring,
+            'osd',
+            'tree',
+            '-f', 'json',
+        ],
+        show_command=True
+    )
+    if returncode != 0:
+        raise RuntimeError('Unable check if OSD id exists: %s' % osd_id)
+
+    output = json.loads(stdout)
+    osds = output['nodes']
+    return any([osd['id'] == osd_id for osd in osds])
+
+
 def mount_tmpfs(path):
     process.run([
         'mount',
