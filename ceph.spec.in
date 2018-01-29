@@ -1736,7 +1736,6 @@ fi
 %{_bindir}/ceph_scratchtool
 %{_bindir}/ceph_scratchtoolpp
 %{_bindir}/ceph_test_*
-%{_bindir}/ceph_xattr_bench
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
 %{_mandir}/man8/ceph-debugpack.8*

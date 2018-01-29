@@ -438,7 +438,6 @@ ceph_test() {
 		ceph_scratchtool \
 		ceph_scratchtoolpp \
 		ceph_test_* \
-		ceph_xattr_bench \
 		ceph-coverage \
 		ceph-monstore-tool \
 		ceph-osdomap-tool \
