@@ -1886,15 +1886,11 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
     t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
-    ret = store->apply_transaction(ch, std::move(t));
+    ret = store->queue_transaction(ch, std::move(t), nullptr);
     if (ret) {
       derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
-	   << "apply_transaction returned " << cpp_strerror(ret) << dendl;
+	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
       goto umount_store;
-    }
-    C_SaferCond waiter;
-    if (!ch->flush_commit(&waiter)) {
-      waiter.wait();
     }
   }
 
@@ -2653,7 +2649,7 @@ int OSD::init()
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
     ObjectStore::Transaction t;
     write_superblock(t);
-    r = store->apply_transaction(service.meta_ch, std::move(t));
+    r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
     if (r < 0)
       goto out;
   }
@@ -2663,7 +2659,7 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
-    r = store->apply_transaction(service.meta_ch, std::move(t));
+    r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
     if (r < 0)
       goto out;
   }
@@ -3489,7 +3485,7 @@ int OSD::shutdown()
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
-  int r = store->apply_transaction(service.meta_ch, std::move(t));
+  int r = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
   if (r) {
     derr << "OSD::shutdown: error writing superblock: "
 	 << cpp_strerror(r) << dendl;
@@ -3751,13 +3747,13 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
         if (++removed > cct->_conf->osd_target_transaction_size) {
-          store->apply_transaction(service.meta_ch, std::move(t));
+          store->queue_transaction(service.meta_ch, std::move(t), nullptr);
           t = ObjectStore::Transaction();
           removed = 0;
         }
       }
       if (removed) {
-        store->apply_transaction(service.meta_ch, std::move(t));
+        store->queue_transaction(service.meta_ch, std::move(t), nullptr);
       }
     }
   }
@@ -3791,14 +3787,14 @@ void OSD::recursive_remove_collection(CephContext* cct,
       ceph_abort();
     t.remove(tmp, *p);
     if (removed > cct->_conf->osd_target_transaction_size) {
-      int r = store->apply_transaction(ch, std::move(t));
+      int r = store->queue_transaction(ch, std::move(t), nullptr);
       assert(r == 0);
       t = ObjectStore::Transaction();
       removed = 0;
     }
   }
   t.remove_collection(tmp);
-  int r = store->apply_transaction(ch, std::move(t));
+  int r = store->queue_transaction(ch, std::move(t), nullptr);
   assert(r == 0);
 
   C_SaferCond waiter;
@@ -5101,7 +5097,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       val.append(valstr);
       newattrs[key] = val;
       t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5113,7 +5109,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5125,7 +5121,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5154,7 +5150,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t), nullptr);
       if (r < 0)
 	ss << "error=" << r;
       else

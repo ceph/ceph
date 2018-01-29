@@ -405,7 +405,7 @@ void DeterministicOpSequence::_do_coll_create(coll_entry_t *entry, uint32_t pg_n
 	  << " a hint, pg_num is: " << pg_num << ", num_objs is: "
 	  << num_objs << dendl;
 
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_touch(coll_entry_t *entry, hobject_t& obj)
@@ -413,7 +413,7 @@ void DeterministicOpSequence::_do_touch(coll_entry_t *entry, hobject_t& obj)
   ObjectStore::Transaction t;
   note_txn(&t);
   t.touch(entry->m_cid, ghobject_t(obj));
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_remove(coll_entry_t *entry, hobject_t& obj)
@@ -421,7 +421,7 @@ void DeterministicOpSequence::_do_remove(coll_entry_t *entry, hobject_t& obj)
   ObjectStore::Transaction t;
   note_txn(&t);
   t.remove(entry->m_cid, ghobject_t(obj));
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_set_attrs(coll_entry_t *entry,
@@ -431,7 +431,7 @@ void DeterministicOpSequence::_do_set_attrs(coll_entry_t *entry,
   ObjectStore::Transaction t;
   note_txn(&t);
   t.omap_setkeys(entry->m_cid, ghobject_t(obj), attrs);
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_write(coll_entry_t *entry, hobject_t& obj,
@@ -440,7 +440,7 @@ void DeterministicOpSequence::_do_write(coll_entry_t *entry, hobject_t& obj,
   ObjectStore::Transaction t;
   note_txn(&t);
   t.write(entry->m_cid, ghobject_t(obj), off, len, data);
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_clone(coll_entry_t *entry, hobject_t& orig_obj,
@@ -449,7 +449,7 @@ void DeterministicOpSequence::_do_clone(coll_entry_t *entry, hobject_t& orig_obj
   ObjectStore::Transaction t;
   note_txn(&t);
   t.clone(entry->m_cid, ghobject_t(orig_obj), ghobject_t(new_obj));
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_clone_range(coll_entry_t *entry,
@@ -460,7 +460,7 @@ void DeterministicOpSequence::_do_clone_range(coll_entry_t *entry,
   note_txn(&t);
   t.clone_range(entry->m_cid, ghobject_t(orig_obj), ghobject_t(new_obj),
 		srcoff, srclen, dstoff);
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_write_and_clone_range(coll_entry_t *entry,
@@ -476,7 +476,7 @@ void DeterministicOpSequence::_do_write_and_clone_range(coll_entry_t *entry,
   t.write(entry->m_cid, ghobject_t(orig_obj), srcoff, bl.length(), bl);
   t.clone_range(entry->m_cid, ghobject_t(orig_obj), ghobject_t(new_obj),
 		srcoff, srclen, dstoff);
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 
 void DeterministicOpSequence::_do_coll_move(coll_entry_t *entry,
@@ -488,6 +488,6 @@ void DeterministicOpSequence::_do_coll_move(coll_entry_t *entry,
   t.remove(entry->m_cid, ghobject_t(new_obj));
   t.collection_move_rename(entry->m_cid, ghobject_t(orig_obj),
 			   entry->m_cid, ghobject_t(new_obj));
-  m_store->apply_transaction(entry->m_ch, std::move(t));
+  m_store->queue_transaction(entry->m_ch, std::move(t));
 }
 

@@ -74,7 +74,6 @@ int main(int argc, const char **argv)
   dout(0) << "starting thread" << dendl;
   foo.create("foo");
   dout(0) << "starting op" << dendl;
-  fs->apply_transaction(ch, std::move(t));
-
+  fs->queue_transaction(ch, std::move(t), nullptr);
 }
 
