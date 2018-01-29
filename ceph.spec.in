@@ -48,9 +48,11 @@
 %endif
 %if 0%{?suse_version} >= 1500
 %bcond_with python2
-%global _defined_if_python2_absent 1
 %else
 %bcond_without python2
+%endif
+%if 0%{without python2}
+%global _defined_if_python2_absent 1
 %endif
 
 %if %{with selinux}
