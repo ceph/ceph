@@ -20,7 +20,7 @@
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
 #define dout_prefix *_dout << "librbd::ManagedLock: " << this << " " \
-                           <<  __func__
+                           <<  __func__ << ": "
 
 namespace librbd {
 
@@ -196,7 +196,7 @@ void ManagedLock<I>::reacquire_lock(Context *on_reacquired) {
 
     if (m_state == STATE_WAITING_FOR_REGISTER) {
       // restart the acquire lock process now that watch is valid
-      ldout(m_cct, 10) << ": " << "woke up waiting acquire" << dendl;
+      ldout(m_cct, 10) << "woke up waiting acquire" << dendl;
       Action active_action = get_active_action();
       assert(active_action == ACTION_TRY_LOCK ||
              active_action == ACTION_ACQUIRE_LOCK);
@@ -475,7 +475,7 @@ void ManagedLock<I>::send_acquire_lock() {
 
 template <typename I>
 void ManagedLock<I>::handle_pre_acquire_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     handle_acquire_lock(r);
@@ -493,15 +493,15 @@ void ManagedLock<I>::handle_pre_acquire_lock(int r) {
 
 template <typename I>
 void ManagedLock<I>::handle_acquire_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r == -EBUSY || r == -EAGAIN) {
-    ldout(m_cct, 5) << ": unable to acquire exclusive lock" << dendl;
+    ldout(m_cct, 5) << "unable to acquire exclusive lock" << dendl;
   } else if (r < 0) {
-    lderr(m_cct) << ": failed to acquire exclusive lock:" << cpp_strerror(r)
+    lderr(m_cct) << "failed to acquire exclusive lock:" << cpp_strerror(r)
                << dendl;
   } else {
-    ldout(m_cct, 5) << ": successfully acquired exclusive lock" << dendl;
+    ldout(m_cct, 5) << "successfully acquired exclusive lock" << dendl;
   }
 
   m_post_next_state = (r < 0 ? STATE_UNLOCKED : STATE_LOCKED);
@@ -514,7 +514,7 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
 
 template <typename I>
 void ManagedLock<I>::handle_post_acquire_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
 
@@ -529,7 +529,7 @@ void ManagedLock<I>::handle_post_acquire_lock(int r) {
 
 template <typename I>
 void ManagedLock<I>::revert_to_unlock_state(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
@@ -554,7 +554,7 @@ void ManagedLock<I>::send_reacquire_lock() {
   uint64_t watch_handle = m_watcher->get_watch_handle();
   if (watch_handle == 0) {
      // watch (re)failed while recovering
-     lderr(m_cct) << ": aborting reacquire due to invalid watch handle"
+     lderr(m_cct) << "aborting reacquire due to invalid watch handle"
                   << dendl;
      complete_active_action(STATE_LOCKED, 0);
      return;
@@ -562,7 +562,7 @@ void ManagedLock<I>::send_reacquire_lock() {
 
   m_new_cookie = encode_lock_cookie(watch_handle);
   if (m_cookie == m_new_cookie) {
-    ldout(m_cct, 10) << ": skipping reacquire since cookie still valid"
+    ldout(m_cct, 10) << "skipping reacquire since cookie still valid"
                      << dendl;
     complete_active_action(STATE_LOCKED, 0);
     return;
@@ -585,16 +585,16 @@ void ManagedLock<I>::send_reacquire_lock() {
 
 template <typename I>
 void ManagedLock<I>::handle_reacquire_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_REACQUIRING);
 
   if (r < 0) {
     if (r == -EOPNOTSUPP) {
-      ldout(m_cct, 10) << ": updating lock is not supported" << dendl;
+      ldout(m_cct, 10) << "updating lock is not supported" << dendl;
     } else {
-      lderr(m_cct) << ": failed to update lock cookie: " << cpp_strerror(r)
+      lderr(m_cct) << "failed to update lock cookie: " << cpp_strerror(r)
                    << dendl;
     }
 
@@ -649,7 +649,7 @@ void ManagedLock<I>::send_release_lock() {
 
 template <typename I>
 void ManagedLock<I>::handle_pre_release_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   {
     Mutex::Locker locker(m_lock);
@@ -672,7 +672,7 @@ void ManagedLock<I>::handle_pre_release_lock(int r) {
 
 template <typename I>
 void ManagedLock<I>::handle_release_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_RELEASING);
@@ -691,7 +691,7 @@ void ManagedLock<I>::handle_release_lock(int r) {
 
 template <typename I>
 void ManagedLock<I>::handle_post_release_lock(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   Mutex::Locker locker(m_lock);
   complete_active_action(m_post_next_state, r);
@@ -720,7 +720,7 @@ void ManagedLock<I>::send_shutdown() {
 
 template <typename I>
 void ManagedLock<I>::handle_shutdown(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   wait_for_tracked_ops(r);
 }
@@ -739,7 +739,7 @@ void ManagedLock<I>::send_shutdown_release() {
 
 template <typename I>
 void ManagedLock<I>::handle_shutdown_pre_release(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   std::string cookie;
   {
@@ -763,14 +763,14 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
 
 template <typename I>
 void ManagedLock<I>::handle_shutdown_post_release(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   wait_for_tracked_ops(r);
 }
 
 template <typename I>
 void ManagedLock<I>::wait_for_tracked_ops(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   Context *ctx = new FunctionContext([this, r](int ret) {
       complete_shutdown(r);
@@ -781,7 +781,7 @@ void ManagedLock<I>::wait_for_tracked_ops(int r) {
 
 template <typename I>
 void ManagedLock<I>::complete_shutdown(int r) {
-  ldout(m_cct, 10) << ": r=" << r << dendl;
+  ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
     lderr(m_cct) << "failed to shut down lock: " << cpp_strerror(r)
