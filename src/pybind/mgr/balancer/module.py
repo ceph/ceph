@@ -675,7 +675,7 @@ class Module(MgrModule):
                     overlap[osd] = 1
                 visited[osd] = 1
         if len(overlap) > 0:
-            self.log.err('error: some osds belong to multiple subtrees: %s' %
+            self.log.error('error: some osds belong to multiple subtrees: %s' %
                          overlap)
             return False
 
