@@ -1562,7 +1562,7 @@ private:
   friend class PGRecovery;
   friend class PGDelete;
 
-  class ShardedOpWQ
+  class ShardedOpWQ final
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
     struct ShardData {

@@ -9619,7 +9619,7 @@ void OSD::ShardedOpWQ::clear_pg_pointer(PG *pg)
 {
   spg_t pgid = pg->get_pgid();
   uint32_t shard_index = pgid.hash_to_shard(shards.size());
-  auto& sdata = shard_list[shard_index];
+  auto& sdata = shards[shard_index];
   Mutex::Locker l(sdata.sdata_op_ordering_lock);
   auto p = sdata.pg_slots.find(pgid);
   if (p != sdata.pg_slots.end()) {
