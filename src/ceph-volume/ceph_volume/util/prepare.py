@@ -47,22 +47,27 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     system.chown(osd_keyring)
 
 
-def create_id(fsid, json_secrets):
+def create_id(fsid, json_secrets, osd_id=None):
     """
     :param fsid: The osd fsid to create, always required
     :param json_secrets: a json-ready object with whatever secrets are wanted
                          to be passed to the monitor
+    :param osd_id: Reuse an existing ID from an OSD that's been destroyed, if the
+                   id does not exist in the cluster a new ID will be created
     """
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = [
+        'ceph',
+        '--cluster', conf.cluster,
+        '--name', 'client.bootstrap-osd',
+        '--keyring', bootstrap_keyring,
+        '-i', '-',
+        'osd', 'new', fsid
+    ]
+    if check_id(osd_id):
+        cmd.append(osd_id)
     stdout, stderr, returncode = process.call(
-        [
-            'ceph',
-            '--cluster', conf.cluster,
-            '--name', 'client.bootstrap-osd',
-            '--keyring', bootstrap_keyring,
-            '-i', '-',
-            'osd', 'new', fsid
-        ],
+        cmd,
         stdin=json_secrets,
         show_command=True
     )
