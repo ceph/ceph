@@ -15,12 +15,19 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
+#include <condition_variable>
+#include <mutex>
+#include <string>
 #include <string_view>
+#include <thread>
 
-#include "common/Cond.h"
+#include "include/buffer.h"
+#include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContext;
+
+using namespace std::literals;
 
 inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
@@ -31,11 +38,11 @@ public:
   virtual ~AdminSocketHook() {}
 };
 
-class AdminSocket : public Thread
+class AdminSocket 
 {
 public:
   AdminSocket(CephContext *cct);
-  ~AdminSocket() override;
+  ~AdminSocket();
 
   AdminSocket(const AdminSocket&) = delete;
   AdminSocket& operator =(const AdminSocket&) = delete;
@@ -78,7 +85,7 @@ public:
    */
   int unregister_command(std::string_view command);
 
-  bool init(const string& path);
+  bool init(const std::string& path);
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
@@ -91,7 +98,8 @@ private:
   std::string destroy_shutdown_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
-  void *entry() override;
+  std::thread th;
+  void entry() noexcept;
   bool do_accept();
   bool validate(const std::string& command,
 		const cmdmap_t& cmdmap,
@@ -99,14 +107,15 @@ private:
 
   CephContext *m_cct;
   std::string m_path;
-  int m_sock_fd;
-  int m_shutdown_rd_fd;
-  int m_shutdown_wr_fd;
+  int m_sock_fd = -1;
+  int m_shutdown_rd_fd = -1;
+  int m_shutdown_wr_fd = -1;
 
-  bool in_hook;
-  Cond in_hook_cond;
-  Mutex m_lock;    // protects m_hooks, m_descs, m_help
-  AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
+  bool in_hook = false;
+  std::condition_variable in_hook_cond;
+  std::mutex lock;    // protects m_hooks, m_descs, m_help
+  AdminSocketHook *m_version_hook = nullptr, *m_help_hook = nullptr,
+    *m_getdescs_hook = nullptr;
 
   std::map<std::string,AdminSocketHook*, std::less<>> m_hooks;
   std::map<std::string,std::string, std::less<>> m_descs;

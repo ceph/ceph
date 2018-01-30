@@ -14,7 +14,10 @@
 
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_context.h"
 #include "common/common_init.h"
+#include "common/config.h"
+#include "common/dout.h"
 #include "common/valgrind.h"
 #include "common/zipkin_trace.h"
 
