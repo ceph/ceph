@@ -4359,7 +4359,7 @@ void MDCache::handle_cache_rejoin_weak(MMDSCacheRejoin *weak)
 
     for (auto p = weak->cap_exports.begin(); p != weak->cap_exports.end(); ++p) {
       CInode *in = get_inode(p->first);
-      assert(in && in->is_auth());
+      assert(!in || in->is_auth());
       // note
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	dout(10) << " claiming cap import " << p->first << " client." << q->first << dendl;
