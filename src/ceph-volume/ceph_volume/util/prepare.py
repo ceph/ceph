@@ -96,7 +96,7 @@ def check_id(osd_id):
     if returncode != 0:
         raise RuntimeError('Unable check if OSD id exists: %s' % osd_id)
 
-    output = json.loads(stdout)
+    output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
     found_osd = any([str(osd['id']) == str(osd_id) for osd in osds])
     if found_osd:
