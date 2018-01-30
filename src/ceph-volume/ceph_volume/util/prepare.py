@@ -78,36 +78,6 @@ def create_id(fsid, json_secrets, osd_id=None):
 
 def check_id(osd_id):
     """
-    Checks to see if an osd ID exists or not. Returns True
-    if it does exist, False if it doesn't.
-
-    :param osd_id: The osd ID to check
-    """
-    if osd_id is None:
-        return False
-    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
-    stdout, stderr, returncode = process.call(
-        [
-            'ceph',
-            '--cluster', conf.cluster,
-            '--name', 'client.bootstrap-osd',
-            '--keyring', bootstrap_keyring,
-            'osd',
-            'tree',
-            '-f', 'json',
-        ],
-        show_command=True
-    )
-    if returncode != 0:
-        raise RuntimeError('Unable check if OSD id exists: %s' % osd_id)
-
-    output = json.loads(''.join(stdout).strip())
-    osds = output['nodes']
-    return any([str(osd['id']) == str(osd_id) for osd in osds])
-
-
-def check_id(osd_id):
-    """
     Checks to see if an osd ID exists or not. Returns osd_id
     if it does exist, False if it doesn't.
 
