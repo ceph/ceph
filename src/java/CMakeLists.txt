@@ -36,7 +36,7 @@ add_custom_target(
 add_dependencies(jni-header libcephfs)
 
 find_jar(JUNIT_JAR
-  NAMES junit junit4
+  NAMES junit4 junit
   PATHS "/usr/share/java")
 if(JUNIT_JAR)
   set(CMAKE_JAVA_INCLUDE_PATH ${JUNIT_JAR} ${libcephfs_jar})
