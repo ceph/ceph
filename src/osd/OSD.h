@@ -27,6 +27,7 @@
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
 #include "common/zipkin_trace.h"
+#include "common/tiny_vector.hpp"
 
 #include "mgr/MgrClient.h"
 
@@ -1693,9 +1694,8 @@ private:
       }
     }; // struct ShardData
 
-    vector<ShardData*> shard_list;
     OSD *osd;
-    uint32_t num_shards;
+    ceph::tiny_vector<ShardData, 8> shards;
 
   public:
     ShardedOpWQ(uint32_t pnum_shards,
@@ -1704,26 +1704,22 @@ private:
 		time_t si,
 		ShardedThreadPool* tp)
       : ShardedThreadPool::ShardedWQ<OpQueueItem>(ti, si, tp),
+        // the container can't change size after filling boost::optionals
         osd(o),
-        num_shards(pnum_shards) {
-      for (uint32_t i = 0; i < num_shards; i++) {
-	char lock_name[32] = {0};
-	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
-	char order_lock[32] = {0};
-	snprintf(order_lock, sizeof(order_lock), "%s.%d",
-		 "OSD:ShardedOpWQ:order:", i);
-	ShardData* one_shard = new ShardData(
-	  lock_name, order_lock,
-	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
-	shard_list.push_back(one_shard);
-      }
-    }
-    ~ShardedOpWQ() override {
-      while (!shard_list.empty()) {
-	delete shard_list.back();
-	shard_list.pop_back();
-      }
+        shards(pnum_shards,
+               [&](size_t i, auto emplacer) {
+	         char lock_name[32] = {0};
+	         snprintf(lock_name, sizeof(lock_name), "%s.%zd",
+                          "OSD:ShardedOpWQ:", i);
+	         char order_lock[32] = {0};
+	         snprintf(order_lock, sizeof(order_lock), "%s.%zd",
+	                  "OSD:ShardedOpWQ:order:", i);
+                 emplacer.emplace(
+	           lock_name, order_lock,
+	           osd->cct->_conf->osd_op_pq_max_tokens_per_priority,
+	           osd->cct->_conf->osd_op_pq_min_cost,
+                   osd->cct, osd->op_queue); })
+        {
     }
 
     /// wake any pg waiters after a PG is created/instantiated
@@ -1748,39 +1744,34 @@ private:
     void _enqueue_front(OpQueueItem&& item) override;
       
     void return_waiting_threads() override {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
-	assert (NULL != sdata); 
-	sdata->sdata_lock.Lock();
-	sdata->stop_waiting = true;
-	sdata->sdata_cond.Signal();
-	sdata->sdata_lock.Unlock();
+      for(auto& sdata : shards) {
+	sdata.sdata_lock.Lock();
+	sdata.stop_waiting = true;
+	sdata.sdata_cond.Signal();
+	sdata.sdata_lock.Unlock();
       }
     }
 
     void stop_return_waiting_threads() override {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
-	assert (NULL != sdata);
-	sdata->sdata_lock.Lock();
-	sdata->stop_waiting = false;
-	sdata->sdata_lock.Unlock();
+      for(auto& sdata : shards) {
+	sdata.sdata_lock.Lock();
+	sdata.stop_waiting = false;
+	sdata.sdata_lock.Unlock();
       }
     }
 
     void dump(Formatter *f) {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	auto &&sdata = shard_list[i];
+      for(uint32_t i = 0; i < shards.size(); i++) {
+	auto &sdata = shards[i];
 
 	char queue_name[32] = {0};
 	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
-	assert(NULL != sdata);
 
-	sdata->sdata_op_ordering_lock.Lock();
+	sdata.sdata_op_ordering_lock.Lock();
 	f->open_object_section(queue_name);
-	sdata->pqueue->dump(f);
+	sdata.pqueue->dump(f);
 	f->close_section();
-	sdata->sdata_op_ordering_lock.Unlock();
+	sdata.sdata_op_ordering_lock.Unlock();
       }
     }
 
@@ -1813,11 +1804,10 @@ private:
     };
 
     bool is_shard_empty(uint32_t thread_index) override {
-      uint32_t shard_index = thread_index % num_shards; 
-      auto &&sdata = shard_list[shard_index];
-      assert(sdata);
-      Mutex::Locker l(sdata->sdata_op_ordering_lock);
-      return sdata->pqueue->empty();
+      uint32_t shard_index = thread_index % shards.size();
+      auto &&sdata = shards[shard_index];
+      Mutex::Locker l(sdata.sdata_op_ordering_lock);
+      return sdata.pqueue->empty();
     }
   } op_shardedwq;
 
