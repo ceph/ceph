@@ -98,25 +98,25 @@ Developer Notes
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-If you want to add a new endpoint to the backend, you just need to add
-a class decorated with ``ApiController`` in a python file located under the
-``controllers`` directory. The dashboard plugin will automatically load your
-new controller upon start.
+If you want to add a new endpoint to the backend, you just need to add a
+class derived from ``BaseController`` decorated with ``ApiController`` in a
+Python file located under the ``controllers`` directory. The Dashboard module
+will automatically load your new controller upon start.
 
 For example create a file ``ping2.py`` under ``controllers`` directory with the
 following code::
 
   import cherrypy
-  from ..tools import ApiController
+  from ..tools import ApiController, BaseController
 
   @ApiController('ping2')
-  class Ping2(object):
+  class Ping2(BaseController):
     @cherrypy.expose
     def default(self, *args):
       return "Hello"
 
-Reload the dashboard plugin, and then you can access the above controller
-from the web browser using the URL http://mgr_hostname:8080/api/ping2
+Reload the Dashboard module and then you can access the above controller from
+the web browser using the URL http://mgr_hostname:8080/api/ping2.
 
 We also provide a simple mechanism to create REST based controllers using the
 ``RESTController`` class.
@@ -156,9 +156,9 @@ Now only authenticated users will be able to "ping" your controller.
 How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each controller class annoted with the ``ApiController`` decorator is injected
-with a class property that points to the manager module global instance. The
-property is named ``mgr``.
+Each controller class derived from ``BaseController``has a class property that
+points to the manager module global instance. The property is named ``mgr``.
+There is another class property called ``logger`` to easily add log messages.
 
 Example::
 
@@ -170,9 +170,6 @@ Example::
     def list(self):
       self.logger.debug('Listing available servers')
       return {'servers': self.mgr.list_servers()}
-
-We also inject a class property ``logger`` that is provided by the module class
-to easily add log messages.
 
 
 How to write a unit test for a controller?

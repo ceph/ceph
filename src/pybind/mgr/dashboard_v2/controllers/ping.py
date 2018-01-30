@@ -3,12 +3,12 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from ..tools import ApiController, AuthRequired, RESTController
+from ..tools import ApiController, AuthRequired, RESTController, BaseController
 
 
 @ApiController('ping')
 @AuthRequired()
-class Ping(object):
+class Ping(BaseController):
     @cherrypy.expose
     def default(self):
         return 'pong'
