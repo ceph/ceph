@@ -1,11 +1,11 @@
 import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { HostModule } from './host/host.module';
+import { ClusterModule } from './cluster/cluster.module';
 
 @NgModule({
   imports: [
     CommonModule,
-    HostModule
+    ClusterModule
   ],
   declarations: []
 })
