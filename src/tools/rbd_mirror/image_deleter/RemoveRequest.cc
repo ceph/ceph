@@ -117,6 +117,14 @@ void RemoveRequest<I>::remove_image() {
 template <typename I>
 void RemoveRequest<I>::handle_remove_image(int r) {
   dout(10) << "r=" << r << dendl;
+  if (r == -ENOTEMPTY) {
+    // image must have clone v2 snapshot still associated to child
+    dout(10) << "snapshots still in-use" << dendl;
+    *m_error_result = ERROR_RESULT_RETRY_IMMEDIATELY;
+    finish(-EBUSY);
+    return;
+  }
+
   if (r < 0 && r != -ENOENT) {
     derr << "error removing image " << m_image_id << " "
          << "(" << m_image_id << ") from local pool: "
