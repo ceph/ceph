@@ -649,6 +649,19 @@ struct C_InvalidateCache : public Context {
     return ((features & in_features) == in_features);
   }
 
+  bool ImageCtx::test_op_features(uint64_t in_op_features) const
+  {
+    RWLock::RLocker snap_locker(snap_lock);
+    return test_op_features(in_op_features, snap_lock);
+  }
+
+  bool ImageCtx::test_op_features(uint64_t in_op_features,
+                                  const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
+    return ((op_features & in_op_features) == in_op_features);
+  }
+
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
   {
     assert(snap_lock.is_locked());
