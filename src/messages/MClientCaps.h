@@ -24,7 +24,7 @@ class MClientCaps : public Message {
 
  public:
   static const unsigned FLAG_SYNC		= (1<<0);
-  static const unsigned FLAG_NO_CAPSNAP		= (1<<1);
+  static const unsigned FLAG_NO_CAPSNAP		= (1<<1); // unused
   static const unsigned FLAG_PENDING_CAPSNAP	= (1<<2);
 
   struct ceph_mds_caps_head head;

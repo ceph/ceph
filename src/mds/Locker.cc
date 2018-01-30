@@ -2868,36 +2868,13 @@ void Locker::handle_client_caps(MClientCaps *m)
       caps &= cap->issued();
     }
     
-    cap->confirm_receipt(m->get_seq(), caps);
     dout(10) << " follows " << follows
 	     << " retains " << ccap_string(m->get_caps())
 	     << " dirty " << ccap_string(m->get_dirty())
 	     << " on " << *in << dendl;
 
-
-    // missing/skipped snapflush?
-    //  The client MAY send a snapflush if it is issued WR/EXCL caps, but
-    //  presently only does so when it has actual dirty metadata.  But, we
-    //  set up the need_snapflush stuff based on the issued caps.
-    //  We can infer that the client WONT send a FLUSHSNAP once they have
-    //  released all WR/EXCL caps (the FLUSHSNAP always comes before the cap
-    //  update/release).
-    if (!head_in->client_need_snapflush.empty()) {
-      if ((m->flags & MClientCaps::FLAG_NO_CAPSNAP) ||
-	  (!(cap->issued() & CEPH_CAP_ANY_FILE_WR) &&
-	   !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))) {
-	head_in->auth_pin(this); // prevent subtree frozen
-	need_unpin = true;
-	_do_null_snapflush(head_in, client);
-      } else {
-	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
-      }
-    }
-    if (cap->need_snapflush() && (m->flags & MClientCaps::FLAG_NO_CAPSNAP))
-      cap->clear_needsnapflush();
-    
     if (m->get_dirty() && in->is_auth()) {
-      dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty()) 
+      dout(7) << " flush client." << client << " dirty " << ccap_string(m->get_dirty())
 	      << " seq " << m->get_seq() << " on " << *in << dendl;
       ack = new MClientCaps(CEPH_CAP_OP_FLUSH_ACK, in->ino(), 0, cap->get_cap_id(), m->get_seq(),
 			    m->get_caps(), 0, m->get_dirty(), 0, mds->get_osd_epoch_barrier());
@@ -2905,8 +2882,33 @@ void Locker::handle_client_caps(MClientCaps *m)
       ack->set_oldest_flush_tid(m->get_oldest_flush_tid());
     }
 
-    // filter wanted based on what we could ever give out (given auth/replica status)
     bool need_flush = m->flags & MClientCaps::FLAG_SYNC;
+    bool updated = in->is_auth() &&
+		   _do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush);
+
+    cap->confirm_receipt(m->get_seq(), caps);
+
+    // missing/skipped snapflush?
+    //  The client MAY send a snapflush if it is issued WR/EXCL caps,
+    //  but only does so when it has actual dirty metadata. We set up
+    //  the need_snapflush stuff based on the issued caps. We can infer
+    //  that the client WONT send a FLUSHSNAP once they have released
+    //  all WR/EXCL caps (the FLUSHSNAP always comes before the cap
+    //  update/release).
+    if (!head_in->client_need_snapflush.empty()) {
+      if (!(cap->issued() & CEPH_CAP_ANY_FILE_WR) &&
+	  !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP)) {
+	head_in->auth_pin(this); // prevent subtree frozen
+	need_unpin = true;
+	_do_null_snapflush(head_in, client);
+      } else {
+	dout(10) << " revocation in progress, not making any conclusions about null snapflushes" << dendl;
+      }
+    }
+    if (cap->need_snapflush() && !(m->flags & MClientCaps::FLAG_PENDING_CAPSNAP))
+      cap->clear_needsnapflush();
+
+    // filter wanted based on what we could ever give out (given auth/replica status)
     int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
     if (new_wanted != cap->wanted()) {
       if (!need_flush && (new_wanted & ~cap->pending())) {
@@ -2917,8 +2919,7 @@ void Locker::handle_client_caps(MClientCaps *m)
       adjust_cap_wanted(cap, new_wanted, m->get_issue_seq());
     }
       
-    if (in->is_auth() &&
-	_do_cap_update(in, cap, m->get_dirty(), follows, m, ack, &need_flush)) {
+    if (updated) {
       // updated
       eval(in, CEPH_CAP_LOCKS);
 
