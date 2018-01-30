@@ -1,12 +1,13 @@
 from __future__ import print_function
 import argparse
+import base64
 import json
 import logging
 import os
 from textwrap import dedent
 from ceph_volume import decorators, terminal, conf
 from ceph_volume.api import lvm
-from ceph_volume.util import arg_validators, system, disk
+from ceph_volume.util import arg_validators, system, disk, encryption
 
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,11 @@ class Scan(object):
         device_metadata = {'path': None, 'uuid': None}
         if not path:
             return device_metadata
+        if self.is_encrypted:
+            encryption_metadata = encryption.legacy_encrypted(path)
+            device_metadata['path'] = encryption_metadata['device']
+            device_metadata['uuid'] = disk.get_partuuid(encryption_metadata['device'])
+            return device_metadata
         # cannot read the symlink if this is tmpfs
         if os.path.islink(path):
             device = os.readlink(path)
@@ -61,17 +67,24 @@ class Scan(object):
 
     def scan_directory(self, path):
         osd_metadata = {'cluster_name': conf.cluster}
-        path_mounts = system.get_mounts(paths=True)
+        directory_files = os.listdir(path)
+        if 'keyring' not in directory_files:
+            raise RuntimeError(
+                'OSD files not found, required "keyring" file is not present at: %s' % path
+            )
         for _file in os.listdir(path):
             file_path = os.path.join(path, _file)
-            if os.path.islink(file_path):
+            if os.path.islink(file_path) and os.path.exists(file_path):
                 osd_metadata[_file] = self.scan_device(file_path)
             if os.path.isdir(file_path):
                 continue
             # the check for binary needs to go before the file, to avoid
             # capturing data from binary files but still be able to capture
             # contents from actual files later
-            if system.is_binary(file_path):
+            try:
+                if system.is_binary(file_path):
+                    continue
+            except IOError:
                 continue
             if os.path.isfile(file_path):
                 content = self.get_contents(file_path)
@@ -80,6 +93,8 @@ class Scan(object):
                 except ValueError:
                     osd_metadata[_file] = content
 
+        # we must scan the paths again because this might be a temporary mount
+        path_mounts = system.get_mounts(paths=True)
         device = path_mounts.get(path)
         # it is possible to have more than one device, pick the first one, and
         # warn that it is possible that more than one device is 'data'
@@ -90,30 +105,97 @@ class Scan(object):
 
         return osd_metadata
 
+    def scan_encrypted(self):
+        device = self.encryption_metadata['device']
+        lockbox = self.encryption_metadata['lockbox']
+        encryption_type = self.encryption_metadata['type']
+        osd_metadata = {}
+        # Get the PARTUUID of the device to make sure have the right one and
+        # that maps to the data device
+        device_uuid = disk.get_partuuid(device)
+        dm_path = '/dev/mapper/%s' % device_uuid
+        # check if this partition is already mapped
+        device_status = encryption.status(device_uuid)
+
+        # capture all the information from the lockbox first, reusing the
+        # directory scan method
+        if self.device_mounts.get(lockbox):
+            lockbox_path = self.device_mounts.get(lockbox)[0]
+            lockbox_metadata = self.scan_directory(lockbox_path)
+            # ceph-disk stores the fsid as osd-uuid in the lockbox, thanks ceph-disk
+            dmcrypt_secret = encryption.get_dmcrypt_key(
+                None,  # There is no ID stored in the lockbox
+                lockbox_metadata['osd-uuid'],
+                os.path.join(lockbox_path, 'keyring')
+            )
+        else:
+            with system.tmp_mount(lockbox) as lockbox_path:
+                lockbox_metadata = self.scan_directory(lockbox_path)
+                # ceph-disk stores the fsid as osd-uuid in the lockbox, thanks ceph-disk
+                dmcrypt_secret = encryption.get_dmcrypt_key(
+                    None,  # There is no ID stored in the lockbox
+                    lockbox_metadata['osd-uuid'],
+                    os.path.join(lockbox_path, 'keyring')
+                )
+
+        if not device_status:
+            if encryption_type == 'luks':
+                encryption.luks_open(dmcrypt_secret, device, device_uuid)
+            else:
+                dmcrypt_secret = base64.b64decode(dmcrypt_secret)
+                encryption.plain_open(dmcrypt_secret, device, device_uuid)
+
+        # Now check if that mapper is mounted already, to avoid remounting and
+        # decrypting the device
+        dm_path_mount = self.device_mounts.get(dm_path)
+        if dm_path_mount:
+            osd_metadata = self.scan_directory(dm_path_mount[0])
+        else:
+            with system.tmp_mount(dm_path, encrypted=True) as device_path:
+                osd_metadata = self.scan_directory(device_path)
+
+        osd_metadata['encrypted'] = True
+        osd_metadata['encryption_type'] = encryption_type
+        osd_metadata['lockbox.keyring'] = lockbox_metadata['keyring']
+        return osd_metadata
+
     @decorators.needs_root
     def scan(self, args):
         osd_metadata = {'cluster_name': conf.cluster}
-        device_mounts = system.get_mounts(devices=True)
         osd_path = None
         logger.info('detecting if argument is a device or a directory: %s', args.osd_path)
         if os.path.isdir(args.osd_path):
             logger.info('will scan directly, path is a directory')
             osd_path = args.osd_path
+            mounted_device = system.get_mounts(paths=True).get(args.osd_path)[0]
+            # Must re-scan since nothing in the dir can tell us if this is
+            # encrypted or what the lockbox may be
+            self.encryption_metadata = encryption.legacy_encrypted(mounted_device)
+            self.is_encrypted = self.encryption_metadata['encrypted']
         else:
             # assume this is a device, check if it is mounted and use that path
             logger.info('path is not a directory, will check if mounted')
             if system.device_is_mounted(args.osd_path):
                 logger.info('argument is a device, which is mounted')
-                mounted_osd_paths = device_mounts.get(args.osd_path)
+                mounted_osd_paths = self.device_mounts.get(args.osd_path)
                 osd_path = mounted_osd_paths[0] if len(mounted_osd_paths) else None
 
         # argument is not a directory, and it is not a device that is mounted
         # somewhere so temporarily mount it to poke inside, otherwise, scan
         # directly
         if not osd_path:
-            logger.info('device is not mounted, will mount it temporarily to scan')
-            with system.tmp_mount(args.osd_path) as osd_path:
-                osd_metadata = self.scan_directory(osd_path)
+            # check if we have an encrypted device first, so that we can poke at
+            # the lockbox instead
+            if self.is_encrypted:
+                if not self.encryption_metadata.get('lockbox'):
+                    raise RuntimeError(
+                        'Lockbox partition was not found for device: %s' % args.osd_path
+                    )
+                osd_metadata = self.scan_encrypted()
+            else:
+                logger.info('device is not mounted, will mount it temporarily to scan')
+                with system.tmp_mount(args.osd_path) as osd_path:
+                    osd_metadata = self.scan_directory(osd_path)
         else:
             logger.info('will scan OSD directory at path: %s', osd_path)
             osd_metadata = self.scan_directory(osd_path)
@@ -207,5 +289,17 @@ class Scan(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
+
         args = parser.parse_args(self.argv)
+        if disk.is_partition(args.osd_path):
+            label = disk.lsblk(args.osd_path)['PARTLABEL']
+            if 'data' not in label:
+                raise RuntimeError('Device must be the data partition, but got: %s' % label)
+
+        # Capture some environment status, so that it can be reused all over
+        self.device_mounts = system.get_mounts(devices=True)
+        self.path_mounts = system.get_mounts(paths=True)
+        self.encryption_metadata = encryption.legacy_encrypted(args.osd_path)
+        self.is_encrypted = self.encryption_metadata['encrypted']
+
         self.scan(args)
