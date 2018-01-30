@@ -1717,6 +1717,7 @@ struct rgw_obj_key {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 

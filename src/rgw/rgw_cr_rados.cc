@@ -3,6 +3,7 @@
 #include "rgw_cr_rados.h"
 
 #include "cls/lock/cls_lock_client.h"
+#include "cls/rgw/cls_rgw_client.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -481,14 +482,48 @@ bool RGWOmapAppend::finish() {
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
   RGWObjectCtx obj_ctx(store);
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, *bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, *bucket_info, NULL, NULL);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
-        << bucket << dendl;
+        << oid << dendl;
     return r;
   }
 
   return 0;
+}
+
+RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(RGWRados *store,
+                                         const RGWBucketInfo& bucket_info,
+                                         int shard_id,
+                                         const std::string& start_marker,
+                                         const std::string& end_marker)
+  : RGWSimpleCoroutine(store->ctx()), bs(store),
+    start_marker(BucketIndexShardsManager::get_shard_marker(start_marker)),
+    end_marker(BucketIndexShardsManager::get_shard_marker(end_marker))
+{
+  bs.init(bucket_info, shard_id);
+}
+
+int RGWRadosBILogTrimCR::send_request()
+{
+  bufferlist in;
+  cls_rgw_bi_log_trim_op call;
+  call.start_marker = std::move(start_marker);
+  call.end_marker = std::move(end_marker);
+  ::encode(call, in);
+
+  librados::ObjectWriteOperation op;
+  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
+
+  cn = stack->create_completion_notifier();
+  return bs.index_ctx.aio_operate(bs.bucket_obj, cn->completion(), &op);
+}
+
+int RGWRadosBILogTrimCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+  set_status() << "request complete; ret=" << r;
+  return r;
 }
 
 int RGWAsyncFetchRemoteObj::_send_request()
@@ -793,4 +828,37 @@ int RGWStatObjCR::send_request()
 int RGWStatObjCR::request_complete()
 {
   return req->get_ret_status();
+}
+
+RGWRadosNotifyCR::RGWRadosNotifyCR(RGWRados *store, const rgw_raw_obj& obj,
+                                   bufferlist& request, uint64_t timeout_ms,
+                                   bufferlist *response)
+  : RGWSimpleCoroutine(store->ctx()), store(store), obj(obj),
+    request(request), timeout_ms(timeout_ms), response(response)
+{
+  set_description() << "notify dest=" << obj;
+}
+
+int RGWRadosNotifyCR::send_request()
+{
+  int r = store->get_raw_obj_ref(obj, &ref);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get ref for (" << obj << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  return ref.ioctx.aio_notify(ref.oid, cn->completion(), request,
+                              timeout_ms, response);
+}
+
+int RGWRadosNotifyCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
 }

@@ -4,6 +4,7 @@
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
+#include "cls_rgw_const.h"
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
 #include "common/ceph_time.h"
@@ -216,6 +217,15 @@ public:
       add(shard, iter->substr(pos + 1));
     }
     return 0;
+  }
+
+  // trim the '<shard-id>#' prefix from a single shard marker if present
+  static std::string get_shard_marker(const std::string& marker) {
+    auto p = marker.find(KEY_VALUE_SEPARATOR);
+    if (p == marker.npos) {
+      return marker;
+    }
+    return marker.substr(p + 1);
   }
 };
 
