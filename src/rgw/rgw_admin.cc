@@ -67,25 +67,6 @@ public:
   }
 };
 
-static int check_pool_support_omap(const rgw_pool& pool)
-{
-  librados::IoCtx io_ctx;
-  int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
-  if (ret < 0) {
-     // the pool may not exist at this moment, we have no way to check if it supports omap.
-     return 0;
-  }
-
-  ret = io_ctx.omap_clear("__omap_test_not_exist_oid__");
-  if (ret == -EOPNOTSUPP) {
-    io_ctx.close();
-    return ret;
-  }
-  io_ctx.close();
-  return 0;
-}
-
-
 #ifdef BUILDING_FOR_EMBEDDED
 extern "C" int cephd_rgw_admin(int argc, const char **argv)
 #else
@@ -479,8 +460,13 @@ int main(int argc, const char **argv)
     }
       break;
     case OPT_REALM_PULL:
-      return handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
+    {
+      ret =  handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
                                    store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
     case OPT_ZONEGROUP_ADD:
       {
 	ret = handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name, tier_type_specified, &tier_type,
@@ -570,77 +556,45 @@ int main(int argc, const char **argv)
       break;
     case OPT_ZONEGROUP_PLACEMENT_LIST:
       {
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	encode_json("placement_targets", zonegroup.placement_targets, formatter);
-	formatter->flush(cout);
+        ret = handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
+        }
       }
       break;
     case OPT_ZONEGROUP_PLACEMENT_ADD:
-    case OPT_ZONEGROUP_PLACEMENT_MODIFY:
-    case OPT_ZONEGROUP_PLACEMENT_RM:
-    case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
-      {
-        if (placement_id.empty()) {
-          cerr << "ERROR: --placement-id not specified" << std::endl;
-          return EINVAL;
-        }
-
-	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
-	int ret = zonegroup.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
-          RGWZoneGroupPlacementTarget target;
-          target.name = placement_id;
-          for (auto& t : tags) {
-            target.tags.insert(t);
-          }
-          zonegroup.placement_targets[placement_id] = target;
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
-          RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
-          if (!tags.empty()) {
-            target.tags.clear();
-            for (auto& t : tags) {
-              target.tags.insert(t);
-            }
-          }
-          target.name = placement_id;
-          for (auto& t : tags_rm) {
-            target.tags.erase(t);
-          }
-          for (auto& t : tags_add) {
-            target.tags.insert(t);
-          }
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
-          zonegroup.placement_targets.erase(placement_id);
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
-          if (!zonegroup.placement_targets.count(placement_id)) {
-            cerr << "failed to find a zonegroup placement target named '"
-                << placement_id << "'" << std::endl;
-            return -ENOENT;
-          }
-          zonegroup.default_placement = placement_id;
-        }
-
-        zonegroup.post_process_params();
-        ret = zonegroup.update();
-        if (ret < 0) {
-          cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("placement_targets", zonegroup.placement_targets, formatter);
-        formatter->flush(cout);
+    {
+      ret = handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags, g_ceph_context,
+                                               store, formatter);
+      if (ret != 0) {
+        return ret;
       }
+    }
+        break;
+    case OPT_ZONEGROUP_PLACEMENT_MODIFY:
+    {
+      ret = handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name, tags, tags_add, tags_rm,
+                                                  g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
+        break;
+    case OPT_ZONEGROUP_PLACEMENT_RM:
+    {
+      ret = handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
+        break;
+    case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
+    {
+      ret = handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
       break;
     case OPT_ZONE_CREATE:
       {
@@ -715,109 +669,39 @@ int main(int argc, const char **argv)
       }
       break;
     case OPT_ZONE_PLACEMENT_ADD:
+    {
+      ret = handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
+                                          data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
+                                          store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
+      break;
     case OPT_ZONE_PLACEMENT_MODIFY:
+    {
+      ret = handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
+                                             data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
+                                             store, formatter);
+      if (ret != 0) {
+        return ret;
+      }
+    }
+        break;
     case OPT_ZONE_PLACEMENT_RM:
       {
-        if (placement_id.empty()) {
-          cerr << "ERROR: --placement-id not specified" << std::endl;
-          return EINVAL;
+        ret = handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
         }
-        // validate compression type
-        if (compression_type && *compression_type != "random"
-            && !Compressor::get_comp_alg_type(*compression_type)) {
-          std::cerr << "Unrecognized compression type" << std::endl;
-          return EINVAL;
-        }
-
-	RGWZoneParams zone(zone_id, zone_name);
-	int ret = zone.init(g_ceph_context, store);
-        if (ret < 0) {
-	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
-          // pool names are required
-          if (!index_pool || index_pool->empty() ||
-              !data_pool || data_pool->empty()) {
-            cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
-            return EINVAL;
-          }
-
-          RGWZonePlacementInfo& placement_info = zone.placement_pools[placement_id];
-
-          placement_info.index_pool = *index_pool;
-          placement_info.data_pool = *data_pool;
-          if (data_extra_pool) {
-            placement_info.data_extra_pool = *data_extra_pool;
-          }
-          if (index_type_specified) {
-            placement_info.index_type = placement_index_type;
-          }
-          if (compression_type) {
-            placement_info.compression_type = *compression_type;
-          }
-
-          ret = check_pool_support_omap(placement_info.get_data_extra_pool());
-          if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << placement_info.get_data_extra_pool()
-                 << "' does not support omap" << std::endl;
-             return ret;
-          }
-        } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          auto p = zone.placement_pools.find(placement_id);
-          if (p == zone.placement_pools.end()) {
-            cerr << "ERROR: zone placement target '" << placement_id
-                << "' not found" << std::endl;
-            return -ENOENT;
-          }
-          auto& info = p->second;
-          if (index_pool && !index_pool->empty()) {
-            info.index_pool = *index_pool;
-          }
-          if (data_pool && !data_pool->empty()) {
-            info.data_pool = *data_pool;
-          }
-          if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
-          }
-          if (index_type_specified) {
-            info.index_type = placement_index_type;
-          }
-          if (compression_type) {
-            info.compression_type = *compression_type;
-          }
-
-          ret = check_pool_support_omap(info.get_data_extra_pool());
-          if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool()
-                 << "' does not support omap" << std::endl;
-             return ret;
-          }
-        } else if (opt_cmd == OPT_ZONE_PLACEMENT_RM) {
-          zone.placement_pools.erase(placement_id);
-        }
-
-        ret = zone.update();
-        if (ret < 0) {
-          cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("zone", zone, formatter);
-        formatter->flush(cout);
       }
       break;
     case OPT_ZONE_PLACEMENT_LIST:
       {
-	RGWZoneParams zone(zone_id, zone_name);
-	int ret = zone.init(g_ceph_context, store);
-	if (ret < 0) {
-	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	encode_json("placement_pools", zone.placement_pools, formatter);
-	formatter->flush(cout);
+        ret = handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
+        if (ret != 0) {
+          return ret;
+        }
       }
       break;
     }

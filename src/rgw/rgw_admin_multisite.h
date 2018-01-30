@@ -3,6 +3,7 @@
 
 #include <boost/optional.hpp>
 #include <common/errno.h>
+#include <compressor/Compressor.h>
 #include "rgw_rest_conn.h"
 #include "rgw_admin_common.h"
 #include "rgw_sync.h"
@@ -120,6 +121,26 @@ int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegr
 int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegroup_name,
                                 const string& zonegroup_new_name, CephContext *context, RGWRados *store);
 
+int handle_opt_zonegroup_placement_list(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+                                        RGWRados *store, Formatter *formatter);
+
+int handle_opt_zonegroup_placement_add(const string& placement_id, const string& zonegroup_id,
+                                       const string& zonegroup_name, const list<string>& tags, CephContext *context,
+                                       RGWRados *store, Formatter *formatter);
+
+int handle_opt_zonegroup_placement_modify(const string& placement_id, const string& zonegroup_id, 
+                                          const string& zonegroup_name, const list<string>& tags,
+                                          const list<string> tags_add, const list<string>& tags_rm,
+                                          CephContext *context, RGWRados *store, Formatter *formatter);
+
+int handle_opt_zonegroup_placement_rm(const string& placement_id, const string& zonegroup_id,
+                                      const string& zonegroup_name, CephContext *context,
+                                      RGWRados *store, Formatter *formatter);
+
+int handle_opt_zonegroup_placement_default(const string& placement_id, const string& zonegroup_id, 
+                                           const string& zonegroup_name, CephContext *context, RGWRados *store,
+                                           Formatter *formatter);
+
 int handle_opt_zone_create(const string& zone_id, const string& zone_name, const string& zonegroup_id,
                            const string& zonegroup_name, string& realm_id, const string& realm_name,
                            const string& access_key, const string& secret_key, bool tier_type_specified,
@@ -158,6 +179,25 @@ int handle_opt_zone_modify(const string& zone_id, const string& zone_name, const
 int handle_opt_zone_rename(const string& zone_id, const string& zone_name, const string& zone_new_name,
                            const string& zonegroup_id, const string& zonegroup_name,
                            CephContext *context, RGWRados *store);
+
+int handle_opt_zone_placement_list(const string& zone_id, const string& zone_name, CephContext *context,
+                                   RGWRados *store, Formatter *formatter);
+
+int handle_opt_zone_placement_add(const string& placement_id, const string& zone_id, const string& zone_name, 
+                                  const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
+                                  const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+                                  bool index_type_specified, RGWBucketIndexType placement_index_type,
+                                  CephContext *context, RGWRados *store, Formatter *formatter);
+
+int handle_opt_zone_placement_modify(const string& placement_id, const string& zone_id, const string& zone_name, 
+                                     const boost::optional<string>& compression_type, const boost::optional<string>& index_pool, 
+                                     const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool, 
+                                     bool index_type_specified, RGWBucketIndexType placement_index_type, 
+                                     CephContext *context, RGWRados *store, Formatter *formatter);
+
+int handle_opt_zone_placement_rm(const string& placement_id, const string& zone_id, const string& zone_name,
+                                 const boost::optional<string>& compression_type, CephContext *context, RGWRados *store,
+                                 Formatter *formatter);
 
 int handle_opt_metadata_sync_status(RGWRados *store, Formatter *formatter);
 
