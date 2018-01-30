@@ -73,12 +73,12 @@ def create_id(fsid, json_secrets):
 
 def check_id(osd_id):
     """
-    Checks to see if an osd ID exists or not. Returns True
+    Checks to see if an osd ID exists or not. Returns osd_id
     if it does exist, False if it doesn't.
 
     :param osd_id: The osd ID to check
     """
-    if not osd_id:
+    if osd_id is None:
         return False
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
@@ -98,7 +98,11 @@ def check_id(osd_id):
 
     output = json.loads(stdout)
     osds = output['nodes']
-    return any([osd['id'] == osd_id for osd in osds])
+    found_osd = any([str(osd['id']) == str(osd_id) for osd in osds])
+    if found_osd:
+        # return a string so an ID of 0 evaluates to True
+        return str(osd_id)
+    return False
 
 
 def mount_tmpfs(path):
