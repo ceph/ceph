@@ -18,7 +18,7 @@ export class AppComponent {
     this.toastr.setRootViewContainerRef(vcr);
   }
 
-  isLogginActive() {
+  isLoginActive() {
     return this.router.url === '/login' || !this.authStorageService.isLoggedIn();
   }
 
