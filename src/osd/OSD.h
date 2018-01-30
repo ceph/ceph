@@ -1624,7 +1624,7 @@ private:
   friend class PGPeeringItem;
   friend class PGRecovery;
 
-  class ShardedOpWQ
+  class ShardedOpWQ final
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
     struct ShardData {
