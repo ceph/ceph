@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 #include <poll.h>
 #include <sys/un.h>
@@ -19,10 +19,8 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/pipe.h"
-#include "common/safe_io.h"
 #include "common/Thread.h"
 #include "common/version.h"
-#include "include/compat.h"
 
 
 // re-include our assert to clobber the system one; fix dout:
@@ -43,51 +41,47 @@ using std::ostringstream;
  * This code makes things a little nicer by unlinking those dead sockets when
  * the application exits normally.
  */
-static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
-static std::vector<const char*> cleanup_files;
+
+template<typename F, typename... Args>
+inline int retry_sys_call(F f, Args... args) {
+  int r;
+  do {
+    r = f(args...);
+  } while (r < 0 && errno == EINTR);
+  return r;
+};
+
+
+static std::mutex cleanup_lock;
+static std::vector<std::string> cleanup_files;
 static bool cleanup_atexit = false;
 
-static void remove_cleanup_file(const char *file)
-{
-  pthread_mutex_lock(&cleanup_lock);
-  VOID_TEMP_FAILURE_RETRY(unlink(file));
-  for (std::vector <const char*>::iterator i = cleanup_files.begin();
-       i != cleanup_files.end(); ++i) {
-    if (strcmp(file, *i) == 0) {
-      free((void*)*i);
-      cleanup_files.erase(i);
-      break;
-    }
+static void remove_cleanup_file(std::string_view file) {
+  std::unique_lock l(cleanup_lock);
+
+  if (auto i = std::find(cleanup_files.cbegin(), cleanup_files.cend(), file);
+      i != cleanup_files.cend()) {
+    retry_sys_call(&::unlink, i->c_str());
+    cleanup_files.erase(i);
   }
-  pthread_mutex_unlock(&cleanup_lock);
 }
 
-static void remove_all_cleanup_files()
-{
-  pthread_mutex_lock(&cleanup_lock);
-  for (std::vector <const char*>::iterator i = cleanup_files.begin();
-       i != cleanup_files.end(); ++i) {
-    VOID_TEMP_FAILURE_RETRY(unlink(*i));
-    free((void*)*i);
+void remove_all_cleanup_files() {
+  std::unique_lock l(cleanup_lock);
+  for (const auto& s : cleanup_files) {
+    retry_sys_call(&::unlink, s.c_str());
   }
   cleanup_files.clear();
-  pthread_mutex_unlock(&cleanup_lock);
 }
 
-static void add_cleanup_file(const char *file)
-{
-  char *fname = strdup(file);
-  if (!fname)
-    return;
-  pthread_mutex_lock(&cleanup_lock);
-  cleanup_files.push_back(fname);
+static void add_cleanup_file(std::string file) {
+  std::unique_lock l(cleanup_lock);
+  cleanup_files.push_back(std::move(file));
   if (!cleanup_atexit) {
     atexit(remove_all_cleanup_files);
     cleanup_atexit = true;
   }
-  pthread_mutex_unlock(&cleanup_lock);
 }
-
 
 AdminSocket::AdminSocket(CephContext *cct)
   : m_cct(cct)
@@ -130,7 +124,7 @@ std::string AdminSocket::destroy_shutdown_pipe()
   int ret = safe_write(m_shutdown_wr_fd, buf, sizeof(buf));
 
   // Close write end
-  VOID_TEMP_FAILURE_RETRY(close(m_shutdown_wr_fd));
+  retry_sys_call(&::close, m_shutdown_wr_fd);
   m_shutdown_wr_fd = -1;
 
   if (ret != 0) {
@@ -144,7 +138,7 @@ std::string AdminSocket::destroy_shutdown_pipe()
 
   // Close read end. Doing this before join() blocks the listenter and prevents
   // joining.
-  VOID_TEMP_FAILURE_RETRY(close(m_shutdown_rd_fd));
+  retry_sys_call(close, m_shutdown_rd_fd);
   m_shutdown_rd_fd = -1;
 
   return "";
@@ -174,7 +168,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
   if (r < 0) {
     r = errno;
-    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
+    retry_sys_call(&::close, sock_fd);
     ostringstream oss;
     oss << "AdminSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
@@ -195,7 +189,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
 	err = EEXIST;
       } else {
 	ldout(m_cct, 20) << "unlink stale file " << sock_path << dendl;
-	VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+	retry_sys_call(&::unlink, sock_path.c_str());
 	if (::bind(sock_fd, (struct sockaddr*)&address,
 		 sizeof(struct sockaddr_un)) == 0) {
 	  err = 0;
@@ -219,7 +213,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
     oss << "AdminSocket::bind_and_listen: "
 	  << "failed to listen to socket: " << cpp_strerror(err);
     close(sock_fd);
-    VOID_TEMP_FAILURE_RETRY(unlink(sock_path.c_str()));
+    retry_sys_call(&::unlink, sock_path.c_str());
     return oss.str();
   }
   *fd = sock_fd;
@@ -309,10 +303,9 @@ bool AdminSocket::do_accept()
         lderr(m_cct) << "AdminSocket: error reading request code: "
 		     << cpp_strerror(ret) << dendl;
       }
-      VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+      retry_sys_call(&::close, connection_fd);
       return false;
     }
-    //ldout(m_cct, 0) << "AdminSocket read byte " << (int)cmd[pos] << " pos " << pos << dendl;
     if (cmd[0] == '\0') {
       // old protocol: __be32
       if (pos == 3 && cmd[0] == '\0') {
@@ -342,7 +335,7 @@ bool AdminSocket::do_accept()
     }
     if (++pos >= sizeof(cmd)) {
       lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
-      VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+      retry_sys_call(&::close, connection_fd);
       return false;
     }
   }
@@ -356,7 +349,7 @@ bool AdminSocket::do_accept()
   cmdvec.push_back(cmd);
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
-    VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+    retry_sys_call(&::close, connection_fd);
     return false;
   }
   cmd_getval(m_cct, cmdmap, "format", format);
@@ -426,7 +419,7 @@ bool AdminSocket::do_accept()
   }
   l.unlock();
 
-  VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+  retry_sys_call(&::close, connection_fd);
   return rval;
 }
 
@@ -613,8 +606,6 @@ bool AdminSocket::init(const std::string& path)
 
 void AdminSocket::shutdown()
 {
-  std::string err;
-
   // Under normal operation this is unlikely to occur.  However for some unit
   // tests, some object members are not initialized and so cannot be deleted
   // without fault.
@@ -623,12 +614,12 @@ void AdminSocket::shutdown()
 
   ldout(m_cct, 5) << "shutdown" << dendl;
 
-  err = destroy_shutdown_pipe();
+  auto err = destroy_shutdown_pipe();
   if (!err.empty()) {
     lderr(m_cct) << "AdminSocket::shutdown: error: " << err << dendl;
   }
 
-  VOID_TEMP_FAILURE_RETRY(close(m_sock_fd));
+  retry_sys_call(&::close, m_sock_fd);
 
   unregister_command("version");
   unregister_command("git_version");
@@ -641,6 +632,6 @@ void AdminSocket::shutdown()
   unregister_command("get_command_descriptions");
   delete m_getdescs_hook;
 
-  remove_cleanup_file(m_path.c_str());
+  remove_cleanup_file(m_path);
   m_path.clear();
 }
