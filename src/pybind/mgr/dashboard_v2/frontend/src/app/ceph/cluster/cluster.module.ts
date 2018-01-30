@@ -12,4 +12,4 @@ import { ServiceListPipe } from './service-list.pipe';
   ],
   declarations: [HostsComponent, ServiceListPipe],
 })
-export class HostModule { }
+export class ClusterModule { }
