@@ -9,6 +9,7 @@ import os
 import pkgutil
 import sys
 
+import six
 import cherrypy
 
 
@@ -55,10 +56,10 @@ def load_controllers(mgrmodule):
         mod = importlib.import_module('.controllers.{}'.format(mod_name),
                                       package='dashboard_v2')
         for _, cls in mod.__dict__.items():
-            if isinstance(cls, type) and hasattr(cls, '_cp_controller_'):
-                # found controller
+            # Controllers MUST be derived from the class BaseController.
+            if isinstance(cls, BaseControllerMeta) and \
+                    hasattr(cls, '_cp_controller_'):
                 cls.mgr = mgrmodule
-                cls.logger = mgrmodule.log
                 controllers.append(cls)
 
     return controllers
@@ -69,7 +70,51 @@ def _json_error_page(status, message, traceback, version):
                            version=version))
 
 
-class RESTController(object):
+class BaseControllerMeta(type):
+    @property
+    def mgr(cls):
+        """
+        :return: Returns the MgrModule instance of this Ceph dashboard module.
+        """
+        return cls._mgr_module
+
+    @mgr.setter
+    def mgr(cls, value):
+        """
+        :param value: The MgrModule instance of the Ceph dashboard module.
+        """
+        cls._mgr_module = value
+
+    @property
+    def logger(cls):
+        """
+        :return: Returns the logger belonging to the Ceph dashboard module.
+        """
+        return cls.mgr.log
+
+
+class BaseController(six.with_metaclass(BaseControllerMeta, object)):
+    """
+    Base class for all controllers providing API endpoints.
+    """
+    _mgr_module = None
+
+    @property
+    def mgr(self):
+        """
+        :return: Returns the MgrModule instance of this Ceph module.
+        """
+        return self._mgr_module
+
+    @property
+    def logger(self):
+        """
+        :return: Returns the logger belonging to the Ceph dashboard module.
+        """
+        return self.mgr.log
+
+
+class RESTController(BaseController):
     """
     Base class for providing a RESTful interface to a resource.
 
