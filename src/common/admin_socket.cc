@@ -359,7 +359,7 @@ bool AdminSocket::do_accept()
 
   bool rval = false;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   string format;
   vector<string> cmdvec;
   stringstream errss;
@@ -382,7 +382,7 @@ bool AdminSocket::do_accept()
     p = m_hooks.find(match);
     if (p != m_hooks.end())
       break;
-    
+
     // drop right-most word
     size_t pos = match.rfind(' ');
     if (pos == std::string::npos) {
@@ -441,8 +441,8 @@ bool AdminSocket::do_accept()
 }
 
 bool AdminSocket::validate(const std::string& command,
-			  const cmdmap_t& cmdmap,
-			  bufferlist& out) const
+			   const cmdmap_t& cmdmap,
+			   bufferlist& out) const
 {
   stringstream os;
   if (validate_cmd(m_cct, m_descs.at(command), cmdmap, os)) {
@@ -453,7 +453,10 @@ bool AdminSocket::validate(const std::string& command,
   }
 }
 
-int AdminSocket::register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help)
+int AdminSocket::register_command(std::string_view command,
+				  std::string_view cmddesc,
+				  AdminSocketHook *hook,
+				  std::string_view help)
 {
   int ret;
   m_lock.Lock();
@@ -462,24 +465,24 @@ int AdminSocket::register_command(std::string command, std::string cmddesc, Admi
     ret = -EEXIST;
   } else {
     ldout(m_cct, 5) << "register_command " << command << " hook " << hook << dendl;
-    m_hooks[command] = hook;
-    m_descs[command] = cmddesc;
-    m_help[command] = help;
+    m_hooks.emplace(command, hook);
+    m_descs.emplace(command, cmddesc);
+    m_help.emplace(command, help);
     ret = 0;
-  }  
+  }
   m_lock.Unlock();
   return ret;
 }
 
-int AdminSocket::unregister_command(std::string command)
+int AdminSocket::unregister_command(std::string_view command)
 {
   int ret;
   m_lock.Lock();
   if (m_hooks.count(command)) {
     ldout(m_cct, 5) << "unregister_command " << command << dendl;
-    m_hooks.erase(command);
-    m_descs.erase(command);
-    m_help.erase(command);
+    m_hooks.erase(m_hooks.find(command));
+    m_descs.erase(m_descs.find(command));
+    m_help.erase(m_help.find(command));
 
     // If we are currently processing a command, wait for it to
     // complete in case it referenced the hook that we are
@@ -499,9 +502,9 @@ int AdminSocket::unregister_command(std::string command)
 
 class VersionHook : public AdminSocketHook {
 public:
-  bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-		    bufferlist& out) override {
-    if (command == "0") {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
+    if (command == "0"sv) {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
       JSONFormatter jf;
@@ -527,14 +530,14 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   explicit HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) override {
-    Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format,
+	    bufferlist& out) override {
+    auto f = Formatter::create(format, "json-pretty"sv, "json-pretty"sv);
     f->open_object_section("help");
-    for (map<string,string>::iterator p = m_as->m_help.begin();
-	 p != m_as->m_help.end();
-	 ++p) {
-      if (p->second.length())
-	f->dump_string(p->first.c_str(), p->second);
+    for (const auto& [command, help] : m_as->m_help) {
+      if (help.length())
+	f->dump_string(command.c_str(), help);
     }
     f->close_section();
     ostringstream ss;
@@ -549,19 +552,18 @@ class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
-  bool call(string command, cmdmap_t &cmdmap, string format, bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     int cmdnum = 0;
     JSONFormatter jf;
     jf.open_object_section("command_descriptions");
-    for (map<string,string>::iterator p = m_as->m_descs.begin();
-	 p != m_as->m_descs.end();
-	 ++p) {
+    for (const auto& [command, desc] : m_as->m_descs) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(&jf,
 				secname.str().c_str(),
-				p->second.c_str(),
-				m_as->m_help[p->first]);
+				desc,
+				m_as->m_help[command]);
       cmdnum++;
     }
     jf.close_section(); // command_descriptions
@@ -573,7 +575,7 @@ public:
   }
 };
 
-bool AdminSocket::init(const std::string &path)
+bool AdminSocket::init(const std::string& path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
 

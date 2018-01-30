@@ -522,10 +522,10 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
 
 void DaemonServer::_generate_command_map(
-  map<string,cmd_vartype>& cmdmap,
+  cmdmap_t& cmdmap,
   map<string,string> &param_str_map)
 {
-  for (map<string,cmd_vartype>::const_iterator p = cmdmap.begin();
+  for (auto p = cmdmap.begin();
        p != cmdmap.end(); ++p) {
     if (p->first == "prefix")
       continue;
@@ -562,7 +562,7 @@ bool DaemonServer::_allowed_command(
   MgrSession *s,
   const string &module,
   const string &prefix,
-  const map<string,cmd_vartype>& cmdmap,
+  const cmdmap_t& cmdmap,
   const map<string,string>& param_str_map,
   const MonCommand *this_cmd) {
 

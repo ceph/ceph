@@ -2925,7 +2925,7 @@ void PGMap::get_health_checks(
 
 int process_pg_map_command(
   const string& orig_prefix,
-  const map<string,cmd_vartype>& orig_cmdmap,
+  const cmdmap_t& orig_cmdmap,
   const PGMap& pg_map,
   const OSDMap& osdmap,
   Formatter *f,
@@ -2933,7 +2933,7 @@ int process_pg_map_command(
   bufferlist *odata)
 {
   string prefix = orig_prefix;
-  map<string,cmd_vartype> cmdmap = orig_cmdmap;
+  auto cmdmap = orig_cmdmap;
 
   // perhaps these would be better in the parsing, but it's weird
   bool primary = false;

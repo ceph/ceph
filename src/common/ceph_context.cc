@@ -105,8 +105,8 @@ public:
   }
 
   // AdminSocketHook
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     if (command == "dump_mempools") {
       std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
@@ -367,19 +367,19 @@ class CephContextHook : public AdminSocketHook {
 public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     m_cct->do_command(command, cmdmap, format, &out);
     return true;
   }
 };
 
-void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
-			     std::string format, bufferlist *out)
+void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
+			     std::string_view format, bufferlist *out)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   stringstream ss;
-  for (cmdmap_t::iterator it = cmdmap.begin(); it != cmdmap.end(); ++it) {
+  for (auto it = cmdmap.begin(); it != cmdmap.end(); ++it) {
     if (it->first != "prefix") {
       ss << it->first  << ":" << cmd_vartype_stringify(it->second) << " ";
     }
@@ -411,7 +411,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
   }
   else if (command == "perf reset") {
     std::string var;
-    string section = command;
+    std::string section(command);
     f->open_object_section(section.c_str());
     if (!cmd_getval(this, cmdmap, "var", var)) {
       f->dump_string("error", "syntax error: 'perf reset <var>'");
@@ -419,12 +419,12 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
      if(!_perf_counters_collection->reset(var))
         f->dump_stream("error") << "Not find: " << var;
      else
-       f->dump_string("success", command + ' ' + var);
+       f->dump_string("success", std::string(command) + ' ' + var);
     }
     f->close_section();
   }
   else {
-    string section = command;
+    std::string section(command);
     boost::replace_all(section, " ", "_");
     f->open_object_section(section.c_str());
     if (command == "config show") {

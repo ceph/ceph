@@ -126,8 +126,8 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
-		  ceph::bufferlist *out);
+  void do_command(std::string_view command, const cmdmap_t& cmdmap,
+		  std::string_view format, ceph::bufferlist *out);
 
   template<typename T>
   void lookup_or_create_singleton_object(T*& p, const std::string &name) {

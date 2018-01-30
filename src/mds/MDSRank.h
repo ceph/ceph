@@ -541,7 +541,7 @@ public:
   void init();
   void tick();
   void shutdown();
-  bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
+  bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
                            Formatter *f, std::ostream& ss);
   void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
   void handle_osd_map();
