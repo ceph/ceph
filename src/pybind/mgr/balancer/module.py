@@ -212,13 +212,13 @@ class Module(MgrModule):
             "perm": "rw",
         },
         {
-            "cmd": "balancer eval name=plan,type=CephString,req=false",
-            "desc": "Evaluate data distribution for the current cluster or specific plan",
+            "cmd": "balancer eval name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan",
             "perm": "r",
         },
         {
-            "cmd": "balancer eval-verbose name=plan,type=CephString,req=false",
-            "desc": "Evaluate data distribution for the current cluster or specific plan (verbosely)",
+            "cmd": "balancer eval-verbose name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan (verbosely)",
             "perm": "r",
         },
         {
@@ -288,13 +288,20 @@ class Module(MgrModule):
         elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
             verbose = command['prefix'] == 'balancer eval-verbose'
             pools = []
-            if 'plan' in command:
-                plan = self.plans.get(command['plan'])
+            if 'option' in command:
+                plan = self.plans.get(command['option'])
                 if not plan:
-                    return (-errno.ENOENT, '', 'plan %s not found' %
-                            command['plan'])
-                pools = plan.pools
-                ms = plan.final_state()
+                    # not a plan, does it look like a pool?
+                    osdmap = self.get_osdmap()
+                    valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+                    option = command['option']
+                    if option not in valid_pool_names:
+                         return (-errno.EINVAL, '', 'option "%s" not a plan or a pool' % option)
+                    pools.append(option)
+                    ms = MappingState(osdmap, self.get("pg_dump"), 'pool "%s"' % option)
+                else:
+                    pools = plan.pools
+                    ms = plan.final_state()
             else:
                 ms = MappingState(self.get_osdmap(),
                                   self.get("pg_dump"),
