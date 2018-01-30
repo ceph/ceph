@@ -85,11 +85,17 @@ class tmp_mount(object):
     """
     Temporarily mount a device on a temporary directory,
     and unmount it upon exit
+
+    When ``encrypted`` is set to ``True``, the exit method will call out to
+    close the device so that it doesn't remain open after mounting. It is
+    assumed that it will be open because otherwise it wouldn't be possible to
+    mount in the first place
     """
 
-    def __init__(self, device):
+    def __init__(self, device, encrypted=False):
         self.device = device
         self.path = None
+        self.encrypted = encrypted
 
     def __enter__(self):
         self.path = tempfile.mkdtemp()
@@ -107,6 +113,10 @@ class tmp_mount(object):
             '-v',
             self.path
         ])
+        if self.encrypted:
+            # avoid a circular import from the encryption module
+            from ceph_volume.util import encryption
+            encryption.dmcrypt_close(self.device)
 
 
 def path_is_mounted(path, destination=None):
