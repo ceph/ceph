@@ -11,17 +11,19 @@
  * Foundation.  See file COPYING.
  * 
  */
+#include <poll.h>
+#include <sys/un.h>
 
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
+#include "common/dout.h"
 #include "common/errno.h"
 #include "common/pipe.h"
 #include "common/safe_io.h"
+#include "common/Thread.h"
 #include "common/version.h"
 #include "include/compat.h"
 
-#include <poll.h>
-#include <sys/un.h>
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/assert.h"
@@ -42,7 +44,7 @@ using std::ostringstream;
  * the application exits normally.
  */
 static pthread_mutex_t cleanup_lock = PTHREAD_MUTEX_INITIALIZER;
-static std::vector <const char*> cleanup_files;
+static std::vector<const char*> cleanup_files;
 static bool cleanup_atexit = false;
 
 static void remove_cleanup_file(const char *file)
@@ -88,17 +90,8 @@ static void add_cleanup_file(const char *file)
 
 
 AdminSocket::AdminSocket(CephContext *cct)
-  : m_cct(cct),
-    m_sock_fd(-1),
-    m_shutdown_rd_fd(-1),
-    m_shutdown_wr_fd(-1),
-    in_hook(false),
-    m_lock("AdminSocket::m_lock"),
-    m_version_hook(NULL),
-    m_help_hook(NULL),
-    m_getdescs_hook(NULL)
-{
-}
+  : m_cct(cct)
+{}
 
 AdminSocket::~AdminSocket()
 {
@@ -150,7 +143,7 @@ std::string AdminSocket::destroy_shutdown_pipe()
     return oss.str();
   }
 
-  join();
+  th.join();
 
   // Close read end. Doing this before join() blocks the listenter and prevents
   // joining.
@@ -236,7 +229,7 @@ std::string AdminSocket::bind_and_listen(const std::string &sock_path, int *fd)
   return "";
 }
 
-void* AdminSocket::entry()
+void AdminSocket::entry() noexcept
 {
   ldout(m_cct, 5) << "entry start" << dendl;
   while (true) {
@@ -255,7 +248,7 @@ void* AdminSocket::entry()
       }
       lderr(m_cct) << "AdminSocket: poll(2) error: '"
 		   << cpp_strerror(err) << dendl;
-      return PFL_FAIL;
+      return;
     }
 
     if (fds[0].revents & POLLIN) {
@@ -264,7 +257,7 @@ void* AdminSocket::entry()
     }
     if (fds[1].revents & POLLIN) {
       // Parent wants us to shut down
-      return PFL_SUCCESS;
+      return;
     }
   }
   ldout(m_cct, 5) << "entry exit" << dendl;
@@ -375,7 +368,7 @@ bool AdminSocket::do_accept()
     format = "json-pretty";
   cmd_getval(m_cct, cmdmap, "prefix", c);
 
-  m_lock.Lock();
+  std::unique_lock l(lock);
   map<string,AdminSocketHook*>::iterator p;
   string match = c;
   while (match.size()) {
@@ -408,12 +401,12 @@ bool AdminSocket::do_accept()
     // removing this hook.
     in_hook = true;
     auto match_hook = p->second;
-    m_lock.Unlock();
+    l.unlock();
     bool success = (validate(match, cmdmap, out) &&
                     match_hook->call(match, cmdmap, format, out));
-    m_lock.Lock();
+    l.lock();
     in_hook = false;
-    in_hook_cond.Signal();
+    in_hook_cond.notify_all();
 
     if (!success) {
       ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
@@ -434,7 +427,7 @@ bool AdminSocket::do_accept()
 	rval = true;
     }
   }
-  m_lock.Unlock();
+  l.unlock();
 
   VOID_TEMP_FAILURE_RETRY(close(connection_fd));
   return rval;
@@ -459,7 +452,7 @@ int AdminSocket::register_command(std::string_view command,
 				  std::string_view help)
 {
   int ret;
-  m_lock.Lock();
+  std::unique_lock l(lock);
   if (m_hooks.count(command)) {
     ldout(m_cct, 5) << "register_command " << command << " hook " << hook << " EEXIST" << dendl;
     ret = -EEXIST;
@@ -470,14 +463,13 @@ int AdminSocket::register_command(std::string_view command,
     m_help.emplace(command, help);
     ret = 0;
   }
-  m_lock.Unlock();
   return ret;
 }
 
 int AdminSocket::unregister_command(std::string_view command)
 {
   int ret;
-  m_lock.Lock();
+  std::unique_lock l(lock);
   if (m_hooks.count(command)) {
     ldout(m_cct, 5) << "unregister_command " << command << dendl;
     m_hooks.erase(m_hooks.find(command));
@@ -487,16 +479,13 @@ int AdminSocket::unregister_command(std::string_view command)
     // If we are currently processing a command, wait for it to
     // complete in case it referenced the hook that we are
     // unregistering.
-    if (in_hook) {
-      in_hook_cond.Wait(m_lock);
-    }
+    in_hook_cond.wait(l, [this]() { return !in_hook; });
 
     ret = 0;
   } else {
     ldout(m_cct, 5) << "unregister_command " << command << " ENOENT" << dendl;
     ret = -ENOENT;
-  }  
-  m_lock.Unlock();
+  }
   return ret;
 }
 
@@ -612,7 +601,7 @@ bool AdminSocket::init(const std::string& path)
   register_command("get_command_descriptions", "get_command_descriptions",
 		   m_getdescs_hook, "list available commands");
 
-  create("admin_socket");
+  th = make_named_thread("admin_socket", &AdminSocket::entry, this);
   add_cleanup_file(m_path.c_str());
   return true;
 }

@@ -24,10 +24,15 @@
 #include "common/admin_socket.h"
 #include "common/perf_counters.h"
 #include "common/code_environment.h"
+#include "common/Cond.h"
+#include "common/config.h"
 #include "common/ceph_crypto.h"
 #include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/Graylog.h"
+
+#include "log/Log.h"
+
 #include "auth/Crypto.h"
 #include "include/str_list.h"
 #include "common/PluginRegistry.h"
