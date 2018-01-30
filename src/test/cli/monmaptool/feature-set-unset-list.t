@@ -28,7 +28,7 @@
   available:persistent:[kraken(1),luminous(2),mimic(4)]
 
   $ monmaptool --feature-set foo /tmp/test.monmap.1234
-  unknown features name 'foo' or unable to parse value: Expected option value to be integer, got 'foo'
+  unknown features name 'foo' or unable to parse value: The option value 'foo' contains invalid digits
    usage: [--print] [--create [--clobber][--fsid uuid]]
           [--generate] [--set-initial-members]
           [--add name 1.2.3.4:567] [--rm name]

@@ -127,9 +127,11 @@ TEST(StrToL, Error1) {
   test_strict_strtoll_err("604462909807314587353088"); // overflow
   test_strict_strtoll_err("aw shucks"); // invalid
   test_strict_strtoll_err("343245 aw shucks"); // invalid chars at end
+  test_strict_strtoll_err("-"); // invalid
 
   test_strict_strtol_err("35 aw shucks"); // invalid chars at end
   test_strict_strtol_err("--0");
+  test_strict_strtol_err("-");
 
   test_strict_strtod_err("345345.0-");
   test_strict_strtod_err("34.0 garbo");
