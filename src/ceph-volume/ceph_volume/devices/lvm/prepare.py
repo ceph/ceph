@@ -242,7 +242,7 @@ class Prepare(object):
         if crush_device_class:
             secrets['crush_device_class'] = crush_device_class
         # reuse a given ID if it exists, otherwise create a new ID
-        self.osd_id = prepare_utils.check_id(args.osd_id) or prepare_utils.create_id(osd_fsid, json.dumps(secrets))
+        self.osd_id = prepare_utils.create_id(osd_fsid, json.dumps(secrets), osd_id=args.osd_id)
         tags = {
             'ceph.osd_fsid': osd_fsid,
             'ceph.osd_id': self.osd_id,
