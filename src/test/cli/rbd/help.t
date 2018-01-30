@@ -990,20 +990,21 @@ Skip test on FreeBSD as it generates different output there.
     --pretty-format      pretty formatting (json and xml)
   
   rbd help lock remove
-  usage: rbd lock remove [--pool <pool>] [--image <image>] 
+  usage: rbd lock remove [--pool <pool>] [--image <image>] [--expire <expire>] 
                          <image-spec> <lock-id> <locker> 
   
   Release a lock on an image.
   
   Positional arguments
-    <image-spec>         image specification
-                         (example: [<pool-name>/]<image-name>)
-    <lock-id>            unique lock id
-    <locker>             locker client
+    <image-spec>             image specification
+                             (example: [<pool-name>/]<image-name>)
+    <lock-id>                unique lock id
+    <locker>                 locker client
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --image arg          image name
+    -p [ --pool ] arg        pool name
+    --image arg              image name
+    -e [ --expire ] arg (=0) blacklist's expire time
   
   rbd help map
   usage: rbd map [--pool <pool>] [--image <image>] [--snap <snap>] 

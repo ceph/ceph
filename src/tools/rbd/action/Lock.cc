@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
+#include "librbd/ImageCtx.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -208,6 +209,7 @@ int execute_add(const po::variables_map &vm,
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_expire_option(options);
   add_id_option(positional);
   positional->add_options()
     ("locker", "locker client");
@@ -219,6 +221,12 @@ int execute_remove(const po::variables_map &vm,
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
+  uint32_t expire = 0;
+
+  if (vm.count(at::EXPIRE)) {
+    expire = vm[at::EXPIRE].as<uint32_t>();
+  }
+
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &image_name,
     &snap_name, utils::SNAPSHOT_PRESENCE_NONE, utils::SPEC_VALIDATION_NONE);
@@ -246,6 +254,8 @@ int execute_remove(const po::variables_map &vm,
   if (r < 0) {
     return r;
   }
+
+  image.set_blacklist_expire_seconds(expire);
 
   r = do_lock_remove(image, lock_client.c_str(), lock_cookie.c_str());
   if (r < 0) {

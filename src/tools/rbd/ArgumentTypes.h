@@ -82,6 +82,7 @@ static const std::string VERBOSE("verbose");
 static const std::string NO_ERROR("no-error");
 
 static const std::string LIMIT("limit");
+static const std::string EXPIRE("expire");
 
 static const std::set<std::string> SWITCH_ARGUMENTS = {
   WHOLE_OBJECT, NO_PROGRESS, PRETTY_FORMAT, VERBOSE, NO_ERROR};
@@ -177,6 +178,7 @@ void add_journal_spec_options(
   boost::program_options::options_description *opt,
   ArgumentModifier modifier);
 
+void add_expire_option(boost::program_options::options_description *opt);
 void add_create_image_options(boost::program_options::options_description *opt,
                               bool include_format);
 

@@ -2134,6 +2134,10 @@ namespace librbd {
     return r;
   }
 
+  void Image::set_blacklist_expire_seconds(uint32_t expire) {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    ictx->blacklist_expire_seconds = expire;
+  }
 } // namespace librbd
 
 extern "C" void rbd_version(int *major, int *minor, int *extra)

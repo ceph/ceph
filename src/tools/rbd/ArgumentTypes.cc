@@ -297,6 +297,12 @@ void add_create_image_options(po::options_description *opt,
   add_create_journal_options(opt);
 }
 
+void add_expire_option(boost::program_options::options_description *opt) {
+  opt->add_options()
+    ((EXPIRE + ",e").c_str(), po::value<uint32_t>()->default_value(0),
+      "blacklist's expire time");
+}
+
 void add_create_journal_options(po::options_description *opt) {
   opt->add_options()
     (JOURNAL_SPLAY_WIDTH.c_str(), po::value<uint64_t>(),
