@@ -4278,111 +4278,127 @@ bool CInode::validated_data::all_damage_repaired() const
   return !unrepaired;
 }
 
-void CInode::dump(Formatter *f) const
+void CInode::dump(Formatter *f, int flags) const
 {
-  InodeStoreBase::dump(f);
+  if (flags & DUMP_PATH) {
+    std::string path;
+    make_path_string(path, true);
+    if (path.empty())
+      path = "/";
+    f->dump_string("path", path);
+  }
 
-  MDSCacheObject::dump(f);
+  if (flags & DUMP_INODE_STORE_BASE)
+    InodeStoreBase::dump(f);
+  
+  if (flags & DUMP_MDS_CACHE_OBJECT)
+    MDSCacheObject::dump(f);
 
-  f->open_object_section("versionlock");
-  versionlock.dump(f);
-  f->close_section();
+  if (flags & DUMP_LOCKS) {
+    f->open_object_section("versionlock");
+    versionlock.dump(f);
+    f->close_section();
 
-  f->open_object_section("authlock");
-  authlock.dump(f);
-  f->close_section();
+    f->open_object_section("authlock");
+    authlock.dump(f);
+    f->close_section();
 
-  f->open_object_section("linklock");
-  linklock.dump(f);
-  f->close_section();
+    f->open_object_section("linklock");
+    linklock.dump(f);
+    f->close_section();
 
-  f->open_object_section("dirfragtreelock");
-  dirfragtreelock.dump(f);
-  f->close_section();
+    f->open_object_section("dirfragtreelock");
+    dirfragtreelock.dump(f);
+    f->close_section();
 
-  f->open_object_section("filelock");
-  filelock.dump(f);
-  f->close_section();
+    f->open_object_section("filelock");
+    filelock.dump(f);
+    f->close_section();
 
-  f->open_object_section("xattrlock");
-  xattrlock.dump(f);
-  f->close_section();
+    f->open_object_section("xattrlock");
+    xattrlock.dump(f);
+    f->close_section();
 
-  f->open_object_section("snaplock");
-  snaplock.dump(f);
-  f->close_section();
+    f->open_object_section("snaplock");
+    snaplock.dump(f);
+    f->close_section();
 
-  f->open_object_section("nestlock");
-  nestlock.dump(f);
-  f->close_section();
+    f->open_object_section("nestlock");
+    nestlock.dump(f);
+    f->close_section();
 
-  f->open_object_section("flocklock");
-  flocklock.dump(f);
-  f->close_section();
+    f->open_object_section("flocklock");
+    flocklock.dump(f);
+    f->close_section();
 
-  f->open_object_section("policylock");
-  policylock.dump(f);
-  f->close_section();
-
-  f->open_array_section("states");
-  MDSCacheObject::dump_states(f);
-  if (state_test(STATE_EXPORTING))
-    f->dump_string("state", "exporting");
-  if (state_test(STATE_OPENINGDIR))
-    f->dump_string("state", "openingdir");
-  if (state_test(STATE_FREEZING))
-    f->dump_string("state", "freezing");
-  if (state_test(STATE_FROZEN))
-    f->dump_string("state", "frozen");
-  if (state_test(STATE_AMBIGUOUSAUTH))
-    f->dump_string("state", "ambiguousauth");
-  if (state_test(STATE_EXPORTINGCAPS))
-    f->dump_string("state", "exportingcaps");
-  if (state_test(STATE_NEEDSRECOVER))
-    f->dump_string("state", "needsrecover");
-  if (state_test(STATE_PURGING))
-    f->dump_string("state", "purging");
-  if (state_test(STATE_DIRTYPARENT))
-    f->dump_string("state", "dirtyparent");
-  if (state_test(STATE_DIRTYRSTAT))
-    f->dump_string("state", "dirtyrstat");
-  if (state_test(STATE_STRAYPINNED))
-    f->dump_string("state", "straypinned");
-  if (state_test(STATE_FROZENAUTHPIN))
-    f->dump_string("state", "frozenauthpin");
-  if (state_test(STATE_DIRTYPOOL))
-    f->dump_string("state", "dirtypool");
-  if (state_test(STATE_ORPHAN))
-    f->dump_string("state", "orphan");
-  if (state_test(STATE_MISSINGOBJS))
-    f->dump_string("state", "missingobjs");
-  f->close_section();
-
-  f->open_array_section("client_caps");
-  for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
-       it != client_caps.end(); ++it) {
-    f->open_object_section("client_cap");
-    f->dump_int("client_id", it->first.v);
-    f->dump_string("pending", ccap_string(it->second->pending()));
-    f->dump_string("issued", ccap_string(it->second->issued()));
-    f->dump_string("wanted", ccap_string(it->second->wanted()));
-    f->dump_int("last_sent", it->second->get_last_sent());
+    f->open_object_section("policylock");
+    policylock.dump(f);
     f->close_section();
   }
-  f->close_section();
 
-  f->dump_int("loner", loner_cap.v);
-  f->dump_int("want_loner", want_loner_cap.v);
-
-  f->open_array_section("mds_caps_wanted");
-  for (compact_map<int,int>::const_iterator p = mds_caps_wanted.begin();
-       p != mds_caps_wanted.end(); ++p) {
-    f->open_object_section("mds_cap_wanted");
-    f->dump_int("rank", p->first);
-    f->dump_string("cap", ccap_string(p->second));
+  if (flags & DUMP_STATE) {
+    f->open_array_section("states");
+    MDSCacheObject::dump_states(f);
+    if (state_test(STATE_EXPORTING))
+      f->dump_string("state", "exporting");
+    if (state_test(STATE_OPENINGDIR))
+      f->dump_string("state", "openingdir");
+    if (state_test(STATE_FREEZING))
+      f->dump_string("state", "freezing");
+    if (state_test(STATE_FROZEN))
+      f->dump_string("state", "frozen");
+    if (state_test(STATE_AMBIGUOUSAUTH))
+      f->dump_string("state", "ambiguousauth");
+    if (state_test(STATE_EXPORTINGCAPS))
+      f->dump_string("state", "exportingcaps");
+    if (state_test(STATE_NEEDSRECOVER))
+      f->dump_string("state", "needsrecover");
+    if (state_test(STATE_PURGING))
+      f->dump_string("state", "purging");
+    if (state_test(STATE_DIRTYPARENT))
+      f->dump_string("state", "dirtyparent");
+    if (state_test(STATE_DIRTYRSTAT))
+      f->dump_string("state", "dirtyrstat");
+    if (state_test(STATE_STRAYPINNED))
+      f->dump_string("state", "straypinned");
+    if (state_test(STATE_FROZENAUTHPIN))
+      f->dump_string("state", "frozenauthpin");
+    if (state_test(STATE_DIRTYPOOL))
+      f->dump_string("state", "dirtypool");
+    if (state_test(STATE_ORPHAN))
+      f->dump_string("state", "orphan");
+    if (state_test(STATE_MISSINGOBJS))
+      f->dump_string("state", "missingobjs");
     f->close_section();
   }
-  f->close_section();
+
+  if (flags & DUMP_CAPS) {
+    f->open_array_section("client_caps");
+    for (map<client_t,Capability*>::const_iterator it = client_caps.begin();
+         it != client_caps.end(); ++it) {
+      f->open_object_section("client_cap");
+      f->dump_int("client_id", it->first.v);
+      f->dump_string("pending", ccap_string(it->second->pending()));
+      f->dump_string("issued", ccap_string(it->second->issued()));
+      f->dump_string("wanted", ccap_string(it->second->wanted()));
+      f->dump_int("last_sent", it->second->get_last_sent());
+      f->close_section();
+    }
+    f->close_section();
+
+    f->dump_int("loner", loner_cap.v);
+    f->dump_int("want_loner", want_loner_cap.v);
+
+    f->open_array_section("mds_caps_wanted");
+    for (compact_map<int,int>::const_iterator p = mds_caps_wanted.begin();
+         p != mds_caps_wanted.end(); ++p) {
+      f->open_object_section("mds_cap_wanted");
+      f->dump_int("rank", p->first);
+      f->dump_string("cap", ccap_string(p->second));
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 /****** Scrub Stuff *****/

@@ -534,7 +534,7 @@ public:
 
 
   void clean_open_file_lists();
-
+  void dump_openfiles(Formatter *f);
 protected:
   // [rejoin]
   bool rejoins_pending;
