@@ -130,8 +130,8 @@ private:
   string bal_code;
   string bal_version;
 
-  utime_t last_heartbeat;
-  utime_t last_sample;
+  mono_time last_heartbeat = mono_clock::zero();
+  mono_time last_sample = mono_clock::zero();
   utime_t rebalance_time; //ensure a consistent view of load for rebalance
 
   // Dirfrags which are marked to be passed on to MDCache::[split|merge]_dir
