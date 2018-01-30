@@ -38,7 +38,7 @@ public:
   virtual ~AdminSocketHook() {}
 };
 
-class AdminSocket 
+class AdminSocket
 {
 public:
   AdminSocket(CephContext *cct);
@@ -113,13 +113,21 @@ private:
 
   bool in_hook = false;
   std::condition_variable in_hook_cond;
-  std::mutex lock;    // protects m_hooks, m_descs, m_help
+  std::mutex lock;  // protects `hooks`
   AdminSocketHook *m_version_hook = nullptr, *m_help_hook = nullptr,
     *m_getdescs_hook = nullptr;
 
-  std::map<std::string,AdminSocketHook*, std::less<>> m_hooks;
-  std::map<std::string,std::string, std::less<>> m_descs;
-  std::map<std::string,std::string, std::less<>> m_help;
+  struct hook_info {
+    AdminSocketHook* hook;
+    std::string desc;
+    std::string help;
+
+    hook_info(AdminSocketHook* hook, std::string_view desc,
+	      std::string_view help)
+      : hook(hook), desc(desc), help(help) {}
+  };
+
+  std::map<std::string, hook_info, std::less<>> hooks;
 
   friend class AdminSocketTest;
   friend class HelpHook;
