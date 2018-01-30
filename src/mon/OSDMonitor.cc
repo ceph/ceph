@@ -3621,7 +3621,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
-    osdmap.print_summary(f.get(), ds, "");
+    osdmap.print_summary(f.get(), ds, "", true);
     if (f)
       f->flush(rdata);
     else
