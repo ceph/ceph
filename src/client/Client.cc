@@ -3775,19 +3775,13 @@ void Client::_flush_range(Inode *in, int64_t offset, uint64_t size)
     return;
   }
 
-  Mutex flock("Client::_flush_range flock");
-  Cond cond;
-  bool safe = false;
-  Context *onflush = new C_SafeCond(&flock, &cond, &safe);
+  C_SaferCond onflush("Client::_flush_range flock");
   bool ret = objectcacher->file_flush(&in->oset, &in->layout, in->snaprealm->get_snap_context(),
-				      offset, size, onflush);
+				      offset, size, &onflush);
   if (!ret) {
     // wait for flush
     client_lock.Unlock();
-    flock.Lock();
-    while (!safe)
-      cond.Wait(flock);
-    flock.Unlock();
+    onflush.wait();
     client_lock.Lock();
   }
 }
@@ -8753,19 +8747,12 @@ retry:
   if (f->flags & O_DIRECT)
     have &= ~CEPH_CAP_FILE_CACHE;
 
-  Mutex uninline_flock("Client::_read_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
 
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (!(have & CEPH_CAP_FILE_CACHE)) {
-      onuninline = new C_SafeCond(&uninline_flock,
-                                  &uninline_cond,
-                                  &uninline_done,
-                                  &uninline_ret);
-      uninline_data(in, onuninline);
+      onuninline.reset(new C_SaferCond("Client::_read_uninline_data flock"));
+      uninline_data(in, onuninline.get());
     } else {
       uint32_t len = in->inline_data.length();
 
@@ -8832,21 +8819,17 @@ success:
 done:
   // done!
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int ret = onuninline->wait();
     client_lock.Lock();
-
-    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+    if (ret >= 0 || ret == -ECANCELED) {
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       check_caps(in, 0);
     } else
-      r = uninline_ret;
+      r = ret;
   }
 
   if (have)
@@ -8896,26 +8879,16 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl)
                  << " max_periods=" << conf->client_readahead_max_periods << dendl;
 
   // read (and possibly block)
-  int r, rvalue = 0;
-  Mutex flock("Client::_read_async flock");
-  Cond cond;
-  bool done = false;
-  Context *onfinish = new C_SafeCond(&flock, &cond, &done, &rvalue);
+  int r = 0;
+  C_SaferCond onfinish("Client::_read_async flock");
   r = objectcacher->file_read(&in->oset, &in->layout, in->snapid,
-			      off, len, bl, 0, onfinish);
+			      off, len, bl, 0, &onfinish);
   if (r == 0) {
     get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     client_lock.Unlock();
-    flock.Lock();
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    r = onfinish.wait();
     client_lock.Lock();
     put_cap_ref(in, CEPH_CAP_FILE_CACHE);
-    r = rvalue;
-  } else {
-    // it was cached.
-    delete onfinish;
   }
 
   if(f->readahead.get_min_readahead_size() > 0) {
@@ -8953,21 +8926,16 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   Mutex flock("Client::_read_sync flock");
   Cond cond;
   while (left > 0) {
-    int r = 0;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done, &r);
+    C_SaferCond onfinish("Client::_read_sync flock");
     bufferlist tbl;
 
     int wanted = left;
     filer->read_trunc(in->ino, &in->layout, in->snapid,
 		      pos, left, &tbl, 0,
 		      in->truncate_size, in->truncate_seq,
-		      onfinish);
+		      &onfinish);
     client_lock.Unlock();
-    flock.Lock();
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    int r = onfinish.wait();
     client_lock.Lock();
 
     // if we get ENOENT from OSD, assume 0 bytes returned
@@ -9203,21 +9171,14 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
-  Mutex uninline_flock("Client::_write_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
-
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
+  
   if (in->inline_version < CEPH_INLINE_NONE) {
     if (endoff > cct->_conf->client_max_inline_size ||
         endoff > CEPH_INLINE_MAX_SIZE ||
         !(have & CEPH_CAP_FILE_BUFFER)) {
-      onuninline = new C_SafeCond(&uninline_flock,
-                                  &uninline_cond,
-                                  &uninline_done,
-                                  &uninline_ret);
-      uninline_data(in, onuninline);
+      onuninline.reset(new C_SaferCond("Client::_write_uninline_data flock"));
+      uninline_data(in, onuninline.get());
     } else {
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
@@ -9268,24 +9229,16 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       _flush_range(in, offset, size);
 
     // simple, non-atomic sync write
-    Mutex flock("Client::_write flock");
-    Cond cond;
-    bool done = false;
-    Context *onfinish = new C_SafeCond(&flock, &cond, &done);
-
+    C_SaferCond onfinish("Client::_write flock");
     unsafe_sync_write++;
     get_cap_ref(in, CEPH_CAP_FILE_BUFFER);  // released by onsafe callback
 
     filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
 		       offset, size, bl, ceph::real_clock::now(), 0,
 		       in->truncate_size, in->truncate_seq,
-		       onfinish);
+		       &onfinish);
     client_lock.Unlock();
-    flock.Lock();
-
-    while (!done)
-      cond.Wait(flock);
-    flock.Unlock();
+    onfinish.wait();
     client_lock.Lock();
     _sync_write_commit(in);
   }
@@ -9323,12 +9276,9 @@ success:
 
 done:
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int uninline_ret = onuninline->wait();
     client_lock.Lock();
 
     if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
@@ -9426,19 +9376,16 @@ int Client::fsync(int fd, bool syncdataonly)
 int Client::_fsync(Inode *in, bool syncdataonly)
 {
   int r = 0;
-  Mutex lock("Client::_fsync::lock");
-  Cond cond;
-  bool done = false;
-  C_SafeCond *object_cacher_completion = NULL;
+  std::unique_ptr<C_SaferCond> object_cacher_completion = nullptr;
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
 
   ldout(cct, 3) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
   if (cct->_conf->client_oc) {
-    object_cacher_completion = new C_SafeCond(&lock, &cond, &done, &r);
-    tmp_ref = in; // take a reference; C_SafeCond doesn't and _flush won't either
-    _flush(in, object_cacher_completion);
+    object_cacher_completion.reset(new C_SaferCond("Client::_fsync::lock"));
+    tmp_ref = in; // take a reference; C_SaferCond doesn't and _flush won't either
+    _flush(in, object_cacher_completion.get());
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
   
@@ -9457,13 +9404,10 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     put_request(req);
   }
 
-  if (object_cacher_completion) { // wait on a real reply instead of guessing
+  if (nullptr != object_cacher_completion) { // wait on a real reply instead of guessing
     client_lock.Unlock();
-    lock.Lock();
     ldout(cct, 15) << "waiting on data to flush" << dendl;
-    while (!done)
-      cond.Wait(lock);
-    lock.Unlock();
+    r = object_cacher_completion->wait();
     client_lock.Lock();
     ldout(cct, 15) << "got " << r << " from flush writeback" << dendl;
   } else {
@@ -10085,13 +10029,11 @@ int Client::_sync_fs()
   ldout(cct, 10) << __func__ << dendl;
 
   // flush file data
-  Mutex lock("Client::_fsync::lock");
-  Cond cond;
-  bool flush_done = false;
-  if (cct->_conf->client_oc)
-    objectcacher->flush_all(new C_SafeCond(&lock, &cond, &flush_done));
-  else
-    flush_done = true;
+  std::unique_ptr<C_SaferCond> cond = nullptr; 
+  if (cct->_conf->client_oc) {
+    cond.reset(new C_SaferCond("Client::_sync_fs:lock"));
+    objectcacher->flush_all(cond.get());
+  }
 
   // flush caps
   flush_caps_sync();
@@ -10102,13 +10044,11 @@ int Client::_sync_fs()
 
   wait_sync_caps(flush_tid);
 
-  if (!flush_done) {
+  if (nullptr != cond) {
     client_lock.Unlock();
-    lock.Lock();
-    ldout(cct, 15) << "waiting on data to flush" << dendl;
-    while (!flush_done)
-      cond.Wait(lock);
-    lock.Unlock();
+    ldout(cct, 15) << __func__ << "waiting on data to flush" << dendl;
+    cond->wait();
+    ldout(cct, 15) << __func__ << "flush finished" << dendl;
     client_lock.Lock();
   }
 
@@ -12748,28 +12688,17 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 			   uint64_t length, file_layout_t* layout,
 			   uint64_t snapseq, uint32_t sync)
 {
-  Mutex flock("Client::ll_write_block flock");
   vinodeno_t vino = ll_get_vino(in);
-  Cond cond;
-  bool done;
   int r = 0;
-  Context *onsafe = nullptr;
-
+  std::unique_ptr<C_SaferCond> onsafe = nullptr;
+  
   if (length == 0) {
     return -EINVAL;
   }
   if (true || sync) {
     /* if write is stable, the epilogue is waiting on
      * flock */
-    onsafe = new C_SafeCond(&flock, &cond, &done, &r);
-    done = false;
-  } else {
-    /* if write is unstable, we just place a barrier for
-     * future commits to wait on */
-    /*onsafe = new C_Block_Sync(this, vino.ino,
-			      barrier_interval(offset, offset + length), &r);
-    */
-    done = true;
+    onsafe.reset(new C_SaferCond("Client::ll_write_block flock"));
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
@@ -12787,7 +12716,6 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   client_lock.Lock();
   if (unmounting) {
     client_lock.Unlock();
-    delete onsafe;
     return -ENOTCONN;
   }
 
@@ -12799,14 +12727,11 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
 		  bl,
 		  ceph::real_clock::now(),
 		  0,
-		  onsafe);
+		  onsafe.get());
 
   client_lock.Unlock();
-  if (!done /* also !sync */) {
-    flock.Lock();
-    while (! done)
-      cond.Wait(flock);
-    flock.Unlock();
+  if (nullptr != onsafe) {
+    r = onsafe->wait();
   }
 
   if (r < 0) {
@@ -12930,12 +12855,7 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
   if (r < 0)
     return r;
 
-  Mutex uninline_flock("Client::_fallocate_uninline_data flock");
-  Cond uninline_cond;
-  bool uninline_done = false;
-  int uninline_ret = 0;
-  Context *onuninline = NULL;
-
+  std::unique_ptr<C_SaferCond> onuninline = nullptr;
   if (mode & FALLOC_FL_PUNCH_HOLE) {
     if (in->inline_version < CEPH_INLINE_NONE &&
         (have & CEPH_CAP_FILE_BUFFER)) {
@@ -12959,17 +12879,11 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
     } else {
       if (in->inline_version < CEPH_INLINE_NONE) {
-        onuninline = new C_SafeCond(&uninline_flock,
-                                    &uninline_cond,
-                                    &uninline_done,
-                                    &uninline_ret);
-        uninline_data(in, onuninline);
+        onuninline.reset(new C_SaferCond("Client::_fallocate_uninline_data flock"));
+        uninline_data(in, onuninline.get());
       }
 
-      Mutex flock("Client::_punch_hole flock");
-      Cond cond;
-      bool done = false;
-      Context *onfinish = new C_SafeCond(&flock, &cond, &done);
+      C_SaferCond onfinish("Client::_punch_hole flock");
 
       unsafe_sync_write++;
       get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
@@ -12979,16 +12893,13 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
 		  in->snaprealm->get_snap_context(),
 		  offset, length,
 		  ceph::real_clock::now(),
-		  0, true, onfinish);
+		  0, true, &onfinish);
       in->mtime = ceph_clock_now();
       in->change_attr++;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
       client_lock.Unlock();
-      flock.Lock();
-      while (!done)
-        cond.Wait(flock);
-      flock.Unlock();
+      onfinish.wait();
       client_lock.Lock();
       _sync_write_commit(in);
     }
@@ -13008,21 +12919,18 @@ int Client::_fallocate(Fh *fh, int mode, int64_t offset, int64_t length)
     }
   }
 
-  if (onuninline) {
+  if (nullptr != onuninline) {
     client_lock.Unlock();
-    uninline_flock.Lock();
-    while (!uninline_done)
-      uninline_cond.Wait(uninline_flock);
-    uninline_flock.Unlock();
+    int ret = onuninline->wait();
     client_lock.Lock();
 
-    if (uninline_ret >= 0 || uninline_ret == -ECANCELED) {
+    if (ret >= 0 || ret == -ECANCELED) {
       in->inline_data.clear();
       in->inline_version = CEPH_INLINE_NONE;
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
       check_caps(in, 0);
     } else
-      r = uninline_ret;
+      r = ret;
   }
 
   put_cap_ref(in, CEPH_CAP_FILE_WR);
