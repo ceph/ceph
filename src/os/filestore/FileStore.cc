@@ -1958,6 +1958,11 @@ int FileStore::umount()
   sync();
   do_force_sync();
 
+  {
+    Mutex::Locker l(coll_lock);
+    coll_map.clear();
+  }
+
   lock.Lock();
   stop = true;
   sync_cond.Signal();
@@ -2015,6 +2020,10 @@ int FileStore::umount()
 
 /// -----------------------------
 
+// keep OpSequencer handles alive for all time so that a sequence
+// that removes a collection and creates a new one will not allow
+// two sequencers for the same collection to be alive at once.
+
 ObjectStore::CollectionHandle FileStore::open_collection(const coll_t& c)
 {
   Mutex::Locker l(coll_lock);
@@ -2028,9 +2037,14 @@ ObjectStore::CollectionHandle FileStore::open_collection(const coll_t& c)
 ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
 {
   Mutex::Locker l(coll_lock);
-  auto *r = new OpSequencer(cct, ++next_osr_id, c);
-  coll_map[c] = r;
-  return r;
+  auto p = coll_map.find(c);
+  if (p == coll_map.end()) {
+    auto *r = new OpSequencer(cct, ++next_osr_id, c);
+    coll_map[c] = r;
+    return r;
+  } else {
+    return p->second;
+  }
 }
 
 
@@ -5347,11 +5361,6 @@ int FileStore::_destroy_collection(const coll_t& c)
   if (r < 0) {
     r = -errno;
     goto out;
-  }
-
-  {
-    Mutex::Locker l(coll_lock);
-    coll_map.erase(c);
   }
 
  out:
