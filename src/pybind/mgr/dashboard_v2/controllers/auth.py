@@ -28,8 +28,8 @@ class Auth(RESTController):
     @RESTController.args_from_json
     def create(self, username, password, stay_signed_in=False):
         now = time.time()
-        config_username = self.mgr.get_localized_config('username', None)
-        config_password = self.mgr.get_localized_config('password', None)
+        config_username = self.mgr.get_config('username', None)
+        config_password = self.mgr.get_config('password', None)
         hash_password = Auth.password_hash(password,
                                            config_password)
         if username == config_username and hash_password == config_password:
@@ -66,7 +66,7 @@ class Auth(RESTController):
             raise cherrypy.HTTPError(401, 'You are not authorized to access '
                                           'that resource')
         now = time.time()
-        expires = float(Auth.mgr.get_localized_config(
+        expires = float(Auth.mgr.get_config(
             'session-expire', Session.DEFAULT_EXPIRE))
         if expires > 0:
             username_ts = cherrypy.session.get(Session.TS, None)
@@ -81,6 +81,6 @@ class Auth(RESTController):
 
     @staticmethod
     def set_login_credentials(username, password):
-        Auth.mgr.set_localized_config('username', username)
+        Auth.mgr.set_config('username', username)
         hashed_passwd = Auth.password_hash(password)
-        Auth.mgr.set_localized_config('password', hashed_passwd)
+        Auth.mgr.set_config('password', hashed_passwd)
