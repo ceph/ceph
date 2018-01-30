@@ -169,6 +169,8 @@ static void dump_node(RGWSyncTraceNode *entry, bool show_history, JSONFormatter&
 
 string RGWSyncTraceManager::get_active_names()
 {
+  shunique_lock rl(lock, ceph::acquire_shared);
+
   stringstream ss;
   JSONFormatter f;
 
