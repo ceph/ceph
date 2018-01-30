@@ -517,7 +517,8 @@ public:
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format,
 	    bufferlist& out) override {
-    auto f = Formatter::create(format, "json-pretty"sv, "json-pretty"sv);
+    std::unique_ptr<Formatter> f(Formatter::create(format, "json-pretty"sv,
+						   "json-pretty"sv));
     f->open_object_section("help");
     for (const auto& [command, info] : m_as->hooks) {
       if (info.help.length())
@@ -527,7 +528,6 @@ public:
     ostringstream ss;
     f->flush(ss);
     out.append(ss.str());
-    delete f;
     return true;
   }
 };
@@ -589,15 +589,17 @@ bool AdminSocket::init(const std::string& path)
   m_shutdown_wr_fd = pipe_wr;
   m_path = path;
 
-  m_version_hook = new VersionHook;
-  register_command("0", "0", m_version_hook, "");
-  register_command("version", "version", m_version_hook, "get ceph version");
-  register_command("git_version", "git_version", m_version_hook, "get git sha1");
-  m_help_hook = new HelpHook(this);
-  register_command("help", "help", m_help_hook, "list available commands");
-  m_getdescs_hook = new GetdescsHook(this);
+  version_hook = std::make_unique<VersionHook>();
+  register_command("0", "0", version_hook.get(), "");
+  register_command("version", "version", version_hook.get(), "get ceph version");
+  register_command("git_version", "git_version", version_hook.get(),
+		   "get git sha1");
+  help_hook = std::make_unique<HelpHook>(this);
+  register_command("help", "help", help_hook.get(),
+		   "list available commands");
+  getdescs_hook = std::make_unique<GetdescsHook>(this);
   register_command("get_command_descriptions", "get_command_descriptions",
-		   m_getdescs_hook, "list available commands");
+		   getdescs_hook.get(), "list available commands");
 
   th = make_named_thread("admin_socket", &AdminSocket::entry, this);
   add_cleanup_file(m_path.c_str());
@@ -624,13 +626,13 @@ void AdminSocket::shutdown()
   unregister_command("version");
   unregister_command("git_version");
   unregister_command("0");
-  delete m_version_hook;
+  version_hook.reset();
 
   unregister_command("help");
-  delete m_help_hook;
+  help_hook.reset();
 
   unregister_command("get_command_descriptions");
-  delete m_getdescs_hook;
+  getdescs_hook.reset();
 
   remove_cleanup_file(m_path);
   m_path.clear();
