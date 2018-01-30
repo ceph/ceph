@@ -18,11 +18,13 @@ def ApiController(path):
         cls._cp_controller_ = True
         cls._cp_path_ = path
         if not hasattr(cls, '_cp_config'):
-            cls._cp_config = {
+            cls._cp_config = dict(cls._cp_config_default)
+            cls._cp_config.update({
                 'tools.sessions.on': True,
                 'tools.authenticate.on': False
-            }
+            })
         else:
+            cls._cp_config.update(cls._cp_config_default)
             cls._cp_config['tools.sessions.on'] = True
             if 'tools.authenticate.on' not in cls._cp_config:
                 cls._cp_config['tools.authenticate.on'] = False
@@ -33,10 +35,12 @@ def ApiController(path):
 def AuthRequired(enabled=True):
     def decorate(cls):
         if not hasattr(cls, '_cp_config'):
+            cls._cp_config = dict(cls._cp_config_default)
             cls._cp_config = {
                 'tools.authenticate.on': enabled
             }
         else:
+            cls._cp_config.update(cls._cp_config_default)
             cls._cp_config['tools.authenticate.on'] = enabled
         return cls
     return decorate
@@ -99,6 +103,10 @@ class BaseController(six.with_metaclass(BaseControllerMeta, object)):
     """
     _mgr_module = None
 
+    _cp_config_default = {
+        'request.error_page': {'default': _json_error_page},
+    }
+
     @property
     def mgr(self):
         """
@@ -137,10 +145,6 @@ class RESTController(BaseController):
     curl http://127.0.0.1:8080/foo/0
 
     """
-
-    _cp_config = {
-        'request.error_page': {'default': _json_error_page},
-    }
 
     def _not_implemented(self, is_element):
         methods = [method
