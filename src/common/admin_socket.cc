@@ -108,9 +108,6 @@ AdminSocket::~AdminSocket()
  * AdminSocketConfigObs class to join() it.
  */
 
-#define PFL_SUCCESS ((void*)(intptr_t)0)
-#define PFL_FAIL ((void*)(intptr_t)1)
-
 std::string AdminSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
