@@ -76,6 +76,22 @@ Options
 :Default: None
 
 
+``ssl_protocol_version``
+
+:Description: The SSL version. ``4`` is TLS 1.2.
+
+:Type: Integer
+:Default: ``4``
+
+
+``ssl_cipher_list``
+
+:Description: Which ciphers to use. See OpenSSL's cipher documentation.
+
+:Type: String
+:Default: ``EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH:!LOW:!RC4:!MD5:!3DES``
+
+
 A complete list of supported options can be found in the `Civetweb User Manual`_.
 
 
