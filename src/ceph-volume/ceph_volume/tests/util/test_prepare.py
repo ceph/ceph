@@ -20,16 +20,17 @@ class TestCheckID(object):
         stdout = dict(nodes=[
             dict(id=0),
         ])
-        stdout = ['', json.dumps(stdout)]
+        stdout = json.dumps(stdout)
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
         result = prepare.check_id(0)
         assert result
+        assert result == "0"
 
     def test_id_does_not_exist(self, monkeypatch):
         stdout = dict(nodes=[
             dict(id=0),
         ])
-        stdout = ['', json.dumps(stdout)]
+        stdout = json.dumps(stdout)
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
         result = prepare.check_id(1)
         assert not result
@@ -38,7 +39,7 @@ class TestCheckID(object):
         stdout = dict(nodes=[
             dict(id=0),
         ])
-        stdout = ['', json.dumps(stdout)]
+        stdout = json.dumps(stdout)
         monkeypatch.setattr('ceph_volume.process.call', lambda *a, **kw: (stdout, '', 0))
         result = prepare.check_id("foo")
         assert not result
