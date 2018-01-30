@@ -800,6 +800,7 @@ class Module(MgrModule):
         else:
             self.log.info('Failed to find further optimization, score %f',
                           pe.score)
+            plan.compat_ws = {}
             return False
 
     def get_compat_weight_set_weights(self):
