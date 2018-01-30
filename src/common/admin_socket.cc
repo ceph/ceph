@@ -369,11 +369,11 @@ bool AdminSocket::do_accept()
   cmd_getval(m_cct, cmdmap, "prefix", c);
 
   std::unique_lock l(lock);
-  map<string,AdminSocketHook*>::iterator p;
+  decltype(hooks)::iterator p;
   string match = c;
   while (match.size()) {
-    p = m_hooks.find(match);
-    if (p != m_hooks.end())
+    p = hooks.find(match);
+    if (p != hooks.cend())
       break;
 
     // drop right-most word
@@ -387,7 +387,7 @@ bool AdminSocket::do_accept()
   }
 
   bufferlist out;
-  if (p == m_hooks.end()) {
+  if (p == hooks.cend()) {
     lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
   } else {
     string args;
@@ -400,7 +400,7 @@ bool AdminSocket::do_accept()
     // and set in_hook to allow unregister to wait for us before
     // removing this hook.
     in_hook = true;
-    auto match_hook = p->second;
+    auto match_hook = p->second.hook;
     l.unlock();
     bool success = (validate(match, cmdmap, out) &&
                     match_hook->call(match, cmdmap, format, out));
@@ -410,11 +410,11 @@ bool AdminSocket::do_accept()
 
     if (!success) {
       ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
-		      << "' to " << p->second << " failed" << dendl;
+		      << "' to " << match_hook << " failed" << dendl;
       out.append("failed");
     } else {
       ldout(m_cct, 5) << "AdminSocket: request '" << match << "' '" << args
-		       << "' to " << p->second
+		       << "' to " << match_hook
 		       << " returned " << out.length() << " bytes" << dendl;
     }
     uint32_t len = htonl(out.length());
@@ -438,7 +438,7 @@ bool AdminSocket::validate(const std::string& command,
 			   bufferlist& out) const
 {
   stringstream os;
-  if (validate_cmd(m_cct, m_descs.at(command), cmdmap, os)) {
+  if (validate_cmd(m_cct, hooks.at(command).desc, cmdmap, os)) {
     return true;
   } else {
     out.append(os);
@@ -453,14 +453,18 @@ int AdminSocket::register_command(std::string_view command,
 {
   int ret;
   std::unique_lock l(lock);
-  if (m_hooks.count(command)) {
-    ldout(m_cct, 5) << "register_command " << command << " hook " << hook << " EEXIST" << dendl;
+  auto i = hooks.find(command);
+  if (i != hooks.cend()) {
+    ldout(m_cct, 5) << "register_command " << command << " hook " << hook
+		    << " EEXIST" << dendl;
     ret = -EEXIST;
   } else {
-    ldout(m_cct, 5) << "register_command " << command << " hook " << hook << dendl;
-    m_hooks.emplace(command, hook);
-    m_descs.emplace(command, cmddesc);
-    m_help.emplace(command, help);
+    ldout(m_cct, 5) << "register_command " << command << " hook " << hook
+		    << dendl;
+    hooks.emplace_hint(i,
+		       std::piecewise_construct,
+		       std::forward_as_tuple(command),
+		       std::forward_as_tuple(hook, cmddesc, help));
     ret = 0;
   }
   return ret;
@@ -470,16 +474,17 @@ int AdminSocket::unregister_command(std::string_view command)
 {
   int ret;
   std::unique_lock l(lock);
-  if (m_hooks.count(command)) {
+  auto i = hooks.find(command);
+  if (i != hooks.cend()) {
     ldout(m_cct, 5) << "unregister_command " << command << dendl;
-    m_hooks.erase(m_hooks.find(command));
-    m_descs.erase(m_descs.find(command));
-    m_help.erase(m_help.find(command));
 
     // If we are currently processing a command, wait for it to
     // complete in case it referenced the hook that we are
     // unregistering.
     in_hook_cond.wait(l, [this]() { return !in_hook; });
+
+    hooks.erase(i);
+
 
     ret = 0;
   } else {
@@ -524,9 +529,9 @@ public:
 	    bufferlist& out) override {
     auto f = Formatter::create(format, "json-pretty"sv, "json-pretty"sv);
     f->open_object_section("help");
-    for (const auto& [command, help] : m_as->m_help) {
-      if (help.length())
-	f->dump_string(command.c_str(), help);
+    for (const auto& [command, info] : m_as->hooks) {
+      if (info.help.length())
+	f->dump_string(command.c_str(), info.help);
     }
     f->close_section();
     ostringstream ss;
@@ -546,13 +551,16 @@ public:
     int cmdnum = 0;
     JSONFormatter jf;
     jf.open_object_section("command_descriptions");
-    for (const auto& [command, desc] : m_as->m_descs) {
+    for (const auto& [command, info] : m_as->hooks) {
+      // GCC 8 actually has [[maybe_unused]] on a structured binding
+      // do what you'd expect. GCC 7 does not.
+      (void)command;
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
       dump_cmd_and_help_to_json(&jf,
 				secname.str().c_str(),
-				desc,
-				m_as->m_help[command]);
+				info.desc,
+				info.help);
       cmdnum++;
     }
     jf.close_section(); // command_descriptions
