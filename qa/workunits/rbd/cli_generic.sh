@@ -269,7 +269,7 @@ test_remove() {
     rbd create --image-format 2 -s 1 test2
     rbd snap create test2@snap
     rbd snap protect test2@snap
-    rbd clone test2@snap clone
+    rbd clone test2@snap clone --rbd-default-clone-format 1
 
     rados -p rbd rm rbd_children
     rbd rm clone
