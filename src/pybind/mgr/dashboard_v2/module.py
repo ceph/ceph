@@ -94,14 +94,26 @@ class Module(MgrModule):
                 .format(cmd['prefix']))
 
     class ApiRoot(object):
+
         def __init__(self, mgrmod):
-            ctrls = load_controllers(mgrmod)
-            mgrmod.log.debug('Loaded controllers: {}'.format(ctrls))
-            for ctrl in ctrls:
+            self.ctrls = load_controllers(mgrmod)
+            mgrmod.log.debug('Loaded controllers: {}'.format(self.ctrls))
+            for ctrl in self.ctrls:
                 mgrmod.log.info('Adding controller: {} -> /api/{}'
                                 .format(ctrl.__name__, ctrl._cp_path_))
                 ins = ctrl()
                 setattr(Module.ApiRoot, ctrl._cp_path_, ins)
+
+        @cherrypy.expose
+        def index(self):
+            tpl = """API Endpoints:<br>
+            <ul>
+            {lis}
+            </ul>
+            """
+            endpoints = ['<li><a href="{}">{}</a></li>'.format(ctrl._cp_path_, ctrl.__name__) for
+                         ctrl in self.ctrls]
+            return tpl.format(lis='\n'.join(endpoints))
 
     class StaticRoot(object):
         pass
