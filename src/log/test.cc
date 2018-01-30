@@ -370,6 +370,30 @@ TEST(Log, Speed_nogather)
   }
 }
 
+TEST(Log, GarbleRecovery)
+{
+  static const char* test_file="/tmp/log_for_moment";
+
+  Log* saved = g_ceph_context->_log;
+  Log log(&g_ceph_context->_conf->subsys);
+  log.start();
+  unlink(test_file);
+  log.set_log_file(test_file);
+  log.reopen_log_file();
+  g_ceph_context->_log = &log;
+
+  std::string long_message(1000,'c');
+  ldout(g_ceph_context, 0) << long_message << dendl;
+  ldout(g_ceph_context, 0) << "Prologue" << (char*)nullptr << long_message << dendl;
+  ldout(g_ceph_context, 0) << "Epitaph" << long_message << dendl;
+
+  g_ceph_context->_log = saved;
+  log.flush();
+  log.stop();
+  struct stat file_status;
+  ASSERT_EQ(lstat(test_file, &file_status), 0);
+  ASSERT_GT(file_status.st_size, 2000);
+}
 
 int main(int argc, char **argv)
 {
