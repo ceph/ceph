@@ -1162,6 +1162,161 @@ int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
+int handle_opt_zonegroup_placement_list(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+                                        RGWRados *store, Formatter *formatter)
+{
+  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+  int ret = zonegroup.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("placement_targets", zonegroup.placement_targets, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zonegroup_placement_add(const string& placement_id, const string& zonegroup_id,
+                                       const string& zonegroup_name, const list<string>& tags, CephContext *context,
+                                       RGWRados *store, Formatter *formatter) {
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+  int ret = zonegroup.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  RGWZoneGroupPlacementTarget target;
+  target.name = placement_id;
+  for (auto& t : tags) {
+    target.tags.insert(t);
+  }
+  zonegroup.placement_targets[placement_id] = target;
+
+  zonegroup.post_process_params();
+  ret = zonegroup.update();
+  if (ret < 0) {
+    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("placement_targets", zonegroup.placement_targets, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zonegroup_placement_modify(const string& placement_id, const string& zonegroup_id,
+                                          const string& zonegroup_name, const list<string>& tags,
+                                          const list<string> tags_add, const list<string>& tags_rm,
+                                          CephContext *context, RGWRados *store, Formatter *formatter) {
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+  int ret = zonegroup.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
+  if (!tags.empty()) {
+    target.tags.clear();
+    for (auto& t : tags) {
+      target.tags.insert(t);
+    }
+  }
+  target.name = placement_id;
+  for (auto& t : tags_rm) {
+    target.tags.erase(t);
+  }
+  for (auto& t : tags_add) {
+    target.tags.insert(t);
+  }
+
+  zonegroup.post_process_params();
+  ret = zonegroup.update();
+  if (ret < 0) {
+    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("placement_targets", zonegroup.placement_targets, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zonegroup_placement_rm(const string& placement_id, const string& zonegroup_id,
+                                      const string& zonegroup_name, CephContext *context,
+                                      RGWRados *store, Formatter *formatter) {
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+  int ret = zonegroup.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  zonegroup.placement_targets.erase(placement_id);
+
+  zonegroup.post_process_params();
+  ret = zonegroup.update();
+  if (ret < 0) {
+    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("placement_targets", zonegroup.placement_targets, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zonegroup_placement_default(const string& placement_id, const string& zonegroup_id,
+                                           const string& zonegroup_name, CephContext *context, RGWRados *store,
+                                           Formatter *formatter) {
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+  int ret = zonegroup.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  if (!zonegroup.placement_targets.count(placement_id)) {
+    cerr << "failed to find a zonegroup placement target named '"
+         << placement_id << "'" << std::endl;
+    return -ENOENT;
+  }
+  zonegroup.default_placement = placement_id;
+
+  zonegroup.post_process_params();
+  ret = zonegroup.update();
+  if (ret < 0) {
+    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("placement_targets", zonegroup.placement_targets, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
 int handle_opt_zone_create(const string& zone_id, const string& zone_name, const string& zonegroup_id,
                            const string& zonegroup_name, string& realm_id, const string& realm_name,
                            const string& access_key, const string& secret_key, bool tier_type_specified,
@@ -1575,6 +1730,200 @@ int handle_opt_zone_rename(const string& zone_id, const string& zone_name, const
       return -ret;
     }
   }
+  return 0;
+}
+
+static int check_pool_support_omap(const rgw_pool& pool, RGWRados *store)
+{
+  librados::IoCtx io_ctx;
+  int ret = store->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
+  if (ret < 0) {
+    // the pool may not exist at this moment, we have no way to check if it supports omap.
+    return 0;
+  }
+
+  ret = io_ctx.omap_clear("__omap_test_not_exist_oid__");
+  if (ret == -EOPNOTSUPP) {
+    io_ctx.close();
+    return ret;
+  }
+  io_ctx.close();
+  return 0;
+}
+
+int handle_opt_zone_placement_list(const string& zone_id, const string& zone_name, CephContext *context,
+                                   RGWRados *store, Formatter *formatter)
+{
+  RGWZoneParams zone(zone_id, zone_name);
+  int ret = zone.init(context, store);
+  if (ret < 0) {
+    cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  encode_json("placement_pools", zone.placement_pools, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zone_placement_add(const string& placement_id, const string& zone_id, const string& zone_name,
+                                  const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
+                                  const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+                                  bool index_type_specified, RGWBucketIndexType placement_index_type,
+                                  CephContext *context, RGWRados *store, Formatter *formatter)
+{
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+  // validate compression type
+  if (compression_type && *compression_type != "random"
+      && !Compressor::get_comp_alg_type(*compression_type)) {
+    std::cerr << "Unrecognized compression type" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneParams zone(zone_id, zone_name);
+  int ret = zone.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  // pool names are required
+  if (!index_pool || index_pool->empty() ||
+      !data_pool || data_pool->empty()) {
+    cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZonePlacementInfo& placement_info = zone.placement_pools[placement_id];
+
+  placement_info.index_pool = *index_pool;
+  placement_info.data_pool = *data_pool;
+  if (data_extra_pool) {
+    placement_info.data_extra_pool = *data_extra_pool;
+  }
+  if (index_type_specified) {
+    placement_info.index_type = placement_index_type;
+  }
+  if (compression_type) {
+    placement_info.compression_type = *compression_type;
+  }
+
+  ret = check_pool_support_omap(placement_info.get_data_extra_pool(), store);
+  if (ret < 0) {
+    cerr << "ERROR: the data extra (non-ec) pool '" << placement_info.get_data_extra_pool()
+         << "' does not support omap" << std::endl;
+    return ret;
+  }
+
+  ret = zone.update();
+  if (ret < 0) {
+    cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("zone", zone, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zone_placement_modify(const string& placement_id, const string& zone_id, const string& zone_name,
+                                     const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
+                                     const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+                                     bool index_type_specified, RGWBucketIndexType placement_index_type,
+                                     CephContext *context, RGWRados *store, Formatter *formatter)
+{
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+  // validate compression type
+  if (compression_type && *compression_type != "random"
+      && !Compressor::get_comp_alg_type(*compression_type)) {
+    std::cerr << "Unrecognized compression type" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneParams zone(zone_id, zone_name);
+  int ret = zone.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  auto p = zone.placement_pools.find(placement_id);
+  if (p == zone.placement_pools.end()) {
+    cerr << "ERROR: zone placement target '" << placement_id
+         << "' not found" << std::endl;
+    return -ENOENT;
+  }
+  auto& info = p->second;
+  if (index_pool && !index_pool->empty()) {
+    info.index_pool = *index_pool;
+  }
+  if (data_pool && !data_pool->empty()) {
+    info.data_pool = *data_pool;
+  }
+  if (data_extra_pool) {
+    info.data_extra_pool = *data_extra_pool;
+  }
+  if (index_type_specified) {
+    info.index_type = placement_index_type;
+  }
+  if (compression_type) {
+    info.compression_type = *compression_type;
+  }
+
+  ret = check_pool_support_omap(info.get_data_extra_pool(), store);
+  if (ret < 0) {
+    cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool()
+         << "' does not support omap" << std::endl;
+    return ret;
+  }
+
+  ret = zone.update();
+  if (ret < 0) {
+    cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("zone", zone, formatter);
+  formatter->flush(cout);
+  return 0;
+}
+
+int handle_opt_zone_placement_rm(const string& placement_id, const string& zone_id, const string& zone_name,
+                                 const boost::optional<string>& compression_type, CephContext *context, RGWRados *store,
+                                 Formatter *formatter)
+{
+  if (placement_id.empty()) {
+    cerr << "ERROR: --placement-id not specified" << std::endl;
+    return EINVAL;
+  }
+  // validate compression type
+  if (compression_type && *compression_type != "random"
+      && !Compressor::get_comp_alg_type(*compression_type)) {
+    std::cerr << "Unrecognized compression type" << std::endl;
+    return EINVAL;
+  }
+
+  RGWZoneParams zone(zone_id, zone_name);
+  int ret = zone.init(context, store);
+  if (ret < 0) {
+    cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  zone.placement_pools.erase(placement_id);
+
+  ret = zone.update();
+  if (ret < 0) {
+    cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  encode_json("zone", zone, formatter);
+  formatter->flush(cout);
   return 0;
 }
 
