@@ -2203,11 +2203,10 @@ class PrepareSpace(object):
 
         if 'journal' in self.name and self.args.journal_non_dmcrypt:
             LOG.info('not encrypting journal')
-        elif 'journal' in self.name and self.args.journal_dmcrypt and self.args.dmcrypt is None:
-            self.space_dmcrypt = self.space_symlink
-            self.space_symlink = '/dev/mapper/{uuid}'.format(
-                uuid=getattr(self.args, self.name + '_uuid'))
-        elif self.args.dmcrypt:
+        elif (
+                ('journal' in self.name and self.args.journal_dmcrypt and self.args.dmcrypt is None) or
+                (self.args.dmcrypt)
+            ):
             self.space_dmcrypt = self.space_symlink
             self.space_symlink = '/dev/mapper/{uuid}'.format(
                 uuid=getattr(self.args, self.name + '_uuid'))
@@ -2369,10 +2368,13 @@ class CryptHelpers(object):
 
     @staticmethod
     def get_dmcrypt_type(name, args):
-        LOG.info(name)
         if 'journal' in str(name) and hasattr(args, 'dmcrypt') and args.dmcrypt and hasattr(args, 'journal_non_dmcrypt') and args.journal_non_dmcrypt:
             return None
-        elif hasattr(args, 'dmcrypt') and args.dmcrypt or 'journal' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt or 'lockbox' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt:
+        elif (
+                (hasattr(args, 'dmcrypt') and args.dmcrypt) or
+                ('journal' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt) or 
+                ('lockbox' in str(name) and hasattr(args, 'journal_dmcrypt') and args.journal_dmcrypt)
+            ):
             dmcrypt_type = get_conf(
                 cluster=args.cluster,
                 variable='osd_dmcrypt_type',
@@ -5034,11 +5036,6 @@ def make_activate_parser(subparsers):
     )
     activate_parser.add_argument(
         '--dmcrypt',
-        action='store_true', default=None,
-        help='map DATA and/or JOURNAL devices with dm-crypt',
-    )
-    activate_parser.add_argument(
-        '--journal-dmcrypt',
         action='store_true', default=None,
         help='map DATA and/or JOURNAL devices with dm-crypt',
     )
