@@ -146,11 +146,17 @@ class RESTController(BaseController):
 
     """
 
-    def _not_implemented(self, is_element):
-        methods = [method
-                   for ((method, _is_element), (meth, _))
-                   in self._method_mapping.items()
-                   if _is_element == is_element and hasattr(self, meth)]
+    def _not_implemented(self, obj_key, detail_route_name):
+        if detail_route_name:
+            try:
+                methods = getattr(getattr(self, detail_route_name), 'detail_route_methods')
+            except AttributeError:
+                raise cherrypy.NotFound()
+        else:
+            methods = [method
+                       for ((method, _is_element), (meth, _))
+                       in self._method_mapping.items()
+                       if _is_element == obj_key is not None and hasattr(self, meth)]
         cherrypy.response.headers['Allow'] = ','.join(methods)
         raise cherrypy.HTTPError(405, 'Method not implemented.')
 
@@ -166,17 +172,31 @@ class RESTController(BaseController):
         ('DELETE', True): ('delete', 204),
     }
 
+    def _get_method(self, obj_key, detail_route_name):
+        if detail_route_name:
+            try:
+                method = getattr(self, detail_route_name)
+                if not getattr(method, 'detail_route'):
+                    self._not_implemented(obj_key, detail_route_name)
+                if cherrypy.request.method not in getattr(method, 'detail_route_methods'):
+                    self._not_implemented(obj_key, detail_route_name)
+                return method, 200
+            except AttributeError:
+                self._not_implemented(obj_key, detail_route_name)
+        else:
+            method_name, status_code = self._method_mapping[
+                (cherrypy.request.method, obj_key is not None)]
+            method = getattr(self, method_name, None)
+            if not method:
+                self._not_implemented(obj_key, detail_route_name)
+            return method, status_code
+
     @cherrypy.expose
     def default(self, *vpath, **params):
         cherrypy.config.update({
             'error_page.default': _json_error_page})
-        is_element = len(vpath) > 0
-
-        (method_name, status_code) = self._method_mapping[
-            (cherrypy.request.method, is_element)]
-        method = getattr(self, method_name, None)
-        if not method:
-            self._not_implemented(is_element)
+        obj_key, detail_route_name = self.split_vpath(vpath)
+        method, status_code = self._get_method(obj_key, detail_route_name)
 
         if cherrypy.request.method not in ['GET', 'DELETE']:
             method = RESTController._takes_json(method)
@@ -186,7 +206,8 @@ class RESTController(BaseController):
 
         cherrypy.response.status = status_code
 
-        return method(*vpath, **params)
+        obj_key_args = [obj_key] if obj_key else []
+        return method(*obj_key_args, **params)
 
     @staticmethod
     def args_from_json(func):
@@ -233,3 +254,19 @@ class RESTController(BaseController):
             ret = func(*args, **kwargs)
             return json.dumps(ret).encode('utf8')
         return inner
+
+    @staticmethod
+    def split_vpath(vpath):
+        if not vpath:
+            return None, None
+        if len(vpath) == 1:
+            return vpath[0], None
+        return vpath[0], vpath[1]
+
+
+def detail_route(methods):
+    def decorator(func):
+        func.detail_route = True
+        func.detail_route_methods = [m.upper() for m in methods]
+        return func
+    return decorator
