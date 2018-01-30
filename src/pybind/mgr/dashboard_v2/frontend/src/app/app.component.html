@@ -1,6 +1,6 @@
-<cd-navigation *ngIf="!isLogginActive()"></cd-navigation>
+<cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
 <div class="container-fluid"
-     [ngClass]="{'full-height':isLogginActive()}">
-  <div *ngIf="!isLogginActive()" class="breadcrumb"></div>
+     [ngClass]="{'full-height':isLoginActive()}">
+  <div *ngIf="!isLoginActive()" class="breadcrumb"></div>
   <router-outlet></router-outlet>
 </div>
