@@ -85,6 +85,10 @@ namespace ceph {
 	return (t == time_point::min());
       }
 
+      static time_point zero() {
+        return time_point::min();
+      }
+
       // Allow conversion to/from any clock with the same interface as
       // std::chrono::system_clock)
       template<typename Clock, typename Duration>
@@ -236,6 +240,14 @@ namespace ceph {
 	struct timespec ts;
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
+      }
+
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
       }
 
       // A monotonic clock's timepoints are only meaningful to the
