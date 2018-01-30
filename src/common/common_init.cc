@@ -90,6 +90,11 @@ void complain_about_parse_errors(CephContext *cct,
  * same application. */
 void common_init_finish(CephContext *cct)
 {
+  // only do this once per cct
+  if (cct->_finished) {
+    return;
+  }
+  cct->_finished = true;
   cct->init_crypto();
   ZTracer::ztrace_init();
 

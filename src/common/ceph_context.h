@@ -71,6 +71,8 @@ public:
   CephContext(CephContext&&) = delete;
   CephContext& operator =(CephContext&&) = delete;
 
+  bool _finished = false;
+
   // ref count!
 private:
   ~CephContext();
