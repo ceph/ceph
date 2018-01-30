@@ -21,6 +21,7 @@
 #include <errno.h>
 
 #include <fstream>
+#include <type_traits>
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -165,6 +166,9 @@ void usage()
   cout << "   -i mapfn --reweight-item name weight\n";
   cout << "                         reweight a given item (and adjust ancestor\n"
        << "                         weights as needed)\n";
+  cout << "   -i mapfn --add-bucket name type [--loc type name ...]\n"
+       << "                         insert a bucket into the hierachy at the given\n"
+       << "                         location\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
   cout << "   -i mapfn --create-simple-rule name root type mode\n"
        << "                         create crush rule <name> to start from <root>,\n"
@@ -239,13 +243,52 @@ struct layer_t {
   int size;
 };
 
+int do_add_bucket(CephContext* cct,
+		  const char* me,
+		  CrushWrapper& crush,
+		  const string& add_name,
+		  const string& add_type,
+		  const map<string,string>& add_loc) {
+  int bucketno;
+  if (crush.name_exists(add_name)) {
+    cerr << me << " bucket '" << add_name << "' already exists" << std::endl;
+    return -EEXIST;
+  }
+  int type = crush.get_type_id(add_type);
+  if (type <= 0) {
+    cerr << me << " bad bucket type: " << add_type << std::endl;
+    return -EINVAL;
+  }
+  int r = 0;
+  r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT, type, 0, nullptr, nullptr, &bucketno);
+  if (r < 0) {
+    cerr << me << " unable to add bucket: " << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  r = crush.set_item_name(bucketno, add_name);
+  if (r < 0) {
+    cerr << me << " bad bucket name: " << add_name << std::endl;
+    return r;
+  }
+  if (!add_loc.empty()) {
+    if (!crush.check_item_loc(cct, bucketno, add_loc, (int*)nullptr)) {
+      r = crush.move_bucket(cct, bucketno, add_loc);
+      if (r < 0) {
+	cerr << me << " error moving bucket '" << add_name << "' to " << add_loc << std::endl;
+	return r;
+      }
+    }
+  }
+  return 0;
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
 
   const char *me = argv[0];
-  std::string infn, srcfn, outfn, add_name, remove_name, reweight_name;
+  std::string infn, srcfn, outfn, add_name, add_type, remove_name, reweight_name;
   bool compile = false;
   bool decompile = false;
   bool check = false;
@@ -262,6 +305,7 @@ int main(int argc, const char **argv)
 
   bool reweight = false;
   int add_item = -1;
+  bool add_bucket = false;
   bool update_item = false;
   bool add_rule = false;
   std::string rule_name, rule_root, rule_type, rule_mode, rule_device_class;
@@ -420,6 +464,19 @@ int main(int argc, const char **argv)
       }
       add_name.assign(*i);
       i = args.erase(i);
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--add-bucket", (char*)NULL)) {
+      add_name.assign(val);
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      if (i == args.end()) {
+	cerr << "expecting additional argument to --add-bucket" << std::endl;
+	return EXIT_FAILURE;
+      }
+      add_type = *i;
+      i = args.erase(i);
+      add_bucket = true;
     } else if (ceph_argparse_witharg(args, i, &val, err, "--create-simple-rule", (char*)NULL)) {
       rule_name.assign(val);
       if (!err.str().empty()) {
@@ -639,7 +696,7 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
-      add_item < 0 && !add_rule && !del_rule && full_location < 0 &&
+      add_item < 0 && !add_bucket && !add_rule && !del_rule && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     return EXIT_FAILURE;
@@ -928,6 +985,15 @@ int main(int argc, const char **argv)
       modified = true;
     } else {
       cerr << me << " " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  if (add_bucket) {
+    int r = do_add_bucket(cct.get(), me, crush, add_name, add_type, add_loc);
+    if (!r) {
+      modified = true;
+    } else {
       return r;
     }
   }
