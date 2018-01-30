@@ -4,7 +4,7 @@ import logging
 from ceph_volume import process, conf
 from ceph_volume.util import constants
 from .prepare import write_keyring
-from .disk import lsblk, device_family
+from .disk import lsblk, device_family, get_part_entry_type
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +45,28 @@ def luks_format(key, device):
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
+def plain_open(key, device, mapping):
+    """
+    Decrypt (open) an encrypted device, previously prepared with cryptsetup in plain mode
+
+    :param key: dmcrypt secret key
+    :param device: absolute path to device
+    :param mapping: mapping name used to correlate device. Usually a UUID
+    """
+    command = [
+        'cryptsetup',
+        '--key-file',
+        '-',
+        'open',
+        device,
+        mapping,
+        '--type', 'plain',
+        '--key-size', '256',
+    ]
+
+    process.call(command, stdin=key, terminal_verbose=True, show_command=True)
+
+
 def luks_open(key, device, mapping):
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
@@ -73,17 +95,20 @@ def dmcrypt_close(mapping):
     process.run(['cryptsetup', 'remove', mapping])
 
 
-def get_dmcrypt_key(osd_id, osd_fsid):
+def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     """
     Retrieve the dmcrypt (secret) key stored initially on the monitor. The key
     is sent initially with JSON, and the Monitor then mangles the name to
     ``dm-crypt/osd/<fsid>/luks``
 
-    The ``lockbox.keyring`` file is required for this operation, and should
-    exist on the path for the same OSD that is being activated.
+    The ``lockbox.keyring`` file is required for this operation, and it is
+    assumed it will exist on the path for the same OSD that is being activated.
+    To support scanning, it is optionally configurable to a custom location
+    (e.g. inside a lockbox partition mounted in a temporary location)
     """
+    if lockbox_keyring is None:
+        lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
     name = 'client.osd-lockbox.%s' % osd_fsid
-    lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
     stdout, stderr, returncode = process.call(
@@ -181,7 +206,7 @@ def legacy_encrypted(device):
 
     This function assumes that ``device`` will be a partition.
     """
-    metadata = {'encrypted': False, 'type': None, 'lockbox': ''}
+    metadata = {'encrypted': False, 'type': None, 'lockbox': '', 'device': device}
     # check if the device is online/decrypted first
     active_mapper = status(device)
     if active_mapper:
@@ -192,9 +217,9 @@ def legacy_encrypted(device):
         # re-assigned here for the lockbox checks to succeed (it is not
         # possible to guess partitions from a device mapper device otherwise
         device = active_mapper.get('device', device)
+        metadata['device'] = device
     else:
-        out, err, rc = process.call(['blkid', '-p', '-s', 'PART_ENTRY_TYPE', '-o', 'value', device])
-        uuid = ' '.join(out).strip()
+        uuid = get_part_entry_type(device)
         guid_match = constants.ceph_disk_guids.get(uuid, {})
         encrypted_guid = guid_match.get('encrypted', False)
         if encrypted_guid:
