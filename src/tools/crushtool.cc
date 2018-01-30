@@ -169,6 +169,8 @@ void usage()
   cout << "   -i mapfn --add-bucket name type [--loc type name ...]\n"
        << "                         insert a bucket into the hierachy at the given\n"
        << "                         location\n";
+  cout << "   -i mapfn --move       name --loc type name ...\n"
+       << "                         move the given item to specified location\n";
   cout << "   -i mapfn --reweight   recalculate all bucket weights\n";
   cout << "   -i mapfn --create-simple-rule name root type mode\n"
        << "                         create crush rule <name> to start from <root>,\n"
@@ -282,6 +284,41 @@ int do_add_bucket(CephContext* cct,
   return 0;
 }
 
+// return 1 for no change, 0 for successful change, negative on error
+int do_move_item(CephContext* cct,
+		 const char *me,
+		 CrushWrapper& crush,
+		 const string& name,
+		 const map<string,string>& loc)
+{
+  if (!crush.name_exists(name)) {
+    cerr << me << " item '" << name << "' does not exist" << std::endl;
+    return -ENOENT;
+  }
+  int id = crush.get_item_id(name);
+  if (loc.empty()) {
+    cerr << me << " expecting additional --loc argument to --move" << std::endl;
+    return -EINVAL;
+  }
+  if (crush.check_item_loc(cct, id, loc, (int*)nullptr)) {
+    // it's already there
+    cerr << me << " item '" << name << "' already at " << loc << std::endl;
+    return 1;
+  }
+  if (id >= 0) {
+    switch (int r = crush.create_or_move_item(cct, id, 0, name, loc)) {
+    case 0:
+      return 1;
+    case 1:
+      return 0;
+    default:
+      return r;
+    }
+  } else {
+    return crush.move_bucket(cct, id, loc);
+  }
+}
+
 int main(int argc, const char **argv)
 {
   vector<const char*> args;
@@ -289,6 +326,7 @@ int main(int argc, const char **argv)
 
   const char *me = argv[0];
   std::string infn, srcfn, outfn, add_name, add_type, remove_name, reweight_name;
+  std::string move_name;
   bool compile = false;
   bool decompile = false;
   bool check = false;
@@ -307,6 +345,7 @@ int main(int argc, const char **argv)
   int add_item = -1;
   bool add_bucket = false;
   bool update_item = false;
+  bool move_item = false;
   bool add_rule = false;
   std::string rule_name, rule_root, rule_type, rule_mode, rule_device_class;
   bool del_rule = false;
@@ -477,6 +516,13 @@ int main(int argc, const char **argv)
       add_type = *i;
       i = args.erase(i);
       add_bucket = true;
+    } else if (ceph_argparse_witharg(args, i, &val, err, "--move", (char*)NULL)) {
+      move_name.assign(val);
+      if (!err.str().empty()) {
+	cerr << err.str() << std::endl;
+	return EXIT_FAILURE;
+      }
+      move_item = true;
     } else if (ceph_argparse_witharg(args, i, &val, err, "--create-simple-rule", (char*)NULL)) {
       rule_name.assign(val);
       if (!err.str().empty()) {
@@ -696,7 +742,7 @@ int main(int argc, const char **argv)
     return EXIT_FAILURE;
   }
   if (!check && !compile && !decompile && !build && !test && !reweight && !adjust && !tree && !dump &&
-      add_item < 0 && !add_bucket && !add_rule && !del_rule && full_location < 0 &&
+      add_item < 0 && !add_bucket && !move_item && !add_rule && !del_rule && full_location < 0 &&
       remove_name.empty() && reweight_name.empty()) {
     cerr << "no action specified; -h for help" << std::endl;
     return EXIT_FAILURE;
@@ -998,6 +1044,14 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (move_item) {
+    int r = do_move_item(cct.get(), me, crush, move_name, add_loc);
+    if (!r) {
+      modified = true;
+    } else {
+      return r;
+    }
+  }
   if (add_rule) {
     if (crush.rule_exists(rule_name)) {
       cerr << "rule " << rule_name << " already exists" << std::endl;
