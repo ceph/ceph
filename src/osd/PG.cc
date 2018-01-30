@@ -2740,6 +2740,8 @@ void PG::_update_calc_stats()
       if (!actingbackfill.count(peer.first)) {
 	continue;
       }
+      // Primary should not be in the peer_info, skip if it is.
+      if (peer.first == pg_whoami) continue;
       missing = 0;
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
