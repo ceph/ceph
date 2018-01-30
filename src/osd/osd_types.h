@@ -3129,6 +3129,7 @@ inline ostream& operator<<(ostream& out, const pg_query_t& q) {
   out << "query(" << q.get_type_name() << " " << q.since;
   if (q.type == pg_query_t::LOG)
     out << " " << q.history;
+  out << " epoch_sent " << q.epoch_sent;
   out << ")";
   return out;
 }
