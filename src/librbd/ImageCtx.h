@@ -278,6 +278,9 @@ namespace librbd {
     bool test_features(uint64_t test_features) const;
     bool test_features(uint64_t test_features,
                        const RWLock &in_snap_lock) const;
+    bool test_op_features(uint64_t op_features) const;
+    bool test_op_features(uint64_t op_features,
+                          const RWLock &in_snap_lock) const;
     int get_flags(librados::snap_t in_snap_id, uint64_t *flags) const;
     int test_flags(uint64_t test_flags, bool *flags_set) const;
     int test_flags(uint64_t test_flags, const RWLock &in_snap_lock,
