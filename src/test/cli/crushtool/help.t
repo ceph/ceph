@@ -57,6 +57,9 @@
      -i mapfn --reweight-item name weight
                            reweight a given item (and adjust ancestor
                            weights as needed)
+     -i mapfn --add-bucket name type [--loc type name ...]
+                           insert a bucket into the hierachy at the given
+                           location
      -i mapfn --reweight   recalculate all bucket weights
      -i mapfn --create-simple-rule name root type mode
                            create crush rule <name> to start from <root>,
