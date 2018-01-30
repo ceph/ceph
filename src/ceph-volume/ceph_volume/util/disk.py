@@ -3,6 +3,13 @@ import stat
 from ceph_volume import process
 
 
+# The blkid CLI tool has some oddities which prevents having one common call
+# to extract the information instead of having separate utilities. The `udev`
+# type of output is needed in older versions of blkid (v 2.23) that will not
+# work correctly with just the ``-p`` flag to bypass the cache for example.
+# Xenial doesn't have this problem as it uses a newer blkid version.
+
+
 def get_partuuid(device):
     """
     If a device is a partition, it will probably have a PARTUUID on it that
@@ -13,6 +20,20 @@ def get_partuuid(device):
         ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
+
+
+def get_part_entry_type(device):
+    """
+    Parses the ``ID_PART_ENTRY_TYPE`` from the "low level" (bypasses the cache)
+    output that uses the ``udev`` type of output. This output is intended to be
+    used for udev rules, but it is useful in this case as it is the only
+    consistent way to retrieve the GUID used by ceph-disk to identify devices.
+    """
+    out, err, rc = process.call(['blkid', '-p', '-o', 'udev', device])
+    for line in out:
+        if 'ID_PART_ENTRY_TYPE=' in line:
+            return line.split('=')[-1].strip()
+    return ''
 
 
 def get_device_from_partuuid(partuuid):
