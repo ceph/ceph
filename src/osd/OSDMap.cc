@@ -3373,7 +3373,7 @@ void OSDMap::print_tree(Formatter *f, ostream *out, unsigned filter, string buck
 }
 
 void OSDMap::print_summary(Formatter *f, ostream& out,
-			   const string& prefix) const
+			   const string& prefix, bool extra) const
 {
   if (f) {
     f->open_object_section("osdmap");
@@ -3389,6 +3389,8 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
     out << get_num_osds() << " osds: "
 	<< get_num_up_osds() << " up, "
 	<< get_num_in_osds() << " in";
+    if (extra)
+      out << "; epoch: e" << get_epoch();
     if (get_num_pg_temp())
       out << "; " << get_num_pg_temp() << " remapped pgs";
     out << "\n";

@@ -1373,7 +1373,7 @@ private:
 public:
   void print(ostream& out) const;
   void print_pools(ostream& out) const;
-  void print_summary(Formatter *f, ostream& out, const string& prefix) const;
+  void print_summary(Formatter *f, ostream& out, const string& prefix, bool extra=false) const;
   void print_oneline_summary(ostream& out) const;
 
   enum {
