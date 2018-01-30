@@ -173,12 +173,12 @@ int main(int argc, char **argv)
     std::cout << "collection " << pgid << std::endl;
     ObjectStore::Transaction t;
     t.create_collection(coll_t(pgid), 0);
-    fs.apply_transaction(&osr, std::move(t));
+    fs.queue_transaction(&osr, std::move(t));
   }
   {
     ObjectStore::Transaction t;
     t.create_collection(coll_t(), 0);
-    fs.apply_transaction(&osr, std::move(t));
+    fs.queue_transaction(&osr, std::move(t));
   }
 
   vector<ceph::shared_ptr<Bencher> > benchers(

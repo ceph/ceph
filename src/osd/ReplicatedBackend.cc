@@ -59,16 +59,6 @@ class PG_RecoveryQueueAsync : public Context {
 };
 }
 
-struct ReplicatedBackend::C_OSD_RepModifyApply : public Context {
-  ReplicatedBackend *pg;
-  RepModifyRef rm;
-  C_OSD_RepModifyApply(ReplicatedBackend *pg, RepModifyRef r)
-    : pg(pg), rm(r) {}
-  void finish(int r) override {
-    pg->repop_applied(rm);
-  }
-};
-
 struct ReplicatedBackend::C_OSD_RepModifyCommit : public Context {
   ReplicatedBackend *pg;
   RepModifyRef rm;
@@ -284,17 +274,6 @@ public:
   }
 };
 
-class C_OSD_OnOpApplied : public Context {
-  ReplicatedBackend *pg;
-  ReplicatedBackend::InProgressOp *op;
-public:
-  C_OSD_OnOpApplied(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
-    : pg(pg), op(op) {}
-  void finish(int) override {
-    pg->op_applied(op);
-  }
-};
-
 void generate_transaction(
   PGTransactionUPtr &pgt,
   const coll_t &coll,
@@ -449,7 +428,6 @@ void ReplicatedBackend::submit_transaction(
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &_log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
-  Context *on_local_applied_sync,
   Context *on_all_acked,
   Context *on_all_commit,
   ceph_tid_t tid,
@@ -517,10 +495,6 @@ void ReplicatedBackend::submit_transaction(
     true,
     op_t);
   
-  op_t.register_on_applied_sync(on_local_applied_sync);
-  op_t.register_on_applied(
-    parent->bless_context(
-      new C_OSD_OnOpApplied(this, &op)));
   op_t.register_on_commit(
     parent->bless_context(
       new C_OSD_OnOpCommit(this, &op)));
@@ -529,6 +503,7 @@ void ReplicatedBackend::submit_transaction(
   tls.push_back(std::move(op_t));
 
   parent->queue_transactions(tls, op.op);
+  op_applied(&op);
 }
 
 void ReplicatedBackend::op_applied(
@@ -717,7 +692,7 @@ int ReplicatedBackend::be_deep_scrub(
 
     bufferlist hdrbl;
     r = store->omap_get_header(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &hdrbl, true);
@@ -736,7 +711,7 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
-    coll,
+    ch,
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
@@ -1141,14 +1116,12 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->opt.register_on_commit(
     parent->bless_context(
       new C_OSD_RepModifyCommit(this, rm)));
-  rm->localt.register_on_applied(
-    parent->bless_context(
-      new C_OSD_RepModifyApply(this, rm)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(rm->localt));
   tls.push_back(std::move(rm->opt));
   parent->queue_transactions(tls, op);
+  repop_applied(rm);
   // op is cleaned up by oncommit/onapply when both are executed
 }
 
@@ -1919,7 +1892,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   eversion_t v  = recovery_info.version;
   if (progress.first) {
-    int r = store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
+    int r = store->omap_get_header(ch, ghobject_t(recovery_info.soid), &out_op->omap_header);
     if(r < 0) {
       dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl; 
       return r;
@@ -1962,7 +1935,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
     ObjectMap::ObjectMapIterator iter =
-      store->get_omap_iterator(coll,
+      store->get_omap_iterator(ch,
 			       ghobject_t(recovery_info.soid));
     assert(iter);
     for (iter->lower_bound(progress.omap_recovered_to);

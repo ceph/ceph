@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
     ObjectStore::Transaction t;
     assert(!store->mount());
     t.create_collection(coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->queue_transaction(&osr, std::move(t));
   } else {
     assert(!store->mount());
   }

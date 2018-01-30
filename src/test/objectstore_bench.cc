@@ -261,7 +261,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    os->apply_transaction(&osr, std::move(t));
+    os->queue_transaction(&osr, std::move(t));
   }
 
   // create the objects
@@ -276,7 +276,7 @@ int main(int argc, const char *argv[])
       ObjectStore::Sequencer osr(__func__);
       ObjectStore::Transaction t;
       t.touch(cid, oids[i]);
-      int r = os->apply_transaction(&osr, std::move(t));
+      int r = os->queue_transaction(&osr, std::move(t));
       assert(r == 0);
     }
   } else {
@@ -285,7 +285,7 @@ int main(int argc, const char *argv[])
     ObjectStore::Sequencer osr(__func__);
     ObjectStore::Transaction t;
     t.touch(cid, oids.back());
-    int r = os->apply_transaction(&osr, std::move(t));
+    int r = os->queue_transaction(&osr, std::move(t));
     assert(r == 0);
   }
 
@@ -318,7 +318,7 @@ int main(int argc, const char *argv[])
   ObjectStore::Transaction t;
   for (const auto &oid : oids)
     t.remove(cid, oid);
-  os->apply_transaction(&osr,std::move(t));
+  os->queue_transaction(&osr,std::move(t));
 
   os->umount();
   return 0;

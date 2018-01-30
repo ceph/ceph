@@ -84,27 +84,6 @@ PGLSFilter::~PGLSFilter()
 {
 }
 
-struct PrimaryLogPG::C_OSD_OnApplied : Context {
-  PrimaryLogPGRef pg;
-  epoch_t epoch;
-  eversion_t v;
-  C_OSD_OnApplied(
-    PrimaryLogPGRef pg,
-    epoch_t epoch,
-    eversion_t v)
-    : pg(pg), epoch(epoch), v(v) {}
-  bool sync_finish(int r) override {
-    pg->op_applied(v);
-    return true;
-  }
-  void finish(int) override {
-    pg->lock();
-    if (!pg->pg_has_reset_since(epoch))
-      pg->op_applied(v);
-    pg->unlock();
-  }
-};
-
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -193,22 +172,6 @@ class PrimaryLogPG::C_PG_ObjectContext : public Context {
     pg(p), obc(o) {}
   void finish(int r) override {
     pg->object_context_destructor_callback(obc);
-  }
-};
-
-class PrimaryLogPG::C_OSD_OndiskWriteUnlock : public Context {
-  ObjectContextRef obc, obc2, obc3;
-  public:
-  C_OSD_OndiskWriteUnlock(
-    ObjectContextRef o,
-    ObjectContextRef o2 = ObjectContextRef(),
-    ObjectContextRef o3 = ObjectContextRef()) : obc(o), obc2(o2), obc3(o3) {}
-  void finish(int r) override {
-    obc->ondisk_write_unlock();
-    if (obc2)
-      obc2->ondisk_write_unlock();
-    if (obc3)
-      obc3->ondisk_write_unlock();
   }
 };
 
@@ -419,7 +382,6 @@ void PrimaryLogPG::on_local_recover(
   if (is_primary()) {
     if (!is_delete) {
       obc->obs.exists = true;
-      obc->ondisk_write_lock();
 
       bool got = obc->get_recovery_read();
       assert(got);
@@ -427,7 +389,6 @@ void PrimaryLogPG::on_local_recover(
       assert(recovering.count(obc->obs.oi.soid));
       recovering[obc->obs.oi.soid] = obc;
       obc->obs.oi = recovery_info.oi;  // may have been updated above
-      t->register_on_applied_sync(new C_OSD_OndiskWriteUnlock(obc));
     }
 
     t->register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
@@ -1208,7 +1169,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	}
 
 	hobject_t current = lower_bound;
-	osr->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
 	  list_size,
@@ -1365,7 +1325,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
 	hobject_t next;
 	hobject_t current = response.handle;
-	osr->flush();
 	int r = pgbackend->objects_list_partial(
 	  current,
 	  list_size,
@@ -3738,11 +3697,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
     ctx->user_at_version = obc->obs.oi.user_version;
   dout(30) << __func__ << " user_at_version " << ctx->user_at_version << dendl;
 
-  if (op->may_read()) {
-    dout(10) << " taking ondisk_read_lock" << dendl;
-    obc->ondisk_read_lock();
-  }
-
   {
 #ifdef WITH_LTTNG
     osd_reqid_t reqid = ctx->op->get_reqid();
@@ -3759,11 +3713,6 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
 #endif
     tracepoint(osd, prepare_tx_exit, reqid.name._type,
         reqid.name._num, reqid.tid, reqid.inc);
-  }
-
-  if (op->may_read()) {
-    dout(10) << " dropping ondisk_read_lock" << dendl;
-    obc->ondisk_read_unlock();
   }
 
   bool pending_async_reads = !ctx->pending_async_reads.empty();
@@ -4097,7 +4046,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       ObjectStore::Transaction t;
       dirty_info = true;
       write_if_dirty(t);
-      int tr = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+      int tr = osd->store->queue_transaction(ch, std::move(t), NULL);
       assert(tr == 0);
     }
     break;
@@ -4125,7 +4074,7 @@ void PrimaryLogPG::do_backfill_remove(OpRequestRef op)
   for (auto& p : m->ls) {
     remove_snap_mapped_object(t, p.first);
   }
-  int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+  int r = osd->store->queue_transaction(ch, std::move(t), NULL);
   assert(r == 0);
 }
 
@@ -6975,7 +6924,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bool truncated = false;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, ghobject_t(soid)
+	    ch, ghobject_t(soid)
 	    );
 	  assert(iter);
 	  iter->upper_bound(start_after);
@@ -7022,7 +6971,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	bufferlist bl;
 	if (oi.is_omap()) {
 	  ObjectMap::ObjectMapIterator iter = osd->store->get_omap_iterator(
-	    coll, ghobject_t(soid)
+	    ch, ghobject_t(soid)
 	    );
           if (!iter) {
             result = -ENOENT;
@@ -8422,7 +8371,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::iterator& bp,
       }
       bufferlist omap_data;
       ObjectMap::ObjectMapIterator iter =
-	osd->store->get_omap_iterator(coll, ghobject_t(oi.soid));
+	osd->store->get_omap_iterator(ch, ghobject_t(oi.soid));
       assert(iter);
       iter->upper_bound(cursor.omap_offset);
       for (; iter->valid(); iter->next(false)) {
@@ -9997,10 +9946,7 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
 void PrimaryLogPG::op_applied(const eversion_t &applied_version)
 {
   dout(10) << "op_applied version " << applied_version << dendl;
-  if (applied_version == eversion_t())
-    return;
-  assert(applied_version > last_update_applied);
-  assert(applied_version <= info.last_update);
+  assert(applied_version == info.last_update);
   last_update_applied = applied_version;
   if (is_primary()) {
     if (scrubber.active) {
@@ -10142,24 +10088,16 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
-  ctx->obc->ondisk_write_lock();
-
   ctx->op_t->add_obc(ctx->obc);
   if (ctx->clone_obc) {
-    ctx->clone_obc->ondisk_write_lock();
     ctx->op_t->add_obc(ctx->clone_obc);
   }
   if (ctx->head_obc) {
-    ctx->head_obc->ondisk_write_lock();
     ctx->op_t->add_obc(ctx->head_obc);
   }
 
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
   Context *on_all_applied = new C_OSD_RepopApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
-    ctx->obc,
-    ctx->clone_obc,
-    ctx->head_obc);
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
@@ -10176,7 +10114,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     min_last_complete_ondisk,
     ctx->log,
     ctx->updated_hset_history,
-    onapplied_sync,
     on_all_applied,
     on_all_commit,
     repop->rep_tid,
@@ -10375,10 +10312,9 @@ void PrimaryLogPG::submit_log_entries(
       };
       t.register_on_commit(
 	new OnComplete{this, rep_tid, get_osdmap()->get_epoch()});
-      t.register_on_applied(
-	new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
-      int r = osd->store->queue_transaction(osr.get(), std::move(t), NULL);
+      int r = osd->store->queue_transaction(ch, std::move(t), NULL);
       assert(r == 0);
+      op_applied(info.last_update);
     });
 }
 
@@ -11136,7 +11072,7 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
 	 ObjectStore::Transaction t2;
 	 on_local_recover(soid, recovery_info, ObjectContextRef(), true, &t2);
 	 t2.register_on_complete(on_complete);
-	 int r = osd->store->queue_transaction(osr.get(), std::move(t2), nullptr);
+	 int r = osd->store->queue_transaction(ch, std::move(t2), nullptr);
 	 assert(r == 0);
 	 unlock();
        } else {
@@ -11144,7 +11080,7 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
 	 on_complete->complete(-EAGAIN);
        }
      }));
-  int r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
+  int r = osd->store->queue_transaction(ch, std::move(t), nullptr);
   assert(r == 0);
 }
 
@@ -11353,13 +11289,12 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
       t.register_on_commit(complete);
     }
   }
-  t.register_on_applied(
-    new C_OSD_OnApplied{this, get_osdmap()->get_epoch(), info.last_update});
   int tr = osd->store->queue_transaction(
-    osr.get(),
+    ch,
     std::move(t),
     nullptr);
   assert(tr == 0);
+  op_applied(info.last_update);
 }
 
 void PrimaryLogPG::do_update_log_missing_reply(OpRequestRef &op)
@@ -11654,7 +11589,6 @@ void PrimaryLogPG::shutdown()
   lock();
   on_shutdown();
   unlock();
-  osr->flush();
 }
 
 void PrimaryLogPG::on_shutdown()
@@ -11753,7 +11687,7 @@ void PrimaryLogPG::_on_new_interval()
   dout(20) << __func__ << " checking missing set deletes flag. missing = " << pg_log.get_missing() << dendl;
   if (!pg_log.get_missing().may_include_deletes &&
       get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
-    pg_log.rebuild_missing_set_with_deletes(osd->store, coll, info);
+    pg_log.rebuild_missing_set_with_deletes(osd->store, ch, info);
   }
   assert(pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
 }
@@ -12252,7 +12186,6 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 	      dout(10) << " already reverting " << soid << dendl;
 	    } else {
 	      dout(10) << " reverting " << soid << " to " << latest->prior_version << dendl;
-	      obc->ondisk_write_lock();
 	      obc->obs.oi.version = latest->version;
 
 	      ObjectStore::Transaction t;
@@ -12268,13 +12201,12 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ++active_pushes;
 
-	      osd->store->queue_transaction(osr.get(), std::move(t),
-					    new C_OSD_AppliedRecoveredObject(this, obc),
-					    new C_OSD_CommittedPushedObject(
-					      this,
-					      get_osdmap()->get_epoch(),
-					      info.last_complete),
-					    new C_OSD_OndiskWriteUnlock(obc));
+	      t.register_on_applied(new C_OSD_AppliedRecoveredObject(this, obc));
+	      t.register_on_commit(new C_OSD_CommittedPushedObject(
+				     this,
+				     get_osdmap()->get_epoch(),
+				     info.last_complete));
+	      osd->store->queue_transaction(ch, std::move(t));
 	      continue;
 	    }
 	  } else {
@@ -12415,14 +12347,12 @@ int PrimaryLogPG::prep_object_replica_pushes(
    * a client write would be blocked since the object is degraded.
    * In almost all cases, therefore, this lock should be uncontended.
    */
-  obc->ondisk_read_lock();
   int r = pgbackend->recover_object(
     soid,
     v,
     ObjectContextRef(),
     obc, // has snapset context
     h);
-  obc->ondisk_read_unlock();
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << soid << dendl;
     primary_failed(soid);
@@ -12973,14 +12903,12 @@ int PrimaryLogPG::prep_backfill_object_push(
   recovering.insert(make_pair(oid, obc));
 
   // We need to take the read_lock here in order to flush in-progress writes
-  obc->ondisk_read_lock();
   int r = pgbackend->recover_object(
     oid,
     v,
     ObjectContextRef(),
     obc,
     h);
-  obc->ondisk_read_unlock();
   if (r < 0) {
     dout(0) << __func__ << " Error " << r << " on oid " << oid << dendl;
     primary_failed(oid);
@@ -13001,7 +12929,6 @@ void PrimaryLogPG::update_range(
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
-    osr->flush();
     if (last_update_applied >= info.log_tail) {
       bi->version = last_update_applied;
     } else {
@@ -13742,10 +13669,8 @@ void PrimaryLogPG::agent_load_hit_sets()
 
 	bufferlist bl;
 	{
-	  obc->ondisk_read_lock();
 	  int r = osd->store->read(ch, ghobject_t(oid), 0, 0, bl);
 	  assert(r >= 0);
-	  obc->ondisk_read_unlock();
 	}
 	HitSetRef hs(new HitSet);
 	bufferlist::iterator pbl = bl.begin();
@@ -14967,7 +14892,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     ObjectStore::Transaction t;
     pg->dirty_big_info = true;
     pg->write_if_dirty(t);
-    int tr = pg->osd->store->queue_transaction(pg->osr.get(), std::move(t), NULL);
+    int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
     assert(tr == 0);
 
     pg->share_pg_info();

@@ -183,7 +183,7 @@ int init_collections(std::unique_ptr<ObjectStore>& os,
     }
   }
   ObjectStore::Sequencer sequencer("Engine init");
-  int r = os->apply_transaction(&sequencer, std::move(t));
+  int r = os->queue_transaction(&sequencer, std::move(t));
   if (r)
     derr << "Engine init failed with " << cpp_strerror(-r) << dendl;
   return r;
@@ -201,7 +201,7 @@ int destroy_collections(
     t.remove_collection(coll.cid);
   }
   ObjectStore::Sequencer sequencer("Engine cleanup");
-  int r = os->apply_transaction(&sequencer, std::move(t));
+  int r = os->queue_transaction(&sequencer, std::move(t));
   if (r)
     derr << "Engine cleanup failed with " << cpp_strerror(-r) << dendl;
   return r;
@@ -408,7 +408,7 @@ Job::Job(Engine* engine, const thread_data* td)
 
   // apply the entire transaction synchronously
   ObjectStore::Sequencer sequencer("job init");
-  int r = engine->os->apply_transaction(&sequencer, std::move(t));
+  int r = engine->os->queue_transaction(&sequencer, std::move(t));
   if (r) {
     engine->deref();
     throw std::system_error(r, std::system_category(), "job init");
@@ -425,7 +425,7 @@ Job::~Job()
       t.remove(obj.coll.cid, obj.oid);
     }
     ObjectStore::Sequencer sequencer("job cleanup");
-    int r = engine->os->apply_transaction(&sequencer, std::move(t));
+    int r = engine->os->queue_transaction(&sequencer, std::move(t));
     if (r)
       derr << "job cleanup failed with " << cpp_strerror(-r) << dendl;
   }

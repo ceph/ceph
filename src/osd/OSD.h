@@ -236,7 +236,6 @@ struct C_CompleteSplits;
 struct C_OpenPGs;
 class LogChannel;
 class CephContext;
-typedef ceph::shared_ptr<ObjectStore::Sequencer> SequencerRef;
 class MOSDOp;
 
 class OSD;
@@ -245,8 +244,7 @@ class OSDService {
 public:
   OSD *osd;
   CephContext *cct;
-  SharedPtrRegistry<spg_t, ObjectStore::Sequencer> osr_registry;
-  ceph::shared_ptr<ObjectStore::Sequencer> meta_osr;
+  ObjectStore::CollectionHandle meta_ch;
   const int whoami;
   ObjectStore *&store;
   LogClient &log_client;
@@ -861,12 +859,6 @@ public:
   SimpleLRU<epoch_t, bufferlist> map_bl_cache;
   SimpleLRU<epoch_t, bufferlist> map_bl_inc_cache;
 
-  /// newest map fully consumed by handle_osd_map (i.e., written to disk)
-  epoch_t map_cache_pinned_epoch = 0;
-
-  /// true if pg consumption affected our unpinning
-  std::atomic<bool> map_cache_pinned_low = {false};
-
   /// final pg_num values for recently deleted pools
   map<int64_t,int> deleted_pool_pg_nums;
 
@@ -886,7 +878,6 @@ public:
     Mutex::Locker l(map_cache_lock);
     return _add_map_bl(e, bl);
   }
-  void pin_map_bl(epoch_t e, bufferlist &bl);
   void _add_map_bl(epoch_t e, bufferlist& bl);
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     Mutex::Locker l(map_cache_lock);
@@ -898,12 +889,8 @@ public:
     Mutex::Locker l(map_cache_lock);
     return _add_map_inc_bl(e, bl);
   }
-  void pin_map_inc_bl(epoch_t e, bufferlist &bl);
   void _add_map_inc_bl(epoch_t e, bufferlist& bl);
   bool get_inc_map_bl(epoch_t e, bufferlist& bl);
-
-  void clear_map_bl_cache_pins(epoch_t e);
-  void check_map_bl_cache_pins();
 
   /// get last pg_num before a pool was deleted (if any)
   int get_deleted_pool_pg_num(int64_t pool);
@@ -1828,17 +1815,11 @@ private:
   void add_map_bl(epoch_t e, bufferlist& bl) {
     return service.add_map_bl(e, bl);
   }
-  void pin_map_bl(epoch_t e, bufferlist &bl) {
-    return service.pin_map_bl(e, bl);
-  }
   bool get_map_bl(epoch_t e, bufferlist& bl) {
     return service.get_map_bl(e, bl);
   }
   void add_map_inc_bl(epoch_t e, bufferlist& bl) {
     return service.add_map_inc_bl(e, bl);
-  }
-  void pin_map_inc_bl(epoch_t e, bufferlist &bl) {
-    return service.pin_map_inc_bl(e, bl);
   }
 
 protected:
