@@ -1162,7 +1162,8 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
-  bool asok_command(string admin_command, cmdmap_t& cmdmap, string format, ostream& ss);
+  bool asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
+		    std::string_view format, std::ostream& ss);
 
 public:
   ClassHandler  *class_handler = nullptr;

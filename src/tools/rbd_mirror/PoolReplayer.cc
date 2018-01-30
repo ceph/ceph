@@ -192,8 +192,8 @@ public:
     }
   }
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     assert(i != commands.end());
     Formatter *f = Formatter::create(format);
@@ -205,7 +205,8 @@ public:
   }
 
 private:
-  typedef std::map<std::string, PoolReplayerAdminSocketCommand*> Commands;
+  typedef std::map<std::string, PoolReplayerAdminSocketCommand*,
+		   std::less<>> Commands;
 
   AdminSocket *admin_socket;
   Commands commands;

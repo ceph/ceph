@@ -3449,7 +3449,8 @@ private:
 		       boost::optional<obj_version> refresh_version);
 public:
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format,
 	    bufferlist& out) override final;
 
 protected:

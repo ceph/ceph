@@ -165,7 +165,7 @@ bool ConfigKeyService::service_dispatch(MonOpRequestRef op)
   bufferlist rdata;
 
   string prefix;
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
 
   if (!cmdmap_from_json(cmd->cmd, &cmdmap, ss)) {
     return false;

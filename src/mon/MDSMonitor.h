@@ -98,7 +98,7 @@ class MDSMonitor : public PaxosService {
   int filesystem_command(
       MonOpRequestRef op,
       std::string const &prefix,
-      map<string, cmd_vartype> &cmdmap,
+      const cmdmap_t& cmdmap,
       std::stringstream &ss);
 
   // beacons

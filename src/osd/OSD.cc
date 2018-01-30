@@ -1815,7 +1815,7 @@ void OSDService::_queue_for_recovery(
 namespace ceph { 
 namespace osd_cmds { 
 
-int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
+int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f, std::ostream& os);
  
 }} // namespace ceph::osd_cmds
 
@@ -2149,8 +2149,8 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string admin_command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     stringstream ss;
     bool r = osd->asok_command(admin_command, cmdmap, format, ss);
     out.append(ss);
@@ -2166,8 +2166,8 @@ std::set<int> OSD::get_mapped_pools() {
     return pools;
 }
 
-bool OSD::asok_command(string admin_command, cmdmap_t& cmdmap, string format,
-		       ostream& ss)
+bool OSD::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
+		       std::string_view format, ostream& ss)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (admin_command == "status") {
@@ -2404,15 +2404,15 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     stringstream ss;
     test_ops(service, store, command, cmdmap, ss);
     out.append(ss);
     return true;
   }
   void test_ops(OSDService *service, ObjectStore *store,
-		const std::string &command, cmdmap_t& cmdmap, ostream &ss);
+		std::string_view command, const cmdmap_t& cmdmap, ostream &ss);
 
 };
 
@@ -5035,7 +5035,8 @@ void OSD::tick_without_osd_lock()
 //
 //   set_recovery_delay [utime]
 void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
-     const std::string &command, cmdmap_t& cmdmap, ostream &ss)
+				 std::string_view command,
+				 const cmdmap_t& cmdmap, ostream &ss)
 {
   //Test support
   //Support changing the omap on a single osd by using the Admin Socket to
@@ -5900,7 +5901,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
 
   dout(20) << "do_command tid " << tid << " " << cmd << dendl;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   string prefix;
   string format;
   string pgidstr;
@@ -9929,7 +9930,8 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
 namespace ceph { 
 namespace osd_cmds { 
 
-int heap(CephContext& cct, cmdmap_t& cmdmap, Formatter& f, std::ostream& os)
+int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
+	 std::ostream& os)
 {
   if (!ceph_using_tcmalloc()) {
         os << "could not issue heap profiler command -- not using tcmalloc!";

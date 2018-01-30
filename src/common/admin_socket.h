@@ -15,17 +15,19 @@
 #ifndef CEPH_COMMON_ADMIN_SOCKET_H
 #define CEPH_COMMON_ADMIN_SOCKET_H
 
+#include <string_view>
+
 #include "common/Cond.h"
 
 class AdminSocket;
 class CephContext;
 
-#define CEPH_ADMIN_SOCK_VERSION "2"
+inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-		    bufferlist& out) = 0;
+  virtual bool call(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, bufferlist& out) = 0;
   virtual ~AdminSocketHook() {}
 };
 
@@ -34,6 +36,11 @@ class AdminSocket : public Thread
 public:
   AdminSocket(CephContext *cct);
   ~AdminSocket() override;
+
+  AdminSocket(const AdminSocket&) = delete;
+  AdminSocket& operator =(const AdminSocket&) = delete;
+  AdminSocket(AdminSocket&&) = delete;
+  AdminSocket& operator =(AdminSocket&&) = delete;
 
   /**
    * register an admin socket command
@@ -54,7 +61,10 @@ public:
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help);
+  int register_command(std::string_view command,
+		       std::string_view cmddesc,
+		       AdminSocketHook *hook,
+		       std::string_view help);
 
   /**
    * unregister an admin socket command.
@@ -66,16 +76,14 @@ public:
    * @param command command string
    * @return 0 on succest, -ENOENT if command dne.
    */
-  int unregister_command(std::string command);
+  int unregister_command(std::string_view command);
 
-  bool init(const std::string &path);
+  bool init(const string& path);
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
 private:
-  AdminSocket(const AdminSocket& rhs);
-  AdminSocket& operator=(const AdminSocket &rhs);
 
   void shutdown();
 
@@ -100,9 +108,9 @@ private:
   Mutex m_lock;    // protects m_hooks, m_descs, m_help
   AdminSocketHook *m_version_hook, *m_help_hook, *m_getdescs_hook;
 
-  std::map<std::string,AdminSocketHook*> m_hooks;
-  std::map<std::string,std::string> m_descs;
-  std::map<std::string,std::string> m_help;
+  std::map<std::string,AdminSocketHook*, std::less<>> m_hooks;
+  std::map<std::string,std::string, std::less<>> m_descs;
+  std::map<std::string,std::string, std::less<>> m_help;
 
   friend class AdminSocketTest;
   friend class HelpHook;
