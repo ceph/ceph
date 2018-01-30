@@ -7,7 +7,7 @@ from cherrypy.test import helper
 from mock import patch
 
 from .helper import RequestHelper
-from ..tools import RESTController
+from ..tools import RESTController, detail_route
 
 
 # pylint: disable=W0613
@@ -29,6 +29,14 @@ class FooResource(RESTController):
 
     def bulk_delete(self):
         FooResource.elems = []
+
+    def set(self, data, key):
+        FooResource.elems[int(key)] = data
+        return dict(key=key, **data)
+
+    @detail_route(methods=['get'])
+    def detail(self, key):
+        return {'detail': key}
 
 
 class FooArgs(RESTController):
@@ -71,6 +79,11 @@ class RESTControllerTest(helper.CPWebCase, RequestHelper):
             self.assertHeader('Content-Type', 'application/json')
             self.assertJsonBody([data] * 5)
 
+            self._put('/foo/0', {'newdata': 'newdata'})
+            self.assertStatus('200 OK')
+            self.assertHeader('Content-Type', 'application/json')
+            self.assertJsonBody({'newdata': 'newdata', 'key': '0'})
+
     def test_not_implemented(self):
         self._put("/foo")
         self.assertStatus(405)
@@ -78,3 +91,10 @@ class RESTControllerTest(helper.CPWebCase, RequestHelper):
     def test_args_from_json(self):
         self._put("/fooargs/hello", {'name': 'world'})
         self.assertJsonBody({'code': 'hello', 'name': 'world'})
+
+    def test_detail_route(self):
+        self._get('/foo/1/detail')
+        self.assertJsonBody({'detail': '1'})
+
+        self._post('/foo/1/detail', 'post-data')
+        self.assertStatus(405)

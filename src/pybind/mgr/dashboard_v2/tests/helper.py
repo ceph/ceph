@@ -5,6 +5,7 @@ from __future__ import absolute_import
 import json
 
 from cherrypy.test import helper
+from more_itertools import always_iterable
 
 from ..module import Module
 
@@ -32,8 +33,15 @@ class RequestHelper(object):
     def _put(self, url, data=None):
         self._request(url, 'PUT', data)
 
-    def assertJsonBody(self, data):
-        self.assertBody(json.dumps(data))
+    def assertJsonBody(self, data, msg=None):
+        """Fail if value != self.body."""
+        body_str = self.body.decode('utf-8') if isinstance(self.body, bytes) else self.body
+        json_body = json.loads(body_str)
+        if data != json_body:
+            if msg is None:
+                msg = 'expected body:\n%r\n\nactual body:\n%r' % (
+                    data, json_body)
+            self._handlewebError(msg)
 
 
 class ControllerTestCase(helper.CPWebCase, RequestHelper):
