@@ -129,3 +129,27 @@ type conversions.
 * Other C++ Features > Avoid Default Arguments:
 
     They obscure the interface.
+
+
+Python code
+-----------
+
+For new python code, PEP-8 should be observed:
+
+    https://www.python.org/dev/peps/pep-0008/
+
+Existing code can be refactored to adhere to PEP-8, and cleanups are welcome.
+
+
+JavaScript / TypeScript
+-----------------------
+
+For Angular code, we follow the official Angular style guide:
+
+    https://angular.io/guide/styleguide
+
+To check whether your code is conformant with the style guide, we suggest
+using TSLint with Codelyzer:
+
+    https://www.npmjs.com/package/codelyzer
+
