@@ -318,9 +318,11 @@ int execute_list_images(const po::variables_map &vm,
     }
 
     if (f) {
-      f->dump_string("image name", image_name);
+      f->open_object_section("image");
+      f->dump_string("image", image_name);
       f->dump_string("pool", pool_name);
       f->dump_int("state", state);
+      f->close_section();
     } else
       std::cout << pool_name << "/" << image_name << " " << state_string << std::endl;
   }
@@ -511,7 +513,7 @@ int execute_group_snap_list(const po::variables_map &vm,
     }
     if (f) {
       f->open_object_section("group_snap");
-      f->dump_string("snap name", snap_name);
+      f->dump_string("snapshot", snap_name);
       f->dump_string("state", state_string);
       f->close_section();
     } else {
