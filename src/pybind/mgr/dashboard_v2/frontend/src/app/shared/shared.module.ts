@@ -6,7 +6,9 @@ import { PipesModule } from './pipes/pipes.module';
 import { AuthGuardService } from './services/auth-guard.service';
 import { AuthStorageService } from './services/auth-storage.service';
 import { AuthService } from './services/auth.service';
+import { FormatterService } from './services/formatter.service';
 import { HostService } from './services/host.service';
+import { PoolService } from './services/pool.service';
 import { ServicesModule } from './services/services.module';
 
 @NgModule({
@@ -16,13 +18,15 @@ import { ServicesModule } from './services/services.module';
     ComponentsModule,
     ServicesModule
   ],
-  exports: [PipesModule, ServicesModule, PipesModule],
+  exports: [PipesModule, ServicesModule],
   declarations: [],
   providers: [
     AuthService,
     AuthStorageService,
     AuthGuardService,
-    HostService
+    HostService,
+    PoolService,
+    FormatterService
   ]
 })
 export class SharedModule {}

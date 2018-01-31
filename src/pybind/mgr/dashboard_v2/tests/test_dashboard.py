@@ -5,6 +5,7 @@ from .helper import ControllerTestCase, authenticate
 
 
 class DashboardTest(ControllerTestCase):
+
     @authenticate
     def test_toplevel(self):
         data = self._get("/api/dashboard/toplevel")
@@ -12,8 +13,10 @@ class DashboardTest(ControllerTestCase):
 
         self.assertIn('filesystems', data)
         self.assertIn('health_status', data)
+        self.assertIn('rbd_pools', data)
         self.assertIsNotNone(data['filesystems'])
         self.assertIsNotNone(data['health_status'])
+        self.assertIsNotNone(data['rbd_pools'])
 
     @authenticate
     def test_health(self):

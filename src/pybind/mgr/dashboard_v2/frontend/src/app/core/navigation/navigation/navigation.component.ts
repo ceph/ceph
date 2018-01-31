@@ -8,12 +8,14 @@ import { TopLevelService } from '../../../shared/services/top-level.service';
 })
 export class NavigationComponent implements OnInit {
   topLevelData: any;
+  rbdPools: Array<any> = [];
 
-  constructor(topLevelService: TopLevelService) {
-    topLevelService.topLevelData$.subscribe(data => {
+  constructor(private topLevelService: TopLevelService) {}
+
+  ngOnInit() {
+    this.topLevelService.topLevelData$.subscribe((data: any) => {
       this.topLevelData = data;
+      this.rbdPools = data.rbd_pools;
     });
   }
-
-  ngOnInit() {}
 }
