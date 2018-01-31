@@ -275,7 +275,7 @@ Commands
 :command:`group snap rm` *group-snap-spec*
   Remove a snapshot from a group.
 
-:command:`group snap rename` *group-snap-spec* *snap-spec*
+:command:`group snap rename` *group-snap-spec* *snap-name*
   Rename group's snapshot.
 
 :command:`image-meta get` *image-spec* *key*
