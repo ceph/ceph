@@ -188,8 +188,9 @@ md_config_t::md_config_t(bool is_daemon)
       // We call pre_validate as a sanity check, but also to get any
       // side effect (value modification) from the validator.
       std::string *def_str = boost::get<std::string>(&default_val);
+      std::string val = *def_str;
       std::string err;
-      if (opt.pre_validate(def_str, &err) != 0) {
+      if (opt.pre_validate(&val, &err) != 0) {
         std::cerr << "Default value " << opt.name << "=" << *def_str << " is "
                      "invalid: " << err << std::endl;
 
@@ -197,6 +198,11 @@ md_config_t::md_config_t(bool is_daemon)
         // validation, so this is super-invalid and should never make it
         // past a pull request: crash out.
         ceph_abort();
+      }
+      if (val != *def_str) {
+	// if the validator normalizes the string into a different form than
+	// what was compiled in, use that.
+	set_val_default(opt.name, val);
       }
     }
   }
