@@ -92,13 +92,6 @@ class BaseControllerMeta(type):
         """
         cls._mgr_module = value
 
-    @property
-    def logger(cls):
-        """
-        :return: Returns the logger belonging to the Ceph dashboard module.
-        """
-        return cls.mgr.log
-
 
 class BaseController(six.with_metaclass(BaseControllerMeta, object)):
     """
@@ -117,12 +110,6 @@ class BaseController(six.with_metaclass(BaseControllerMeta, object)):
         """
         return self._mgr_module
 
-    @property
-    def logger(self):
-        """
-        :return: Returns the logger belonging to the Ceph dashboard module.
-        """
-        return self.mgr.log
 
 
 class RESTController(BaseController):
