@@ -22,22 +22,24 @@ namespace ceph {
 //
 // The purpose of the container is store arbitrary number of objects
 // with absolutely minimal requirements regarding constructibility
-// and with minimized memory indirection.
-// There is no obligation for MoveConstructibility, CopyConstructibility
-// nor even DefaultConstructibility which allows to handle std::mutexes,
-// std::atomics or any type embedding them.
+// and assignability while minimizing memory indirection.
+// There is no obligation for MoveConstructibility, CopyConstructibility,
+// MoveAssignability, CopyAssignability nor even DefaultConstructibility
+// which allows to handle std::mutexes, std::atomics or any type embedding
+// them.
 //
 // Few requirements translate into tiny interface. The container isn't
 // Copy- nor MoveConstructible. Although it does offer random access
 // iterator, insertion in the middle is not allowed. The maximum number
-// of elements must be known in run-time. This shouldn't be an issue in
+// of elements must be known at run-time. This shouldn't be an issue in
 // the intended use case: sharding.
 //
 // Alternatives:
 //  1. std::vector<boost::optional<ValueT>> initialized with the known
 //     known size and emplace_backed(). boost::optional inside provides
 //     the DefaultConstructibility. Imposes extra memory indirection.
-//  2. boost::container::small_vector + boost::optional doesn't work.
+//  2. boost::container::small_vector + boost::optional always
+//     requires MoveConstructibility.
 //  3. boost::container::static_vector feed via emplace_back().
 //     Good for performance but enforces upper limit on elements count.
 //     For sharding this means we can't handle arbitrary number of
@@ -84,8 +86,9 @@ public:
     : data(count <= Capacity ? internal
                              : new storage_unit_t[count]) {
     for (std::size_t i = 0; i < count; ++i) {
-      // caller MAY emplace up to count elements but it IS NOT
-      // obliged to do so.
+      // caller MAY emplace up to `count` elements but it IS NOT
+      // obliged to do so. The emplacer guarantees that the limit
+      // will never be exceeded.
       f(i, emplacer(this));
     }
   }
