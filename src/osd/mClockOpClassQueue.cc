@@ -33,9 +33,10 @@ namespace ceph {
    * class mClockOpClassQueue
    */
 
-  mClockOpClassQueue::mClockOpClassQueue(CephContext *cct) :
+  mClockOpClassQueue::mClockOpClassQueue(CephContext *cct, bool allow_limit_break) :
     queue(std::bind(&mClockOpClassQueue::op_class_client_info_f, this, _1),
-	  cct->_conf->osd_op_queue_mclock_anticipation_timeout),
+          allow_limit_break,
+          cct->_conf->osd_op_queue_mclock_anticipation_timeout),
     client_info_mgr(cct)
   {
     // empty

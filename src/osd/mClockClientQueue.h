@@ -49,7 +49,7 @@ namespace ceph {
 
   public:
 
-    mClockClientQueue(CephContext *cct);
+    mClockClientQueue(CephContext *cct, bool allow_limit_break = true);
 
     const crimson::dmclock::ClientInfo* op_class_client_info_f(const InnerClient& client);
 
@@ -98,6 +98,10 @@ namespace ceph {
     // Returns if the queue is empty
     inline bool empty() const override final {
       return queue.empty();
+    }
+
+    inline double next_dequeue_delay() override final {
+      return queue.next_dequeue_delay();
     }
 
     // Formatted output of the queue
