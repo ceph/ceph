@@ -79,12 +79,17 @@ class Module(MgrModule):
 
         df_types = [
             'bytes_used',
+            'kb_used',
             'dirty',
+            'rd',
             'rd_bytes',
             'raw_bytes_used',
+            'wr',
             'wr_bytes',
             'objects',
-            'max_avail'
+            'max_avail',
+            'quota_objects',
+            'quota_bytes'
         ]
 
         for df_type in df_types:
