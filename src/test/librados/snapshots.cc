@@ -1,3 +1,4 @@
+#include "include/rados.h"
 #include "include/rados/librados.hpp"
 #include "test/librados/test.h"
 #include "test/librados/TestCase.h"
@@ -536,6 +537,62 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, Bug11677) {
   my_snaps.pop_back();
   ioctx.snap_set_read(LIBRADOS_SNAP_HEAD);
   delete[] buf;
+}
+
+TEST_F(LibRadosSnapshotsSelfManagedPP, OrderSnap) {
+  std::vector<uint64_t> my_snaps;
+  char buf[bufsize];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+
+  int flags = librados::OPERATION_ORDERSNAP;
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ObjectWriteOperation op1;
+  op1.write(0, bl);
+  librados::AioCompletion *comp1 = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate("foo", comp1, &op1, flags));
+  ASSERT_EQ(0, comp1->wait_for_complete());
+  ASSERT_EQ(0, comp1->get_return_value());
+  comp1->release();
+
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ObjectWriteOperation op2;
+  op2.write(0, bl);
+  librados::AioCompletion *comp2 = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate("foo", comp2, &op2, flags));
+  ASSERT_EQ(0, comp2->wait_for_complete());
+  ASSERT_EQ(0, comp2->get_return_value());
+  comp2->release();
+
+  my_snaps.pop_back();
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ObjectWriteOperation op3;
+  op3.write(0, bl);
+  librados::AioCompletion *comp3 = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate("foo", comp3, &op3, flags));
+  ASSERT_EQ(0, comp3->wait_for_complete());
+  ASSERT_EQ(-EOLDSNAPC, comp3->get_return_value());
+  comp3->release();
+
+  ObjectWriteOperation op4;
+  op4.write(0, bl);
+  librados::AioCompletion *comp4 = cluster.aio_create_completion();
+  ASSERT_EQ(0, ioctx.aio_operate("foo", comp4, &op4, 0));
+  ASSERT_EQ(0, comp4->wait_for_complete());
+  ASSERT_EQ(0, comp4->get_return_value());
+  comp4->release();
 }
 
 // EC testing
