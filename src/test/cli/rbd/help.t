@@ -593,12 +593,12 @@ Skip test on FreeBSD as it generates different output there.
   
   rbd help group snap create
   usage: rbd group snap create [--pool <pool>] [--group <group>] [--snap <snap>] 
-                               <group-spec> 
+                               <group-snap-spec> 
   
   Make a snapshot of a group.
   
   Positional arguments
-    <group-spec>         group specification
+    <group-snap-spec>    group specification
                          (example: [<pool-name>/]<group-name>@<snap-name>)
   
   Optional arguments
@@ -625,12 +625,12 @@ Skip test on FreeBSD as it generates different output there.
   
   rbd help group snap remove
   usage: rbd group snap remove [--pool <pool>] [--group <group>] [--snap <snap>] 
-                               <group-spec> 
+                               <group-snap-spec> 
   
   Remove a snapshot from a group.
   
   Positional arguments
-    <group-spec>         group specification
+    <group-snap-spec>    group specification
                          (example: [<pool-name>/]<group-name>@<snap-name>)
   
   Optional arguments
@@ -641,12 +641,12 @@ Skip test on FreeBSD as it generates different output there.
   rbd help group snap rename
   usage: rbd group snap rename [--pool <pool>] [--group <group>] [--snap <snap>] 
                                [--dest-snap <dest-snap>] 
-                               <group-spec> <dest-snap> 
+                               <group-snap-spec> <dest-snap> 
   
   Rename group's snapshot.
   
   Positional arguments
-    <group-spec>         group specification
+    <group-snap-spec>    group specification
                          (example: [<pool-name>/]<group-name>@<snap-name>)
     <dest-snap>          destination snapshot name
                          (example: <snapshot-name>)
