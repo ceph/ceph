@@ -8,6 +8,7 @@ import bcrypt
 import cherrypy
 
 from ..tools import ApiController, RESTController, Session
+from .. import logger
 
 
 @ApiController('auth')
@@ -37,15 +38,19 @@ class Auth(RESTController):
             cherrypy.session[Session.USERNAME] = username
             cherrypy.session[Session.TS] = now
             cherrypy.session[Session.EXPIRE_AT_BROWSER_CLOSE] = not stay_signed_in
-            self.logger.debug('Login successful')
+            logger.debug('Login successful')
             return {'username': username}
 
         cherrypy.response.status = 403
-        self.logger.debug('Login failed')
+        if config_username is None:
+            logger.warning('No Credentials configured. Need to call `ceph dashboard '
+                           'set-login-credentials <username> <password>` first.')
+        else:
+            logger.debug('Login failed')
         return {'detail': 'Invalid credentials'}
 
     def bulk_delete(self):
-        self.logger.debug('Logout successful')
+        logger.debug('Logout successful')
         cherrypy.session[Session.USERNAME] = None
         cherrypy.session[Session.TS] = None
 
@@ -61,8 +66,8 @@ class Auth(RESTController):
     def check_auth():
         username = cherrypy.session.get(Session.USERNAME)
         if not username:
-            Auth.logger.debug('Unauthorized access to {}'.format(cherrypy.url(
-                relative='server')))
+            logger.debug('Unauthorized access to %s',
+                         cherrypy.url(relative='server'))
             raise cherrypy.HTTPError(401, 'You are not authorized to access '
                                           'that resource')
         now = time.time()
@@ -73,7 +78,7 @@ class Auth(RESTController):
             if username_ts and float(username_ts) < (now - expires):
                 cherrypy.session[Session.USERNAME] = None
                 cherrypy.session[Session.TS] = None
-                Auth.logger.debug('Session expired')
+                logger.debug('Session expired')
                 raise cherrypy.HTTPError(401,
                                          'Session expired. You are not '
                                          'authorized to access that resource')
