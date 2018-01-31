@@ -785,6 +785,7 @@ class Module(MgrModule):
                                next_misplaced, max_misplaced, step)
             else:
                 if next_pe.score > best_pe.score * 1.0001:
+                    bad_steps += 1
                     if bad_steps < 5 and random.randint(0, 100) < 70:
                         self.log.debug('Score got worse, taking another step')
                     else:
