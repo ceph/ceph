@@ -469,11 +469,6 @@ void md_config_t::parse_env(const char *args_var)
     string k = getenv("CEPH_KEYRING");
     values["keyring"][CONF_ENV] = Option::value_t(k);
   }
-  if (getenv(args_var)) {
-    vector<const char *> env_args;
-    env_to_vec(env_args, args_var);
-    parse_argv(env_args, CONF_ENV);
-  }
   if (const char *dir = getenv("CEPH_LIB")) {
     Mutex::Locker l(lock);
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
@@ -482,6 +477,11 @@ void md_config_t::parse_env(const char *args_var)
       assert(o);
       _set_val(dir, *o, CONF_ENV, &err);
     }
+  }
+  if (getenv(args_var)) {
+    vector<const char *> env_args;
+    env_to_vec(env_args, args_var);
+    parse_argv(env_args, CONF_ENV);
   }
 }
 
