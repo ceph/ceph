@@ -12016,6 +12016,7 @@ int MDCache::dump_cache(const char *fn, Formatter *f,
     if (r < 0)
       goto out;
   }
+  r = 0;
 
  out:
   if (f) {
