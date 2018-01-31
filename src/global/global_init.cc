@@ -142,6 +142,9 @@ void global_pre_init(
   conf->parse_argv(args);
 
   if (!conf->no_mon_config) {
+    // make sure our mini-session gets legacy values
+    conf->apply_changes(nullptr);
+
     MonClient mc_bootstrap(g_ceph_context);
     if (mc_bootstrap.get_monmap_and_config() < 0) {
       derr << "failed to fetch mon config (--no-mon-config to skip)" << dendl;
