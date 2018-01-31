@@ -15,12 +15,15 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <set>
+#include <any>
+#include <atomic>
+#include <map>
 #include <memory>
 #include <mutex>
-#include <atomic>
-
-#include <boost/noncopyable.hpp>
+#include <set>
+#include <string>
+#include <string_view>
+#include <typeinfo>
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
@@ -60,6 +63,11 @@ public:
   CephContext(uint32_t module_type_,
               enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY,
               int init_flags_ = 0);
+
+  CephContext(const CephContext&) = delete;
+  CephContext& operator =(const CephContext&) = delete;
+  CephContext(CephContext&&) = delete;
+  CephContext& operator =(CephContext&&) = delete;
 
   // ref count!
 private:
@@ -129,20 +137,24 @@ public:
   void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
 		  ceph::bufferlist *out);
 
-  template<typename T>
-  void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    std::lock_guard<ceph::spinlock> lg(_associated_objs_lock);
+  template<typename T, typename... Args>
+  T& lookup_or_create_singleton_object(std::string_view name,
+				       Args&&... args) {
+    std::lock_guard<ceph::spinlock> lg(associated_objs_lock);
+    const auto& type = typeid(T);
 
-    if (!_associated_objs.count(name)) {
-      p = new T(this);
-      _associated_objs[name] = new TypedSingletonWrapper<T>(p);
-    } else {
-      TypedSingletonWrapper<T> *wrapper =
-        dynamic_cast<TypedSingletonWrapper<T> *>(_associated_objs[name]);
-      assert(wrapper != NULL);
-      p = wrapper->singleton;
+    auto i = associated_objs.find(
+      std::pair<std::string_view, const std::type_info&>(name, type));
+    if (i == associated_objs.cend()) {
+      i = associated_objs.emplace_hint(
+	i,
+	std::piecewise_construct,
+	std::forward_as_tuple(name, type),
+	std::forward_as_tuple(std::forward<Args>(args)...));
     }
+    return std::any_cast<T&>(i->second);
   }
+
   /**
    * get a crypto handler
    */
@@ -206,23 +218,7 @@ public:
   }
 
 private:
-  struct SingletonWrapper : boost::noncopyable {
-    virtual ~SingletonWrapper() {}
-  };
 
-  template <typename T>
-  struct TypedSingletonWrapper : public SingletonWrapper {
-    TypedSingletonWrapper(T *p) : singleton(p) {
-    }
-    ~TypedSingletonWrapper() override {
-      delete singleton;
-    }
-
-    T *singleton;
-  };
-
-  CephContext(const CephContext &rhs);
-  CephContext &operator=(const CephContext &rhs);
 
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
@@ -260,8 +256,20 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  ceph::spinlock _associated_objs_lock;
-  std::map<std::string, SingletonWrapper*> _associated_objs;
+  ceph::spinlock associated_objs_lock;
+
+  struct associated_objs_cmp {
+    using is_transparent = std::true_type;
+    template<typename T, typename U>
+    bool operator ()(const std::pair<T, const std::type_info&>& l,
+                     const std::pair<U, const std::type_info&>& r) const noexcept {
+      return ((l.first < r.first)  ||
+              (l.first == r.first && l.second.before(r.second)));
+    }
+  };
+
+  std::map<std::pair<std::string, const std::type_info&>,
+	   std::any, associated_objs_cmp> associated_objs;
 
   ceph::spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;
