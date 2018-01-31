@@ -230,6 +230,9 @@ class Module(MgrModule):
                               "'%s'", self.config['database'],
                               self.config['username'])
                 client.create_database(self.config['database'])
+                client.create_retention_policy(name='8_weeks', duration='8w',
+                                               replication='1', default=True,
+                                               database=self.config['database'])
             else:
                 self.set_health_checks({
                     'MGR_INFLUX_SEND_FAILED': {
