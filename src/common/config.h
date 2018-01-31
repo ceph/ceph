@@ -327,6 +327,8 @@ public:
   /// cluster name
   string cluster;
 
+  bool no_mon_config = false;
+
 // This macro block defines C members of the md_config_t struct
 // corresponding to the definitions in legacy_config_opts.h.
 // These C members are consumed by code that was written before

@@ -559,6 +559,9 @@ int md_config_t::parse_argv(std::vector<const char*>& args, int level)
     else if (ceph_argparse_witharg(args, i, &val, "--show_config_value", (char*)NULL)) {
       do_show_config_value = val;
     }
+    else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
+      no_mon_config = true;
+    }
     else if (ceph_argparse_flag(args, i, "--foreground", "-f", (char*)NULL)) {
       set_val_or_die("daemonize", "false");
     }
