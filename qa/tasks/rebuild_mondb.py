@@ -129,6 +129,7 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
                   '--cap', 'mds', 'allow *',
                   '--cap', 'mgr', 'allow *'])
     mon.run(args=['sudo', '-u', 'ceph',
+                  'CEPH_ARGS=--no-mon-config',
                   'ceph-monstore-tool', mon_store_dir,
                   'rebuild', '--', '--keyring',
                   keyring_path])
