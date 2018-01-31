@@ -26,8 +26,8 @@ mkdir $MNT
 
 export CEPH_ARGS=--enable_experimental_unrecoverable_data_corrupting_features=bluestore
 
-$COT --op mkfs --data-path $DATA --type $TYPE
-$COT --op fuse --data-path $DATA --mountpoint $MNT &
+$COT --no-mon-config --op mkfs --data-path $DATA --type $TYPE
+$COT --no-mon-config --op fuse --data-path $DATA --mountpoint $MNT &
 
 while ! test -e $MNT/type ; do
     echo waiting for $MNT/type to appear
