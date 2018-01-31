@@ -310,7 +310,7 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
-  standby_modules.reset(new StandbyPyModules(monc, mgr_map));
+  standby_modules.reset(new StandbyPyModules(monc, mgr_map, clog));
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
