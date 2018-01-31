@@ -43,12 +43,13 @@
         </div>
 
         <!-- Stay signed in -->
-        <div class="checkbox">
-          <label translate>
-            <input id="stay_signed_in"
-                   name="stay_signed_in"
-                   type="checkbox"
-                   [(ngModel)]="model.stay_signed_in">
+        <div class="checkbox checkbox-primary">
+          <input id="stay_signed_in"
+                 name="stay_signed_in"
+                 type="checkbox"
+                 [(ngModel)]="model.stay_signed_in">
+          <label for="stay_signed_in"
+                 translate>
             Keep me logged in
           </label>
         </div>
