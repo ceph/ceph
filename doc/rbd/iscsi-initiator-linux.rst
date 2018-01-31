@@ -1,14 +1,12 @@
-------------------------------------------------
-The iSCSI Initiator for Red Hat Enterprise Linux
-------------------------------------------------
+-------------------------
+iSCSI Initiator for Linux
+-------------------------
 
 **Prerequisite:**
 
--  Package ``iscsi-initiator-utils-6.2.0.873-35`` or newer must be
-   installed
+-  Package ``iscsi-initiator-utils``
 
--  Package ``device-mapper-multipath-0.4.9-99`` or newer must be
-   installed
+-  Package ``device-mapper-multipath``
 
 **Installing:**
 
@@ -22,7 +20,7 @@ Install the iSCSI initiator and multipath tools:
 **Configuring:**
 
 #. Create the default ``/etc/multipath.conf`` file and enable the
-   ``multiapthd`` service:
+   ``multipathd`` service:
 
    ::
 
@@ -42,7 +40,7 @@ Install the iSCSI initiator and multipath tools:
                        path_checker           tur
                        prio                   alua
                        prio_args              exclusive_pref_bit
-                       fast_oi_fail_tmo       25
+                       fast_io_fail_tmo       25
                        no_path_retry          queue
                }
        }
@@ -54,6 +52,9 @@ Install the iSCSI initiator and multipath tools:
        # systemctl reload multipathd
 
 **iSCSI Discovery and Setup:**
+
+#. If CHAP was setup on the iSCSI gateway, provide a CHAP username and
+   password by updating the ``/etc/iscsi/iscsid.conf`` file accordingly.
 
 #. Discover the target portals:
 
