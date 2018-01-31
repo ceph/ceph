@@ -15,6 +15,8 @@
 #ifndef CEPH_CONFIG_H
 #define CEPH_CONFIG_H
 
+#include <boost/container/flat_map.hpp>
+
 #include "common/backport_std.h"
 #include "common/ConfUtils.h"
 #include "common/entity_name.h"
@@ -90,8 +92,15 @@ public:
   /**
    * The configuration schema, in the form of Option objects describing
    * possible settings.
+   *
+   * flat_map<> is employed to lower memory fragmentation and reduce
+   * CPU cache misses. It still offers logarithmic search complexity
+   * while the extra overhead on insert isn't a problem as modifying
+   * the schema is intended to be rare.
    */
-  std::map<std::string, const Option &> schema;
+  boost::container::flat_map<
+    std::string,
+    std::reference_wrapper<const Option>> schema;
 
   /**
    * The current values of all settings described by the schema

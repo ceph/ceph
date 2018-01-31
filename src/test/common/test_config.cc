@@ -136,7 +136,7 @@ public:
     expand_all_meta();
     int after_count = 0;
     for (auto& i : values) {
-      const auto &opt = schema.at(i.first);
+      const Option &opt = schema.at(i.first);
       if (opt.type == Option::TYPE_STR) {
         const std::string &str = boost::get<std::string>(i.second);
         size_t pos = 0;

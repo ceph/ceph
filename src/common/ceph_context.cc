@@ -475,7 +475,7 @@ void CephContext::do_command(std::string command, cmdmap_t& cmdmap,
           msg << "Setting not found: '" << key << "'";
           f->dump_string("error", msg.str());
         } else {
-          i->second.dump(f);
+          static_cast<const Option&>(i->second).dump(f);
         }
       } else {
         // Output all

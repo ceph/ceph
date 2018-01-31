@@ -89,7 +89,7 @@ md_config_t::md_config_t(bool is_daemon)
                 << std::endl;
       ceph_abort();
     }
-    schema.insert({i.name, i});
+    schema.emplace(i.name, i);
   }
 
   // Populate list of legacy_values according to the OPTION() definitions
@@ -155,7 +155,7 @@ md_config_t::md_config_t(bool is_daemon)
 void md_config_t::validate_schema()
 {
   for (const auto &i : schema) {
-    const auto &opt = i.second;
+    const Option &opt = i.second;
     for (const auto &see_also_key : opt.see_also) {
       if (schema.count(see_also_key) == 0) {
         std::cerr << "Non-existent see-also key '" << see_also_key
@@ -309,7 +309,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
   std::vector <std::string> my_sections;
   _get_my_sections(my_sections);
   for (const auto &i : schema) {
-    const auto &opt = i.second;
+    const Option &opt = i.second;
     std::string val;
     int ret = _get_val_from_conf_file(my_sections, opt.name, val, false);
     if (ret == 0) {
