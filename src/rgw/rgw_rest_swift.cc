@@ -572,20 +572,12 @@ static int get_swift_container_settings(req_state * const s,
                                         RGWCORSConfiguration * const cors_config,
                                         bool * const has_cors)
 {
-  string read_list, write_list;
-
-  const char * const read_attr = s->info.env->get("HTTP_X_CONTAINER_READ");
-  if (read_attr) {
-    read_list = read_attr;
-  }
-  const char * const write_attr = s->info.env->get("HTTP_X_CONTAINER_WRITE");
-  if (write_attr) {
-    write_list = write_attr;
-  }
+  const char * const read_list = s->info.env->get("HTTP_X_CONTAINER_READ");
+  const char * const write_list = s->info.env->get("HTTP_X_CONTAINER_WRITE");
 
   *has_policy = false;
 
-  if (read_attr || write_attr) {
+  if (read_list || write_list) {
     RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
     const auto r = swift_policy.create(store,
                                        s->user->user_id,
