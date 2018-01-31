@@ -1440,6 +1440,11 @@ void md_config_t::diff(
 {
   Mutex::Locker l(lock);
   for (auto& i : values) {
+    if (i.second.size() == 1 &&
+	i.second.begin()->first == CONF_DEFAULT) {
+      // we only have a default value; exclude from diff
+      continue;
+    }
     f->open_object_section(i.first.c_str());
     const Option *o = find_option(i.first);
     dump(f, CONF_DEFAULT, _get_val_default(*o));
