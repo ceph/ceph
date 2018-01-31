@@ -28,7 +28,9 @@
   TagForm
   Trees
   CSS Fix
-/*
+*/
+
+@import 'defaults';
 
 /* Basics */
 html {
@@ -146,12 +148,12 @@ option {
 /* Buttons */
 .btn-openattic {
   color: #ececec;
-  background-color: #288cea;
-  border-color: #288cea;
+  background-color: $oa-color-blue;
+  border-color: $oa-color-blue;
 }
 .btn-primary {
   color: #ececec;
-  background-color: #288CEA;
+  background-color: $oa-color-blue;
   border-color: #2172bf;
 }
 .btn-primary:hover,
@@ -183,11 +185,11 @@ fieldset[disabled] .btn-primary:active,
 .btn-primary.disabled.active,
 .btn-primary[disabled].active,
 fieldset[disabled] .btn-primary.active {
-  background-color: #288CEA;
+  background-color: $oa-color-blue;
   border-color: #2172bf;
 }
 .btn-primary .badge {
-  color: #288CEA;
+  color: $oa-color-blue;
   background-color: #ececec;
 }
 .btn-primary .caret {
@@ -213,7 +215,7 @@ button.btn.btn-label>i.fa {
 }
 .dropdown-menu>.active>a {
   color: #ececec;
-  background-color: #288cea;
+  background-color: $oa-color-blue;
 }
 .dataTables_wrapper .dropdown-menu>li.divider {
   cursor: auto;
@@ -325,7 +327,7 @@ ul.task-queue-pagination {
   background: #474544;
   border: 0;
   border-radius: 0;
-  border-top: 4px solid #288cea;
+  border-top: 4px solid $oa-color-blue;
   font-size: 1.2em;
 }
 .navbar-openattic .navbar-header {
@@ -388,7 +390,7 @@ ul.task-queue-pagination {
 .navbar-openattic .navbar-primary>.active>a:hover,
 .navbar-openattic .navbar-primary>.active>a:focus {
   color: #ececec;
-  background-color: #288cea;
+  background-color: $oa-color-blue;
   border: 0;
 }
 .navbar-openattic .navbar-utility a,
@@ -414,7 +416,7 @@ ul.task-queue-pagination {
   .navbar-openattic .navbar-primary>.active>a:hover,
   .navbar-openattic .navbar-primary>.active>a:focus {
     background-color: transparent;
-    border-bottom: 4px solid #288cea;
+    border-bottom: 4px solid $oa-color-blue;
   }
   .navbar-openattic .navbar-utility {
     border-bottom: 0;
@@ -449,10 +451,10 @@ ul.task-queue-pagination {
   }
   .navbar-openattic .navbar-nav .open .dropdown-menu>.active>a {
     color: #ececec;
-    background-color: #288cea;
+    background-color: $oa-color-blue;
   }
   .navbar-openattic .navbar-nav>li>a:hover {
-    background-color: #288cea;
+    background-color: $oa-color-blue;
   }
   .navbar-openattic .navbar-utility {
     border-top: 1px solid #ececec;
@@ -460,7 +462,7 @@ ul.task-queue-pagination {
   .navbar-openattic .navbar-primary>.active>a,
   .navbar-openattic .navbar-primary>.active>a:hover,
   .navbar-openattic .navbar-primary>.active>a:focus {
-    background-color: #288cea;
+    background-color: $oa-color-blue;
   }
 }
 
@@ -480,7 +482,7 @@ ul.task-queue-pagination {
 .nav-tabs-openattic>li.active>a:focus,
 .nav-tabs-openattic>li.active>a:hover {
   border: 0!important;
-  border-bottom: 3px solid #288cea!important;
+  border-bottom: 3px solid $oa-color-blue!important;
 }
 
 /* Notifications */
@@ -540,7 +542,7 @@ ul.task-queue-pagination {
 .pagination>.active>span,
 .pagination>.active>span:focus,
 .pagination>.active>span:hover {
-  color: #288cea;
+  color: $oa-color-blue;
   border-color: #fff #e1e1e1 #f4f4f4;
   border-width: 0 1px;
 }
@@ -608,7 +610,7 @@ ul.task-queue-pagination {
   border-radius: 0;
 }
 .panel-openattic>.panel-heading {
-  border-top: 2px solid #288cea;
+  border-top: 2px solid $oa-color-blue;
   border-radius: 0;
   padding: 20px 15px;
 }
@@ -635,7 +637,7 @@ table.datatable {
 }
 table.dataTable thead .sorting_asc,
 table.dataTable thead .sorting_desc {
-  color: #288cea;
+  color: $oa-color-blue;
 }
 table.dataTable thead .sorting,
 table.dataTable thead .sorting_asc,
@@ -749,7 +751,7 @@ table.datatable thead .sorting_desc:after {
 
 /* Typo */
 a {
-  color: #288cea;
+  color: $oa-color-blue;
 }
 a:hover,
 a:focus{
@@ -789,26 +791,6 @@ h6{
 
 /*************************************************************/
 
-/* Login */
-.login {
-  height: 100%;
-}
-.login .row {
-  color: #ececec;
-  background-color: #474544;
-}
-.login h1 {
-  margin-top: 0;
-  margin-bottom: 30px;
-}
-.login .form-control {
-  color: #ececec;
-  background-color: #555555;
-}
-.login .checkbox {
-  line-height: 20px;
-}
-
 /* Statistics */
 .statistics-content {
   margin: 0 -20px;
@@ -827,7 +809,7 @@ h6{
 
 /* Caret */
 .caret {
-  color: #288cea;
+  color: $oa-color-blue;
 }
 
 /* Datatables */
@@ -991,7 +973,7 @@ h6{
   color: #ffffff;
   font-size: 1.2em;
   font-weight: 700;
-  background-color: #288cea;
+  background-color: $oa-color-blue;
   border-radius: 5px 5px 0 0;
   z-index: 99999;
 }
@@ -1025,7 +1007,7 @@ h6{
   width: 300px;
   height: 100%;
   background-color: #ffffff;
-  border-left: 5px solid #288cea;
+  border-left: 5px solid $oa-color-blue;
   z-index: 99999;
   overflow-y: auto;
 }
@@ -1094,7 +1076,7 @@ h6{
   background-image: none !important;
 }
 .progress-bar-info {
-  background-color: #288cea;
+  background-color: $oa-color-blue;
 }
 .progress-bar-freespace {
   background-color: #ddd;
@@ -1357,7 +1339,7 @@ uib-accordion .panel-title,
 
 /* oa-helper  */
 oa-helper i {
-  color: #288cea;
+  color: $oa-color-blue;
   cursor: pointer;
 }
 

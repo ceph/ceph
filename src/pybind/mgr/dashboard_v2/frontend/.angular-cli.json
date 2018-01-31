@@ -22,6 +22,7 @@
         "../node_modules/bootstrap/dist/css/bootstrap.css",
         "../node_modules/ng2-toastr/bundles/ng2-toastr.min.css",
         "../node_modules/font-awesome/css/font-awesome.css",
+        "../node_modules/awesome-bootstrap-checkbox/awesome-bootstrap-checkbox.css",
         "styles.scss"
       ],
       "scripts": [],
