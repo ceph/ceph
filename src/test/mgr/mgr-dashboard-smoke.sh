@@ -21,18 +21,17 @@ function run() {
     setup $dir || return 1
 
     MON=127.0.0.1:7150  # git grep '\<7150\>' : there must be only one
-    (
-        FSID=$(uuidgen) 
-        export CEPH_ARGS
-        CEPH_ARGS+="--fsid=$FSID --auth-supported=none "
-        CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
-        CEPH_ARGS+="--mgr-initial-modules=dashbaord "
-	CEPH_ARGS+="--mon-host=$MON"
-        run_mon $dir a --public-addr $MON || return 1
-    )
+
+    FSID=$(uuidgen)
+    CEPH_ARGS+="--fsid=$FSID --auth-supported=none "
+    CEPH_ARGS+="--mon-initial-members=a --mon-host=$MON "
+    CEPH_ARGS+="--mgr-initial-modules=dashbaord "
+    CEPH_ARGS+="--mon-host=$MON"
+    export CEPH_ARGS
+
+    run_mon $dir a --public-addr $MON || return 1
 
     timeout 360 ceph --mon-host $MON mon stat || return 1
-    export CEPH_ARGS="--mon_host $MON "
     ceph config-key set mgr/x/dashboard/server_port 7001
     MGR_ARGS+="--mgr_module_path=${CEPH_ROOT}/src/pybind/mgr "
     run_mgr $dir x ${MGR_ARGS} || return 1
