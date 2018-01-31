@@ -77,6 +77,8 @@ class Module(MgrModule):
         df = self.get("df")
         data = []
 
+        now = datetime.utcnow().isoformat() + 'Z'
+
         df_types = [
             'bytes_used',
             'kb_used',
@@ -102,7 +104,7 @@ class Module(MgrModule):
                         "type_instance": df_type,
                         "fsid": self.get_fsid()
                     },
-                    "time": datetime.utcnow().isoformat() + 'Z',
+                    "time": now,
                     "fields": {
                         "value": pool['stats'][df_type],
                     }
@@ -112,6 +114,8 @@ class Module(MgrModule):
 
     def get_daemon_stats(self):
         data = []
+
+        now = datetime.utcnow().isoformat() + 'Z'
 
         for daemon, counters in self.get_all_perf_counters().iteritems():
             svc_type, svc_id = daemon.split(".")
@@ -131,7 +135,7 @@ class Module(MgrModule):
                         "host": metadata['hostname'],
                         "fsid": self.get_fsid()
                     },
-                    "time": datetime.utcnow().isoformat() + 'Z',
+                    "time": now,
                     "fields": {
                         "value": value
                     }
