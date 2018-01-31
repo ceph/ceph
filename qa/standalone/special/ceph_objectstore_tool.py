@@ -992,9 +992,6 @@ def main(argv):
     cmd = "{path}/ceph-objectstore-tool --data-path BAD_DATA_PATH --op list".format(osd=ONEOSD, path=CEPH_BIN)
     ERRORS += test_failure(cmd, "data-path: BAD_DATA_PATH: No such file or directory")
 
-    cmd = "{path}/ceph-objectstore-tool --journal-path BAD_JOURNAL_PATH --op dump-journal".format(path=CEPH_BIN)
-    ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: (2) No such file or directory")
-
     cmd = (CFSD_PREFIX + "--journal-path BAD_JOURNAL_PATH --op list").format(osd=ONEOSD)
     ERRORS += test_failure(cmd, "journal-path: BAD_JOURNAL_PATH: No such file or directory")
 
