@@ -72,11 +72,11 @@ KernelDevice::KernelDevice(CephContext* cct,
     fd_buffered(-1),
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
-    injecting_crash(0)
+    injecting_crash(0),
+    aio_main_service(cct, this)
 {
-  dout(0) << "!!!!!!!!!!! num_shards = " << num_shards << dendl;
   for (size_t i = 0; i < num_shards; ++i) {
-    aio_services.emplace_back(cct, this);
+    aio_rdonly_services.emplace_back(cct, this);
   }
 }
 
@@ -353,13 +353,19 @@ int KernelDevice::_aio_start()
     return 0;
   }
 
-  for (size_t i = 0; i < aio_services.size(); ++i) {
-    const int ret = aio_services[i].start(cct);
+  const int ret = aio_main_service.start(cct);
+  if (ret < 0) {
+    return ret;
+  }
+
+  for (size_t i = 0; i < aio_rdonly_services.size(); ++i) {
+    const int ret = aio_rdonly_services[i].start(cct);
     if (ret < 0) {
       // oops, need to undo the partial state
       while (i > 0) {
-        aio_services[--i].stop(cct);
+        aio_rdonly_services[--i].stop(cct);
       }
+      aio_main_service.stop(cct);
       return ret;
     }
   }
@@ -372,7 +378,10 @@ void KernelDevice::_aio_stop()
   if (!aio) {
     return;
   }
-  for (auto& aio_service : aio_services) {
+
+  aio_main_service.stop(cct);
+
+  for (auto& aio_service : aio_rdonly_services) {
     aio_service.stop(cct);
   }
 }
@@ -564,11 +573,56 @@ void KernelDevice::aio_submit(IOContext *ioc)
   }
 
   void *priv = static_cast<void*>(ioc);
-  auto& aio_service = \
-    aio_services[ioc->shard_hint % aio_services.size()];
   int r, retries = 0;
+  r = aio_main_service.aio_queue.submit_batch(ioc->running_aios.begin(), e,
+					      pending, priv, &retries);
+
+  if (retries)
+    derr << __func__ << " retries " << retries << dendl;
+  if (r < 0) {
+    derr << " aio submit got " << cpp_strerror(r) << dendl;
+    assert(r == 0);
+  }
+}
+
+void KernelDevice::aio_submit(RDOnlyIOContext *ioc)
+{
+  dout(20) << __func__ << " pure-read ioc " << ioc
+	   << " pending " << ioc->num_pending.load()
+	   << " running " << ioc->num_running.load()
+	   << dendl;
+
+  if (ioc->num_pending.load() == 0) {
+    return;
+  }
+
+  // move these aside, and get our end iterator position now, as the
+  // aios might complete as soon as they are submitted and queue more
+  // wal aio's.
+  list<aio_t>::iterator e = ioc->running_aios.begin();
+  ioc->running_aios.splice(e, ioc->pending_aios);
+
+  int pending = ioc->num_pending.load();
+  ioc->num_running += pending;
+  ioc->num_pending -= pending;
+  assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
+  assert(ioc->pending_aios.size() == 0);
+  
+  if (cct->_conf->bdev_debug_aio) {
+    list<aio_t>::iterator p = ioc->running_aios.begin();
+    while (p != e) {
+      dout(30) << __func__ << " " << *p << dendl;
+      std::lock_guard<std::mutex> l(debug_queue_lock);
+      debug_aio_link(*p++);
+    }
+  }
+
+  void *priv = static_cast<void*>(ioc);
+  int r, retries = 0;
+  auto& aio_service = \
+    aio_rdonly_services[ioc->get_shard_hint() % aio_rdonly_services.size()];
   r = aio_service.aio_queue.submit_batch(ioc->running_aios.begin(), e,
-					 pending, priv, &retries);
+				         pending, priv, &retries);
   
   if (retries)
     derr << __func__ << " retries " << retries << dendl;

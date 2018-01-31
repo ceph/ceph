@@ -47,7 +47,6 @@ private:
 public:
   CephContext* cct;
   void *priv;
-  size_t shard_hint = 0;
 #ifdef HAVE_SPDK
   void *nvme_task_first = nullptr;
   void *nvme_task_last = nullptr;
@@ -104,6 +103,23 @@ public:
   }
 };
 
+class RDOnlyIOContext : public IOContext {
+  size_t shard_hint;
+
+public:
+  explicit RDOnlyIOContext(
+    CephContext* const cct,
+    void* const p,
+    size_t shard_hint = 0,
+    bool allow_eio = false)
+  : IOContext(cct, p, allow_eio),
+    shard_hint(shard_hint) {
+  }
+
+  size_t get_shard_hint() const {
+    return shard_hint;
+  }
+};
 
 class BlockDevice {
 public:
@@ -141,6 +157,11 @@ public:
   virtual bool is_rotational() { return rotational; }
 
   virtual void aio_submit(IOContext *ioc) = 0;
+  virtual void aio_submit(RDOnlyIOContext *ioc) {
+    // The fallback implementation just treats an pure-read ioc like any
+    // any other one. This is safe but means no optimizations.
+    aio_submit(static_cast<IOContext*>(ioc));
+  }
 
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }

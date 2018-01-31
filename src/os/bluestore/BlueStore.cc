@@ -3884,9 +3884,10 @@ int BlueStore::BlueReadTrans::_do_read(
   if (!cr.blobs2read.empty()) {
     // yes, at least one region isn't in cache
     if (!aio) {
-      aio = std::make_unique<AioReadBatch>(store->cct);
-      Collection *c = static_cast<Collection *>(this->c.get());
-      aio->ioc.shard_hint = c->get_cid().hash_to_shard(store->cache_shards.size());
+      Collection* const c = static_cast<Collection *>(this->c.get());
+      const auto shard_hint = \
+        c->get_cid().hash_to_shard(store->cache_shards.size());
+      aio = std::make_unique<AioReadBatch>(store->cct, shard_hint);
     }
 
     aio->queue_read_ctx(std::move(cr),

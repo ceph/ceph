@@ -1797,17 +1797,11 @@ public:
 
     boost::container::small_vector<read_ctx_t, 1> read_ctx_batch;
     Context* on_all_complete;
-    IOContext ioc;
+    RDOnlyIOContext ioc;
 
-    AioReadBatch(CephContext* const cct,
-                 Context* const on_all_complete)
-      : on_all_complete(on_all_complete),
-        ioc(cct, this, true) { // allow EIO
-    }
-
-    AioReadBatch(CephContext* const cct)
+    AioReadBatch(CephContext* const cct, const size_t shard_hint)
       : on_all_complete(nullptr),
-        ioc(cct, this, true) { // allow EIO
+        ioc(cct, this, shard_hint, true) { // allow EIO
     }
 
     read_ctx_t& create_read_ctx(async_read_params_t params) {

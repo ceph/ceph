@@ -61,10 +61,11 @@ class KernelDevice : public BlockDevice {
     int start(CephContext* cct);
     void stop(CephContext* cct);
   };
+  aio_service_t aio_main_service;
   static constexpr size_t expected_max_shard_num = 16;
   boost::container::static_vector<
     aio_service_t,
-    expected_max_shard_num> aio_services;
+    expected_max_shard_num> aio_rdonly_services;
 
   void _aio_thread(aio_queue_t& aio_queue, const bool& aio_stop);
   int _aio_start();
@@ -93,6 +94,7 @@ public:
                size_t max_shard_num);
 
   void aio_submit(IOContext *ioc) override;
+  void aio_submit(RDOnlyIOContext *ioc) override;
 
   int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
   int get_devname(std::string *s) override {

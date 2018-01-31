@@ -57,6 +57,7 @@ class NVMEDevice : public BlockDevice {
 
   bool supported_bdev_label() override { return false; }
 
+  using BlockDevice::aio_submit;
   void aio_submit(IOContext *ioc) override;
 
   int read(uint64_t off, uint64_t len, bufferlist *pbl,

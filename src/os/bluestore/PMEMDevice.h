@@ -39,6 +39,7 @@ public:
   PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv);
 
 
+  using BlockDevice::aio_submit;
   void aio_submit(IOContext *ioc) override;
 
   int collect_metadata(const std::string& prefix, map<std::string,std::string> *pm) const override;
