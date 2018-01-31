@@ -247,7 +247,8 @@ private:
 
   int _get_val_cstr(const std::string &key, char **buf, int len) const;
   Option::value_t _get_val(const std::string &key,
-			   expand_stack_t *stack=0) const;
+			   expand_stack_t *stack=0,
+			   std::ostream *err=0) const;
   Option::value_t _get_val(const Option& o,
 			   expand_stack_t *stack=0,
 			   std::ostream *err=0) const;
