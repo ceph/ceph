@@ -45,7 +45,7 @@ class Module(MgrModule):
         'database': 'ceph',
         'username': None,
         'password': None,
-        'interval': 5,
+        'interval': 30,
         'ssl': 'false',
         'verify_ssl': 'true'
     }
