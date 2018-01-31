@@ -229,9 +229,11 @@ private:
     list<uint64_t> jq;
     list<pair<uint64_t, Context*> > flush_commit_waiters;
     Cond cond;
+    string osr_name_str;
   public:
     Mutex apply_lock;  // for apply mutual exclusion
     int id;
+    const char *osr_name;
 
     /// get_max_uncompleted
     bool _get_max_uncompleted(
@@ -351,8 +353,10 @@ private:
       : CollectionImpl(cid),
 	cct(cct),
 	qlock("FileStore::OpSequencer::qlock", false, false),
+	osr_name_str(stringify(cid)),
 	apply_lock("FileStore::OpSequencer::apply_lock", false, false),
-        id(i) {}
+        id(i),
+	osr_name(osr_name_str.c_str()) {}
     ~OpSequencer() override {
       assert(q.empty());
     }
@@ -511,13 +515,14 @@ public:
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
-    ThreadPool::TPHandle *handle);
+    ThreadPool::TPHandle *handle,
+    const char *osr_name);
   int do_transactions(vector<Transaction> &tls, uint64_t op_seq) override {
-    return _do_transactions(tls, op_seq, 0);
+    return _do_transactions(tls, op_seq, nullptr, "replay");
   }
   void _do_transaction(
     Transaction& t, uint64_t op_seq, int trans_num,
-    ThreadPool::TPHandle *handle);
+    ThreadPool::TPHandle *handle, const char *osr_name);
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
