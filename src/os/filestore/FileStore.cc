@@ -2200,11 +2200,6 @@ int FileStore::queue_transactions(CollectionHandle& ch, vector<Transaction>& tls
   OpSequencer *osr = static_cast<OpSequencer*>(ch.get());
   dout(5) << __FUNC__ << ": osr " << osr << " " << *osr << dendl;
 
-  // used to include osr information in tracepoints during transaction apply
-  for (vector<Transaction>::iterator i = tls.begin(); i != tls.end(); ++i) {
-    (*i).set_osr(osr);
-  }
-
   ZTracer::Trace trace;
   if (osd_op && osd_op->pg_trace) {
     osd_op->store_trace.init("filestore op", &trace_endpoint, &osd_op->pg_trace);
