@@ -2,12 +2,14 @@
 # pylint: disable=W0212
 from __future__ import absolute_import
 
+import collections
 import importlib
 import inspect
 import json
 import os
 import pkgutil
 import sys
+import threading
 
 import six
 import cherrypy
@@ -298,3 +300,93 @@ class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
             if name in cookie:
                 del cookie[name]['expires']
                 del cookie[name]['max-age']
+
+
+class NotificationQueue(threading.Thread):
+    _ALL_TYPES_ = '__ALL__'
+    _listeners = collections.defaultdict(set)
+    _lock = threading.Lock()
+    _cond = threading.Condition()
+    _queue = collections.deque()
+    _running = False
+    _instance = None
+
+    def __init__(self):
+        super(NotificationQueue, self).__init__()
+
+    @classmethod
+    def start_queue(cls):
+        with cls._lock:
+            if cls._instance:
+                # the queue thread is already running
+                return
+            cls._running = True
+            cls._instance = NotificationQueue()
+        cls._instance.start()
+
+    @classmethod
+    def stop(cls):
+        with cls._lock:
+            if not cls._instance:
+                # the queue thread was not started
+                return
+            instance = cls._instance
+            cls._instance = None
+            cls._running = False
+        with cls._cond:
+            cls._cond.notify()
+        instance.join()
+
+    @classmethod
+    def register(cls, func, types=None):
+        """Registers function to listen for notifications
+
+        If the second parameter `types` is omitted, the function in `func`
+        parameter will be called for any type of notifications.
+
+        Args:
+            func (function): python function ex: def foo(val)
+            types (str|list): the single type to listen, or a list of types
+        """
+        with cls._lock:
+            if not types:
+                cls._listeners[cls._ALL_TYPES_].add(func)
+                return
+            if isinstance(types, str):
+                cls._listeners[types].add(func)
+            elif isinstance(types, list):
+                for typ in types:
+                    cls._listeners[typ].add(func)
+            else:
+                raise Exception("types param is neither a string nor a list")
+
+    @classmethod
+    def new_notification(cls, notify_type, notify_value):
+        cls._queue.append((notify_type, notify_value))
+        with cls._cond:
+            cls._cond.notify()
+
+    @classmethod
+    def notify_listeners(cls, events):
+        for ev in events:
+            notify_type, notify_value = ev
+            with cls._lock:
+                listeners = list(cls._listeners[notify_type])
+                listeners.extend(cls._listeners[cls._ALL_TYPES_])
+            for listener in listeners:
+                listener(notify_value)
+
+    def run(self):
+        while self._running:
+            private_buffer = []
+            try:
+                while True:
+                    private_buffer.append(self._queue.popleft())
+            except IndexError:
+                pass
+            self.notify_listeners(private_buffer)
+            with self._cond:
+                self._cond.wait(1.0)
+        # flush remaining events
+        self.notify_listeners(self._queue)
+        self._queue.clear()

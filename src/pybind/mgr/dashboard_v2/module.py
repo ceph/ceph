@@ -11,7 +11,8 @@ import cherrypy
 from mgr_module import MgrModule
 
 from .controllers.auth import Auth
-from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool
+from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
+                   NotificationQueue
 from . import logger
 
 
@@ -88,12 +89,15 @@ class Module(MgrModule):
         self.configure_cherrypy()
 
         cherrypy.engine.start()
+        NotificationQueue.start_queue()
         logger.info('Waiting for engine...')
+        self.log.info('Waiting for engine...')
         cherrypy.engine.block()
         logger.info('Engine done')
 
     def shutdown(self):
         logger.info('Stopping server...')
+        NotificationQueue.stop()
         cherrypy.engine.exit()
         logger.info('Stopped server')
 
@@ -104,6 +108,9 @@ class Module(MgrModule):
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))
+
+    def notify(self, notify_type, notify_id):
+        NotificationQueue.new_notification(notify_type, notify_id)
 
     class ApiRoot(object):
 
