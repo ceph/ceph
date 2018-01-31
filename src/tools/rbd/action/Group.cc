@@ -392,8 +392,13 @@ int execute_group_snap_create(const po::variables_map &vm,
 
   librbd::RBD rbd;
   r = rbd.group_snap_remove(io_ctx, group_name.c_str(), snap_name.c_str());
+  if (r < 0) {
+    std::cerr << "rbd: failed to remove group snapshot: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
 
-  return r;
+  return 0;
 }
 
 int execute_group_snap_rename(const po::variables_map &vm,
@@ -426,6 +431,12 @@ int execute_group_snap_rename(const po::variables_map &vm,
     return -EINVAL;
   }
 
+  r = utils::validate_snapshot_name(at::ARGUMENT_MODIFIER_DEST, dest_snap_name,
+                                    utils::SNAPSHOT_PRESENCE_REQUIRED,
+                                    utils::SPEC_VALIDATION_SNAP);
+  if (r < 0) {
+    return r;
+  }
   librados::Rados rados;
   librados::IoCtx io_ctx;
   r = utils::init(pool_name, &rados, &io_ctx);
@@ -438,7 +449,8 @@ int execute_group_snap_rename(const po::variables_map &vm,
                             source_snap_name.c_str(), dest_snap_name.c_str());
 
   if (r < 0) {
-    std::cerr << "rbd: failed to rename snapshot" << std::endl;
+    std::cerr << "rbd: failed to rename group snapshot: "
+              << cpp_strerror(r) << std::endl;
     return r;
   }
 
