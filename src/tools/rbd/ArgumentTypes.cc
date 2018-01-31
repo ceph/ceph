@@ -227,7 +227,7 @@ void add_group_spec_options(po::options_description *pos,
   } else {
     add_snap_option(opt, modifier);
     pos->add_options()
-      ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
+      ((get_name_prefix(modifier) + GROUP_SNAP_SPEC).c_str(),
        (get_description_prefix(modifier) + "group specification\n" +
          "(example: [<pool-name>/]<group-name>@<snap-name>)").c_str());
   }
