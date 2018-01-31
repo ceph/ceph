@@ -251,7 +251,7 @@ int main(int argc, const char **argv, const char *envp[]) {
     }
     
     client->update_metadata("mount_point", cfuse->get_mount_point());
-    perms = client->pick_my_perms();
+    perms = client->default_perms();
     {
       // start up fuse
       // use my argc, argv (make sure you pass a mount point!)

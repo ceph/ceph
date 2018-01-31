@@ -100,7 +100,7 @@ public:
     if (ret)
       goto fail;
 
-    default_perms = Client::pick_my_perms(cct);
+    default_perms = Client::default_perms();
     inited = true;
     return 0;
 
@@ -460,6 +460,15 @@ extern "C" int ceph_is_mounted(struct ceph_mount_info *cmount)
 extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
 {
   return &cmount->default_perms;
+}
+
+extern "C" int ceph_mount_perms_set(struct ceph_mount_info *cmount,
+				    struct UserPerm *perms)
+{
+  if (cmount->is_mounted())
+    return -EISCONN;
+  cmount->default_perms = *perms;
+  return 0;
 }
 
 extern "C" int ceph_statfs(struct ceph_mount_info *cmount, const char *path,

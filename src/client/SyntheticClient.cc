@@ -312,7 +312,7 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   dout(15) << "initing" << dendl;
   int err = client->init();
   if (err < 0) {
@@ -1005,7 +1005,7 @@ void SyntheticClient::up()
 int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
 {
   dout(4) << "play trace prefix '" << prefix << "'" << dendl;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   t.start();
 
   string buf;
@@ -1074,7 +1074,7 @@ int SyntheticClient::play_trace(Trace& t, string& prefix, bool metadata_only)
     }
 
     // high level ops ---------------------
-    UserPerm perms = client->pick_my_perms();
+    UserPerm perms = client->default_perms();
     if (strcmp(op, "link") == 0) {
       const char *a = t.get_string(buf, p);
       const char *b = t.get_string(buf2, p);
@@ -1551,7 +1551,7 @@ int SyntheticClient::clean_dir(string& basedir)
 {
   // read dir
   list<string> contents;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   int r = client->getdir(basedir.c_str(), contents, perms);
   if (r < 0) {
     dout(1) << "getdir on " << basedir << " returns " << r << dendl;
@@ -1601,7 +1601,7 @@ int SyntheticClient::full_walk(string& basedir)
   ceph::unordered_map<inodeno_t, int> nlink;
   ceph::unordered_map<inodeno_t, int> nlink_seen;
 
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   while (!dirq.empty()) {
     string dir = dirq.front();
     frag_info_t expect = statq.front();
@@ -1690,7 +1690,7 @@ int SyntheticClient::full_walk(string& basedir)
 
 int SyntheticClient::dump_placement(string& fn) {
   
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   // open file
   int fd = client->open(fn.c_str(), O_RDONLY, perms);
@@ -1738,7 +1738,7 @@ int SyntheticClient::make_dirs(const char *basedir, int dirs, int files, int dep
 {
   if (time_to_stop()) return 0;
 
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   // make sure base dir exists
   int r = client->mkdir(basedir, 0755, perms);
   if (r != 0) {
@@ -1768,7 +1768,7 @@ int SyntheticClient::stat_dirs(const char *basedir, int dirs, int files, int dep
 {
   if (time_to_stop()) return 0;
 
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   // make sure base dir exists
   struct stat st;
@@ -1806,7 +1806,7 @@ int SyntheticClient::read_dirs(const char *basedir, int dirs, int files, int dep
   dout(3) << "read_dirs " << basedir << " dirs " << dirs << " files " << files << " depth " << depth << dendl;
 
   list<string> contents;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   utime_t s = ceph_clock_now();
   int r = client->getdir(basedir, contents, perms);
   utime_t e = ceph_clock_now();
@@ -1841,7 +1841,7 @@ int SyntheticClient::make_files(int num, int count, int priv, bool more)
 {
   int whoami = client->get_nodeid().v;
   char d[255];
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   if (priv) {
     for (int c=0; c<count; c++) {
@@ -1891,7 +1891,7 @@ int SyntheticClient::link_test()
   char d[255];
   char e[255];
 
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
  // create files
   int num = 200;
@@ -1927,7 +1927,7 @@ int SyntheticClient::link_test()
 int SyntheticClient::create_shared(int num)
 {
   // files
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   char d[255];
   client->mkdir("test", 0755, perms);
   for (int n=0; n<num; n++) {
@@ -1942,7 +1942,7 @@ int SyntheticClient::open_shared(int num, int count)
 {
   // files
   char d[255];
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   for (int c=0; c<count; c++) {
     // open
     list<int> fds;
@@ -1971,7 +1971,7 @@ int SyntheticClient::open_shared(int num, int count)
 
 // Hits OSD 0 with writes to various files with OSD 0 as the primary.
 int SyntheticClient::overload_osd_0(int n, int size, int wrsize) {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   // collect a bunch of files starting on OSD 0
   int left = n;
   int tried = 0;
@@ -2018,7 +2018,7 @@ int SyntheticClient::check_first_primary(int fh)
 
 int SyntheticClient::rm_file(string& fn)
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   return client->unlink(fn.c_str(), perms);
 }
 
@@ -2028,7 +2028,7 @@ int SyntheticClient::write_file(string& fn, int size, loff_t wrsize)   // size i
   char *buf = new char[wrsize+100];   // 1 MB
   memset(buf, 7, wrsize);
   int64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)wrsize;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   int fd = client->open(fn.c_str(), O_RDWR|O_CREAT, perms);
   dout(5) << "writing to " << fn << " fd " << fd << dendl;
@@ -2145,7 +2145,7 @@ int SyntheticClient::read_file(const std::string& fn, int size,
   char *buf = new char[rdsize]; 
   memset(buf, 1, rdsize);
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   int fd = client->open(fn.c_str(), O_RDONLY, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
@@ -2411,7 +2411,7 @@ int SyntheticClient::object_rw(int nobj, int osize, int wrpc,
 
 int SyntheticClient::read_random(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
   int fd = client->open(fn.c_str(), O_RDWR, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
@@ -2541,7 +2541,7 @@ int normdist(int min, int max, int stdev) /* specifies input values */
 int SyntheticClient::read_random_ex(string& fn, int size, int rdsize)   // size is in MB, wrsize in bytes
 {
   uint64_t chunks = (uint64_t)size * (uint64_t)(1024*1024) / (uint64_t)rdsize;
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   int fd = client->open(fn.c_str(), O_RDWR, perms);
   dout(5) << "reading from " << fn << " fd " << fd << dendl;
   
@@ -2645,7 +2645,7 @@ int SyntheticClient::random_walk(int num_req)
 
   init_op_dist();  // set up metadata op distribution
  
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   while (left > 0) {
     left--;
 
@@ -2832,7 +2832,7 @@ int SyntheticClient::random_walk(int num_req)
 
 void SyntheticClient::make_dir_mess(const char *basedir, int n)
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   vector<string> dirs;
   
   dirs.push_back(basedir);
@@ -2871,7 +2871,7 @@ void SyntheticClient::make_dir_mess(const char *basedir, int n)
 
 void SyntheticClient::foo()
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   if (1) {
     // make 2 parallel dirs, link/unlink between them.
@@ -3068,7 +3068,7 @@ int SyntheticClient::thrash_links(const char *basedir, int dirs, int files, int 
 
   if (time_to_stop()) return 0;
 
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
 
   srand(0);
   if (1) {
@@ -3203,7 +3203,7 @@ void SyntheticClient::import_find(const char *base, const char *find, bool data)
    *
    */
 
-  UserPerm process_perms = client->pick_my_perms();
+  UserPerm process_perms = client->default_perms();
 
   if (base[0] != '-') 
     client->mkdir(base, 0755, process_perms);
@@ -3343,7 +3343,7 @@ int SyntheticClient::lookup_ino(inodeno_t ino, const UserPerm& perms)
 
 int SyntheticClient::chunk_file(string &filename)
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   int fd = client->open(filename.c_str(), O_RDONLY, perms);
   if (fd < 0)
     return fd;
@@ -3417,7 +3417,7 @@ void SyntheticClient::rmsnap(const char *base, const char *name, const UserPerm&
 
 void SyntheticClient::mksnapfile(const char *dir)
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms = client->default_perms();
   client->mkdir(dir, 0755, perms);
 
   string f = dir;

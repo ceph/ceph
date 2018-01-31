@@ -290,16 +290,8 @@ class Client : public Dispatcher, public md_config_obs_t {
 public:
   void tick();
 
-  UserPerm pick_my_perms() {
-    uid_t uid = user_id >= 0 ? user_id : -1;
-    gid_t gid = group_id >= 0 ? group_id : -1;
-    return UserPerm(uid, gid);
-  }
-
-  static UserPerm pick_my_perms(CephContext *c) {
-    uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : -1;
-    gid_t gid = c->_conf->client_mount_gid >= 0 ? c->_conf->client_mount_gid : -1;
-    return UserPerm(uid, gid);
+  static UserPerm default_perms() {
+    return UserPerm(-1, -1);
   }
 protected:
   Messenger *messenger;  
@@ -308,7 +300,6 @@ protected:
 
   client_t whoami;
 
-  int user_id, group_id;
   int acl_type;
 
   void set_cap_epoch_barrier(epoch_t e);
