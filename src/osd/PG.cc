@@ -2912,7 +2912,7 @@ void PG::publish_stats_to_osd()
   if (get_osdmap()->require_osd_release >= CEPH_RELEASE_MIMIC) {
     // share (some of) our purged_snaps via the pg_stats. limit # of intervals
     // because we don't want to make the pg_stat_t structures too expensive.
-    unsigned max = cct->_conf->get_val<uint64_t>("osd_max_snap_prune_intervals_per_epoch");
+    unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
     unsigned num = 0;
     auto i = info.purged_snaps.begin();
     while (num < max && i != info.purged_snaps.end()) {
