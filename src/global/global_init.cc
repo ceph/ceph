@@ -93,15 +93,16 @@ void global_pre_init(
   CephInitParameters iparams = ceph_argparse_early_args(
     args, module_type,
     &cluster, &conf_file_list);
-  if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
-	       CINIT_FLAG_NO_MON_CONFIG)) {
-    iparams.no_mon_config = true;
-  }
 
   CephContext *cct = common_preinit(iparams, code_env, flags);
   cct->_conf->cluster = cluster;
   global_init_set_globals(cct);
   md_config_t *conf = cct->_conf;
+
+  if (flags & (CINIT_FLAG_NO_DEFAULT_CONFIG_FILE|
+	       CINIT_FLAG_NO_MON_CONFIG)) {
+    conf->no_mon_config = true;
+  }
 
   // alternate defaults
   if (defaults) {
@@ -140,7 +141,7 @@ void global_pre_init(
   // command line (as passed by caller)
   conf->parse_argv(args);
 
-  if (!iparams.no_mon_config) {
+  if (!conf->no_mon_config) {
     MonClient mc_bootstrap(g_ceph_context);
     if (mc_bootstrap.get_monmap_and_config() < 0) {
       derr << "failed to fetch mon config (--no-mon-config to skip)" << dendl;
