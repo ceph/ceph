@@ -18,7 +18,7 @@ Skip test on FreeBSD as it generates different output there.
       diff                                Print extents that differ since a
                                           previous snap, or image creation.
       disk-usage (du)                     Show disk usage stats for pool, image
-                                          or snapshot
+                                          or snapshot.
       export                              Export image to file.
       export-diff                         Export incremental diff to file.
       feature disable                     Disable the specified image feature.
@@ -381,7 +381,7 @@ Skip test on FreeBSD as it generates different output there.
                         [--from-snap <from-snap>] 
                         <image-or-snap-spec> 
   
-  Show disk usage stats for pool, image or snapshot
+  Show disk usage stats for pool, image or snapshot.
   
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
