@@ -1374,7 +1374,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   for (map<pg_shard_t, pg_info_t>::iterator p = all_info.begin();
        p != all_info.end();
        ++p) {
-    dout(10) << "calc_acting osd." << p->first << " " << p->second << dendl;
+    dout(10) << __func__ << " all_info osd." << p->first << " " << p->second << dendl;
   }
 
   map<pg_shard_t, pg_info_t>::const_iterator auth_log_shard =

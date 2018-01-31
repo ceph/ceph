@@ -8086,7 +8086,7 @@ void PrimaryLogPG::start_copy(CopyCallback *cb, ObjectContextRef obc,
 
 void PrimaryLogPG::_copy_some(ObjectContextRef obc, CopyOpRef cop)
 {
-  dout(10) << __func__ << " " << obc << " " << cop << dendl;
+  dout(10) << __func__ << " " << *obc << " " << cop << dendl;
 
   unsigned flags = 0;
   if (cop->flags & CEPH_OSD_COPY_FROM_FLAG_FLUSH)
