@@ -78,7 +78,7 @@ def create_id(fsid, json_secrets, osd_id=None):
 
 def check_id(osd_id):
     """
-    Checks to see if an osd ID exists or not. Returns osd_id
+    Checks to see if an osd ID exists or not. Returns True
     if it does exist, False if it doesn't.
 
     :param osd_id: The osd ID to check
@@ -103,11 +103,7 @@ def check_id(osd_id):
 
     output = json.loads(''.join(stdout).strip())
     osds = output['nodes']
-    found_osd = any([str(osd['id']) == str(osd_id) for osd in osds])
-    if found_osd:
-        # return a string so an ID of 0 evaluates to True
-        return str(osd_id)
-    return False
+    return any([str(osd['id']) == str(osd_id) for osd in osds])
 
 
 def mount_tmpfs(path):
