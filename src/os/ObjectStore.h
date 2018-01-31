@@ -435,8 +435,6 @@ public:
   private:
     TransactionData data;
 
-    void *osr {nullptr}; // NULL on replay
-
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32> object_index;
 
@@ -466,7 +464,6 @@ public:
     // override default move operations to reset default values
     Transaction(Transaction&& other) noexcept :
       data(std::move(other.data)),
-      osr(other.osr),
       coll_index(std::move(other.coll_index)),
       object_index(std::move(other.object_index)),
       coll_id(other.coll_id),
@@ -477,14 +474,12 @@ public:
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
     }
 
     Transaction& operator=(Transaction&& other) noexcept {
       data = std::move(other.data);
-      osr = other.osr;
       coll_index = std::move(other.coll_index);
       object_index = std::move(other.object_index);
       coll_id = other.coll_id;
@@ -495,7 +490,6 @@ public:
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
       return *this;
@@ -823,14 +817,6 @@ public:
     /// Number of operations in the transation
     int get_num_ops() {
       return data.ops;
-    }
-
-    void set_osr(void *s) {
-      osr = s;
-    }
-
-    void *get_osr() {
-      return osr;
     }
 
     /**

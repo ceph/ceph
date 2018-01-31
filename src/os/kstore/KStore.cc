@@ -2145,7 +2145,6 @@ int KStore::queue_transactions(
   txc->oncommit = ondisk;
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
-    (*p).set_osr(osr);
     txc->ops += (*p).get_num_ops();
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
