@@ -32,6 +32,8 @@ class ZabbixSender(object):
         cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
                hostname, '-vv', '-i', '-']
 
+        self.log.debug('Executing: %s', cmd)
+
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
         for key, value in data.items():
@@ -218,6 +220,13 @@ class Module(MgrModule):
         if not self.config['zabbix_host']:
             self.log.error('Zabbix server not set, please configure using: '
                            'ceph zabbix config-set zabbix_host <zabbix_host>')
+            self.set_health_checks({
+                'MGR_ZABBIX_NO_SERVER': {
+                    'severity': 'warning',
+                    'summary': 'No Zabbix server not configured',
+                    'detail': ['Configuration value zabbix_host not configured']
+                }
+            })
             return
 
         try:
@@ -231,9 +240,17 @@ class Module(MgrModule):
                                   self.config['zabbix_port'], self.log)
 
             zabbix.send(identifier, data)
+            self.set_health_checks(dict())
             return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+            self.set_health_checks({
+                'MGR_ZABBIX_SEND_FAILED': {
+                    'severity': 'warning',
+                    'summary': 'Failed to send data to Zabbix',
+                    'detail': [str(exc)]
+                }
+            })
 
         return False
 
