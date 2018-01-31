@@ -55,6 +55,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
       need_stats = stats;
     }
   }
+  doing_swift_cross_tenant = s->bucket_tenant != s->user->user_id.tenant;
 
   return 0;
 }

@@ -289,6 +289,7 @@ protected:
   uint64_t buckets_size_rounded;
   map<string, bufferlist> attrs;
   bool is_truncated;
+  bool doing_swift_cross_tenant;
 
   virtual uint64_t get_default_max() const {
     return 1000;
