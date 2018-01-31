@@ -59,7 +59,7 @@ static bool uid_is_public(string& uid)
          sub.compare(".referrer") == 0;
 }
 
-void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uids, int perm)
+int RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uids, int perm)
 {
   list<string>::iterator iter;
   for (iter = uids.begin(); iter != uids.end(); ++iter ) {
@@ -73,16 +73,18 @@ void RGWAccessControlPolicy_SWIFT::add_grants(RGWRados *store, list<string>& uid
       rgw_user user(uid);
       if (rgw_get_user_info_by_uid(store, user, grant_user) < 0) {
         ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
-        /* skipping silently */
+        /* skipping not so silently */
+        return ESRCH;
       } else {
         grant.set_canon(user, grant_user.display_name, perm);
         acl.add_grant(&grant);
       }
     }
   }
+  return 0;
 }
 
-bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string& name, const char* read_list, const char* write_list, uint32_t& rw_mask)
+int RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string& name, const char* read_list, const char* write_list, uint32_t& rw_mask)
 {
   acl.create_default(id, name);
   owner.set_id(id);
@@ -93,25 +95,33 @@ bool RGWAccessControlPolicy_SWIFT::create(RGWRados *store, rgw_user& id, string&
     list<string> uids;
     int r = parse_list(read_list, uids);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
-      return false;
+      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << " rl=" << read_list << dendl;
+      return r;
     }
 
-    add_grants(store, uids, SWIFT_PERM_READ);
+    r = add_grants(store, uids, SWIFT_PERM_READ);
+    if (r) {
+      ldout(cct, 0) << "ERROR: add_grants returned r=" << r << " rl=" << read_list << dendl;
+      return r;
+    }
     rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list) {
     list<string> uids;
     int r = parse_list(write_list, uids);
     if (r < 0) {
-      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << dendl;
-      return false;
+      ldout(cct, 0) << "ERROR: parse_list returned r=" << r << " wl=" << write_list << dendl;
+      return r;
     }
 
-    add_grants(store, uids, SWIFT_PERM_WRITE);
+    r = add_grants(store, uids, SWIFT_PERM_WRITE);
+    if (r) {
+      ldout(cct, 0) << "ERROR: add_grants returned r=" << r << " wl=" << write_list << dendl;
+      return r;
+    }
     rw_mask |= SWIFT_PERM_WRITE;
   }
-  return true;
+  return 0;
 }
 
 void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,

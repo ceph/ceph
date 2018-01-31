@@ -19,8 +19,8 @@ public:
   explicit RGWAccessControlPolicy_SWIFT(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
   ~RGWAccessControlPolicy_SWIFT() {}
 
-  void add_grants(RGWRados *store, list<string>& uids, int perm);
-  bool create(RGWRados *store, rgw_user& id, string& name, const char* read_list, const char* write_list, uint32_t& rw_mask);
+  int add_grants(RGWRados *store, list<string>& uids, int perm);
+  int create(RGWRados *store, rgw_user& id, string& name, const char* read_list, const char* write_list, uint32_t& rw_mask);
   void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(string& read, string& write);
 };
