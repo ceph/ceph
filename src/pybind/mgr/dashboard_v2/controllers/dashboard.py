@@ -9,7 +9,7 @@ import time
 import cherrypy
 from mgr_module import CommandResult
 
-from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue
+from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue, ViewCache
 
 
 LOG_BUFFER_SIZE = 30
@@ -54,6 +54,13 @@ class Dashboard(BaseController):
                 for l in lines:
                     buf.appendleft(l)
 
+    @ViewCache()
+    def _rbd_pool_ls(self):
+        osd_map = self.mgr.get("osd_map")
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools'] if
+                     'rbd' in pool.get('application_metadata', {})]
+        return rbd_pools
+
     @cherrypy.expose
     @cherrypy.tools.json_out()
     def toplevel(self):
@@ -67,9 +74,16 @@ class Dashboard(BaseController):
             for f in fsmap['filesystems']
         ]
 
+        _, data = self._rbd_pool_ls()
+        if data is None:
+            self.mgr.log.warning("Failed to get RBD pool list")
+            data = []
+        data.sort()
+
         return {
             'health_status': self.health_data()['status'],
             'filesystems': filesystems,
+            'rbd_pools': data
         }
 
     # pylint: disable=R0914

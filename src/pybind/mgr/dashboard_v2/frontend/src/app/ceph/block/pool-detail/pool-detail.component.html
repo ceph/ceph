@@ -1,0 +1,34 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Block</li>
+    <li class="breadcrumb-item">Pools</li>
+    <li class="breadcrumb-item active" aria-current="page">{{ name }}</li>
+  </ol>
+</nav>
+
+<legend>
+  Images
+  <small>
+    <i class="fa fa-spinner fa-spin fa-fw"
+       aria-hidden="true"
+       *ngIf="images === null && retries <= maxRetries"></i>
+  </small>
+</legend>
+
+<alert type="warning" *ngIf="images === null && retries > 0 && retries <= maxRetries">
+  Still working, please wait{{ retries | ellipsis }}
+</alert>
+
+<alert type="danger" *ngIf="images === null && retries > maxRetries">
+  Cannot load images within {{ name }}.
+</alert>
+
+<div *ngIf="images !== null && images.length === 0">
+  There are no images within {{ name }} pool.
+</div>
+
+<cd-table [data]="images"
+          [columns]="columns"
+          (fetchData)="loadImages()"
+          *ngIf="images !== null && images.length > 0">
+</cd-table>
