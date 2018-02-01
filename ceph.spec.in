@@ -46,11 +46,7 @@
 %endif
 %endif
 %endif
-%if 0%{?suse_version} >= 1500
-%bcond_with python2
-%else
 %bcond_without python2
-%endif
 %if 0%{without python2}
 %global _defined_if_python2_absent 1
 %endif
@@ -887,6 +883,7 @@ cmake .. \
     -DCMAKE_INSTALL_INCLUDEDIR=%{_includedir} \
     -DWITH_EMBEDDED=OFF \
     -DWITH_MANPAGE=ON \
+    -DWITH_SYSTEMD=ON \
     -DWITH_PYTHON3=ON \
 %if %{with python2}
     -DWITH_PYTHON2=ON \
@@ -894,7 +891,6 @@ cmake .. \
     -DWITH_PYTHON2=OFF \
     -DMGR_PYTHON_VERSION=3 \
 %endif
-    -DWITH_SYSTEMD=ON \
 %if 0%{?rhel} && ! 0%{?centos}
     -DWITH_SUBMAN=ON \
 %endif
