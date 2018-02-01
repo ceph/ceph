@@ -979,6 +979,11 @@ public:
   uint8_t get_min_compat_client() const;
 
   /**
+   * gets the required minimum *client* version that can connect to the cluster.
+   */
+  uint8_t get_require_min_compat_client() const;
+
+  /**
    * get intersection of features supported by up osds
    */
   uint64_t get_up_osd_features() const;

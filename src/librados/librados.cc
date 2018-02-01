@@ -2323,6 +2323,13 @@ uint64_t librados::Rados::get_instance_id()
   return client->get_instance_id();
 }
 
+int librados::Rados::get_min_compatible_client(int8_t* min_compat_client,
+                                               int8_t* require_min_compat_client)
+{
+  return client->get_min_compatible_client(min_compat_client,
+                                           require_min_compat_client);
+}
+
 int librados::Rados::conf_read_file(const char * const path) const
 {
   return rados_conf_read_file((rados_t)client, path);
@@ -2886,6 +2893,15 @@ extern "C" uint64_t rados_get_instance_id(rados_t cluster)
   uint64_t retval = client->get_instance_id();
   tracepoint(librados, rados_get_instance_id_exit, retval);
   return retval;
+}
+
+extern "C" int rados_get_min_compatible_client(rados_t cluster,
+                                               int8_t* min_compat_client,
+                                               int8_t* require_min_compat_client)
+{
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  return client->get_min_compatible_client(min_compat_client,
+                                           require_min_compat_client);
 }
 
 extern "C" void rados_version(int *major, int *minor, int *extra)

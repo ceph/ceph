@@ -1337,6 +1337,9 @@ namespace librados
 
     uint64_t get_instance_id();
 
+    int get_min_compatible_client(int8_t* min_compat_client,
+                                  int8_t* require_min_compat_client);
+
     int mon_command(std::string cmd, const bufferlist& inbl,
 		    bufferlist *outbl, std::string *outs);
     int mgr_command(std::string cmd, const bufferlist& inbl,
