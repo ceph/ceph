@@ -693,7 +693,6 @@ void PG::discover_all_missing(map<int, map<spg_t,pg_query_t> > &query_map)
 {
   auto &missing = pg_log.get_missing();
   uint64_t unfound = get_num_unfound();
-  assert(unfound > 0);
 
   dout(10) << __func__ << " "
 	   << missing.num_missing() << " missing, "
@@ -1836,8 +1835,8 @@ void PG::activate(ObjectStore::Transaction& t,
 
       build_might_have_unfound();
 
-      if (have_unfound())
-	discover_all_missing(query_map);
+      // Always call now so _update_calc_stats() will be accurate
+      discover_all_missing(query_map);
     }
 
     // num_objects_degraded if calculated should reflect this too, unless no
