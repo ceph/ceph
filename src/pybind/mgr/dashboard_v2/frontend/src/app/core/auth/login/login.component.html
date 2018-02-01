@@ -6,7 +6,7 @@
            class="pull-right">
     </div>
     <div class="col-xs-10 col-sm-4 col-lg-3 col-xs-offset-1 col-sm-offset-0 col-md-offset-0 col-lg-offset-0">
-      <h1 translate>Welcome to ceph!</h1>
+      <h1 i18n="The welcome message on the login page">Welcome to ceph!</h1>
       <form name="loginForm"
             (ngSubmit)="login()"
             #loginForm="ngForm"
@@ -49,7 +49,7 @@
                  type="checkbox"
                  [(ngModel)]="model.stay_signed_in">
           <label for="stay_signed_in"
-                 translate>
+                 i18n="A checkbox on the login page to do not expire session on browser close">
             Keep me logged in
           </label>
         </div>
