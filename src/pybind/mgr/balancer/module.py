@@ -334,7 +334,7 @@ class Module(MgrModule):
             if not plan:
                 return (-errno.ENOENT, '', 'plan %s not found' % command['plan'])
             self.execute(plan)
-            self.plan_rm(plan)
+            self.plan_rm(command['plan'])
             return (0, '', '')
         else:
             return (-errno.EINVAL, '',
