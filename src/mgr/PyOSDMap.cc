@@ -121,13 +121,32 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
 			&max_iterations, &pool_list)) {
     return nullptr;
   }
+  if (!PyList_CheckExact(pool_list)) {
+    derr << __func__ << " pool_list not a list" << dendl;
+    return nullptr;
+  }
+  set<int64_t> pools;
+  for (auto i = 0; i < PyList_Size(pool_list); ++i) {
+    PyObject *pool_name = PyList_GET_ITEM(pool_list, i);
+    if (!PyString_Check(pool_name)) {
+      derr << __func__ << " " << pool_name << " not a string" << dendl;
+      return nullptr;
+    }
+    auto pool_id = self->osdmap->lookup_pg_pool_name(
+      PyString_AsString(pool_name));
+    if (pool_id < 0) {
+      derr << __func__ << " pool '" << PyString_AsString(pool_name)
+           << "' does not exist" << dendl;
+      return nullptr;
+    }
+    pools.insert(pool_id);
+  }
 
   dout(10) << __func__ << " osdmap " << self->osdmap << " inc " << incobj->inc
 	   << " max_deviation " << max_deviation
 	   << " max_iterations " << max_iterations
+	   << " pools " << pools
 	   << dendl;
-  set<int64_t> pools;
-  // FIXME: unpack pool_list and translate to pools set
   int r = self->osdmap->calc_pg_upmaps(g_ceph_context,
 				 max_deviation,
 				 max_iterations,
