@@ -3636,6 +3636,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
     c->set_peer_type(m->client.name.type());
     c->set_features(m->con_features);
 
+    s->authenticated = true;
     s->caps = m->client_caps;
     dout(10) << " caps are " << s->caps << dendl;
     s->entity_name = m->entity_name;
@@ -3983,6 +3984,7 @@ void Monitor::_ms_dispatch(Message *m)
       dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
       if (!s->caps.is_allow_all()) // but no need to repeatedly copy
         s->caps = *mon_caps;
+      s->authenticated = true;
     }
     s->put();
   } else {

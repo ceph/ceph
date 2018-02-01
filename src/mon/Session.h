@@ -51,6 +51,8 @@ struct MonSession : public RefCountedObject {
   uint64_t auid;
   uint64_t global_id;
 
+  bool authenticated = false;  ///< true if auth handshake is complete
+
   map<string, Subscription*> sub_map;
   epoch_t osd_epoch;		// the osdmap epoch sent to the mon client
 
