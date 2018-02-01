@@ -886,7 +886,7 @@ void ObjectWriteOperation::set_alloc_hint(uint64_t expected_object_size,
                                           uint64_t expected_write_size) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   o->ops.push_back(boost::bind(&TestIoCtxImpl::set_alloc_hint, _1, _2,
-			       expected_object_size, expected_write_size));
+			       expected_object_size, expected_write_size, _4));
 }
 
 
@@ -920,7 +920,7 @@ void ObjectWriteOperation::writesame(uint64_t off, uint64_t len, const bufferlis
 
 void ObjectWriteOperation::zero(uint64_t off, uint64_t len) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
-  o->ops.push_back(boost::bind(&TestIoCtxImpl::zero, _1, _2, off, len));
+  o->ops.push_back(boost::bind(&TestIoCtxImpl::zero, _1, _2, off, len, _4));
 }
 
 Rados::Rados() : client(NULL) {

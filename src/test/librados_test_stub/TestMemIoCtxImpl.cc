@@ -411,6 +411,24 @@ int TestMemIoCtxImpl::selfmanaged_snap_rollback(const std::string& oid,
   return 0;
 }
 
+int TestMemIoCtxImpl::set_alloc_hint(const std::string& oid,
+                                     uint64_t expected_object_size,
+                                     uint64_t expected_write_size,
+                                     const SnapContext &snapc) {
+  if (get_snap_read() != CEPH_NOSNAP) {
+    return -EROFS;
+  } else if (m_client->is_blacklisted()) {
+    return -EBLACKLISTED;
+  }
+
+  {
+    RWLock::WLocker l(m_pool->file_lock);
+    get_file(oid, true, snapc);
+  }
+
+  return 0;
+}
+
 int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
                                   uint64_t len,
                                   std::map<uint64_t,uint64_t> *m,
@@ -657,7 +675,8 @@ int TestMemIoCtxImpl::xattr_set(const std::string& oid, const std::string &name,
   return 0;
 }
 
-int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
+int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len,
+                           const SnapContext &snapc) {
   if (m_client->is_blacklisted()) {
     return -EBLACKLISTED;
   }
@@ -666,11 +685,11 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
   TestMemCluster::SharedFile file;
   {
     RWLock::WLocker l(m_pool->file_lock);
-    file = get_file(oid, false, get_snap_context());
+    file = get_file(oid, false, snapc);
     if (!file) {
       return 0;
     }
-    file = get_file(oid, true, get_snap_context());
+    file = get_file(oid, true, snapc);
 
     RWLock::RLocker l2(file->lock);
     if (len > 0 && off + len >= file->data.length()) {
@@ -679,12 +698,12 @@ int TestMemIoCtxImpl::zero(const std::string& oid, uint64_t off, uint64_t len) {
     }
   }
   if (truncate_redirect) {
-    return truncate(oid, off, get_snap_context());
+    return truncate(oid, off, snapc);
   }
 
   bufferlist bl;
   bl.append_zero(len);
-  return write(oid, bl, len, off, get_snap_context());
+  return write(oid, bl, len, off, snapc);
 }
 
 void TestMemIoCtxImpl::append_clone(bufferlist& src, bufferlist* dest) {

@@ -108,7 +108,8 @@ struct MockImageCtx {
           image_ctx.mirroring_resync_after_disconnect),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
-      blkin_trace_all(image_ctx.blkin_trace_all)
+      blkin_trace_all(image_ctx.blkin_trace_all),
+      enable_alloc_hint(image_ctx.enable_alloc_hint)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -147,6 +148,7 @@ struct MockImageCtx {
   MOCK_METHOD0(init_layout, void());
 
   MOCK_CONST_METHOD1(get_object_name, std::string(uint64_t));
+  MOCK_CONST_METHOD0(get_object_size, uint64_t());
   MOCK_CONST_METHOD0(get_current_size, uint64_t());
   MOCK_CONST_METHOD1(get_image_size, uint64_t(librados::snap_t));
   MOCK_CONST_METHOD1(get_object_count, uint64_t(librados::snap_t));
@@ -315,6 +317,7 @@ struct MockImageCtx {
   int mirroring_replay_delay;
   bool non_blocking_aio;
   bool blkin_trace_all;
+  bool enable_alloc_hint;
 };
 
 } // namespace librbd
