@@ -2360,6 +2360,7 @@ protected:
 	boost::statechart::custom_reaction< UnfoundBackfill >,
 	boost::statechart::custom_reaction< RemoteBackfillPreempted >,
 	boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
+	boost::statechart::custom_reaction< RecoveryDone >,
 	boost::statechart::transition<DeleteStart, ToDelete>
 	> reactions;
       boost::statechart::result react(const QueryState& q);
@@ -2369,6 +2370,9 @@ protected:
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MQuery&);
       boost::statechart::result react(const Activate&);
+      boost::statechart::result react(const RecoveryDone&) {
+	return discard_event();
+      }
       boost::statechart::result react(const DeferRecovery& evt) {
 	return discard_event();
       }
