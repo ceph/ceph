@@ -711,12 +711,14 @@ class Module(MgrModule):
             random.shuffle(roots)
             for root in roots:
                 pools = best_pe.root_pools[root]
-                pgs = len(best_pe.target_by_root[root])
-                min_pgs = pgs * min_pg_per_osd
-                if best_pe.total_by_root[root] < min_pgs:
+                osds = len(best_pe.target_by_root[root])
+                min_pgs = osds * min_pg_per_osd
+                if best_pe.total_by_root[root][key] < min_pgs:
                     self.log.info('Skipping root %s (pools %s), total pgs %d '
                                   '< minimum %d (%d per osd)',
-                                  root, pools, pgs, min_pgs, min_pg_per_osd)
+                                  root, pools,
+                                  best_pe.total_by_root[root][key],
+                                  min_pgs, min_pg_per_osd)
                     continue
                 self.log.info('Balancing root %s (pools %s) by %s' %
                               (root, pools, key))
@@ -816,6 +818,7 @@ class Module(MgrModule):
         else:
             self.log.info('Failed to find further optimization, score %f',
                           pe.score)
+            plan.compat_ws = {}
             return False
 
     def get_compat_weight_set_weights(self):
