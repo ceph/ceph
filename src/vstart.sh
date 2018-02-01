@@ -610,9 +610,10 @@ EOF
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
-            ceph_adm osd create $uuid
-            ceph_adm osd crush add osd.$osd 1.0 host=$HOSTNAME root=default
 	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > dev/osd$osd/new.json
+            ceph_adm osd new $uuid -i dev/osd$osd/new.json
+	    rm dev/osd$osd/new.json
             $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
