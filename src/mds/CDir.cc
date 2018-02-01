@@ -313,6 +313,7 @@ CDentry *CDir::lookup(std::string_view name, snapid_t snap)
 }
 
 CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
+  dout(20) << __func__ << " (" << last << ", '" << name << "')" << dendl;
   auto p = items.find(dentry_key_t(last, name, inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
