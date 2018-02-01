@@ -111,7 +111,6 @@ class BaseController(six.with_metaclass(BaseControllerMeta, object)):
         return self._mgr_module
 
 
-
 class RESTController(BaseController):
     """
     Base class for providing a RESTful interface to a resource.
