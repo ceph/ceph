@@ -17,7 +17,6 @@ if 'UNITTEST' not in os.environ:
                 raise AttributeError("Logging not initialized")
             return getattr(self.logger, item)
 
-
     logger = _LoggerProxy()
 
     # pylint: disable=W0403,W0401
