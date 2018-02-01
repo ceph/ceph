@@ -481,7 +481,9 @@ int Operations<I>::check_object_map(ProgressContext &prog_ctx) {
   r = invoke_async_request("check object map", true,
                            boost::bind(&Operations<I>::check_object_map, this,
                                        boost::ref(prog_ctx), _1),
-			   [] (Context *c) { c->complete(-EOPNOTSUPP); });
+			   [this](Context *c) {
+                             m_image_ctx.op_work_queue->queue(c, -EOPNOTSUPP);
+                           });
 
   return r;
 }
