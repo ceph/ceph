@@ -3,7 +3,7 @@ import { Router } from '@angular/router';
 
 import { ToastsManager } from 'ng2-toastr';
 
-import { Credentials } from '../../../shared/models/credentials.model';
+import { Credentials } from '../../../shared/models/credentials';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { AuthService } from '../../../shared/services/auth.service';
 

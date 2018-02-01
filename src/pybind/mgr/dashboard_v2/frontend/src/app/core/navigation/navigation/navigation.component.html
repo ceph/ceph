@@ -25,13 +25,17 @@
   <div class="collapse navbar-collapse"
        id="bs-example-navbar-collapse-1">
     <ul class="nav navbar-nav navbar-primary">
-      <!-- <li routerLinkActive="active"
+      <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_dashboard">
         <a i18n
-           routerLink="/dashboard">Dashboard
+           routerLink="/dashboard">
+          <i class="fa fa-heartbeat fa-fw"
+             [ngStyle]="topLevelData?.health_status | healthColor"></i>
+          <span>Dashboard</span>
         </a>
       </li>
-      <li routerLinkActive="active"
+      <!--
+  <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_ceph_osds">
         <a i18n
            routerLink="/cephOsds">OSDs

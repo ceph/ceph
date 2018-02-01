@@ -7,22 +7,22 @@ import { AuthGuardService } from './services/auth-guard.service';
 import { AuthStorageService } from './services/auth-storage.service';
 import { AuthService } from './services/auth.service';
 import { HostService } from './services/host.service';
+import { ServicesModule } from './services/services.module';
 
 @NgModule({
   imports: [
     CommonModule,
     PipesModule,
-    ComponentsModule
+    ComponentsModule,
+    ServicesModule
   ],
+  exports: [PipesModule, ServicesModule, PipesModule],
   declarations: [],
   providers: [
     AuthService,
     AuthStorageService,
     AuthGuardService,
     HostService
-  ],
-  exports: [
-    PipesModule
   ]
 })
-export class SharedModule { }
+export class SharedModule {}

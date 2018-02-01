@@ -25,7 +25,9 @@
         "../node_modules/awesome-bootstrap-checkbox/awesome-bootstrap-checkbox.css",
         "styles.scss"
       ],
-      "scripts": [],
+      "scripts": [
+        "../node_modules/chart.js/dist/Chart.bundle.js"
+      ],
       "environmentSource": "environments/environment.ts",
       "environments": {
         "dev": "environments/environment.ts",
