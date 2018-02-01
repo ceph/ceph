@@ -136,12 +136,6 @@ eviction command to each active daemon.  When blacklisting is enabled
 (the default), sending an eviction command to just a single
 MDS is sufficient, because the blacklist propagates it to the others.
 
-Advanced options
-================
-
-``mds_blacklist_interval`` - this setting controls how many seconds
-entries will remain in the blacklist for.
-
 
 .. _background_blacklisting_and_osd_epoch_barrier:
 

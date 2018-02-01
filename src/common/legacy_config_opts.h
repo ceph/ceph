@@ -432,7 +432,6 @@ OPTION(mds_decay_halflife, OPT_FLOAT)
 OPTION(mds_beacon_interval, OPT_FLOAT)
 OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
-OPTION(mds_blacklist_interval, OPT_FLOAT)  // how long to blacklist failed nodes
 
 OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout

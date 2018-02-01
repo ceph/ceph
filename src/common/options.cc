@@ -1386,7 +1386,14 @@ std::vector<Option> get_global_options() {
 
     Option("mon_osd_blacklist_default_expire", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
-    .set_description(""),
+    .set_description("Duration in seconds that blacklist entries for clients "
+                     "remain in the OSD map"),
+
+    Option("mon_mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(1_day)
+    .set_min(1_hr)
+    .set_description("Duration in seconds that blacklist entries for MDS "
+                     "daemons remain in the OSD map"),
 
     Option("mon_osd_crush_smoke_test", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -5905,10 +5912,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
-
-    Option("mds_blacklist_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(24.0*60.0)
     .set_description(""),
 
     Option("mds_session_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
