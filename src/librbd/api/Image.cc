@@ -145,7 +145,7 @@ int Image<I>::deep_copy(I *src, librados::IoCtx& dest_md_ctx,
     features = src->features;
     src_size = src->get_image_size(src->snap_id);
   }
-  uint64_t format = src->old_format ? 1 : 2;
+  uint64_t format = 2;
   if (opts.get(RBD_IMAGE_OPTION_FORMAT, &format) != 0) {
     opts.set(RBD_IMAGE_OPTION_FORMAT, format);
   }
