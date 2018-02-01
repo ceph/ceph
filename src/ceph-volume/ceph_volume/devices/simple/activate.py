@@ -6,10 +6,12 @@ import os
 from textwrap import dedent
 from ceph_volume import process, decorators, terminal
 from ceph_volume.util import system, disk
+from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.systemd import systemctl
 
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 
 class Activate(object):
@@ -20,28 +22,101 @@ class Activate(object):
         self.argv = argv
         self.systemd = systemd
 
+    def validate_devices(self, json_config):
+        """
+        ``json_config`` is the loaded dictionary coming from the JSON file. It is usually mixed with
+        other non-device items, but for sakes of comparison it doesn't really matter. This method is
+        just making sure that the keys needed exist
+        """
+        devices = json_config.keys()
+        try:
+            objectstore = json_config['type']
+        except KeyError:
+            logger.warning('"type" was not defined, will assume "bluestore"')
+            objectstore = 'bluestore'
+
+        # Go throuh all the device combinations that are absolutely required,
+        # raise an error describing what was expected and what was found
+        # otherwise.
+        if objectstore == 'filestore':
+            if {'data', 'journal'}.issubset(set(devices)):
+                return True
+            else:
+                found = [i for i in devices if i in ['data', 'journal']]
+                mlogger.error("Required devices (data, and journal) not present for filestore")
+                mlogger.error('filestore devices found: %s', found)
+                raise RuntimeError('Unable to activate filestore OSD due to missing devices')
+        else:
+            # This is a bit tricky, with newer bluestore we don't need data, older implementations
+            # do (e.g. with ceph-disk). ceph-volume just uses a tmpfs that doesn't require data.
+            if {'block', 'data'}.issubset(set(devices)):
+                return True
+            else:
+                bluestore_devices = ['block.db', 'block.wal', 'block', 'data']
+                found = [i for i in devices if i in bluestore_devices]
+                mlogger.error("Required devices (block and data) not present for bluestore")
+                mlogger.error('bluestore devices found: %s', found)
+                raise RuntimeError('Unable to activate bluestore OSD due to missing devices')
+
+    def get_device(self, uuid):
+        """
+        If a device is encrypted, it will decrypt/open and return the mapper
+        path, if it isn't encrypted it will just return the device found that
+        is mapped to the uuid.  This will make it easier for the caller to
+        avoid if/else to check if devices need decrypting
+
+        :param uuid: The partition uuid of the device (PARTUUID)
+        """
+        device = disk.get_device_from_partuuid(uuid)
+
+        # If device is not found, it is fine to return an empty string from the
+        # helper that finds `device`. If it finds anything and it is not
+        # encrypted, just return what was found
+        if not self.is_encrypted or not device:
+            return device
+
+        if self.encryption_type == 'luks':
+            encryption_utils.luks_open(self.dmcrypt_secret, device, uuid)
+        else:
+            encryption_utils.plain_open(self.dmcrypt_secret, device, uuid)
+
+        return '/dev/mapper/%s' % uuid
+
     @decorators.needs_root
     def activate(self, args):
         with open(args.json_config, 'r') as fp:
             osd_metadata = json.load(fp)
 
+        # Make sure that required devices are configured
+        self.validate_devices(osd_metadata)
+
         osd_id = osd_metadata.get('whoami', args.osd_id)
         osd_fsid = osd_metadata.get('fsid', args.osd_fsid)
-
-        cluster_name = osd_metadata.get('cluster_name', 'ceph')
-        osd_dir = '/var/lib/ceph/osd/%s-%s' % (cluster_name, osd_id)
         data_uuid = osd_metadata.get('data', {}).get('uuid')
         if not data_uuid:
             raise RuntimeError(
                 'Unable to activate OSD %s - no "uuid" key found for data' % args.osd_id
             )
-        data_device = disk.get_device_from_partuuid(data_uuid)
-        journal_device = disk.get_device_from_partuuid(osd_metadata.get('journal', {}).get('uuid'))
-        block_device = disk.get_device_from_partuuid(osd_metadata.get('block', {}).get('uuid'))
-        block_db_device = disk.get_device_from_partuuid(osd_metadata.get('block.db', {}).get('uuid'))
-        block_wal_device = disk.get_device_from_partuuid(
-            osd_metadata.get('block.wal', {}).get('uuid')
-        )
+
+        # Encryption detection, and capturing of the keys to decrypt
+        self.is_encrypted = osd_metadata.get('encrypted', False)
+        self.encryption_type = osd_metadata.get('encryption_type')
+        if self.is_encrypted:
+            lockbox_secret = osd_metadata.get('lockbox.keyring')
+            # write the keyring always so that we can unlock
+            encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
+            # Store the secret around so that the decrypt method can reuse
+            self.dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+
+        cluster_name = osd_metadata.get('cluster_name', 'ceph')
+        osd_dir = '/var/lib/ceph/osd/%s-%s' % (cluster_name, osd_id)
+
+        # XXX there is no support for LVM here
+        data_device = self.get_device(data_uuid)
+        journal_device = self.get_device(osd_metadata.get('journal', {}).get('uuid'))
+        block_device = self.get_device(osd_metadata.get('block', {}).get('uuid'))
+        block_db_device = self.get_device(osd_metadata.get('block.db', {}).get('uuid'))
+        block_wal_device = self.get_device(osd_metadata.get('block.wal', {}).get('uuid'))
 
         if not system.device_is_mounted(data_device, destination=osd_dir):
             process.run(['mount', '-v', data_device, osd_dir])
