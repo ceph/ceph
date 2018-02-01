@@ -6502,9 +6502,14 @@ std::vector<Option> get_mds_client_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("client_die_on_failed_remount", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
+    Option("client_die_on_failed_remount", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
     .set_description(""),
+
+    Option("client_die_on_failed_dentry_invalidate", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("kill the client when no dentry invalidation options are available")
+    .set_long_description("The CephFS client requires a mechanism to invalidate dentries in the caller (e.g. the kernel for ceph-fuse) when capabilities must be recalled. If the client cannot do this then the MDS cache cannot shrink which can cause the MDS to fail."),
 
     Option("client_check_pool_perm", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

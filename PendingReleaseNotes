@@ -42,6 +42,15 @@
 12.2.3
 ------
 
-* The RBD C API's rbd_discard method now enforces a maximum length of
-  2GB to match the C++ API's Image::discard method. This restriction
-  prevents overflow of the result code.
+- *RBD*:
+
+  * The RBD C API's rbd_discard method now enforces a maximum length of
+    2GB to match the C++ API's Image::discard method. This restriction
+    prevents overflow of the result code.
+
+- *CephFS*:
+
+  * The CephFS client now catches failures to clear dentries during startup
+    and refuses to start as consistency and untrimmable cache issues may
+    develop. The new option client_die_on_failed_dentry_invalidate (default:
+    true) may be turned off to allow the client to proceed (dangerous!).
