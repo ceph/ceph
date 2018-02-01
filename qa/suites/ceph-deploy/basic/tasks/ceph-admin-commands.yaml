@@ -1,3 +1,9 @@
+openstack:
+  - machine:
+      disk: 10
+    volumes:
+      count: 2
+      size: 20
 roles:
 - - mon.a
   - mgr.x
@@ -6,14 +12,6 @@ roles:
 - - osd.1
   - mon.b
   - client.0
-openstack:
-  - machine:
-      disk: 10 # GB
-      ram: 2000 # MB
-      cpus: 1
-    volumes: # attached to each instance
-      count: 2
-      size: 10 # GB
 tasks:
 - ssh_keys:
 - print: "**** done ssh_keys"
