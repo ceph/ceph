@@ -1,3 +1,9 @@
+openstack:
+  - machine:
+      disk: 10
+    volumes:
+      count: 2
+      size: 20
 roles:
 - - mon.a
   - mgr.x
