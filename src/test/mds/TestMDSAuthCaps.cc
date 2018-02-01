@@ -101,11 +101,19 @@ TEST(MDSAuthCaps, AllowAll) {
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
+  ASSERT_TRUE(cap.parse(g_ceph_context, "r", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap = MDSAuthCaps();
+
   ASSERT_TRUE(cap.parse(g_ceph_context, "allow rw", NULL));
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
   ASSERT_TRUE(cap.parse(g_ceph_context, "allow", NULL));
+  ASSERT_FALSE(cap.allow_all());
+  cap = MDSAuthCaps();
+
+  ASSERT_TRUE(cap.parse(g_ceph_context, "", NULL));
   ASSERT_FALSE(cap.allow_all());
   cap = MDSAuthCaps();
 
@@ -234,6 +242,8 @@ TEST(MDSAuthCaps, OutputParsed) {
     const char *output;
   };
   CapsTest test_values[] = {
+    {"",
+     "MDSAuthCaps[allow rw]"},
     {"allow",
      "MDSAuthCaps[allow rw]"},
     {"allow *",
