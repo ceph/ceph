@@ -4050,21 +4050,26 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case CEPH_MSG_MON_GET_MAP:
       handle_mon_get_map(op);
       break;
+  }
+  if (dealt_with)
+    return;
 
-      // unauthenticated clients can fetch config
+  if (!op->get_session()->authenticated) {
+    dout(5) << __func__ << " " << op->get_req()->get_source_inst()
+            << " is not authenticated, dropping " << *(op->get_req())
+            << dendl;
+    goto drop;
+  }
+
+  switch (op->get_req()->get_type()) {
     case MSG_GET_CONFIG:
       configmon()->handle_get_config(op);
-      break;
+      return;
 
     case CEPH_MSG_MON_METADATA:
       return handle_mon_metadata(op);
 
-    default:
-      dealt_with = false;
-      break;
   }
-  if (dealt_with)
-    return;
 
   /* well, maybe the op belongs to a service... */
   op->set_type_service();
