@@ -342,9 +342,9 @@ class Module(MgrModule):
             plan = self.plans.get(command['plan'])
             if not plan:
                 return (-errno.ENOENT, '', 'plan %s not found' % command['plan'])
-            self.execute(plan)
+            r, detail = self.execute(plan)
             self.plan_rm(command['plan'])
-            return (0, '', '')
+            return (r, '', detail)
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -914,7 +914,7 @@ class Module(MgrModule):
             r, outb, outs = result.wait()
             if r != 0:
                 self.log.error('Error creating compat weight-set')
-                return
+                return r, outs
 
         for osd, weight in plan.compat_ws.iteritems():
             self.log.info('ceph osd crush weight-set reweight-compat osd.%d %f',
@@ -974,6 +974,7 @@ class Module(MgrModule):
         for result in commands:
             r, outb, outs = result.wait()
             if r != 0:
-                self.log.error('Error on command')
-                return
+                self.log.error('execute error: r = %d, detail = %s' % (r, outs))
+                return r, outs
         self.log.debug('done')
+        return 0, ''
