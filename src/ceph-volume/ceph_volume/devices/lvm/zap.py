@@ -5,6 +5,7 @@ from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
+from ceph_volume.util import system
 
 logger = logging.getLogger(__name__)
 
@@ -59,27 +60,37 @@ class Zap(object):
         logger.info("Zapping: %s", path)
         terminal.write("Zapping: %s" % path)
 
-        if args.destroy and not lv:
-            # check if there was a pv created with the
-            # name of device
-            pv = api.PVolumes().get(pv_name=device)
-            if pv:
-                logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
-                vg_name = pv.vg_name
-                logger.info("Destroying volume group %s because --destroy was given", vg_name)
-                terminal.write("Destroying volume group %s because --destroy was given" % vg_name)
-                api.remove_vg(vg_name)
-                logger.info("Destroying physical volume %s because --destroy was given", device)
-                terminal.write("Destroying physical volume %s because --destroy was given" % device)
-                api.remove_pv(device)
-            else:
-                logger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
-                terminal.write("Skipping --destroy because no associated physical volumes are found for %s" % device)
+        # check if there was a pv created with the
+        # name of device
+        pv = api.PVolumes().get(pv_name=device)
+        if pv:
+            vg_name = pv.vg_name
+            lv = api.Volumes().get(vg_name=vg_name)
+
+        if lv:
+            osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
+            if system.path_is_mounted(osd_path):
+                logger.info("Unmounting %s", osd_path)
+                terminal.write("Unmounting %s" % osd_path)
+                system.unmount(osd_path)
+
+        if args.destroy and pv:
+            logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
+            vg_name = pv.vg_name
+            logger.info("Destroying volume group %s because --destroy was given", vg_name)
+            terminal.write("Destroying volume group %s because --destroy was given" % vg_name)
+            api.remove_vg(vg_name)
+            logger.info("Destroying physical volume %s because --destroy was given", device)
+            terminal.write("Destroying physical volume %s because --destroy was given" % device)
+            api.remove_pv(device)
+        elif args.destroy and not pv:
+            logger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
+            terminal.write("Skipping --destroy because no associated physical volumes are found for %s" % device)
 
         wipefs(path)
         zap_data(path)
 
-        if lv:
+        if lv and not pv:
             # remove all lvm metadata
             lv.clear_tags()
 
@@ -91,6 +102,9 @@ class Zap(object):
         If given a path to a logical volume it must be in the format of vg/lv. Any
         filesystems present on the given device, vg/lv, or partition will be removed and
         all data will be purged.
+
+        If the logicial volume, raw device or partition is being used for any ceph related
+        mountpoints they will be unmounted.
 
         However, the lv or partition will be kept intact.
 
