@@ -1111,6 +1111,10 @@ namespace librados
         std::vector<snap_t>& snaps,
         const blkin_trace_info *trace_info);
     int aio_operate(const std::string& oid, AioCompletion *c,
+        ObjectWriteOperation *op, snap_t seq,
+        std::vector<snap_t>& snaps, int flags,
+        const blkin_trace_info *trace_info);
+    int aio_operate(const std::string& oid, AioCompletion *c,
 		    ObjectReadOperation *op, bufferlist *pbl);
 
     int aio_operate(const std::string& oid, AioCompletion *c,
