@@ -200,8 +200,7 @@ void Server::dispatch(Message *m)
   }
 
   // active?
-  if (!mds->is_active() &&
-      !(mds->is_stopping() && m->get_source().is_mds())) {
+  if (!mds->is_active()) {
     if (m->get_type() == CEPH_MSG_CLIENT_REQUEST &&
 	(mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT)) {
       MClientRequest *req = static_cast<MClientRequest*>(m);
@@ -238,6 +237,10 @@ void Server::dispatch(Message *m)
     if (m->get_type() == MSG_MDS_SLAVE_REQUEST) {
       // handle_slave_request() will wait if necessary
       wait_for_active = false;
+    } else if (mds->is_stopping()) {
+      if (m->get_source().is_mds() ||
+	  m->get_type() == CEPH_MSG_CLIENT_SESSION)
+	wait_for_active = false;
     } else if (mds->is_clientreplay()) {
       // session open requests need to be handled during replay,
       // close requests need to be delayed
@@ -350,6 +353,12 @@ void Server::handle_client_session(MClientSession *m)
     assert(session->is_closed() ||
 	   session->is_closing());
 
+    if (mds->is_stopping()) {
+      dout(10) << "mds is stopping, dropping open req" << dendl;
+      m->put();
+      return;
+    }
+
     blacklisted = mds->objecter->with_osdmap(
         [session](const OSDMap &osd_map) -> bool {
           return osd_map.is_blacklisted(session->info.inst.addr);
@@ -458,7 +467,8 @@ void Server::handle_client_session(MClientSession *m)
     break;
 
   case CEPH_SESSION_REQUEST_FLUSH_MDLOG:
-    mdlog->flush();
+    if (mds->is_active())
+      mdlog->flush();
     break;
 
   default:
