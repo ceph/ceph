@@ -201,3 +201,68 @@ case needs to add to the test.
 In the example above we use the ``setup_test()`` method to disable the
 authentication handler for the ``Ping2`` controller.
 
+
+How to listen for manager notifications in a controller?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The manager notifies the modules of several types of cluster events, such
+as cluster logging event, etc...
+
+Each module has a "global" handler function called ``notify`` that the manager
+calls to notify the module. But this handler function must not block or spend
+too much time processing the event notification.
+For this reason we provide a notification queue that controllers can register
+themselves with to receive cluster notifications.
+
+The example below represents a controller that implements a very simple live
+log viewer page::
+
+  from __future__ import absolute_import
+
+  import collections
+
+  import cherrypy
+
+  from ..tools import ApiController, BaseController, NotificationQueue
+
+
+  @ApiController('livelog')
+  class LiveLog(BaseController):
+      log_buffer = collections.deque(maxlen=1000)
+
+      def __init__(self):
+          super(LiveLog, self).__init__()
+          NotificationQueue.register(self.log, 'clog')
+
+      def log(self, log_struct):
+          self.log_buffer.appendleft(log_struct)
+
+      @cherrypy.expose
+      def default(self):
+          ret = '<html><meta http-equiv="refresh" content="2" /><body>'
+          for l in self.log_buffer:
+              ret += "{}<br>".format(l)
+          ret += "</body></html>"
+          return ret
+
+As you can see above, the ``NotificationQueue`` class provides a register
+method that receives the function as its first argument, and receives the
+"notification type" as the second argument.
+You can omit the second argument of the ``register`` method, and in that case
+you are registering to listen all notifications of any type.
+
+Here is an list of notification types (these might change in the future) that
+can be used:
+
+* ``clog``: cluster log notifications
+* ``command``: notification when a command issued by ``MgrModule.send_command``
+  completes
+* ``perf_schema_update``: perf counters schema update
+* ``mon_map``: monitor map update
+* ``fs_map``: cephfs map update
+* ``osd_map``: OSD map update
+* ``service_map``: services (RGW, RBD-Mirror, etc.) map update
+* ``mon_status``: monitor status regular update
+* ``health``: health status regular update
+* ``pg_summary``: regular update of PG status information
+
