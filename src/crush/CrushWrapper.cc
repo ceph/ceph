@@ -666,7 +666,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
     return false;
   }
   
-  ldout(cct, 1) << "check_item_loc item " << item << " loc " << loc << dendl;
+  ldout(cct, 2) << __func__ << " item " << item << " loc " << loc << dendl;
   return false;
 }
 
