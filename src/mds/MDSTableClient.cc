@@ -71,6 +71,7 @@ void MDSTableClient::handle_request(class MMDSTableRequest *m)
     break;
 
   case TABLESERVER_OP_NOTIFY_PREP:
+    assert(g_conf->mds_kill_mdstable_at != 9);
     handle_notify_prep(m);
     break;
     
