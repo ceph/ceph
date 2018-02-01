@@ -1,0 +1,68 @@
+<div class="dataTables_wrapper">
+  <div class="dataTables_header clearfix"
+       *ngIf="header">
+    <!-- actions -->
+    <div class="oadatatableactions">
+        <ng-content select="table-actions"></ng-content>
+    </div>
+    <!-- end actions -->
+
+    <!-- search -->
+    <div class="input-group">
+      <span class="input-group-addon">
+        <i class="glyphicon glyphicon-search"></i>
+      </span>
+      <input
+             class="form-control"
+             type="text"
+             [(ngModel)]="search"
+             (keyup)='updateFilter($event)'>
+      <span class="input-group-btn">
+        <button type="button"
+                class="btn btn-default clear-input tc_clearInputBtn"
+                (click)="updateFilter()">
+          <i class="icon-prepend fa fa-remove"></i>
+        </button>
+      </span>
+    </div>
+    <!-- end search -->
+
+    <!-- pagination limit -->
+    <div class="dataTables_length widget-toolbar">
+      <input type="number"
+             min="1"
+             max="9999"
+             [value]="limit"
+             (click)="setLimit($event)"
+             (keyup)="setLimit($event)"
+             (blur)="setLimit($event)">
+    </div>
+    <!-- end pagination limit-->
+
+    <!-- refresh button -->
+    <div class="widget-toolbar tc_refreshBtn">
+      <a (click)="reloadData()">
+        <i class="fa fa-lg fa-refresh"></i>
+      </a>
+    </div>
+    <!-- end refresh button -->
+  </div>
+  <ngx-datatable #table
+                 class="bootstrap oadatatable"
+                 [cssClasses]="paginationClasses"
+                 [selectionType]="selectable"
+                 [selected]="selected"
+                 (select)="toggleExpandRow($event)"
+                 [columns]="columns"
+                 [columnMode]="'force'"
+                 [rows]="rows"
+                 [footerHeight]="'auto'"
+                 [limit]="limit"
+                 [loadingIndicator]="true"
+                 [rowHeight]="'auto'">
+    <!-- Row Detail Template -->
+    <ngx-datatable-row-detail (toggle)="updateDetailView($event)">
+    </ngx-datatable-row-detail>
+  </ngx-datatable>
+</div>
+<ng-template cdTableDetails></ng-template>

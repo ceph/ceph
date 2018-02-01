@@ -1,0 +1,71 @@
+.dataTables_wrapper {
+  margin-bottom: 25px;
+  .separator {
+    height: 30px;
+    border-left: 1px solid rgba(0,0,0,.09);
+    padding-left: 5px;
+    margin-left: 5px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .widget-toolbar {
+    display: inline-block;
+    float: right;
+    width: auto;
+    height: 30px;
+    line-height: 28px;
+    position: relative;
+    border-left: 1px solid rgba(0,0,0,.09);
+    cursor: pointer;
+    padding: 0 8px;
+    text-align: center;
+  }
+  .dropdown-menu {
+    white-space: nowrap;
+    & > li {
+      cursor: pointer;
+      & > label {
+        width: 100%;
+        margin-bottom: 0;
+        padding-left: 20px;
+        padding-right: 20px;
+        cursor: pointer;
+        &:hover {
+          background-color: #f5f5f5;
+        }
+        & > input {
+          cursor: pointer;
+        }
+      }
+    }
+  }
+  th.oadatatablecheckbox {
+    width: 16px;
+  }
+}
+.dataTables_header {
+  background-color: #f6f6f6;
+  border: 1px solid #d1d1d1;
+  border-bottom: none;
+  padding: 5px;
+  position: relative;
+  .oadatatableactions {
+    display: inline-block;
+  }
+  .input-group {
+    float: right;
+    border-left: 1px solid rgba(0,0,0,.09);
+    padding-left: 8px;
+    width: 40%;
+    max-width: 350px;
+    .form-control {
+      height: 30px;
+    }
+    .clear-input {
+      height: 30px;
+      i {
+        vertical-align: text-top;
+      }
+    }
+  }
+}
