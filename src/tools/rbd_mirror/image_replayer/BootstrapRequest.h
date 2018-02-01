@@ -53,6 +53,7 @@ public:
         const std::string &local_mirror_uuid,
         const std::string &remote_mirror_uuid,
         Journaler *journaler,
+        cls::journal::ClientState *client_state,
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
         bool *do_resync,
@@ -62,8 +63,8 @@ public:
                                 local_image_id, remote_image_id,
                                 global_image_id, work_queue, timer, timer_lock,
                                 local_mirror_uuid, remote_mirror_uuid,
-                                journaler, client_meta, on_finish, do_resync,
-                                progress_ctx);
+                                journaler, client_state, client_meta, on_finish,
+                                do_resync, progress_ctx);
   }
 
   BootstrapRequest(librados::IoCtx &local_io_ctx,
@@ -76,6 +77,7 @@ public:
                    SafeTimer *timer, Mutex *timer_lock,
                    const std::string &local_mirror_uuid,
                    const std::string &remote_mirror_uuid, Journaler *journaler,
+                   cls::journal::ClientState *client_state,
                    MirrorPeerClientMeta *client_meta, Context *on_finish,
                    bool *do_resync, ProgressContext *progress_ctx = nullptr);
   ~BootstrapRequest() override;
@@ -97,14 +99,8 @@ private:
    *    v                                                   *
    * OPEN_REMOTE_IMAGE  * * * * * * * * * * * * * * * * * * *
    *    |                                                   *
-   *    v                                                   *
-   * GET_CLIENT * * * * * * * * * * * * * * * * * * * * *   *
-   *    |                                               *   *
-   *    |/----------------------------------------------*---*---\
-   *    v (skip if not needed)                          *   *   |
-   * REGISTER_CLIENT  * * * * * * * * * * * * * * * * * *   *   |
-   *    |                                               *   *   |
-   *    v                                               *   *   |
+   *    |/--------------------------------------------------*---\
+   *    v                                                   *   |
    * IS_PRIMARY * * * * * * * * * * * * * * * * * * * * *   *   |
    *    |                                               *   *   |
    *    | (remote image primary, no local image id)     *   *   |
@@ -119,6 +115,9 @@ private:
    *    |         |   .                                 *   *   |
    *    |         |   . (image doesn't exist)           *   *   |
    *    |         |   . . > UNREGISTER_CLIENT * * * * * *   *   |
+   *    |         |             |                       *   *   |
+   *    |         |             v                       *   *   |
+   *    |         |         REGISTER_CLIENT * * * * * * *   *   |
    *    |         |             |                       *   *   |
    *    |         |             \-----------------------*---*---/
    *    |         |                                     *   *
@@ -159,6 +158,7 @@ private:
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
   Journaler *m_journaler;
+  cls::journal::ClientState *m_client_state;
   MirrorPeerClientMeta *m_client_meta;
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
@@ -179,12 +179,6 @@ private:
   void get_remote_tag_class();
   void handle_get_remote_tag_class(int r);
 
-  void get_client();
-  void handle_get_client(int r);
-
-  void register_client();
-  void handle_register_client(int r);
-
   void open_remote_image();
   void handle_open_remote_image(int r);
 
@@ -199,6 +193,9 @@ private:
 
   void unregister_client();
   void handle_unregister_client(int r);
+
+  void register_client();
+  void handle_register_client(int r);
 
   void create_local_image();
   void handle_create_local_image(int r);
@@ -217,8 +214,6 @@ private:
 
   void close_remote_image();
   void handle_close_remote_image(int r);
-
-  bool decode_client_meta();
 
   void update_progress(const std::string &description);
 };
