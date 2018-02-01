@@ -5,11 +5,13 @@ import { AuthStorageService } from './services/auth-storage.service';
 import { AuthGuardService } from './services/auth-guard.service';
 import { PipesModule } from './pipes/pipes.module';
 import { HostService } from './services/host.service';
+import { ComponentsModule } from './components/components.module';
 
 @NgModule({
   imports: [
     CommonModule,
-    PipesModule
+    PipesModule,
+    ComponentsModule
   ],
   declarations: [],
   providers: [
