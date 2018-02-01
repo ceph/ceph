@@ -648,9 +648,8 @@ void ConfigMonitor::send_config(MonSession *s)
 
 void ConfigMonitor::check_sub(MonSession *s)
 {
-  if (!s->is_capable(s->entity_name.get_type_str(), MON_CAP_R)) {
-    dout(20) << __func__ << " not capable for " << s->entity_name << " with "
-	     << s->caps << dendl;
+  if (!s->authenticated) {
+    dout(20) << __func__ << " not authenticated " << s->entity_name << dendl;
     return;
   }
   auto p = s->sub_map.find("config");
