@@ -471,7 +471,7 @@ class Filesystem(MDSCluster):
                                              self.name, self.metadata_pool_name, data_pool_name,
                                              '--allow-dangerous-metadata-overlay')
         else:
-            if self.ec_profile:
+            if self.ec_profile and 'disabled' not in self.ec_profile:
                 log.info("EC profile is %s", self.ec_profile)
                 cmd = ['osd', 'erasure-code-profile', 'set', data_pool_name]
                 cmd.extend(self.ec_profile)
