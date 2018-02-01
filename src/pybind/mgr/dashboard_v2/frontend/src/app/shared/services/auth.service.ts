@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Credentials } from '../models/credentials.model';
+import { Credentials } from '../models/credentials';
 import { AuthStorageService } from './auth-storage.service';
 
 @Injectable()

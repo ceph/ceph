@@ -1,0 +1,10 @@
+<div>
+  <tabset *ngIf="hasGrafana">
+    <tab heading="Health">
+      <cd-health></cd-health>
+    </tab>
+    <tab heading="Statistics">
+    </tab>
+  </tabset>
+  <cd-health *ngIf="!hasGrafana"></cd-health>
+</div>

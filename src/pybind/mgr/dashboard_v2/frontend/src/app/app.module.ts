@@ -31,7 +31,9 @@ export class CustomOption extends ToastOptions {
     HttpClientModule,
     CoreModule,
     SharedModule,
-    CephModule
+    CephModule,
+    HttpClientModule,
+    BrowserAnimationsModule
   ],
   exports: [SharedModule],
   providers: [

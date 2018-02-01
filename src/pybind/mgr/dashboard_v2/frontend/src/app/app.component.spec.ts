@@ -9,30 +9,18 @@ import { CoreModule } from './core/core.module';
 import { SharedModule } from './shared/shared.module';
 
 describe('AppComponent', () => {
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        RouterTestingModule,
-        CoreModule,
-        SharedModule,
-        ToastModule.forRoot(),
-        ClusterModule
-      ],
-      declarations: [
-        AppComponent
-      ],
-    }).compileComponents();
-  }));
-
-  it('should create the app', async(() => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.debugElement.componentInstance;
-    expect(app).toBeTruthy();
-  }));
-
-  it(`should have as title 'oa'`, async(() => {
-    const fixture = TestBed.createComponent(AppComponent);
-    const app = fixture.debugElement.componentInstance;
-    expect(app.title).toEqual('cd');
-  }));
+  beforeEach(
+    async(() => {
+      TestBed.configureTestingModule({
+        imports: [
+          RouterTestingModule,
+          CoreModule,
+          SharedModule,
+          ToastModule.forRoot(),
+          ClusterModule
+        ],
+        declarations: [AppComponent]
+      }).compileComponents();
+    })
+  );
 });
