@@ -49,6 +49,8 @@ def plain_open(key, device, mapping):
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup in plain mode
 
+    .. note: ceph-disk will require an additional b64decode call for this to work
+
     :param key: dmcrypt secret key
     :param device: absolute path to device
     :param mapping: mapping name used to correlate device. Usually a UUID
@@ -70,6 +72,8 @@ def plain_open(key, device, mapping):
 def luks_open(key, device, mapping):
     """
     Decrypt (open) an encrypted device, previously prepared with cryptsetup
+
+    .. note: ceph-disk will require an additional b64decode call for this to work
 
     :param key: dmcrypt secret key
     :param device: absolute path to device
