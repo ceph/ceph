@@ -207,7 +207,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
     return {};
   }
 
-  unsigned int prefix_len = 0;
+  const unsigned int prefix_len = max(sizeof(in_addr::s_addr), sizeof(in6_addr::s6_addr)) * CHAR_BIT;
   const struct ifaddrs *found = find_ip_in_subnet(ifa,
                                   (const struct sockaddr *) &network, prefix_len);
 
