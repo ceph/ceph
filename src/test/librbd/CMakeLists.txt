@@ -37,6 +37,7 @@ set(unittest_librbd_srcs
   image/test_mock_RemoveRequest.cc
   io/test_mock_ImageRequest.cc
   io/test_mock_ImageRequestWQ.cc
+  io/test_mock_ObjectRequest.cc
   journal/test_mock_OpenRequest.cc
   journal/test_mock_PromoteRequest.cc
   journal/test_mock_Replay.cc

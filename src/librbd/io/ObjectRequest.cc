@@ -31,6 +31,19 @@
 namespace librbd {
 namespace io {
 
+namespace {
+
+template <typename I>
+inline bool is_copy_on_read(I *ictx, librados::snap_t snap_id) {
+  assert(ictx->snap_lock.is_locked());
+  return (ictx->clone_copy_on_read &&
+          !ictx->read_only && snap_id == CEPH_NOSNAP &&
+          (ictx->exclusive_lock == nullptr ||
+           ictx->exclusive_lock->is_lock_owner()));
+}
+
+} // anonymous namespace
+
 template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_remove(I *ictx, const std::string &oid,
@@ -121,7 +134,7 @@ ObjectRequest<I>::create_compare_and_write(I *ictx, const std::string &oid,
 }
 
 template <typename I>
-ObjectRequest<I>::ObjectRequest(ImageCtx *ictx, const std::string &oid,
+ObjectRequest<I>::ObjectRequest(I *ictx, const std::string &oid,
                                 uint64_t objectno, uint64_t off,
                                 uint64_t len, librados::snap_t snap_id,
                                 bool hide_enoent, const char *trace_name,
@@ -186,35 +199,26 @@ bool ObjectRequest<I>::compute_parent_extents() {
   return false;
 }
 
-static inline bool is_copy_on_read(ImageCtx *ictx, librados::snap_t snap_id) {
-  assert(ictx->snap_lock.is_locked());
-  return (ictx->clone_copy_on_read &&
-          !ictx->read_only && snap_id == CEPH_NOSNAP &&
-          (ictx->exclusive_lock == nullptr ||
-           ictx->exclusive_lock->is_lock_owner()));
-}
-
 /** read **/
 
 template <typename I>
 ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t objectno, uint64_t offset,
                                         uint64_t len, Extents& be,
-                                        librados::snap_t snap_id, bool sparse,
-					int op_flags,
+                                        librados::snap_t snap_id, int op_flags,
 					const ZTracer::Trace &parent_trace,
                                         Context *completion)
-  : ObjectRequest<I>(util::get_image_ctx(ictx), oid, objectno, offset, len,
-                     snap_id, false, "read", parent_trace, completion),
-    m_buffer_extents(be), m_tried_parent(false), m_sparse(sparse),
-    m_op_flags(op_flags), m_state(LIBRBD_AIO_READ_FLAT) {
+  : ObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, false, "read",
+                     parent_trace, completion),
+    m_buffer_extents(be), m_tried_parent(false), m_op_flags(op_flags),
+    m_state(LIBRBD_AIO_READ_FLAT) {
   guard_read();
 }
 
 template <typename I>
 void ObjectReadRequest<I>::guard_read()
 {
-  ImageCtx *image_ctx = this->m_ictx;
+  I *image_ctx = this->m_ictx;
   RWLock::RLocker snap_locker(image_ctx->snap_lock);
   RWLock::RLocker parent_locker(image_ctx->parent_lock);
 
@@ -227,7 +231,7 @@ void ObjectReadRequest<I>::guard_read()
 template <typename I>
 bool ObjectReadRequest<I>::should_complete(int r)
 {
-  ImageCtx *image_ctx = this->m_ictx;
+  I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " "
                             << this->m_object_off << "~" << this->m_object_len
                             << " r = " << r << dendl;
@@ -302,7 +306,7 @@ bool ObjectReadRequest<I>::should_complete(int r)
 
 template <typename I>
 void ObjectReadRequest<I>::send() {
-  ImageCtx *image_ctx = this->m_ictx;
+  I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
                             << "~" << this->m_object_len
                             << dendl;
@@ -321,7 +325,7 @@ void ObjectReadRequest<I>::send() {
 
   librados::ObjectReadOperation op;
   int flags = image_ctx->get_read_flags(this->m_snap_id);
-  if (m_sparse) {
+  if (this->m_object_len >= image_ctx->sparse_read_threshold_bytes) {
     op.sparse_read(this->m_object_off, this->m_object_len, &m_ext_map,
                    &m_read_data, nullptr);
   } else {
@@ -342,7 +346,7 @@ void ObjectReadRequest<I>::send() {
 template <typename I>
 void ObjectReadRequest<I>::send_copyup()
 {
-  ImageCtx *image_ctx = this->m_ictx;
+  I *image_ctx = this->m_ictx;
   ldout(image_ctx->cct, 20) << this->m_oid << " " << this->m_object_off
                             << "~" << this->m_object_len << dendl;
 
@@ -357,11 +361,10 @@ void ObjectReadRequest<I>::send_copyup()
   }
 
   Mutex::Locker copyup_locker(image_ctx->copyup_list_lock);
-  map<uint64_t, CopyupRequest*>::iterator it =
-    image_ctx->copyup_list.find(this->m_object_no);
+  auto it = image_ctx->copyup_list.find(this->m_object_no);
   if (it == image_ctx->copyup_list.end()) {
     // create and kick off a CopyupRequest
-    CopyupRequest *new_req = new CopyupRequest(
+    auto new_req = CopyupRequest<I>::create(
       image_ctx, this->m_oid, this->m_object_no,
       std::move(this->m_parent_extents), this->m_trace);
     this->m_parent_extents.clear();
@@ -374,15 +377,15 @@ void ObjectReadRequest<I>::send_copyup()
 template <typename I>
 void ObjectReadRequest<I>::read_from_parent(Extents&& parent_extents)
 {
-  ImageCtx *image_ctx = this->m_ictx;
+  I *image_ctx = this->m_ictx;
   AioCompletion *parent_completion = AioCompletion::create_and_start<
-    ObjectRequest<I> >(this, image_ctx, AIO_TYPE_READ);
+    ObjectRequest<I> >(this, util::get_image_ctx(image_ctx), AIO_TYPE_READ);
 
   ldout(image_ctx->cct, 20) << "parent completion " << parent_completion
                             << " extents " << parent_extents << dendl;
-  ImageRequest<>::aio_read(image_ctx->parent, parent_completion,
-                           std::move(parent_extents),
-                           ReadResult{&m_read_data}, 0, this->m_trace);
+  ImageRequest<I>::aio_read(image_ctx->parent, parent_completion,
+                            std::move(parent_extents),
+                            ReadResult{&m_read_data}, 0, this->m_trace);
 }
 
 /** write **/
@@ -568,13 +571,10 @@ void AbstractObjectWriteRequest::send_copyup()
   m_state = LIBRBD_AIO_WRITE_COPYUP;
 
   m_ictx->copyup_list_lock.Lock();
-  map<uint64_t, CopyupRequest*>::iterator it =
-    m_ictx->copyup_list.find(m_object_no);
+  auto it = m_ictx->copyup_list.find(m_object_no);
   if (it == m_ictx->copyup_list.end()) {
-    CopyupRequest *new_req = new CopyupRequest(m_ictx, m_oid,
-                                               m_object_no,
-                                               std::move(m_parent_extents),
-					       this->m_trace);
+    auto new_req = CopyupRequest<>::create(
+      m_ictx, m_oid, m_object_no, std::move(m_parent_extents), this->m_trace);
     m_parent_extents.clear();
 
     // make sure to wait on this CopyupRequest
