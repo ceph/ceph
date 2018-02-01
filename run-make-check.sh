@@ -30,8 +30,8 @@ function get_processors() {
 function run() {
     local install_cmd
     local which_pkg="which"
+    source /etc/os-release
     if test -f /etc/redhat-release ; then
-        source /etc/os-release
         if ! type bc > /dev/null 2>&1 ; then
             echo "Please install bc and re-run." 
             exit 1
@@ -41,12 +41,12 @@ function run() {
         else
             install_cmd="yum install -y"
         fi
-    else
+    elif type zypper > /dev/null 2>&1 ; then
+        install_cmd="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+    elif type apt-get > /dev/null 2>&1 ; then
+        install_cmd="apt-get install -y"
         which_pkg="debianutils"
     fi
-
-    type apt-get > /dev/null 2>&1 && install_cmd="apt-get install -y"
-    type zypper > /dev/null 2>&1 && install_cmd="zypper --gpg-auto-import-keys --non-interactive install"
 
     if ! type sudo > /dev/null 2>&1 ; then
         echo "Please install sudo and re-run. This script assumes it is running"
@@ -57,6 +57,7 @@ function run() {
         $DRY_RUN sudo $install_cmd ccache jq $which_pkg
     else
         echo "WARNING: Don't know how to install packages" >&2
+        echo "This probably means distribution $ID is not supported by run-make-check.sh" >&2
     fi
 
     if test -f ./install-deps.sh ; then
