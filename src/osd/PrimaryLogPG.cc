@@ -25,6 +25,7 @@
 #include "Session.h"
 #include "objclass/objclass.h"
 
+#include "common/config_cacher.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "common/perf_counters.h"
@@ -5321,8 +5322,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
+  static md_config_cacher_t<bool> data_digest_proxy(
+    *g_conf, "osd_skip_data_digest");
   bool skip_data_digest = osd->store->has_builtin_csum() &&
-    g_conf->osd_skip_data_digest;
+    data_digest_proxy.get_val();
 
   PGTransaction* t = ctx->op_t.get();
   if (!oi.has_extents() &&
