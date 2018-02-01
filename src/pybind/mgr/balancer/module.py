@@ -320,8 +320,12 @@ class Module(MgrModule):
             if len(invalid_pool_names):
                 return (-errno.EINVAL, '', 'pools %s not found' % invalid_pool_names)
             plan = self.plan_create(command['plan'], osdmap, pools)
-            self.optimize(plan)
-            return (0, '', '')
+            r, detail = self.optimize(plan)
+            # remove plan if we are currently unable to find an optimization
+            # or distribution is already perfect
+            if r:
+                self.plan_rm(command['plan'])
+            return (r, '', detail)
         elif command['prefix'] == 'balancer rm':
             self.plan_rm(command['plan'])
             return (0, '', '')
@@ -376,7 +380,8 @@ class Module(MgrModule):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
                 plan = self.plan_create(name, self.get_osdmap(), [])
-                if self.optimize(plan):
+                r, detail = self.optimize(plan)
+                if r == 0:
                     self.execute(plan)
                 self.plan_rm(name)
             self.log.debug('Sleeping for %d', sleep_interval)
@@ -615,25 +620,35 @@ class Module(MgrModule):
         self.log.debug('unknown %f degraded %f inactive %f misplaced %g',
                        unknown, degraded, inactive, misplaced)
         if unknown > 0.0:
-            self.log.info('Some PGs (%f) are unknown; waiting', unknown)
+            detail = 'Some PGs (%f) are unknown; try again later' % unknown
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif degraded > 0.0:
-            self.log.info('Some objects (%f) are degraded; waiting', degraded)
+            detail = 'Some objects (%f) are degraded; try again later' % degraded
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif inactive > 0.0:
-            self.log.info('Some PGs (%f) are inactive; waiting', inactive)
+            detail = 'Some PGs (%f) are inactive; try again later' % inactive
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         elif misplaced >= max_misplaced:
-            self.log.info('Too many objects (%f > %f) are misplaced; waiting',
-                          misplaced, max_misplaced)
+            detail = 'Too many objects (%f > %f) are misplaced; ' \
+                     'try again later' % (misplaced, max_misplaced)
+            self.log.info(detail)
+            return -errno.EAGAIN, detail
         else:
             if plan.mode == 'upmap':
                 return self.do_upmap(plan)
             elif plan.mode == 'crush-compat':
                 return self.do_crush_compat(plan)
             elif plan.mode == 'none':
+                detail = 'Please do "ceph balancer mode" to choose a valid mode first'
                 self.log.info('Idle')
+                return -errno.ENOEXEC, detail
             else:
-                self.log.info('Unrecognized mode %s' % plan.mode)
-        return False
-
+                detail = 'Unrecognized mode %s' % plan.mode
+                self.log.info(detail)
+                return -errno.EINVAL, detail
         ##
 
     def do_upmap(self, plan):
@@ -647,8 +662,9 @@ class Module(MgrModule):
         else: # all
             pools = [str(i['pool_name']) for i in ms.osdmap_dump.get('pools',[])]
         if len(pools) == 0:
-            self.log.info('no pools, nothing to do')
-            return False
+            detail = 'No pools available'
+            self.log.info(detail)
+            return -errno.ENOENT, detail
         # shuffle pool list so they all get equal (in)attention
         random.shuffle(pools)
         self.log.info('pools %s' % pools)
@@ -663,16 +679,16 @@ class Module(MgrModule):
             if left <= 0:
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
-        return True
+        return 0, ''
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
         max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
         if max_iterations < 1:
-            return False
+            return -errno.EINVAL, '"crush_compat_max_iterations" must be >= 1'
         step = float(self.get_config('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
-            return False
+            return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
         max_misplaced = float(self.get_config('max_misplaced',
                                               default_max_misplaced))
         min_pg_per_osd = 2
@@ -682,8 +698,9 @@ class Module(MgrModule):
         crush = osdmap.get_crush()
         pe = self.calc_eval(ms, plan.pools)
         if pe.score == 0:
-            self.log.info('Distribution is already perfect')
-            return False
+            detail = 'Distribution is already perfect'
+            self.log.info(detail)
+            return -errno.EALREADY, detail
 
         # get current osd reweights
         orig_osd_weight = { a['osd']: a['weight']
@@ -694,7 +711,7 @@ class Module(MgrModule):
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights(ms)
         if not orig_ws:
-            return False
+            return -errno.EAGAIN, 'compat weight-set not available'
         orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
 
         # Make sure roots don't overlap their devices.  If so, we
@@ -710,9 +727,10 @@ class Module(MgrModule):
                     overlap[osd] = 1
                 visited[osd] = 1
         if len(overlap) > 0:
-            self.log.error('error: some osds belong to multiple subtrees: %s' %
-                         overlap)
-            return False
+            detail = 'Some osds belong to multiple subtrees: %s' % \
+                     overlap.keys()
+            self.log.error(detail)
+            return -errno.EOPNOTSUPP, detail
 
         key = 'pgs'  # pgs objects or bytes
 
@@ -834,12 +852,13 @@ class Module(MgrModule):
                 if w != orig_osd_weight[osd]:
                     self.log.debug('osd.%d reweight %f', osd, w)
                     plan.osd_weights[osd] = w
-            return True
+            return 0, ''
         else:
             self.log.info('Failed to find further optimization, score %f',
                           pe.score)
             plan.compat_ws = {}
-            return False
+            return -errno.EDOM, 'Unable to find further optimization, ' \
+                                'change balancer mode and retry might help'
 
     def get_compat_weight_set_weights(self, ms):
         if not CRUSHMap.have_default_choose_args(ms.crush_dump):
