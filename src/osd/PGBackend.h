@@ -606,7 +606,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
-     const OSDMapRef curmap,
+     const map<string,string>& profile,
      Listener *l,
      coll_t coll,
      ObjectStore::CollectionHandle &ch,

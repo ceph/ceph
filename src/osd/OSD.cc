@@ -3844,10 +3844,14 @@ PG* OSD::_make_pg(
 {
   dout(10) << __func__ << " " << pgid << dendl;
   pg_pool_t pi;
+  map<string,string> ec_profile;
   string name;
   if (createmap->have_pg_pool(pgid.pool())) {
     pi = *createmap->get_pg_pool(pgid.pool());
     name = createmap->get_pool_name(pgid.pool());
+    if (pi.is_erasure()) {
+      ec_profile = createmap->get_erasure_code_profile(pi.erasure_code_profile);
+    }
   } else {
     // pool was deleted; grab final pg_pool_t off disk.
     ghobject_t oid = make_final_pool_info_oid(pgid.pool());
@@ -3857,12 +3861,13 @@ PG* OSD::_make_pg(
     auto p = bl.begin();
     decode(pi, p);
     decode(name, p);
+    decode(ec_profile, p);
   }
   PGPool pool(cct, createmap, pgid.pool(), pi, name);
   PG *pg;
   if (pi.type == pg_pool_t::TYPE_REPLICATED ||
       pi.type == pg_pool_t::TYPE_ERASURE)
-    pg = new PrimaryLogPG(&service, createmap, pool, pgid);
+    pg = new PrimaryLogPG(&service, createmap, pool, ec_profile, pgid);
   else
     ceph_abort();
   return pg;
@@ -7509,6 +7514,12 @@ void OSD::handle_osd_map(MOSDMap *m)
 	encode(j.second, bl, CEPH_FEATURES_ALL);
 	string name = lastmap->get_pool_name(j.first);
 	encode(name, bl);
+	map<string,string> profile;
+	if (lastmap->get_pg_pool(j.first)->is_erasure()) {
+	  profile = lastmap->get_erasure_code_profile(
+	    lastmap->get_pg_pool(j.first)->erasure_code_profile);
+	}
+	encode(profile, bl);
 	t.write(coll_t::meta(), obj, 0, bl.length(), bl);
 	service.store_deleted_pool_pg_num(j.first, j.second.get_pg_num());
       }
