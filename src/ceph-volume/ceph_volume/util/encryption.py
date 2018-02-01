@@ -2,7 +2,7 @@ import base64
 import os
 import logging
 from ceph_volume import process, conf
-from ceph_volume.util import constants
+from ceph_volume.util import constants, system
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
 
@@ -206,6 +206,13 @@ def legacy_encrypted(device):
 
     This function assumes that ``device`` will be a partition.
     """
+    if os.path.isdir(device):
+        mounts = system.get_mounts(paths=True)
+        # yes, rebind the device variable here because a directory isn't going
+        # to help with parsing
+        device = mounts.get(device, [None])[0]
+        if not device:
+            raise RuntimeError('unable to determine the device mounted at %s' % device)
     metadata = {'encrypted': False, 'type': None, 'lockbox': '', 'device': device}
     # check if the device is online/decrypted first
     active_mapper = status(device)
