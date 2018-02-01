@@ -600,8 +600,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
       dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
               << ": " << in->inode.layout << dendl;
       std::ostringstream oss;
-      oss << "Invalid layout for inode 0x" << std::hex << in->inode.ino
-          << std::dec << " in journal";
+      oss << "Invalid layout for inode " << in->ino() << " in journal";
       mds->clog->error() << oss.str();
       mds->damaged();
       ceph_abort();  // Should be unreachable because damaged() calls respawn()

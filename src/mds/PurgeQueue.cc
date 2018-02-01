@@ -252,7 +252,7 @@ void PurgeQueue::create(Context *fin)
  */
 void PurgeQueue::push(const PurgeItem &pi, Context *completion)
 {
-  dout(4) << "pushing inode 0x" << std::hex << pi.ino << std::dec << dendl;
+  dout(4) << "pushing inode " << pi.ino << dendl;
   Mutex::Locker l(lock);
 
   // Callers should have waited for open() before using us
@@ -391,8 +391,7 @@ bool PurgeQueue::_consume()
            << journaler.get_read_pos() << dendl;
       on_error->complete(0);
     }
-    dout(20) << " executing item (0x" << std::hex << item.ino
-             << std::dec << ")" << dendl;
+    dout(20) << " executing item (" << item.ino << ")" << dendl;
     _execute_item(item, journaler.get_read_pos());
   }
 
@@ -527,8 +526,7 @@ void PurgeQueue::_execute_item_complete(
   ops_in_flight -= _calculate_ops(iter->second);
   logger->set(l_pq_executing_ops, ops_in_flight);
 
-  dout(10) << "completed item for ino 0x" << std::hex << iter->second.ino
-           << std::dec << dendl;
+  dout(10) << "completed item for ino " << iter->second.ino << dendl;
 
   in_flight.erase(iter);
   logger->set(l_pq_executing, in_flight.size());

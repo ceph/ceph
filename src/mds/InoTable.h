@@ -100,7 +100,7 @@ class InoTable : public MDSTable {
   {
     if (free.contains(ino)) {
       inodeno_t min = free.begin().get_start();
-      std::cerr << "Erasing 0x" << std::hex << min << " to 0x" << ino << std::dec << std::endl;
+      std::cerr << "Erasing " << min << " to " << ino << std::endl;
       free.erase(min, ino - min + 1);
       projected_free = free;
       projected_version = ++version;

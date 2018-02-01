@@ -2380,7 +2380,7 @@ CDir *MDSRank::_command_dirfrag_get(
 
   CDir *dir = in->get_dirfrag(fg);
   if (!dir) {
-    ss << "frag 0x" << std::hex << in->ino() << "/" << fg << " not in cache ("
+    ss << "frag " << in->ino() << "/" << fg << " not in cache ("
           "use `dirfrag ls` to see if it should exist)";
     return NULL;
   }
