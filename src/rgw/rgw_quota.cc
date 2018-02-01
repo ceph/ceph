@@ -107,9 +107,9 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
       quota.max_size_soft_threshold = quota.max_size_kb * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
     }
 
-    if (cached_stats.num_kb_rounded >= (uint64_t)quota.max_size_soft_threshold) {
+    if (cached_stats.size_rounded  >= (uint64_t)quota.max_size_soft_threshold) {
       ldout(store->ctx(), 20) << "quota: can't use cached stats, exceeded soft threshold (size): "
-        << cached_stats.num_kb_rounded << " >= " << quota.max_size_soft_threshold << dendl;
+        << cached_stats.size_rounded << " >= " << quota.max_size_soft_threshold << dendl;
       return false;
     }
   }
