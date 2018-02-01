@@ -6,6 +6,7 @@ the single-call helper
 """
 import os
 import logging
+import json
 from ceph_volume import process, conf
 from ceph_volume.util import system, constants
 
@@ -46,12 +47,44 @@ def write_keyring(osd_id, secret, keyring_name='keyring', name=None):
     system.chown(osd_keyring)
 
 
-def create_id(fsid, json_secrets):
+def create_id(fsid, json_secrets, osd_id=None):
     """
     :param fsid: The osd fsid to create, always required
     :param json_secrets: a json-ready object with whatever secrets are wanted
                          to be passed to the monitor
+    :param osd_id: Reuse an existing ID from an OSD that's been destroyed, if the
+                   id does not exist in the cluster a new ID will be created
     """
+    bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = [
+        'ceph',
+        '--cluster', conf.cluster,
+        '--name', 'client.bootstrap-osd',
+        '--keyring', bootstrap_keyring,
+        '-i', '-',
+        'osd', 'new', fsid
+    ]
+    if check_id(osd_id):
+        cmd.append(osd_id)
+    stdout, stderr, returncode = process.call(
+        cmd,
+        stdin=json_secrets,
+        show_command=True
+    )
+    if returncode != 0:
+        raise RuntimeError('Unable to create a new OSD id')
+    return ' '.join(stdout).strip()
+
+
+def check_id(osd_id):
+    """
+    Checks to see if an osd ID exists or not. Returns True
+    if it does exist, False if it doesn't.
+
+    :param osd_id: The osd ID to check
+    """
+    if osd_id is None:
+        return False
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     stdout, stderr, returncode = process.call(
         [
@@ -59,15 +92,18 @@ def create_id(fsid, json_secrets):
             '--cluster', conf.cluster,
             '--name', 'client.bootstrap-osd',
             '--keyring', bootstrap_keyring,
-            '-i', '-',
-            'osd', 'new', fsid
+            'osd',
+            'tree',
+            '-f', 'json',
         ],
-        stdin=json_secrets,
         show_command=True
     )
     if returncode != 0:
-        raise RuntimeError('Unable to create a new OSD id')
-    return ' '.join(stdout).strip()
+        raise RuntimeError('Unable check if OSD id exists: %s' % osd_id)
+
+    output = json.loads(''.join(stdout).strip())
+    osds = output['nodes']
+    return any([str(osd['id']) == str(osd_id) for osd in osds])
 
 
 def mount_tmpfs(path):
