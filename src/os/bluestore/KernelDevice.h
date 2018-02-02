@@ -48,13 +48,14 @@ class KernelDevice : public BlockDevice {
     bool aio_stop = false;
 
     explicit aio_service_t(CephContext* cct,
-                           KernelDevice* const bdev)
+                           KernelDevice* const bdev,
+                           const bool IsRDOnlyV)
       : aio_queue(cct->_conf->bdev_aio_max_queue_depth),
-        aio_thread(make_lambda_thread([bdev, this]() {
+        aio_thread(make_lambda_thread([bdev, this, IsRDOnlyV]() {
           // NOTE: the physical location of the object SHALL NOT change!
           // Othwerwise we'll end with bstore_aios  interpreting random
           // junks as their qio_queue or the stop signal.
-          bdev->_aio_thread(this->aio_queue, this->aio_stop);
+          bdev->_aio_thread(this->aio_queue, this->aio_stop, IsRDOnlyV);
         })) {
     }
 
@@ -67,7 +68,7 @@ class KernelDevice : public BlockDevice {
     aio_service_t,
     expected_max_shard_num> aio_rdonly_services;
 
-  void _aio_thread(aio_queue_t& aio_queue, const bool& aio_stop);
+  void _aio_thread(aio_queue_t& aio_queue, const bool& aio_stop, bool rdonly);
   int _aio_start();
   void _aio_stop();
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);

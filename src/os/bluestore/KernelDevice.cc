@@ -73,10 +73,10 @@ KernelDevice::KernelDevice(CephContext* cct,
     fs(NULL), aio(false), dio(false),
     debug_lock("KernelDevice::debug_lock"),
     injecting_crash(0),
-    aio_main_service(cct, this)
+    aio_main_service(cct, this, false)
 {
   for (size_t i = 0; i < num_shards; ++i) {
-    aio_rdonly_services.emplace_back(cct, this);
+    aio_rdonly_services.emplace_back(cct, this, true);
   }
 }
 
@@ -386,7 +386,7 @@ void KernelDevice::_aio_stop()
   }
 }
 
-void KernelDevice::_aio_thread(aio_queue_t& aio_queue, const bool& aio_stop)
+void KernelDevice::_aio_thread(aio_queue_t& aio_queue, const bool& aio_stop, bool rdonly)
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
@@ -416,7 +416,11 @@ void KernelDevice::_aio_thread(aio_queue_t& aio_queue, const bool& aio_stop)
 	// that an earlier, racing flush() could observe and clear this
 	// flag, but that also ensures that the IO will be stable before the
 	// later flush() occurs.
-	io_since_flush.store(true);
+        // FIXME: template the rdonly parameter or split _aio_thread
+        // implementation.
+        if (!rdonly) {
+	  io_since_flush.store(true);
+        }
 
 	int r = aio[i]->get_return_value();
         if (r < 0) {
