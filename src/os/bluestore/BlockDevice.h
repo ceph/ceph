@@ -205,6 +205,11 @@ public:
     bufferlist& bl,
     IOContext *ioc,
     bool buffered) = 0;
+  virtual int aio_write(
+    uint64_t off,
+    bufferlist& bl,
+    RDOnlyIOContext *ioc,
+    bool buffered) = delete;
   virtual int flush() = 0;
 
   void queue_reap_ioc(IOContext *ioc);
