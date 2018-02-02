@@ -7360,8 +7360,14 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
+  string dest_obj_name = dest_obj.get_object();
+  if (dest_obj_name.size() > 2
+	&& dest_obj_name[0] == '_' && dest_obj_name[1] == '_') {
+    dest_obj_name.erase(0,1);
+  }
+
   RGWPutObjProcessor_Atomic processor(obj_ctx,
-                                      dest_bucket_info, dest_obj.bucket, dest_obj.get_object(),
+                                      dest_bucket_info, dest_obj.bucket, dest_obj_name,
                                       cct->_conf->rgw_obj_stripe_size, tag, dest_bucket_info.versioning_enabled());
   if (version_id) {
     processor.set_version_id(*version_id);
