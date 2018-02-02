@@ -697,8 +697,13 @@ class Module(MgrModule):
         osdmap = ms.osdmap
         crush = osdmap.get_crush()
         pe = self.calc_eval(ms, plan.pools)
-        if pe.score == 0:
-            detail = 'Distribution is already perfect'
+        min_score_to_optimize = float(self.get_config('min_score', 0))
+        if pe.score <= min_score_to_optimize:
+            if pe.score == 0:
+                detail = 'Distribution is already perfect'
+            else:
+                detail = 'score %f <= min_score %f, will not optimize' \
+                         % (pe.score, min_score_to_optimize)
             self.log.info(detail)
             return -errno.EALREADY, detail
 
