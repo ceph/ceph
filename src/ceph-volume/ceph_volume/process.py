@@ -100,7 +100,6 @@ def run(command, **kw):
     """
     stop_on_error = kw.pop('stop_on_error', True)
     command_msg = obfuscate(command, kw.pop('obfuscate', None))
-    stdin = kw.pop('stdin', None)
     fail_msg = kw.pop('fail_msg', None)
     logger.info(command_msg)
     terminal.write(command_msg)
@@ -108,15 +107,12 @@ def run(command, **kw):
 
     process = subprocess.Popen(
         command,
-        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         close_fds=True,
         **kw
     )
 
-    if stdin:
-        process.communicate(stdin)
     while True:
         reads, _, _ = select(
             [process.stdout.fileno(), process.stderr.fileno()],
