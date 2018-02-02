@@ -2694,6 +2694,8 @@ void PG::_update_calc_stats()
 
     assert(!actingbackfill.empty());
 
+    bool estimate = false;
+
     // NOTE: we only generate degraded, misplaced and unfound
     // values for the summation, not individual stat categories.
     int64_t num_objects = info.stats.stats.sum.num_objects;
@@ -2739,6 +2741,9 @@ void PG::_update_calc_stats()
           missing = peer_missing[peer.first].num_missing();
         } else {
           dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
+          if (is_recovering()) {
+            estimate = true;
+          }
           missing = std::max((int64_t)0, num_objects - peer_num_objects);
         }
       }
@@ -2892,8 +2897,9 @@ void PG::_update_calc_stats()
       misplaced += extra_misplaced;
     }
 out:
-    dout(20) << __func__ << " degraded " << degraded << dendl;
-    dout(20) << __func__ << " misplaced " << misplaced << dendl;
+    // NOTE: Tests use these messages to verify this code
+    dout(20) << __func__ << " degraded " << degraded << (estimate ? " (est)": "") << dendl;
+    dout(20) << __func__ << " misplaced " << misplaced << (estimate ? " (est)": "")<< dendl;
 
     info.stats.stats.sum.num_objects_degraded = degraded;
     info.stats.stats.sum.num_objects_unfound = get_num_unfound();

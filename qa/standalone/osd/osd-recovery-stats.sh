@@ -54,14 +54,23 @@ function above_margin() {
     return $(( $check >= $target && $check <= $target + $margin ? 0 : 1 ))
 }
 
+FIND_UPACT='grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
+FIND_FIRST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_LAST='grep "pg[[]${PG}.*recovering.*_update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
+
 function check() {
-    local PG=$1
-    local log=$2
-    local degraded_start=$3
-    local degraded_end=$4
-    local misplaced_start=$5
-    local misplaced_end=$6
-    local type=$7
+    local dir=$1
+    local PG=$2
+    local primary=$3
+    local type=$4
+    local degraded_start=$5
+    local degraded_end=$6
+    local misplaced_start=$7
+    local misplaced_end=$8
+    local primary_start=${9:-}
+    local primary_end=${10:-}
+
+    local log=$dir/osd.${primary}.log
 
     local addp=" "
     if [ "$type" = "erasure" ];
@@ -69,19 +78,31 @@ function check() {
       addp="p"
     fi
 
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
+    UPACT=$(eval $FIND_UPACT)
 
     # Check 3rd line at start because of false recovery starts
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    local which="degraded"
+    FIRST=$(eval $FIND_FIRST)
     below_margin $FIRST $degraded_start || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats degraded " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
     above_margin $LAST $degraded_end || return 1
 
     # Check 3rd line at start because of false recovery starts
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats misplaced " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    which="misplaced"
+    FIRST=$(eval $FIND_FIRST)
     below_margin $FIRST $misplaced_start || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats misplaced " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
     above_margin $LAST $misplaced_end || return 1
+
+    # This is the value of set into MISSING_ON_PRIMARY
+    if [ -n "$primary_start" ];
+    then
+      which="shard $primary"
+      FIRST=$(eval $FIND_FIRST)
+      below_margin $FIRST $primary_start || return 1
+      LAST=$(eval $FIND_LAST)
+      above_margin $LAST $primary_end || return 1
+    fi
 }
 
 # [1,0,?] -> [1,2,4]
@@ -134,8 +155,7 @@ function do_recovery_out1() {
 
     wait_for_clean || return 1
 
-    local log=$dir/osd.${primary}.log
-    check $PG $log $objects 0 0 0 $type || return 1
+    check $dir $PG $primary $type $objects 0 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -202,15 +222,7 @@ function TEST_recovery_sizeup() {
     local degraded=$(expr $objects \* 2)
     local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log $degraded 0 $misplaced 0 || return 1
-
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
-
-    # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
-    below_margin $FIRST $objects || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
-    above_margin $LAST 0 || return 1
+    check $dir $PG $primary replicated $degraded 0 $misplaced 0 $objects 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -268,7 +280,7 @@ function TEST_recovery_sizedown() {
 
     local misplaced=$(expr $objects \* 2)
     local log=$dir/osd.${primary}.log
-    check $PG $log 0 0 $misplaced 0 || return 1
+    check $dir $PG $primary replicated 0 0 $misplaced 0 || return 1
 
     UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
 
@@ -353,7 +365,7 @@ function TEST_recovery_undersized() {
 
     local first_degraded=$(expr $objects \* 3)
     local last_degraded=$(expr $objects \* 2)
-    check $PG $log $first_degraded $last_degraded 0 0 || return 1
+    check $dir $PG $primary replicated $first_degraded $last_degraded 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -417,7 +429,7 @@ function TEST_recovery_erasure_remapped() {
     wait_for_clean || return 1
 
     local log=$dir/osd.${primary}.log
-    check $PG $log $objects 0 $objects $objects erasure || return 1
+    check $dir $PG $primary erasure $objects 0 $objects $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -487,15 +499,7 @@ function TEST_recovery_multi() {
     primary=$(get_primary $poolname obj1)
 
     local log=$dir/osd.${primary}.log
-    check $PG $log 399 0 300 0 || return 1
-
-    UPACT=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
-
-    # This is the value of set into MISSING_ON_PRIMARY
-    FIRST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | grep -F " $UPACT " | head -1 | sed "s/.* \([0-9]*\)$/\1/")
-    below_margin $FIRST 99 || return 1
-    LAST=$(grep "pg[[]${PG}.*recovering.*_update_calc_stats shard $primary " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
-    above_margin $LAST 0 || return 1
+    check $dir $PG $primary replicated 399 0 300 0 99 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
