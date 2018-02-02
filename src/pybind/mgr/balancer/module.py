@@ -679,6 +679,9 @@ class Module(MgrModule):
             if left <= 0:
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        if total_did == 0:
+            return -errno.EALREADY, 'Unable to find further optimization,' \
+                                    'or distribution is already perfect'
         return 0, ''
 
     def do_crush_compat(self, plan):
