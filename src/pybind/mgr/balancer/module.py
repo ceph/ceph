@@ -77,7 +77,7 @@ class Plan:
                   self.initial.osdmap.get_crush_version())
         ls.append('# mode %s' % self.mode)
         if len(self.compat_ws) and \
-           '-1' not in self.initial.crush_dump.get('choose_args', {}):
+           not CRUSHMap.have_default_choose_args(self.initial.crush_dump):
             ls.append('ceph osd crush weight-set create-compat')
         for osd, weight in self.compat_ws.iteritems():
             ls.append('ceph osd crush weight-set reweight-compat %s %f' %
@@ -823,7 +823,7 @@ class Module(MgrModule):
             return False
 
     def get_compat_weight_set_weights(self, ms):
-        if '-1' not in ms.crush_dump.get('choose_args', {}):
+        if not CRUSHMap.have_default_choose_args(ms.crush_dump):
             # enable compat weight-set first
             self.log.debug('ceph osd crush weight-set create-compat')
             result = CommandResult('')
@@ -852,7 +852,7 @@ class Module(MgrModule):
         else:
             crushmap = ms.crush_dump
 
-        raw = crushmap.get('choose_args',{}).get('-1', [])
+        raw = CRUSHMap.get_default_choose_args(crushmap)
         weight_set = {}
         for b in raw:
             bucket = None
@@ -885,7 +885,7 @@ class Module(MgrModule):
 
         # compat weight-set
         if len(plan.compat_ws) and \
-           '-1' not in plan.initial.crush_dump.get('choose_args', {}):
+           not CRUSHMap.have_default_choose_args(plan.initial.crush_dump):
             self.log.debug('ceph osd crush weight-set create-compat')
             result = CommandResult('')
             self.send_command(result, 'mon', '', json.dumps({
