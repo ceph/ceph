@@ -916,7 +916,10 @@ void md_config_t::get_defaults_bl(bufferlist *bl)
   *bl = defaults_bl;
 }
 
-void md_config_t::get_config_bl(bufferlist *bl)
+void md_config_t::get_config_bl(
+  uint64_t have_version,
+  bufferlist *bl,
+  uint64_t *got_version)
 {
   Mutex::Locker l(lock);
   if (values_bl.length() == 0) {
@@ -959,8 +962,12 @@ void md_config_t::get_config_bl(bufferlist *bl)
     encode(n, values_bl);
     values_bl.claim_append(bl);
     encode(ignored_mon_values, values_bl);
+    ++values_bl_version;
   }
-  *bl = values_bl;
+  if (have_version != values_bl_version) {
+    *bl = values_bl;
+    *got_version = values_bl_version;
+  }
 }
 
 int md_config_t::get_val(const std::string &key, char **buf, int len) const

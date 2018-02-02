@@ -174,7 +174,7 @@ void MgrClient::_send_open()
       open->service_daemon = service_daemon;
       open->daemon_metadata = daemon_metadata;
     }
-    cct->_conf->get_config_bl(&open->config_bl);
+    cct->_conf->get_config_bl(0, &open->config_bl, &last_config_bl_version);
     cct->_conf->get_defaults_bl(&open->config_defaults_bl);
     session->con->send_message(open);
   }
@@ -331,7 +331,8 @@ void MgrClient::send_report()
 
   report->osd_health_metrics = std::move(osd_health_metrics);
 
-  cct->_conf->get_config_bl(&report->config_bl);
+  cct->_conf->get_config_bl(last_config_bl_version, &report->config_bl,
+			    &last_config_bl_version);
 
   session->con->send_message(report);
 }
