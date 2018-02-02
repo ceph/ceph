@@ -844,51 +844,64 @@ if [ $CEPH_NUM_MON -gt 0 ]; then
     start_mon
 
     echo Populating config ...
-    $CEPH_BIN/ceph config set global osd_pool_default_size $OSD_POOL_DEFAULT_SIZE
-    $CEPH_BIN/ceph config set global osd_pool_default_min_size 1
-    $CEPH_BIN/ceph config set global mon_pg_warn_min_per_osd 3
+    cat <<EOF | $CEPH_BIN/ceph config assimilate-conf -i -
+[global]
+osd_pool_default_size = $OSD_POOL_DEFAULT_SIZE
+osd_pool_default_min_size = 1
+mon_pg_warn_min_per_osd = 3
 
-    $CEPH_BIN/ceph config set mon mon_osd_reporter_subtree_level osd
-    $CEPH_BIN/ceph config set mon mon_data_avail_warn 2
-    $CEPH_BIN/ceph config set mon mon_data_avail_crit 1
-    $CEPH_BIN/ceph config set mon osd_pool_default_erasure_code_profile 'plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd'
-    $CEPH_BIN/ceph config set mon mon_allow_pool_delete true
+[mon]
+mon_osd_reporter_subtree_level = osd
+mon_data_avail_warn = 2
+mon_data_avail_crit = 1
+osd_pool_default_erasure_code_profile = 'plugin=jerasure technique=reed_sol_van k=2 m=1 crush-failure-domain=osd'
+mon_allow_pool_delete = true
 
-    $CEPH_BIN/ceph config set osd osd_scrub_load_threshold 2000
-    $CEPH_BIN/ceph config set osd osd_debug_op_order true
-    $CEPH_BIN/ceph config set osd osd_debug_misdirected_ops true
-    $CEPH_BIN/ceph config set osd osd_copyfrom_max_chunk 524288
+[osd]
+osd_scrub_load_threshold = 2000
+osd_debug_op_order = true
+osd_debug_misdirected_ops = true
+osd_copyfrom_max_chunk = 524288
 
-    $CEPH_BIN/ceph config set mds mds_debug_frag true
-    $CEPH_BIN/ceph config set mds mds_debug_auth_pins true
-    $CEPH_BIN/ceph config set mds mds_debug_subtrees true
+[mds]
+mds_debug_frag = true
+mds_debug_auth_pins = true
+mds_debug_subtrees = true
+
+EOF
 
     if [ "$debug" -ne 0 ]; then
-	$CEPH_BIN/ceph config set mgr debug_ms 1
-	$CEPH_BIN/ceph config set mgr debug_mgr 20
-	$CEPH_BIN/ceph config set mgr debug_monc 20
-	$CEPH_BIN/ceph config set mgr debug_mon 20
+	echo Setting debug configs ...
+	cat <<EOF | $CEPH_BIN/ceph config assimilate-conf -i -
+[mgr]
+debug_ms = 1
+debug_mgr = 20
+debug_monc = 20
+debug_mon = 20
 
-	$CEPH_BIN/ceph config set osd debug_ms 1
-	$CEPH_BIN/ceph config set osd debug_osd 25
-	$CEPH_BIN/ceph config set osd debug_objecter 20
-	$CEPH_BIN/ceph config set osd debug_monc 20
-	$CEPH_BIN/ceph config set osd debug_mgrc 20
-	$CEPH_BIN/ceph config set osd debug_journal 20
-	$CEPH_BIN/ceph config set osd debug_filestore 20
-	$CEPH_BIN/ceph config set osd debug_bluestore 30
-	$CEPH_BIN/ceph config set osd debug_bluefs 20
-	$CEPH_BIN/ceph config set osd debug_rocksdb 20
-	$CEPH_BIN/ceph config set osd debug_bdev 20
-	$CEPH_BIN/ceph config set osd debug_reserver 10
-	$CEPH_BIN/ceph config set osd debug_objclass 20
+[osd]
+debug_ms = 1
+debug_osd = 25
+debug_objecter = 20
+debug_monc = 20
+debug_mgrc = 20
+debug_journal = 20
+debug_filestore = 20
+debug_bluestore = 20
+debug_bluefs = 20
+debug_rocksdb = 20
+debug_bdev = 20
+debug_reserver = 10
+debug_objclass = 20
 
-	$CEPH_BIN/ceph config set mds debug_ms 1
-	$CEPH_BIN/ceph config set mds debug_mds 20
-	$CEPH_BIN/ceph config set mds debug_monc 20
-	$CEPH_BIN/ceph config set mds debug_mgrc 20
-	$CEPH_BIN/ceph config set mds mds_debug_scatterstat true
-	$CEPH_BIN/ceph config set mds mds_verify_scatter true
+[mds]
+debug_ms = 1
+debug_mds = 20
+debug_monc = 20
+debug_mgrc = 20
+mds_debug_scatterstat = true
+mds_verify_scatter = true
+EOF
     fi
 fi
 
