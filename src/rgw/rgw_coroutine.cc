@@ -234,7 +234,7 @@ int RGWCoroutinesStack::operate(RGWCoroutinesEnv *_env)
     r = unwind(op_retcode);
     op->put();
     done_flag = (pos == ops.end());
-    blocked_flag &= ~done_flag;
+    blocked_flag &= !done_flag;
     if (done_flag) {
       retcode = op_retcode;
     }
