@@ -9496,24 +9496,12 @@ int OSD::init_op_flags(OpRequestRef& op)
 void OSD::ShardedOpWQ::_wake_pg_slot(
   spg_t pgid,
   ShardData *sdata,
-  ShardData::pg_slot& slot,
-  unsigned *pushes_to_free)
+  ShardData::pg_slot& slot)
 {
   dout(20) << __func__ << " " << pgid
 	   << " to_process " << slot.to_process
 	   << " waiting " << slot.waiting
 	   << " waiting_peering " << slot.waiting_peering << dendl;
-  for (auto& q : slot.to_process) {
-    *pushes_to_free += q.get_reserved_pushes();
-  }
-  for (auto& q : slot.waiting) {
-    *pushes_to_free += q.get_reserved_pushes();
-  }
-  for (auto& q : slot.waiting_peering) {
-    for (auto& r : q.second) {
-      *pushes_to_free += r.get_reserved_pushes();
-    }
-  }
   for (auto i = slot.to_process.rbegin();
        i != slot.to_process.rend();
        ++i) {
@@ -9545,17 +9533,13 @@ void OSD::ShardedOpWQ::wake_pg_split_waiters(spg_t pgid)
   uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
   auto sdata = shard_list[shard_index];
   bool queued = false;
-  unsigned pushes_to_free = 0;
   {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
     auto p = sdata->pg_slots.find(pgid);
     if (p != sdata->pg_slots.end()) {
-      _wake_pg_slot(pgid, sdata, p->second, &pushes_to_free);
+      _wake_pg_slot(pgid, sdata, p->second);
       queued = true;
     }
-  }
-  if (pushes_to_free > 0) {
-    osd->service.release_reserved_pushes(pushes_to_free);
   }
   if (queued) {
     sdata->sdata_lock.Lock();
@@ -9598,7 +9582,7 @@ void OSD::ShardedOpWQ::prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami)
 	  dout(20) << __func__ << "  " << p->first
 		   << " pending_peering first epoch " << first
 		   << " <= " << osdmap->get_epoch() << ", requeueing" << dendl;
-	  _wake_pg_slot(p->first, sdata, slot, &pushes_to_free);
+	  _wake_pg_slot(p->first, sdata, slot);
 	  queued = true;
 	}
 	++p;
@@ -9864,7 +9848,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	    pg = osd->handle_pg_create_info(osdmap, create_info);
 	    if (pg) {
 	      // we created the pg! drop out and continue "normally"!
-	      _wake_pg_slot(token, sdata, slot, &pushes_to_free);
+	      _wake_pg_slot(token, sdata, slot);
 	      break;
 	    }
 	    dout(20) << __func__ << " ignored create on " << qi << dendl;
@@ -9913,6 +9897,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       _add_slot_waiter(token, slot, std::move(qi));
       sdata->sdata_op_ordering_lock.Unlock();
       pg->unlock();
+      if (pushes_to_free) {
+	osd->service.release_reserved_pushes(pushes_to_free);
+      }
       return;
     }
   }
