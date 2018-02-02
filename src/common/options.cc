@@ -345,6 +345,9 @@ std::vector<Option> get_global_options() {
     .set_daemon_default(true)
     .set_description("send critical error log lines to stderr"),
 
+    Option("log_stderr_prefix", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_description("String to prefix log messages with when sent to stderr"),
+
     Option("log_to_syslog", Option::TYPE_BOOL, Option::LEVEL_BASIC)
     .set_default(false)
     .set_description("send log lines to syslog facility"),
@@ -419,6 +422,10 @@ std::vector<Option> get_global_options() {
     Option("clog_to_graylog_port", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("12201")
     .set_description(""),
+
+    Option("mon_cluster_log_to_stderr", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Send cluster log messages to stderr (prefixed by channel)"),
 
     Option("mon_cluster_log_to_syslog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("default=false")

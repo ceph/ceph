@@ -43,6 +43,8 @@ class Log : private Thread
   int m_stderr_log, m_stderr_crash;
   int m_graylog_log, m_graylog_crash;
 
+  std::string m_log_stderr_prefix;
+
   shared_ptr<Graylog> m_graylog;
 
   bool m_stop;
@@ -68,6 +70,7 @@ public:
   void set_log_file(std::string fn);
   void reopen_log_file();
   void chown_log_file(uid_t uid, gid_t gid);
+  void set_log_stderr_prefix(const std::string& p);
 
   void flush();
 

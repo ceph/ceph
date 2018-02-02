@@ -126,6 +126,11 @@ void Log::set_log_file(string fn)
   m_log_file = fn;
 }
 
+void Log::set_log_stderr_prefix(const std::string& p)
+{
+  m_log_stderr_prefix = p;
+}
+
 void Log::reopen_log_file()
 {
   pthread_mutex_lock(&m_flush_mutex);
@@ -327,7 +332,7 @@ void Log::_flush(EntryQueue *t, EntryQueue *requeue, bool crash)
       }
 
       if (do_stderr) {
-        cerr << buf << std::endl;
+        cerr << m_log_stderr_prefix << buf << std::endl;
       }
       if (do_fd) {
         buf[buflen] = '\n';
