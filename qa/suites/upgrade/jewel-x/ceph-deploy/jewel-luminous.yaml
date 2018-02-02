@@ -53,8 +53,6 @@ tasks:
     skip-mgr: True
 - print: "**** done initial ceph-deploy"
 - ceph-deploy.upgrade:
-    branch:
-      dev: luminous
     setup-mgr-node: True
     check-for-healthy: True
     roles:
