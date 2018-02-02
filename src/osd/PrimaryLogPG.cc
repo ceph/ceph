@@ -10142,28 +10142,28 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
-  ctx->obc->ondisk_write_lock();
-
-  ctx->op_t->add_obc(ctx->obc);
-  if (ctx->clone_obc) {
-    ctx->clone_obc->ondisk_write_lock();
-    ctx->op_t->add_obc(ctx->clone_obc);
-  }
-  if (ctx->head_obc) {
-    ctx->head_obc->ondisk_write_lock();
-    ctx->op_t->add_obc(ctx->head_obc);
-  }
-
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
   Context *on_all_applied = new C_OSD_RepopApplied(this, repop);
-  Context *onapplied_sync = new C_OSD_OndiskWriteUnlock(
-    ctx->obc,
-    ctx->clone_obc,
-    ctx->head_obc);
-  if (!(ctx->log.empty())) {
-    assert(ctx->at_version >= projected_last_update);
-    projected_last_update = ctx->at_version;
+  Context *onapplied_sync = NULL;
+
+  if (osd->store->get_type() != "blustore") {
+    ctx->obc->ondisk_write_lock();
+
+    ctx->op_t->add_obc(ctx->obc);
+    if (ctx->clone_obc) {
+      ctx->clone_obc->ondisk_write_lock();
+      ctx->op_t->add_obc(ctx->clone_obc);
+    }
+    if (ctx->head_obc) {
+      ctx->head_obc->ondisk_write_lock();
+      ctx->op_t->add_obc(ctx->head_obc);
+    }
+    onapplied_sync = new C_OSD_OndiskWriteUnlock(
+	ctx->obc,
+	ctx->clone_obc,
+	ctx->head_obc);
   }
+
   for (auto &&entry: ctx->log) {
     projected_log.add(entry);
   }
