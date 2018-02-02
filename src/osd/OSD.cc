@@ -3813,6 +3813,7 @@ PGRef OSD::_open_pg(
   PG* pg = _make_pg(createmap, pgid);
   {
     RWLock::WLocker l(pg_map_lock);
+    assert(pg_map.count(pgid) == 0);
     pg_map[pgid] = pg;
     pg_map_size = pg_map.size();
     pg->get("PGMap");  // because it's in pg_map
@@ -7883,6 +7884,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
     pg->unlock();
 
     pg_map_lock.get_write();
+    assert(pg_map.count(pg->get_pgid()) == 0);
     pg->get("PGMap");  // For pg_map
     pg_map[pg->get_pgid()] = pg;
     pg_map_size = pg_map.size();
@@ -9475,7 +9477,7 @@ void OSD::ShardedOpWQ::_wake_pg_slot(
   dout(20) << __func__ << " " << pgid
 	   << " to_process " << slot.to_process
 	   << " waiting " << slot.waiting
-	   << " waiting_nopg " << slot.waiting_peering << dendl;
+	   << " waiting_peering " << slot.waiting_peering << dendl;
   for (auto& q : slot.to_process) {
     *pushes_to_free += q.get_reserved_pushes();
   }
@@ -9483,7 +9485,9 @@ void OSD::ShardedOpWQ::_wake_pg_slot(
     *pushes_to_free += q.get_reserved_pushes();
   }
   for (auto& q : slot.waiting_peering) {
-    *pushes_to_free += q.get_reserved_pushes();
+    for (auto& r : q.second) {
+      *pushes_to_free += r.get_reserved_pushes();
+    }
   }
   for (auto i = slot.to_process.rbegin();
        i != slot.to_process.rend();
@@ -9500,10 +9504,13 @@ void OSD::ShardedOpWQ::_wake_pg_slot(
   for (auto i = slot.waiting_peering.rbegin();
        i != slot.waiting_peering.rend();
        ++i) {
-    sdata->_enqueue_front(std::move(*i), osd->op_prio_cutoff);
+    // this is overkill; we requeue everything, even if some of these items are
+    // waiting for maps we don't have yet.  FIXME.
+    for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
+      sdata->_enqueue_front(std::move(*j), osd->op_prio_cutoff);
+    }
   }
   slot.waiting_peering.clear();
-  slot.pending_peering_epoch = 0;
   slot.waiting_for_split = false;
   ++slot.requeue_seq;
 }
@@ -9561,12 +9568,11 @@ void OSD::ShardedOpWQ::prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami)
 	continue;
       }
       if (!slot.waiting_peering.empty()) {
-	assert(slot.pending_peering_epoch);
-	if (slot.pending_peering_epoch <= osdmap->get_epoch()) {
+	epoch_t first = slot.waiting_peering.begin()->first;
+	if (first <= osdmap->get_epoch()) {
 	  dout(20) << __func__ << "  " << p->first
-		   << " pending_peering_epoch " << slot.pending_peering_epoch
-		   << " < " << osdmap->get_epoch() << ", requeueing" << dendl;
-	  assert(!slot.waiting_peering.empty());
+		   << " pending_peering first epoch " << first
+		   << " <= " << osdmap->get_epoch() << ", requeueing" << dendl;
 	  _wake_pg_slot(p->first, sdata, slot, &pushes_to_free);
 	  queued = true;
 	}
@@ -9643,17 +9649,11 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
   OpQueueItem&& qi)
 {
   if (qi.is_peering()) {
-    if (!slot.pending_peering_epoch ||
-	slot.pending_peering_epoch > qi.get_map_epoch()) {
-      slot.pending_peering_epoch = qi.get_map_epoch();
-    }
     dout(20) << __func__ << " " << pgid
 	     << " no pg, peering, item epoch is "
 	     << qi.get_map_epoch()
-	     << ", pending_peering_epoch now "
-	     << slot.pending_peering_epoch
 	     << ", will wait on " << qi << dendl;
-    slot.waiting_peering.push_back(std::move(qi));
+    slot.waiting_peering[qi.get_map_epoch()].push_back(std::move(qi));
   } else {
     dout(20) << __func__ << " " << pgid
 	     << " no pg, item epoch is "
@@ -9850,17 +9850,19 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	}
       } else {
 	dout(20) << __func__ << " " << token
-		 << " no pg, peering, does't map here, discarding " << qi
+		 << " no pg, peering, doesn't map here e" << osdmap->get_epoch()
+		 << ", discarding " << qi
 		 << dendl;
       }
     } else if (osdmap->is_up_acting_osd_shard(token, osd->whoami)) {
       dout(20) << __func__ << " " << token
-	       << " no pg, should exist, will wait on " << qi << dendl;
+	       << " no pg, should exist e" << osdmap->get_epoch()
+	       << ", will wait on " << qi << dendl;
       _add_slot_waiter(token, slot, std::move(qi));
     } else {
       dout(20) << __func__ << " " << token
-	       << " no pg, shouldn't exist,"
-	       << " dropping " << qi << dendl;
+	       << " no pg, shouldn't exist e" << osdmap->get_epoch()
+	       << ", dropping " << qi << dendl;
       // share map with client?
       if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
 	Session *session = static_cast<Session *>(
