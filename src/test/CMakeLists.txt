@@ -921,5 +921,9 @@ add_executable(unittest_pageset test_pageset.cc)
 add_ceph_unittest(unittest_pageset)
 target_link_libraries(unittest_pageset global)
 
-#make check ends here
+# unittest_any_
+add_executable(unittest_any test_any.cc)
+add_ceph_unittest(unittest_any)
+target_link_libraries(unittest_any)
 
+#make check ends here
