@@ -1678,8 +1678,7 @@ private:
     /// wake any pg waiters after a PG is split
     void wake_pg_split_waiters(spg_t pgid);
 
-    void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot,
-		       unsigned *pushes_to_free);
+    void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot);
 
     /// prime slots for splitting pgs
     void prime_splits(const set<spg_t>& pgs);
