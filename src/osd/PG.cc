@@ -6305,21 +6305,13 @@ void PG::take_waiters()
 {
   dout(10) << "take_waiters" << dendl;
   requeue_map_waiters();
-  for (auto i = peering_waiters.rbegin();
-       i != peering_waiters.rend();
-       ++i) {
-    osd->osd->enqueue_peering_evt_front(info.pgid, *i);
-  }
-  peering_waiters.clear();
 }
 
 void PG::do_peering_event(PGPeeringEventRef evt, RecoveryCtx *rctx)
 {
   dout(10) << __func__ << ": " << evt->get_desc() << dendl;
-  if (!have_same_or_newer_map(evt->get_epoch_sent())) {
-    dout(10) << "deferring event " << evt->get_desc() << dendl;
-    peering_waiters.push_back(evt);
-  } else if (old_peering_evt(evt)) {
+  assert(have_same_or_newer_map(evt->get_epoch_sent()));
+  if (old_peering_evt(evt)) {
     dout(10) << "discard old " << evt->get_desc() << dendl;
   } else {
     recovery_state.handle_event(evt, rctx);
