@@ -731,7 +731,7 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
       ldout(cct, 1) << "Failed to create io context for image" << dendl;
     }
 
-    ldout(cct, 20) << "Openning image with id" << image.spec.image_id << dendl;
+    ldout(cct, 20) << "Opening image with id " << image.spec.image_id << dendl;
 
     librbd::ImageCtx* image_ctx = new ImageCtx("", image.spec.image_id.c_str(),
 					       nullptr, image_io_ctx, false);
