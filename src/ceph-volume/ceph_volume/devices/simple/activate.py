@@ -1,5 +1,6 @@
 from __future__ import print_function
 import argparse
+import base64
 import json
 import logging
 import os
@@ -35,7 +36,7 @@ class Activate(object):
             logger.warning('"type" was not defined, will assume "bluestore"')
             objectstore = 'bluestore'
 
-        # Go throuh all the device combinations that are absolutely required,
+        # Go through all the device combinations that are absolutely required,
         # raise an error describing what was expected and what was found
         # otherwise.
         if objectstore == 'filestore':
@@ -106,7 +107,14 @@ class Activate(object):
             # write the keyring always so that we can unlock
             encryption_utils.write_lockbox_keyring(osd_id, osd_fsid, lockbox_secret)
             # Store the secret around so that the decrypt method can reuse
-            self.dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+            raw_dmcrypt_secret = encryption_utils.get_dmcrypt_key(osd_id, osd_fsid)
+            # Note how both these calls need b64decode. For some reason, the
+            # way ceph-disk creates these keys, it stores them in the monitor
+            # *undecoded*, requiring this decode call again. The lvm side of
+            # encryption doesn't need it, so we are assuming here that anything
+            # that `simple` scans, will come from ceph-disk and will need this
+            # extra decode call here
+            self.dmcrypt_secret = base64.b64decode(raw_dmcrypt_secret)
 
         cluster_name = osd_metadata.get('cluster_name', 'ceph')
         osd_dir = '/var/lib/ceph/osd/%s-%s' % (cluster_name, osd_id)
