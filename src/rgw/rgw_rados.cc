@@ -7362,6 +7362,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   uint64_t data_len;
   map<string, bufferlist> src_attrs;
   off_t ofs{0};
+  off_t lofs{0}; /* logical ofs */
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
@@ -7405,7 +7406,7 @@ public:
 
   int handle_data(bufferlist& bl, bool *pause) override {
     if (progress_cb) {
-      progress_cb(ofs, progress_data);
+      progress_cb(lofs, progress_data);
     }
     if (extra_data_left) {
       size_t extra_len = bl.length();
@@ -7422,15 +7423,15 @@ public:
         if (res < 0)
           return res;
       }
+      ofs += extra_len;
       if (bl.length() == 0) {
         return 0;
       }
-      ofs += extra_len;
     }
-    // adjust ofs based on extra_data_len, so the result is a logical offset
-    // into the object data
+
     assert(uint64_t(ofs) >= extra_data_len);
-    ofs -= extra_data_len;
+
+    lofs = ofs - extra_data_len;
 
     data_len += bl.length();
     bool again = false;
@@ -7441,7 +7442,7 @@ public:
       void *handle = NULL;
       rgw_raw_obj obj;
       uint64_t size = bl.length();
-      int ret = filter->handle_data(bl, ofs, &handle, &obj, &again);
+      int ret = filter->handle_data(bl, lofs, &handle, &obj, &again);
       if (ret < 0)
         return ret;
 
