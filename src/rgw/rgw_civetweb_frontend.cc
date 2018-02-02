@@ -59,6 +59,8 @@ int RGWCivetWebFrontend::run()
   set_conf_default(conf_map, "validate_http_method", "no");
   set_conf_default(conf_map, "canonicalize_url_path", "no");
   set_conf_default(conf_map, "enable_auth_domain_check", "no");
+  set_conf_default(conf_map, "ssl_protocol_version", "4");
+  set_conf_default(conf_map, "ssl_cipher_list", "EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH:!LOW:!RC4:!MD5:!3DES");
   conf->get_val("port", "80", &port_str);
   std::replace(port_str.begin(), port_str.end(), '+', ',');
   conf_map["listening_ports"] = port_str;
