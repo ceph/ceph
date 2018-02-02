@@ -149,7 +149,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
     @staticmethod
     def get_default_choose_args(dump):
-        return dump.get('choose_args', {}).get(CRUSHMap.DEFAULT_CHOOSE_ARGS, [])
+        return dump.get('choose_args').get(CRUSHMap.DEFAULT_CHOOSE_ARGS, [])
 
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
