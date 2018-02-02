@@ -17,10 +17,13 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
     return -ENOENT;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
+  auto iter = cache_map.find(name);
+  if (iter == cache_map.end() ||
+      (expiry.count() &&
+       (ceph::mono_clock::now() - iter->second.info.time_added) > expiry)) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
-    if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
+    if (perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
 

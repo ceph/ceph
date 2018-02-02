@@ -40,7 +40,7 @@ int rgw_put_system_obj(RGWRados *rgwstore, rgw_bucket& bucket, const string& oid
 
 int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bucket, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs,
-                       rgw_cache_entry_info *cache_info)
+                       rgw_cache_entry_info *cache_info, boost::optional<obj_version> refresh_version)
 {
   struct rgw_err err;
   bufferlist::iterator iter;
@@ -61,7 +61,7 @@ int rgw_get_system_obj(RGWRados *rgwstore, RGWObjectCtx& obj_ctx, rgw_bucket& bu
 
     rop.read_params.cache_info = cache_info;
 
-    ret = rop.read(0, request_len - 1, bl, objv_tracker);
+    ret = rop.read(0, request_len - 1, bl, objv_tracker, refresh_version);
     if (ret == -ECANCELED) {
       /* raced, restart */
       continue;

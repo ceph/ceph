@@ -1269,6 +1269,12 @@ OPTION(rgw_override_bucket_index_max_shards, OPT_U32, 0)
 OPTION(rgw_bucket_index_max_aio, OPT_U32, 8)
 
 /**
+ * Number of seconds before entries in the bucket info cache are
+ * assumed stale and re-fetched. Zero is never.
+ */
+OPTION(rgw_cache_expiry_interval, OPT_U64, 900 /* 15 min */)
+
+/**
  * whether or not the quota/gc threads should be started
  */
 OPTION(rgw_enable_quota_threads, OPT_BOOL, true)
