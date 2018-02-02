@@ -2579,6 +2579,7 @@ void PG::_update_calc_stats()
   info.stats.ondisk_log_size = info.stats.log_size;
   info.stats.log_start = pg_log.get_tail();
   info.stats.ondisk_log_start = pg_log.get_tail();
+  info.stats.snaptrimq_len = snap_trimq.size();
 
   unsigned num_shards = get_osdmap()->get_pg_size(info.pgid.pgid);
 
