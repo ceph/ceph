@@ -2638,6 +2638,25 @@ bool PG::check_in_progress_op(
     pg_log.get_log().get_request(r, version, user_version, return_code));
 }
 
+static bool find_shard(const set<pg_shard_t> & pgs, shard_id_t shard)
+{
+    for (auto&p : pgs)
+      if (p.shard == shard)
+        return true;
+    return false;
+}
+
+static pg_shard_t get_another_shard(const set<pg_shard_t> & pgs, pg_shard_t skip, shard_id_t shard)
+{
+    for (auto&p : pgs) {
+      if (p == skip)
+        continue;
+      if (p.shard == shard)
+        return p;
+    }
+    return pg_shard_t();
+}
+
 void PG::_update_calc_stats()
 {
   info.stats.version = info.last_update;
@@ -2660,14 +2679,14 @@ void PG::_update_calc_stats()
   // In rare case that upset is too large (usually transient), use as target
   // for calculations below.
   unsigned target = std::max(num_shards, (unsigned)upset.size());
-  // Not sure this could ever happen, that actingset > upset
-  // which only matters if actingset > num_shards.
+  // For undersized actingset may be larger with OSDs out
   unsigned nrep = std::max(actingset.size(), upset.size());
   // calc num_object_copies
   info.stats.stats.calc_copies(MAX(target, nrep));
   info.stats.stats.sum.num_objects_degraded = 0;
   info.stats.stats.sum.num_objects_unfound = 0;
   info.stats.stats.sum.num_objects_misplaced = 0;
+
   if ((is_remapped() || is_undersized() || !is_clean()) && (is_peered() || is_activating())) {
     dout(20) << __func__ << " actingset " << actingset << " upset "
              << upset << " actingbackfill " << actingbackfill << dendl;
@@ -2684,47 +2703,127 @@ void PG::_update_calc_stats()
     // Objects missing from nodes not in up, sort by # objects
     boost::container::flat_set<pair<int64_t,pg_shard_t>> acting_source_objects;
 
-    int64_t missing;
+    // Fill missing_target_objects/acting_source_objects
 
-    // Primary first
-    missing = pg_log.get_missing().num_missing();
-    assert(actingbackfill.count(pg_whoami));
-    if (upset.count(pg_whoami)) {
-      missing_target_objects.insert(make_pair(missing, pg_whoami));
-    } else {
-      acting_source_objects.insert(make_pair(missing, pg_whoami));
+    {
+      int64_t missing;
+
+      // Primary first
+      missing = pg_log.get_missing().num_missing();
+      assert(actingbackfill.count(pg_whoami));
+      if (upset.count(pg_whoami)) {
+        missing_target_objects.insert(make_pair(missing, pg_whoami));
+      } else {
+        acting_source_objects.insert(make_pair(missing, pg_whoami));
+      }
+      info.stats.stats.sum.num_objects_missing_on_primary = missing;
+      dout(20) << __func__ << " shard " << pg_whoami
+               << " primary objects " << num_objects
+               << " missing " << missing
+               << dendl;
+
     }
-    info.stats.stats.sum.num_objects_missing_on_primary = missing;
 
     // All other peers
     for (auto& peer : peer_info) {
-      // Ignore other peers until we add code to look at detailed missing
-      // information. (recovery)
-      if (!actingbackfill.count(peer.first)) {
-	continue;
-      }
-      missing = 0;
+      // Primary should not be in the peer_info, skip if it is.
+      if (peer.first == pg_whoami) continue;
+      int64_t missing = 0;
+      int64_t peer_num_objects = peer.second.stats.stats.sum.num_objects;
       // Backfill targets always track num_objects accurately
       // all other peers track missing accurately.
       if (is_backfill_targets(peer.first)) {
-	missing = std::max((int64_t)0, num_objects - peer.second.stats.stats.sum.num_objects);
+        missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
-	if (peer_missing.count(peer.first)) {
-	  missing = peer_missing[peer.first].num_missing();
-	} else {
-	  dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
+        if (peer_missing.count(peer.first)) {
+          missing = peer_missing[peer.first].num_missing();
+        } else {
+          dout(20) << __func__ << " no peer_missing found for " << peer.first << dendl;
+          missing = std::max((int64_t)0, num_objects - peer_num_objects);
         }
       }
       if (upset.count(peer.first)) {
 	missing_target_objects.insert(make_pair(missing, peer.first));
-      } else {
+      } else if (actingset.count(peer.first)) {
 	acting_source_objects.insert(make_pair(missing, peer.first));
       }
       peer.second.stats.stats.sum.num_objects_missing = missing;
+      dout(20) << __func__ << " shard " << peer.first
+               << " objects " << peer_num_objects
+               << " missing " << missing
+               << dendl;
     }
 
+    // A misplaced object is not stored on the correct OSD
+    int64_t misplaced = 0;
+    // a degraded objects has fewer replicas or EC shards than the pool specifies.
+    int64_t degraded = 0;
+
+    if (is_recovering()) {
+      for (auto& sml: missing_loc.get_missing_by_count()) {
+        for (auto& ml: sml.second) {
+          int missing_shards;
+          if (sml.first == shard_id_t::NO_SHARD) {
+            dout(0) << __func__ << " ml " << ml.second << " upset size " << upset.size() << " up " << ml.first.up << dendl;
+            missing_shards = (int)upset.size() - ml.first.up;
+          } else {
+	    // Handle shards not even in upset below
+            if (!find_shard(upset, sml.first))
+	      continue;
+	    missing_shards = std::max(0, 1 - ml.first.up);
+            dout(0) << __func__ << " shard " << sml.first << " ml " << ml.second << " missing shards " << missing_shards << dendl;
+          }
+          int odegraded = ml.second * missing_shards;
+          // Copies on other osds but limited to the possible degraded
+          int more_osds = std::min(missing_shards, ml.first.other);
+          int omisplaced = ml.second * more_osds;
+          assert(omisplaced <= odegraded);
+          odegraded -= omisplaced;
+
+          misplaced += omisplaced;
+          degraded += odegraded;
+        }
+      }
+
+      dout(20) << __func__ << " missing based degraded " << degraded << dendl;
+      dout(20) << __func__ << " missing based misplaced " << misplaced << dendl;
+
+      // Handle undersized case
+      if (pool.info.is_replicated()) {
+        // Add degraded for missing targets (num_objects missing)
+        assert(target >= upset.size());
+        unsigned needed = target - upset.size();
+        degraded += num_objects * needed;
+      } else {
+        for (unsigned i = 0 ; i < num_shards; ++i) {
+          shard_id_t shard(i);
+
+          if (!find_shard(upset, shard)) {
+            pg_shard_t pgs = get_another_shard(actingset, pg_shard_t(), shard);
+
+            if (pgs != pg_shard_t()) {
+              int64_t missing;
+
+              if (pgs == pg_whoami)
+                missing = info.stats.stats.sum.num_objects_missing_on_primary;
+              else
+                missing = peer_info[pgs].stats.stats.sum.num_objects_missing;
+
+              degraded += missing;
+              misplaced += std::max((int64_t)0, num_objects - missing);
+            } else {
+              // No shard anywhere
+              degraded += num_objects;
+            }
+          }
+        }
+      }
+      goto out;
+    }
+
+    // Handle undersized case
     if (pool.info.is_replicated()) {
-      // Add to missing_target_objects up to target elements (num_objects missing)
+      // Add to missing_target_objects
       assert(target >= missing_target_objects.size());
       unsigned needed = target - missing_target_objects.size();
       if (needed)
@@ -2749,11 +2848,8 @@ void PG::_update_calc_stats()
     for (const auto& item : acting_source_objects)
       dout(20) << __func__ << " acting shard " << std::get<1>(item) << " missing= " << std::get<0>(item) << dendl;
 
-    // A misplaced object is not stored on the correct OSD
-    int64_t misplaced = 0;
-    // a degraded objects has fewer replicas or EC shards than the pool specifies.
-    int64_t degraded = 0;
-
+    // Handle all objects not in missing for remapped
+    // or backfill
     for (auto m = missing_target_objects.rbegin();
         m != missing_target_objects.rend(); ++m) {
 
@@ -2795,6 +2891,7 @@ void PG::_update_calc_stats()
       dout(20) << __func__ << " extra acting misplaced " << extra_misplaced << dendl;
       misplaced += extra_misplaced;
     }
+out:
     dout(20) << __func__ << " degraded " << degraded << dendl;
     dout(20) << __func__ << " misplaced " << misplaced << dendl;
 
