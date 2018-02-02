@@ -11346,6 +11346,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       err = -EINVAL;
       goto reply;
     }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " should not exist";
+      err = -ENOENT;
+      goto reply;
+    }
     bool creating_now;
     {
       std::lock_guard<std::mutex> l(creating_pgs_lock);
