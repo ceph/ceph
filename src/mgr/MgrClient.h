@@ -66,6 +66,8 @@ protected:
 
   utime_t last_connect_attempt;
 
+  uint64_t last_config_bl_version = 0;
+
   Context *report_callback = nullptr;
   Context *connect_retry_callback = nullptr;
 

@@ -110,6 +110,9 @@ public:
   /// encoded, cached copy of of values + ignored_mon_values
   bufferlist values_bl;
 
+  /// version for values_bl; increments each time there is a change
+  uint64_t values_bl_version = 0;
+
   /// encoded copy of defaults (map<string,string>)
   bufferlist defaults_bl;
 
@@ -190,7 +193,9 @@ public:
   int rm_val(const std::string& key);
 
   /// get encoded map<string,map<int32_t,string>> of entire config
-  void get_config_bl(bufferlist *bl);
+  void get_config_bl(uint64_t have_version,
+		     bufferlist *bl,
+		     uint64_t *got_version);
 
   /// get encoded map<string,string> of compiled-in defaults
   void get_defaults_bl(bufferlist *bl);
