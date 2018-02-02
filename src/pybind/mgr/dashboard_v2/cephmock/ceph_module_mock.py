@@ -36,3 +36,6 @@ class BaseMgrModule(object):
 
     def _ceph_log(self, *args):
         pass
+
+    def _ceph_get_context(self):
+        return None

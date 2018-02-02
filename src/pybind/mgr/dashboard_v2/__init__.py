@@ -26,8 +26,10 @@ else:
     import logging
     import sys
     # pylint: disable=W0403
-    from . import ceph_module_mock
+    from .cephmock import ceph_module_mock, rados_mock, rbd_mock
     sys.modules['ceph_module'] = ceph_module_mock
+    sys.modules['rados'] = rados_mock
+    sys.modules['rbd'] = rbd_mock
     logging.basicConfig(level=logging.WARNING)
     logger = logging.getLogger(__name__)
     logging.root.handlers[0].setLevel(logging.WARNING)
