@@ -8794,6 +8794,9 @@ void OSDService::_maybe_queue_recovery() {
       cct->_conf->osd_recovery_max_single_start);
     _queue_for_recovery(awaiting_throttle.front(), to_start);
     awaiting_throttle.pop_front();
+    dout(10) << __func__ << " starting " << to_start
+	     << ", recovery_ops_reserved " << recovery_ops_reserved
+	     << " -> " << (recovery_ops_reserved + to_start) << dendl;
     recovery_ops_reserved += to_start;
   }
 }
@@ -8941,6 +8944,17 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 bool OSDService::is_recovery_active()
 {
   return local_reserver.has_reservation() || remote_reserver.has_reservation();
+}
+
+void OSDService::release_reserved_pushes(uint64_t pushes)
+{
+  Mutex::Locker l(recovery_lock);
+  dout(10) << __func__ << "(" << pushes << "), recovery_ops_reserved "
+	   << recovery_ops_reserved << " -> " << (recovery_ops_reserved-pushes)
+	   << dendl;
+  assert(recovery_ops_reserved >= pushes);
+  recovery_ops_reserved -= pushes;
+  _maybe_queue_recovery();
 }
 
 // =========================================================

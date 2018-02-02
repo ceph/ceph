@@ -821,12 +821,7 @@ public:
   void start_recovery_op(PG *pg, const hobject_t& soid);
   void finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue);
   bool is_recovery_active();
-  void release_reserved_pushes(uint64_t pushes) {
-    Mutex::Locker l(recovery_lock);
-    assert(recovery_ops_reserved >= pushes);
-    recovery_ops_reserved -= pushes;
-    _maybe_queue_recovery();
-  }
+  void release_reserved_pushes(uint64_t pushes);
   void defer_recovery(float defer_for) {
     defer_recovery_until = ceph_clock_now();
     defer_recovery_until += defer_for;
