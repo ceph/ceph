@@ -5,6 +5,7 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "common/errno.h"
+#include "include/stringify.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 
@@ -78,10 +79,19 @@ int execute(const po::variables_map &vm,
       if (image_r == 0) {
 	image_r = image.get_group(&group_info, sizeof(group_info));
       }
-      if (image_r == 0)
-	std::cerr << "rbd: error: image belongs to a group "
-		  << group_info.pool << "." << group_info.name;
-      else
+      if (image_r == 0) {
+        std::string pool_name = "";
+        librados::Rados rados(io_ctx);
+        librados::IoCtx pool_io_ctx;
+        r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
+        if (r < 0) {
+          pool_name = "<missing data pool " + stringify(group_info.pool) + ">";
+        } else {
+          pool_name = pool_io_ctx.get_pool_name();
+        }
+        std::cerr << "rbd: error: image belongs to a group "
+                  << pool_name << "/" << group_info.name;
+      } else
 	std::cerr << "rbd: error: image belongs to a group";
 
       std::cerr << std::endl

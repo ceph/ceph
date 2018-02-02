@@ -291,7 +291,7 @@ int execute(const po::variables_map &vm,
 }
 
 Shell::Action action(
-  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot",
+  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot.",
   "", &get_arguments, &execute);
 
 } // namespace disk_usage

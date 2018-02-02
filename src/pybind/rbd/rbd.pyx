@@ -1579,7 +1579,7 @@ cdef class Group(object):
 
         :param image_ioctx: determines which RADOS pool the image belongs to.
         :type ioctx: :class:`rados.Ioctx`
-        :param name: the name of the image to remove
+        :param name: the name of the image to add
         :type name: str
 
         :raises: :class:`ObjectNotFound`
@@ -1598,7 +1598,7 @@ cdef class Group(object):
 
     def remove_image(self, image_ioctx, image_name):
         """
-        Remove an image to a group.
+        Remove an image from a group.
 
         :param image_ioctx: determines which RADOS pool the image belongs to.
         :type ioctx: :class:`rados.Ioctx`
@@ -1687,7 +1687,7 @@ cdef class Group(object):
             ret = rbd_group_snap_rename(self._ioctx, self._name, _old_snap_name,
                                         _new_snap_name)
         if ret != 0:
-            raise make_ex(ret, 'error removing group snapshot',
+            raise make_ex(ret, 'error renaming group snapshot',
                           group_errno_to_exception)
 
     def list_snaps(self):
@@ -3598,7 +3598,7 @@ cdef class GroupImageIterator(object):
 
     * ``name`` (str) - name of the image
 
-    * ``pool`` (int) - name of the pool this image belongs to
+    * ``pool`` (int) - id of the pool this image belongs to
 
     * ``state`` (int) - state of the image
     """
@@ -3614,7 +3614,7 @@ cdef class GroupImageIterator(object):
         while True:
             self.images = <rbd_group_image_info_t*>realloc_chk(self.images,
                                                                self.num_images *
-                                                                sizeof(rbd_group_image_info_t))
+                                                               sizeof(rbd_group_image_info_t))
             with nogil:
                 ret = rbd_group_image_list(group._ioctx, group._name,
                                            self.images,

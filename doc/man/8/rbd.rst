@@ -249,22 +249,34 @@ Commands
   This requires image format 2.
 
 :command:`group create` *group-spec*
-  Create a consistency group.
+  Create a group.
 
 :command:`group image add` *group-spec* *image-spec*
-  Add an image to a consistency group.
+  Add an image to a group.
 
 :command:`group image list` *group-spec*
-  List images in a consistency group.
+  List images in a group.
 
 :command:`group image remove` *group-spec* *image-spec*
-  Remove an image from a consistency group.
+  Remove an image from a group.
 
 :command:`group ls` [-p | --pool *pool-name*]
-  List rbd consistency groups.
+  List rbd groups.
 
 :command:`group rm` *group-spec*
-  Delete a consistency group.
+  Delete a group.
+
+:command:`group snap create` *group-snap-spec*
+  Make a snapshot of a group.
+
+:command:`group snap list` *group-spec*
+  List snapshots of a group.
+
+:command:`group snap rm` *group-snap-spec*
+  Remove a snapshot from a group.
+
+:command:`group snap rename` *group-snap-spec* *snap-name*
+  Rename group's snapshot.
 
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
@@ -520,6 +532,9 @@ Commands
   Move an image to the trash. Images, even ones actively in-use by 
   clones, can be moved to the trash and deleted at a later time.
 
+:command:`trash purge` [*pool-name*]
+  Remove all expired images from trash.
+
 :command:`trash restore` *image-id*  
   Restore an image from trash.
 
@@ -537,10 +552,11 @@ Commands
 Image, snap, group and journal specs
 ====================================
 
-| *image-spec*   is [*pool-name*/]\ *image-name*
-| *snap-spec*    is [*pool-name*/]\ *image-name*\ @\ *snap-name*
-| *group-spec*   is [*pool-name*/]\ *group-name*
-| *journal-spec* is [*pool-name*/]\ *journal-name*
+| *image-spec*      is [*pool-name*/]\ *image-name*
+| *snap-spec*       is [*pool-name*/]\ *image-name*\ @\ *snap-name*
+| *group-spec*      is [*pool-name*/]\ *group-name*
+| *group-snap-spec* is [*pool-name*/]\ *group-name*\ @\ *snap-name*
+| *journal-spec*    is [*pool-name*/]\ *journal-name*
 
 The default for *pool-name* is "rbd".  If an image name contains a slash
 character ('/'), *pool-name* is required.
@@ -720,9 +736,9 @@ To list images from trash::
 
        rbd trash ls mypool
 
-To defer delete an image (use *--delay* to set delay-time, default is 0)::
+To defer delete an image (use *--expires-at* to set expiration time, default is now)::
 
-       rbd trash mv mypool/myimage
+       rbd trash mv mypool/myimage --expires-at "tomorrow"
 
 To delete an image from trash (be careful!)::
 
