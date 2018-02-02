@@ -196,11 +196,15 @@ public:
   }
 
   friend ostream& operator<<(ostream& out, const OpQueueItem& item) {
-    return out << "OpQueueItem("
-	       << item.get_ordering_token() << " " << *item.qitem
-	       << " prio " << item.get_priority()
-	       << " cost " << item.get_cost()
-	       << " e" << item.get_map_epoch() << ")";
+     out << "OpQueueItem("
+	 << item.get_ordering_token() << " " << *item.qitem
+	 << " prio " << item.get_priority()
+	 << " cost " << item.get_cost()
+	 << " e" << item.get_map_epoch();
+     if (item.get_reserved_pushes()) {
+       out << " reserved_pushes " << item.get_reserved_pushes();
+     }
+    return out << ")";
   }
 }; // class OpQueueItem
 
