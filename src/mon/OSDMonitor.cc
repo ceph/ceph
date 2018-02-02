@@ -684,7 +684,8 @@ void OSDMonitor::create_pending()
 }
 
 creating_pgs_t
-OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
+OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
+			       const OSDMap& nextmap)
 {
   dout(10) << __func__ << dendl;
   creating_pgs_t pending_creatings;
@@ -733,6 +734,20 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
     dout(10) << __func__ << " " << removed
 	     << " pgs removed because they're created" << dendl;
     pending_creatings.last_scan_epoch = osdmap.get_epoch();
+  }
+
+  // filter out any pgs that shouldn't exist.
+  {
+    auto i = pending_creatings.pgs.begin();
+    while (i != pending_creatings.pgs.end()) {
+      if (!nextmap.pg_exists(i->first)) {
+	dout(10) << __func__ << " removing pg " << i->first
+		 << " which should not exist" << dendl;
+	i = pending_creatings.pgs.erase(i);
+      } else {
+	++i;
+      }
+    }
   }
 
   // process queue
@@ -1373,7 +1388,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // and pg creating, also!
   if (mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {
-    auto pending_creatings = update_pending_pgs(pending_inc);
+    auto pending_creatings = update_pending_pgs(pending_inc, tmp);
     if (osdmap.get_epoch() &&
 	osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
       dout(7) << __func__ << " in the middle of upgrading, "
@@ -3407,6 +3422,11 @@ void OSDMonitor::update_creating_pgs()
   for (const auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
+    if (!osdmap.pg_exists(pgid)) {
+      dout(20) << __func__ << " ignoring " << pgid << " which should not exist"
+	       << dendl;
+      continue;
+    }
     auto mapped = pg.second.first;
     dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
