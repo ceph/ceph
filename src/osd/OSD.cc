@@ -9661,13 +9661,13 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 {
   if (qi.is_peering()) {
     dout(20) << __func__ << " " << pgid
-	     << " no pg, peering, item epoch is "
+	     << " peering, item epoch is "
 	     << qi.get_map_epoch()
 	     << ", will wait on " << qi << dendl;
     slot.waiting_peering[qi.get_map_epoch()].push_back(std::move(qi));
   } else {
     dout(20) << __func__ << " " << pgid
-	     << " no pg, item epoch is "
+	     << " item epoch is "
 	     << qi.get_map_epoch()
 	     << ", will wait on " << qi << dendl;
     slot.waiting.push_back(std::move(qi));
@@ -9892,6 +9892,15 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     }
     sdata->sdata_op_ordering_lock.Unlock();
     return;
+  }
+  if (qi.is_peering()) {
+    OSDMapRef osdmap = sdata->waiting_for_pg_osdmap;
+    if (qi.get_map_epoch() > osdmap->get_epoch()) {
+      _add_slot_waiter(token, slot, std::move(qi));
+      sdata->sdata_op_ordering_lock.Unlock();
+      pg->unlock();
+      return;
+    }
   }
   sdata->sdata_op_ordering_lock.Unlock();
 
