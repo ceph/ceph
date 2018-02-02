@@ -383,7 +383,7 @@ private:
     eversion_t pg_roll_forward_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
-    const vector<pg_log_entry_t> &log_entries,
+    const bufferlist &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
