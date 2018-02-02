@@ -15,6 +15,9 @@ Synopsis
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
 | *zap* | *list*]
 
+| **ceph-volume** **simple** [ *trigger* | *scan* | *activate* ]
+
+
 Description
 ===========
 
@@ -156,6 +159,84 @@ Positional arguments:
 
 * <DEVICE>  Either in the form of ``vg/lv`` for logical volumes or
   ``/path/to/sda1`` for regular devices.
+
+
+simple
+------
+
+Scan legacy OSD directories or data devices that may have been created by
+ceph-disk, or manually.
+
+Subcommands:
+
+**activate**
+Enables a systemd unit that persists the OSD ID and its UUID (also called
+``fsid`` in Ceph CLI tools), so that at boot time it can understand what OSD is
+enabled and needs to be mounted, while reading information that was previously
+created and persisted at ``/etc/ceph/osd/`` in JSON format.
+
+Usage::
+
+    ceph-volume simple activate --bluestore <osd id> <osd fsid>
+
+Optional Arguments:
+
+* [-h, --help]  show the help message and exit
+* [--bluestore] bluestore objectstore (default)
+* [--filestore] filestore objectstore
+
+Note: It requires a matching JSON file with the following format::
+
+    /etc/ceph/osd/<osd id>-<osd fsid>.json
+
+
+**scan**
+Scan a running OSD or data device for an OSD for metadata that can later be
+used to activate and manage the OSD with ceph-volume. The scan method will
+create a JSON file with the required information plus anything found in the OSD
+directory as well.
+
+Optionally, the JSON blob can be sent to stdout for further inspection.
+
+Usage on data devices::
+
+    ceph-volume simple scan <data device>
+
+Running OSD directories::
+
+    ceph-volume simple scan <path to osd dir>
+
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--stdout]            Send the JSON blob to stdout
+* [--force]             If the JSON file exists at destination, overwrite it
+
+Required Positional arguments:
+
+* <DATA DEVICE or OSD DIR>  Actual data partition or a path to the running OSD
+
+**trigger**
+This subcommand is not meant to be used directly, and it is used by systemd so
+that it proxies input to ``ceph-volume simple activate`` by parsing the
+input from systemd, detecting the UUID and ID associated with an OSD.
+
+Usage::
+
+    ceph-volume simple trigger <SYSTEMD-DATA>
+
+The systemd "data" is expected to be in the format of::
+
+    <OSD ID>-<OSD UUID>
+
+The JSON file associated with the OSD need to have been persisted previously by
+a scan (or manually), so that all needed metadata can be used.
+
+Positional arguments:
+
+* <SYSTEMD_DATA>  Data from a systemd unit containing ID and UUID of the OSD.
+
 
 Availability
 ============
