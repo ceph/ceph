@@ -673,7 +673,7 @@ class Module(MgrModule):
                             if b < 1.0 and b > 0.0 ]
 
         # get current compat weight-set weights
-        orig_ws = self.get_compat_weight_set_weights()
+        orig_ws = self.get_compat_weight_set_weights(ms)
         if orig_ws is None:
             return False
         orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
@@ -822,32 +822,35 @@ class Module(MgrModule):
             plan.compat_ws = {}
             return False
 
-    def get_compat_weight_set_weights(self):
-        # enable compat weight-set
-        self.log.debug('ceph osd crush weight-set create-compat')
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush weight-set create-compat',
-            'format': 'json',
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error creating compat weight-set')
-            return
+    def get_compat_weight_set_weights(self, ms):
+        if '-1' not in ms.crush_dump.get('choose_args', {}):
+            # enable compat weight-set first
+            self.log.debug('ceph osd crush weight-set create-compat')
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd crush weight-set create-compat',
+                'format': 'json',
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.error('Error creating compat weight-set')
+                return
 
-        result = CommandResult('')
-        self.send_command(result, 'mon', '', json.dumps({
-            'prefix': 'osd crush dump',
-            'format': 'json',
-        }), '')
-        r, outb, outs = result.wait()
-        if r != 0:
-            self.log.error('Error dumping crush map')
-            return
-        try:
-            crushmap = json.loads(outb)
-        except:
-            raise RuntimeError('unable to parse crush map')
+            result = CommandResult('')
+            self.send_command(result, 'mon', '', json.dumps({
+                'prefix': 'osd crush dump',
+                'format': 'json',
+            }), '')
+            r, outb, outs = result.wait()
+            if r != 0:
+                self.log.error('Error dumping crush map')
+                return
+            try:
+                crushmap = json.loads(outb)
+            except:
+                raise RuntimeError('unable to parse crush map')
+        else:
+            crushmap = ms.crush_dump
 
         raw = crushmap.get('choose_args',{}).get('-1', [])
         weight_set = {}
