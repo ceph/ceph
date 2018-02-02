@@ -283,8 +283,8 @@ class Scan(object):
 
     def main(self):
         sub_command_help = dedent("""
-        Scan an OSD directory for files and configurations that will allow to
-        take over the management of the OSD.
+        Scan an OSD directory (or data device) for files and configurations
+        that will allow to take over the management of the OSD.
 
         Scanned OSDs will get their configurations stored in
         /etc/ceph/osd/<id>-<fsid>.json
