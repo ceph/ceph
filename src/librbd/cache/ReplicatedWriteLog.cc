@@ -38,6 +38,12 @@ BlockExtent block_extent(ImageCache::Extent& image_extent)
   return block_extent(image_extent.first, image_extent.second);
 }
 
+ImageCache::Extent image_extent(BlockExtent block_extent)
+{
+  return ImageCache::Extent(block_extent.block_start * BLOCK_SIZE,
+			    (block_extent.block_end - block_extent.block_start + 1) * BLOCK_SIZE);
+}
+
 namespace rwl {
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
@@ -298,7 +304,7 @@ bool is_block_aligned(const ImageCache::Extents &image_extents) {
 }
 
 /**
- * A chain of requests that stops lon the first failure
+ * A chain of requests that stops on the first failure
  */
 struct C_BlockIORequest : public Context {
   CephContext *m_cct;
@@ -428,33 +434,131 @@ public:
     last_block = last_image_byte / BLOCK_SIZE;
   }
 };
+
+struct C_ReadRequest : public Context {
+  CephContext *m_cct;
+  Context *m_on_finish;
+  ImageCache::Extents m_miss_extents;
+  bufferlist m_miss_bl;
+  
+  C_ReadRequest(CephContext *cct, Context *on_finish)
+    : m_cct(cct), m_on_finish(on_finish) {
+    ldout(m_cct, 99) << this << dendl;
+  }
+  ~C_ReadRequest() {
+    ldout(m_cct, 99) << this << dendl;
+  }
+
+  virtual void finish(int r) override {
+    ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
+    m_on_finish->complete(r);
+  }
+  
+  virtual const char *get_name() const {
+    return "C_ReadRequest";
+  }
+};
   
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "image_extents=" << image_extents << ", "
-                 << "on_finish=" << on_finish << dendl;
+  C_ReadRequest *read_ctx = new C_ReadRequest(cct, on_finish);
+  uint64_t buffer_offset = 0;
+  ldout(cct, 5) << "image_extents=" << image_extents << ", "
+		<< "bl=" << *bl << ", "
+		<< "on_finish=" << on_finish << dendl;
 
+  // TODO: Handle unaligned IO.
+  if (!is_block_aligned(image_extents)) {
+    lderr(cct) << "unaligned read fails" << dendl;
+    for (auto &extent : image_extents) {
+      lderr(cct) << "start: " << extent.first << " length: " << extent.second << dendl;
+    }
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  // TODO handle fadvise flags
+
+  /*
+   * The strategy here is to look up all the WriteLogMapEntries that overlap
+   * this read, and iterate through those to separate this read into hits and
+   * misses. For hits we copy the data here from the RWL entry in pmem to the
+   * appropriate position in the bufferlist. A new Extents object is produced
+   * here with Extents for each miss region. At the same time a new bufferlist
+   * is constructed containing the regions of the input bufferlist that
+   * correspond to the miss Extents. The miss Extents and bufferlist is then
+   * passed on to the read cache below RWL.
+   */
   for (auto &extent : image_extents) {
+    uint64_t extent_offset = 0;
     WriteLogMapEntries map_entries = m_blocks_to_log_entries.find_map_entries(block_extent(extent));
     for (auto &entry : map_entries) {
+      ImageCache::Extent entry_image_extent(image_extent(entry.block_extent));
+      /* If this map entry starts after the current image extent offset ... */
+      if (entry_image_extent.first > extent.first + extent_offset) {
+	/* ... add range before map_entry to miss extents */
+	uint64_t miss_extent_start = extent.first + extent_offset;
+	uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
+	ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
+	read_ctx->m_miss_extents.push_back(miss_extent);
+	/* Add corresponding region of buffer to miss extents */
+	bufferlist leading_miss_bl;
+	leading_miss_bl.substr_of(*bl, buffer_offset, miss_extent_length);
+	read_ctx->m_miss_bl.append(leading_miss_bl);
+	buffer_offset += miss_extent_length;
+	extent_offset += miss_extent_length;
+      }
+      assert(entry_image_extent.first <= extent.first + extent_offset);
+      uint64_t entry_offset = 0;
+      /* If this map entry starts before the current image extent offset ... */
+      if (entry_image_extent.first < extent.first + extent_offset) {
+	/* ... compute offset into log entry for this read extent */
+	entry_offset = (extent.first + extent_offset) - entry_image_extent.first;
+      }
+      /* This read hit ends at the end of the extent or the end of the log
+	 entry, whichever is less. */
+      uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
+				      extent.second - extent_offset);
+      /* Offset of the map entry into the log entry's buffer */
+      uint64_t map_entry_buffer_offset = entry_image_extent.first - entry.log_entry->ram_entry.image_offset_bytes;
+      /* Offset into the log entry buffer of this read hit */
+      uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
+      /* Copy data from RWL entry hit to bufferlist */
+      bufferlist read_hit_bl;
+      read_hit_bl.substr_of(*bl, buffer_offset, entry_hit_length);
+      bufferlist::iterator i(&read_hit_bl);
+      i.copy_in(entry_hit_length,
+		(const char*)(entry.log_entry->pmem_buffer + read_buffer_offset));
+      /* Exclude RWL hit range from buffer and extent */
+      buffer_offset += entry_hit_length;
+      extent_offset += entry_hit_length;
       ldout(cct, 20) << entry << dendl;
+    }
+    /* If the last map entry didn't consume the entire image extent ... */
+    if (extent.second > extent_offset) {
+      /* ... add the rest of this extent to miss extents */
+      uint64_t miss_extent_start = extent.first + extent_offset;
+      uint64_t miss_extent_length = extent.second - extent_offset;
+      ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
+      /* Add corresponding region of buffer to miss extents */
+      bufferlist trailing_miss_bl;
+      trailing_miss_bl.substr_of(*bl, buffer_offset, miss_extent_length);
+      read_ctx->m_miss_bl.append(trailing_miss_bl);
+      buffer_offset += miss_extent_length;
+      extent_offset += miss_extent_length;
     }
   }
   
+  ldout(cct, 5) << "miss_extents=" << read_ctx->m_miss_extents << ", "
+		<< "miss_bl=" << read_ctx->m_miss_bl << dendl;
+
   if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
+    m_image_cache.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
   } else {
-    m_image_writeback.aio_read(std::move(image_extents), bl, fadvise_flags, on_finish);
+    m_image_writeback.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
   }
-  // TODO handle fadvise flags
-  /*
-  BlockGuard::C_BlockRequest *req = new C_ReadBlockRequest<I>(
-    m_image_ctx, m_image_writeback, *m_image_store, m_release_block, bl,
-    on_finish);
-  map_blocks(IO_TYPE_READ, std::move(image_extents), req);
-  */
 }
 
 template <typename I>
