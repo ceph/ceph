@@ -135,7 +135,7 @@ void osbench_worker(ObjectStore *os, const Config &cfg,
     std::condition_variable cond;
     bool done = false;
 
-    os->queue_transactions(&sequencer, tls, nullptr,
+    os->queue_transactions(&sequencer, tls,
                            new C_NotifyCond(&mutex, &cond, &done));
 
     std::unique_lock<std::mutex> lock(mutex);
