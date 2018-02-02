@@ -55,14 +55,24 @@ function above_margin() {
     return $(( $check >= $target && $check <= $target + $margin ? 0 : 1 ))
 }
 
+FIND_UPACT='grep "pg[[]${PG}.*backfilling.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/"'
+FIND_FIRST='grep "pg[[]${PG}.*backfilling.*_update_calc_stats $which " $log | grep -F " ${UPACT}${addp}" | grep -v est | head -1 | sed "s/.* \([0-9]*\)$/\1/"'
+FIND_LAST='grep "pg[[]${PG}.*backfilling.*_update_calc_stats $which " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/"'
+
 function check() {
-    local PG=$1
-    local log=$2
-    local degraded_start=$3
-    local degraded_end=$4
-    local misplaced_start=$5
-    local misplaced_end=$6
-    local type=$7
+    local dir=$1
+    local PG=$2
+    local primary=$3
+    local type=$4
+    local degraded_start=$5
+    local degraded_end=$6
+    local misplaced_start=$7
+    local misplaced_end=$8
+    local primary_start=${9:-}
+    local primary_end=${10:-}
+
+    local log=$(grep -l +backfilling $dir/osd.*.log)
+    test -n "$log" || return 1
 
     local addp=" "
     if [ "$type" = "erasure" ];
@@ -70,19 +80,38 @@ function check() {
       addp="p"
     fi
 
-    UPACT=$(grep "pg[[]${PG}.*backfilling.*_update_calc_stats " $log | tail -1 | sed "s/.*[)] \([[][^ p]*\).*$/\1/")
+    UPACT=$(eval $FIND_UPACT)
+    [ -n "$UPACT" ] || return 1
 
-    # Check 3rd line at start because of false backfill starts
-    FIRST=$(grep "pg[[]${PG}.*backfilling.*_update_calc_stats degraded " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    # Check 3rd line at start because of false recovery starts
+    local which="degraded"
+    FIRST=$(eval $FIND_FIRST)
+    [ -n "$FIRST" ] || return 1
     below_margin $FIRST $degraded_start || return 1
-    LAST=$(grep "pg[[]${PG}.*backfilling.*_update_calc_stats degraded " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
+    [ -n "$LAST" ] || return 1
     above_margin $LAST $degraded_end || return 1
 
-    # Check 3rd line at start because of false backfill starts
-    FIRST=$(grep "pg[[]${PG}.*backfilling.*_update_calc_stats misplaced " $log | grep -F " ${UPACT}${addp}" | head -1 | sed "s/.* \([0-9]*\)$/\1/")
+    # Check 3rd line at start because of false recovery starts
+    which="misplaced"
+    FIRST=$(eval $FIND_FIRST)
+    [ -n "$FIRST" ] || return 1
     below_margin $FIRST $misplaced_start || return 1
-    LAST=$(grep "pg[[]${PG}.*backfilling.*_update_calc_stats misplaced " $log | tail -1 | sed "s/.* \([0-9]*\)$/\1/")
+    LAST=$(eval $FIND_LAST)
+    [ -n "$LAST" ] || return 1
     above_margin $LAST $misplaced_end || return 1
+
+    # This is the value of set into MISSING_ON_PRIMARY
+    if [ -n "$primary_start" ];
+    then
+      which="shard $primary"
+      FIRST=$(eval $FIND_FIRST)
+      [ -n "$FIRST" ] || return 1
+      below_margin $FIRST $primary_start || return 1
+      LAST=$(eval $FIND_LAST)
+      [ -n "$LAST" ] || return 1
+      above_margin $LAST $primary_end || return 1
+    fi
 }
 
 # [1] -> [1, 0, 2]
@@ -122,11 +151,8 @@ function TEST_backfill_sizeup() {
     local primary=$(get_primary $poolname obj1)
     local PG=$(get_pg $poolname obj1)
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
     local degraded=$(expr $objects \* 2)
-    check $PG $log $degraded 0 0 0 || return 1
+    check $dir $PG $primary replicated $degraded 0 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -173,10 +199,8 @@ function TEST_backfill_sizeup_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
     local degraded=$(expr $objects \* 2)
-    check $PG $log $degraded 0 $objects 0 || return 1
+    check $dir $PG $primary replicated $degraded 0 $objects 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -221,10 +245,7 @@ function TEST_backfill_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
-    check $PG $log 0 0 $objects 0 || return 1
+    check $dir $PG $primary replicated 0 0 $objects 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -273,10 +294,7 @@ function TEST_backfill_down_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
-    check $PG $log $objects 0 0 0 || return 1
+    check $dir $PG $primary replicated $objects 0 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -328,11 +346,9 @@ function TEST_backfill_out2() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
     local misplaced=$(expr $objects \* 2)
 
-    check $PG $log $objects 0 $misplaced 0 || return 1
+    check $dir $PG $primary replicated $objects 0 $misplaced 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -384,10 +400,8 @@ function TEST_backfill_sizeup4_allout() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
     local misdeg=$(expr $objects \* 2)
-    check $PG $log $misdeg 0 $misdeg $objects || return 1
+    check $dir $PG $primary replicated $misdeg 0 $misdeg $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -445,11 +459,9 @@ function TEST_backfill_remapped() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
     local misplaced=$(expr $objects \* 2)
 
-    check $PG $log 0 0 $misplaced $objects || return 1
+    check $dir $PG $primary replicated 0 0 $misplaced $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -503,11 +515,8 @@ function TEST_backfill_ec_all_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
     local misplaced=$(expr $objects \* 3)
-    check $PG $log 0 0 $misplaced $objects erasure || return 1
+    check $dir $PG $primary erasure 0 0 $misplaced $objects || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -553,11 +562,8 @@ function TEST_backfill_ec_prim_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
     local misplaced=$(expr $objects \* 3)
-    check $PG $log 0 0 $objects 0 erasure || return 1
+    check $dir $PG $primary erasure 0 0 $objects 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -640,11 +646,8 @@ function TEST_backfill_ec_down_all_out() {
 
     ceph pg dump pgs
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
     local misplaced=$(expr $objects \* 2)
-    check $PG $log $objects 0 $misplaced 0 erasure || return 1
+    check $dir $PG $primary erasure $objects 0 $misplaced 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
@@ -695,11 +698,8 @@ function TEST_backfill_ec_down_out() {
 
     wait_for_clean || return 1
 
-    local log=$(grep -l +backfilling $dir/osd.*.log)
-    test -n "$log" || return 1
-
     local misplaced=$(expr $objects \* 2)
-    check $PG $log $objects 0 0 0 erasure || return 1
+    check $dir $PG $primary erasure $objects 0 0 0 || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
