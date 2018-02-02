@@ -478,20 +478,11 @@ test_trash() {
     remove_images
 }
 
-test_purge(){
+test_purge() {
     echo "testing trash purge..."
     remove_images
 
-    for i in {1..3};
-    do
-        rbd create   "test$i" -s 4
-        rbd bench    "test$i" --io-total 4M --io-type write > /dev/null
-        rbd trash mv "test$i"
-    done
-
-    rbd trash purge --threshold 1 | grep "Nothing to do"
-
-    rbd trash purge --threshold 0
+    rbd trash purge
     rbd trash ls | wc -l | grep 0
 
     rbd create foo -s 1
