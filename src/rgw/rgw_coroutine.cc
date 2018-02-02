@@ -127,7 +127,7 @@ void RGWCompletionManager::_wakeup(void *opaque)
   if (iter != waiters.end()) {
     void *user_id = iter->second;
     waiters.erase(iter);
-    _complete(NULL, rgw_io_id() /* no IO id */, user_id);
+    _complete(NULL, rgw_io_id{0, -1} /* no IO id */, user_id);
   }
 }
 
