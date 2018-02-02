@@ -30,7 +30,7 @@ class Throttle {
   CephContext *cct;
   const std::string name;
   PerfCounters *logger;
-  std::atomic<unsigned> count = { 0 }, max = { 0 };
+  std::atomic<int64_t> count = { 0 }, max = { 0 };
   Mutex lock;
   list<Cond*> cond;
   const bool use_perf;
