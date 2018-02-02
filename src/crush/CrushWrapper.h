@@ -1391,9 +1391,9 @@ public:
     free(arg_map.args);
   }
 
-  void create_choose_args(int64_t id, int positions) {
+  bool create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
-      return;
+      return false;
     assert(positions);
     auto &cmap = choose_args[id];
     cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
@@ -1422,6 +1422,7 @@ public:
 	carg.weight_set_size = 0;
       }
     }
+    return true;
   }
 
   void rm_choose_args(int64_t id) {
