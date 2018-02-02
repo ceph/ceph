@@ -548,10 +548,10 @@ void ReplicatedBackend::op_applied(
   if (op->waiting_for_applied.empty()) {
     op->on_applied->complete(0);
     op->on_applied = 0;
-  }
-  if (op->done()) {
-    assert(!op->on_commit && !op->on_applied);
-    in_progress_ops.erase(op->tid);
+    if (op->waiting_for_commit.empty()) {
+      assert(!op->on_commit);
+      in_progress_ops.erase(op->tid);
+    }
   }
 }
 
@@ -571,10 +571,10 @@ void ReplicatedBackend::op_commit(
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
     op->on_commit = 0;
-  }
-  if (op->done()) {
-    assert(!op->on_commit && !op->on_applied);
-    in_progress_ops.erase(op->tid);
+    if (op->waiting_for_applied.empty()) {
+      assert(!op->on_applied);
+      in_progress_ops.erase(op->tid);
+    }
   }
 }
 
@@ -634,15 +634,17 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       from,
       r->get_last_complete_ondisk());
 
-    if (ip_op.waiting_for_applied.empty() &&
-        ip_op.on_applied) {
-      ip_op.on_applied->complete(0);
-      ip_op.on_applied = 0;
-    }
+    //ASAP call commit->complete.
     if (ip_op.waiting_for_commit.empty() &&
         ip_op.on_commit) {
       ip_op.on_commit->complete(0);
       ip_op.on_commit= 0;
+    }
+
+    if (ip_op.waiting_for_applied.empty() &&
+        ip_op.on_applied) {
+      ip_op.on_applied->complete(0);
+      ip_op.on_applied = 0;
     }
     if (ip_op.done()) {
       assert(!ip_op.on_commit && !ip_op.on_applied);
