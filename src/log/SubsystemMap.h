@@ -7,6 +7,8 @@
 #include <string>
 #include <vector>
 
+#include "common/subsys_types.h"
+
 #include "include/assert.h"
 
 namespace ceph {
@@ -58,7 +60,13 @@ public:
     return m_subsys[subsys].name;
   }
 
-  bool should_gather(unsigned sub, int level) {
+  template <unsigned SubV>
+  bool should_gather(int level) {
+    static_assert(SubV < ceph_subsys_get_num(), "wrong subsystem ID");
+    return level <= m_subsys[SubV].gather_level ||
+      level <= m_subsys[SubV].log_level;
+  }
+  bool should_gather(const unsigned sub, int level) {
     assert(sub < m_subsys.size());
     return level <= m_subsys[sub].gather_level ||
       level <= m_subsys[sub].log_level;
