@@ -81,6 +81,7 @@ bool DeterministicOpSequence::run_one_op(int op, rngen_t& gen)
     break;
 
   default:
+    cout << "bad op " << op << std::endl;
     assert(0 == "bad op");
   }
   return ok;
