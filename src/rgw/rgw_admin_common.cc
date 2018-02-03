@@ -2,8 +2,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int init_bucket(RGWRados *store, const string& tenant_name, const string& bucket_name, const string& bucket_id,
-                RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs)
+int init_bucket(RGWRados *store, const std::string& tenant_name, const std::string& bucket_name, const std::string& bucket_id,
+                RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<std::string, bufferlist> *pattrs)
 {
   if (!bucket_name.empty()) {
     RGWObjectCtx obj_ctx(store);
@@ -11,7 +11,7 @@ int init_bucket(RGWRados *store, const string& tenant_name, const string& bucket
     if (bucket_id.empty()) {
       r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, pattrs);
     } else {
-      string bucket_instance_id = bucket_name + ":" + bucket_id;
+      std::string bucket_instance_id = bucket_name + ":" + bucket_id;
       r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, nullptr, pattrs);
     }
     if (r < 0) {
@@ -23,7 +23,7 @@ int init_bucket(RGWRados *store, const string& tenant_name, const string& bucket
   return 0;
 }
 
-int read_input(const string& infile, bufferlist& bl)
+int read_input(const std::string& infile, bufferlist& bl)
 {
   const int READ_CHUNK = 8196;
   int fd = 0;
@@ -59,7 +59,7 @@ int read_input(const string& infile, bufferlist& bl)
   return err;
 }
 
-int parse_date_str(const string& date_str, utime_t& ut)
+int parse_date_str(const std::string& date_str, utime_t& ut)
 {
   uint64_t epoch = 0;
   uint64_t nsec = 0;
@@ -79,7 +79,7 @@ int parse_date_str(const string& date_str, utime_t& ut)
 
 int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
   uint64_t obj_size;
 
   RGWObjectCtx obj_ctx(store);
@@ -95,7 +95,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
     return ret;
   }
 
-  map<string, bufferlist>::iterator iter;
+  map<std::string, bufferlist>::iterator iter;
   iter = attrs.find(RGW_ATTR_MANIFEST);
   if (iter == attrs.end()) {
     *need_rewrite = (obj_size >= min_stripe_size);
@@ -143,15 +143,15 @@ int read_current_period_id(RGWRados* store, const std::string& realm_id,
 }
 
 int check_reshard_bucket_params(RGWRados *store,
-                                const string& bucket_name,
-                                const string& tenant,
-                                const string& bucket_id,
+                                const std::string& bucket_name,
+                                const std::string& tenant,
+                                const std::string& bucket_id,
                                 bool num_shards_specified,
                                 int num_shards,
                                 int yes_i_really_mean_it,
                                 rgw_bucket& bucket,
                                 RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs)
+                                map<std::string, bufferlist>& attrs)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket not specified" << std::endl;

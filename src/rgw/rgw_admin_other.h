@@ -28,7 +28,7 @@ int handle_opt_log_rm(const std::string& object, const std::string& date,
 
 int handle_opt_usage_show(rgw_user& user_id, const std::string& start_date, const std::string& end_date,
                           bool show_log_entries, bool show_log_sum, RGWFormatterFlusher& flusher,
-                          std::map<string, bool> *categories, RGWRados *store);
+                          std::map<std::string, bool> *categories, RGWRados *store);
 
 int handle_opt_usage_trim(rgw_user& user_id, const std::string& start_date, const std::string& end_date,
                           bool yes_i_really_mean_it, RGWRados *store);

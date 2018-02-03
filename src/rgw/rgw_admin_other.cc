@@ -72,7 +72,7 @@ int handle_opt_log_list(const std::string& date, RGWRados *store, Formatter *for
       return -ret;
     }
     while (true) {
-      string name;
+      std::string name;
       ret = store->log_list_next(access_handle, &name);
       if (ret == -ENOENT)
         break;
@@ -98,7 +98,7 @@ int handle_opt_log_show(const std::string& object, const std::string& date,
     ceph_abort();
   }
 
-  string oid;
+  std::string oid;
   if (!object.empty()) {
     oid = object;
   } else {
@@ -190,7 +190,7 @@ int handle_opt_log_rm(const std::string& object, const std::string& date,
     ceph_abort();
   }
 
-  string oid;
+  std::string oid;
   if (!object.empty()) {
     oid = object;
   } else {
@@ -211,7 +211,7 @@ int handle_opt_log_rm(const std::string& object, const std::string& date,
 
 int handle_opt_usage_show(rgw_user& user_id, const std::string& start_date, const std::string& end_date,
                           bool show_log_entries, bool show_log_sum, RGWFormatterFlusher& flusher,
-                          std::map<string, bool> *categories, RGWRados *store)
+                          std::map<std::string, bool> *categories, RGWRados *store)
 {
   uint64_t start_epoch = 0;
   auto end_epoch = (uint64_t)-1;
@@ -405,8 +405,8 @@ int handle_opt_gc_process(bool include_all, RGWRados *store)
 int handle_opt_lc_list(int max_entries, RGWRados *store, Formatter *formatter)
 {
   formatter->open_array_section("lifecycle_list");
-  map<string, int> bucket_lc_map;
-  string marker;
+  map<std::string, int> bucket_lc_map;
+  std::string marker;
   const int MAX_LC_LIST_ENTRIES = 100;
   if (max_entries < 0) {
     max_entries = MAX_LC_LIST_ENTRIES;
@@ -417,11 +417,11 @@ int handle_opt_lc_list(int max_entries, RGWRados *store, Formatter *formatter)
       cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
       return 1;
     }
-    map<string, int>::iterator iter;
+    map<std::string, int>::iterator iter;
     for (iter = bucket_lc_map.begin(); iter != bucket_lc_map.end(); ++iter) {
       formatter->open_object_section("bucket_lc_info");
       formatter->dump_string("bucket", iter->first);
-      string lc_status = LC_STATUS[iter->second];
+      std::string lc_status = LC_STATUS[iter->second];
       formatter->dump_string("status", lc_status);
       formatter->close_section(); // objs
       formatter->flush(cout);
@@ -503,7 +503,7 @@ int handle_opt_metadata_list(const std::string& metadata_key, const std::string&
 
   uint64_t left;
   do {
-    list<string> keys;
+    list<std::string> keys;
     left = (max_entries_specified ? max_entries - count : max);
     ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
@@ -716,7 +716,7 @@ int handle_opt_sync_error_list(int max_entries, const std::string& start_date, c
     formatter->open_array_section("entries");
 
     int count = 0;
-    string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+    std::string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
 
     do {
       list<cls_log_entry> entries;
@@ -785,7 +785,7 @@ int handle_opt_sync_error_trim(const std::string& start_date, const std::string&
   }
 
   for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
-    string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+    std::string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
     ret = store->time_log_trim(oid, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
@@ -1181,7 +1181,7 @@ int handle_opt_replicalog_update(const std::string& replica_log_type_str, Replic
   return 0;
 }
 
-static void flush_ss(stringstream& ss, list<string>& l)
+static void flush_ss(std::stringstream& ss, list<std::string>& l)
 {
   if (!ss.str().empty()) {
     l.push_back(ss.str());
@@ -1189,7 +1189,7 @@ static void flush_ss(stringstream& ss, list<string>& l)
   ss.str("");
 }
 
-static stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
+static std::stringstream& push_ss(std::stringstream& ss, list<std::string>& l, int tab = 0)
 {
   flush_ss(ss, l);
   if (tab > 0) {
@@ -1198,24 +1198,24 @@ static stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
   return ss;
 }
 
-static void get_md_sync_status(list<string>& status, RGWRados *store)
+static void get_md_sync_status(list<std::string>& status, RGWRados *store)
 {
   RGWMetaSyncStatusManager sync(store, store->get_async_rados());
 
   int ret = sync.init();
   if (ret < 0) {
-    status.push_back(string("failed to retrieve sync info: sync.init() failed: ") + cpp_strerror(-ret));
+    status.push_back(std::string("failed to retrieve sync info: sync.init() failed: ") + cpp_strerror(-ret));
     return;
   }
 
   rgw_meta_sync_status sync_status;
   ret = sync.read_sync_status(&sync_status);
   if (ret < 0) {
-    status.push_back(string("failed to read sync status: ") + cpp_strerror(-ret));
+    status.push_back(std::string("failed to read sync status: ") + cpp_strerror(-ret));
     return;
   }
 
-  string status_str;
+  std::string status_str;
   switch (sync_status.sync_info.state) {
     case rgw_meta_sync_info::StateInit:
       status_str = "init";
@@ -1253,7 +1253,7 @@ static void get_md_sync_status(list<string>& status, RGWRados *store)
     }
   }
 
-  stringstream ss;
+  std::stringstream ss;
   push_ss(ss, status) << "full sync: " << num_full << "/" << total_shards << " shards";
 
   if (num_full > 0) {
@@ -1265,20 +1265,20 @@ static void get_md_sync_status(list<string>& status, RGWRados *store)
   rgw_mdlog_info log_info;
   ret = sync.read_log_info(&log_info);
   if (ret < 0) {
-    status.push_back(string("failed to fetch local sync status: ") + cpp_strerror(-ret));
+    status.push_back(std::string("failed to fetch local sync status: ") + cpp_strerror(-ret));
     return;
   }
 
   map<int, RGWMetadataLogInfo> master_shards_info;
-  string master_period = store->get_current_period_id();
+  std::string master_period = store->get_current_period_id();
 
   ret = sync.read_master_log_shards_info(master_period, &master_shards_info);
   if (ret < 0) {
-    status.push_back(string("failed to fetch master sync status: ") + cpp_strerror(-ret));
+    status.push_back(std::string("failed to fetch master sync status: ") + cpp_strerror(-ret));
     return;
   }
 
-  map<int, string> shards_behind;
+  map<int, std::string> shards_behind;
   if (sync_status.sync_info.period != master_period) {
     status.emplace_back("master is on a different period: master_period=" +
                         master_period + " local_period=" + sync_status.sync_info.period);
@@ -1334,20 +1334,20 @@ static void get_md_sync_status(list<string>& status, RGWRados *store)
   flush_ss(ss, status);
 }
 
-static void get_data_sync_status(const string& source_zone, list<string>& status, int tab, RGWRados *store)
+static void get_data_sync_status(const std::string& source_zone, list<std::string>& status, int tab, RGWRados *store)
 {
-  stringstream ss;
+  std::stringstream ss;
 
   auto ziter = store->zone_by_id.find(source_zone);
   if (ziter == store->zone_by_id.end()) {
-    push_ss(ss, status, tab) << string("zone not found");
+    push_ss(ss, status, tab) << std::string("zone not found");
     flush_ss(ss, status);
     return;
   }
   RGWZone& sz = ziter->second;
 
   if (!store->zone_syncs_from(store->get_zone(), sz)) {
-    push_ss(ss, status, tab) << string("not syncing from zone");
+    push_ss(ss, status, tab) << std::string("not syncing from zone");
     flush_ss(ss, status);
     return;
   }
@@ -1355,7 +1355,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
 
   int ret = sync.init();
   if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to retrieve sync info: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << std::string("failed to retrieve sync info: ") + cpp_strerror(-ret);
     flush_ss(ss, status);
     return;
   }
@@ -1363,11 +1363,11 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   rgw_data_sync_status sync_status;
   ret = sync.read_sync_status(&sync_status);
   if (ret < 0 && ret != -ENOENT) {
-    push_ss(ss, status, tab) << string("failed read sync status: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << std::string("failed read sync status: ") + cpp_strerror(-ret);
     return;
   }
 
-  string status_str;
+  std::string status_str;
   switch (sync_status.sync_info.state) {
     case rgw_data_sync_info::StateInit:
       status_str = "init";
@@ -1416,7 +1416,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   rgw_datalog_info log_info;
   ret = sync.read_log_info(&log_info);
   if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to fetch local sync status: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << std::string("failed to fetch local sync status: ") + cpp_strerror(-ret);
     return;
   }
 
@@ -1425,11 +1425,11 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
 
   ret = sync.read_source_log_shards_info(&source_shards_info);
   if (ret < 0) {
-    push_ss(ss, status, tab) << string("failed to fetch source sync status: ") + cpp_strerror(-ret);
+    push_ss(ss, status, tab) << std::string("failed to fetch source sync status: ") + cpp_strerror(-ret);
     return;
   }
 
-  map<int, string> shards_behind;
+  map<int, std::string> shards_behind;
 
   for (auto local_iter : sync_status.sync_markers) {
     int shard_id = local_iter.first;
@@ -1481,9 +1481,9 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
   flush_ss(ss, status);
 }
 
-static void tab_dump(const string& header, int width, const list<string>& entries)
+static void tab_dump(const std::string& header, int width, const list<std::string>& entries)
 {
-  string s = header;
+  std::string s = header;
 
   for (auto e : entries) {
     cout << std::setw(width) << s << std::setw(1) << " " << e << std::endl;
@@ -1504,7 +1504,7 @@ void handle_opt_sync_status(RGWRados *store)
   cout << std::setw(width) << "zonegroup" << std::setw(1) << " " << zonegroup.get_id() << " (" << zonegroup.get_name() << ")" << std::endl;
   cout << std::setw(width) << "zone" << std::setw(1) << " " << zone.id << " (" << zone.name << ")" << std::endl;
 
-  list<string> md_status;
+  list<std::string> md_status;
 
   if (store->is_meta_master()) {
     md_status.emplace_back("no sync (zone is master)");
@@ -1514,15 +1514,15 @@ void handle_opt_sync_status(RGWRados *store)
 
   tab_dump("metadata sync", width, md_status);
 
-  list<string> data_status;
+  list<std::string> data_status;
 
   for (auto iter : store->zone_conn_map) {
-    const string& source_id = iter.first;
-    string source_str = "source: ";
-    string s = source_str + source_id;
+    const std::string& source_id = iter.first;
+    std::string source_str = "source: ";
+    std::string s = source_str + source_id;
     auto siter = store->zone_by_id.find(source_id);
     if (siter != store->zone_by_id.end()) {
-      s += string(" (") + siter->second.name + ")";
+      s += std::string(" (") + siter->second.name + ")";
     }
     data_status.push_back(s);
     get_data_sync_status(source_id, data_status, source_str.size(), store);
