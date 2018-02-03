@@ -3406,8 +3406,27 @@ void RGWPutObj::execute()
     goto done;
   }
 
+  if ((! copy_source.empty()) && !copy_source_range) {
+    rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
+    rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
+
+    RGWObjState *astate;
+    op_ret = store->get_obj_state(static_cast<RGWObjectCtx *>(s->obj_ctx),
+                                  copy_source_bucket_info, obj, &astate, true, false);
+    if (op_ret < 0) {
+      ldout(s->cct, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
+      goto done;
+    }
+    if (!astate->exists){
+      op_ret = -ENOENT;
+      goto done;
+    }
+    lst = astate->size - 1;
+  } else {
+    lst = copy_source_range_lst;
+  }
+
   fst = copy_source_range_fst;
-  lst = copy_source_range_lst;
 
   op_ret = get_encrypt_filter(&encrypt, filter);
   if (op_ret < 0) {
