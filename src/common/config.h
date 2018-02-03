@@ -230,8 +230,6 @@ private:
   void update_legacy_val(const Option &opt,
       md_config_t::member_ptr_t member);
 
-  void init_subsys();
-
   bool expand_meta(std::string &val,
 		   std::ostream *oss) const;
 
