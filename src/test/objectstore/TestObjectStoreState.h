@@ -100,7 +100,7 @@ public:
  public:
   explicit TestObjectStoreState(ObjectStore *store) :
     m_next_coll_nr(0), m_num_objs_per_coll(10), m_num_objects(0),
-    m_max_in_flight(0), m_finished_lock("Finished Lock"), m_next_pool(1) {
+    m_max_in_flight(0), m_finished_lock("Finished Lock"), m_next_pool(2) {
     m_store.reset(store);
   }
   ~TestObjectStoreState() { 
