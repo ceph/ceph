@@ -307,8 +307,7 @@ int main(int argc, const char **argv)
                                                   OPT_REALM_DEFAULT, OPT_REALM_PULL};
 
 
-  bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
-                         raw_period_update);
+  bool raw_storage_op = (raw_storage_ops_list.count(opt_cmd) > 0 || raw_period_update);
 
   if (raw_storage_op) {
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
