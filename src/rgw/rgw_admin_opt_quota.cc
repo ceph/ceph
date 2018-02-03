@@ -5,7 +5,7 @@
 #include "rgw_admin_common.h"
 
 static void set_quota_info(RGWQuotaInfo& quota, RgwAdminCommand opt_cmd, int64_t max_size, int64_t max_objects,
-                    bool have_max_size, bool have_max_objects)
+                           bool have_max_size, bool have_max_objects)
 {
   switch (opt_cmd) {
     case OPT_QUOTA_ENABLE:
@@ -40,9 +40,9 @@ static void set_quota_info(RGWQuotaInfo& quota, RgwAdminCommand opt_cmd, int64_t
 }
 
 static int set_bucket_quota(RGWRados *store, RgwAdminCommand opt_cmd,
-                     const string& tenant_name, const string& bucket_name,
-                     int64_t max_size, int64_t max_objects,
-                     bool have_max_size, bool have_max_objects)
+                            const string& tenant_name, const string& bucket_name,
+                            int64_t max_size, int64_t max_objects,
+                            bool have_max_size, bool have_max_objects)
 {
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
@@ -64,7 +64,7 @@ static int set_bucket_quota(RGWRados *store, RgwAdminCommand opt_cmd,
 }
 
 static int set_user_bucket_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
-                          bool have_max_size, bool have_max_objects)
+                                 bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 
@@ -82,7 +82,7 @@ static int set_user_bucket_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUser
 }
 
 static int set_user_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
-                   bool have_max_size, bool have_max_objects)
+                          bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
 

@@ -1,5 +1,56 @@
 #include "rgw_admin_other.h"
+
 #include "rgw_data_sync.h"
+#include "rgw_admin_argument_parsing.h"
+
+int handle_opt_pool_add(const std::string& pool_name, rgw_pool& pool, RGWRados *store)
+{
+  if (pool_name.empty()) {
+    cerr << "need to specify pool to add!" << std::endl;
+    usage();
+    ceph_abort();
+  }
+
+  int ret = store->add_bucket_placement(pool);
+  if (ret < 0)
+    cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
+  return 0;
+}
+
+int handle_opt_pool_rm(const std::string& pool_name, rgw_pool& pool, RGWRados *store)
+{
+  if (pool_name.empty()) {
+    cerr << "need to specify pool to remove!" << std::endl;
+    usage();
+    ceph_abort();
+  }
+
+  int ret = store->remove_bucket_placement(pool);
+  if (ret < 0)
+    cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
+  return 0;
+}
+
+int handle_opt_pools_list(RGWRados *store, Formatter *formatter)
+{
+  set<rgw_pool> pools;
+  int ret = store->list_placement_set(pools);
+  if (ret < 0) {
+    cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  formatter->reset();
+  formatter->open_array_section("pools");
+  for (const auto &pool : pools) {
+    formatter->open_object_section("pool");
+    formatter->dump_string("name", pool.to_str());
+    formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
 
 int handle_opt_log_list(const std::string& date, RGWRados *store, Formatter *formatter)
 {
@@ -38,9 +89,9 @@ int handle_opt_log_list(const std::string& date, RGWRados *store, Formatter *for
   return 0;
 }
 
-int handle_opt_log_show_rm(RgwAdminCommand opt_cmd, const std::string& object, const std::string& date,
-                           const std::string& bucket_id, const std::string& bucket_name, bool show_log_entries,
-                           bool skip_zero_entries,  bool show_log_sum, RGWRados *store, Formatter *formatter) {
+int handle_opt_log_show(const std::string& object, const std::string& date,
+                        const std::string& bucket_id, const std::string& bucket_name, bool show_log_entries,
+                        bool skip_zero_entries,  bool show_log_sum, RGWRados *store, Formatter *formatter) {
   if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
     cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
     usage();
@@ -58,84 +109,102 @@ int handle_opt_log_show_rm(RgwAdminCommand opt_cmd, const std::string& object, c
     oid += bucket_name;
   }
 
-  if (opt_cmd == OPT_LOG_SHOW) {
-    RGWAccessHandle h;
+  RGWAccessHandle h;
 
-    int r = store->log_show_init(oid, &h);
-    if (r < 0) {
-      cerr << "error opening log " << oid << ": " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-
-    formatter->reset();
-    formatter->open_object_section("log");
-
-    struct rgw_log_entry entry;
-
-    // peek at first entry to get bucket metadata
-    r = store->log_show_next(h, &entry);
-    if (r < 0) {
-      cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-    formatter->dump_string("bucket_id", entry.bucket_id);
-    formatter->dump_string("bucket_owner", entry.bucket_owner.to_str());
-    formatter->dump_string("bucket", entry.bucket);
-
-    uint64_t agg_time = 0;
-    uint64_t agg_bytes_sent = 0;
-    uint64_t agg_bytes_received = 0;
-    uint64_t total_entries = 0;
-
-    if (show_log_entries)
-      formatter->open_array_section("log_entries");
-
-    do {
-      uint64_t total_time =  entry.total_time.to_msec();
-
-      agg_time += total_time;
-      agg_bytes_sent += entry.bytes_sent;
-      agg_bytes_received += entry.bytes_received;
-      total_entries++;
-
-      if (skip_zero_entries && entry.bytes_sent == 0 &&
-          entry.bytes_received == 0) {
-        goto next;
-      }
-
-      if (show_log_entries) {
-        rgw_format_ops_log_entry(entry, formatter);
-        formatter->flush(cout);
-      }
-      next:
-      r = store->log_show_next(h, &entry);
-    } while (r > 0);
-
-    if (r < 0) {
-      cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-    if (show_log_entries)
-      formatter->close_section();
-
-    if (show_log_sum) {
-      formatter->open_object_section("log_sum");
-      formatter->dump_int("bytes_sent", agg_bytes_sent);
-      formatter->dump_int("bytes_received", agg_bytes_received);
-      formatter->dump_int("total_time", agg_time);
-      formatter->dump_int("total_entries", total_entries);
-      formatter->close_section();
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
+  int r = store->log_show_init(oid, &h);
+  if (r < 0) {
+    cerr << "error opening log " << oid << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
   }
-  if (opt_cmd == OPT_LOG_RM) {
-    int r = store->log_remove(oid);
-    if (r < 0) {
-      cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
-      return -r;
+
+  formatter->reset();
+  formatter->open_object_section("log");
+
+  struct rgw_log_entry entry;
+
+  // peek at first entry to get bucket metadata
+  r = store->log_show_next(h, &entry);
+  if (r < 0) {
+    cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  formatter->dump_string("bucket_id", entry.bucket_id);
+  formatter->dump_string("bucket_owner", entry.bucket_owner.to_str());
+  formatter->dump_string("bucket", entry.bucket);
+
+  uint64_t agg_time = 0;
+  uint64_t agg_bytes_sent = 0;
+  uint64_t agg_bytes_received = 0;
+  uint64_t total_entries = 0;
+
+  if (show_log_entries)
+    formatter->open_array_section("log_entries");
+
+  do {
+    uint64_t total_time =  entry.total_time.to_msec();
+
+    agg_time += total_time;
+    agg_bytes_sent += entry.bytes_sent;
+    agg_bytes_received += entry.bytes_received;
+    total_entries++;
+
+    if (skip_zero_entries && entry.bytes_sent == 0 &&
+        entry.bytes_received == 0) {
+      goto next;
     }
+
+    if (show_log_entries) {
+      rgw_format_ops_log_entry(entry, formatter);
+      formatter->flush(cout);
+    }
+    next:
+    r = store->log_show_next(h, &entry);
+  } while (r > 0);
+
+  if (r < 0) {
+    cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
+  }
+  if (show_log_entries)
+    formatter->close_section();
+
+  if (show_log_sum) {
+    formatter->open_object_section("log_sum");
+    formatter->dump_int("bytes_sent", agg_bytes_sent);
+    formatter->dump_int("bytes_received", agg_bytes_received);
+    formatter->dump_int("total_time", agg_time);
+    formatter->dump_int("total_entries", total_entries);
+    formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+  cout << std::endl;
+  return 0;
+}
+
+int handle_opt_log_rm(const std::string& object, const std::string& date,
+                      const std::string& bucket_id, const std::string& bucket_name, RGWRados *store) {
+  if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
+    cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
+    usage();
+    ceph_abort();
+  }
+
+  string oid;
+  if (!object.empty()) {
+    oid = object;
+  } else {
+    oid = date;
+    oid += "-";
+    oid += bucket_id;
+    oid += "-";
+    oid += bucket_name;
+  }
+
+  int r = store->log_remove(oid);
+  if (r < 0) {
+    cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
+    return -r;
   }
   return 0;
 }
@@ -413,6 +482,63 @@ int handle_opt_metadata_rm(std::string& metadata_key, RGWRados *store, Formatter
   return 0;
 }
 
+int handle_opt_metadata_list(const std::string& metadata_key, const std::string& marker, bool max_entries_specified,
+                             int max_entries, RGWRados *store, Formatter *formatter)
+{
+  void *handle;
+  int max = 1000;
+  int ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
+  if (ret < 0) {
+    cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+
+  bool truncated;
+  uint64_t count = 0;
+
+  if (max_entries_specified) {
+    formatter->open_object_section("result");
+  }
+  formatter->open_array_section("keys");
+
+  uint64_t left;
+  do {
+    list<string> keys;
+    left = (max_entries_specified ? max_entries - count : max);
+    ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    } if (ret != -ENOENT) {
+      for (auto &key : keys) {
+        formatter->dump_string("key", key);
+        ++count;
+      }
+      formatter->flush(cout);
+    }
+  } while (truncated && left > 0);
+
+  formatter->close_section();
+
+  if (max_entries_specified) {
+    encode_json("truncated", truncated, formatter);
+    encode_json("count", count, formatter);
+    if (truncated) {
+      encode_json("marker", store->meta_mgr->get_marker(handle), formatter);
+    }
+    formatter->close_section();
+  }
+  formatter->flush(cout);
+
+  store->meta_mgr->list_keys_complete(handle);
+  return 0;
+}
+
+int handle_opt_user_list(const std::string& marker, bool max_entries_specified, int max_entries,
+                         RGWRados *store, Formatter *formatter) {
+  return handle_opt_metadata_list("user", marker, max_entries_specified, max_entries, store, formatter);
+}
+
 int handle_opt_mdlog_list(const std::string& start_date, const std::string& end_date, bool specified_shard_id,
                           int shard_id, const std::string& realm_id, const std::string& realm_name,
                           std::string& marker, std::string& period_id, RGWRados *store, Formatter *formatter)
@@ -672,6 +798,29 @@ int handle_opt_sync_error_trim(const std::string& start_date, const std::string&
   return 0;
 }
 
+int handle_opt_datalog_status(bool specified_shard_id, int shard_id, RGWRados *store, Formatter *formatter)
+{
+  RGWDataChangesLog *log = store->data_log;
+  int i = (specified_shard_id ? shard_id : 0);
+
+  formatter->open_array_section("entries");
+  for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
+    list<cls_log_entry> entries;
+
+    RGWDataChangesLogInfo info;
+    log->get_info(i, &info);
+
+    encode_json("info", info, formatter);
+
+    if (specified_shard_id)
+      break;
+  }
+
+  formatter->close_section();
+  formatter->flush(cout);
+  return 0;
+}
+
 int handle_opt_datalog_list(int max_entries, const std::string& start_date, const std::string& end_date,
                             bool extra_info, RGWRados *store, Formatter *formatter)
 {
@@ -737,6 +886,62 @@ int handle_opt_datalog_trim(const std::string& start_date, const std::string& en
   ret = log->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
   if (ret < 0) {
     cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_opstate_set(const std::string& client_id, const std::string& op_id, const std::string& object,
+                           const std::string& state_str, RGWRados *store)
+{
+  RGWOpState oc(store);
+
+  RGWOpState::OpState state;
+  if (object.empty() || client_id.empty() || op_id.empty()) {
+    cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+    return EINVAL;
+  }
+  if (state_str.empty()) {
+    cerr << "ERROR: state was not specified" << std::endl;
+    return EINVAL;
+  }
+  int ret = oc.state_from_str(state_str, &state);
+  if (ret < 0) {
+    cerr << "ERROR: invalid state: " << state_str << std::endl;
+    return -ret;
+  }
+
+  ret = oc.set_state(client_id, op_id, object, state);
+  if (ret < 0) {
+    cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
+    return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_opstate_renew(const std::string& client_id, const std::string& op_id, const std::string& object,
+                             const std::string& state_str, RGWRados *store)
+{
+  RGWOpState oc(store);
+
+  RGWOpState::OpState state;
+  if (object.empty() || client_id.empty() || op_id.empty()) {
+    cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
+    return EINVAL;
+  }
+  if (state_str.empty()) {
+    cerr << "ERROR: state was not specified" << std::endl;
+    return EINVAL;
+  }
+  int ret = oc.state_from_str(state_str, &state);
+  if (ret < 0) {
+    cerr << "ERROR: invalid state: " << state_str << std::endl;
+    return -ret;
+  }
+
+  ret = oc.renew_state(client_id, op_id, object, state);
+  if (ret < 0) {
+    cerr << "ERROR: failed to renew state: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
   return 0;

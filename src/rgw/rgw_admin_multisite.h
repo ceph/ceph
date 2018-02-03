@@ -91,7 +91,7 @@ int handle_opt_zonegroup_add(const string& zonegroup_id, const string& zonegroup
                              list<string>& sync_from_rm, CephContext *context, RGWRados *store,
                              Formatter *formatter);
 
-int handle_opt_zonegroup_create(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id, 
+int handle_opt_zonegroup_create(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id,
                                 const string& realm_name, const string& api_name, bool set_default, bool is_master,
                                 const list<string>& endpoints, CephContext *context, RGWRados *store, Formatter *formatter);
 
@@ -101,7 +101,7 @@ int handle_opt_zonegroup_default(const string& zonegroup_id, const string& zoneg
 int handle_opt_zonegroup_delete(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
                                 RGWRados *store);
 
-int handle_opt_zonegroup_get(const string& zonegroup_id, const string& zonegroup_name, CephContext *context, 
+int handle_opt_zonegroup_get(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
                              RGWRados *store, Formatter *formatter);
 
 int handle_opt_zonegroup_list(CephContext *context, RGWRados *store, Formatter *formatter);
@@ -112,10 +112,10 @@ int handle_opt_zonegroup_modify(const string& zonegroup_id, const string& zonegr
                                 CephContext *context, RGWRados *store, Formatter *formatter);
 
 int handle_opt_zonegroup_set(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id,
-                                const string& realm_name, const string& infile,  bool set_default, const list<string>& endpoints,
-                                CephContext *context, RGWRados *store, Formatter *formatter);
+                             const string& realm_name, const string& infile,  bool set_default, const list<string>& endpoints,
+                             CephContext *context, RGWRados *store, Formatter *formatter);
 
-int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegroup_name, string& zone_id, 
+int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegroup_name, string& zone_id,
                                 const string& zone_name, CephContext *context, RGWRados *store, Formatter *formatter);
 
 int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegroup_name,
@@ -128,7 +128,7 @@ int handle_opt_zonegroup_placement_add(const string& placement_id, const string&
                                        const string& zonegroup_name, const list<string>& tags, CephContext *context,
                                        RGWRados *store, Formatter *formatter);
 
-int handle_opt_zonegroup_placement_modify(const string& placement_id, const string& zonegroup_id, 
+int handle_opt_zonegroup_placement_modify(const string& placement_id, const string& zonegroup_id,
                                           const string& zonegroup_name, const list<string>& tags,
                                           const list<string> tags_add, const list<string>& tags_rm,
                                           CephContext *context, RGWRados *store, Formatter *formatter);
@@ -137,7 +137,7 @@ int handle_opt_zonegroup_placement_rm(const string& placement_id, const string& 
                                       const string& zonegroup_name, CephContext *context,
                                       RGWRados *store, Formatter *formatter);
 
-int handle_opt_zonegroup_placement_default(const string& placement_id, const string& zonegroup_id, 
+int handle_opt_zonegroup_placement_default(const string& placement_id, const string& zonegroup_id,
                                            const string& zonegroup_name, CephContext *context, RGWRados *store,
                                            Formatter *formatter);
 
@@ -183,16 +183,16 @@ int handle_opt_zone_rename(const string& zone_id, const string& zone_name, const
 int handle_opt_zone_placement_list(const string& zone_id, const string& zone_name, CephContext *context,
                                    RGWRados *store, Formatter *formatter);
 
-int handle_opt_zone_placement_add(const string& placement_id, const string& zone_id, const string& zone_name, 
+int handle_opt_zone_placement_add(const string& placement_id, const string& zone_id, const string& zone_name,
                                   const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
                                   const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
                                   bool index_type_specified, RGWBucketIndexType placement_index_type,
                                   CephContext *context, RGWRados *store, Formatter *formatter);
 
-int handle_opt_zone_placement_modify(const string& placement_id, const string& zone_id, const string& zone_name, 
-                                     const boost::optional<string>& compression_type, const boost::optional<string>& index_pool, 
-                                     const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool, 
-                                     bool index_type_specified, RGWBucketIndexType placement_index_type, 
+int handle_opt_zone_placement_modify(const string& placement_id, const string& zone_id, const string& zone_name,
+                                     const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
+                                     const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+                                     bool index_type_specified, RGWBucketIndexType placement_index_type,
                                      CephContext *context, RGWRados *store, Formatter *formatter);
 
 int handle_opt_zone_placement_rm(const string& placement_id, const string& zone_id, const string& zone_name,
