@@ -119,7 +119,7 @@ int main(int argc, const char **argv)
   rgw_bucket bucket;
   uint32_t perm_mask = 0;
   RGWUserInfo info;
-  int opt_cmd = OPT_NO_CMD;
+  RgwAdminCommand opt_cmd = OPT_NO_CMD;
   int gen_access_key = 0;
   int gen_secret_key = 0;
   bool set_perm = false;
@@ -450,6 +450,7 @@ int main(int argc, const char **argv)
         return handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type, g_ceph_context, store, formatter);
       case OPT_ZONE_PLACEMENT_LIST:
         return handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
+      default: break;
     }
   }
 

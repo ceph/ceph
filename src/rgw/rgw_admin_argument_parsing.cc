@@ -304,7 +304,7 @@ void usage()
   generic_client_usage();
 }
 
-int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
+static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more)
 {
   *need_more = false;
   // NOTE: please keep the checks in alphabetical order !!!
@@ -794,7 +794,7 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
 }
 
 int parse_command(const string& access_key, int gen_access_key, const string& secret_key, int gen_secret_key,
-                  vector<const char*>& args, int& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id)
+                  vector<const char*>& args, RgwAdminCommand& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id)
 {
   if (args.empty()) {
     usage();
@@ -803,10 +803,11 @@ int parse_command(const string& access_key, int gen_access_key, const string& se
   bool need_more;
   const char *prev_cmd = nullptr;
   const char *prev_prev_cmd = nullptr;
-  std::vector<const char*>::iterator i ;
+  std::vector<const char*>::iterator i;
+  int command_or_error = 0;
   for (i = args.begin(); i != args.end(); ++i) {
-    opt_cmd = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
-    if (opt_cmd < 0) {
+    command_or_error = get_cmd(*i, prev_cmd, prev_prev_cmd, &need_more);
+    if (command_or_error < 0) {
       cerr << "unrecognized arg " << *i << std::endl;
       usage();
       ceph_abort();
@@ -819,6 +820,7 @@ int parse_command(const string& access_key, int gen_access_key, const string& se
     prev_cmd = *i;
   }
 
+  opt_cmd = static_cast<RgwAdminCommand>(command_or_error);
   if (opt_cmd == OPT_NO_CMD) {
     usage();
     ceph_abort();

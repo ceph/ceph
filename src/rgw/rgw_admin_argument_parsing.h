@@ -9,10 +9,8 @@
 
 void usage();
 
-int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_cmd, bool *need_more);
-
 int parse_command(const string& access_key, int gen_access_key, const string& secret_key, int gen_secret_key,
-                  vector<const char*>& args, int& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id);
+                  vector<const char*>& args, RgwAdminCommand& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id);
 
 int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, string& tenant, string& access_key,
                                  string& subuser, string& secret_key, string& user_email, RGWUserAdminOpState& user_op,

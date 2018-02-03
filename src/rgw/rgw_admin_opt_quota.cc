@@ -4,7 +4,7 @@
 
 #include "rgw_admin_common.h"
 
-static void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, int64_t max_objects,
+static void set_quota_info(RGWQuotaInfo& quota, RgwAdminCommand opt_cmd, int64_t max_size, int64_t max_objects,
                     bool have_max_size, bool have_max_objects)
 {
   switch (opt_cmd) {
@@ -35,10 +35,11 @@ static void set_quota_info(RGWQuotaInfo& quota, int opt_cmd, int64_t max_size, i
     case OPT_GLOBAL_QUOTA_DISABLE:
       quota.enabled = false;
       break;
+    default: break;
   }
 }
 
-static int set_bucket_quota(RGWRados *store, int opt_cmd,
+static int set_bucket_quota(RGWRados *store, RgwAdminCommand opt_cmd,
                      const string& tenant_name, const string& bucket_name,
                      int64_t max_size, int64_t max_objects,
                      bool have_max_size, bool have_max_objects)
@@ -62,7 +63,7 @@ static int set_bucket_quota(RGWRados *store, int opt_cmd,
   return 0;
 }
 
-static int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+static int set_user_bucket_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                           bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
@@ -80,7 +81,7 @@ static int set_user_bucket_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState
   return 0;
 }
 
-static int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
+static int set_user_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
                    bool have_max_size, bool have_max_objects)
 {
   RGWUserInfo& user_info = op_state.get_user_info();
@@ -99,7 +100,7 @@ static int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_st
 }
 
 int handle_opt_global_quota(string& realm_id, const string& realm_name, bool have_max_size, int64_t max_size,
-                            bool have_max_objects, int64_t max_objects, int opt_cmd, const string& quota_scope,
+                            bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const string& quota_scope,
                             RGWRados *store, Formatter *formatter)
 {
   if (realm_id.empty()) {
@@ -176,7 +177,7 @@ int handle_opt_global_quota(string& realm_id, const string& realm_name, bool hav
 }
 
 int handle_opt_quota(const rgw_user& user_id, const string& bucket_name, const string& tenant, bool have_max_size,
-                     int64_t max_size, bool have_max_objects, int64_t max_objects, int opt_cmd, const string& quota_scope,
+                     int64_t max_size, bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const string& quota_scope,
                      RGWUser& user, RGWUserAdminOpState& user_op,
                      RGWRados *store) {
   if (bucket_name.empty() && user_id.empty()) {

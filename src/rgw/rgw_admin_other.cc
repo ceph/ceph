@@ -38,7 +38,7 @@ int handle_opt_log_list(const std::string& date, RGWRados *store, Formatter *for
   return 0;
 }
 
-int handle_opt_log_show_rm(int opt_cmd, const std::string& object, const std::string& date,
+int handle_opt_log_show_rm(RgwAdminCommand opt_cmd, const std::string& object, const std::string& date,
                            const std::string& bucket_id, const std::string& bucket_name, bool show_log_entries,
                            bool skip_zero_entries,  bool show_log_sum, RGWRados *store, Formatter *formatter) {
   if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
