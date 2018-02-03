@@ -23,6 +23,7 @@
 #include "log/SubsystemMap.h"
 #include "common/config_obs.h"
 #include "common/options.h"
+#include "common/subsys_types.h"
 
 class CephContext;
 
@@ -337,16 +338,5 @@ inline std::ostream& operator<<(std::ostream& o, const boost::blank& ) {
 
 int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result);
-
-enum config_subsys_id {
-  ceph_subsys_,   // default
-#define SUBSYS(name, log, gather) \
-  ceph_subsys_##name,
-#define DEFAULT_SUBSYS(log, gather)
-#include "common/subsys.h"
-#undef SUBSYS
-#undef DEFAULT_SUBSYS
-  ceph_subsys_max
-};
 
 #endif
