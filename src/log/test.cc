@@ -46,6 +46,35 @@ TEST(Log, Simple)
   log.stop();
 }
 
+TEST(Log, ReuseBad)
+{
+  SubsystemMap subs;
+  subs.add(1, "foo", 1, 1);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("/tmp/foo");
+  log.reopen_log_file();
+
+  const int l = 0;
+  {
+    auto e = log.create_entry(l, 1);
+    auto& out = e->get_ostream();
+    out << (const char*)nullptr;
+    EXPECT_TRUE(out.bad()); // writing nullptr to a stream sets its badbit
+    log.submit_entry(e);
+  }
+  {
+    auto e = log.create_entry(l, 1);
+    auto& out = e->get_ostream();
+    EXPECT_FALSE(out.bad()); // should not see failures from previous log entry
+    out << "hello world";
+    log.submit_entry(e);
+  }
+
+  log.flush();
+  log.stop();
+}
+
 int many = 10000;
 
 TEST(Log, ManyNoGather)

@@ -1986,6 +1986,8 @@ bool MDSRankDispatcher::handle_asok_command(
     command_dirfrag_merge(cmdmap, ss);
   } else if (command == "dirfrag ls") {
     command_dirfrag_ls(cmdmap, ss, f);
+  } else if (command == "openfiles ls") {
+    command_openfiles_ls(f);
   } else {
     return false;
   }
@@ -2497,6 +2499,12 @@ bool MDSRank::command_dirfrag_ls(
   return true;
 }
 
+void MDSRank::command_openfiles_ls(Formatter *f) 
+{
+  Mutex::Locker l(mds_lock);
+  mdcache->dump_openfiles(f);
+}
+
 void MDSRank::dump_status(Formatter *f) const
 {
   if (state == MDSMap::STATE_REPLAY ||
@@ -2610,13 +2618,15 @@ void MDSRank::create_logger()
 
   {
     PerfCountersBuilder mdm_plb(g_ceph_context, "mds_mem", l_mdm_first, l_mdm_last);
-    mdm_plb.add_u64(l_mdm_ino, "ino", "Inodes");
+    mdm_plb.add_u64(l_mdm_ino, "ino", "Inodes", "ino",
+                    PerfCountersBuilder::PRIO_INTERESTING);
     mdm_plb.add_u64_counter(l_mdm_inoa, "ino+", "Inodes opened");
     mdm_plb.add_u64_counter(l_mdm_inos, "ino-", "Inodes closed");
     mdm_plb.add_u64(l_mdm_dir, "dir", "Directories");
     mdm_plb.add_u64_counter(l_mdm_dira, "dir+", "Directories opened");
     mdm_plb.add_u64_counter(l_mdm_dirs, "dir-", "Directories closed");
-    mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries");
+    mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries", "dn",
+                    PerfCountersBuilder::PRIO_INTERESTING);
     mdm_plb.add_u64_counter(l_mdm_dna, "dn+", "Dentries opened");
     mdm_plb.add_u64_counter(l_mdm_dns, "dn-", "Dentries closed");
     mdm_plb.add_u64(l_mdm_cap, "cap", "Capabilities");

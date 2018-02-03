@@ -37,6 +37,7 @@ static const std::string POSITIONAL_COMMAND_SPEC("positional-command-spec");
 static const std::string POSITIONAL_ARGUMENTS("positional-arguments");
 static const std::string IMAGE_SPEC("image-spec");
 static const std::string GROUP_SPEC("group-spec");
+static const std::string GROUP_SNAP_SPEC("group-snap-spec");
 static const std::string SNAPSHOT_SPEC("snap-spec");
 static const std::string IMAGE_OR_SNAPSHOT_SPEC("image-or-snap-spec");
 static const std::string JOURNAL_SPEC("journal-spec");

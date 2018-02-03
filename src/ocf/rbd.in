@@ -123,12 +123,12 @@ do_rbd() {
     ocf_run rbd $rbd_options $@
 }
 
-# Convenience function that uses "rbd showmapped" to retrieve the
+# Convenience function that uses "rbd device list" to retrieve the
 # mapped device name from the pool, RBD name, and snapshot.
 find_rbd_dev() {
     local sedpat
 
-    # Example output from "rbd showmapped" (tab separated):
+    # Example output from "rbd device list" (tab separated):
     # id        pool    image   snap    device
     # 0         rbd     test    -       /dev/rbd0
 
@@ -136,9 +136,9 @@ find_rbd_dev() {
     # it's unset
     sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\).*"
 
-    # Run rbd showmapped, filter out the header line, then try to
+    # Run "rbd device list", filter out the header line, then try to
     # extract the device name
-    rbd showmapped | tail -n +2 | sed -n -e "s,$sedpat,\1,p"
+    rbd device list | tail -n +2 | sed -n -e "s,$sedpat,\1,p"
 }
 
 rbd_validate_all() {
@@ -211,7 +211,7 @@ rbd_start() {
         rbd_name="$rbd_name@${OCF_RESKEY_snap}"
     fi
 
-    do_rbd map $rbd_name $rbd_map_options || exit $OCF_ERR_GENERIC
+    do_rbd device map $rbd_name $rbd_map_options || exit $OCF_ERR_GENERIC
 
     # After the resource has been started, check whether it started up
     # correctly. If the resource starts asynchronously, the agent may
@@ -249,7 +249,7 @@ rbd_stop() {
     # exit with an $OCF_ERR_ error code if anything goes seriously
     # wrong)
     rbd_dev=`find_rbd_dev`
-    do_rbd unmap $rbd_dev || exit $OCF_ERR_GENERIC
+    do_rbd device unmap $rbd_dev || exit $OCF_ERR_GENERIC
 
     # After the resource has been stopped, check whether it shut down
     # correctly. If the resource stops asynchronously, the agent may
