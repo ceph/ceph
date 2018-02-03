@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <algorithm>
 
 #include "common/subsys_types.h"
 
@@ -14,62 +15,89 @@
 namespace ceph {
 namespace logging {
 
-struct Subsystem {
-  int log_level, gather_level;
-  std::string name;
-  
-  Subsystem() : log_level(0), gather_level(0) {}     
-};
-
 class SubsystemMap {
-  std::vector<Subsystem> m_subsys;
-  unsigned m_max_name_len;
+  // Access to the current gathering levels must be *FAST* as they are
+  // read over and over from all places in the code (via should_gather()
+  // by i.e. dout).
+  std::array<uint8_t, ceph_subsys_get_num()> m_gather_levels;
+
+  // The rest. Should be as small as possible to not unnecessarily
+  // enlarge md_config_t and spread it other elements across cache
+  // lines. Access can be slow.
+  std::vector<ceph_subsys_item_t> m_subsys;
+
+  // TODO(rzarzynski): knock this out with constexpr.
+  unsigned m_max_name_len = 0;
 
   friend class Log;
 
 public:
-  SubsystemMap() : m_max_name_len(0) {}
+  SubsystemMap() : m_max_name_len(0) {
+    constexpr auto s = ceph_subsys_get_as_array();
+    m_subsys.reserve(s.size());
 
-  size_t get_num() const {
-    return m_subsys.size();
+    std::size_t i = 0;
+    for (const ceph_subsys_item_t& item : s) {
+      m_subsys.emplace_back(item);
+      m_gather_levels[i++] = std::max(item.log_level, item.gather_level);
+
+      m_max_name_len = std::max(m_max_name_len,
+        static_cast<unsigned>(strlen(item.name)));
+    }
+  }
+
+  constexpr static size_t get_num() {
+    return ceph_subsys_get_num();
   }
 
   int get_max_subsys_len() const {
     return m_max_name_len;
   }
 
-  void add(unsigned subsys, std::string name, int log, int gather);  
-  void set_log_level(unsigned subsys, int log);
-  void set_gather_level(unsigned subsys, int gather);
-
   int get_log_level(unsigned subsys) const {
-    if (subsys >= m_subsys.size())
+    if (subsys >= get_num())
       subsys = 0;
     return m_subsys[subsys].log_level;
   }
 
   int get_gather_level(unsigned subsys) const {
-    if (subsys >= m_subsys.size())
+    if (subsys >= get_num())
       subsys = 0;
     return m_subsys[subsys].gather_level;
   }
 
-  const std::string& get_name(unsigned subsys) const {
-    if (subsys >= m_subsys.size())
+  // TODO(rzarzynski): move to string_view?
+  constexpr const char* get_name(unsigned subsys) const {
+    if (subsys >= get_num())
       subsys = 0;
-    return m_subsys[subsys].name;
+    return ceph_subsys_get_as_array()[subsys].name;
   }
 
   template <unsigned SubV>
   bool should_gather(int level) {
-    static_assert(SubV < ceph_subsys_get_num(), "wrong subsystem ID");
-    return level <= m_subsys[SubV].gather_level ||
-      level <= m_subsys[SubV].log_level;
+    static_assert(SubV < get_num(), "wrong subsystem ID");
+    return level <= m_gather_levels[SubV];
   }
   bool should_gather(const unsigned sub, int level) {
     assert(sub < m_subsys.size());
-    return level <= m_subsys[sub].gather_level ||
-      level <= m_subsys[sub].log_level;
+    return level <= m_gather_levels[sub];
+  }
+
+  // TODO(rzarzynski): verify the -1 case
+  void set_log_level(unsigned subsys, uint8_t log)
+  {
+    assert(subsys < m_subsys.size());
+    m_subsys[subsys].log_level = log;
+    m_gather_levels[subsys] = \
+      std::max(log, m_subsys[subsys].gather_level);
+  }
+
+  void set_gather_level(unsigned subsys, uint8_t gather)
+  {
+    assert(subsys < m_subsys.size());
+    m_subsys[subsys].gather_level = gather;
+    m_gather_levels[subsys] = \
+      std::max(m_subsys[subsys].log_level, gather);
   }
 };
 

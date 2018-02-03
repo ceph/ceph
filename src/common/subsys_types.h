@@ -15,6 +15,8 @@
 #ifndef CEPH_SUBSYS_TYPES_H
 #define CEPH_SUBSYS_TYPES_H
 
+#include <array>
+
 enum ceph_subsys_id_t {
   ceph_subsys_,   // default
 #define SUBSYS(name, log, gather) \
@@ -28,6 +30,26 @@ enum ceph_subsys_id_t {
 
 constexpr static std::size_t ceph_subsys_get_num() {
   return static_cast<std::size_t>(ceph_subsys_max);
+}
+
+struct ceph_subsys_item_t {
+  const char* name;
+  uint8_t log_level;
+  uint8_t gather_level;
+};
+
+constexpr static std::array<ceph_subsys_item_t, ceph_subsys_get_num()>
+ceph_subsys_get_as_array() {
+#define SUBSYS(name, log, gather) \
+  ceph_subsys_item_t{ #name, log, gather },
+#define DEFAULT_SUBSYS(log, gather) \
+  ceph_subsys_item_t{ "none", log, gather },
+
+  return {
+#include "common/subsys.h"
+  };
+#undef SUBSYS
+#undef DEFAULT_SUBSYS
 }
 
 #endif // CEPH_SUBSYS_TYPES_H

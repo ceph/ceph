@@ -451,7 +451,6 @@ set(libcommon_files
   common/types.cc
   common/iso_8601.cc
   log/Log.cc
-  log/SubsystemMap.cc
   mon/MonCap.cc
   mon/MonClient.cc
   mon/MonMap.cc
