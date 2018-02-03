@@ -954,8 +954,7 @@ COMMAND("osd pool get-quota " \
         "osd", "r", "cli,rest")
 COMMAND("osd pool application enable " \
         "name=pool,type=CephPoolname " \
-        "name=app,type=CephString,goodchars=[A-Za-z0-9-_.] " \
-	"name=force,type=CephChoices,strings=--yes-i-really-mean-it,req=false", \
+        "name=app,type=CephString,goodchars=[A-Za-z0-9-_.] ", \
         "enable use of an application <app> [cephfs,rbd,rgw] on pool <poolname>",
         "osd", "rw", "cli,rest")
 COMMAND("osd pool application disable " \
