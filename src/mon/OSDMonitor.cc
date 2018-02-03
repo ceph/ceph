@@ -1346,23 +1346,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   encode_health(next, t);
 }
 
-void OSDMonitor::trim_creating_pgs(creating_pgs_t* creating_pgs,
-				   const ceph::unordered_map<pg_t,pg_stat_t>& pg_stat)
-{
-  auto p = creating_pgs->pgs.begin();
-  while (p != creating_pgs->pgs.end()) {
-    auto q = pg_stat.find(p->first);
-    if (q != pg_stat.end() &&
-	!(q->second.state & PG_STATE_CREATING)) {
-      dout(20) << __func__ << " pgmap shows " << p->first << " is created"
-	       << dendl;
-      p = creating_pgs->pgs.erase(p);
-    } else {
-      ++p;
-    }
-  }
-}
-
 int OSDMonitor::load_metadata(int osd, map<string, string>& m, ostream *err)
 {
   bufferlist bl;
