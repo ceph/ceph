@@ -102,6 +102,7 @@
 # redmine issue update: http://www.redmine.org/projects/redmine/wiki/Rest_Issues
 
 import argparse
+import codecs
 import datetime
 import getpass
 import git
@@ -139,7 +140,7 @@ INDICATIONS = [
 
 CONTRIBUTORS = {}
 NEW_CONTRIBUTORS = {}
-with open(".githubmap") as f:
+with codecs.open(".githubmap", encoding='utf-8') as f:
     comment = re.compile("\s*#")
     patt = re.compile("([\w-]+)\s+(.*)")
     for line in f:
