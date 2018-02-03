@@ -77,8 +77,8 @@ int main(int argc, const char **argv)
   argv_to_vec(argc, (const char **)argv, args);
   env_to_vec(args);
 
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
-                         CODE_ENVIRONMENT_UTILITY, 0);
+  boost::intrusive_ptr<CephContext> cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+                                                      CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf->rgw_region.empty() && g_conf->rgw_zonegroup.empty()) {
@@ -245,13 +245,15 @@ int main(int argc, const char **argv)
                                          data_pool, data_extra_pool, placement_index_type, index_type_specified,
                                          compression_type, role_name, path, assume_role_doc, policy_name,
                                          perm_policy_doc, path_prefix);
-  if (ret != 0)
+  if (ret != 0) {
     return ret;
+  }
 
   ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd, metadata_key, tenant,
                       user_id);
-  if (ret != 0)
+  if (ret != 0) {
     return ret;
+  }
 
 
   // default to pretty json
@@ -332,380 +334,123 @@ int main(int argc, const char **argv)
   if (raw_storage_op) {
     switch (opt_cmd) {
     case OPT_PERIOD_DELETE:
-      ret = handle_opt_period_delete(period_id, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-      break;
+      return handle_opt_period_delete(period_id, g_ceph_context, store);
     case OPT_PERIOD_GET:
-      ret = handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-      break;
+      return handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name, g_ceph_context, store, formatter);
     case OPT_PERIOD_GET_CURRENT:
-      ret = handle_opt_period_get_current(realm_id, realm_name, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-      break;
+      return handle_opt_period_get_current(realm_id, realm_name, store, formatter);
     case OPT_PERIOD_LIST:
-      {
-        ret = handle_opt_period_list(store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_period_list(store, formatter);
     case OPT_PERIOD_UPDATE:
-      {
-        ret = update_period(store, realm_id, realm_name, period_id, period_epoch,
+      return update_period(store, realm_id, realm_name, period_id, period_epoch,
                                 commit, remote, url, access_key, secret_key,
                                 formatter, yes_i_really_mean_it);
-	if (ret < 0) {
-	  return -ret;
-	}
-      }
-      break;
     case OPT_PERIOD_PULL:
-      {
-        ret = handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
+      return handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
                                      remote, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_GLOBAL_QUOTA_GET:
     case OPT_GLOBAL_QUOTA_SET:
     case OPT_GLOBAL_QUOTA_ENABLE:
-    case OPT_GLOBAL_QUOTA_DISABLE: {
-      ret = handle_opt_global_quota(realm_id, realm_name, have_max_size, max_size, have_max_objects, max_objects,
+    case OPT_GLOBAL_QUOTA_DISABLE:
+      return handle_opt_global_quota(realm_id, realm_name, have_max_size, max_size, have_max_objects, max_objects,
                                     opt_cmd, quota_scope, store, formatter);
-      if (ret != 0) return ret;
-      break;
-    }
     case OPT_REALM_CREATE:
-      {
-        ret = handle_opt_realm_create(realm_name, set_default, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_realm_create(realm_name, set_default, g_ceph_context, store, formatter);
     case OPT_REALM_DELETE:
-    {
-      ret = handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_delete(realm_id, realm_name, g_ceph_context, store);
     case OPT_REALM_GET:
-    {
-      ret = handle_opt_realm_get(realm_id, realm_name, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_get(realm_id, realm_name, g_ceph_context, store, formatter);
     case OPT_REALM_GET_DEFAULT:
-    {
-      ret = handle_opt_realm_get_default(g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_get_default(g_ceph_context, store);
     case OPT_REALM_LIST:
-    {
-      ret = handle_opt_realm_list(g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_list(g_ceph_context, store, formatter);
     case OPT_REALM_LIST_PERIODS:
-    {
-      ret = handle_opt_realm_list_periods(realm_id, realm_name, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
-
+      return handle_opt_realm_list_periods(realm_id, realm_name, store, formatter);
     case OPT_REALM_RENAME:
-    {
-      ret = handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, store);
     case OPT_REALM_SET:
-    {
-      ret = handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
-
+      return handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
     case OPT_REALM_DEFAULT:
-    {
-      ret = handle_opt_realm_default(realm_id, realm_name, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_realm_default(realm_id, realm_name, g_ceph_context, store);
     case OPT_REALM_PULL:
-    {
-      ret =  handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
+      return handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
                                    store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
     case OPT_ZONEGROUP_ADD:
-      {
-	ret = handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name, tier_type_specified, &tier_type,
+      return handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name, tier_type_specified, &tier_type,
                                        tier_config_add, sync_from_all_specified, &sync_from_all, redirect_zone_set,
                                        &redirect_zone, is_master_set, &is_master, is_read_only_set, &read_only, endpoints,
                                        sync_from, sync_from_rm, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_ZONEGROUP_CREATE:
-      {
-        ret = handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, set_default,
+      return handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, set_default,
                                           is_master, endpoints, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_ZONEGROUP_DEFAULT:
-      {
-        ret = handle_opt_zonegroup_default(zonegroup_id, zonegroup_name, g_ceph_context, store);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zonegroup_default(zonegroup_id, zonegroup_name, g_ceph_context, store);
     case OPT_ZONEGROUP_DELETE:
-    {
-      ret = handle_opt_zonegroup_delete(zonegroup_id, zonegroup_name, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_zonegroup_delete(zonegroup_id, zonegroup_name, g_ceph_context, store);
     case OPT_ZONEGROUP_GET:
-    {
-      ret = handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
     case OPT_ZONEGROUP_LIST:
-    {
-      ret = handle_opt_zonegroup_list(g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_zonegroup_list(g_ceph_context, store, formatter);
     case OPT_ZONEGROUP_MODIFY:
-    {
-      ret = handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, master_zone,
+      return handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, master_zone,
                                         is_master_set, is_master, set_default, endpoints, g_ceph_context, store,
                                         formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
     case OPT_ZONEGROUP_SET:
-      {
-        ret = handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile, set_default,
+      return handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile, set_default,
                                        endpoints, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_ZONEGROUP_REMOVE:
-      {
-        ret = handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name, g_ceph_context, store, formatter);
     case OPT_ZONEGROUP_RENAME:
-      {
-	ret = handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name, g_ceph_context, store);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name, g_ceph_context, store);
     case OPT_ZONEGROUP_PLACEMENT_LIST:
-      {
-        ret = handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
     case OPT_ZONEGROUP_PLACEMENT_ADD:
-    {
-      ret = handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags, g_ceph_context,
+      return handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags, g_ceph_context,
                                                store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-        break;
     case OPT_ZONEGROUP_PLACEMENT_MODIFY:
-    {
-      ret = handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name, tags, tags_add, tags_rm,
+      return handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name, tags, tags_add, tags_rm,
                                                   g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-        break;
     case OPT_ZONEGROUP_PLACEMENT_RM:
-    {
-      ret = handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-        break;
+      return handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
     case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
-    {
-      ret = handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
     case OPT_ZONE_CREATE:
-      {
-        ret = handle_opt_zone_create(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
+      return handle_opt_zone_create(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
                                      secret_key, tier_type_specified, &tier_type, tier_config_add,
                                      sync_from_all_specified, &sync_from_all, redirect_zone_set, &redirect_zone,
                                      is_master_set, &is_master, is_read_only_set, &read_only, endpoints, sync_from,
                                      sync_from_rm, set_default, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_ZONE_DEFAULT:
-      {
-        ret = handle_opt_zone_default(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_default(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
     case OPT_ZONE_DELETE:
-    {
-      ret = handle_opt_zone_delete(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
+      return handle_opt_zone_delete(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
     case OPT_ZONE_GET:
-      {
-        ret = handle_opt_zone_get(zone_id, zone_name, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_get(zone_id, zone_name, g_ceph_context, store, formatter);
     case OPT_ZONE_SET:
-      {
-        ret = handle_opt_zone_set(zone_name, realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return 0;
-        }
-      }
-      break;
+      return handle_opt_zone_set(zone_name, realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
     case OPT_ZONE_LIST:
-      {
-        ret = handle_opt_zone_list(g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_list(g_ceph_context, store, formatter);
     case OPT_ZONE_MODIFY:
-      {
-        ret = handle_opt_zone_modify(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
+      return handle_opt_zone_modify(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
                                      secret_key, tier_type_specified, &tier_type, tier_config_add, tier_config_rm,
                                      sync_from_all_specified, &sync_from_all, redirect_zone_set, &redirect_zone,
                                      is_master_set, &is_master, is_read_only_set, &read_only, endpoints, sync_from,
                                      sync_from_rm, set_default, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
     case OPT_ZONE_RENAME:
-      {
-        ret = handle_opt_zone_rename(zone_id, zone_name, zone_new_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_rename(zone_id, zone_name, zone_new_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
     case OPT_ZONE_PLACEMENT_ADD:
-    {
-      ret = handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
+      return handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
                                           data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
                                           store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-      break;
     case OPT_ZONE_PLACEMENT_MODIFY:
-    {
-      ret = handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
+      return handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
                                              data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
                                              store, formatter);
-      if (ret != 0) {
-        return ret;
-      }
-    }
-        break;
     case OPT_ZONE_PLACEMENT_RM:
-      {
-        ret = handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type, g_ceph_context, store, formatter);
     case OPT_ZONE_PLACEMENT_LIST:
-      {
-        ret = handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
-        if (ret != 0) {
-          return ret;
-        }
-      }
-      break;
+      return handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
     }
-    return 0;
   }
 
   if (!user_id.empty()) {
@@ -755,9 +500,8 @@ int main(int argc, const char **argv)
     user_op.set_perm(perm_mask);
 
   if (set_temp_url_key) {
-    auto iter = temp_url_keys.begin();
-    for (; iter != temp_url_keys.end(); ++iter) {
-      user_op.set_temp_url_key(iter->second, iter->first);
+    for (auto &temp_url_key : temp_url_keys) {
+      user_op.set_temp_url_key(temp_url_key.second, temp_url_key.first);
     }
   }
 
@@ -776,6 +520,7 @@ int main(int argc, const char **argv)
     user_op.set_key_type(key_type);
 
   // set suspension operation parameters
+  // TODO: move
   if (opt_cmd == OPT_USER_ENABLE)
     user_op.set_suspension(false);
   else if (opt_cmd == OPT_USER_SUSPEND)
@@ -926,6 +671,7 @@ int main(int argc, const char **argv)
     show_user_info(info, formatter);
   }
 
+  // TODO: move
   if (opt_cmd == OPT_POLICY) {
     if (format == "xml") {
       int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
@@ -947,45 +693,33 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
-    ret = handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket, bucket_op,
+    return handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket, bucket_op,
                                    f, store, formatter);
-    if (ret != 0)
-      return ret;
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    ret = handle_opt_bucket_stats(bucket_op, f, store);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_stats(bucket_op, f, store);
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    ret = handle_opt_bucket_link(bucket_id, bucket_op, store);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_link(bucket_id, bucket_op, store);
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    ret = handle_opt_bucket_unlink(bucket_op, store);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_unlink(bucket_op, store);
   }
 
   if (opt_cmd == OPT_LOG_LIST) {
-    ret = handle_opt_log_list(date, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_log_list(date, store, formatter);
   }
 
+  // TODO: split
   if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
-    ret = handle_opt_log_show_rm(opt_cmd, object, date, bucket_id, bucket_name, show_log_entries, skip_zero_entries,
+    return handle_opt_log_show_rm(opt_cmd, object, date, bucket_id, bucket_name, show_log_entries, skip_zero_entries,
                                  show_log_sum, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
   }
 
+  // TODO: move pool-related commands
   if (opt_cmd == OPT_POOL_ADD) {
     if (pool_name.empty()) {
       cerr << "need to specify pool to add!" << std::endl;
@@ -1030,88 +764,53 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_USAGE_SHOW) {
-    ret = handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum, f, &categories, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum, f, &categories, store);
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
-    ret = handle_opt_usage_trim(user_id, start_date, end_date, yes_i_really_mean_it, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_usage_trim(user_id, start_date, end_date, yes_i_really_mean_it, store);
   }
 
   if (opt_cmd == OPT_OLH_GET) {
-    ret = handle_opt_olh_get(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_olh_get(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_OLH_READLOG) {
-    ret = handle_opt_olh_readlog(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_olh_readlog(tenant, bucket_id, bucket_name, object, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BI_GET) {
-    ret = handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type, object_version, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type, object_version, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BI_PUT) {
-    ret = handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bi_put(bucket_id, bucket_name, tenant, infile, object_version, bucket, store);
   }
 
   if (opt_cmd == OPT_BI_LIST) {
-    ret = handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BI_PURGE) {
-    ret = handle_opt_bi_purge(bucket_id, bucket_name, tenant, yes_i_really_mean_it, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bi_purge(bucket_id, bucket_name, tenant, yes_i_really_mean_it, bucket, store);
   }
 
   if (opt_cmd == OPT_OBJECT_RM) {
-    ret = handle_opt_object_rm(bucket_id, bucket_name, tenant, object, object_version, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_object_rm(bucket_id, bucket_name, tenant, object, object_version, bucket, store);
   }
 
   if (opt_cmd == OPT_OBJECT_REWRITE) {
-    ret = handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version, min_rewrite_stripe_size,
+    return handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version, min_rewrite_stripe_size,
                                     bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
   }
 
   if (opt_cmd == OPT_OBJECTS_EXPIRE) {
-    ret = handle_opt_object_expire(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_object_expire(store);
   }
 
   if (opt_cmd == OPT_BUCKET_REWRITE) {
-    ret = handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date, min_rewrite_size,
+    return handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date, min_rewrite_size,
                                     max_rewrite_size, min_rewrite_stripe_size, bucket, store, formatter);
-    if (ret != 0)
-      return ret;
   }
 
   if (opt_cmd == OPT_BUCKET_RESHARD) {
@@ -1130,80 +829,49 @@ int main(int argc, const char **argv)
 
 
   if (opt_cmd == OPT_RESHARD_STATUS) {
-    ret = handle_opt_reshard_status(bucket_id, bucket_name, tenant, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_reshard_status(bucket_id, bucket_name, tenant, store, formatter);
   }
 
   if (opt_cmd == OPT_RESHARD_PROCESS) {
-    ret = handle_opt_reshard_process(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_reshard_process(store);
   }
 
   if (opt_cmd == OPT_RESHARD_CANCEL) {
-    ret = handle_opt_reshard_cancel(bucket_name, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_reshard_cancel(bucket_name, store);
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    ret = handle_opt_object_unlink(bucket_id, bucket_name, tenant, object, object_version, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_object_unlink(bucket_id, bucket_name, tenant, object, object_version, bucket, store);
   }
 
   if (opt_cmd == OPT_OBJECT_STAT) {
-    ret = handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
-    ret = handle_opt_bucket_check(check_head_obj_locator, bucket_name, tenant, fix, remove_bad,
+    return handle_opt_bucket_check(check_head_obj_locator, bucket_name, tenant, fix, remove_bad,
                                   bucket_op, f, store, formatter);
-    if (ret != 0)
-      return ret;
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    ret = handle_opt_bucket_rm(inconsistent_index, bypass_gc, yes_i_really_mean_it, bucket_op, store);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_rm(inconsistent_index, bypass_gc, yes_i_really_mean_it, bucket_op, store);
   }
 
   if (opt_cmd == OPT_GC_LIST) {
-    ret = handle_opt_gc_list(include_all, marker, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_gc_list(include_all, marker, store, formatter);
   }
 
   if (opt_cmd == OPT_GC_PROCESS) {
-    ret = handle_opt_gc_process(include_all, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_gc_process(include_all, store);
   }
 
   if (opt_cmd == OPT_LC_LIST) {
-    ret = handle_opt_lc_list(max_entries, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_lc_list(max_entries, store, formatter);
   }
 
 
   if (opt_cmd == OPT_LC_PROCESS) {
-    ret = handle_opt_lc_process(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_lc_process(store);
   }
 
   if (opt_cmd == OPT_ORPHANS_FIND) {
@@ -1286,31 +954,19 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_USER_STATS) {
-    ret = handle_opt_user_stats(sync_stats, bucket_name, tenant, user_id, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_user_stats(sync_stats, bucket_name, tenant, user_id, store, formatter);
   }
 
   if (opt_cmd == OPT_METADATA_GET) {
-    ret = handle_opt_metadata_get(metadata_key, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_get(metadata_key, store, formatter);
   }
 
   if (opt_cmd == OPT_METADATA_PUT) {
-    ret = handle_opt_metadata_put(metadata_key, infile, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_put(metadata_key, infile, store, formatter);
   }
 
   if (opt_cmd == OPT_METADATA_RM) {
-    ret = handle_opt_metadata_rm(metadata_key, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_rm(metadata_key, store, formatter);
   }
 
   if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
@@ -1342,8 +998,8 @@ int main(int argc, const char **argv)
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
-	for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
-	  formatter->dump_string("key", *iter);
+	for (auto &key : keys) {
+	  formatter->dump_string("key", key);
           ++count;
 	}
 	formatter->flush(cout);
@@ -1366,32 +1022,20 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_MDLOG_LIST) {
-    ret = handle_opt_mdlog_list(start_date, end_date, specified_shard_id, shard_id, realm_id, realm_name, marker,
-                                period_id, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_mdlog_list(start_date, end_date, specified_shard_id, shard_id, realm_id, realm_name, marker,
+                                 period_id, store, formatter);
   }
 
   if (opt_cmd == OPT_MDLOG_STATUS) {
-    ret = handle_opt_mdlog_status(specified_shard_id, shard_id, realm_id, realm_name, marker, period_id, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_mdlog_status(specified_shard_id, shard_id, realm_id, realm_name, marker, period_id, store, formatter);
   }
 
   if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
-    ret = handle_opt_mdlog_autotrim(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_mdlog_autotrim(store);
   }
 
   if (opt_cmd == OPT_MDLOG_TRIM) {
-    ret = handle_opt_mdlog_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, period_id, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_mdlog_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, period_id, store);
   }
 
   if (opt_cmd == OPT_SYNC_STATUS) {
@@ -1399,54 +1043,35 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
-    ret = handle_opt_metadata_sync_status(store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_sync_status(store, formatter);
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_INIT) {
-    ret = handle_opt_metadata_sync_init(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_sync_init(store);
   }
 
 
   if (opt_cmd == OPT_METADATA_SYNC_RUN) {
-    ret = handle_opt_metadata_sync_run(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_metadata_sync_run(store);
   }
 
   if (opt_cmd == OPT_DATA_SYNC_STATUS) {
-    ret = handle_opt_data_sync_status(source_zone, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_data_sync_status(source_zone, store, formatter);
   }
 
   if (opt_cmd == OPT_DATA_SYNC_INIT) {
-    ret = handle_opt_data_sync_init(source_zone, cct, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_data_sync_init(source_zone, cct, store);
   }
 
   if (opt_cmd == OPT_DATA_SYNC_RUN) {
-    ret = handle_opt_data_sync_run(source_zone, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_data_sync_run(source_zone, store);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_INIT) {
-    ret = handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
   }
 
+  // TODO: move (+split?)
   if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -1477,66 +1102,42 @@ int main(int argc, const char **argv)
 }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
-    ret = handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, bucket_op, store, formatter);
-    if (ret != 0)
-      return ret;
+    return handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, bucket_op, store, formatter);
   }
 
  if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
-   ret = handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
-   if (ret != 0)
-     return ret;
+   return handle_opt_bucket_sync_run(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
  }
 
   if (opt_cmd == OPT_BILOG_LIST) {
-    ret = handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_SYNC_ERROR_LIST) {
-    ret = handle_opt_sync_error_list(max_entries, start_date, end_date, specified_shard_id, shard_id, marker, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_sync_error_list(max_entries, start_date, end_date, specified_shard_id, shard_id, marker, store, formatter);
   }
 
   if (opt_cmd == OPT_SYNC_ERROR_TRIM) {
-    ret = handle_opt_sync_error_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_sync_error_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, store);
   }
 
   if (opt_cmd == OPT_BILOG_TRIM) {
-    ret = handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker, end_marker, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker, end_marker, bucket, store);
   }
 
   if (opt_cmd == OPT_BILOG_STATUS) {
-    ret = handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BILOG_AUTOTRIM) {
-    ret = handle_opt_bilog_autotrim(store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_bilog_autotrim(store);
   }
 
   if (opt_cmd == OPT_DATALOG_LIST) {
-    ret = handle_opt_datalog_list(max_entries, start_date, end_date, extra_info, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_datalog_list(max_entries, start_date, end_date, extra_info, store, formatter);
   }
 
+  // TOOD: remove :: and handle with other datalogs
   if (opt_cmd == OPT_DATALOG_STATUS) {
     RGWDataChangesLog *log = store->data_log;
     int i = (specified_shard_id ? shard_id : 0);
@@ -1559,19 +1160,14 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_DATALOG_TRIM) {
-    ret = handle_opt_datalog_trim(start_date, end_date, start_marker, end_marker, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_datalog_trim(start_date, end_date, start_marker, end_marker, store);
   }
 
   if (opt_cmd == OPT_OPSTATE_LIST) {
-    ret = handle_opt_opstate_list(client_id, op_id, object, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_opstate_list(client_id, op_id, object, store, formatter);
   }
 
+  // TODO: split those two into different handler functions
   if (opt_cmd == OPT_OPSTATE_SET || opt_cmd == OPT_OPSTATE_RENEW) {
     RGWOpState oc(store);
 
@@ -1604,42 +1200,29 @@ int main(int argc, const char **argv)
       }
     }
   }
+
   if (opt_cmd == OPT_OPSTATE_RM) {
-    ret = handle_opt_opstate_rm(client_id, op_id, object, store);
-    if (ret != 0) {
-      return ret;
-    }
+    return handle_opt_opstate_rm(client_id, op_id, object, store);
   }
 
   if (opt_cmd == OPT_REPLICALOG_GET) {
-    ret = handle_opt_replicalog_get(replica_log_type_str, replica_log_type, specified_shard_id, shard_id, bucket_id,
+    return handle_opt_replicalog_get(replica_log_type_str, replica_log_type, specified_shard_id, shard_id, bucket_id,
                                     bucket_name, tenant, pool, bucket, store, formatter);
-    if (ret != 0) {
-      return ret;
-    }
   }
 
   if (opt_cmd == OPT_REPLICALOG_DELETE) {
-    ret = handle_opt_replicalog_delete(replica_log_type_str, replica_log_type, specified_shard_id, shard_id,
+    return handle_opt_replicalog_delete(replica_log_type_str, replica_log_type, specified_shard_id, shard_id,
                                        specified_daemon_id, daemon_id, bucket_id, bucket_name, tenant, pool, bucket,
                                        store);
-    if (ret != 0) {
-      return ret;
-    }
   }
 
   if (opt_cmd == OPT_REPLICALOG_UPDATE) {
-    ret = handle_opt_replicalog_update(replica_log_type_str, replica_log_type, marker, date, infile,
+    return handle_opt_replicalog_update(replica_log_type_str, replica_log_type, marker, date, infile,
                                        specified_shard_id, shard_id, specified_daemon_id, daemon_id, bucket_id,
                                        bucket_name, tenant, pool, bucket, store);
-    if (ret != 0) {
-      return ret;
-    }
   }
 
-  bool quota_op = (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE);
-
-  if (quota_op)
+  if (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE)
     return handle_opt_quota(user_id, bucket_name, tenant, have_max_size, max_size, have_max_objects, max_objects,
                             opt_cmd, quota_scope, user, user_op, store);
 
