@@ -11,34 +11,31 @@
 #include "rgw_xml.h"
 #include "rgw_tag_s3.h"
 
-class LCID_S3 : public XMLObj
-{
+class LCID_S3 : public XMLObj {
 public:
   LCID_S3() {}
   ~LCID_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCPrefix_S3 : public XMLObj
-{
+class LCPrefix_S3 : public XMLObj {
 public:
   LCPrefix_S3() {}
   ~LCPrefix_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCFilter_S3 : public LCFilter, public XMLObj
-{
+class LCFilter_S3 : public LCFilter, public XMLObj {
  public:
   ~LCFilter_S3() override {}
   string& to_str() { return data; }
-  void to_xml(ostream& out){
+  void to_xml(ostream& out) {
     out << "<Filter>";
     stringstream ss;
     if (has_prefix())
       out << "<Prefix>" << prefix << "</Prefix>";
-    if (has_tags()){
-      for (const auto&kv : obj_tags.get_tags()){
+    if (has_tags()) {
+      for (const auto&kv : obj_tags.get_tags()) {
         ss << "<Tag>";
         ss << "<Key>" << kv.first << "</Key>";
         ss << "<Value>" << kv.second << "</Value>";
@@ -60,7 +57,7 @@ class LCFilter_S3 : public LCFilter, public XMLObj
       f->open_object_section("And");
     if (!prefix.empty())
       encode_xml("Prefix", prefix, f);
-    if (has_tags()){
+    if (has_tags()) {
       const auto& tagset_s3 = static_cast<const RGWObjTagSet_S3 &>(obj_tags);
       tagset_s3.dump_xml(f);
     }
@@ -71,40 +68,35 @@ class LCFilter_S3 : public LCFilter, public XMLObj
   bool xml_end(const char *el) override;
 };
 
-class LCStatus_S3 : public XMLObj
-{
+class LCStatus_S3 : public XMLObj {
 public:
   LCStatus_S3() {}
   ~LCStatus_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCDays_S3 : public XMLObj
-{
+class LCDays_S3 : public XMLObj {
 public:
   LCDays_S3() {}
   ~LCDays_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCDate_S3 : public XMLObj
-{
+class LCDate_S3 : public XMLObj {
 public:
   LCDate_S3() {}
   ~LCDate_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCDeleteMarker_S3 : public XMLObj
-{
+class LCDeleteMarker_S3 : public XMLObj {
 public:
   LCDeleteMarker_S3() {}
   ~LCDeleteMarker_S3() override {}
   string& to_str() { return data; }
 };
 
-class LCExpiration_S3 : public LCExpiration, public XMLObj
-{
+class LCExpiration_S3 : public LCExpiration, public XMLObj {
 private:
   bool dm_expiration;
 public:
@@ -121,7 +113,7 @@ public:
     out << "<Expiration>";
     if (dm_expiration) {
       out << "<ExpiredObjectDeleteMarker>" << "true" << "</ExpiredObjectDeleteMarker>";
-    } else if (!days.empty()){
+    } else if (!days.empty()) {
       out << "<Days>" << days << "</Days>";
     } else {
       out << "<Date>" << date << "</Date>";
@@ -149,32 +141,34 @@ public:
   }
 };
 
-class LCNoncurExpiration_S3 : public LCExpiration, public XMLObj
-{
+class LCNoncurExpiration_S3 : public LCExpiration, public XMLObj {
 public:
   LCNoncurExpiration_S3() {}
   ~LCNoncurExpiration_S3() override {}
-  
+
   bool xml_end(const char *el) override;
   void to_xml(ostream& out) {
-    out << "<NoncurrentVersionExpiration>" << "<NoncurrentDays>" << days << "</NoncurrentDays>"<< "</NoncurrentVersionExpiration>";
+    out << "<NoncurrentVersionExpiration>"
+        << "<NoncurrentDays>" << days << "</NoncurrentDays>"
+        << "</NoncurrentVersionExpiration>";
   }
   void dump_xml(Formatter *f) const {
     f->open_object_section("NoncurrentVersionExpiration");
     encode_xml("NoncurrentDays", days, f);
-    f->close_section(); 
+    f->close_section();
   }
 };
 
-class LCMPExpiration_S3 : public LCExpiration, public XMLObj
-{
+class LCMPExpiration_S3 : public LCExpiration, public XMLObj {
 public:
   LCMPExpiration_S3() {}
   ~LCMPExpiration_S3() {}
 
   bool xml_end(const char *el);
   void to_xml(ostream& out) {
-    out << "<AbortIncompleteMultipartUpload>" << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>" << "</AbortIncompleteMultipartUpload>";
+    out << "<AbortIncompleteMultipartUpload>"
+        << "<DaysAfterInitiation>" << days << "</DaysAfterInitiation>"
+        << "</AbortIncompleteMultipartUpload>";
   }
   void dump_xml(Formatter *f) const {
     f->open_object_section("AbortIncompleteMultipartUpload");
@@ -183,8 +177,7 @@ public:
   }
 };
 
-class LCRule_S3 : public LCRule, public XMLObj
-{
+class LCRule_S3 : public LCRule, public XMLObj {
 private:
   CephContext *cct;
 public:
@@ -227,8 +220,7 @@ public:
   }
 };
 
-class RGWLCXMLParser_S3 : public RGWXMLParser
-{
+class RGWLCXMLParser_S3 : public RGWXMLParser {
   CephContext *cct;
 
   XMLObj *alloc_obj(const char *el) override;
@@ -236,8 +228,7 @@ public:
   RGWLCXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
 
-class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XMLObj
-{
+class RGWLifecycleConfiguration_S3 : public RGWLifecycleConfiguration, public XMLObj {
 public:
   RGWLifecycleConfiguration_S3(CephContext *_cct) : RGWLifecycleConfiguration(_cct) {}
   RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(NULL) {}
@@ -257,6 +248,5 @@ public:
   int rebuild(RGWRados *store, RGWLifecycleConfiguration& dest);
   void dump_xml(Formatter *f) const;
 };
-
 
 #endif

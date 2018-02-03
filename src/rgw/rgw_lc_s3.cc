@@ -8,16 +8,14 @@
 #include "rgw_user.h"
 #include "rgw_lc_s3.h"
 
-
 #define dout_subsys ceph_subsys_rgw
 
-
-bool LCExpiration_S3::xml_end(const char * el) {
+bool LCExpiration_S3::xml_end(const char *el) {
   LCDays_S3 *lc_days = static_cast<LCDays_S3 *>(find_first("Days"));
   LCDeleteMarker_S3 *lc_dm = static_cast<LCDeleteMarker_S3 *>(find_first("ExpiredObjectDeleteMarker"));
   LCDate_S3 *lc_date = static_cast<LCDate_S3 *>(find_first("Date"));
 
-  if ((!lc_days && !lc_dm && !lc_date) || (lc_days && lc_dm) 
+  if ((!lc_days && !lc_dm && !lc_date) || (lc_days && lc_dm)
       || (lc_days && lc_date) || (lc_dm && lc_date)) {
     return false;
   }
@@ -81,7 +79,7 @@ bool LCFilter_S3::xml_end(const char* el) {
   // If there is an AND condition, every tag is a child of and
   // else we only support single conditions and return false if we see multiple
 
-  if (o == nullptr){
+  if (o == nullptr) {
     o = this;
     single_cond = true;
   }
@@ -91,8 +89,8 @@ bool LCFilter_S3::xml_end(const char* el) {
     num_conditions++;
   auto tags_iter = o->find("Tag");
   obj_tags.clear();
-  while (auto tag_xml =tags_iter.get_next()){
-    std::string _key,_val;
+  while (auto tag_xml =tags_iter.get_next()) {
+    std::string _key, _val;
     RGWXMLDecoder::decode_xml("Key", _key, tag_xml);
     RGWXMLDecoder::decode_xml("Value", _val, tag_xml);
     obj_tags.emplace_tag(std::move(_key), std::move(_val));
@@ -125,7 +123,6 @@ bool LCRule_S3::xml_end(const char *el) {
   } else {
     gen_rand_alphanumeric_lower(cct, &id, LC_ID_LENGTH);
   }
-
 
   lc_filter = static_cast<LCFilter_S3 *>(find_first("Filter"));
 
@@ -224,18 +221,16 @@ int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfigura
   return ret;
 }
 
-
-
 void RGWLifecycleConfiguration_S3::dump_xml(Formatter *f) const
 {
-	f->open_object_section_in_ns("LifecycleConfiguration", XMLNS_AWS_S3);
+  f->open_object_section_in_ns("LifecycleConfiguration", XMLNS_AWS_S3);
 
-    for (auto iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
-		const LCRule_S3& rule = static_cast<const LCRule_S3&>(iter->second);
-		rule.dump_xml(f);
-	}
+  for (auto iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
+    const LCRule_S3& rule = static_cast<const LCRule_S3&>(iter->second);
+    rule.dump_xml(f);
+  }
 
-	f->close_section(); // Lifecycle
+  f->close_section(); // Lifecycle
 }
 
 XMLObj *RGWLCXMLParser_S3::alloc_obj(const char *el)

@@ -33,10 +33,9 @@ typedef enum {
   lc_processing,
   lc_failed,
   lc_complete,
-}LC_BUCKET_STATUS;
+} LC_BUCKET_STATUS;
 
-class LCExpiration
-{
+class LCExpiration {
 protected:
   string days;
   //At present only current object has expiration date
@@ -91,14 +90,12 @@ public:
 };
 WRITE_CLASS_ENCODER(LCExpiration)
 
-class LCFilter
-{
- protected:
+class LCFilter {
+protected:
   std::string prefix;
   RGWObjTags obj_tags;
 
- public:
-
+public:
   const std::string& get_prefix() const {
     return prefix;
   }
@@ -147,10 +144,7 @@ class LCFilter
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
-
-
-class LCRule
-{
+class LCRule {
 protected:
   string id;
   string prefix;
@@ -162,7 +156,6 @@ protected:
   bool dm_expiration = false;
 
 public:
-
   LCRule(){};
   ~LCRule(){};
 
@@ -199,23 +192,23 @@ public:
     return dm_expiration;
   }
 
-  void set_id(string*_id) {
+  void set_id(string *_id) {
     id = *_id;
   }
 
-  void set_prefix(string*_prefix) {
+  void set_prefix(string *_prefix) {
     prefix = *_prefix;
   }
 
-  void set_status(string*_status) {
+  void set_status(string *_status) {
     status = *_status;
   }
 
-  void set_expiration(LCExpiration*_expiration) {
+  void set_expiration(LCExpiration *_expiration) {
     expiration = *_expiration;
   }
 
-  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
+  void set_noncur_expiration(LCExpiration *_noncur_expiration) {
     noncur_expiration = *_noncur_expiration;
   }
 
@@ -228,7 +221,7 @@ public:
   }
 
   bool valid();
-  
+
   void encode(bufferlist& bl) const {
      ENCODE_START(5, 1, bl);
      encode(id, bl);
@@ -266,8 +259,7 @@ public:
 };
 WRITE_CLASS_ENCODER(LCRule)
 
-struct lc_op
-{
+struct lc_op {
   bool status;
   bool dm_expiration;
   int expiration;
@@ -276,12 +268,11 @@ struct lc_op
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
   lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
-  
+
   void dump(Formatter *f) const;
 };
 
-class RGWLifecycleConfiguration
-{
+class RGWLifecycleConfiguration {
 protected:
   CephContext *cct;
   map<string, lc_op> prefix_map;
@@ -298,8 +289,6 @@ public:
 
   virtual ~RGWLifecycleConfiguration() {}
 
-//  int get_perm(string& id, int perm_mask);
-//  int get_group_perm(ACLGroupTypeEnum group, int perm_mask);
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(rule_map, bl);
@@ -326,13 +315,6 @@ public:
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
   map<string, lc_op>& get_prefix_map() { return prefix_map; }
-/*
-  void create_default(string id, string name) {
-    ACLGrant grant;
-    grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
-    add_grant(&grant);
-  }
-*/
 };
 WRITE_CLASS_ENCODER(RGWLifecycleConfiguration)
 
@@ -357,8 +339,8 @@ class RGWLC {
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
   };
-  
-  public:
+
+public:
   LCWorker *worker;
   RGWLC() : cct(NULL), store(NULL), worker(NULL) {}
   ~RGWLC() {
@@ -385,7 +367,5 @@ class RGWLC {
   bool obj_has_expired(ceph::real_time mtime, int days);
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };
-
-
 
 #endif
