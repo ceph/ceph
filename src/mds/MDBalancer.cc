@@ -51,7 +51,7 @@ using std::chrono::duration_cast;
     if ((dout_context)->_conf->subsys.should_gather(ceph_subsys_mds_balancer, lvl)) {\
       subsys = ceph_subsys_mds_balancer;\
     }\
-    dout_impl(dout_context, subsys, lvl) dout_prefix
+    dout_impl(dout_context, ceph::dout::need_dynamic(subsys), lvl) dout_prefix
 #undef dendl
 #define dendl dendl_impl; } while (0)
 
