@@ -71,10 +71,13 @@ def to_sorted_array(data):
     return sorted(data.iteritems())
 
 def prepare_url_prefix(url_prefix):
-    url_prefix = urlparse.urljoin('/', url_prefix)
-    if url_prefix[-1] != '/':
-        url_prefix = url_prefix + '/'
-    return url_prefix
+    """
+    return '/' if no prefix, or '/prefix' without slash in the end.
+    """
+    if url_prefix:
+        return urlparse.urljoin('/', url_prefix).rstrip('/')
+    else:
+        return "/"
 
 class StandbyModule(MgrStandbyModule):
     def serve(self):
@@ -1012,7 +1015,7 @@ class Module(MgrModule):
 
         # Publish the URI that others may use to access the service we're
         # about to start serving
-        self.set_uri("http://{0}:{1}{2}".format(
+        self.set_uri("http://{0}:{1}/{2}".format(
             socket.getfqdn() if server_addr == "::" else server_addr,
             server_port,
             url_prefix
