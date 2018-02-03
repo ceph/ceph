@@ -674,7 +674,7 @@ class Module(MgrModule):
 
         # get current compat weight-set weights
         orig_ws = self.get_compat_weight_set_weights(ms)
-        if orig_ws is None:
+        if not orig_ws:
             return False
         orig_ws = { a: b for a, b in orig_ws.iteritems() if a >= 0 }
 
