@@ -420,26 +420,13 @@ bool DeterministicOpSequence::do_coll_move(rngen_t& gen)
 
 bool DeterministicOpSequence::do_coll_create(rngen_t& gen)
 {
-  boost::uniform_int<> pg_num_range(0, 512);
-  int pg_num = pg_num_range(gen);
+  int i = m_collections.size();
+  coll_entry_t *entry = coll_create(i);
+  m_collections.insert(make_pair(i, entry));
+  m_collections_ids.push_back(i);
 
-  // Assume there is 7 OSDs in total, the PGs are evenly distributed across those OSDs
-  int pgs = pg_num / 7;
-
-  boost::uniform_int<> num_objs_range(1, 1024);
-  int num_objs = num_objs_range(gen);
-
-  int pool_id = get_next_pool_id();
-  std::set<int> pg_created;
-  for (int i = 0; i < pgs; i++) {
-    boost::uniform_int<> pg_range(0, pg_num - 1);
-    int pg_id = pg_range(gen);
-    if (pg_created.count(pg_id) > 0)
-      continue;
-    _do_coll_create(coll_t(spg_t(pg_t(pg_id,pool_id),shard_id_t::NO_SHARD)),
-		    (uint32_t) pg_num, (uint64_t) num_objs);
-    pg_created.insert(pg_id);
-  }
+  _do_coll_create(entry->m_coll, 10, 10);
+  
   return true;
 }
 
