@@ -39,9 +39,9 @@ class DeterministicOpSequence : public TestObjectStoreState {
     DSOP_CLONE = 2,
     DSOP_CLONE_RANGE = 3,
     DSOP_OBJ_REMOVE = 4,
-    DSOP_COLL_MOVE = 6,
-    DSOP_SET_ATTRS = 7,
-    DSOP_COLL_CREATE = 8,
+    DSOP_COLL_MOVE = 5,
+    DSOP_SET_ATTRS = 6,
+    DSOP_COLL_CREATE = 7,
 
     DSOP_FIRST = DSOP_TOUCH,
     DSOP_LAST = DSOP_COLL_CREATE,
