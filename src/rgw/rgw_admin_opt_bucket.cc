@@ -3,10 +3,10 @@
 #include "rgw_orphan.h"
 #include "rgw_data_sync.h"
 
-static bool bucket_object_check_filter(const string& name)
+static bool bucket_object_check_filter(const std::string& name)
 {
   rgw_obj_key k;
-  string ns; /* empty namespace */
+  std::string ns; /* empty namespace */
   return rgw_obj_key::oid_to_key_in_ns(name, &k, ns);
 }
 
@@ -19,8 +19,8 @@ static int check_obj_locator_underscore(RGWRados *store, RGWBucketInfo& bucket_i
   f->dump_string("instance", key.instance);
   f->close_section();
 
-  string oid;
-  string locator;
+  std::string oid;
+  std::string locator;
 
   get_obj_bucket_and_oid_loc(obj, oid, locator);
 
@@ -38,7 +38,7 @@ static int check_obj_locator_underscore(RGWRados *store, RGWBucketInfo& bucket_i
 
   f->dump_bool("needs_fixing", needs_fixing);
 
-  string status = (needs_fixing ? "needs_fixing" : "ok");
+  std::string status = (needs_fixing ? "needs_fixing" : "ok");
 
   if ((needs_fixing || remove_bad) && fix) {
     ret = store->fix_head_obj_locator(bucket_info, needs_fixing, remove_bad, key);
@@ -66,7 +66,7 @@ static int check_obj_tail_locator_underscore(RGWRados *store, RGWBucketInfo& buc
   f->close_section();
 
   bool needs_fixing;
-  string status;
+  std::string status;
 
   int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
   if (ret < 0) {
@@ -84,7 +84,7 @@ static int check_obj_tail_locator_underscore(RGWRados *store, RGWBucketInfo& buc
   return 0;
 }
 
-static int do_check_object_locator(RGWRados *store, const string& tenant_name, const string& bucket_name,
+static int do_check_object_locator(RGWRados *store, const std::string& tenant_name, const std::string& bucket_name,
                                    bool fix, bool remove_bad, Formatter *f)
 {
   if (remove_bad && !fix) {
@@ -94,7 +94,7 @@ static int do_check_object_locator(RGWRados *store, const string& tenant_name, c
 
   RGWBucketInfo bucket_info;
   rgw_bucket bucket;
-  string bucket_id;
+  std::string bucket_id;
 
   f->open_object_section("bucket");
   f->dump_string("bucket", bucket_name);
@@ -108,16 +108,16 @@ static int do_check_object_locator(RGWRados *store, const string& tenant_name, c
 
   int max_entries = 1000;
 
-  string prefix;
-  string delim;
+  std::string prefix;
+  std::string delim;
   vector<rgw_bucket_dir_entry> result;
-  map<string, bool> common_prefixes;
-  string ns;
+  map<std::string, bool> common_prefixes;
+  std::string ns;
 
   RGWRados::Bucket target(store, bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
-  string marker;
+  std::string marker;
 
   list_op.params.prefix = prefix;
   list_op.params.delim = delim;
@@ -162,10 +162,10 @@ static int do_check_object_locator(RGWRados *store, const string& tenant_name, c
   return 0;
 }
 
-int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_name, const string& bucket_name)
+int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const std::string& tenant_name, const std::string& bucket_name)
 {
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
 
   int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, &attrs);
@@ -214,8 +214,8 @@ int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_n
   return 0;
 }
 
-static int init_bucket_for_sync(RGWRados *store, const string& tenant, const string& bucket_name,
-                                const string& bucket_id, rgw_bucket& bucket)
+static int init_bucket_for_sync(RGWRados *store, const std::string& tenant, const std::string& bucket_name,
+                                const std::string& bucket_id, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
@@ -232,7 +232,7 @@ int handle_opt_bucket_limit_check(const rgw_user& user_id, bool warnings_only, R
                                   RGWFormatterFlusher& flusher, RGWRados *store) {
   void *handle;
   std::list<std::string> user_ids;
-  string metadata_key = "user";
+  std::string metadata_key = "user";
   int max = 1000;
 
   bool truncated;
@@ -275,8 +275,8 @@ int handle_opt_bucket_limit_check(const rgw_user& user_id, bool warnings_only, R
   return -ret;
 }
 
-int handle_opt_buckets_list(const string& bucket_name, const string& tenant, const string& bucket_id,
-                            const string& marker, int max_entries, rgw_bucket& bucket,
+int handle_opt_buckets_list(const std::string& bucket_name, const std::string& tenant, const std::string& bucket_id,
+                            const std::string& marker, int max_entries, rgw_bucket& bucket,
                             RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
                             RGWRados *store, Formatter *formatter) {
   if (bucket_name.empty()) {
@@ -294,11 +294,11 @@ int handle_opt_buckets_list(const string& bucket_name, const string& tenant, con
     if (max_entries < 0)
       max_entries = 1000;
 
-    string prefix;
-    string delim;
+    std::string prefix;
+    std::string delim;
     vector<rgw_bucket_dir_entry> result;
-    map<string, bool> common_prefixes;
-    string ns;
+    map<std::string, bool> common_prefixes;
+    std::string ns;
 
     RGWRados::Bucket target(store, bucket_info);
     RGWRados::Bucket::List list_op(&target);
@@ -343,8 +343,8 @@ int handle_opt_bucket_stats(RGWBucketAdminOpState& bucket_op, RGWFormatterFlushe
   return 0;
 }
 
-int handle_opt_bucket_link(const string& bucket_id, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
-  string err;
+int handle_opt_bucket_link(const std::string& bucket_id, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
+  std::string err;
   bucket_op.set_bucket_id(bucket_id);
   int r = RGWBucketAdminOp::link(store, bucket_op, &err);
   if (r < 0) {
@@ -363,8 +363,8 @@ int handle_opt_bucket_unlink(RGWBucketAdminOpState& bucket_op, RGWRados *store) 
   return 0;
 }
 
-int handle_opt_bucket_rewrite(const string& bucket_name, const string& tenant, const string& bucket_id,
-                              const string& start_date, const string& end_date,
+int handle_opt_bucket_rewrite(const std::string& bucket_name, const std::string& tenant, const std::string& bucket_id,
+                              const std::string& start_date, const std::string& end_date,
                               int min_rewrite_size, int max_rewrite_size, uint64_t min_rewrite_stripe_size,
                               rgw_bucket& bucket, RGWRados *store, Formatter *formatter){
   if (bucket_name.empty()) {
@@ -400,13 +400,13 @@ int handle_opt_bucket_rewrite(const string& bucket_name, const string& tenant, c
   bool is_truncated = true;
 
   rgw_obj_index_key marker;
-  string prefix;
+  std::string prefix;
 
   formatter->open_object_section("result");
   formatter->dump_string("bucket", bucket_name);
   formatter->open_array_section("objects");
   while (is_truncated) {
-    map<string, rgw_bucket_dir_entry> result;
+    map<std::string, rgw_bucket_dir_entry> result;
     int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
                                    result, &is_truncated, &marker,
                                    bucket_object_check_filter);
@@ -418,7 +418,7 @@ int handle_opt_bucket_rewrite(const string& bucket_name, const string& tenant, c
     if (r == -ENOENT)
       break;
 
-    map<string, rgw_bucket_dir_entry>::iterator iter;
+    map<std::string, rgw_bucket_dir_entry>::iterator iter;
     for (iter = result.begin(); iter != result.end(); ++iter) {
       rgw_obj_key key = iter->second.key;
       rgw_bucket_dir_entry& entry = iter->second;
@@ -469,13 +469,13 @@ int handle_opt_bucket_rewrite(const string& bucket_name, const string& tenant, c
   return 0;
 }
 
-int handle_opt_bucket_reshard(const string& bucket_name, const string& tenant, const string& bucket_id,
+int handle_opt_bucket_reshard(const std::string& bucket_name, const std::string& tenant, const std::string& bucket_id,
                               bool num_shards_specified, int num_shards, bool yes_i_really_mean_it, int max_entries,
                               bool verbose, RGWRados *store, Formatter *formatter) {
   const int DEFAULT_RESHARD_MAX_ENTRIES = 1000;
   rgw_bucket bucket;
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
 
   int ret = check_reshard_bucket_params(store,
                                         bucket_name,
@@ -501,7 +501,7 @@ int handle_opt_bucket_reshard(const string& bucket_name, const string& tenant, c
                     verbose, &cout, formatter);
 }
 
-int handle_opt_bucket_check(bool check_head_obj_locator, const string& bucket_name, const string& tenant, bool fix,
+int handle_opt_bucket_check(bool check_head_obj_locator, const std::string& bucket_name, const std::string& tenant, bool fix,
                             bool remove_bad, RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
                             RGWRados *store, Formatter *formatter) {
   if (check_head_obj_locator) {
@@ -531,8 +531,8 @@ int handle_opt_bucket_rm(bool inconsistent_index, bool bypass_gc, bool yes_i_rea
   return 0;
 }
 
-int bucket_sync_toggle(RgwAdminCommand opt_cmd, const string& bucket_name, const string& tenant,
-                       const string& realm_id, const string& realm_name, const string& object,
+int bucket_sync_toggle(RgwAdminCommand opt_cmd, const std::string& bucket_name, const std::string& tenant,
+                       const std::string& realm_id, const std::string& realm_name, const std::string& object,
                        rgw_bucket& bucket, CephContext *context, RGWRados *store)
 {
   if (bucket_name.empty()) {
@@ -560,8 +560,8 @@ int bucket_sync_toggle(RgwAdminCommand opt_cmd, const string& bucket_name, const
   return 0;
 }
 
-int handle_opt_bucket_sync_init(const string& source_zone, const string& bucket_name, const string& bucket_id,
-                                const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
+int handle_opt_bucket_sync_init(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
+                                const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -590,8 +590,8 @@ int handle_opt_bucket_sync_init(const string& source_zone, const string& bucket_
   return 0;
 }
 
-int handle_opt_bucket_sync_status(const string& source_zone, const string& bucket_name, const string& bucket_id,
-                                  const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store, Formatter *formatter) {
+int handle_opt_bucket_sync_status(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
+                                  const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store, Formatter *formatter) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -626,8 +626,8 @@ int handle_opt_bucket_sync_status(const string& source_zone, const string& bucke
   return 0;
 }
 
-int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_name, const string& bucket_id,
-                               const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
+int handle_opt_bucket_sync_run(const std::string& source_zone, const std::string& bucket_name, const std::string& bucket_id,
+                               const std::string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
     return EINVAL;
@@ -657,7 +657,7 @@ int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_n
   return 0;
 }
 
-int handle_opt_policy(const string& format, RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
+int handle_opt_policy(const std::string& format, RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
                       RGWRados *store)
 {
   if (format == "xml") {
@@ -676,8 +676,8 @@ int handle_opt_policy(const string& format, RGWBucketAdminOpState& bucket_op, RG
   return 0;
 }
 
-int handle_opt_bi_get(const string& object, const string& bucket_id, const string& bucket_name, const string& tenant,
-                      BIIndexType bi_index_type, const string& object_version, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+int handle_opt_bi_get(const std::string& object, const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
+                      BIIndexType bi_index_type, const std::string& object_version, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket name not specified" << std::endl;
@@ -711,8 +711,8 @@ int handle_opt_bi_get(const string& object, const string& bucket_id, const strin
   return 0;
 }
 
-int handle_opt_bi_put(const string& bucket_id, const string& bucket_name, const string& tenant, const string& infile,
-                      const string& object_version, rgw_bucket& bucket, RGWRados *store)
+int handle_opt_bi_put(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, const std::string& infile,
+                      const std::string& object_version, rgw_bucket& bucket, RGWRados *store)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket name not specified" << std::endl;
@@ -742,8 +742,8 @@ int handle_opt_bi_put(const string& bucket_id, const string& bucket_name, const 
   return 0;
 }
 
-int handle_opt_bi_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
-                       const string& object, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+int handle_opt_bi_list(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, int max_entries,
+                       const std::string& object, std::string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket name not specified" << std::endl;
@@ -800,7 +800,7 @@ int handle_opt_bi_list(const string& bucket_id, const string& bucket_name, const
   return 0;
 }
 
-int handle_opt_bi_purge(const string& bucket_id, const string& bucket_name, const string& tenant, bool yes_i_really_mean_it,
+int handle_opt_bi_purge(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, bool yes_i_really_mean_it,
                         rgw_bucket& bucket, RGWRados *store)
 {
   if (bucket_name.empty()) {
@@ -816,7 +816,7 @@ int handle_opt_bi_purge(const string& bucket_id, const string& bucket_name, cons
 
   RGWBucketInfo cur_bucket_info;
   rgw_bucket cur_bucket;
-  ret = init_bucket(store, tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
+  ret = init_bucket(store, tenant, bucket_name, std::string(), cur_bucket_info, cur_bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
     return -ret;
@@ -848,8 +848,8 @@ int handle_opt_bi_purge(const string& bucket_id, const string& bucket_name, cons
   return 0;
 }
 
-int handle_opt_bilog_list(const string& bucket_id, const string& bucket_name, const string& tenant, int max_entries,
-                          int shard_id, string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
+int handle_opt_bilog_list(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, int max_entries,
+                          int shard_id, std::string& marker, rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket not specified" << std::endl;
@@ -890,8 +890,8 @@ int handle_opt_bilog_list(const string& bucket_id, const string& bucket_name, co
   return 0;
 }
 
-int handle_opt_bilog_trim(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
-                          string& start_marker, string& end_marker, rgw_bucket& bucket, RGWRados *store)
+int handle_opt_bilog_trim(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, int shard_id,
+                          std::string& start_marker, std::string& end_marker, rgw_bucket& bucket, RGWRados *store)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket not specified" << std::endl;
@@ -911,7 +911,7 @@ int handle_opt_bilog_trim(const string& bucket_id, const string& bucket_name, co
   return 0;
 }
 
-int handle_opt_bilog_status(const string& bucket_id, const string& bucket_name, const string& tenant, int shard_id,
+int handle_opt_bilog_status(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, int shard_id,
                             rgw_bucket& bucket, RGWRados *store, Formatter *formatter)
 {
   if (bucket_name.empty()) {
@@ -924,7 +924,7 @@ int handle_opt_bilog_status(const string& bucket_id, const string& bucket_name, 
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
-  map<int, string> markers;
+  map<int, std::string> markers;
   ret = store->get_bi_log_status(bucket_info, shard_id, markers);
   if (ret < 0) {
     cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
@@ -964,13 +964,13 @@ int handle_opt_bilog_autotrim(RGWRados *store)
   return 0;
 }
 
-int handle_opt_reshard_add(const string& bucket_id, const string& bucket_name, const string& tenant,
+int handle_opt_reshard_add(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
                            bool num_shards_specified, int num_shards, bool yes_i_really_mean_it,
                            RGWRados *store)
 {
   rgw_bucket bucket;
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
 
   int ret = check_reshard_bucket_params(store,
                                         bucket_name,
@@ -1016,7 +1016,7 @@ int handle_opt_reshard_list(int max_entries, RGWRados *store, Formatter *formatt
   formatter->open_array_section("reshard");
   for (int i = 0; i < num_logshards; i++) {
     bool is_truncated = true;
-    string marker;
+    std::string marker;
     do {
       entries.clear();
       ret = reshard.list(i, marker, max_entries, entries, &is_truncated);
@@ -1042,7 +1042,7 @@ int handle_opt_reshard_list(int max_entries, RGWRados *store, Formatter *formatt
   return 0;
 }
 
-int handle_opt_reshard_status(const string& bucket_id, const string& bucket_name, const string& tenant,
+int handle_opt_reshard_status(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
                               RGWRados *store, Formatter *formatter)
 {
   if (bucket_name.empty()) {
@@ -1052,7 +1052,7 @@ int handle_opt_reshard_status(const string& bucket_id, const string& bucket_name
 
   rgw_bucket bucket;
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
   int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -1084,7 +1084,7 @@ int handle_opt_reshard_process(RGWRados *store)
   return 0;
 }
 
-int handle_opt_reshard_cancel(const string& bucket_name, RGWRados *store)
+int handle_opt_reshard_cancel(const std::string& bucket_name, RGWRados *store)
 {
   RGWReshard reshard(store);
 
@@ -1133,7 +1133,7 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 
 static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
-  string val;
+  std::string val;
   if (bl.length() > 0) {
     val.assign(bl.c_str());
   }
@@ -1142,8 +1142,8 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
-int handle_opt_object_rm(const string& bucket_id, const string& bucket_name, const string& tenant, const string& object,
-                         const string& object_version, rgw_bucket& bucket, RGWRados *store)
+int handle_opt_object_rm(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant, const std::string& object,
+                         const std::string& object_version, rgw_bucket& bucket, RGWRados *store)
 {
   RGWBucketInfo bucket_info;
   int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
@@ -1161,8 +1161,8 @@ int handle_opt_object_rm(const string& bucket_id, const string& bucket_name, con
   return 0;
 }
 
-int handle_opt_object_rewrite(const string& bucket_id, const string& bucket_name, const string& tenant,
-                              const string& object, const string& object_version, uint64_t min_rewrite_stripe_size,
+int handle_opt_object_rewrite(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
+                              const std::string& object, const std::string& object_version, uint64_t min_rewrite_stripe_size,
                               rgw_bucket& bucket, RGWRados *store)
 {
   if (bucket_name.empty()) {
@@ -1212,8 +1212,8 @@ int handle_opt_object_expire(RGWRados *store)
   return 0;
 }
 
-int handle_opt_object_unlink(const string& bucket_id, const string& bucket_name, const string& tenant,
-                             const string& object, const string& object_version, rgw_bucket& bucket, RGWRados *store)
+int handle_opt_object_unlink(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
+                             const std::string& object, const std::string& object_version, rgw_bucket& bucket, RGWRados *store)
 {
   RGWBucketInfo bucket_info;
   int ret = init_bucket(store, tenant, bucket_name, bucket_id, bucket_info, bucket);
@@ -1234,8 +1234,8 @@ int handle_opt_object_unlink(const string& bucket_id, const string& bucket_name,
   return 0;
 }
 
-int handle_opt_object_stat(const string& bucket_id, const string& bucket_name, const string& tenant,
-                           const string& object, const string& object_version, rgw_bucket& bucket,
+int handle_opt_object_stat(const std::string& bucket_id, const std::string& bucket_name, const std::string& tenant,
+                           const std::string& object, const std::string& object_version, rgw_bucket& bucket,
                            RGWRados *store, Formatter *formatter)
 {
   RGWBucketInfo bucket_info;
@@ -1248,7 +1248,7 @@ int handle_opt_object_stat(const string& bucket_id, const string& bucket_name, c
   obj.key.set_instance(object_version);
 
   uint64_t obj_size;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -1265,8 +1265,8 @@ int handle_opt_object_stat(const string& bucket_id, const string& bucket_name, c
   formatter->dump_string("name", object);
   formatter->dump_unsigned("size", obj_size);
 
-  map<string, bufferlist>::iterator iter;
-  map<string, bufferlist> other_attrs;
+  map<std::string, bufferlist>::iterator iter;
+  map<std::string, bufferlist> other_attrs;
   for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
     bufferlist& bl = iter->second;
     bool handled = false;

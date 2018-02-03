@@ -9,14 +9,13 @@
 
 #include <boost/optional.hpp>
 #include <unordered_set>
+#include <map>
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
 #include "common/ceph_json.h"
 #include "common/config.h"
-#include "common/ceph_argparse.h"
-#include "common/errno.h"
 
 #include "cls/rgw/cls_rgw_client.h"
 
@@ -89,7 +88,7 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
   rgw_user user_id;
-  string tenant;
+  std::string tenant;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
@@ -104,11 +103,11 @@ int main(int argc, const char **argv)
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix;
   std::string redirect_zone;
   bool redirect_zone_set = false;
-  list<string> endpoints;
+  std::list<std::string> endpoints;
   int sync_from_all_specified = false;
   bool sync_from_all = false;
-  list<string> sync_from;
-  list<string> sync_from_rm;
+  std::list<std::string> sync_from;
+  std::list<std::string> sync_from_rm;
   int set_default = 0;
   bool is_master = false;
   bool is_master_set = false;
@@ -125,8 +124,8 @@ int main(int argc, const char **argv)
   int gen_secret_key = 0;
   bool set_perm = false;
   bool set_temp_url_key = false;
-  map<int, string> temp_url_keys;
-  string bucket_id;
+  std::map<int, std::string> temp_url_keys;
+  std::string bucket_id;
   Formatter *formatter = nullptr;
   int purge_data = false;
   int pretty_format = false;
@@ -141,17 +140,17 @@ int main(int argc, const char **argv)
   int check_head_obj_locator = false;
   int max_buckets = -1;
   bool max_buckets_specified = false;
-  map<string, bool> categories;
-  string caps;
+  std::map<std::string, bool> categories;
+  std::string caps;
   int check_objects = false;
   RGWUserAdminOpState user_op;
   RGWBucketAdminOpState bucket_op;
-  string infile;
-  string metadata_key;
+  std::string infile;
+  std::string metadata_key;
   RGWObjVersionTracker objv_tracker;
-  string marker;
-  string start_marker;
-  string end_marker;
+  std::string marker;
+  std::string start_marker;
+  std::string end_marker;
   int max_entries = -1;
   bool max_entries_specified = false;
   int admin = false;
@@ -160,20 +159,20 @@ int main(int argc, const char **argv)
   bool system_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
-  string daemon_id;
+  std::string daemon_id;
   bool specified_daemon_id = false;
-  string client_id;
-  string op_id;
-  string state_str;
-  string replica_log_type_str;
+  std::string client_id;
+  std::string op_id;
+  std::string state_str;
+  std::string replica_log_type_str;
   ReplicaLogType replica_log_type = ReplicaLog_Invalid;
-  string op_mask_str;
-  string quota_scope;
-  string object_version;
-  string placement_id;
-  list<string> tags;
-  list<string> tags_add;
-  list<string> tags_rm;
+  std::string op_mask_str;
+  std::string quota_scope;
+  std::string object_version;
+  std::string placement_id;
+  std::list<std::string> tags;
+  std::list<std::string> tags_add;
+  std::list<std::string> tags_rm;
 
   int64_t max_objects = -1;
   int64_t max_size = -1;
@@ -196,26 +195,26 @@ int main(int argc, const char **argv)
 
   BIIndexType bi_index_type = PlainIdx;
 
-  string job_id;
+  std::string job_id;
   int num_shards = 0;
   bool num_shards_specified = false;
   int max_concurrent_ios = 32;
   uint64_t orphan_stale_secs = (24 * 3600);
 
-  string err;
+  std::string err;
 
-  string source_zone_name;
-  string source_zone; /* zone id */
+  std::string source_zone_name;
+  std::string source_zone; /* zone id */
 
-  string tier_type;
+  std::string tier_type;
   bool tier_type_specified = false;
 
-  map<string, string, ltstr_nocase> tier_config_add;
-  map<string, string, ltstr_nocase> tier_config_rm;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_add;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_rm;
 
-  boost::optional<string> index_pool;
-  boost::optional<string> data_pool;
-  boost::optional<string> data_extra_pool;
+  boost::optional<std::string> index_pool;
+  boost::optional<std::string> data_pool;
+  boost::optional<std::string> data_extra_pool;
   RGWBucketIndexType placement_index_type = RGWBIType_Normal;
   bool index_type_specified = false;
 
@@ -250,7 +249,8 @@ int main(int argc, const char **argv)
     return ret;
   }
 
-  ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd, metadata_key, tenant,
+  ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd,
+                      metadata_key, tenant,
                       user_id);
   if (ret != 0) {
     return ret;
@@ -337,7 +337,8 @@ int main(int argc, const char **argv)
       case OPT_PERIOD_DELETE:
         return handle_opt_period_delete(period_id, g_ceph_context, store);
       case OPT_PERIOD_GET:
-        return handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name, g_ceph_context, store, formatter);
+        return handle_opt_period_get(period_epoch, period_id, staging, realm_id, realm_name,
+                                     g_ceph_context, store, formatter);
       case OPT_PERIOD_GET_CURRENT:
         return handle_opt_period_get_current(realm_id, realm_name, store, formatter);
       case OPT_PERIOD_LIST:
@@ -347,14 +348,15 @@ int main(int argc, const char **argv)
                              commit, remote, url, access_key, secret_key,
                              formatter, yes_i_really_mean_it);
       case OPT_PERIOD_PULL:
-        return handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
-                                      remote, g_ceph_context, store, formatter);
+        return handle_opt_period_pull(period_id, period_epoch, realm_id, realm_name, url, access_key,
+                                      secret_key, remote, g_ceph_context, store, formatter);
       case OPT_GLOBAL_QUOTA_GET:
       case OPT_GLOBAL_QUOTA_SET:
       case OPT_GLOBAL_QUOTA_ENABLE:
       case OPT_GLOBAL_QUOTA_DISABLE:
-        return handle_opt_global_quota(realm_id, realm_name, have_max_size, max_size, have_max_objects, max_objects,
-                                       opt_cmd, quota_scope, store, formatter);
+        return handle_opt_global_quota(realm_id, realm_name, have_max_size, max_size,
+                                       have_max_objects, max_objects, opt_cmd, quota_scope,
+                                       store, formatter);
       case OPT_REALM_CREATE:
         return handle_opt_realm_create(realm_name, set_default, g_ceph_context, store, formatter);
       case OPT_REALM_DELETE:
@@ -370,85 +372,109 @@ int main(int argc, const char **argv)
       case OPT_REALM_RENAME:
         return handle_opt_realm_rename(realm_id, realm_name, realm_new_name, g_ceph_context, store);
       case OPT_REALM_SET:
-        return handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
+        return handle_opt_realm_set(realm_id, realm_name, infile, set_default, g_ceph_context,
+                                    store, formatter);
       case OPT_REALM_DEFAULT:
         return handle_opt_realm_default(realm_id, realm_name, g_ceph_context, store);
       case OPT_REALM_PULL:
-        return handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key, set_default, g_ceph_context,
+        return handle_opt_realm_pull(realm_id, realm_name, url, access_key, secret_key,
+                                     set_default, g_ceph_context,
                                      store, formatter);
       case OPT_ZONEGROUP_ADD:
-        return handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name, tier_type_specified, &tier_type,
-                                        tier_config_add, sync_from_all_specified, &sync_from_all, redirect_zone_set,
-                                        &redirect_zone, is_master_set, &is_master, is_read_only_set, &read_only, endpoints,
-                                        sync_from, sync_from_rm, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_add(zonegroup_id, zonegroup_name, zone_id, zone_name,
+                                        tier_type_specified, &tier_type, tier_config_add,
+                                        sync_from_all_specified, &sync_from_all, redirect_zone_set,
+                                        &redirect_zone, is_master_set, &is_master, is_read_only_set,
+                                        &read_only, endpoints, sync_from, sync_from_rm,
+                                        g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_CREATE:
-        return handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, set_default,
-                                           is_master, endpoints, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_create(zonegroup_id, zonegroup_name, realm_id, realm_name,
+                                           api_name, set_default, is_master, endpoints,
+                                           g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_DEFAULT:
         return handle_opt_zonegroup_default(zonegroup_id, zonegroup_name, g_ceph_context, store);
       case OPT_ZONEGROUP_DELETE:
         return handle_opt_zonegroup_delete(zonegroup_id, zonegroup_name, g_ceph_context, store);
       case OPT_ZONEGROUP_GET:
-        return handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_get(zonegroup_id, zonegroup_name, g_ceph_context, store,
+                                        formatter);
       case OPT_ZONEGROUP_LIST:
         return handle_opt_zonegroup_list(g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_MODIFY:
-        return handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name, api_name, master_zone,
-                                           is_master_set, is_master, set_default, endpoints, g_ceph_context, store,
+        return handle_opt_zonegroup_modify(zonegroup_id, zonegroup_name, realm_id, realm_name,
+                                           api_name, master_zone, is_master_set, is_master,
+                                           set_default, endpoints, g_ceph_context, store,
                                            formatter);
       case OPT_ZONEGROUP_SET:
-        return handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile, set_default,
-                                        endpoints, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_set(zonegroup_id, zonegroup_name, realm_id, realm_name, infile,
+                                        set_default, endpoints, g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_REMOVE:
-        return handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_remove(zonegroup_id, zonegroup_name, zone_id, zone_name,
+                                           g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_RENAME:
-        return handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name, g_ceph_context, store);
+        return handle_opt_zonegroup_rename(zonegroup_id, zonegroup_name, zonegroup_new_name,
+                                           g_ceph_context, store);
       case OPT_ZONEGROUP_PLACEMENT_LIST:
-        return handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_placement_list(zonegroup_id, zonegroup_name, g_ceph_context,
+                                                   store, formatter);
       case OPT_ZONEGROUP_PLACEMENT_ADD:
-        return handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags, g_ceph_context,
-                                                  store, formatter);
+        return handle_opt_zonegroup_placement_add(placement_id, zonegroup_id, zonegroup_name, tags,
+                                                  g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_PLACEMENT_MODIFY:
-        return handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name, tags, tags_add, tags_rm,
-                                                     g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_placement_modify(placement_id, zonegroup_id, zonegroup_name,
+                                                     tags, tags_add, tags_rm, g_ceph_context, store,
+                                                     formatter);
       case OPT_ZONEGROUP_PLACEMENT_RM:
-        return handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_placement_rm(placement_id, zonegroup_id, zonegroup_name,
+                                                 g_ceph_context, store, formatter);
       case OPT_ZONEGROUP_PLACEMENT_DEFAULT:
-        return handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name, g_ceph_context, store, formatter);
+        return handle_opt_zonegroup_placement_default(placement_id, zonegroup_id, zonegroup_name,
+                                                      g_ceph_context, store, formatter);
       case OPT_ZONE_CREATE:
-        return handle_opt_zone_create(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
-                                      secret_key, tier_type_specified, &tier_type, tier_config_add,
-                                      sync_from_all_specified, &sync_from_all, redirect_zone_set, &redirect_zone,
-                                      is_master_set, &is_master, is_read_only_set, &read_only, endpoints, sync_from,
-                                      sync_from_rm, set_default, g_ceph_context, store, formatter);
+        return handle_opt_zone_create(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id,
+                                      realm_name, access_key, secret_key, tier_type_specified,
+                                      &tier_type, tier_config_add, sync_from_all_specified,
+                                      &sync_from_all, redirect_zone_set, &redirect_zone,
+                                      is_master_set, &is_master, is_read_only_set, &read_only,
+                                      endpoints, sync_from, sync_from_rm, set_default,
+                                      g_ceph_context, store, formatter);
       case OPT_ZONE_DEFAULT:
-        return handle_opt_zone_default(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
+        return handle_opt_zone_default(zone_id, zone_name, zonegroup_id, zonegroup_name,
+                                       g_ceph_context, store);
       case OPT_ZONE_DELETE:
-        return handle_opt_zone_delete(zone_id, zone_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
+        return handle_opt_zone_delete(zone_id, zone_name, zonegroup_id, zonegroup_name,
+                                      g_ceph_context, store);
       case OPT_ZONE_GET:
         return handle_opt_zone_get(zone_id, zone_name, g_ceph_context, store, formatter);
       case OPT_ZONE_SET:
-        return handle_opt_zone_set(zone_name, realm_id, realm_name, infile, set_default, g_ceph_context, store, formatter);
+        return handle_opt_zone_set(zone_name, realm_id, realm_name, infile, set_default,
+                                   g_ceph_context, store, formatter);
       case OPT_ZONE_LIST:
         return handle_opt_zone_list(g_ceph_context, store, formatter);
       case OPT_ZONE_MODIFY:
-        return handle_opt_zone_modify(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id, realm_name, access_key,
-                                      secret_key, tier_type_specified, &tier_type, tier_config_add, tier_config_rm,
-                                      sync_from_all_specified, &sync_from_all, redirect_zone_set, &redirect_zone,
-                                      is_master_set, &is_master, is_read_only_set, &read_only, endpoints, sync_from,
-                                      sync_from_rm, set_default, g_ceph_context, store, formatter);
+        return handle_opt_zone_modify(zone_id, zone_name, zonegroup_id, zonegroup_name, realm_id,
+                                      realm_name, access_key, secret_key, tier_type_specified,
+                                      &tier_type, tier_config_add, tier_config_rm,
+                                      sync_from_all_specified, &sync_from_all, redirect_zone_set,
+                                      &redirect_zone, is_master_set, &is_master, is_read_only_set,
+                                      &read_only, endpoints, sync_from, sync_from_rm, set_default,
+                                      g_ceph_context, store, formatter);
       case OPT_ZONE_RENAME:
-        return handle_opt_zone_rename(zone_id, zone_name, zone_new_name, zonegroup_id, zonegroup_name, g_ceph_context, store);
+        return handle_opt_zone_rename(zone_id, zone_name, zone_new_name, zonegroup_id,
+                                      zonegroup_name, g_ceph_context, store);
       case OPT_ZONE_PLACEMENT_ADD:
-        return handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
-                                             data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
-                                             store, formatter);
+        return handle_opt_zone_placement_add(placement_id, zone_id, zone_name, compression_type,
+                                             index_pool, data_pool, data_extra_pool,
+                                             index_type_specified, placement_index_type,
+                                             g_ceph_context, store, formatter);
       case OPT_ZONE_PLACEMENT_MODIFY:
-        return handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type, index_pool, data_pool,
-                                                data_extra_pool, index_type_specified, placement_index_type, g_ceph_context,
-                                                store, formatter);
+        return handle_opt_zone_placement_modify(placement_id, zone_id, zone_name, compression_type,
+                                                index_pool, data_pool, data_extra_pool,
+                                                index_type_specified, placement_index_type,
+                                                g_ceph_context, store, formatter);
       case OPT_ZONE_PLACEMENT_RM:
-        return handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type, g_ceph_context, store, formatter);
+        return handle_opt_zone_placement_rm(placement_id, zone_id, zone_name, compression_type,
+                                            g_ceph_context, store, formatter);
       case OPT_ZONE_PLACEMENT_LIST:
         return handle_opt_zone_placement_list(zone_id, zone_name, g_ceph_context, store, formatter);
       default: break;
@@ -633,15 +659,16 @@ int main(int argc, const char **argv)
       }
       break;
     case OPT_PERIOD_PUSH:
-      return handle_opt_period_push(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
-                                    g_ceph_context, store);
+      return handle_opt_period_push(period_id, period_epoch, realm_id, realm_name, url,
+                                    access_key, secret_key, g_ceph_context, store);
     case OPT_PERIOD_UPDATE:
       return update_period(store, realm_id, realm_name, period_id, period_epoch,
                            commit, remote, url, access_key, secret_key,
                            formatter, yes_i_really_mean_it);
     case OPT_PERIOD_COMMIT:
-      return handle_opt_period_commit(period_id, period_epoch, realm_id, realm_name, url, access_key, secret_key,
-                                      remote, yes_i_really_mean_it, g_ceph_context, store, formatter);
+      return handle_opt_period_commit(period_id, period_epoch, realm_id, realm_name, url,
+                                      access_key, secret_key, remote, yes_i_really_mean_it,
+                                      g_ceph_context, store, formatter);
     case OPT_ROLE_CREATE: return handle_opt_role_create(role_name, assume_role_doc, path, tenant,
                                                         g_ceph_context, store, formatter);
     case OPT_ROLE_DELETE: return handle_opt_role_delete(role_name, tenant, g_ceph_context, store);
@@ -649,11 +676,13 @@ int main(int argc, const char **argv)
     case OPT_ROLE_MODIFY: return handle_opt_role_modify(role_name, tenant, assume_role_doc,
                                                         g_ceph_context, store);
     case OPT_ROLE_LIST: return handle_opt_role_list(path_prefix, tenant, g_ceph_context, store, formatter);
-    case OPT_ROLE_POLICY_PUT: return handle_opt_role_policy_put(role_name, policy_name, perm_policy_doc,
-                                                                tenant, g_ceph_context, store);
-    case OPT_ROLE_POLICY_LIST: return handle_opt_role_policy_list(role_name, tenant, g_ceph_context, store, formatter);
-    case OPT_ROLE_POLICY_GET: return handle_opt_role_policy_get(role_name, policy_name, tenant, g_ceph_context,
-                                                                store, formatter);
+    case OPT_ROLE_POLICY_PUT: return handle_opt_role_policy_put(role_name, policy_name,
+                                                                perm_policy_doc, tenant,
+                                                                g_ceph_context, store);
+    case OPT_ROLE_POLICY_LIST: return handle_opt_role_policy_list(role_name, tenant, g_ceph_context,
+                                                                  store, formatter);
+    case OPT_ROLE_POLICY_GET: return handle_opt_role_policy_get(role_name, policy_name, tenant,
+                                                                g_ceph_context, store, formatter);
     case OPT_ROLE_POLICY_DELETE: return handle_opt_role_policy_delete(role_name, policy_name, tenant,
                                                                       g_ceph_context, store);
     default:
@@ -679,8 +708,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
-    return handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket, bucket_op,
-                                   rgw_stream_flusher, store, formatter);
+    return handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket,
+                                   bucket_op, rgw_stream_flusher, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
@@ -700,8 +729,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_LOG_SHOW) {
-    return handle_opt_log_show(object, date, bucket_id, bucket_name, show_log_entries, skip_zero_entries,
-                               show_log_sum, store, formatter);
+    return handle_opt_log_show(object, date, bucket_id, bucket_name, show_log_entries,
+                               skip_zero_entries, show_log_sum, store, formatter);
   }
 
   if (opt_cmd == OPT_LOG_RM) {
@@ -721,7 +750,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_USAGE_SHOW) {
-    return handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum, rgw_stream_flusher, &categories, store);
+    return handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum,
+                                 rgw_stream_flusher, &categories, store);
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
@@ -737,7 +767,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BI_GET) {
-    return handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type, object_version, bucket, store, formatter);
+    return handle_opt_bi_get(object, bucket_id, bucket_name, tenant, bi_index_type, object_version,
+                             bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BI_PUT) {
@@ -745,7 +776,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BI_LIST) {
-    return handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker, bucket, store, formatter);
+    return handle_opt_bi_list(bucket_id, bucket_name, tenant, max_entries, object, marker, bucket,
+                              store, formatter);
   }
 
   if (opt_cmd == OPT_BI_PURGE) {
@@ -757,8 +789,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_OBJECT_REWRITE) {
-    return handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version, min_rewrite_stripe_size,
-                                     bucket, store);
+    return handle_opt_object_rewrite(bucket_id, bucket_name, tenant, object, object_version,
+                                     min_rewrite_stripe_size, bucket, store);
   }
 
   if (opt_cmd == OPT_OBJECTS_EXPIRE) {
@@ -766,8 +798,9 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_REWRITE) {
-    return handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date, min_rewrite_size,
-                                     max_rewrite_size, min_rewrite_stripe_size, bucket, store, formatter);
+    return handle_opt_bucket_rewrite(bucket_name, tenant, bucket_id, start_date, end_date,
+                                     min_rewrite_size, max_rewrite_size, min_rewrite_stripe_size,
+                                     bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_RESHARD) {
@@ -802,7 +835,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_OBJECT_STAT) {
-    return handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket, store, formatter);
+    return handle_opt_object_stat(bucket_id, bucket_name, tenant, object, object_version, bucket,
+                                  store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
@@ -888,10 +922,10 @@ int main(int argc, const char **argv)
       return -ret;
     }
 
-    map <string,RGWOrphanSearchState> m;
+    std::map <std::string,RGWOrphanSearchState> m;
     ret = orphan_store.list_jobs(m);
     if (ret < 0) {
-      cerr << "job list failed" << std::endl;
+      cerr << "job std::list failed" << std::endl;
       return -ret;
     }
     formatter->open_array_section("entries");
@@ -927,7 +961,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_METADATA_LIST) {
-    return handle_opt_metadata_list(metadata_key, marker, max_entries_specified, max_entries, store, formatter);
+    return handle_opt_metadata_list(metadata_key, marker, max_entries_specified, max_entries, store,
+                                    formatter);
   }
 
   if (opt_cmd == OPT_USER_LIST) {
@@ -935,12 +970,13 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_MDLOG_LIST) {
-    return handle_opt_mdlog_list(start_date, end_date, specified_shard_id, shard_id, realm_id, realm_name, marker,
-                                 period_id, store, formatter);
+    return handle_opt_mdlog_list(start_date, end_date, specified_shard_id, shard_id, realm_id,
+                                 realm_name, marker, period_id, store, formatter);
   }
 
   if (opt_cmd == OPT_MDLOG_STATUS) {
-    return handle_opt_mdlog_status(specified_shard_id, shard_id, realm_id, realm_name, marker, period_id, store, formatter);
+    return handle_opt_mdlog_status(specified_shard_id, shard_id, realm_id, realm_name, marker,
+                                   period_id, store, formatter);
   }
 
   if (opt_cmd == OPT_MDLOG_AUTOTRIM) {
@@ -948,7 +984,8 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_MDLOG_TRIM) {
-    return handle_opt_mdlog_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, period_id, store);
+    return handle_opt_mdlog_trim(start_date, end_date, specified_shard_id, shard_id, start_marker,
+                                 end_marker, period_id, store);
   }
 
   if (opt_cmd == OPT_SYNC_STATUS) {
@@ -985,11 +1022,13 @@ int main(int argc, const char **argv)
   }
 
   if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
-    return bucket_sync_toggle(opt_cmd, bucket_name, tenant, realm_id, realm_name, object, bucket, g_ceph_context, store);
+    return bucket_sync_toggle(opt_cmd, bucket_name, tenant, realm_id, realm_name, object, bucket,
+                              g_ceph_context, store);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
-    return handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, bucket_op, store, formatter);
+    return handle_opt_bucket_sync_status(source_zone, bucket_name, bucket_id, tenant, bucket_op,
+                                         store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_RUN) {
@@ -997,23 +1036,28 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BILOG_LIST) {
-    return handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker, bucket, store, formatter);
+    return handle_opt_bilog_list(bucket_id, bucket_name, tenant, max_entries, shard_id, marker,
+                                 bucket, store, formatter);
   }
 
   if (opt_cmd == OPT_SYNC_ERROR_LIST) {
-    return handle_opt_sync_error_list(max_entries, start_date, end_date, specified_shard_id, shard_id, marker, store, formatter);
+    return handle_opt_sync_error_list(max_entries, start_date, end_date, specified_shard_id,
+                                      shard_id, marker, store, formatter);
   }
 
   if (opt_cmd == OPT_SYNC_ERROR_TRIM) {
-    return handle_opt_sync_error_trim(start_date, end_date, specified_shard_id, shard_id, start_marker, end_marker, store);
+    return handle_opt_sync_error_trim(start_date, end_date, specified_shard_id, shard_id,
+                                      start_marker, end_marker, store);
   }
 
   if (opt_cmd == OPT_BILOG_TRIM) {
-    return handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker, end_marker, bucket, store);
+    return handle_opt_bilog_trim(bucket_id, bucket_name, tenant, shard_id, start_marker,
+                                 end_marker, bucket, store);
   }
 
   if (opt_cmd == OPT_BILOG_STATUS) {
-    return handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, store, formatter);
+    return handle_opt_bilog_status(bucket_id, bucket_name, tenant, shard_id, bucket, store,
+                                   formatter);
   }
 
   if (opt_cmd == OPT_BILOG_AUTOTRIM) {
@@ -1049,25 +1093,27 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_REPLICALOG_GET) {
-    return handle_opt_replicalog_get(replica_log_type_str, replica_log_type, specified_shard_id, shard_id, bucket_id,
-                                     bucket_name, tenant, pool, bucket, store, formatter);
+    return handle_opt_replicalog_get(replica_log_type_str, replica_log_type, specified_shard_id,
+                                     shard_id, bucket_id, bucket_name, tenant, pool, bucket, store,
+                                     formatter);
   }
 
   if (opt_cmd == OPT_REPLICALOG_DELETE) {
-    return handle_opt_replicalog_delete(replica_log_type_str, replica_log_type, specified_shard_id, shard_id,
-                                        specified_daemon_id, daemon_id, bucket_id, bucket_name, tenant, pool, bucket,
-                                        store);
+    return handle_opt_replicalog_delete(replica_log_type_str, replica_log_type, specified_shard_id,
+                                        shard_id, specified_daemon_id, daemon_id, bucket_id,
+                                        bucket_name, tenant, pool, bucket, store);
   }
 
   if (opt_cmd == OPT_REPLICALOG_UPDATE) {
     return handle_opt_replicalog_update(replica_log_type_str, replica_log_type, marker, date, infile,
-                                        specified_shard_id, shard_id, specified_daemon_id, daemon_id, bucket_id,
-                                        bucket_name, tenant, pool, bucket, store);
+                                        specified_shard_id, shard_id, specified_daemon_id,
+                                        daemon_id, bucket_id, bucket_name, tenant, pool, bucket,
+                                        store);
   }
 
   if (opt_cmd == OPT_QUOTA_SET || opt_cmd == OPT_QUOTA_ENABLE || opt_cmd == OPT_QUOTA_DISABLE)
-    return handle_opt_quota(user_id, bucket_name, tenant, have_max_size, max_size, have_max_objects, max_objects,
-                            opt_cmd, quota_scope, user, user_op, store);
+    return handle_opt_quota(user_id, bucket_name, tenant, have_max_size, max_size, have_max_objects,
+                            max_objects, opt_cmd, quota_scope, user, user_op, store);
 
   return 0;
 }

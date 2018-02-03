@@ -40,12 +40,12 @@ static void set_quota_info(RGWQuotaInfo& quota, RgwAdminCommand opt_cmd, int64_t
 }
 
 static int set_bucket_quota(RGWRados *store, RgwAdminCommand opt_cmd,
-                            const string& tenant_name, const string& bucket_name,
+                            const std::string& tenant_name, const std::string& bucket_name,
                             int64_t max_size, int64_t max_objects,
                             bool have_max_size, bool have_max_objects)
 {
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  map<std::string, bufferlist> attrs;
   RGWObjectCtx obj_ctx(store);
   int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, &attrs);
   if (r < 0) {
@@ -72,7 +72,7 @@ static int set_user_bucket_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUser
 
   op_state.set_bucket_quota(user_info.bucket_quota);
 
-  string err;
+  std::string err;
   int r = user.modify(op_state, &err);
   if (r < 0) {
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
@@ -90,7 +90,7 @@ static int set_user_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOp
 
   op_state.set_user_quota(user_info.user_quota);
 
-  string err;
+  std::string err;
   int r = user.modify(op_state, &err);
   if (r < 0) {
     cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
@@ -99,8 +99,8 @@ static int set_user_quota(RgwAdminCommand opt_cmd, RGWUser& user, RGWUserAdminOp
   return 0;
 }
 
-int handle_opt_global_quota(string& realm_id, const string& realm_name, bool have_max_size, int64_t max_size,
-                            bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const string& quota_scope,
+int handle_opt_global_quota(std::string& realm_id, const std::string& realm_name, bool have_max_size, int64_t max_size,
+                            bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const std::string& quota_scope,
                             RGWRados *store, Formatter *formatter)
 {
   if (realm_id.empty()) {
@@ -176,8 +176,8 @@ int handle_opt_global_quota(string& realm_id, const string& realm_name, bool hav
   return 0;
 }
 
-int handle_opt_quota(const rgw_user& user_id, const string& bucket_name, const string& tenant, bool have_max_size,
-                     int64_t max_size, bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const string& quota_scope,
+int handle_opt_quota(const rgw_user& user_id, const std::string& bucket_name, const std::string& tenant, bool have_max_size,
+                     int64_t max_size, bool have_max_objects, int64_t max_objects, RgwAdminCommand opt_cmd, const std::string& quota_scope,
                      RGWUser& user, RGWUserAdminOpState& user_op,
                      RGWRados *store) {
   if (bucket_name.empty() && user_id.empty()) {

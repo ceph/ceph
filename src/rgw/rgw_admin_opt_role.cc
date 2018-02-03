@@ -7,7 +7,7 @@
 #include "rgw_role.h"
 #include "rgw_admin_common.h"
 
-static void show_perm_policy(const string& perm_policy, Formatter* formatter)
+static void show_perm_policy(const std::string& perm_policy, Formatter* formatter)
 {
   formatter->open_object_section("role");
   formatter->dump_string("Permission policy", perm_policy);
@@ -15,7 +15,7 @@ static void show_perm_policy(const string& perm_policy, Formatter* formatter)
   formatter->flush(cout);
 }
 
-static void show_policy_names(const std::vector<string>& policy_names, Formatter* formatter)
+static void show_policy_names(const std::vector<std::string>& policy_names, Formatter* formatter)
 {
   formatter->open_array_section("PolicyNames");
   for (const auto& it : policy_names) {
@@ -45,8 +45,8 @@ static void show_roles_info(const vector<RGWRole>& roles, Formatter* formatter)
   formatter->flush(cout);
 }
 
-int handle_opt_role_create(const string& role_name, const string& assume_role_doc, const string& path,
-                           const string& tenant, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_role_create(const std::string& role_name, const std::string& assume_role_doc, const std::string& path,
+                           const std::string& tenant, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   if (role_name.empty()) {
     cerr << "ERROR: role name is empty" << std::endl;
@@ -70,7 +70,7 @@ int handle_opt_role_create(const string& role_name, const string& assume_role_do
     cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
     return -EINVAL;
   }
-  string trust_policy = bl.to_str();
+  std::string trust_policy = bl.to_str();
   RGWRole role(context, store, role_name, path, trust_policy, tenant);
   ret = role.create(true);
   if (ret < 0) {
@@ -80,7 +80,7 @@ int handle_opt_role_create(const string& role_name, const string& assume_role_do
   return 0;
 }
 
-int handle_opt_role_delete(const string& role_name, const string& tenant, CephContext *context, RGWRados *store)
+int handle_opt_role_delete(const std::string& role_name, const std::string& tenant, CephContext *context, RGWRados *store)
 {
   if (role_name.empty()) {
     cerr << "ERROR: empty role name" << std::endl;
@@ -95,7 +95,7 @@ int handle_opt_role_delete(const string& role_name, const string& tenant, CephCo
   return 0;
 }
 
-int handle_opt_role_get(const string& role_name, const string& tenant, CephContext *context,
+int handle_opt_role_get(const std::string& role_name, const std::string& tenant, CephContext *context,
                         RGWRados *store, Formatter *formatter)
 {
   if (role_name.empty()) {
@@ -111,7 +111,7 @@ int handle_opt_role_get(const string& role_name, const string& tenant, CephConte
   return 0;
 }
 
-int handle_opt_role_modify(const string& role_name, const string& assume_role_doc, const string& tenant,
+int handle_opt_role_modify(const std::string& role_name, const std::string& assume_role_doc, const std::string& tenant,
                            CephContext *context, RGWRados *store)
 {
   if (role_name.empty()) {
@@ -137,7 +137,7 @@ int handle_opt_role_modify(const string& role_name, const string& assume_role_do
     cout << "ERROR: failed to parse JSON: " << assume_role_doc << std::endl;
     return -EINVAL;
   }
-  string trust_policy = bl.to_str();
+  std::string trust_policy = bl.to_str();
   RGWRole role(context, store, role_name, tenant);
   ret = role.get();
   if (ret < 0) {
@@ -152,7 +152,7 @@ int handle_opt_role_modify(const string& role_name, const string& assume_role_do
   return 0;
 }
 
-int handle_opt_role_list(const string& path_prefix, const string& tenant, CephContext *context,
+int handle_opt_role_list(const std::string& path_prefix, const std::string& tenant, CephContext *context,
                          RGWRados *store, Formatter *formatter)
 {
   vector<RGWRole> result;
@@ -164,8 +164,8 @@ int handle_opt_role_list(const string& path_prefix, const string& tenant, CephCo
   return 0;
 }
 
-int handle_opt_role_policy_put(const string& role_name, const string& policy_name, const string& perm_policy_doc,
-                               const string& tenant, CephContext *context, RGWRados *store)
+int handle_opt_role_policy_put(const std::string& role_name, const std::string& policy_name, const std::string& perm_policy_doc,
+                               const std::string& tenant, CephContext *context, RGWRados *store)
 {
   if (role_name.empty()) {
     cerr << "role name is empty" << std::endl;
@@ -195,7 +195,7 @@ int handle_opt_role_policy_put(const string& role_name, const string& policy_nam
     cout << "ERROR: failed to parse JSON: " << std::endl;
     return -EINVAL;
   }
-  string perm_policy;
+  std::string perm_policy;
   perm_policy = bl.c_str();
 
   RGWRole role(context, store, role_name, tenant);
@@ -212,7 +212,7 @@ int handle_opt_role_policy_put(const string& role_name, const string& policy_nam
   return 0;
 }
 
-int handle_opt_role_policy_list(const string& role_name, const string& tenant, CephContext *context,
+int handle_opt_role_policy_list(const std::string& role_name, const std::string& tenant, CephContext *context,
                                 RGWRados *store, Formatter *formatter)
 {
   if (role_name.empty()) {
@@ -224,12 +224,12 @@ int handle_opt_role_policy_list(const string& role_name, const string& tenant, C
   if (ret < 0) {
     return -ret;
   }
-  std::vector<string> policy_names = role.get_role_policy_names();
+  std::vector<std::string> policy_names = role.get_role_policy_names();
   show_policy_names(policy_names, formatter);
   return 0;
 }
 
-int handle_opt_role_policy_get(const string& role_name, const string& policy_name, const string& tenant,
+int handle_opt_role_policy_get(const std::string& role_name, const std::string& policy_name, const std::string& tenant,
                                CephContext *context, RGWRados *store, Formatter *formatter)
 {
   if (role_name.empty()) {
@@ -246,7 +246,7 @@ int handle_opt_role_policy_get(const string& role_name, const string& policy_nam
   if (ret < 0) {
     return -ret;
   }
-  string perm_policy;
+  std::string perm_policy;
   ret = role.get_role_policy(policy_name, perm_policy);
   if (ret < 0) {
     return -ret;
@@ -255,7 +255,7 @@ int handle_opt_role_policy_get(const string& role_name, const string& policy_nam
   return 0;
 }
 
-int handle_opt_role_policy_delete(const string& role_name, const string& policy_name, const string& tenant,
+int handle_opt_role_policy_delete(const std::string& role_name, const std::string& policy_name, const std::string& tenant,
                                   CephContext *context, RGWRados *store)
 {
   if (role_name.empty()) {

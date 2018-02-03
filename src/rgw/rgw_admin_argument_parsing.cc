@@ -757,7 +757,7 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
   return -EINVAL;
 }
 
-ReplicaLogType get_replicalog_type(const string& name) {
+ReplicaLogType get_replicalog_type(const std::string& name) {
   if (name == "md" || name == "meta" || name == "metadata")
     return ReplicaLog_Metadata;
   if (name == "data")
@@ -768,7 +768,7 @@ ReplicaLogType get_replicalog_type(const string& name) {
   return ReplicaLog_Invalid;
 }
 
-BIIndexType get_bi_index_type(const string& type_str) {
+BIIndexType get_bi_index_type(const std::string& type_str) {
   if (type_str == "plain")
     return PlainIdx;
   if (type_str == "instance")
@@ -779,9 +779,9 @@ BIIndexType get_bi_index_type(const string& type_str) {
   return InvalidIdx;
 }
 
-static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
+static void parse_tier_config_param(const std::string& s, map<std::string, std::string, ltstr_nocase>& out)
 {
-  list<string> confs;
+  list<std::string> confs;
   get_str_list(s, ",", confs);
   for (auto c : confs) {
     ssize_t pos = c.find("=");
@@ -793,8 +793,8 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
   }
 }
 
-int parse_command(const string& access_key, int gen_access_key, const string& secret_key, int gen_secret_key,
-                  vector<const char*>& args, RgwAdminCommand& opt_cmd, string& metadata_key, string& tenant, rgw_user& user_id)
+int parse_command(const std::string& access_key, int gen_access_key, const std::string& secret_key, int gen_secret_key,
+                  vector<const char*>& args, RgwAdminCommand& opt_cmd, std::string& metadata_key, std::string& tenant, rgw_user& user_id)
 {
   if (args.empty()) {
     usage();
@@ -872,49 +872,49 @@ int parse_command(const string& access_key, int gen_access_key, const string& se
   return 0;
 }
 
-int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, string& tenant, string& access_key,
-                                 string& subuser, string& secret_key, string& user_email, RGWUserAdminOpState& user_op,
-                                 string& display_name, string& bucket_name, string& pool_name, rgw_pool& pool,
-                                 string& object, string& object_version, string& client_id, string& op_id,
-                                 string& state_str, string& op_mask_str, int& key_type, string& job_id,
+int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, std::string& tenant, std::string& access_key,
+                                 std::string& subuser, std::string& secret_key, std::string& user_email, RGWUserAdminOpState& user_op,
+                                 std::string& display_name, std::string& bucket_name, std::string& pool_name, rgw_pool& pool,
+                                 std::string& object, std::string& object_version, std::string& client_id, std::string& op_id,
+                                 std::string& state_str, std::string& op_mask_str, int& key_type, std::string& job_id,
                                  int& gen_access_key, int& gen_secret_key, int& show_log_entries, int& show_log_sum,
                                  int& skip_zero_entries, int& admin, bool& admin_specified, int& system,
                                  bool& system_specified, int& verbose, int& staging, int& commit,
                                  uint64_t& min_rewrite_size, uint64_t& max_rewrite_size,
                                  uint64_t& min_rewrite_stripe_size, int& max_buckets, bool& max_buckets_specified,
                                  int& max_entries, bool& max_entries_specified, int64_t& max_size, bool& have_max_size,
-                                 int64_t& max_objects, bool& have_max_objects, string& date, string& start_date,
-                                 string& end_date, int& num_shards, bool& num_shards_specified, int& max_concurrent_ios,
+                                 int64_t& max_objects, bool& have_max_objects, std::string& date, std::string& start_date,
+                                 std::string& end_date, int& num_shards, bool& num_shards_specified, int& max_concurrent_ios,
                                  uint64_t& orphan_stale_secs, int& shard_id, bool& specified_shard_id,
-                                 string& daemon_id, bool& specified_daemon_id, string& access, uint32_t& perm_mask,
-                                 bool& set_perm, map<int, string>& temp_url_keys, bool& set_temp_url_key,
-                                 string& bucket_id, string& format, map<string, bool>& categories,
+                                 std::string& daemon_id, bool& specified_daemon_id, std::string& access, uint32_t& perm_mask,
+                                 bool& set_perm, map<int, std::string>& temp_url_keys, bool& set_temp_url_key,
+                                 std::string& bucket_id, std::string& format, map<std::string, bool>& categories,
                                  int& delete_child_objects, int& pretty_format, int& purge_data, int& purge_keys,
                                  int& yes_i_really_mean_it, int& fix, int& remove_bad, int& check_head_obj_locator,
                                  int& check_objects, int& sync_stats, int& include_all, int& extra_info, int& bypass_gc,
-                                 int& warnings_only, int& inconsistent_index, string& caps, string& infile,
-                                 string& metadata_key, string& marker, string& start_marker, string& end_marker,
-                                 string& quota_scope, string& replica_log_type_str, ReplicaLogType& replica_log_type,
+                                 int& warnings_only, int& inconsistent_index, std::string& caps, std::string& infile,
+                                 std::string& metadata_key, std::string& marker, std::string& start_marker, std::string& end_marker,
+                                 std::string& quota_scope, std::string& replica_log_type_str, ReplicaLogType& replica_log_type,
                                  BIIndexType& bi_index_type, bool& is_master, bool& is_master_set, int& set_default,
-                                 string& redirect_zone, bool& redirect_zone_set, bool& read_only, int& is_read_only_set,
-                                 string& master_zone, string& period_id, string& period_epoch, string& remote,
-                                 string& url, string& realm_id,string& realm_new_name, string& zonegroup_id,
-                                 string& zonegroup_new_name, string& placement_id, list<string>& tags,
-                                 list<string>& tags_add, list<string>& tags_rm, string& api_name, string& zone_id,
-                                 string& zone_new_name, list<string>& endpoints, list<string>& sync_from,
-                                 list<string>& sync_from_rm, bool& sync_from_all, int& sync_from_all_specified,
-                                 string& source_zone_name, string& tier_type, bool& tier_type_specified,
-                                 map<string, string, ltstr_nocase>& tier_config_add,
-                                 map<string, string, ltstr_nocase>& tier_config_rm, boost::optional<string>& index_pool,
-                                 boost::optional<string>& data_pool, boost::optional<string>& data_extra_pool,
+                                 std::string& redirect_zone, bool& redirect_zone_set, bool& read_only, int& is_read_only_set,
+                                 std::string& master_zone, std::string& period_id, std::string& period_epoch, std::string& remote,
+                                 std::string& url, std::string& realm_id,std::string& realm_new_name, std::string& zonegroup_id,
+                                 std::string& zonegroup_new_name, std::string& placement_id, list<std::string>& tags,
+                                 list<std::string>& tags_add, list<std::string>& tags_rm, std::string& api_name, std::string& zone_id,
+                                 std::string& zone_new_name, list<std::string>& endpoints, list<std::string>& sync_from,
+                                 list<std::string>& sync_from_rm, bool& sync_from_all, int& sync_from_all_specified,
+                                 std::string& source_zone_name, std::string& tier_type, bool& tier_type_specified,
+                                 map<std::string, std::string, ltstr_nocase>& tier_config_add,
+                                 map<std::string, std::string, ltstr_nocase>& tier_config_rm, boost::optional<std::string>& index_pool,
+                                 boost::optional<std::string>& data_pool, boost::optional<std::string>& data_extra_pool,
                                  RGWBucketIndexType& placement_index_type, bool& index_type_specified,
-                                 boost::optional<string>& compression_type, string& role_name, string& path,
-                                 string& assume_role_doc, string& policy_name, string& perm_policy_doc,
-                                 string& path_prefix)
+                                 boost::optional<std::string>& compression_type, std::string& role_name, std::string& path,
+                                 std::string& assume_role_doc, std::string& policy_name, std::string& perm_policy_doc,
+                                 std::string& path_prefix)
 {
   int is_master_int, read_only_int, tmp_int;
   long long tmp = 0;
-  string val, key_type_str, err;
+  std::string val, key_type_str, err;
   std::ostringstream errs;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
@@ -1083,9 +1083,9 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*) nullptr)) {
       format = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr)) {
-      string cat_str = val;
-      list<string> cat_list;
-      list<string>::iterator iter;
+      std::string cat_str = val;
+      list<std::string> cat_list;
+      list<std::string>::iterator iter;
       get_str_list(cat_str, cat_list);
       for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
         categories[*iter] = true;
@@ -1142,7 +1142,7 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
         return EINVAL;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr)) {
-      string index_type_str = val;
+      std::string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
       if (bi_index_type == InvalidIdx) {
         cerr << "ERROR: invalid bucket index entry type" << std::endl;

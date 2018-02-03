@@ -60,8 +60,8 @@ boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store,
 }
 
 
-int send_to_url(const string& url, const string& access,
-                const string& secret, req_info& info,
+int send_to_url(const std::string& url, const std::string& access,
+                const std::string& secret, req_info& info,
                 bufferlist& in_data, JSONParser& parser)
 {
   if (access.empty() || secret.empty()) {
@@ -86,8 +86,8 @@ int send_to_url(const string& url, const string& access,
   return ret;
 }
 
-int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
-                          const string& access, const string& secret,
+int send_to_remote_or_url(RGWRESTConn *conn, const std::string& url,
+                          const std::string& access, const std::string& secret,
                           req_info& info, bufferlist& in_data,
                           JSONParser& parser)
 {
@@ -98,11 +98,11 @@ int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
 }
 
 int commit_period(RGWRados *store, RGWRealm& realm, RGWPeriod& period,
-                  string remote, const string& url,
-                  const string& access, const string& secret,
+                  std::string remote, const std::string& url,
+                  const std::string& access, const std::string& secret,
                   bool force)
 {
-  const string& master_zone = period.get_master_zone();
+  const std::string& master_zone = period.get_master_zone();
   if (master_zone.empty()) {
     cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
     return -EINVAL;
@@ -202,10 +202,10 @@ int commit_period(RGWRados *store, RGWRealm& realm, RGWPeriod& period,
   return ret;
 }
 
-int update_period(RGWRados *store, const string& realm_id, const string& realm_name,
-                  const string& period_id, const string& period_epoch,
-                  bool commit, const string& remote, const string& url,
-                  const string& access, const string& secret,
+int update_period(RGWRados *store, const std::string& realm_id, const std::string& realm_name,
+                  const std::string& period_id, const std::string& period_epoch,
+                  bool commit, const std::string& remote, const std::string& url,
+                  const std::string& access, const std::string& secret,
                   Formatter *formatter, bool force)
 {
   RGWRealm realm(realm_id, realm_name);
@@ -248,10 +248,10 @@ int update_period(RGWRados *store, const string& realm_id, const string& realm_n
   return 0;
 }
 
-int do_period_pull(RGWRados *store, RGWRESTConn *remote_conn, const string& url,
-                   const string& access_key, const string& secret_key,
-                   const string& realm_id, const string& realm_name,
-                   const string& period_id, const string& period_epoch,
+int do_period_pull(RGWRados *store, RGWRESTConn *remote_conn, const std::string& url,
+                   const std::string& access_key, const std::string& secret_key,
+                   const std::string& realm_id, const std::string& realm_name,
+                   const std::string& period_id, const std::string& period_epoch,
                    RGWPeriod *period)
 {
   RGWEnv env;
@@ -259,7 +259,7 @@ int do_period_pull(RGWRados *store, RGWRESTConn *remote_conn, const string& url,
   info.method = "GET";
   info.request_uri = "/admin/realm/period";
 
-  map<string, string> &params = info.args.get_params();
+  map<std::string, std::string> &params = info.args.get_params();
   if (!realm_id.empty())
     params["realm_id"] = realm_id;
   if (!realm_name.empty())
@@ -297,7 +297,7 @@ int do_period_pull(RGWRados *store, RGWRESTConn *remote_conn, const string& url,
   return 0;
 }
 
-int handle_opt_period_delete(const string& period_id, CephContext *context, RGWRados *store)
+int handle_opt_period_delete(const std::string& period_id, CephContext *context, RGWRados *store)
 {
   if (period_id.empty()) {
     cerr << "missing period id" << std::endl;
@@ -317,8 +317,8 @@ int handle_opt_period_delete(const string& period_id, CephContext *context, RGWR
   return 0;
 }
 
-int handle_opt_period_get(const string& period_epoch, string& period_id, bool staging, string& realm_id,
-                          string& realm_name, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_period_get(const std::string& period_epoch, std::string& period_id, bool staging, std::string& realm_id,
+                          std::string& realm_name, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   epoch_t epoch = 0;
   if (!period_epoch.empty()) {
@@ -347,9 +347,9 @@ int handle_opt_period_get(const string& period_epoch, string& period_id, bool st
   return 0;
 }
 
-int handle_opt_period_get_current(const string& realm_id, const string& realm_name, RGWRados *store, Formatter *formatter)
+int handle_opt_period_get_current(const std::string& realm_id, const std::string& realm_name, RGWRados *store, Formatter *formatter)
 {
-  string period_id;
+  std::string period_id;
   int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
   if (ret < 0) {
     return -ret;
@@ -363,7 +363,7 @@ int handle_opt_period_get_current(const string& realm_id, const string& realm_na
 
 int handle_opt_period_list(RGWRados *store, Formatter *formatter)
 {
-  list<string> periods;
+  list<std::string> periods;
   int ret = store->list_periods(periods);
   if (ret < 0) {
     cerr << "failed to list periods: " << cpp_strerror(-ret) << std::endl;
@@ -376,9 +376,9 @@ int handle_opt_period_list(RGWRados *store, Formatter *formatter)
   return 0;
 }
 
-int handle_opt_period_pull(const string& period_id, const string& period_epoch, const string& realm_id,
-                           const string& realm_name, const string& url, const string& access_key, const string& secret_key,
-                           string& remote, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_period_pull(const std::string& period_id, const std::string& period_epoch, const std::string& realm_id,
+                           const std::string& realm_name, const std::string& url, const std::string& access_key, const std::string& secret_key,
+                           std::string& remote, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
@@ -423,8 +423,8 @@ int handle_opt_period_pull(const string& period_id, const string& period_epoch, 
   return 0;
 }
 
-int handle_opt_period_push(const string& period_id, const string& period_epoch, const string& realm_id,
-                           const string& realm_name, const string& url, const string& access_key, const string& secret_key,
+int handle_opt_period_push(const std::string& period_id, const std::string& period_epoch, const std::string& realm_id,
+                           const std::string& realm_name, const std::string& url, const std::string& access_key, const std::string& secret_key,
                            CephContext *context, RGWRados *store)
 {
   RGWEnv env;
@@ -432,7 +432,7 @@ int handle_opt_period_push(const string& period_id, const string& period_epoch, 
   r_info.method = "POST";
   r_info.request_uri = "/admin/realm/period";
 
-  map<string, string> &params = r_info.args.get_params();
+  map<std::string, std::string> &params = r_info.args.get_params();
   if (!realm_id.empty())
     params["realm_id"] = realm_id;
   if (!realm_name.empty())
@@ -465,9 +465,9 @@ int handle_opt_period_push(const string& period_id, const string& period_epoch, 
   return 0;
 }
 
-int handle_opt_period_commit(const string& period_id, const string& period_epoch, const string& realm_id,
-                             const string& realm_name, const string& url, const string& access_key,
-                             const string& secret_key, const string& remote, bool yes_i_really_mean_it,
+int handle_opt_period_commit(const std::string& period_id, const std::string& period_epoch, const std::string& realm_id,
+                             const std::string& realm_name, const std::string& url, const std::string& access_key,
+                             const std::string& secret_key, const std::string& remote, bool yes_i_really_mean_it,
                              CephContext *context, RGWRados *store, Formatter *formatter)
 {
   // read realm and staging period
@@ -495,7 +495,7 @@ int handle_opt_period_commit(const string& period_id, const string& period_epoch
   return 0;
 }
 
-int handle_opt_realm_create(const string& realm_name, bool set_default, CephContext *context, RGWRados *store,
+int handle_opt_realm_create(const std::string& realm_name, bool set_default, CephContext *context, RGWRados *store,
                             Formatter *formatter)
 {
   if (realm_name.empty()) {
@@ -522,7 +522,7 @@ int handle_opt_realm_create(const string& realm_name, bool set_default, CephCont
   return 0;
 }
 
-int handle_opt_realm_delete(const string& realm_id, const string& realm_name, CephContext *context, RGWRados *store)
+int handle_opt_realm_delete(const std::string& realm_id, const std::string& realm_name, CephContext *context, RGWRados *store)
 {
   RGWRealm realm(realm_id, realm_name);
   if (realm_name.empty() && realm_id.empty()) {
@@ -542,7 +542,7 @@ int handle_opt_realm_delete(const string& realm_id, const string& realm_name, Ce
   return 0;
 }
 
-int handle_opt_realm_get(const string& realm_id, const string& realm_name, CephContext *context, RGWRados *store,
+int handle_opt_realm_get(const std::string& realm_id, const std::string& realm_name, CephContext *context, RGWRados *store,
                          Formatter *formatter)
 {
   RGWRealm realm(realm_id, realm_name);
@@ -563,7 +563,7 @@ int handle_opt_realm_get(const string& realm_id, const string& realm_name, CephC
 int handle_opt_realm_get_default(CephContext *context, RGWRados *store)
 {
   RGWRealm realm(context, store);
-  string default_id;
+  std::string default_id;
   int ret = realm.read_default_id(default_id);
   if (ret == -ENOENT) {
     cout << "No default realm is set" << std::endl;
@@ -579,12 +579,12 @@ int handle_opt_realm_get_default(CephContext *context, RGWRados *store)
 int handle_opt_realm_list(CephContext *context, RGWRados *store, Formatter *formatter)
 {
   RGWRealm realm(context, store);
-  string default_id;
+  std::string default_id;
   int ret = realm.read_default_id(default_id);
   if (ret < 0 && ret != -ENOENT) {
     cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
   }
-  list<string> realms;
+  list<std::string> realms;
   ret = store->list_realms(realms);
   if (ret < 0) {
     cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
@@ -598,14 +598,14 @@ int handle_opt_realm_list(CephContext *context, RGWRados *store, Formatter *form
   return 0;
 }
 
-int handle_opt_realm_list_periods(const string& realm_id, const string& realm_name, RGWRados *store, Formatter *formatter)
+int handle_opt_realm_list_periods(const std::string& realm_id, const std::string& realm_name, RGWRados *store, Formatter *formatter)
 {
-  string period_id;
+  std::string period_id;
   int ret = read_current_period_id(store, realm_id, realm_name, &period_id);
   if (ret < 0) {
     return -ret;
   }
-  list<string> periods;
+  list<std::string> periods;
   ret = store->list_periods(period_id, periods);
   if (ret < 0) {
     cerr << "list periods failed: " << cpp_strerror(-ret) << std::endl;
@@ -619,7 +619,7 @@ int handle_opt_realm_list_periods(const string& realm_id, const string& realm_na
   return 0;
 }
 
-int handle_opt_realm_rename(const string& realm_id, const string& realm_name, const string& realm_new_name,
+int handle_opt_realm_rename(const std::string& realm_id, const std::string& realm_name, const std::string& realm_new_name,
                             CephContext *context, RGWRados *store)
 {
   RGWRealm realm(realm_id, realm_name);
@@ -647,7 +647,7 @@ int handle_opt_realm_rename(const string& realm_id, const string& realm_name, co
   return 0;
 }
 
-int handle_opt_realm_set(const string& realm_id, const string& realm_name, const string& infile,
+int handle_opt_realm_set(const std::string& realm_id, const std::string& realm_name, const std::string& infile,
                          bool set_default, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   if (realm_id.empty() && realm_name.empty()) {
@@ -700,7 +700,7 @@ int handle_opt_realm_set(const string& realm_id, const string& realm_name, const
   return 0;
 }
 
-int handle_opt_realm_default(const string& realm_id, const string& realm_name, CephContext *context, RGWRados *store)
+int handle_opt_realm_default(const std::string& realm_id, const std::string& realm_name, CephContext *context, RGWRados *store)
 {
   RGWRealm realm(realm_id, realm_name);
   int ret = realm.init(context, store);
@@ -716,8 +716,8 @@ int handle_opt_realm_default(const string& realm_id, const string& realm_name, C
   return 0;
 }
 
-int handle_opt_realm_pull(const string& realm_id, const string& realm_name, const string& url, const string& access_key,
-                          const string& secret_key, bool set_default, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_realm_pull(const std::string& realm_id, const std::string& realm_name, const std::string& url, const std::string& access_key,
+                          const std::string& secret_key, bool set_default, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   if (url.empty()) {
     cerr << "A --url must be provided." << std::endl;
@@ -728,7 +728,7 @@ int handle_opt_realm_pull(const string& realm_id, const string& realm_name, cons
   r_info.method = "GET";
   r_info.request_uri = "/admin/realm";
 
-  map<string, string> &params = r_info.args.get_params();
+  map<std::string, std::string> &params = r_info.args.get_params();
   if (!realm_id.empty())
     params["id"] = realm_id;
   if (!realm_name.empty())
@@ -791,13 +791,13 @@ int handle_opt_realm_pull(const string& realm_id, const string& realm_name, cons
   return 0;
 }
 
-int handle_opt_zonegroup_add(const string& zonegroup_id, const string& zonegroup_name, const string& zone_id,
-                             const string& zone_name, bool tier_type_specified, string *tier_type,
-                             const map<string, string, ltstr_nocase>& tier_config_add, bool sync_from_all_specified,
-                             bool *sync_from_all, bool redirect_zone_set, string *redirect_zone,
+int handle_opt_zonegroup_add(const std::string& zonegroup_id, const std::string& zonegroup_name, const std::string& zone_id,
+                             const std::string& zone_name, bool tier_type_specified, std::string *tier_type,
+                             const map<std::string, std::string, ltstr_nocase>& tier_config_add, bool sync_from_all_specified,
+                             bool *sync_from_all, bool redirect_zone_set, std::string *redirect_zone,
                              bool is_master_set, bool *is_master, bool is_read_only_set,
-                             bool *read_only, const list<string>& endpoints, list<string>& sync_from,
-                             list<string>& sync_from_rm, CephContext *context, RGWRados *store,
+                             bool *read_only, const list<std::string>& endpoints, list<std::string>& sync_from,
+                             list<std::string>& sync_from_rm, CephContext *context, RGWRados *store,
                              Formatter *formatter)
 {
   if (zonegroup_id.empty() && zonegroup_name.empty()) {
@@ -827,11 +827,11 @@ int handle_opt_zonegroup_add(const string& zonegroup_id, const string& zonegroup
     }
   }
 
-  string *ptier_type = (tier_type_specified ? tier_type : nullptr);
+  std::string *ptier_type = (tier_type_specified ? tier_type : nullptr);
   zone.tier_config = tier_config_add;
 
   bool *psync_from_all = (sync_from_all_specified ? sync_from_all : nullptr);
-  string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
+  std::string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
 
   ret = zonegroup.add_zone(zone,
                            (is_master_set ? is_master : nullptr),
@@ -850,9 +850,9 @@ int handle_opt_zonegroup_add(const string& zonegroup_id, const string& zonegroup
   return 0;
 }
 
-int handle_opt_zonegroup_create(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id,
-                                const string& realm_name, const string& api_name, bool set_default, bool is_master,
-                                const list<string>& endpoints, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_zonegroup_create(const std::string& zonegroup_id, const std::string& zonegroup_name, const std::string& realm_id,
+                                const std::string& realm_name, const std::string& api_name, bool set_default, bool is_master,
+                                const list<std::string>& endpoints, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   if (zonegroup_name.empty()) {
     cerr << "Missing zonegroup name" << std::endl;
@@ -885,7 +885,7 @@ int handle_opt_zonegroup_create(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
-int handle_opt_zonegroup_default(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+int handle_opt_zonegroup_default(const std::string& zonegroup_id, const std::string& zonegroup_name, CephContext *context,
                                  RGWRados *store)
 {
   if (zonegroup_id.empty() && zonegroup_name.empty()) {
@@ -908,7 +908,7 @@ int handle_opt_zonegroup_default(const string& zonegroup_id, const string& zoneg
   return 0;
 }
 
-int handle_opt_zonegroup_delete(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+int handle_opt_zonegroup_delete(const std::string& zonegroup_id, const std::string& zonegroup_name, CephContext *context,
                                 RGWRados *store)
 {
   if (zonegroup_id.empty() && zonegroup_name.empty()) {
@@ -929,7 +929,7 @@ int handle_opt_zonegroup_delete(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
-int handle_opt_zonegroup_get(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+int handle_opt_zonegroup_get(const std::string& zonegroup_id, const std::string& zonegroup_name, CephContext *context,
                              RGWRados *store, Formatter *formatter)
 {
   RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
@@ -953,13 +953,13 @@ int handle_opt_zonegroup_list(CephContext *context, RGWRados *store, Formatter *
     return -ret;
   }
 
-  list<string> zonegroups;
+  list<std::string> zonegroups;
   ret = store->list_zonegroups(zonegroups);
   if (ret < 0) {
     cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
-  string default_zonegroup;
+  std::string default_zonegroup;
   ret = zonegroup.read_default_id(default_zonegroup);
   if (ret < 0 && ret != -ENOENT) {
     cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -972,9 +972,9 @@ int handle_opt_zonegroup_list(CephContext *context, RGWRados *store, Formatter *
   return 0;
 }
 
-int handle_opt_zonegroup_modify(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id,
-                                const string& realm_name, const string& api_name, const string& master_zone,
-                                bool is_master_set, bool is_master, bool set_default, const list<string>& endpoints,
+int handle_opt_zonegroup_modify(const std::string& zonegroup_id, const std::string& zonegroup_name, const std::string& realm_id,
+                                const std::string& realm_name, const std::string& api_name, const std::string& master_zone,
+                                bool is_master_set, bool is_master, bool set_default, const list<std::string>& endpoints,
                                 CephContext *context, RGWRados *store, Formatter *formatter)
 {
   RGWRealm realm(realm_id, realm_name);
@@ -1047,8 +1047,8 @@ int handle_opt_zonegroup_modify(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
-int handle_opt_zonegroup_set(const string& zonegroup_id, const string& zonegroup_name, const string& realm_id,
-                             const string& realm_name, const string& infile,  bool set_default, const list<string>& endpoints,
+int handle_opt_zonegroup_set(const std::string& zonegroup_id, const std::string& zonegroup_name, const std::string& realm_id,
+                             const std::string& realm_name, const std::string& infile,  bool set_default, const list<std::string>& endpoints,
                              CephContext *context, RGWRados *store, Formatter *formatter)
 {
   RGWRealm realm(realm_id, realm_name);
@@ -1097,8 +1097,8 @@ int handle_opt_zonegroup_set(const string& zonegroup_id, const string& zonegroup
   return 0;
 }
 
-int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegroup_name, string& zone_id,
-                                const string& zone_name, CephContext *context, RGWRados *store, Formatter *formatter)
+int handle_opt_zonegroup_remove(const std::string& zonegroup_id, const std::string& zonegroup_name, std::string& zone_id,
+                                const std::string& zone_name, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
   int ret = zonegroup.init(context, store);
@@ -1137,8 +1137,8 @@ int handle_opt_zonegroup_remove(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
-int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegroup_name,
-                                const string& zonegroup_new_name, CephContext *context, RGWRados *store)
+int handle_opt_zonegroup_rename(const std::string& zonegroup_id, const std::string& zonegroup_name,
+                                const std::string& zonegroup_new_name, CephContext *context, RGWRados *store)
 {
   if (zonegroup_new_name.empty()) {
     cerr << " missing zonegroup new name" << std::endl;
@@ -1162,7 +1162,7 @@ int handle_opt_zonegroup_rename(const string& zonegroup_id, const string& zonegr
   return 0;
 }
 
-int handle_opt_zonegroup_placement_list(const string& zonegroup_id, const string& zonegroup_name, CephContext *context,
+int handle_opt_zonegroup_placement_list(const std::string& zonegroup_id, const std::string& zonegroup_name, CephContext *context,
                                         RGWRados *store, Formatter *formatter)
 {
   RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
@@ -1177,8 +1177,8 @@ int handle_opt_zonegroup_placement_list(const string& zonegroup_id, const string
   return 0;
 }
 
-int handle_opt_zonegroup_placement_add(const string& placement_id, const string& zonegroup_id,
-                                       const string& zonegroup_name, const list<string>& tags, CephContext *context,
+int handle_opt_zonegroup_placement_add(const std::string& placement_id, const std::string& zonegroup_id,
+                                       const std::string& zonegroup_name, const list<std::string>& tags, CephContext *context,
                                        RGWRados *store, Formatter *formatter) {
   if (placement_id.empty()) {
     cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -1211,9 +1211,9 @@ int handle_opt_zonegroup_placement_add(const string& placement_id, const string&
   return 0;
 }
 
-int handle_opt_zonegroup_placement_modify(const string& placement_id, const string& zonegroup_id,
-                                          const string& zonegroup_name, const list<string>& tags,
-                                          const list<string> tags_add, const list<string>& tags_rm,
+int handle_opt_zonegroup_placement_modify(const std::string& placement_id, const std::string& zonegroup_id,
+                                          const std::string& zonegroup_name, const list<std::string>& tags,
+                                          const list<std::string> tags_add, const list<std::string>& tags_rm,
                                           CephContext *context, RGWRados *store, Formatter *formatter) {
   if (placement_id.empty()) {
     cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -1254,8 +1254,8 @@ int handle_opt_zonegroup_placement_modify(const string& placement_id, const stri
   return 0;
 }
 
-int handle_opt_zonegroup_placement_rm(const string& placement_id, const string& zonegroup_id,
-                                      const string& zonegroup_name, CephContext *context,
+int handle_opt_zonegroup_placement_rm(const std::string& placement_id, const std::string& zonegroup_id,
+                                      const std::string& zonegroup_name, CephContext *context,
                                       RGWRados *store, Formatter *formatter) {
   if (placement_id.empty()) {
     cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -1283,8 +1283,8 @@ int handle_opt_zonegroup_placement_rm(const string& placement_id, const string& 
   return 0;
 }
 
-int handle_opt_zonegroup_placement_default(const string& placement_id, const string& zonegroup_id,
-                                           const string& zonegroup_name, CephContext *context, RGWRados *store,
+int handle_opt_zonegroup_placement_default(const std::string& placement_id, const std::string& zonegroup_id,
+                                           const std::string& zonegroup_name, CephContext *context, RGWRados *store,
                                            Formatter *formatter) {
   if (placement_id.empty()) {
     cerr << "ERROR: --placement-id not specified" << std::endl;
@@ -1317,14 +1317,14 @@ int handle_opt_zonegroup_placement_default(const string& placement_id, const str
   return 0;
 }
 
-int handle_opt_zone_create(const string& zone_id, const string& zone_name, const string& zonegroup_id,
-                           const string& zonegroup_name, string& realm_id, const string& realm_name,
-                           const string& access_key, const string& secret_key, bool tier_type_specified,
-                           string *tier_type, const map<string, string, ltstr_nocase>& tier_config_add,
+int handle_opt_zone_create(const std::string& zone_id, const std::string& zone_name, const std::string& zonegroup_id,
+                           const std::string& zonegroup_name, std::string& realm_id, const std::string& realm_name,
+                           const std::string& access_key, const std::string& secret_key, bool tier_type_specified,
+                           std::string *tier_type, const map<std::string, std::string, ltstr_nocase>& tier_config_add,
                            bool sync_from_all_specified, bool *sync_from_all, bool redirect_zone_set,
-                           string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
-                           bool *read_only, const list<string>& endpoints, list<string>& sync_from,
-                           list<string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
+                           std::string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
+                           bool *read_only, const list<std::string>& endpoints, list<std::string>& sync_from,
+                           list<std::string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
                            Formatter *formatter)
 {
   if (zone_name.empty()) {
@@ -1364,9 +1364,9 @@ int handle_opt_zone_create(const string& zone_id, const string& zone_name, const
   }
 
   if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
-    string *ptier_type = (tier_type_specified ? tier_type : nullptr);
+    std::string *ptier_type = (tier_type_specified ? tier_type : nullptr);
     bool *psync_from_all = (sync_from_all_specified ? sync_from_all : nullptr);
-    string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
+    std::string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
     ret = zonegroup.add_zone(zone,
                              (is_master_set ? is_master : nullptr),
                              (is_read_only_set ? read_only : nullptr),
@@ -1394,8 +1394,8 @@ int handle_opt_zone_create(const string& zone_id, const string& zone_name, const
   return 0;
 }
 
-int handle_opt_zone_default(const string& zone_id, const string& zone_name, const string& zonegroup_id,
-                            const string& zonegroup_name, CephContext *context, RGWRados *store)
+int handle_opt_zone_default(const std::string& zone_id, const std::string& zone_name, const std::string& zonegroup_id,
+                            const std::string& zonegroup_name, CephContext *context, RGWRados *store)
 {
   RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
   int ret = zonegroup.init(context, store);
@@ -1420,8 +1420,8 @@ int handle_opt_zone_default(const string& zone_id, const string& zone_name, cons
   return 0;
 }
 
-int handle_opt_zone_delete(const string& zone_id, const string& zone_name, const string& zonegroup_id,
-                           const string& zonegroup_name, CephContext *context, RGWRados *store)
+int handle_opt_zone_delete(const std::string& zone_id, const std::string& zone_name, const std::string& zonegroup_id,
+                           const std::string& zonegroup_name, CephContext *context, RGWRados *store)
 {
   if (zone_id.empty() && zone_name.empty()) {
     cerr << "no zone name or id provided" << std::endl;
@@ -1434,15 +1434,15 @@ int handle_opt_zone_delete(const string& zone_id, const string& zone_name, const
     return -ret;
   }
 
-  list<string> zonegroups;
+  list<std::string> zonegroups;
   ret = store->list_zonegroups(zonegroups);
   if (ret < 0) {
     cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
 
-  for (string &zg : zonegroups) {
-    RGWZoneGroup zonegroup(string(), zg);
+  for (std::string &zg : zonegroups) {
+    RGWZoneGroup zonegroup(std::string(), zg);
     int ret = zonegroup.init(g_ceph_context, store);
     if (ret < 0) {
       cerr << "WARNING: failed to initialize zonegroup " << zonegroup_name << std::endl;
@@ -1463,7 +1463,7 @@ int handle_opt_zone_delete(const string& zone_id, const string& zone_name, const
   return 0;
 }
 
-int handle_opt_zone_get(const string& zone_id, const string& zone_name, CephContext *context, RGWRados *store,
+int handle_opt_zone_get(const std::string& zone_id, const std::string& zone_name, CephContext *context, RGWRados *store,
                         Formatter *formatter)
 {
   RGWZoneParams zone(zone_id, zone_name);
@@ -1477,7 +1477,7 @@ int handle_opt_zone_get(const string& zone_id, const string& zone_name, CephCont
   return 0;
 }
 
-int handle_opt_zone_set(string& zone_name, const string& realm_id, const string& realm_name, const string& infile,
+int handle_opt_zone_set(std::string& zone_name, const std::string& realm_id, const std::string& realm_name, const std::string& infile,
                         bool set_default, CephContext *context, RGWRados *store, Formatter *formatter)
 {
   RGWZoneParams zone(zone_name);
@@ -1492,7 +1492,7 @@ int handle_opt_zone_set(string& zone_name, const string& realm_id, const string&
     return -ret;
   }
 
-  string orig_id = zone.get_id();
+  std::string orig_id = zone.get_id();
 
   ret = read_decode_json(infile, zone);
   if (ret < 0) {
@@ -1564,7 +1564,7 @@ int handle_opt_zone_set(string& zone_name, const string& realm_id, const string&
 
 int handle_opt_zone_list(CephContext *context, RGWRados *store, Formatter *formatter)
 {
-  list<string> zones;
+  list<std::string> zones;
   int ret = store->list_zones(zones);
   if (ret < 0) {
     cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
@@ -1577,7 +1577,7 @@ int handle_opt_zone_list(CephContext *context, RGWRados *store, Formatter *forma
     cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
-  string default_zone;
+  std::string default_zone;
   ret = zone.read_default_id(default_zone);
   if (ret < 0 && ret != -ENOENT) {
     cerr << "could not determine default zone: " << cpp_strerror(-ret) << std::endl;
@@ -1590,15 +1590,15 @@ int handle_opt_zone_list(CephContext *context, RGWRados *store, Formatter *forma
   return 0;
 }
 
-int handle_opt_zone_modify(const string& zone_id, const string& zone_name, const string& zonegroup_id,
-                           const string& zonegroup_name, string& realm_id, const string& realm_name,
-                           const string& access_key, const string& secret_key, bool tier_type_specified,
-                           string *tier_type, const map<string, string, ltstr_nocase>& tier_config_add,
-                           const map<string, string, ltstr_nocase>& tier_config_rm,
+int handle_opt_zone_modify(const std::string& zone_id, const std::string& zone_name, const std::string& zonegroup_id,
+                           const std::string& zonegroup_name, std::string& realm_id, const std::string& realm_name,
+                           const std::string& access_key, const std::string& secret_key, bool tier_type_specified,
+                           std::string *tier_type, const map<std::string, std::string, ltstr_nocase>& tier_config_add,
+                           const map<std::string, std::string, ltstr_nocase>& tier_config_rm,
                            bool sync_from_all_specified, bool *sync_from_all, bool redirect_zone_set,
-                           string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
-                           bool *read_only, const list<string>& endpoints, list<string>& sync_from,
-                           list<string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
+                           std::string *redirect_zone, bool is_master_set, bool *is_master, bool is_read_only_set,
+                           bool *read_only, const list<std::string>& endpoints, list<std::string>& sync_from,
+                           list<std::string>& sync_from_rm, bool set_default, CephContext *context, RGWRados *store,
                            Formatter *formatter)
 {
   RGWZoneParams zone(zone_id, zone_name);
@@ -1661,10 +1661,10 @@ int handle_opt_zone_modify(const string& zone_id, const string& zone_name, const
     cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
     return -ret;
   }
-  string *ptier_type = (tier_type_specified ? tier_type : nullptr);
+  std::string *ptier_type = (tier_type_specified ? tier_type : nullptr);
 
   bool *psync_from_all = (sync_from_all_specified ? sync_from_all : nullptr);
-  string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
+  std::string *predirect_zone = (redirect_zone_set ? redirect_zone : nullptr);
 
   ret = zonegroup.add_zone(zone,
                            (is_master_set ? is_master : nullptr),
@@ -1695,8 +1695,8 @@ int handle_opt_zone_modify(const string& zone_id, const string& zone_name, const
   return 0;
 }
 
-int handle_opt_zone_rename(const string& zone_id, const string& zone_name, const string& zone_new_name,
-                           const string& zonegroup_id, const string& zonegroup_name,
+int handle_opt_zone_rename(const std::string& zone_id, const std::string& zone_name, const std::string& zone_new_name,
+                           const std::string& zonegroup_id, const std::string& zonegroup_name,
                            CephContext *context, RGWRados *store)
 {
   if (zone_new_name.empty()) {
@@ -1751,7 +1751,7 @@ static int check_pool_support_omap(const rgw_pool& pool, RGWRados *store)
   return 0;
 }
 
-int handle_opt_zone_placement_list(const string& zone_id, const string& zone_name, CephContext *context,
+int handle_opt_zone_placement_list(const std::string& zone_id, const std::string& zone_name, CephContext *context,
                                    RGWRados *store, Formatter *formatter)
 {
   RGWZoneParams zone(zone_id, zone_name);
@@ -1765,9 +1765,9 @@ int handle_opt_zone_placement_list(const string& zone_id, const string& zone_nam
   return 0;
 }
 
-int handle_opt_zone_placement_add(const string& placement_id, const string& zone_id, const string& zone_name,
-                                  const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
-                                  const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+int handle_opt_zone_placement_add(const std::string& placement_id, const std::string& zone_id, const std::string& zone_name,
+                                  const boost::optional<std::string>& compression_type, const boost::optional<std::string>& index_pool,
+                                  const boost::optional<std::string>& data_pool, const boost::optional<std::string>& data_extra_pool,
                                   bool index_type_specified, RGWBucketIndexType placement_index_type,
                                   CephContext *context, RGWRados *store, Formatter *formatter)
 {
@@ -1828,9 +1828,9 @@ int handle_opt_zone_placement_add(const string& placement_id, const string& zone
   return 0;
 }
 
-int handle_opt_zone_placement_modify(const string& placement_id, const string& zone_id, const string& zone_name,
-                                     const boost::optional<string>& compression_type, const boost::optional<string>& index_pool,
-                                     const boost::optional<string>& data_pool, const boost::optional<string>& data_extra_pool,
+int handle_opt_zone_placement_modify(const std::string& placement_id, const std::string& zone_id, const std::string& zone_name,
+                                     const boost::optional<std::string>& compression_type, const boost::optional<std::string>& index_pool,
+                                     const boost::optional<std::string>& data_pool, const boost::optional<std::string>& data_extra_pool,
                                      bool index_type_specified, RGWBucketIndexType placement_index_type,
                                      CephContext *context, RGWRados *store, Formatter *formatter)
 {
@@ -1893,8 +1893,8 @@ int handle_opt_zone_placement_modify(const string& placement_id, const string& z
   return 0;
 }
 
-int handle_opt_zone_placement_rm(const string& placement_id, const string& zone_id, const string& zone_name,
-                                 const boost::optional<string>& compression_type, CephContext *context, RGWRados *store,
+int handle_opt_zone_placement_rm(const std::string& placement_id, const std::string& zone_id, const std::string& zone_name,
+                                 const boost::optional<std::string>& compression_type, CephContext *context, RGWRados *store,
                                  Formatter *formatter)
 {
   if (placement_id.empty()) {
@@ -2004,7 +2004,7 @@ int handle_opt_metadata_sync_run(RGWRados *store)
   return 0;
 }
 
-int handle_opt_data_sync_status(const string& source_zone, RGWRados *store, Formatter *formatter)
+int handle_opt_data_sync_status(const std::string& source_zone, RGWRados *store, Formatter *formatter)
 {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
@@ -2050,7 +2050,7 @@ int handle_opt_data_sync_status(const string& source_zone, RGWRados *store, Form
   return 0;
 }
 
-int handle_opt_data_sync_init(const string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store)
+int handle_opt_data_sync_init(const std::string& source_zone, const boost::intrusive_ptr<CephContext>& cct, RGWRados *store)
 {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
@@ -2081,7 +2081,7 @@ int handle_opt_data_sync_init(const string& source_zone, const boost::intrusive_
   return 0;
 }
 
-int handle_opt_data_sync_run(const string& source_zone, RGWRados *store)
+int handle_opt_data_sync_run(const std::string& source_zone, RGWRados *store)
 {
   if (source_zone.empty()) {
     cerr << "ERROR: source zone not specified" << std::endl;
