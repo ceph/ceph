@@ -7699,7 +7699,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pool = CrushWrapper::DEFAULT_CHOOSE_ARGS;
       positions = 1;
     }
-    newcrush.create_choose_args(pool, positions);
+    if (!newcrush.create_choose_args(pool, positions)) {
+      if (pool == CrushWrapper::DEFAULT_CHOOSE_ARGS) {
+        ss << "compat weight-set already created";
+      } else {
+        ss << "weight-set for pool '" << osdmap.get_pool_name(pool)
+           << "' already created";
+      }
+      goto reply;
+    }
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     goto update;

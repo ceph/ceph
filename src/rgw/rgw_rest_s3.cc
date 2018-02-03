@@ -2542,23 +2542,24 @@ void RGWCompleteMultipart_ObjStore_S3::send_response()
   dump_errno(s);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
   end_header(s, this, "application/xml");
-  if (op_ret == 0) { 
+  if (op_ret == 0) {
     dump_start(s);
     s->formatter->open_object_section_in_ns("CompleteMultipartUploadResult", XMLNS_AWS_S3);
+    std::string base_uri = compute_domain_uri(s);
     if (!s->bucket_tenant.empty()) {
-      if (s->info.domain.length()) {
-        s->formatter->dump_format("Location", "%s.%s.%s",
-          s->bucket_name.c_str(),
-          s->bucket_tenant.c_str(),
-          s->info.domain.c_str());
-      }
+      s->formatter->dump_format("Location", "%s/%s:%s/%s",
+	  base_uri.c_str(),
+	  s->bucket_tenant.c_str(),
+	  s->bucket_name.c_str(),
+	  s->object.name.c_str()
+          );
       s->formatter->dump_string("Tenant", s->bucket_tenant);
     } else {
-      if (s->info.domain.length()) {
-        s->formatter->dump_format("Location", "%s.%s",
-          s->bucket_name.c_str(),
-          s->info.domain.c_str());
-      }
+      s->formatter->dump_format("Location", "%s/%s/%s",
+	  base_uri.c_str(),
+	  s->bucket_name.c_str(),
+	  s->object.name.c_str()
+          );
     }
     s->formatter->dump_string("Bucket", s->bucket_name);
     s->formatter->dump_string("Key", s->object.name);
@@ -3279,10 +3280,12 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
 
   const char *copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
   if (copy_source &&
-      (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE"))) {
-	ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
-					    s->init_state.src_bucket,
-					    s->src_object);
+      (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
+      (! s->info.args.exists("uploadId"))) {
+
+    ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
+                                          s->init_state.src_bucket,
+                                          s->src_object);
     if (!ret) {
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?

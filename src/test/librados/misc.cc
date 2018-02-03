@@ -6,6 +6,7 @@
 #include "include/err.h"
 #include "include/buffer.h"
 #include "include/rbd_types.h"
+#include "include/rados.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "include/stringify.h"
@@ -1378,4 +1379,29 @@ TEST_F(LibRadosMiscECPP, CompareExtentRange) {
   ObjectReadOperation read2;
   read2.cmpext(2097152, bl3, nullptr);
   ASSERT_EQ(0, ioctx.operate("foo", &read2, nullptr));
+}
+
+TEST_F(LibRadosMisc, MinCompatClient) {
+  int8_t min_compat_client;
+  int8_t require_min_compat_client;
+  ASSERT_EQ(0, rados_get_min_compatible_client(cluster,
+                                               &min_compat_client,
+                                               &require_min_compat_client));
+  ASSERT_LE(-1, min_compat_client);
+  ASSERT_GT(CEPH_RELEASE_MAX, min_compat_client);
+
+  ASSERT_LE(-1, require_min_compat_client);
+  ASSERT_GT(CEPH_RELEASE_MAX, require_min_compat_client);
+}
+
+TEST_F(LibRadosMiscPP, MinCompatClient) {
+  int8_t min_compat_client;
+  int8_t require_min_compat_client;
+  ASSERT_EQ(0, cluster.get_min_compatible_client(&min_compat_client,
+                                                 &require_min_compat_client));
+  ASSERT_LE(-1, min_compat_client);
+  ASSERT_GT(CEPH_RELEASE_MAX, min_compat_client);
+
+  ASSERT_LE(-1, require_min_compat_client);
+  ASSERT_GT(CEPH_RELEASE_MAX, require_min_compat_client);
 }

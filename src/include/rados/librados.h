@@ -707,6 +707,20 @@ CEPH_RADOS_API rados_config_t rados_cct(rados_t cluster);
 CEPH_RADOS_API uint64_t rados_get_instance_id(rados_t cluster);
 
 /**
+ * Gets the minimum compatible client version
+ *
+ * @param cluster cluster handle
+ * @param[out] min_compat_client minimum compatible client version
+ *  based upon the current features
+ * @param[out] require_min_compat_client required minimum client version
+ *  based upon explicit setting
+ * @returns 0 on sucess, negative error code on failure
+ */
+CEPH_RADOS_API int rados_get_min_compatible_client(rados_t cluster,
+                                                   int8_t* min_compat_client,
+                                                   int8_t* require_min_compat_client);
+
+/**
  * Create an io context
  *
  * The io context allows you to perform operations within a particular

@@ -99,6 +99,9 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_client(int8_t* min_compat_client,
+                                int8_t* require_min_compat_client);
+
   int wait_for_latest_osdmap();
 
   int create_ioctx(const char *name, IoCtxImpl **io);

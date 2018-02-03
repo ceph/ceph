@@ -3571,7 +3571,7 @@ public:
                             list<cls_user_bucket_entry>& entries,
                             string *out_marker,
                             bool *truncated);
-  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry, bool update_stats);
+  int cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry);
   int cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add);
   int cls_user_complete_stats_sync(rgw_raw_obj& obj);
   int complete_sync_user_stats(const rgw_user& user_id);

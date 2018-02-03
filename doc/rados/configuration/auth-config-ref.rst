@@ -90,7 +90,7 @@ generated the keys, you may skip the steps related to generating keys.
 #. Create a ``client.admin`` key, and save a copy of the key for your client
    host::
 
-	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
+	ceph auth get-or-create client.admin mon 'allow *' mds 'allow *' mgr 'allow *' osd 'allow *' -o /etc/ceph/ceph.client.admin.keyring
 
    **Warning:** This will clobber any existing
    ``/etc/ceph/client.admin.keyring`` file. Do not perform this step if a
@@ -107,13 +107,17 @@ generated the keys, you may skip the steps related to generating keys.
 
     cp /tmp/ceph.mon.keyring /var/lib/ceph/mon/ceph-a/keyring
 
+#. Generate a secret key for every MGR, where ``{$id}`` is the MGR letter::
+
+    ceph auth get-or-create mgr.{$id} mon 'allow profile mgr' mds 'allow *' osd 'allow *' -o /var/lib/ceph/mgr/ceph-{$id}/keyring
+
 #. Generate a secret key for every OSD, where ``{$id}`` is the OSD number::
 
     ceph auth get-or-create osd.{$id} mon 'allow rwx' osd 'allow *' -o /var/lib/ceph/osd/ceph-{$id}/keyring
 
 #. Generate a secret key for every MDS, where ``{$id}`` is the MDS letter::
 
-    ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' -o /var/lib/ceph/mds/ceph-{$id}/keyring
+    ceph auth get-or-create mds.{$id} mon 'allow rwx' osd 'allow *' mds 'allow *' mgr 'allow profile mds' -o /var/lib/ceph/mds/ceph-{$id}/keyring
 
 #. Enable ``cephx`` authentication by setting the following options in the
    ``[global]`` section of your `Ceph configuration`_ file::
@@ -158,7 +162,7 @@ Enablement
 ``auth cluster required``
 
 :Description: If enabled, the Ceph Storage Cluster daemons (i.e., ``ceph-mon``,
-              ``ceph-osd``, and ``ceph-mds``) must authenticate with
+              ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
               each other. Valid settings are ``cephx`` or ``none``.
 
 :Type: String
@@ -259,12 +263,17 @@ below.
 ``ceph-osd``
 
 :Location: ``$osd_data/keyring``
-:Capabilities: ``mon 'allow profile osd' osd 'allow *'``
+:Capabilities: ``mgr 'allow profile osd' mon 'allow profile osd' osd 'allow *'``
 
 ``ceph-mds``
 
 :Location: ``$mds_data/keyring``
-:Capabilities: ``mds 'allow' mon 'allow profile mds' osd 'allow rwx'``
+:Capabilities: ``mds 'allow' mgr 'allow profile mds' mon 'allow profile mds' osd 'allow rwx'``
+
+``ceph-mgr``
+
+:Location: ``$mgr_data/keyring``
+:Capabilities: ``mon 'allow profile mgr' mds 'allow *' osd 'allow *'``
 
 ``radosgw``
 
