@@ -285,7 +285,7 @@ bool DeterministicOpSequence::_prepare_clone(rngen_t& gen,
   coll_entry_t *entry = get_coll_at(coll_id);
   ceph_assert(entry != NULL);
 
-  if (entry->m_objects.size() >= 2) {
+  if (entry->m_objects.size() < 2) {
     dout(0) << "_prepare_clone coll " << entry->m_coll.to_str()
 	    << " doesn't have 2 or more objects" << dendl;
     return false;
