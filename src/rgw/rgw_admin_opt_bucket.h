@@ -68,6 +68,10 @@ int handle_opt_bucket_check(bool check_head_obj_locator, const string& bucket_na
 int handle_opt_bucket_rm(bool inconsistent_index, bool bypass_gc, bool yes_i_really_mean_it,
                          RGWBucketAdminOpState& bucket_op, RGWRados *store);
 
+int bucket_sync_toggle(RgwAdminCommand opt_cmd, const string& bucket_name, const string& tenant,
+                       const string& realm_id, const string& realm_name, const string& object,
+                       rgw_bucket& bucket, CephContext *context, RGWRados *store);
+
 int handle_opt_bucket_sync_init(const string& source_zone, const string& bucket_name, const string& bucket_id,
                                 const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store);
 
@@ -76,6 +80,9 @@ int handle_opt_bucket_sync_status(const string& source_zone, const string& bucke
 
 int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_name, const string& bucket_id,
                                const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store);
+
+int handle_opt_policy(const string& format, RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
+                      RGWRados *store);
 
 int handle_opt_bi_get(const string& object, const string& bucket_id, const string& bucket_name, const string& tenant,
                       BIIndexType bi_index_type, const string& object_version, rgw_bucket& bucket, RGWRados *store, Formatter *formatter);

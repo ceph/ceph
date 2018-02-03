@@ -129,8 +129,8 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
 }
 
 int read_current_period_id(RGWRados* store, const std::string& realm_id,
-                                  const std::string& realm_name,
-                                  std::string* period_id)
+                           const std::string& realm_name,
+                           std::string* period_id)
 {
   RGWRealm realm(realm_id, realm_name);
   int ret = realm.init(g_ceph_context, store);

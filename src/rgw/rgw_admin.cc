@@ -8,6 +8,7 @@
 #include <string>
 
 #include <boost/optional.hpp>
+#include <unordered_set>
 
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
@@ -221,7 +222,7 @@ int main(int argc, const char **argv)
   boost::optional<std::string> compression_type;
 
   int ret = parse_commandline_parameters(args, user_id, tenant, access_key, subuser, secret_key, user_email,user_op,
-                                         display_name, bucket_name, pool_name,pool, object, object_version, client_id,
+                                         display_name, bucket_name, pool_name, pool, object, object_version, client_id,
                                          op_id, state_str, op_mask_str, key_type, job_id, gen_access_key,
                                          gen_secret_key, show_log_entries, show_log_sum, skip_zero_entries, admin,
                                          admin_specified, system, system_specified, verbose, staging, commit,
@@ -276,34 +277,34 @@ int main(int argc, const char **argv)
   zone_name = g_conf->rgw_zone;
   zonegroup_name = g_conf->rgw_zonegroup;
 
-  RGWStreamFlusher f(formatter, cout);
+  RGWStreamFlusher rgw_stream_flusher(formatter, cout);
 
   // not a raw op if 'period update' needs to commit to master
   bool raw_period_update = opt_cmd == OPT_PERIOD_UPDATE && !commit;
-  std::set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
-                                        OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
-                                        OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
-                                        OPT_ZONEGROUP_RENAME, OPT_ZONEGROUP_MODIFY,
-                                        OPT_ZONEGROUP_REMOVE,
-                                        OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
-                                        OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
-                                        OPT_ZONEGROUP_PLACEMENT_DEFAULT,
-                                        OPT_ZONE_CREATE, OPT_ZONE_DELETE,
-                                        OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
-                                        OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
-                                        OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
-                                        OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
-                                        OPT_REALM_CREATE,
-                                        OPT_PERIOD_DELETE, OPT_PERIOD_GET,
-                                        OPT_PERIOD_PULL,
-                                        OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
-                                        OPT_GLOBAL_QUOTA_GET, OPT_GLOBAL_QUOTA_SET,
-                                        OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
-                                        OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
-                                        OPT_REALM_LIST_PERIODS,
-                                        OPT_REALM_GET_DEFAULT,
-                                        OPT_REALM_RENAME, OPT_REALM_SET,
-                                        OPT_REALM_DEFAULT, OPT_REALM_PULL};
+  std::unordered_set<int> raw_storage_ops_list = {OPT_ZONEGROUP_ADD, OPT_ZONEGROUP_CREATE, OPT_ZONEGROUP_DELETE,
+                                                  OPT_ZONEGROUP_GET, OPT_ZONEGROUP_LIST,
+                                                  OPT_ZONEGROUP_SET, OPT_ZONEGROUP_DEFAULT,
+                                                  OPT_ZONEGROUP_RENAME, OPT_ZONEGROUP_MODIFY,
+                                                  OPT_ZONEGROUP_REMOVE,
+                                                  OPT_ZONEGROUP_PLACEMENT_ADD, OPT_ZONEGROUP_PLACEMENT_RM,
+                                                  OPT_ZONEGROUP_PLACEMENT_MODIFY, OPT_ZONEGROUP_PLACEMENT_LIST,
+                                                  OPT_ZONEGROUP_PLACEMENT_DEFAULT,
+                                                  OPT_ZONE_CREATE, OPT_ZONE_DELETE,
+                                                  OPT_ZONE_GET, OPT_ZONE_SET, OPT_ZONE_RENAME,
+                                                  OPT_ZONE_LIST, OPT_ZONE_MODIFY, OPT_ZONE_DEFAULT,
+                                                  OPT_ZONE_PLACEMENT_ADD, OPT_ZONE_PLACEMENT_RM,
+                                                  OPT_ZONE_PLACEMENT_MODIFY, OPT_ZONE_PLACEMENT_LIST,
+                                                  OPT_REALM_CREATE,
+                                                  OPT_PERIOD_DELETE, OPT_PERIOD_GET,
+                                                  OPT_PERIOD_PULL,
+                                                  OPT_PERIOD_GET_CURRENT, OPT_PERIOD_LIST,
+                                                  OPT_GLOBAL_QUOTA_GET, OPT_GLOBAL_QUOTA_SET,
+                                                  OPT_GLOBAL_QUOTA_ENABLE, OPT_GLOBAL_QUOTA_DISABLE,
+                                                  OPT_REALM_DELETE, OPT_REALM_GET, OPT_REALM_LIST,
+                                                  OPT_REALM_LIST_PERIODS,
+                                                  OPT_REALM_GET_DEFAULT,
+                                                  OPT_REALM_RENAME, OPT_REALM_SET,
+                                                  OPT_REALM_DEFAULT, OPT_REALM_PULL};
 
 
   bool raw_storage_op = (raw_storage_ops_list.find(opt_cmd) != raw_storage_ops_list.end() ||
@@ -520,13 +521,6 @@ int main(int argc, const char **argv)
   if (key_type != KEY_TYPE_UNDEFINED)
     user_op.set_key_type(key_type);
 
-  // set suspension operation parameters
-  // TODO: move
-  if (opt_cmd == OPT_USER_ENABLE)
-    user_op.set_suspension(false);
-  else if (opt_cmd == OPT_USER_SUSPEND)
-    user_op.set_suspension(true);
-
   // RGWUser to use for user operations
   RGWUser user;
   ret = 0;
@@ -570,7 +564,11 @@ int main(int argc, const char **argv)
       output_user_info = false;
       break;
     case OPT_USER_ENABLE:
+      user_op.set_suspension(false);
+      // falling through on purpose
     case OPT_USER_SUSPEND:
+      user_op.set_suspension(true);
+      // falling through on purpose
     case OPT_USER_MODIFY:
       ret = user.modify(user_op, &err_msg);
       if (ret < 0) {
@@ -672,34 +670,21 @@ int main(int argc, const char **argv)
     show_user_info(info, formatter);
   }
 
-  // TODO: move
   if (opt_cmd == OPT_POLICY) {
-    if (format == "xml") {
-      int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
-      if (ret < 0) {
-        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else {
-      int ret = RGWBucketAdminOp::get_policy(store, bucket_op, f);
-      if (ret < 0) {
-        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
+    return handle_opt_policy(format, bucket_op, rgw_stream_flusher, store);
   }
 
   if (opt_cmd == OPT_BUCKET_LIMIT_CHECK) {
-    return handle_opt_bucket_limit_check(user_id, warnings_only, bucket_op, f, store);
+    return handle_opt_bucket_limit_check(user_id, warnings_only, bucket_op, rgw_stream_flusher, store);
   }
 
   if (opt_cmd == OPT_BUCKETS_LIST) {
     return handle_opt_buckets_list(bucket_name, tenant, bucket_id, marker, max_entries, bucket, bucket_op,
-                                   f, store, formatter);
+                                   rgw_stream_flusher, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_STATS) {
-    return handle_opt_bucket_stats(bucket_op, f, store);
+    return handle_opt_bucket_stats(bucket_op, rgw_stream_flusher, store);
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
@@ -714,58 +699,29 @@ int main(int argc, const char **argv)
     return handle_opt_log_list(date, store, formatter);
   }
 
-  // TODO: split
-  if (opt_cmd == OPT_LOG_SHOW || opt_cmd == OPT_LOG_RM) {
-    return handle_opt_log_show_rm(opt_cmd, object, date, bucket_id, bucket_name, show_log_entries, skip_zero_entries,
-                                  show_log_sum, store, formatter);
+  if (opt_cmd == OPT_LOG_SHOW) {
+    return handle_opt_log_show(object, date, bucket_id, bucket_name, show_log_entries, skip_zero_entries,
+                               show_log_sum, store, formatter);
   }
 
-  // TODO: move pool-related commands
-  if (opt_cmd == OPT_POOL_ADD) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to add!" << std::endl;
-      usage();
-      ceph_abort();
-    }
+  if (opt_cmd == OPT_LOG_RM) {
+    return handle_opt_log_rm(object, date, bucket_id, bucket_name, store);
+  }
 
-    int ret = store->add_bucket_placement(pool);
-    if (ret < 0)
-      cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
+  if (opt_cmd == OPT_POOL_ADD) {
+    return handle_opt_pool_add(pool_name, pool, store);
   }
 
   if (opt_cmd == OPT_POOL_RM) {
-    if (pool_name.empty()) {
-      cerr << "need to specify pool to remove!" << std::endl;
-      usage();
-      ceph_abort();
-    }
-
-    int ret = store->remove_bucket_placement(pool);
-    if (ret < 0)
-      cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
+    return handle_opt_pool_rm(pool_name, pool, store);
   }
 
   if (opt_cmd == OPT_POOLS_LIST) {
-    set<rgw_pool> pools;
-    int ret = store->list_placement_set(pools);
-    if (ret < 0) {
-      cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    formatter->reset();
-    formatter->open_array_section("pools");
-    for (const auto &pool : pools) {
-      formatter->open_object_section("pool");
-      formatter->dump_string("name", pool.to_str());
-      formatter->close_section();
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
+    return handle_opt_pools_list(store, formatter);
   }
 
   if (opt_cmd == OPT_USAGE_SHOW) {
-    return handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum, f, &categories, store);
+    return handle_opt_usage_show(user_id, start_date, end_date, show_log_entries, show_log_sum, rgw_stream_flusher, &categories, store);
   }
 
   if (opt_cmd == OPT_USAGE_TRIM) {
@@ -851,7 +807,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_CHECK) {
     return handle_opt_bucket_check(check_head_obj_locator, bucket_name, tenant, fix, remove_bad,
-                                   bucket_op, f, store, formatter);
+                                   bucket_op, rgw_stream_flusher, store, formatter);
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
@@ -970,56 +926,12 @@ int main(int argc, const char **argv)
     return handle_opt_metadata_rm(metadata_key, store, formatter);
   }
 
-  if (opt_cmd == OPT_METADATA_LIST || opt_cmd == OPT_USER_LIST) {
-    if (opt_cmd == OPT_USER_LIST) {
-      metadata_key = "user";
-    }
-    void *handle;
-    int max = 1000;
-    int ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
-    if (ret < 0) {
-      cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
+  if (opt_cmd == OPT_METADATA_LIST) {
+    return handle_opt_metadata_list(metadata_key, marker, max_entries_specified, max_entries, store, formatter);
+  }
 
-    bool truncated;
-    uint64_t count = 0;
-
-    if (max_entries_specified) {
-      formatter->open_object_section("result");
-    }
-    formatter->open_array_section("keys");
-
-    uint64_t left;
-    do {
-      list<string> keys;
-      left = (max_entries_specified ? max_entries - count : max);
-      ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      } if (ret != -ENOENT) {
-        for (auto &key : keys) {
-          formatter->dump_string("key", key);
-          ++count;
-        }
-        formatter->flush(cout);
-      }
-    } while (truncated && left > 0);
-
-    formatter->close_section();
-
-    if (max_entries_specified) {
-      encode_json("truncated", truncated, formatter);
-      encode_json("count", count, formatter);
-      if (truncated) {
-        encode_json("marker", store->meta_mgr->get_marker(handle), formatter);
-      }
-      formatter->close_section();
-    }
-    formatter->flush(cout);
-
-    store->meta_mgr->list_keys_complete(handle);
+  if (opt_cmd == OPT_USER_LIST) {
+    return handle_opt_user_list(marker, max_entries_specified, max_entries, store, formatter);
   }
 
   if (opt_cmd == OPT_MDLOG_LIST) {
@@ -1072,34 +984,8 @@ int main(int argc, const char **argv)
     return handle_opt_bucket_sync_init(source_zone, bucket_name, bucket_id, tenant, bucket_op, store);
   }
 
-  // TODO: move (+split?)
   if ((opt_cmd == OPT_BUCKET_SYNC_DISABLE) || (opt_cmd == OPT_BUCKET_SYNC_ENABLE)) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket not specified" << std::endl;
-      return EINVAL;
-    }
-
-    if (ret < 0) {
-      cerr << "could not init realm " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-    RGWPeriod period;
-    ret = period.init(g_ceph_context, store, realm_id, realm_name, true);
-    if (ret < 0) {
-      cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-
-    if (!store->is_meta_master()) {
-      cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
-      cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
-      return EINVAL;
-    }
-
-    rgw_obj obj(bucket, object);
-    ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
-    if (ret < 0)
-      return -ret;
+    return bucket_sync_toggle(opt_cmd, bucket_name, tenant, realm_id, realm_name, object, bucket, g_ceph_context, store);
   }
 
   if (opt_cmd == OPT_BUCKET_SYNC_STATUS) {
@@ -1138,26 +1024,8 @@ int main(int argc, const char **argv)
     return handle_opt_datalog_list(max_entries, start_date, end_date, extra_info, store, formatter);
   }
 
-  // TOOD: remove :: and handle with other datalogs
   if (opt_cmd == OPT_DATALOG_STATUS) {
-    RGWDataChangesLog *log = store->data_log;
-    int i = (specified_shard_id ? shard_id : 0);
-
-    formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
-      list<cls_log_entry> entries;
-
-      RGWDataChangesLogInfo info;
-      log->get_info(i, &info);
-
-      ::encode_json("info", info, formatter);
-
-      if (specified_shard_id)
-        break;
-    }
-
-    formatter->close_section();
-    formatter->flush(cout);
+    return handle_opt_datalog_status(specified_shard_id, shard_id, store, formatter);
   }
 
   if (opt_cmd == OPT_DATALOG_TRIM) {
@@ -1168,38 +1036,12 @@ int main(int argc, const char **argv)
     return handle_opt_opstate_list(client_id, op_id, object, store, formatter);
   }
 
-  // TODO: split those two into different handler functions
-  if (opt_cmd == OPT_OPSTATE_SET || opt_cmd == OPT_OPSTATE_RENEW) {
-    RGWOpState oc(store);
+  if (opt_cmd == OPT_OPSTATE_SET) {
+    return handle_opt_opstate_set(client_id, op_id, object, state_str, store);
+  }
 
-    RGWOpState::OpState state;
-    if (object.empty() || client_id.empty() || op_id.empty()) {
-      cerr << "ERROR: need to specify client_id, op_id, and object" << std::endl;
-      return EINVAL;
-    }
-    if (state_str.empty()) {
-      cerr << "ERROR: state was not specified" << std::endl;
-      return EINVAL;
-    }
-    int ret = oc.state_from_str(state_str, &state);
-    if (ret < 0) {
-      cerr << "ERROR: invalid state: " << state_str << std::endl;
-      return -ret;
-    }
-
-    if (opt_cmd == OPT_OPSTATE_SET) {
-      ret = oc.set_state(client_id, op_id, object, state);
-      if (ret < 0) {
-        cerr << "ERROR: failed to set state: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else {
-      ret = oc.renew_state(client_id, op_id, object, state);
-      if (ret < 0) {
-        cerr << "ERROR: failed to renew state: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
+  if (opt_cmd == OPT_OPSTATE_RENEW) {
+    return handle_opt_opstate_renew(client_id, op_id, object, state_str, store);
   }
 
   if (opt_cmd == OPT_OPSTATE_RM) {

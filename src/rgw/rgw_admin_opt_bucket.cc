@@ -85,7 +85,7 @@ static int check_obj_tail_locator_underscore(RGWRados *store, RGWBucketInfo& buc
 }
 
 static int do_check_object_locator(RGWRados *store, const string& tenant_name, const string& bucket_name,
-                            bool fix, bool remove_bad, Formatter *f)
+                                   bool fix, bool remove_bad, Formatter *f)
 {
   if (remove_bad && !fix) {
     cerr << "ERROR: can't have remove_bad specified without fix" << std::endl;
@@ -215,7 +215,7 @@ int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_n
 }
 
 static int init_bucket_for_sync(RGWRados *store, const string& tenant, const string& bucket_name,
-                         const string& bucket_id, rgw_bucket& bucket)
+                                const string& bucket_id, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
@@ -531,6 +531,35 @@ int handle_opt_bucket_rm(bool inconsistent_index, bool bypass_gc, bool yes_i_rea
   return 0;
 }
 
+int bucket_sync_toggle(RgwAdminCommand opt_cmd, const string& bucket_name, const string& tenant,
+                       const string& realm_id, const string& realm_name, const string& object,
+                       rgw_bucket& bucket, CephContext *context, RGWRados *store)
+{
+  if (bucket_name.empty()) {
+    cerr << "ERROR: bucket not specified" << std::endl;
+    return EINVAL;
+  }
+
+  RGWPeriod period;
+  int ret = period.init(context, store, realm_id, realm_name, true);
+  if (ret < 0) {
+    cerr << "failed to init period " << ": " << cpp_strerror(-ret) << std::endl;
+    return ret;
+  }
+
+  if (!store->is_meta_master()) {
+    cerr << "failed to update bucket sync: only allowed on meta master zone "  << std::endl;
+    cerr << period.get_master_zone() << " | " << period.get_realm() << std::endl;
+    return EINVAL;
+  }
+
+  rgw_obj obj(bucket, object);
+  ret = set_bucket_sync_enabled(store, opt_cmd, tenant, bucket_name);
+  if (ret < 0)
+    return -ret;
+  return 0;
+}
+
 int handle_opt_bucket_sync_init(const string& source_zone, const string& bucket_name, const string& bucket_id,
                                 const string& tenant, RGWBucketAdminOpState& bucket_op, RGWRados *store) {
   if (source_zone.empty()) {
@@ -624,6 +653,25 @@ int handle_opt_bucket_sync_run(const string& source_zone, const string& bucket_n
   if (ret < 0) {
     cerr << "ERROR: sync.run() returned ret=" << ret << std::endl;
     return -ret;
+  }
+  return 0;
+}
+
+int handle_opt_policy(const string& format, RGWBucketAdminOpState& bucket_op, RGWFormatterFlusher& flusher,
+                      RGWRados *store)
+{
+  if (format == "xml") {
+    int ret = RGWBucketAdminOp::dump_s3_policy(store, bucket_op, cout);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  } else {
+    int ret = RGWBucketAdminOp::get_policy(store, bucket_op, flusher);
+    if (ret < 0) {
+      cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
   }
   return 0;
 }
