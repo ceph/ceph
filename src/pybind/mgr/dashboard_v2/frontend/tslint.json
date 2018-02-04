@@ -6,6 +6,7 @@
     "tslint-eslint-rules"
   ],
   "rules": {
+    "no-consecutive-blank-lines": true,
     "arrow-return-shorthand": true,
     "callable-types": true,
     "class-name": true,
@@ -107,7 +108,6 @@
         "variable-declaration": "nospace"
       }
     ],
-    "typeof-compare": true,
     "unified-signatures": true,
     "variable-name": [
       true,
