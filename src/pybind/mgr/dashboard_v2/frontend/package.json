@@ -51,7 +51,7 @@
     "karma-phantomjs-launcher": "^1.0.4",
     "protractor": "~5.1.2",
     "ts-node": "~3.2.0",
-    "tslint": "~5.7.0",
+    "tslint": "~5.9.1",
     "tslint-eslint-rules": "^4.1.1",
     "typescript": "~2.4.2"
   }
