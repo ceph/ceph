@@ -518,6 +518,7 @@ class TestImage(object):
             copy.remove_snap('snap1')
         self.rbd.remove(ioctx, dst_name)
 
+    @require_features([RBD_FEATURE_LAYERING])
     def test_deep_copy_clone(self):
         global ioctx
         global features
