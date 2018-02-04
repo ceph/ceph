@@ -2,6 +2,9 @@
   "rulesDirectory": [
     "node_modules/codelyzer"
   ],
+  "extends": [
+    "tslint-eslint-rules"
+  ],
   "rules": {
     "arrow-return-shorthand": true,
     "callable-types": true,
@@ -145,6 +148,32 @@
     "directive-class-suffix": true,
     "no-forward-ref": true,
     "no-output-named-after-standard-event": true,
-    "ordered-imports": true
+    "ordered-imports": true,
+    "no-extra-semi": true,
+    "ter-no-irregular-whitespace": true,
+    "no-multi-spaces": true,
+    "brace-style": [
+      true,
+      "1tbs",
+      {
+        "allowSingleLine": false
+      }
+    ],
+    "ter-indent": [
+      true,
+      2,
+      {
+        "SwitchCase": 1,
+        "FunctionDeclaration": {
+          "body": 1,
+          "parameters": "first"
+        },
+        "FunctionExpression": {
+          "body": 1,
+          "parameters": "first"
+        }
+      }
+    ],
+    "space-in-parens": [true, "never"]
   }
 }
