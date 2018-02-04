@@ -212,13 +212,13 @@ class Module(MgrModule):
             "perm": "rw",
         },
         {
-            "cmd": "balancer eval name=plan,type=CephString,req=false",
-            "desc": "Evaluate data distribution for the current cluster or specific plan",
+            "cmd": "balancer eval name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan",
             "perm": "r",
         },
         {
-            "cmd": "balancer eval-verbose name=plan,type=CephString,req=false",
-            "desc": "Evaluate data distribution for the current cluster or specific plan (verbosely)",
+            "cmd": "balancer eval-verbose name=option,type=CephString,req=false",
+            "desc": "Evaluate data distribution for the current cluster or specific pool or specific plan (verbosely)",
             "perm": "r",
         },
         {
@@ -287,17 +287,26 @@ class Module(MgrModule):
             return (0, '', '')
         elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
             verbose = command['prefix'] == 'balancer eval-verbose'
-            if 'plan' in command:
-                plan = self.plans.get(command['plan'])
+            pools = []
+            if 'option' in command:
+                plan = self.plans.get(command['option'])
                 if not plan:
-                    return (-errno.ENOENT, '', 'plan %s not found' %
-                            command['plan'])
-                ms = plan.final_state()
+                    # not a plan, does it look like a pool?
+                    osdmap = self.get_osdmap()
+                    valid_pool_names = [p['pool_name'] for p in osdmap.dump().get('pools', [])]
+                    option = command['option']
+                    if option not in valid_pool_names:
+                         return (-errno.EINVAL, '', 'option "%s" not a plan or a pool' % option)
+                    pools.append(option)
+                    ms = MappingState(osdmap, self.get("pg_dump"), 'pool "%s"' % option)
+                else:
+                    pools = plan.pools
+                    ms = plan.final_state()
             else:
                 ms = MappingState(self.get_osdmap(),
                                   self.get("pg_dump"),
                                   'current cluster')
-            return (0, self.evaluate(ms, verbose=verbose), '')
+            return (0, self.evaluate(ms, pools, verbose=verbose), '')
         elif command['prefix'] == 'balancer optimize':
             pools = []
             if 'pools' in command:
@@ -387,18 +396,19 @@ class Module(MgrModule):
         if name in self.plans:
             del self.plans[name]
 
-    def calc_eval(self, ms):
+    def calc_eval(self, ms, pools):
         pe = Eval(ms)
         pool_rule = {}
         pool_info = {}
         for p in ms.osdmap_dump.get('pools',[]):
+            if len(pools) and p['pool_name'] not in pools:
+                continue
             pe.pool_name[p['pool']] = p['pool_name']
             pe.pool_id[p['pool_name']] = p['pool']
             pool_rule[p['pool_name']] = p['crush_rule']
             pe.pool_roots[p['pool_name']] = []
             pool_info[p['pool_name']] = p
-        pools = pe.pool_id.keys()
-        if len(pools) == 0:
+        if len(pool_info) == 0:
             return pe
         self.log.debug('pool_name %s' % pe.pool_name)
         self.log.debug('pool_id %s' % pe.pool_id)
@@ -413,14 +423,21 @@ class Module(MgrModule):
         rootids = ms.crush.find_takes()
         roots = []
         for rootid in rootids:
-            root = ms.crush.get_item_name(rootid)
-            pe.root_ids[root] = rootid
-            roots.append(root)
             ls = ms.osdmap.get_pools_by_take(rootid)
+            want = []
+            # find out roots associating with pools we are passed in
+            for candidate in ls:
+                if candidate in pe.pool_name:
+                    want.append(candidate)
+            if len(want) == 0:
+                continue
+            root = ms.crush.get_item_name(rootid)
             pe.root_pools[root] = []
-            for poolid in ls:
+            for poolid in want:
                 pe.pool_roots[pe.pool_name[poolid]].append(root)
                 pe.root_pools[root].append(pe.pool_name[poolid])
+            pe.root_ids[root] = rootid
+            roots.append(root)
             weight_map = ms.crush.get_take_weight_osd_map(rootid)
             adjusted_map = {
                 osd: cw * osd_weight.get(osd, 1.0)
@@ -558,6 +575,7 @@ class Module(MgrModule):
                 pe.total_by_root[a]
             ) for a, b in pe.count_by_root.iteritems()
         }
+        self.log.debug('stats_by_root %s' % pe.stats_by_root)
 
 	# the scores are already normalized
         pe.score_by_root = {
@@ -567,6 +585,7 @@ class Module(MgrModule):
                 'bytes': pe.stats_by_root[r]['bytes']['score'],
             } for r in pe.total_by_root.keys()
         }
+        self.log.debug('score_by_root %s' % pe.score_by_root)
 
         # total score is just average of normalized stddevs
         pe.score = 0.0
@@ -576,8 +595,8 @@ class Module(MgrModule):
         pe.score /= 3 * len(roots)
         return pe
 
-    def evaluate(self, ms, verbose=False):
-        pe = self.calc_eval(ms)
+    def evaluate(self, ms, pools, verbose=False):
+        pe = self.calc_eval(ms, pools)
         return pe.show(verbose=verbose)
 
     def optimize(self, plan):
@@ -661,7 +680,7 @@ class Module(MgrModule):
         ms = plan.initial
         osdmap = ms.osdmap
         crush = osdmap.get_crush()
-        pe = self.calc_eval(ms)
+        pe = self.calc_eval(ms, plan.pools)
         if pe.score == 0:
             self.log.info('Distribution is already perfect')
             return False
@@ -768,7 +787,7 @@ class Module(MgrModule):
             # recalc
             plan.compat_ws = copy.deepcopy(next_ws)
             next_ms = plan.final_state()
-            next_pe = self.calc_eval(next_ms)
+            next_pe = self.calc_eval(next_ms, plan.pools)
             next_misplaced = next_ms.calc_misplaced_from(ms)
             self.log.debug('Step result score %f -> %f, misplacing %f',
                            best_pe.score, next_pe.score, next_misplaced)
