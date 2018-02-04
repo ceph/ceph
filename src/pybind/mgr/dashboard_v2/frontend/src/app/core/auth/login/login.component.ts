@@ -1,9 +1,11 @@
 import { Component, OnInit, ViewContainerRef } from '@angular/core';
-import { Credentials } from '../../../shared/models/credentials.model';
-import { AuthService } from '../../../shared/services/auth.service';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { Router } from '@angular/router';
+
 import { ToastsManager } from 'ng2-toastr';
+
+import { Credentials } from '../../../shared/models/credentials.model';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { AuthService } from '../../../shared/services/auth.service';
 
 @Component({
   selector: 'cd-login',

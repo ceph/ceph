@@ -144,6 +144,7 @@
     "component-class-suffix": true,
     "directive-class-suffix": true,
     "no-forward-ref": true,
-    "no-output-named-after-standard-event": true
+    "no-output-named-after-standard-event": true,
+    "ordered-imports": true
   }
 }
