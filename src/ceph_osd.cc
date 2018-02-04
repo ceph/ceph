@@ -529,13 +529,9 @@ flushjournal_out:
 				   client_byte_throttler.get(),
 				   nullptr);
   ms_public->set_policy(entity_name_t::TYPE_MON,
-                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_OSDENC));
+                        Messenger::Policy::lossy_client(osd_required));
   ms_public->set_policy(entity_name_t::TYPE_MGR,
-                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_OSDENC));
+                        Messenger::Policy::lossy_client(osd_required));
 
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
