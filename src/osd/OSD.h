@@ -1015,12 +1015,12 @@ private:
   s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
   void check_full_status(float ratio);
-  bool _check_full(s_names type, ostream &ss) const;
+  bool _check_full(DoutPrefixProvider *dpp, s_names type) const;
 public:
-  bool check_failsafe_full(ostream &ss) const;
-  bool check_full(ostream &ss) const;
-  bool check_backfill_full(ostream &ss) const;
-  bool check_nearfull(ostream &ss) const;
+  bool check_failsafe_full(DoutPrefixProvider *dpp) const;
+  bool check_full(DoutPrefixProvider *dpp) const;
+  bool check_backfill_full(DoutPrefixProvider *dpp) const;
+  bool check_nearfull(DoutPrefixProvider *dpp) const;
   bool is_failsafe_full() const;
   bool is_full() const;
   bool is_backfillfull() const;

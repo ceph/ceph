@@ -287,7 +287,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual LogClientTemp clog_error() = 0;
      virtual LogClientTemp clog_warn() = 0;
 
-     virtual bool check_failsafe_full(ostream &ss) = 0;
+     virtual bool check_failsafe_full() = 0;
 
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
