@@ -9,6 +9,9 @@
 #include "rgw_role.h"
 #include "rgw_admin_common.h"
 
+// This header and the corresponding source file contain handling of the following commads / groups of commands:
+// Role, role policy
+
 int handle_opt_role_get(const std::string& role_name, const std::string& tenant, CephContext *context,
                         RGWRados *store, Formatter *formatter);
 
