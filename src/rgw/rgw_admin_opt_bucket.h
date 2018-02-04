@@ -11,6 +11,9 @@
 
 #include "common/ceph_argparse.h"
 
+// This header and the corresponding source file contain handling of the following commads / groups of commands:
+// Bucket, bucket sync, bi, bilog, reshard, object
+
 template <class T, class K>
 int read_decode_json(const std::string& infile, T& t, K *k)
 {

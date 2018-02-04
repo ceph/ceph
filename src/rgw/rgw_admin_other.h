@@ -11,6 +11,10 @@
 #include "rgw_bucket.h"
 #include "rgw_replica_log.h"
 
+// This header and the corresponding source file contain handling of the following commads / groups of commands:
+// Pool, log, usage, olh, gc, lc, metadata (except metadata sync), user list, mdlog, sync error,
+// datalog, opstate, sync status.
+
 int handle_opt_pool_add(const std::string& pool_name, rgw_pool& pool, RGWRados *store);
 
 int handle_opt_pool_rm(const std::string& pool_name, rgw_pool& pool, RGWRados *store);

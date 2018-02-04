@@ -5,6 +5,9 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 
+// This header and the corresponding source file contain handling of the following commads / groups of commands:
+// User
+
 int handle_opt_user_create(const std::string& subuser, RGWUserAdminOpState& user_op, RGWUser& user);
 
 int handle_opt_user_stats(bool sync_stats, const std::string& bucket_name, const std::string& tenant,

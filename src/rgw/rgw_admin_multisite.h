@@ -9,7 +9,8 @@
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 
-// Period, realm, zone , zonegroup , data sync, metadata sync
+// This header and the corresponding source file contain handling of the following commads / groups of commands:
+// Period, realm, zone, zonegroup, data sync, metadata sync
 
 /// search each zonegroup for a connection
 boost::optional<RGWRESTConn> get_remote_conn(RGWRados *store, const RGWPeriodMap& period_map,
