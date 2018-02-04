@@ -1,9 +1,9 @@
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { HostsComponent } from './hosts.component';
-import { ServiceListPipe } from '../service-list.pipe';
 import { SharedModule } from '../../../shared/shared.module';
-import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ServiceListPipe } from '../service-list.pipe';
+import { HostsComponent } from './hosts.component';
 
 describe('HostsComponent', () => {
   let component: HostsComponent;

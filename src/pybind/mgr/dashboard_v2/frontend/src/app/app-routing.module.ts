@@ -1,8 +1,9 @@
 import { NgModule } from '@angular/core';
-import { Routes, RouterModule } from '@angular/router';
-import { AuthGuardService } from './shared/services/auth-guard.service';
-import { LoginComponent } from './core/auth/login/login.component';
+import { RouterModule, Routes } from '@angular/router';
+
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
+import { LoginComponent } from './core/auth/login/login.component';
+import { AuthGuardService } from './shared/services/auth-guard.service';
 
 const routes: Routes = [
   { path: '', redirectTo: 'hosts', pathMatch: 'full' },

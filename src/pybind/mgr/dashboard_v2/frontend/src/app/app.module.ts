@@ -1,17 +1,16 @@
-import { BrowserModule } from '@angular/platform-browser';
+import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
 import { NgModule } from '@angular/core';
-
-import { AppRoutingModule } from './app-routing.module';
+import { BrowserModule } from '@angular/platform-browser';
+import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { ToastModule, ToastOptions } from 'ng2-toastr/ng2-toastr';
 
+import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
-import { CoreModule } from './core/core.module';
-import { SharedModule } from './shared/shared.module';
 import { CephModule } from './ceph/ceph.module';
-import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
-import { HTTP_INTERCEPTORS, HttpClientModule } from '@angular/common/http';
+import { CoreModule } from './core/core.module';
 import { AuthInterceptorService } from './shared/services/auth-interceptor.service';
+import { SharedModule } from './shared/shared.module';
 
 export class CustomOption extends ToastOptions {
   animate = 'flyRight';

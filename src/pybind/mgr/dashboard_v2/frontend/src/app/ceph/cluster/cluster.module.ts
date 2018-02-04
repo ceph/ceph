@@ -1,8 +1,8 @@
-import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { NgModule } from '@angular/core';
 
-import { HostsComponent } from './hosts/hosts.component';
 import { SharedModule } from '../../shared/shared.module';
+import { HostsComponent } from './hosts/hosts.component';
 import { ServiceListPipe } from './service-list.pipe';
 
 @NgModule({

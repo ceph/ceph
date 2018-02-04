@@ -1,8 +1,9 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import {FormsModule} from '@angular/forms';
+
+import {NgxDatatableModule, TableColumn} from '@swimlane/ngx-datatable';
 
 import { TableComponent } from './table.component';
-import {NgxDatatableModule, TableColumn} from '@swimlane/ngx-datatable';
-import {FormsModule} from '@angular/forms';
 
 describe('TableComponent', () => {
   let component: TableComponent;

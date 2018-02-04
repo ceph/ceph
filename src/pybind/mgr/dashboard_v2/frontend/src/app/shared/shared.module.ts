@@ -1,11 +1,12 @@
-import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AuthService } from './services/auth.service';
-import { AuthStorageService } from './services/auth-storage.service';
-import { AuthGuardService } from './services/auth-guard.service';
-import { PipesModule } from './pipes/pipes.module';
-import { HostService } from './services/host.service';
+import { NgModule } from '@angular/core';
+
 import { ComponentsModule } from './components/components.module';
+import { PipesModule } from './pipes/pipes.module';
+import { AuthGuardService } from './services/auth-guard.service';
+import { AuthStorageService } from './services/auth-storage.service';
+import { AuthService } from './services/auth.service';
+import { HostService } from './services/host.service';
 
 @NgModule({
   imports: [

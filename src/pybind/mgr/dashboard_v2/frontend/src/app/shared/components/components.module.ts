@@ -1,9 +1,11 @@
-import { NgModule } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { TableComponent } from './table/table.component';
-import { NgxDatatableModule } from '@swimlane/ngx-datatable';
+import { NgModule } from '@angular/core';
+import { FormsModule } from '@angular/forms';
+
+import {NgxDatatableModule} from '@swimlane/ngx-datatable';
+
 import { TableDetailsDirective } from './table/table-details.directive';
-import {FormsModule} from '@angular/forms';
+import { TableComponent } from './table/table.component';
 
 @NgModule({
   entryComponents: [],

@@ -1,7 +1,9 @@
 import {
-  Component, EventEmitter, OnInit, Input, Output, ViewChild, OnChanges, ComponentFactoryResolver, Type
+  Component, ComponentFactoryResolver, EventEmitter, Input, OnChanges, OnInit, Output, Type, ViewChild
 } from '@angular/core';
+
 import {DatatableComponent, TableColumn} from '@swimlane/ngx-datatable';
+
 import {TableDetailsDirective} from './table-details.directive';
 
 @Component({
@@ -16,7 +18,7 @@ export class TableComponent implements OnInit, OnChanges {
   @Input() data: any[]; // This is the array with the items to be shown
   @Input() columns: TableColumn[]; // each item -> { prop: 'attribute name', name: 'display name' }
   @Input() detailsComponent?: string; // name of the component fe 'TableDetailsComponent'
-  @Input() header? = true;
+  @Input() header ? = true;
 
   @Output() fetchData = new EventEmitter(); // Should be the function that will update the input data
 

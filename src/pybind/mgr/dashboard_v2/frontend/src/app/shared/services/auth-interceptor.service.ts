@@ -1,13 +1,15 @@
-import { Injectable } from '@angular/core';
-import { AuthStorageService } from './auth-storage.service';
 import {
   HttpErrorResponse, HttpEvent, HttpHandler, HttpInterceptor, HttpRequest,
   HttpResponse
 } from '@angular/common/http';
-import { Observable } from 'rxjs/Observable';
-import 'rxjs/add/operator/do';
-import { ToastsManager } from 'ng2-toastr';
+import { Injectable } from '@angular/core';
 import { Router } from '@angular/router';
+
+import { ToastsManager } from 'ng2-toastr';
+import 'rxjs/add/operator/do';
+import { Observable } from 'rxjs/Observable';
+
+import { AuthStorageService } from './auth-storage.service';
 
 @Injectable()
 export class AuthInterceptorService implements HttpInterceptor {

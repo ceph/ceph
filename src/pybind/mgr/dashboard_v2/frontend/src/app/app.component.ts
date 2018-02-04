@@ -1,7 +1,9 @@
 import { Component, ViewContainerRef } from '@angular/core';
-import { AuthStorageService } from './shared/services/auth-storage.service';
-import { ToastsManager } from 'ng2-toastr';
 import { Router } from '@angular/router';
+
+import { ToastsManager } from 'ng2-toastr';
+
+import { AuthStorageService } from './shared/services/auth-storage.service';
 
 @Component({
   selector: 'cd-root',
