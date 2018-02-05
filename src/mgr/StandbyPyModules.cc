@@ -138,25 +138,31 @@ void *StandbyPyModules::LoadConfigThread::entry()
   assert(cmd.r == 0);
 
   std::map<std::string, std::string> loaded;
-  
-  for (auto &key_str : cmd.json_result.get_array()) {
-    std::string const key = key_str.get_str();
-    dout(20) << "saw key '" << key << "'" << dendl;
+ 
+  while (!loadconfig_stop) {
+    loaded.clear();
+    for (auto &key_str : cmd.json_result.get_array()) {
+      std::string const key = key_str.get_str();
+      dout(20) << "saw key '" << key << "'" << dendl;
 
-    const std::string config_prefix = PyModuleRegistry::config_prefix;
+      const std::string config_prefix = PyModuleRegistry::config_prefix;
 
-    if (key.substr(0, config_prefix.size()) == config_prefix) {
-      dout(20) << "fetching '" << key << "'" << dendl;
-      Command get_cmd;
-      std::ostringstream cmd_json;
-      cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
-      get_cmd.run(monc, cmd_json.str());
-      get_cmd.wait();
-      assert(get_cmd.r == 0);
-      loaded[key] = get_cmd.outbl.to_str();
+      if (key.substr(0, config_prefix.size()) == config_prefix) {
+        dout(20) << "fetching '" << key << "'" << dendl;
+        Command get_cmd;
+        std::ostringstream cmd_json;
+        cmd_json << "{\"prefix\": \"config-key get\", \"key\": \"" << key << "\"}";
+        get_cmd.run(monc, cmd_json.str());
+        get_cmd.wait();
+        assert(get_cmd.r == 0);
+        loaded[key] = get_cmd.outbl.to_str();
+      }
     }
+    state->loaded_config(loaded);
+    utime_t interval;
+    interval.set_from_double(g_conf->get_val<double>("mgr_load_config_grace"));
+    loadconfig_cond.WaitInterval(loadconfig_lock, interval);
   }
-  state->loaded_config(loaded);
 
   return nullptr;
 }
