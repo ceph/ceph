@@ -40,8 +40,9 @@ class PerfCounterInstance
     public:
     utime_t t;
     uint64_t v;
-    DataPoint(utime_t t_, uint64_t v_)
-      : t(t_), v(v_)
+    uint64_t avgcount;
+    DataPoint(utime_t t_, uint64_t v_, uint64_t avgcount=UINT64_MAX)
+      : t(t_), v(v_), avgcount(avgcount)
     {}
   };
 
@@ -54,6 +55,7 @@ class PerfCounterInstance
     return buffer;
   }
   void push(utime_t t, uint64_t const &v);
+  void push(utime_t t, uint64_t const &v, uint64_t const &avgcount);
   PerfCounterInstance()
     : buffer(20) {}
 };

@@ -154,9 +154,10 @@ void DaemonPerfCounters::update(MMgrReport *report)
     if (t.type & PERFCOUNTER_LONGRUNAVG) {
       ::decode(avgcount, p);
       ::decode(avgcount2, p);
+      instances[t_path].push(now, val, avgcount);
+    } else {
+      instances[t_path].push(now, val);
     }
-    // TODO: interface for insertion of avgs
-    instances[t_path].push(now, val);
   }
   DECODE_FINISH(p);
 }
@@ -169,5 +170,10 @@ uint64_t PerfCounterInstance::get_current() const
 void PerfCounterInstance::push(utime_t t, uint64_t const &v)
 {
   buffer.push_back({t, v});
+}
+
+void PerfCounterInstance::push(utime_t t, uint64_t const &v, uint64_t const &avgcount)
+{
+  buffer.push_back({t, v, avgcount});
 }
 

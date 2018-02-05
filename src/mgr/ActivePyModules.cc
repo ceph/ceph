@@ -560,6 +560,9 @@ PyObject* ActivePyModules::get_counter_python(
         f.open_array_section("datapoint");
         f.dump_unsigned("t", datapoint.t.sec());
         f.dump_unsigned("v", datapoint.v);
+        if (datapoint.avgcount != UINT64_MAX) {
+          f.dump_unsigned("avgcount", datapoint.avgcount);
+        }
         f.close_section();
 
       }
