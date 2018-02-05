@@ -88,6 +88,13 @@ def task(ctx, config):
         if config.get("disabled", False) or not client_config.get('mounted', True):
             continue
 
+        # check if we are using distro or test kernel and pass options to mount
+        kernel_sha = ctx.config.get('kernel')['sha1']
+        if kernel_sha == 'distro':
+            is_distro_kernel = True
+        else:
+            is_distro_kernel = False
+
         kernel_mount = KernelMount(
             mons,
             test_dir,
@@ -95,7 +102,8 @@ def task(ctx, config):
             remote,
             ctx.teuthology_config.get('ipmi_user', None),
             ctx.teuthology_config.get('ipmi_password', None),
-            ctx.teuthology_config.get('ipmi_domain', None)
+            ctx.teuthology_config.get('ipmi_domain', None),
+            is_distro_kernel,
         )
 
         mounts[id_] = kernel_mount
