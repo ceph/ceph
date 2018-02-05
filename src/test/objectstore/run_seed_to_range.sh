@@ -12,7 +12,7 @@ mydir=`dirname $0`
 
 for f in `seq $from $to`
 do
-    if ! $mydir/run_seed_to.sh -o 10 $seed $f; then
+    if ! $mydir/run_seed_to.sh -o 10 -e $seed $f; then
 	if [ -d "$dir" ]; then
 	    echo copying evidence to $dir
 	    cp -a . $dir
