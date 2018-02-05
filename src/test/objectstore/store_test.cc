@@ -5763,13 +5763,13 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
                         unsigned max_ops,
                         unsigned max_object_size,
                         unsigned max_write_size,
-                        unsigned write_alignment,
-                        store_statfs_t* res_stat)
+                        unsigned write_alignment)
 {
   ObjectStore::Sequencer osr("test");
   MixedGenerator gen(555);
   gen_type rng(time(NULL));
   coll_t cid(spg_t(pg_t(0,555), shard_id_t::NO_SHARD));
+  store_statfs_t res_stat;
 
   SyntheticWorkloadState test_obj(store.get(),
                                   &gen,
@@ -5792,8 +5792,16 @@ void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
     test_obj.write();
   }
   test_obj.wait_for_done();
-  if (res_stat) {
-    test_obj.statfs(*res_stat);
+  test_obj.statfs(res_stat);
+  if (!(res_stat.stored <= max_object_size) ||
+      !(res_stat.allocated <= max_object_size)) {
+    // this will provide more insight on the mismatch and
+    // helps to avoid any races during stats collection
+    test_obj.fsck(false);
+    // retrieving stats once again and assert if still broken
+    test_obj.statfs(res_stat);
+    ASSERT_LE(res_stat.stored, max_object_size);
+    ASSERT_LE(res_stat.allocated, max_object_size);
   }
   test_obj.shutdown();
 }
@@ -5804,13 +5812,8 @@ TEST_P(StoreTestSpecificAUSize, Many4KWritesTest) {
 
   StartDeferred(0x10000);
 
-  store_statfs_t res_stat;
-  unsigned max_object = 4*1024*1024;
-
-  doMany4KWritesTest(store, 1, 1000, 4*1024*1024, 4*1024, 0, &res_stat);
-
-  ASSERT_LE(res_stat.stored, max_object);
-  ASSERT_EQ(res_stat.allocated, max_object);
+  const unsigned max_object = 4*1024*1024;
+  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
 }
 
 TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
@@ -5819,13 +5822,10 @@ TEST_P(StoreTestSpecificAUSize, Many4KWritesNoCSumTest) {
   StartDeferred(0x10000);
   g_conf->set_val("bluestore_csum_type", "none");
   g_ceph_context->_conf->apply_changes(NULL);
-  store_statfs_t res_stat;
-  unsigned max_object = 4*1024*1024;
+  const unsigned max_object = 4*1024*1024;
 
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat );
+  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0 );
 
-  ASSERT_LE(res_stat.stored, max_object);
-  ASSERT_EQ(res_stat.allocated, max_object);
   g_conf->set_val("bluestore_csum_type", "crc32c");
 }
 
@@ -5833,11 +5833,8 @@ TEST_P(StoreTestSpecificAUSize, TooManyBlobsTest) {
   if (string(GetParam()) != "bluestore")
     return;
   StartDeferred(0x10000);
-  store_statfs_t res_stat;
-  unsigned max_object = 4*1024*1024;
-  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0, &res_stat);
-  ASSERT_LE(res_stat.stored, max_object);
-  ASSERT_EQ(res_stat.allocated, max_object);
+  const unsigned max_object = 4*1024*1024;
+  doMany4KWritesTest(store, 1, 1000, max_object, 4*1024, 0);
 }
 
 #if defined(WITH_BLUESTORE)
