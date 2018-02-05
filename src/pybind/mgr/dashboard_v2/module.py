@@ -6,6 +6,10 @@ from __future__ import absolute_import
 
 import errno
 import os
+try:
+    from urlparse import urljoin
+except ImportError:
+    from urllib.parse import urljoin
 
 import cherrypy
 from mgr_module import MgrModule
@@ -41,9 +45,14 @@ class Module(MgrModule):
         }
     ]
 
+    @property
+    def url_prefix(self):
+        return self._url_prefix
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         logger.logger = self._logger
+        self._url_prefix = ''
 
     def configure_cherrypy(self, in_unittest=False):
         server_addr = self.get_localized_config('server_addr', '::')
@@ -55,6 +64,16 @@ class Module(MgrModule):
                 .format(self.module_name, self.get_mgr_id()))
         self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
+
+        def prepare_url_prefix(url_prefix):
+            """
+            return '' if no prefix, or '/prefix' without slash in the end.
+            """
+            url_prefix = urljoin('/', url_prefix)
+            return url_prefix.rstrip('/')
+
+        self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
+                                                              default=''))
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = cherrypy.Tool('before_handler', Auth.check_auth)
