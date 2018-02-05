@@ -1162,6 +1162,7 @@ const char *pg_pool_t::APPLICATION_NAME_RGW("rgw");
 
 void pg_pool_t::dump(Formatter *f) const
 {
+  f->dump_stream("create_time") << get_create_time();
   f->dump_unsigned("flags", get_flags());
   f->dump_string("flags_names", get_flags_string());
   f->dump_int("type", get_type());
@@ -1551,7 +1552,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 26;
+  uint8_t v = 27;
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
     // this was the first post-hammer thing we added; if it's missing, encode
     // like hammer.
@@ -1559,6 +1560,9 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   }
   if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     v = 24;
+  }
+  if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+    v = 26;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1634,12 +1638,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 26) {
     encode(application_metadata, bl);
   }
+  if (v >= 27) {
+    encode(create_time, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(26, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1789,6 +1796,9 @@ void pg_pool_t::decode(bufferlist::iterator& bl)
   if (struct_v >= 26) {
     decode(application_metadata, bl);
   }
+  if (struct_v >= 27) {
+    decode(create_time, bl);
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1799,6 +1809,7 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   pg_pool_t a;
   o.push_back(new pg_pool_t(a));
 
+  a.create_time = utime_t(4,5);
   a.type = TYPE_REPLICATED;
   a.size = 2;
   a.crush_rule = 3;

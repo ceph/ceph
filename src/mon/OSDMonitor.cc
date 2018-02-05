@@ -5823,6 +5823,7 @@ int OSDMonitor::prepare_new_pool(string& name, uint64_t auid,
   int64_t pool = ++pending_inc.new_pool_max;
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
+  pi->create_time = ceph_clock_now();
   pi->type = pool_type;
   pi->fast_read = fread; 
   pi->flags = g_conf->osd_pool_default_flags;
