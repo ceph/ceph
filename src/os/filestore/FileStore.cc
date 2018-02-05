@@ -2999,7 +2999,8 @@ void FileStore::_do_transaction(
         const coll_t &cid = !_need_temp_object_collection(_cid, oid) ?
           _cid : _cid.get_temp();
         tracepoint(objectstore, omap_clear_enter, osr_name);
-        r = _omap_clear(cid, oid, spos);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+	  r = _omap_clear(cid, oid, spos);
         tracepoint(objectstore, omap_clear_exit, r);
       }
       break;
@@ -3012,7 +3013,8 @@ void FileStore::_do_transaction(
         map<string, bufferlist> aset;
         i.decode_attrset(aset);
         tracepoint(objectstore, omap_setkeys_enter, osr_name);
-        r = _omap_setkeys(cid, oid, aset, spos);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+	  r = _omap_setkeys(cid, oid, aset, spos);
         tracepoint(objectstore, omap_setkeys_exit, r);
       }
       break;
@@ -3025,7 +3027,8 @@ void FileStore::_do_transaction(
         set<string> keys;
         i.decode_keyset(keys);
         tracepoint(objectstore, omap_rmkeys_enter, osr_name);
-        r = _omap_rmkeys(cid, oid, keys, spos);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+	  r = _omap_rmkeys(cid, oid, keys, spos);
         tracepoint(objectstore, omap_rmkeys_exit, r);
       }
       break;
@@ -3039,7 +3042,8 @@ void FileStore::_do_transaction(
         first = i.decode_string();
         last = i.decode_string();
         tracepoint(objectstore, omap_rmkeyrange_enter, osr_name);
-        r = _omap_rmkeyrange(cid, oid, first, last, spos);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+	  r = _omap_rmkeyrange(cid, oid, first, last, spos);
         tracepoint(objectstore, omap_rmkeyrange_exit, r);
       }
       break;
@@ -3052,7 +3056,8 @@ void FileStore::_do_transaction(
         bufferlist bl;
         i.decode_bl(bl);
         tracepoint(objectstore, omap_setheader_enter, osr_name);
-        r = _omap_setheader(cid, oid, bl, spos);
+        if (_check_replay_guard(cid, oid, spos) > 0)
+	  r = _omap_setheader(cid, oid, bl, spos);
         tracepoint(objectstore, omap_setheader_exit, r);
       }
       break;
