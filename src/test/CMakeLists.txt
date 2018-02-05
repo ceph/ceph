@@ -525,9 +525,14 @@ add_executable(ceph_test_admin_socket_output
   admin_socket_output_tests.cc
   )
 target_link_libraries(ceph_test_admin_socket_output
-  ceph-common
-  ${Boost_FILESYSTEM_LIBRARY}
-  )
+  ceph-common)
+if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+  target_link_libraries(ceph_test_admin_socket_output
+    -lstdc++fs)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  target_link_libraries(ceph_test_admin_socket_output
+    -lc++experimental)
+endif()
 install(TARGETS
   ceph_test_admin_socket_output
   DESTINATION ${CMAKE_INSTALL_BINDIR})
