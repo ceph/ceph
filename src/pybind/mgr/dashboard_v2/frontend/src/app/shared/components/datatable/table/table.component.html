@@ -50,15 +50,16 @@
   <ngx-datatable #table
                  class="bootstrap oadatatable"
                  [cssClasses]="paginationClasses"
-                 [selectionType]="selectable"
+                 [selectionType]="selectionType"
                  [selected]="selected"
                  (select)="toggleExpandRow()"
                  [columns]="columns"
                  [columnMode]="columnMode"
                  [rows]="rows"
+                 [rowClass]="getRowClass()"
                  [headerHeight]="header ? 'auto' : 0"
                  [footerHeight]="footer ? 'auto' : 0"
-                 [limit]="limit"
+                 [limit]="limit > 0 ? limit : undefined"
                  [loadingIndicator]="true"
                  [rowHeight]="'auto'">
     <!-- Row Detail Template -->
@@ -68,7 +69,7 @@
 </div>
 <ng-template cdTableDetails></ng-template>
 <!-- cell templates that can be accessed from outside -->
-<ng-template #bold
+<ng-template #tableCellBoldTpl
              let-row="row"
              let-value="value">
   <strong>{{ value }}</strong>

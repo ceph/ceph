@@ -1,4 +1,5 @@
 import {
+  AfterContentChecked,
   Component,
   ComponentFactoryResolver,
   EventEmitter,
@@ -12,26 +13,28 @@ import {
 } from '@angular/core';
 
 import { DatatableComponent } from '@swimlane/ngx-datatable';
+import * as _ from 'lodash';
 
-import { CdTableColumn } from '../../models/cd-table-column';
-import { TableDetailsDirective } from './table-details.directive';
+import { CdTableColumn } from '../../../models/cd-table-column';
+import { TableDetailsDirective } from '../table-details.directive';
 
 @Component({
   selector: 'cd-table',
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.scss']
 })
-export class TableComponent implements OnInit, OnChanges {
+export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   @ViewChild(DatatableComponent) table: DatatableComponent;
   @ViewChild(TableDetailsDirective) detailTemplate: TableDetailsDirective;
+  @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
 
-  // This is the array with the items to be shown
+  // This is the array with the items to be shown.
   @Input() data: any[];
   // Each item -> { prop: 'attribute name', name: 'display name' }
   @Input() columns: CdTableColumn[];
   // Method used for setting column widths.
   @Input() columnMode ?= 'force';
-  // Name of the component fe 'TableDetailsComponent'
+  // Name of the component e.g. 'TableDetailsComponent'
   @Input() detailsComponent?: string;
   // Display the tool header, including reload button, pagination and search fields?
   @Input() toolHeader ?= true;
@@ -39,15 +42,19 @@ export class TableComponent implements OnInit, OnChanges {
   @Input() header ?= true;
   // Display the table footer?
   @Input() footer ?= true;
-  // Should be the function that will update the input data
+  // Page size to show. Set to 0 to show unlimited number of rows.
+  @Input() limit ?= 10;
+  // An optional function that is called before the details page is show.
+  // The current selection is passed as function argument. To do not display
+  // the details page, return false.
+  @Input() beforeShowDetails: Function;
+  // Should be the function that will update the input data.
   @Output() fetchData = new EventEmitter();
 
-  @ViewChild('bold') bold: TemplateRef<any>;
   cellTemplates: {
     [key: string]: TemplateRef<any>
   } = {};
-
-  selectable: String = undefined;
+  selectionType: string = undefined;
   search = '';
   rows = [];
   selected = [];
@@ -57,7 +64,10 @@ export class TableComponent implements OnInit, OnChanges {
     pagerPrevious: 'i fa fa-angle-left',
     pagerNext: 'i fa fa-angle-right'
   };
-  limit = 10;
+
+  // Internal variable to check if it is necessary to recalculate the
+  // table columns after the browser window has been resized.
+  private currentWidth: number;
 
   constructor(private componentFactoryResolver: ComponentFactoryResolver) { }
 
@@ -71,12 +81,25 @@ export class TableComponent implements OnInit, OnChanges {
     });
     this.reloadData();
     if (this.detailsComponent) {
-      this.selectable = 'multi';
+      this.selectionType = 'multi';
+    }
+  }
+
+  ngAfterContentChecked() {
+    // If the data table is not visible, e.g. another tab is active, and the
+    // browser window gets resized, the table and its columns won't get resized
+    // automatically if the tab gets visible again.
+    // https://github.com/swimlane/ngx-datatable/issues/193
+    // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
+    if (this.table && this.table.element.clientWidth !== this.currentWidth) {
+      this.currentWidth = this.table.element.clientWidth;
+      // Force the redrawing of the table.
+      window.dispatchEvent(new Event('resize'));
     }
   }
 
   _addTemplates () {
-    this.cellTemplates.bold = this.bold;
+    this.cellTemplates.bold = this.tableCellBoldTpl;
   }
 
   ngOnChanges(changes) {
@@ -101,12 +124,19 @@ export class TableComponent implements OnInit, OnChanges {
   toggleExpandRow() {
     if (this.selected.length > 0) {
       this.table.rowDetail.toggleExpandRow(this.selected[0]);
+    } else {
+      this.detailTemplate.viewContainerRef.clear();
     }
   }
 
   updateDetailView() {
     if (!this.detailsComponent) {
       return;
+    }
+    if (_.isFunction(this.beforeShowDetails)) {
+      if (!this.beforeShowDetails(this.selected)) {
+        return;
+      }
     }
     const factories = Array.from(this.componentFactoryResolver['_factories'].keys());
     const factoryClass = <Type<any>>factories.find((x: any) => x.name === this.detailsComponent);
@@ -132,5 +162,14 @@ export class TableComponent implements OnInit, OnChanges {
     });
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
+  }
+
+  getRowClass() {
+    // Return the function used to populate a row's CSS classes.
+    return () => {
+      return {
+        'clickable': !_.isUndefined(this.detailsComponent)
+      };
+    };
   }
 }

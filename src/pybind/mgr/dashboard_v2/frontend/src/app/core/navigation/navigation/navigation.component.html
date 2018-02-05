@@ -100,22 +100,33 @@
           </li>
         </ul>
       </li>
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_rgw">
+        <a i18n
+           routerLink="/rgw">Object Gateway
+        </a>
+      </li>
       <!--<li class="dropdown tc_menuitem tc_menuitem_ceph_rgw">
         <a href=""
            class="dropdown-toggle"
-           data-toggle="dropdown"><ng-container i18n>Object Gateway</ng-container> <span class="caret"></span>
+           data-toggle="dropdown">
+          <ng-container i18n>Object Gateway</ng-container>
+          <span class="caret"></span>
         </a>
-        <ul class="dropdown-menu">
+        <ul *dropdownMenu
+            class="dropdown-menu">
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_ceph_rgw_users">
+              class="tc_submenuitem tc_submenuitem_rgw_users">
             <a i18n
-               routerLink="/ceph-rgw-users">Users
+               class="dropdown-item"
+               routerLink="/rgw-users">Users
             </a>
           </li>
           <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_ceph_rgw_buckets">
+              class="tc_submenuitem tc_submenuitem_rgw_buckets">
             <a i18n
-               routerLink="/ceph-rgw-buckets">Buckets
+               class="dropdown-item"
+               routerLink="/rgw-buckets">Buckets
             </a>
           </li>
         </ul>
