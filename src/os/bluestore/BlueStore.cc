@@ -9205,11 +9205,7 @@ int BlueStore::queue_transactions(
     c->complete(0);
   }
   for (auto c : on_applied) {
-    // NOTE: these may complete out of order since some may be sync and some
-    // may be async.
-    if (!c->sync_complete(0)) {
-      finishers[osr->shard]->queue(c);
-    }
+    finishers[osr->shard]->queue(c);
   }
 
   logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
