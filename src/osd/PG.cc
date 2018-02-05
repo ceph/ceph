@@ -3908,11 +3908,7 @@ void PG::do_replica_scrub_map(OpRequestRef op)
     scrub_preempted = true;
   }
   if (scrubber.waiting_on_whom.empty()) {
-    if (ops_blocked_by_scrub()) {
-      requeue_scrub(true);
-    } else {
-      requeue_scrub(false);
-    }
+    requeue_scrub(ops_blocked_by_scrub());
   }
 }
 
