@@ -121,7 +121,6 @@ class Module(MgrModule):
         cherrypy.engine.start()
         NotificationQueue.start_queue()
         logger.info('Waiting for engine...')
-        self.log.info('Waiting for engine...')
         cherrypy.engine.block()
         if 'COVERAGE_ENABLED' in os.environ:
             _cov.stop()

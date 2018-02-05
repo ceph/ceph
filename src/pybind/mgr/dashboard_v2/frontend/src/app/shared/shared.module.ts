@@ -21,6 +21,7 @@ import { ServicesModule } from './services/services.module';
   ],
   exports: [
     PipesModule,
+    ComponentsModule,
     ServicesModule,
     PasswordButtonDirective
   ],

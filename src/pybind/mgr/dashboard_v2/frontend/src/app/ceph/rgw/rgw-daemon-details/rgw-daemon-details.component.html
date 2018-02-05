@@ -1,0 +1,11 @@
+<tabset>
+  <tab heading="Details">
+    <cd-table-key-value [data]="metadata">
+    </cd-table-key-value>
+  </tab>
+  <tab heading="Performance Counters">
+    <cd-table-performance-counter serviceType="rgw"
+                                  [serviceId]="serviceId">
+    </cd-table-performance-counter>
+  </tab>
+</tabset>

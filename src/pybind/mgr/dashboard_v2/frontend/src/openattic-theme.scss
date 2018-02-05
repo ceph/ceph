@@ -102,12 +102,13 @@ option {
 .strikethrough {
   text-decoration: line-through;
 }
-
 .italic {
   font-style: italic;
 }
-
-text-right {
+.bold {
+  font-weight: bold;
+}
+.text-right {
   text-align: right;
 }
 
