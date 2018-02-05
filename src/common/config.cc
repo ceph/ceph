@@ -905,8 +905,7 @@ Option::value_t md_config_t::_get_val_generic(const std::string &key) const
 int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
-  std::string normalized_key(ConfFile::normalize_key_name(key));
-  Option::value_t config_value = _get_val_generic(normalized_key.c_str());
+  auto config_value = _get_val_generic(key);
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {
