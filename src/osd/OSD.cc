@@ -3828,16 +3828,6 @@ PGRef OSD::_open_pg(
   return pg;
 }
 
-PG *OSD::_open_lock_pg(
-  OSDMapRef createmap,
-  OSDMapRef servicemap,
-  spg_t pgid, bool no_lockdep_check)
-{
-  PGRef pg = _open_pg(createmap, servicemap, pgid);
-  pg->lock();
-  return pg.get();
-}
-
 PG* OSD::_make_pg(
   OSDMapRef createmap,
   spg_t pgid)
@@ -3985,12 +3975,13 @@ void OSD::load_pgs()
 	  assert(0 == "Missing map in load_pgs");
 	}
       }
-      pg = _open_lock_pg(pgosdmap, osdmap, pgid);
+      pg = _open_pg(pgosdmap, osdmap, pgid);
     } else {
-      pg = _open_lock_pg(osdmap, osdmap, pgid);
+      pg = _open_pg(osdmap, osdmap, pgid);
     }
     // there can be no waiters here, so we don't call wake_pg_waiters
 
+    pg->lock();
     pg->ch = store->open_collection(pg->coll);
 
     // read pg state, log
