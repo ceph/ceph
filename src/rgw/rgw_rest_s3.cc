@@ -3667,33 +3667,6 @@ namespace rgw {
 namespace auth {
 namespace s3 {
 
-bool AWSGeneralAbstractor::is_time_skew_ok(const utime_t& header_time) const
-{
-  /* Check for time skew first. */
-  const time_t req_sec = header_time.sec();
-  time_t now;
-  time(&now);
-
-  if (req_sec < now - RGW_AUTH_GRACE_MINS * 60 ||
-      req_sec > now + RGW_AUTH_GRACE_MINS * 60) {
-    ldout(cct, 10) << "req_sec=" << req_sec << " now=" << now
-                   << "; now - RGW_AUTH_GRACE_MINS="
-                   << now - RGW_AUTH_GRACE_MINS * 60
-                   << "; now + RGW_AUTH_GRACE_MINS="
-                   << now + RGW_AUTH_GRACE_MINS * 60
-                   << dendl;
-
-    ldout(cct, 0)  << "NOTICE: request time skew too big now="
-                   << utime_t(now, 0)
-                   << " req_time=" << header_time
-                   << dendl;
-    return false;
-  }
-
-  return true;
-}
-
-
 static rgw::auth::Completer::cmplptr_t
 null_completer_factory(const boost::optional<std::string>& secret_key)
 {
