@@ -380,7 +380,7 @@ bool DeterministicOpSequence::do_coll_move(rngen_t& gen)
 bool DeterministicOpSequence::do_coll_create(rngen_t& gen)
 {
   int i = m_collections.size();
-  spg_t pgid(pg_t(i, 0), shard_id_t::NO_SHARD);
+  spg_t pgid(pg_t(i, 1), shard_id_t::NO_SHARD);
   coll_t cid(pgid);
   auto ch = m_store->create_new_collection(cid);
   coll_entry_t *entry = coll_create(pgid, ch);

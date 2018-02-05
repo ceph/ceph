@@ -39,6 +39,8 @@ public:
 	m_meta_obj(hobject_t(sobject_t(object_t(meta_obj_buf), CEPH_NOSNAP))),
 	m_ch(ch),
 	m_next_object_id(0) {
+      m_meta_obj.hobj.pool = m_pgid.pool();
+      m_meta_obj.hobj.set_hash(m_pgid.ps());
     }
     ~coll_entry_t();
 
