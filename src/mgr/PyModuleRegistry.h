@@ -81,26 +81,12 @@ public:
     : clog(clog_)
   {}
 
-  bool handle_mgr_map(const MgrMap &mgr_map_)
-  {
-    Mutex::Locker l(lock);
+  /**
+   * @return true if the mgrmap has changed such that the service needs restart
+   */
+  bool handle_mgr_map(const MgrMap &mgr_map_);
 
-    bool modules_changed = mgr_map_.modules != mgr_map.modules;
-    mgr_map = mgr_map_;
-
-    if (standby_modules != nullptr) {
-      standby_modules->handle_mgr_map(mgr_map_);
-    }
-
-    return modules_changed;
-  }
-
-  bool is_initialized() const
-  {
-    return mgr_map.epoch > 0;
-  }
-
-  int init(const MgrMap &map);
+  int init();
 
   void active_start(
                 PyModuleConfig &config_,
