@@ -20,6 +20,7 @@ endif()
 add_subdirectory(jerasure)
 add_subdirectory(lrc)
 add_subdirectory(shec)
+add_subdirectory(clay)
 
 if (HAVE_BETTER_YASM_ELF64)
   add_subdirectory(isa)
@@ -37,11 +38,12 @@ add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}
     ec_lrc
     ec_jerasure
-    ec_shec)
+    ec_shec
+    ec_clay)
 
 if(WITH_EMBEDDED)
   include(MergeStaticLibraries)
   add_library(cephd_ec_base STATIC $<TARGET_OBJECTS:erasure_code_objs>)
   set_target_properties(cephd_ec_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
-  merge_static_libraries(cephd_ec cephd_ec_base ${EC_ISA_EMBEDDED_LIB} cephd_ec_jerasure cephd_ec_lrc cephd_ec_shec)
+  merge_static_libraries(cephd_ec cephd_ec_base ${EC_ISA_EMBEDDED_LIB} cephd_ec_jerasure cephd_ec_lrc cephd_ec_shec cephd_ec_clay)
 endif()
