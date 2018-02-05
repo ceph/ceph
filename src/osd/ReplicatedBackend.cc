@@ -749,7 +749,7 @@ int ReplicatedBackend::be_deep_scrub(
   while (iter->status() == 0 && iter->valid()) {
     pos.omap_bytes += iter->value().length();
     ++pos.omap_keys;
-
+    --max;
     // fixme: we can do this more efficiently.
     bufferlist bl;
     encode(iter->key(), bl);
