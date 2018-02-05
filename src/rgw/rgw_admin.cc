@@ -235,11 +235,14 @@ void usage()
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
   cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>   bucket id\n";
-  cout << "   --shard-id=<shard-id>     optional for mdlog list\n";
+  cout << "   --shard-id=<shard-id>     optional for: \n";
+  cout << "                               mdlog list\n";
+  cout << "                               data sync status\n";
   cout << "                             required for: \n";
   cout << "                               mdlog trim\n";
   cout << "                               replica mdlog get/delete\n";
   cout << "                               replica datalog get/delete\n";
+  cout << "   --max-entries=<entries>   max entries for listing operations\n";
   cout << "   --metadata-key=<key>      key to retrieve metadata from with metadata get\n";
   cout << "   --remote=<remote>         zone or zonegroup id of remote gateway\n";
   cout << "   --period=<id>             period id\n";
@@ -6487,34 +6490,53 @@ next:
     }
 
     rgw_data_sync_status sync_status;
-    ret = sync.read_sync_status(&sync_status);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
-      return -ret;
-    }
-
-    formatter->open_object_section("summary");
-    encode_json("sync_status", sync_status, formatter);
-
-    uint64_t full_total = 0;
-    uint64_t full_complete = 0;
-
-    for (auto marker_iter : sync_status.sync_markers) {
-      full_total += marker_iter.second.total_entries;
-      if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
-        full_complete += marker_iter.second.pos;
-      } else {
-        full_complete += marker_iter.second.total_entries;
+    if (specified_shard_id) {
+      set<string> pending_buckets;
+      set<string> recovering_buckets;
+      rgw_data_sync_marker sync_marker;
+      ret = sync.read_shard_status(shard_id, pending_buckets, recovering_buckets, &sync_marker, 
+                                   max_entries_specified ? max_entries : 20);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: sync.read_shard_status() returned ret=" << ret << std::endl;
+        return -ret;
       }
+      formatter->open_object_section("summary");
+      encode_json("shard_id", shard_id, formatter);
+      encode_json("marker", sync_marker, formatter);
+      encode_json("pending_buckets", pending_buckets, formatter);
+      encode_json("recovering_buckets", recovering_buckets, formatter);
+      formatter->close_section();
+      formatter->flush(cout);
+    } else {
+      ret = sync.read_sync_status(&sync_status);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: sync.read_sync_status() returned ret=" << ret << std::endl;
+        return -ret;
+      }
+
+      formatter->open_object_section("summary");
+      encode_json("sync_status", sync_status, formatter);
+
+      uint64_t full_total = 0;
+      uint64_t full_complete = 0;
+
+      for (auto marker_iter : sync_status.sync_markers) {
+        full_total += marker_iter.second.total_entries;
+        if (marker_iter.second.state == rgw_meta_sync_marker::SyncState::FullSync) {
+          full_complete += marker_iter.second.pos;
+        } else {
+          full_complete += marker_iter.second.total_entries;
+        }
+      }
+
+      formatter->open_object_section("full_sync");
+      encode_json("total", full_total, formatter);
+      encode_json("complete", full_complete, formatter);
+      formatter->close_section();
+      formatter->close_section();
+
+      formatter->flush(cout);
     }
-
-    formatter->open_object_section("full_sync");
-    encode_json("total", full_total, formatter);
-    encode_json("complete", full_complete, formatter);
-    formatter->close_section();
-    formatter->close_section();
-
-    formatter->flush(cout);
   }
 
   if (opt_cmd == OPT_DATA_SYNC_INIT) {
