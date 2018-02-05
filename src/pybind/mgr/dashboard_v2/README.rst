@@ -266,3 +266,37 @@ can be used:
 * ``health``: health status regular update
 * ``pg_summary``: regular update of PG status information
 
+
+How to write a unit test when a controller accesses a Ceph module?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Consider the following example that implements a controller that retrieves the
+list of RBD images of the ``rbd`` pool::
+
+  import rbd
+  from ..tools import ApiController, RESTController
+
+  @ApiController('rbdimages')
+  class RbdImages(RESTController):
+      def __init__(self):
+          self.ioctx = self.mgr.rados.open_ioctx('rbd')
+          self.rbd = rbd.RBD()
+
+      def list(self):
+          return [{'name': n} for n in self.rbd.list(self.ioctx)]
+
+In the example above, we want to mock the return value of the ``rbd.list``
+function, so that we can test the JSON response of the controller.
+
+The unit test code will look like the following::
+
+  import mock
+  from .helper import ControllerTestCase
+
+  class RbdImagesTest(ControllerTestCase):
+      @mock.patch('rbd.RBD.list')
+      def test_list(self, rbd_list_mock):
+          rbd_list_mock.return_value = ['img1', 'img2']
+          self._get('/api/rbdimages')
+          self.assertJsonBody([{'name': 'img1'}, {'name': 'img2'}])
+
