@@ -3931,7 +3931,9 @@ void PG::_request_scrub_map(
     get_osdmap()->get_epoch(),
     get_last_peering_reset(),
     start, end, deep,
-    allow_preemption);
+    allow_preemption,
+    scrubber.priority,
+    ops_blocked_by_scrub());
   // default priority, we want the rep scrub processed prior to any recovery
   // or client io messages (we are holding a lock!)
   osd->send_message_osd_cluster(
@@ -4397,12 +4399,17 @@ void PG::replica_scrub(
   scrubber.end = msg->end;
   scrubber.deep = msg->deep;
   scrubber.epoch_start = info.history.same_interval_since;
+  if (msg->priority) {
+    scrubber.priority = msg->priority;
+  } else {
+    scrubber.priority = get_scrub_priority();
+  }
 
   scrub_can_preempt = msg->allow_preemption;
   scrub_preempted = false;
   scrubber.replica_scrubmap_pos.reset();
 
-  requeue_scrub(false);
+  requeue_scrub(msg->high_priority);
 }
 
 /* Scrub:
