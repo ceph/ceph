@@ -38,7 +38,9 @@ endif(WITH_EMBEDDED)
 add_subdirectory(libcephfs)
 add_subdirectory(librados)
 add_subdirectory(librados_test_stub)
+if(WITH_LIBRADOSSTRIPER)
 add_subdirectory(libradosstriper)
+endif(WITH_LIBRADOSSTRIPER)
 if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
@@ -642,12 +644,14 @@ add_ceph_unittest(unittest_workqueue)
 target_link_libraries(unittest_workqueue global)
 
 # unittest_striper
-add_executable(unittest_striper
-  test_striper.cc
-  $<TARGET_OBJECTS:unit-main>
-  )
-add_ceph_unittest(unittest_striper)
-target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
+if(WITH_LIBRADOSSTRIPER)
+  add_executable(unittest_striper
+    test_striper.cc
+    $<TARGET_OBJECTS:unit-main>
+    )
+  add_ceph_unittest(unittest_striper)
+  target_link_libraries(unittest_striper global ${BLKID_LIBRARIES})
+endif(WITH_LIBRADOSSTRIPER)
 
 # unittest_prebufferedstreambuf
 add_executable(unittest_prebufferedstreambuf
