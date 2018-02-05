@@ -153,9 +153,11 @@ bool FileStoreDiff::diff_objects(FileStore *a_store, FileStore *b_store, coll_t 
   }
 
   if (b_objects.size() != a_objects.size()) {
-    cout << "diff_objects num objs mismatch (A: " << a_objects.size()
+    cout << "diff_objects " << coll << " num objs mismatch (A: " << a_objects.size()
         << ", B: " << b_objects.size() << ")" << std::endl;
     ret = true;
+    cout << "a: " << a_objects << std::endl;
+    cout << "b: " << b_objects << std::endl;
   }
 
   auto a_ch = a_store->open_collection(coll);

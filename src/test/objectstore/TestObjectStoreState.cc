@@ -43,7 +43,7 @@ void TestObjectStoreState::init(int colls, int objs)
 
   int baseid = 0;
   for (int i = 0; i < colls; i++) {
-    spg_t pgid(pg_t(i, 0), shard_id_t::NO_SHARD);
+    spg_t pgid(pg_t(i, 1), shard_id_t::NO_SHARD);
     coll_t cid(pgid);
     auto ch = m_store->create_new_collection(cid);
     coll_entry_t *entry = coll_create(pgid, ch);
@@ -181,6 +181,8 @@ hobject_t *TestObjectStoreState::coll_entry_t::touch_obj(int id)
   snprintf(buf, 100, "obj%d", id);
 
   hobject_t *obj = new hobject_t(sobject_t(object_t(buf), CEPH_NOSNAP));
+  obj->set_hash(m_pgid.ps());
+  obj->pool = m_pgid.pool();
   m_objects.insert(make_pair(id, obj));
 
   dout(5) << "touch_obj coll id " << m_cid << " name " << buf << dendl;
