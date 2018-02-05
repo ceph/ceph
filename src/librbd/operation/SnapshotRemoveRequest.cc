@@ -97,7 +97,7 @@ void SnapshotRemoveRequest<I>::handle_trash_snap(int r) {
     // trash / clone v2 not supported
     detach_child();
     return;
-  } else if (r < 0) {
+  } else if (r < 0 && r != -EEXIST) {
     lderr(cct) << "failed to move snapshot to trash: " << cpp_strerror(r)
                << dendl;
     this->complete(r);

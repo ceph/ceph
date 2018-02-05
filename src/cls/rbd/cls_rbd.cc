@@ -278,27 +278,6 @@ int snapshot_iterate(cls_method_context_t hctx, L& lambda) {
   return 0;
 }
 
-int snapshot_trash_add(cls_method_context_t hctx,
-                       const std::string& snapshot_key, cls_rbd_snap snap) {
-  // add snap_trash feature bit if not already enabled
-  int r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_SNAP_TRASH,
-                                 RBD_OPERATION_FEATURE_SNAP_TRASH);
-  if (r < 0) {
-    return r;
-  }
-
-  snap.snapshot_namespace = cls::rbd::TrashSnapshotNamespace{snap.name};
-  uuid_d uuid_gen;
-  uuid_gen.generate_random();
-  snap.name = uuid_gen.to_string();
-
-  r = write_key(hctx, snapshot_key, snap);
-  if (r < 0) {
-    return r;
-  }
-  return 0;
-}
-
 } // namespace image
 
 /**
@@ -1994,18 +1973,7 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   // snapshot is in-use by clone v2 child
   if (snap.child_count > 0) {
-    if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
-          cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
-      // trash snapshot still in-use
-      return -EBUSY;
-    }
-
-    r = image::snapshot_trash_add(hctx, snapshot_key, snap);
-    if (r < 0) {
-      return r;
-    }
-
-    return 0;
+    return -EBUSY;
   }
 
   r = remove_key(hctx, snapshot_key);
@@ -2089,10 +2057,22 @@ int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
     return -EBUSY;
   } else if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
                cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
-    return -EINVAL;
+    return -EEXIST;
   }
 
-  r = image::snapshot_trash_add(hctx, snapshot_key, snap);
+  // add snap_trash feature bit if not already enabled
+  r = image::set_op_features(hctx, RBD_OPERATION_FEATURE_SNAP_TRASH,
+                             RBD_OPERATION_FEATURE_SNAP_TRASH);
+  if (r < 0) {
+    return r;
+  }
+
+  snap.snapshot_namespace = cls::rbd::TrashSnapshotNamespace{snap.name};
+  uuid_d uuid_gen;
+  uuid_gen.generate_random();
+  snap.name = uuid_gen.to_string();
+
+  r = write_key(hctx, snapshot_key, snap);
   if (r < 0) {
     return r;
   }

@@ -2552,8 +2552,10 @@ TEST_F(TestClsRbd, clone_parent)
   ASSERT_EQ(expected_child_images, child_images);
 
   // move snapshot to the trash
-  ASSERT_EQ(0, snapshot_remove(&ioctx, oid, 123));
   ASSERT_EQ(-EBUSY, snapshot_remove(&ioctx, oid, 123));
+  librados::ObjectWriteOperation op3;
+  ::librbd::cls_client::snapshot_trash_add(&op3, 123);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
   ASSERT_EQ(0, snapshot_get(&ioctx, oid, {123}, &snaps,
                             &parents, &protection_status));
   ASSERT_EQ(1U, snaps.size());
