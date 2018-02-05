@@ -65,11 +65,12 @@ void ClientIO::init_env(CephContext *cct)
   // split uri from query
   auto url = request.target();
   auto pos = url.find('?');
-  auto query = url.substr(pos + 1);
-  url = url.substr(0, pos);
-
+  if (pos != url.npos) {
+    auto query = url.substr(pos + 1);
+    env.set("QUERY_STRING", query.to_string());
+    url = url.substr(0, pos);
+  }
   env.set("REQUEST_URI", url.to_string());
-  env.set("QUERY_STRING", query.to_string());
   env.set("SCRIPT_URI", url.to_string()); /* FIXME */
 
   char port_buf[16];
