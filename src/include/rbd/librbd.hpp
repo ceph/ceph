@@ -514,6 +514,7 @@ public:
   int update_unwatch(uint64_t handle);
 
   int list_watchers(std::list<image_watcher_t> &watchers);
+  void set_blacklist_expire_seconds(uint32_t expire);
 
 private:
   friend class RBD;
