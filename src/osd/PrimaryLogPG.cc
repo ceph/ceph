@@ -5493,9 +5493,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   ObjectState& obs = ctx->new_obs;
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
-  bool skip_data_digest = osd->store->has_builtin_csum() &&
-    cct->_conf->osd_skip_data_digest;
-  const uint64_t osd_max_object_size = cct->_conf->osd_max_object_size;
+  const bool skip_data_digest = osd->store->has_builtin_csum() &&
+    osd->osd_skip_data_digest;
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -5554,9 +5553,9 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
     if (op.op == CEPH_OSD_OP_ZERO &&
         obs.exists &&
-        op.extent.offset < osd_max_object_size &&
+        op.extent.offset < osd->osd_max_object_size &&
         op.extent.length >= 1 &&
-        op.extent.length <= osd_max_object_size &&
+        op.extent.length <= osd->osd_max_object_size &&
 	op.extent.offset + op.extent.length >= oi.size) {
       if (op.extent.offset >= oi.size) {
         // no-op
@@ -6256,7 +6255,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 	result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd_max_object_size, get_dpp());
+          osd->osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
 
@@ -6302,7 +6301,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  break;
 	}
 	result = check_offset_and_length(0, op.extent.length,
-          osd_max_object_size, get_dpp());
+          osd->osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
 
@@ -6348,7 +6347,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       ++ctx->num_write;
       { // zero
 	result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd_max_object_size, get_dpp());
+          osd->osd_max_object_size, get_dpp());
 	if (result < 0)
 	  break;
  
@@ -6413,7 +6412,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	}
 
         result = check_offset_and_length(op.extent.offset, op.extent.length,
-          osd_max_object_size, get_dpp());
+          osd->osd_max_object_size, get_dpp());
         if (result < 0)
 	  break;
 
