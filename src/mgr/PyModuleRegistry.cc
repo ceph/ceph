@@ -37,14 +37,9 @@ std::string PyModuleRegistry::config_prefix;
 
 
 
-int PyModuleRegistry::init(const MgrMap &map)
+int PyModuleRegistry::init()
 {
   Mutex::Locker locker(lock);
-
-  // Don't try and init me if you don't really have a map
-  assert(map.epoch > 0);
-
-  mgr_map = map;
 
   // namespace in config-key prefixed by "mgr/"
   config_prefix = std::string(g_conf->name.get_type_str()) + "/";
@@ -82,9 +77,9 @@ int PyModuleRegistry::init(const MgrMap &map)
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
 
-    bool enabled = (mgr_map.modules.count(module_name) > 0);
-
-    auto mod = std::make_shared<PyModule>(module_name, enabled);
+    // Everything starts disabled, set enabled flag on module
+    // when we see first MgrMap
+    auto mod = std::make_shared<PyModule>(module_name);
     int r = mod->load(pMainThreadState);
     if (r != 0) {
       // Don't use handle_pyerror() here; we don't have the GIL
@@ -107,12 +102,43 @@ int PyModuleRegistry::init(const MgrMap &map)
   return 0;
 }
 
+bool PyModuleRegistry::handle_mgr_map(const MgrMap &mgr_map_)
+{
+  Mutex::Locker l(lock);
+
+  if (mgr_map.epoch == 0) {
+    mgr_map = mgr_map_;
+
+    // First time we see MgrMap, set the enabled flags on modules
+    // This should always happen before someone calls standby_start
+    // or active_start
+    for (const auto &[module_name, module] : modules) {
+      const bool enabled = (mgr_map.modules.count(module_name) > 0);
+      module->set_enabled(enabled);
+    }
+
+    return false;
+  } else {
+    bool modules_changed = mgr_map_.modules != mgr_map.modules;
+    mgr_map = mgr_map_;
+
+    if (standby_modules != nullptr) {
+      standby_modules->handle_mgr_map(mgr_map_);
+    }
+
+    return modules_changed;
+  }
+}
+
 void PyModuleRegistry::standby_start(MonClient *monc)
 {
   Mutex::Locker l(lock);
   assert(active_modules == nullptr);
   assert(standby_modules == nullptr);
-  assert(is_initialized());
+
+  // Must have seen a MgrMap by this point, in order to know
+  // which modules should be enabled
+  assert(mgr_map.epoch > 0);
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
@@ -157,7 +183,10 @@ void PyModuleRegistry::active_start(
   dout(4) << "Starting modules in active mode" << dendl;
 
   assert(active_modules == nullptr);
-  assert(is_initialized());
+
+  // Must have seen a MgrMap by this point, in order to know
+  // which modules should be enabled
+  assert(mgr_map.epoch > 0);
 
   if (standby_modules != nullptr) {
     standby_modules->shutdown();
