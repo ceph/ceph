@@ -778,22 +778,42 @@ def cluster(ctx, config):
 
         for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
             _, _, id_ = teuthology.split_role(role)
-            remote.run(
-                args=[
-                    'sudo',
-                    'MALLOC_CHECK_=3',
-                    'adjust-ulimits',
-                    'ceph-coverage',
-                    coverage_dir,
-                    'ceph-osd',
-                    '--cluster',
-                    cluster_name,
-                    '--mkfs',
-                    '--mkkey',
-                    '-i', id_,
+            try:
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--no-mon-config',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
                     '--monmap', monmap_path,
-                ],
-            )
+                    ],
+                )
+            except run.CommandFailedError:
+                # try without --no-mon-config.. this may be an upgrade test
+                remote.run(
+                    args=[
+                        'sudo',
+                        'MALLOC_CHECK_=3',
+                        'adjust-ulimits',
+                        'ceph-coverage',
+                        coverage_dir,
+                        'ceph-osd',
+                        '--cluster',
+                        cluster_name,
+                        '--mkfs',
+                        '--mkkey',
+                        '-i', id_,
+                    '--monmap', monmap_path,
+                    ],
+                )
             mnt_point = DATA_PATH.format(
                 type_='osd', cluster=cluster_name, id_=id_)
             remote.run(args=[
