@@ -178,11 +178,14 @@
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>   bucket id
-     --shard-id=<shard-id>     optional for mdlog list
+     --shard-id=<shard-id>     optional for: 
+                                 mdlog list
+                                 data sync status
                                required for: 
                                  mdlog trim
                                  replica mdlog get/delete
                                  replica datalog get/delete
+     --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
