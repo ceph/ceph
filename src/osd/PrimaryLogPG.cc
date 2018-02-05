@@ -10004,12 +10004,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied >= scrubber.subset_last_update) {
-        if (ops_blocked_by_scrub()) {
-          requeue_scrub(true);
-        } else {
-          requeue_scrub(false);
-        }
-
+	requeue_scrub(ops_blocked_by_scrub());
       }
     } else {
       assert(scrubber.start == scrubber.end);
@@ -11210,11 +11205,7 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    if (ops_blocked_by_scrub()) {
-      requeue_scrub(true);
-    } else {
-      requeue_scrub(false);
-    }
+    requeue_scrub(ops_blocked_by_scrub());
   }
 }
 
