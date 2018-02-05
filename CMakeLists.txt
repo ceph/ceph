@@ -560,8 +560,7 @@ option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
-  atomic thread system regex random program_options date_time iostreams
-  filesystem)
+  atomic thread system regex random program_options date_time iostreams)
 set(BOOST_HEADER_COMPONENTS container)
 
 if(WITH_MGR)
