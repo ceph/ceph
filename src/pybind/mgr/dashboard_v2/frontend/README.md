@@ -54,3 +54,22 @@ src/app/core/auth> ng generate component login -m=core/auth
 or, alternatively:
 src/app> ng generate component core/auth/login -m=core/auth
 ```
+
+## Recommended style guide
+
+### Typescript
+
+Group the imports based on its source and separate them with a blank line.
+
+The source groups can be either from angular, external or internal.
+
+Example:
+```javascript
+import { Component } from '@angular/core';
+import { Router } from '@angular/router';
+
+import { ToastsManager } from 'ng2-toastr';
+
+import { Credentials } from '../../../shared/models/credentials.model';
+import { HostService } from './services/host.service';
+```
