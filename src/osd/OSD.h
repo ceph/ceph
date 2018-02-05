@@ -1887,17 +1887,6 @@ protected:
     OSDMapRef servicemap,
     spg_t pg,
     bool no_lockdep_check=false);
-  PG *_create_lock_pg(
-    OSDMapRef createmap,
-    spg_t pgid,
-    bool hold_map_lock,
-    bool backfill,
-    int role,
-    vector<int>& up, int up_primary,
-    vector<int>& acting, int acting_primary,
-    pg_history_t history,
-    const PastIntervals& pi,
-    ObjectStore::Transaction& t);
 
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
 

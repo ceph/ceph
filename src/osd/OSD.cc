@@ -3874,39 +3874,6 @@ PG* OSD::_make_pg(
 }
 
 
-PG *OSD::_create_lock_pg(
-  OSDMapRef createmap,
-  spg_t pgid,
-  bool hold_map_lock,
-  bool backfill,
-  int role,
-  vector<int>& up, int up_primary,
-  vector<int>& acting, int acting_primary,
-  pg_history_t history,
-  const PastIntervals& pi,
-  ObjectStore::Transaction& t)
-{
-  dout(20) << "_create_lock_pg pgid " << pgid << dendl;
-
-  PG *pg = _open_lock_pg(createmap, service.get_osdmap(), pgid, true);
-
-  pg->init(
-    role,
-    up,
-    up_primary,
-    acting,
-    acting_primary,
-    history,
-    pi,
-    backfill,
-    &t);
-
-  pg->ch = store->create_new_collection(pg->coll);
-
-  dout(7) << "_create_lock_pg " << *pg << dendl;
-  return pg;
-}
-
 PGRef OSD::_lookup_pg(spg_t pgid)
 {
   while (true) {
