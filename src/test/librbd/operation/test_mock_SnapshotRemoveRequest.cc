@@ -291,7 +291,9 @@ TEST_F(TestMockOperationSnapshotRemoveRequest, SuccessTrash) {
 
   uint64_t snap_id = ictx->snap_info.rbegin()->first;
   expect_snapshot_get(mock_image_ctx,
-                      {snap_id, {cls::rbd::TrashSnapshotNamespace{"snap1"}},
+                      {snap_id,
+                       {cls::rbd::TrashSnapshotNamespace{
+                          cls::rbd::SNAPSHOT_NAMESPACE_TYPE_USER, "snap1"}},
                        "snap1", 123, {}, 0}, 0);
 
   expect_get_parent_spec(mock_image_ctx, 0);
