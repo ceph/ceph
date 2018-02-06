@@ -328,10 +328,14 @@ struct TrashSnapshotNamespace {
     SNAPSHOT_NAMESPACE_TYPE_TRASH;
 
   std::string original_name;
+  SnapshotNamespaceType original_snapshot_namespace_type =
+    SNAPSHOT_NAMESPACE_TYPE_USER;
 
   TrashSnapshotNamespace() {}
-  TrashSnapshotNamespace(const std::string& original_name)
-    : original_name(original_name) {}
+  TrashSnapshotNamespace(SnapshotNamespaceType original_snapshot_namespace_type,
+                         const std::string& original_name)
+    : original_name(original_name),
+      original_snapshot_namespace_type(original_snapshot_namespace_type) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator& it);
@@ -364,6 +368,7 @@ struct UnknownSnapshotNamespace {
   }
 };
 
+std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type);
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns);
 std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns);

@@ -2055,8 +2055,10 @@ int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
 
   if (snap.protection_status != RBD_PROTECTION_STATUS_UNPROTECTED) {
     return -EBUSY;
-  } else if (cls::rbd::get_snap_namespace_type(snap.snapshot_namespace) ==
-               cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
+  }
+
+  auto snap_type = cls::rbd::get_snap_namespace_type(snap.snapshot_namespace);
+  if (snap_type == cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH) {
     return -EEXIST;
   }
 
@@ -2067,7 +2069,8 @@ int snapshot_trash_add(cls_method_context_t hctx, bufferlist *in,
     return r;
   }
 
-  snap.snapshot_namespace = cls::rbd::TrashSnapshotNamespace{snap.name};
+  snap.snapshot_namespace = cls::rbd::TrashSnapshotNamespace{snap_type,
+                                                             snap.name};
   uuid_d uuid_gen;
   uuid_gen.generate_random();
   snap.name = uuid_gen.to_string();
