@@ -4414,6 +4414,7 @@ void RGWCompleteMultipart::execute()
   obj_op.meta.ptag = &s->req_id; /* use req_id as operation tag */
   obj_op.meta.owner = s->owner.get_id();
   obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.completeMultipart = true;
 
   op_ret = obj_op.write_meta(ofs, attrs);
   if (op_ret < 0)

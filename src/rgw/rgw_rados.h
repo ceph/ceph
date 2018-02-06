@@ -2332,10 +2332,11 @@ public:
         ceph::real_time delete_at;
         bool canceled;
         const string *user_data;
+        bool completeMultipart;
 
         MetaParams() : mtime(NULL), rmattrs(NULL), data(NULL), manifest(NULL), ptag(NULL),
                  remove_objs(NULL), category(RGW_OBJ_CATEGORY_MAIN), flags(0),
-                 if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr) {}
+		       if_match(NULL), if_nomatch(NULL), olh_epoch(0), canceled(false), user_data(nullptr), completeMultipart(false) {}
       } meta;
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
