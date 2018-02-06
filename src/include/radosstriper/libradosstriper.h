@@ -207,7 +207,7 @@ int rados_striper_remove(rados_striper_t striper,
  * @param size the new size of the object in bytes
  * @returns 0 on success, negative error code on failure
  */
-int rados_striper_trunc(rados_ioctx_t io, const char *soid, uint64_t size);
+int rados_striper_trunc(rados_striper_t striper, const char *soid, uint64_t size);
 
 /** @} Synchronous I/O */
 
