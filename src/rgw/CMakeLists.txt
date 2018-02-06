@@ -1,20 +1,20 @@
 if(WITH_TESTS)
-add_executable(ceph_rgw_jsonparser
-  rgw_jsonparser.cc)
-target_link_libraries(ceph_rgw_jsonparser
-  rgw_a
-  global)
+  add_executable(ceph_rgw_jsonparser
+    rgw_jsonparser.cc)
+  target_link_libraries(ceph_rgw_jsonparser
+    rgw_a
+    global)
 
-add_executable(ceph_rgw_multiparser
-  rgw_multiparser.cc)
-target_link_libraries(ceph_rgw_multiparser
-  rgw_a
-  global)
+  add_executable(ceph_rgw_multiparser
+    rgw_multiparser.cc)
+  target_link_libraries(ceph_rgw_multiparser
+    rgw_a
+    global)
 
-install(TARGETS
-  ceph_rgw_jsonparser
-  ceph_rgw_multiparser
-  DESTINATION bin)
+  install(TARGETS
+    ceph_rgw_jsonparser
+    ceph_rgw_multiparser
+    DESTINATION bin)
 endif(WITH_TESTS)
 
 add_custom_target(civetweb_h
@@ -35,7 +35,7 @@ function(gperf_generate input output)
     COMMAND ${GPERF} ${input} > ${output}
     DEPENDS ${input}
     COMMENT "Generate ${output}"
-    )
+  )
 endfunction()
 
 set(rgw_a_srcs
@@ -191,6 +191,14 @@ install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
   rgw_admin.cc
+  rgw_admin_argument_parsing.cc
+  rgw_admin_common.cc
+  rgw_admin_multisite.cc
+  rgw_admin_opt_bucket.cc
+  rgw_admin_opt_quota.cc
+  rgw_admin_opt_role.cc
+  rgw_admin_opt_user.cc
+  rgw_admin_other.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin rgw_a librados
@@ -257,12 +265,12 @@ install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 if(WITH_EMBEDDED)
   include(MergeStaticLibraries)
   add_library(cephd_rgw_base STATIC rgw_main.cc ${radosgw_admin_srcs})
-  if(WITH_RADOSGW_FCGI_FRONTEND)  
+  if(WITH_RADOSGW_FCGI_FRONTEND)
     target_include_directories(cephd_rgw_base SYSTEM PUBLIC ${FCGI_INCLUDE_DIR})
   endif()
   set_target_properties(cephd_rgw_base PROPERTIES COMPILE_DEFINITIONS BUILDING_FOR_EMBEDDED)
   merge_static_libraries(cephd_rgw cephd_rgw_base rgw_a radosgw_a)
-  if(WITH_RADOSGW_FCGI_FRONTEND) 
+  if(WITH_RADOSGW_FCGI_FRONTEND)
     target_link_libraries(cephd_rgw ${FCGI_LIBRARY})
   endif()
 endif()
