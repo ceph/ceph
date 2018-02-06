@@ -506,8 +506,6 @@ extern "C" int rados_striper_getxattrs(rados_striper_t striper,
     return ret;
   }
   it->i = it->attrset.begin();
-  librados::RadosXattrsIter **iret = (librados::RadosXattrsIter**)iter;
-  *iret = it;
   *iter = it;
   return 0;
 }
