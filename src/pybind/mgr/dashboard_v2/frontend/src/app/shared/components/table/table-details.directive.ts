@@ -1,4 +1,4 @@
-import {Directive, Input, ViewContainerRef} from '@angular/core';
+import { Directive, Input, ViewContainerRef } from '@angular/core';
 
 @Directive({
   selector: '[cdTableDetails]'
