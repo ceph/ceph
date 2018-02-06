@@ -74,8 +74,11 @@ Where:
 ``{pg-num}``
 
 :Description: The total number of placement groups for the pool. See `Placement
-              Groups`_  for details on calculating a suitable number. The
+              Groups`_  for details on calculating a suitable number, which should be
+              greater than 0 and less than or equal to `mon max pool pg num`_. The
               default value ``8`` is NOT suitable for most systems.
+
+.. _mon max pool pg num: ../../configuration/pool-pg-config-ref
 
 :Type: Integer
 :Required: Yes.
@@ -84,7 +87,8 @@ Where:
 ``{pgp-num}``
 
 :Description: The total number of placement groups for placement purposes. This
-              **should be equal to the total number of placement groups**, except
+              should be greater than 0 and less than or equal to the total number of
+              placement groups for the pool ``pg-num``, except
               for placement group splitting scenarios.
 
 :Type: Integer
@@ -331,7 +335,7 @@ You may set values for the following keys:
 
 ``pg_num``
 
-:Description: The effective number of placement groups to use when calculating
+:Description: The effective number of placement groups for the pool to use when calculating
               data placement.
 :Type: Integer
 :Valid Range: Superior to ``pg_num`` current value.
@@ -344,7 +348,7 @@ You may set values for the following keys:
               when calculating data placement.
 
 :Type: Integer
-:Valid Range: Equal to or less than ``pg_num``.
+:Valid Range: Greater than 0 and less than or equal to ``pg_num``.
 
 .. _crush_rule:
 
@@ -638,7 +642,7 @@ You may get values for the following keys:
 :Description: see pgp_num_
 
 :Type: Integer
-:Valid Range: Equal to or less than ``pg_num``.
+:Valid Range: Greater than 0 and less than or equal to ``pg_num``.
 
 
 ``crush_rule``
