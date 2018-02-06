@@ -1853,6 +1853,9 @@ protected:
   PGRef _lookup_pg(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
 
+  void _get_pgs(vector<PGRef> *v);
+  void _get_pgids(vector<spg_t> *v);
+
 public:
   PG   *lookup_lock_pg(spg_t pgid);
 

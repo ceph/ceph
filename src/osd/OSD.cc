@@ -3853,6 +3853,27 @@ PG* OSD::_make_pg(
   return pg;
 }
 
+void OSD::_get_pgs(vector<PGRef> *v)
+{
+  v->clear();
+  RWLock::RLocker l(pg_map_lock);
+  for (auto& i : pg_map) {
+    if (!i.second->is_deleted()) {
+      v->push_back(i.second);
+    }
+  }
+}
+
+void OSD::_get_pgids(vector<spg_t> *v)
+{
+  v->clear();
+  RWLock::RLocker l(pg_map_lock);
+  for (auto& i : pg_map) {
+    if (!i.second->is_deleted()) {
+      v->push_back(i.first);
+    }
+  }
+}
 
 PGRef OSD::_lookup_pg(spg_t pgid)
 {
