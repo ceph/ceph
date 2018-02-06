@@ -682,7 +682,9 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
 
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  # pass --no-mon-config since we are looking for the permission denied error
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  cat $TMPFILE
   check_response "Permission denied"
 
   rm -rf $TEMP_DIR/ceph.client.bug.keyring
@@ -692,7 +694,7 @@ function test_mon_caps()
   ceph-authtool  $TEMP_DIR/ceph.client.bug.keyring -n client.bug --gen-key
   ceph-authtool -n client.bug --cap mon '' $TEMP_DIR/ceph.client.bug.keyring
   ceph auth add client.bug -i  $TEMP_DIR/ceph.client.bug.keyring
-  rados lspools --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
+  rados lspools --no-mon-config --keyring $TEMP_DIR/ceph.client.bug.keyring -n client.bug >& $TMPFILE || true
   check_response "Permission denied"  
 }
 
