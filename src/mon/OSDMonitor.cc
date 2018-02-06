@@ -644,7 +644,8 @@ void OSDMonitor::create_pending()
 }
 
 creating_pgs_t
-OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
+OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc,
+			       const OSDMap& nextmap)
 {
   dout(10) << __func__ << dendl;
   creating_pgs_t pending_creatings;
@@ -685,6 +686,20 @@ OSDMonitor::update_pending_pgs(const OSDMap::Incremental& inc)
     dout(10) << __func__ << " " << removed
 	     << " pgs removed because they're created" << dendl;
     pending_creatings.last_scan_epoch = osdmap.get_epoch();
+  }
+
+  // filter out any pgs that shouldn't exist.
+  {
+    auto i = pending_creatings.pgs.begin();
+    while (i != pending_creatings.pgs.end()) {
+      if (!nextmap.pg_exists(i->first)) {
+	dout(10) << __func__ << " removing pg " << i->first
+		 << " which should not exist" << dendl;
+	i = pending_creatings.pgs.erase(i);
+      } else {
+	++i;
+      }
+    }
   }
 
   // process queue
@@ -1288,7 +1303,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata_rm.clear();
 
   // and pg creating, also!
-  auto pending_creatings = update_pending_pgs(pending_inc);
+  auto pending_creatings = update_pending_pgs(pending_inc, tmp);
   bufferlist creatings_bl;
   encode(pending_creatings, creatings_bl);
   t->put(OSD_PG_CREATING_PREFIX, "creating", creatings_bl);
@@ -3282,6 +3297,11 @@ void OSDMonitor::update_creating_pgs()
   for (const auto& pg : creating_pgs.pgs) {
     int acting_primary = -1;
     auto pgid = pg.first;
+    if (!osdmap.pg_exists(pgid)) {
+      dout(20) << __func__ << " ignoring " << pgid << " which should not exist"
+	       << dendl;
+      continue;
+    }
     auto mapped = pg.second.first;
     dout(20) << __func__ << " looking up " << pgid << "@" << mapped << dendl;
     mapping.get(pgid, nullptr, nullptr, nullptr, &acting_primary);
@@ -10925,6 +10945,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
       err = -EINVAL;
+      goto reply;
+    }
+    if (!osdmap.pg_exists(pgid)) {
+      ss << "pg " << pgid << " should not exist";
+      err = -ENOENT;
       goto reply;
     }
     bool creating_now;
