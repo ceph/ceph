@@ -5086,12 +5086,19 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 					0, 0, &exts);
 
-    if (alloc_len < (int64_t)gift) {
-      derr << __func__ << " allocate failed on 0x" << std::hex << gift
-           << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+    if (alloc_len <= 0) {
+      dout(1) << __func__ << " no allocate on 0x" << std::hex << gift
+              << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      alloc->unreserve(gift);
       alloc->dump();
-      assert(0 == "allocate failed, wtf");
-      return -ENOSPC;
+      return 0;
+    } else if (alloc_len < (int64_t)gift) {
+      dout(1) << __func__ << " insufficient allocate on 0x" << std::hex << gift
+              << " min_alloc_size 0x" << min_alloc_size 
+	      << " allocated 0x" << alloc_len
+	      << std::dec << dendl;
+      alloc->unreserve(gift - alloc_len);
+      alloc->dump();
     }
     for (auto& p : exts) {
       bluestore_pextent_t e = bluestore_pextent_t(p);
@@ -5603,7 +5610,6 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     goto out_stop;
 
   mempool_thread.init();
-
 
   mounted = true;
   return 0;
@@ -8427,7 +8433,8 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
 {
   // it's expected we're called with lazy_release_lock already taken!
   if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
-    dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
+    dout(10) << __func__ << " " << txc << " " << std::hex
+             << txc->released << std::dec << dendl;
     alloc->release(txc->released);
   }
   txc->allocated.clear();
