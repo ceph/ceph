@@ -1120,7 +1120,7 @@ struct OSDShard {
 
   Mutex sdata_op_ordering_lock;   ///< protects all members below
 
-  OSDMapRef waiting_for_pg_osdmap;
+  OSDMapRef osdmap;
 
   struct pg_slot {
     PGRef pg;                     ///< cached pg reference [optional]
