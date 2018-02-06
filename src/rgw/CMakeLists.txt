@@ -183,7 +183,9 @@ endif (WITH_RADOSGW_BEAST_FRONTEND)
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+if (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
+  target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
@@ -198,6 +200,10 @@ add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
   cls_version cls_replica_log cls_user)
 install(TARGETS radosgw DESTINATION bin)
+
+if (WITH_RADOSGW_BEAST_FRONTEND)
+  target_link_libraries(radosgw_a ${OPENSSL_LIBRARIES})
+endif()
 
 set(radosgw_admin_srcs
   rgw_admin.cc

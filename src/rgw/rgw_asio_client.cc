@@ -11,10 +11,10 @@
 
 using namespace rgw::asio;
 
-ClientIO::ClientIO(parser_type& parser,
+ClientIO::ClientIO(parser_type& parser, bool is_ssl,
                    const endpoint_type& local_endpoint,
                    const endpoint_type& remote_endpoint)
-  : parser(parser),
+  : parser(parser), is_ssl(is_ssl),
     local_endpoint(local_endpoint),
     remote_endpoint(remote_endpoint),
     txbuf(*this)
@@ -82,8 +82,10 @@ int ClientIO::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", local_endpoint.port());
   env.set("SERVER_PORT", port_buf);
+  if (is_ssl) {
+    env.set("SERVER_PORT_SECURE", port_buf);
+  }
   env.set("REMOTE_ADDR", remote_endpoint.address().to_string());
-  // TODO: set SERVER_PORT_SECURE if using ssl
   // TODO: set REMOTE_USER if authenticated
   return 0;
 }

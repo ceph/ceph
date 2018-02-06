@@ -21,6 +21,7 @@ class ClientIO : public io::RestfulClient,
  protected:
   parser_type& parser;
  private:
+  const bool is_ssl;
   using endpoint_type = boost::asio::ip::tcp::endpoint;
   endpoint_type local_endpoint;
   endpoint_type remote_endpoint;
@@ -30,7 +31,7 @@ class ClientIO : public io::RestfulClient,
   rgw::io::StaticOutputBufferer<> txbuf;
 
  public:
-  ClientIO(parser_type& parser,
+  ClientIO(parser_type& parser, bool is_ssl,
            const endpoint_type& local_endpoint,
            const endpoint_type& remote_endpoint);
   ~ClientIO() override;
