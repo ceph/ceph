@@ -6,6 +6,7 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/image/DetachChildRequest.h"
+#include "librbd/Types.h"
 #include "librbd/io/ObjectRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -162,7 +163,6 @@ bool FlattenRequest<I>::send_update_header() {
       ldout(cct, 5) << "image already flattened" << dendl;
       return true;
     }
-    m_parent_spec = image_ctx.parent_md.spec;
   }
 
   // remove parent from this (base) image
