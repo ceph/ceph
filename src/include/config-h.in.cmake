@@ -336,4 +336,7 @@
 /* Defined if boost::context is available */
 #cmakedefine HAVE_BOOST_CONTEXT
 
+/* Defined if OpenSSL is available for the rgw beast frontend */
+#cmakedefine WITH_RADOSGW_BEAST_OPENSSL
+
 #endif /* CONFIG_H */
