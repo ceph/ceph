@@ -30,16 +30,25 @@
         <!-- Password -->
         <div class="form-group has-feedback"
              [ngClass]="{'has-error': (loginForm.submitted || password.dirty) && password.invalid}">
-          <input id="password"
-                 name="password"
-                 [(ngModel)]="model.password"
-                 #password="ngModel"
-                 type="password"
-                 placeholder="Enter your password..."
-                 class="form-control"
-                 required>
+          <div class="input-group">
+            <input id="password"
+                   name="password"
+                   [(ngModel)]="model.password"
+                   #password="ngModel"
+                   type="password"
+                   placeholder="Enter your password..."
+                   class="form-control"
+                   required>
+            <span class="input-group-btn">
+              <button type="button"
+                      class="btn btn-default btn-password"
+                      cdPasswordButton="password">
+              </button>
+            </span>
+          </div>
           <div class="help-block"
-               *ngIf="(loginForm.submitted || password.dirty) && password.invalid">Password is required</div>
+               *ngIf="(loginForm.submitted || password.dirty) && password.invalid">Password is required
+          </div>
         </div>
 
         <!-- Stay signed in -->

@@ -13,9 +13,14 @@
     margin-bottom: 30px;
   }
 
+  .btn-password,
   .form-control {
     color: #ececec;
     background-color: #555555;
+  }
+
+  .btn-password:focus {
+    outline-color: #66afe9;
   }
 
   .checkbox-primary input[type="checkbox"]:checked + label::before,
