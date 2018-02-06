@@ -2530,10 +2530,10 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_v
         respond_to_request(mdr, -EEXIST);
         return 0;
       }
-    } else if (!dir->inode->is_stray()) {
-      dn->first = dir->inode->find_snaprealm()->get_newest_seq() + 1;
+    } else {
+      snapid_t next_snap = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
+      dn->first = std::max(dn->first, next_snap);
     }
-
     return dn;
   }
 
@@ -2545,7 +2545,7 @@ CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_v
   }
   
   // create
-  dn = dir->add_null_dentry(dname, dir->inode->find_snaprealm()->get_newest_seq() + 1);
+  dn = dir->add_null_dentry(dname, mdcache->get_global_snaprealm()->get_newest_seq() + 1);
   dn->mark_new();
   dout(10) << "prepare_null_dentry added " << *dn << dendl;
   return dn;
@@ -3464,10 +3464,9 @@ void Server::handle_client_open(MDRequestRef& mdr)
 class C_MDS_openc_finish : public ServerLogContext { 
   CDentry *dn;
   CInode *newi;
-  snapid_t follows;
 public:
-  C_MDS_openc_finish(Server *s, MDRequestRef& r, CDentry *d, CInode *ni, snapid_t f) :
-    ServerLogContext(s, r), dn(d), newi(ni), follows(f) {}
+  C_MDS_openc_finish(Server *s, MDRequestRef& r, CDentry *d, CInode *ni) :
+    ServerLogContext(s, r), dn(d), newi(ni) {}
   void finish(int r) override {
     assert(r == 0);
 
@@ -3614,9 +3613,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   // create inode.
-  SnapRealm *realm = diri->find_snaprealm();   // use directory's realm; inode isn't attached yet.
-  snapid_t follows = realm->get_newest_seq();
-
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
 				 req->head.args.open.mode | S_IFREG, &layout);
   assert(in);
@@ -3628,6 +3624,11 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   if (layout.pool_id != mdcache->default_file_layout.pool_id)
     in->inode.add_old_pool(mdcache->default_file_layout.pool_id);
   in->inode.update_backtrace();
+
+  SnapRealm *realm = diri->find_snaprealm();
+  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  assert(follows >= realm->get_newest_seq());
+
   if (cmode & CEPH_FILE_MODE_WR) {
     in->inode.client_ranges[client].range.first = 0;
     in->inode.client_ranges[client].range.last = in->inode.get_layout_size_increment();
@@ -3657,7 +3658,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   LogSegment *ls = mds->mdlog->get_current_segment();
   ls->open_files.push_back(&in->item_open_file);
 
-  C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in, follows);
+  C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, in);
 
   if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
     dout(10) << "adding ino to reply to indicate inode was created" << dendl;
@@ -5147,10 +5148,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   else
     layout = mdcache->default_file_layout;
 
-  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
-  snapid_t follows = realm->get_newest_seq();
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
-				   mode, &layout);
+  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
   assert(newi);
 
   dn->push_projected_linkage(newi);
@@ -5161,6 +5159,10 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   if (layout.pool_id != mdcache->default_file_layout.pool_id)
     newi->inode.add_old_pool(mdcache->default_file_layout.pool_id);
   newi->inode.update_backtrace();
+
+  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
+  assert(follows >= realm->get_newest_seq());
 
   // if the client created a _regular_ file via MKNOD, it's highly likely they'll
   // want to write to it (e.g., if they are reexporting NFS)
@@ -5230,9 +5232,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
     return;
 
   // new inode
-  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
-  snapid_t follows = realm->get_newest_seq();
-
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
   mode |= S_IFDIR;
@@ -5245,6 +5244,10 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   newi->inode.version = dn->pre_dirty();
   newi->inode.rstat.rsubdirs = 1;
   newi->inode.update_backtrace();
+
+  snapid_t follows = mdcache->get_global_snaprealm()->get_newest_seq();
+  SnapRealm *realm = dn->get_dir()->inode->find_snaprealm();
+  assert(follows >= realm->get_newest_seq());
 
   dout(12) << " follows " << follows << dendl;
   assert(dn->first == follows + 1);
@@ -6111,10 +6114,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       return;
   }
 
-  SnapRealm *realm = in->find_snaprealm();
-  snapid_t follows = realm->get_newest_seq();
   if (straydn)
-    straydn->first = std::max<uint64_t>(in->first, follows + 1);
+    straydn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
   if (!mdr->more()->desti_srnode) {
     if (in->is_projected_snaprealm_global()) {
@@ -6130,6 +6131,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       mdr->more()->desti_srnode = new_srnode;
     } else if (dnl->is_primary()) {
       // prepare snaprealm blob for slave request
+      SnapRealm *realm = in->find_snaprealm();
+      snapid_t follows = realm->get_newest_seq();
       if (in->snaprealm || follows + 1 > in->get_oldest_snap()) {
 	sr_t *new_srnode = in->prepare_new_srnode(follows);
 	in->record_snaprealm_past_parent(new_srnode, straydn->get_dir()->inode->find_snaprealm());
@@ -7554,10 +7557,6 @@ void Server::_rename_prepare(MDRequestRef& mdr,
   if (destdn->is_auth())
     mdcache->predirty_journal_parents(mdr, metablob, srci, destdn->get_dir(), flags, 1);
 
-  SnapRealm *src_realm = srci->find_snaprealm();
-  SnapRealm *dest_realm = destdn->get_dir()->inode->find_snaprealm();
-  snapid_t next_dest_snap = std::max(dest_realm->get_newest_seq(), src_realm->get_newest_seq()) + 1;
-
   // add it all to the metablob
   // target inode
   if (!linkmerge) {
@@ -7571,7 +7570,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
 	    assert(!desti_srnode->is_parent_global());
 	  desti_srnode = NULL;
 	}
-	straydn->first = std::max<uint64_t>(oldin->first, dest_realm->get_newest_seq() + 1);
+	straydn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 	metablob->add_primary_dentry(straydn, oldin, true, true);
       } else if (force_journal_stray) {
 	dout(10) << " forced journaling straydn " << *straydn << dendl;
@@ -7611,7 +7610,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
     else
-      destdn->first = next_dest_snap;
+      destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
     if (destdn->is_auth())
       metablob->add_remote_dentry(destdn, true, srcdnl->get_remote_ino(), srcdnl->get_remote_d_type());
@@ -7646,7 +7645,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
     if (destdn->is_auth() && !destdnl->is_null())
       mdcache->journal_cow_dentry(mdr.get(), metablob, destdn, CEPH_NOSNAP, 0, destdnl);
 
-    destdn->first = std::max(srci->first, next_dest_snap);
+    destdn->first = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
 
     if (destdn->is_auth())
       metablob->add_primary_dentry(destdn, srci, true, true);

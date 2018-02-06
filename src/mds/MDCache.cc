@@ -1594,7 +1594,8 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
     if (in->get_projected_parent_dn() != dn) {
       assert(follows == CEPH_NOSNAP);
       realm = dn->dir->inode->find_snaprealm();
-      snapid_t dir_follows = realm->get_newest_seq();
+      snapid_t dir_follows = get_global_snaprealm()->get_newest_seq();
+      assert(dir_follows >= realm->get_newest_seq());
 
       if (dir_follows+1 > dn->first) {
 	snapid_t oldfirst = dn->first;
@@ -1613,15 +1614,17 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 	}
       }
 
+      follows = dir_follows;
       if (in->snaprealm) {
 	realm = in->snaprealm;
-	follows = realm->get_newest_seq();
-      } else
-	follows = dir_follows;
+	assert(follows >= realm->get_newest_seq());
+      }
     } else {
       realm = in->find_snaprealm();
-      if (follows == CEPH_NOSNAP)
-	follows = realm->get_newest_seq();
+      if (follows == CEPH_NOSNAP) {
+	follows = get_global_snaprealm()->get_newest_seq();
+	assert(follows >= realm->get_newest_seq());
+      }
     }
 
     // already cloned?
@@ -1640,8 +1643,10 @@ void MDCache::journal_cow_dentry(MutationImpl *mut, EMetaBlob *metablob,
 
   } else {
     SnapRealm *realm = dn->dir->inode->find_snaprealm();
-    if (follows == CEPH_NOSNAP)
-      follows = realm->get_newest_seq();
+    if (follows == CEPH_NOSNAP) {
+      follows = get_global_snaprealm()->get_newest_seq();
+      assert(follows >= realm->get_newest_seq());
+    }
 
     // already cloned?
     if (follows < dn->first) {
