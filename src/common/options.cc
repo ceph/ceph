@@ -3733,9 +3733,12 @@ std::vector<Option> get_global_options() {
     .set_default(.99)
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
-    Option("bluestore_cache_kv_max", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512_M)
-    .set_description("Max memory (bytes) to devote to kv database (rocksdb)"),
+    .set_description("Max memory (bytes) to devote to kv database (rocksdb)")
+    .set_long_description("A negative value means using bluestore_cache_meta_ratio "
+      "and bluestore_cache_kv_ratio instead of calculating these ratios using "
+      "bluestore_cache_size_* and bluestore_cache_kv_max."),
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
