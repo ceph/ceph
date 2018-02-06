@@ -114,24 +114,25 @@ void global_pre_init(
   int ret = conf->parse_config_files(c_str_or_null(conf_file_list),
 				     &cerr, flags);
   if (ret == -EDOM) {
-    dout_emergency("global_init: error parsing config file.\n");
+    cct->_log->flush();
+    cerr << "global_init: error parsing config file." << std::endl;
     _exit(1);
   }
   else if (ret == -ENOENT) {
     if (!(flags & CINIT_FLAG_NO_DEFAULT_CONFIG_FILE)) {
       if (conf_file_list.length()) {
-	ostringstream oss;
-	oss << "global_init: unable to open config file from search list "
-	    << conf_file_list << "\n";
-        dout_emergency(oss.str());
+	cct->_log->flush();
+	cerr << "global_init: unable to open config file from search list "
+	     << conf_file_list << std::endl;
         _exit(1);
       } else {
-        derr << "did not load config file, using default settings." << dendl;
+	cerr << "did not load config file, using default settings." << std::endl;
       }
     }
   }
   else if (ret) {
-    dout_emergency("global_init: error reading config file.\n");
+    cct->_log->flush();
+    cerr << "global_init: error reading config file." << std::endl;
     _exit(1);
   }
 
@@ -147,8 +148,9 @@ void global_pre_init(
 
     MonClient mc_bootstrap(g_ceph_context);
     if (mc_bootstrap.get_monmap_and_config() < 0) {
-      derr << "failed to fetch mon config (--no-mon-config to skip)" << dendl;
       cct->_log->flush();
+      cerr << "failed to fetch mon config (--no-mon-config to skip)"
+	   << std::endl;
       _exit(1);
     }
   }
