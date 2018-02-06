@@ -210,6 +210,8 @@ Context *RefreshParentRequest<I>::handle_close_parent(int *result) {
   ldout(cct, 10) << this << " " << __func__ << " r=" << *result << dendl;
 
   delete m_parent_image_ctx;
+  m_parent_image_ctx = nullptr;
+
   if (*result < 0) {
     lderr(cct) << "failed to close parent image: " << cpp_strerror(*result)
                << dendl;
