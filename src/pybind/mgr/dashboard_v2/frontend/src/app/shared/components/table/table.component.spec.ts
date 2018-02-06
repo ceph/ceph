@@ -1,7 +1,7 @@
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
-import {FormsModule} from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 
-import {NgxDatatableModule, TableColumn} from '@swimlane/ngx-datatable';
+import { NgxDatatableModule, TableColumn } from '@swimlane/ngx-datatable';
 
 import { TableComponent } from './table.component';
 
