@@ -2221,20 +2221,12 @@ will start to track new ops received afterwards.";
   } else if (admin_command == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
-    {
-      Mutex::Locker l(osd_lock);
-      RWLock::RLocker l2(pg_map_lock);
-      for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
-          it != pg_map.end();
-          ++it) {
-	if (it->second->is_deleted()) {
-	  continue;
-	}
-        list<obj_watch_item_t> pg_watchers;
-        PG *pg = it->second;
-        pg->get_watchers(&pg_watchers);
-        watchers.splice(watchers.end(), pg_watchers);
-      }
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg : pgs) {
+      list<obj_watch_item_t> pg_watchers;
+      pg->get_watchers(&pg_watchers);
+      watchers.splice(watchers.end(), pg_watchers);
     }
 
     f->open_array_section("watchers");
@@ -2333,12 +2325,9 @@ will start to track new ops received afterwards.";
     store->flush_cache();
   } else if (admin_command == "dump_pgstate_history") {
     f->open_object_section("pgstate_history");
-    RWLock::RLocker l2(pg_map_lock);
-    for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
-        it != pg_map.end();
-        ++it) {
-
-      PG *pg = it->second;
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg : pgs) {
       f->dump_stream("pg") << pg->pg_id;
       pg->dump_pgstate_history(f);
     }
@@ -3375,13 +3364,8 @@ int OSD::shutdown()
 
   // Shutdown PGs
   {
-    set<PGRef> pgs;
-    {
-      RWLock::RLocker l(pg_map_lock);
-      for (auto& p : pg_map) {
-	pgs.insert(p.second);
-      }
-    }
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
     for (auto pg : pgs) {
       pg->shutdown();
     }
@@ -4482,14 +4466,9 @@ void OSD::maybe_update_heartbeat_peers()
 
   // build heartbeat from set
   if (is_active()) {
-    RWLock::RLocker l(pg_map_lock);
-    for (ceph::unordered_map<spg_t, PG*>::iterator i = pg_map.begin();
-	 i != pg_map.end();
-	 ++i) {
-      if (i->second->is_deleted()) {
-	continue;
-      }
-      PG *pg = i->second;
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg : pgs) {
       pg->with_heartbeat_peers([&](int peer) {
 	  if (osdmap->is_up(peer)) {
 	    _add_heartbeat_peer(peer);
@@ -6235,13 +6214,9 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       f.reset(new JSONFormatter(true));
     }
     f->open_array_section("pgs");
-    RWLock::RLocker l(pg_map_lock);
-    for (ceph::unordered_map<spg_t, PG*>::const_iterator pg_map_e = pg_map.begin();
-	 pg_map_e != pg_map.end(); ++pg_map_e) {
-      if (pg_map_e->second->is_deleted()) {
-	continue;
-      }
-      PG *pg = pg_map_e->second;
+    vector<PGRef> pgs;
+    _get_pgs(&pgs);
+    for (auto& pg : pgs) {
       string s = stringify(pg->pg_id);
       f->open_array_section(s.c_str());
       pg->lock();
@@ -6825,30 +6800,18 @@ void OSD::handle_scrub(MOSDScrub *m)
   }
 
   vector<spg_t> spgs;
-  {
-    RWLock::RLocker l(pg_map_lock);
-    if (m->scrub_pgs.empty()) {
-      for (ceph::unordered_map<spg_t, PG*>::iterator p = pg_map.begin();
-	   p != pg_map.end();
-	   ++p) {
-	if (p->second->is_deleted()) {
-	  continue;
-	}
-	spgs.push_back(p->second->get_pgid());
-      }
-    } else {
-      for (vector<pg_t>::iterator p = m->scrub_pgs.begin();
-	   p != m->scrub_pgs.end();
-	   ++p) {
-	spg_t pcand;
-	if (osdmap->get_primary_shard(*p, &pcand)) {
-	  auto pg_map_entry = pg_map.find(pcand);
-	  if (pg_map_entry != pg_map.end()) {
-	    spgs.push_back(pcand);
-	  }
-	}
+  _get_pgids(&spgs);
+
+  if (!m->scrub_pgs.empty()) {
+    vector<spg_t> v;
+    for (auto pgid : m->scrub_pgs) {
+      spg_t pcand;
+      if (osdmap->get_primary_shard(pgid, &pcand) &&
+	  std::find(spgs.begin(), spgs.end(), pcand) != spgs.end()) {
+	v.push_back(pcand);
       }
     }
+    spgs.swap(v);
   }
 
   for (auto pgid : spgs) {
@@ -7966,29 +7929,27 @@ void OSD::consume_map()
 
   // scan pg's
   set<spg_t> new_children;
+  vector<PGRef> pgs;
+  _get_pgs(&pgs);
   vector<spg_t> pgids;
+  pgids.reserve(pgs.size());
+  for (auto& pg : pgs) {
+    pgids.push_back(pg->get_pgid());
+    service.init_splits_between(pg->get_pgid(), service.get_osdmap(), osdmap,
+				&new_children);
+
+    // FIXME: this is lockless and racy, but we don't want to take pg lock
+    // here.
+    if (pg->is_primary())
+      num_pg_primary++;
+    else if (pg->is_replica())
+      num_pg_replica++;
+    else
+      num_pg_stray++;
+  }
   {
+    // FIXME: move to OSDShard
     RWLock::RLocker l(pg_map_lock);
-    for (ceph::unordered_map<spg_t,PG*>::iterator it = pg_map.begin();
-        it != pg_map.end();
-        ++it) {
-      pgids.push_back(it->first);
-      PG *pg = it->second;
-      if (pg->is_deleted()) {
-	continue;
-      }
-      service.init_splits_between(it->first, service.get_osdmap(), osdmap, &new_children);
-
-      // FIXME: this is lockless and racy, but we don't want to take pg lock
-      // here.
-      if (pg->is_primary())
-        num_pg_primary++;
-      else if (pg->is_replica())
-        num_pg_replica++;
-      else
-        num_pg_stray++;
-    }
-
     [[gnu::unused]] auto&& pending_create_locker = guardedly_lock(pending_creates_lock);
     for (auto pg = pending_creates_from_osd.cbegin();
 	 pg != pending_creates_from_osd.cend();) {
