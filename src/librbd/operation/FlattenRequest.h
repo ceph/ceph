@@ -5,7 +5,6 @@
 
 #include "librbd/operation/Request.h"
 #include "common/snap_types.h"
-#include "librbd/Types.h"
 
 namespace librbd {
 
@@ -71,8 +70,6 @@ private:
   ::SnapContext m_snapc;
   ProgressContext &m_prog_ctx;
   State m_state = STATE_FLATTEN_OBJECTS;
-
-  ParentSpec m_parent_spec;
 
   bool send_detach_child();
   bool send_update_header();
