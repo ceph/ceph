@@ -1106,6 +1106,86 @@ public:
   ~OSDService();
 };
 
+
+enum class io_queue {
+  prioritized,
+  weightedpriority,
+  mclock_opclass,
+  mclock_client,
+};
+
+struct OSDShard {
+  Mutex sdata_lock;
+  Cond sdata_cond;
+
+  Mutex sdata_op_ordering_lock;   ///< protects all members below
+
+  OSDMapRef waiting_for_pg_osdmap;
+
+  struct pg_slot {
+    PGRef pg;                     ///< cached pg reference [optional]
+    deque<OpQueueItem> to_process; ///< order items for this slot
+    int num_running = 0;          ///< _process threads doing pg lookup/lock
+
+    deque<OpQueueItem> waiting;   ///< waiting for pg (or map + pg)
+
+    /// waiting for map (peering evt)
+    map<epoch_t,deque<OpQueueItem>> waiting_peering;
+
+    /// incremented by wake_pg_waiters; indicates racing _process threads
+    /// should bail out (their op has been requeued)
+    uint64_t requeue_seq = 0;
+
+    /// waiting for split child to materialize
+    bool waiting_for_split = false;
+  };
+
+  /// map of slots for each spg_t.  maintains ordering of items dequeued
+  /// from pqueue while _process thread drops shard lock to acquire the
+  /// pg lock.  slots are removed only by prune_or_wake_pg_waiters.
+  unordered_map<spg_t,pg_slot> pg_slots;
+
+  /// priority queue
+  std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
+
+  bool stop_waiting = false;
+
+  void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
+    unsigned priority = item.get_priority();
+    unsigned cost = item.get_cost();
+    if (priority >= cutoff)
+      pqueue->enqueue_strict_front(
+	item.get_owner(),
+	priority, std::move(item));
+    else
+      pqueue->enqueue_front(
+	item.get_owner(),
+	priority, cost, std::move(item));
+  }
+
+  OSDShard(
+    string lock_name, string ordering_lock,
+    uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
+    io_queue opqueue)
+    : sdata_lock(lock_name.c_str(), false, true, false, cct),
+      sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
+			     false, cct) {
+    if (opqueue == io_queue::weightedpriority) {
+      pqueue = std::make_unique<
+	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
+	  max_tok_per_prio, min_cost);
+    } else if (opqueue == io_queue::prioritized) {
+      pqueue = std::make_unique<
+	PrioritizedQueue<OpQueueItem,uint64_t>>(
+	  max_tok_per_prio, min_cost);
+    } else if (opqueue == io_queue::mclock_opclass) {
+      pqueue = std::make_unique<ceph::mClockOpClassQueue>(cct);
+    } else if (opqueue == io_queue::mclock_client) {
+      pqueue = std::make_unique<ceph::mClockClientQueue>(cct);
+    }
+  }
+};
+
 class OSD : public Dispatcher,
 	    public md_config_obs_t {
   /** OSD **/
@@ -1527,13 +1607,7 @@ private:
   friend struct C_OpenPGs;
 
   // -- op queue --
-  enum class io_queue {
-    prioritized,
-    weightedpriority,
-    mclock_opclass,
-    mclock_client,
-  };
-  friend std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+  friend std::ostream& operator<<(std::ostream& out, const io_queue& q);
 
   const io_queue op_queue;
   const unsigned int op_prio_cutoff;
@@ -1566,119 +1640,26 @@ private:
   class ShardedOpWQ
     : public ShardedThreadPool::ShardedWQ<OpQueueItem>
   {
-    struct ShardData {
-      Mutex sdata_lock;
-      Cond sdata_cond;
-
-      Mutex sdata_op_ordering_lock;   ///< protects all members below
-
-      OSDMapRef waiting_for_pg_osdmap;
-      struct pg_slot {
-	PGRef pg;                     ///< cached pg reference [optional]
-	deque<OpQueueItem> to_process; ///< order items for this slot
-	int num_running = 0;          ///< _process threads doing pg lookup/lock
-
-	deque<OpQueueItem> waiting;   ///< waiting for pg (or map + pg)
-
-	/// waiting for map (peering evt)
-	map<epoch_t,deque<OpQueueItem>> waiting_peering;
-
-	/// incremented by wake_pg_waiters; indicates racing _process threads
-	/// should bail out (their op has been requeued)
-	uint64_t requeue_seq = 0;
-
-	/// waiting for split child to materialize
-	bool waiting_for_split = false;
-      };
-
-      /// map of slots for each spg_t.  maintains ordering of items dequeued
-      /// from pqueue while _process thread drops shard lock to acquire the
-      /// pg lock.  slots are removed only by prune_or_wake_pg_waiters.
-      unordered_map<spg_t,pg_slot> pg_slots;
-
-      /// priority queue
-      std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
-
-      bool stop_waiting = false;
-
-      void _enqueue_front(OpQueueItem&& item, unsigned cutoff) {
-	unsigned priority = item.get_priority();
-	unsigned cost = item.get_cost();
-	if (priority >= cutoff)
-	  pqueue->enqueue_strict_front(
-	    item.get_owner(),
-	    priority, std::move(item));
-	else
-	  pqueue->enqueue_front(
-	    item.get_owner(),
-	    priority, cost, std::move(item));
-      }
-
-      ShardData(
-	string lock_name, string ordering_lock,
-	uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
-	io_queue opqueue)
-	: sdata_lock(lock_name.c_str(), false, true, false, cct),
-	  sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
-				 false, cct) {
-	if (opqueue == io_queue::weightedpriority) {
-	  pqueue = std::make_unique<
-	    WeightedPriorityQueue<OpQueueItem,uint64_t>>(
-	        max_tok_per_prio, min_cost);
-	} else if (opqueue == io_queue::prioritized) {
-	  pqueue = std::make_unique<
-	    PrioritizedQueue<OpQueueItem,uint64_t>>(
-		max_tok_per_prio, min_cost);
-	} else if (opqueue == io_queue::mclock_opclass) {
-	  pqueue = std::make_unique<ceph::mClockOpClassQueue>(cct);
-	} else if (opqueue == io_queue::mclock_client) {
-	  pqueue = std::make_unique<ceph::mClockClientQueue>(cct);
-	}
-      }
-    }; // struct ShardData
-
-    vector<ShardData*> shard_list;
     OSD *osd;
-    uint32_t num_shards;
 
   public:
-    ShardedOpWQ(uint32_t pnum_shards,
-		OSD *o,
+    ShardedOpWQ(OSD *o,
 		time_t ti,
 		time_t si,
 		ShardedThreadPool* tp)
       : ShardedThreadPool::ShardedWQ<OpQueueItem>(ti, si, tp),
-        osd(o),
-        num_shards(pnum_shards) {
-      for (uint32_t i = 0; i < num_shards; i++) {
-	char lock_name[32] = {0};
-	snprintf(lock_name, sizeof(lock_name), "%s.%d", "OSD:ShardedOpWQ:", i);
-	char order_lock[32] = {0};
-	snprintf(order_lock, sizeof(order_lock), "%s.%d",
-		 "OSD:ShardedOpWQ:order:", i);
-	ShardData* one_shard = new ShardData(
-	  lock_name, order_lock,
-	  osd->cct->_conf->osd_op_pq_max_tokens_per_priority, 
-	  osd->cct->_conf->osd_op_pq_min_cost, osd->cct, osd->op_queue);
-	shard_list.push_back(one_shard);
-      }
-    }
-    ~ShardedOpWQ() override {
-      while (!shard_list.empty()) {
-	delete shard_list.back();
-	shard_list.pop_back();
-      }
+        osd(o) {
     }
 
     void _add_slot_waiter(
       spg_t token,
-      ShardData::pg_slot& slot,
+      OSDShard::pg_slot& slot,
       OpQueueItem&& qi);
 
     /// wake any pg waiters after a PG is split
     void wake_pg_split_waiters(spg_t pgid);
 
-    void _wake_pg_slot(spg_t pgid, ShardData *sdata, ShardData::pg_slot& slot);
+    void _wake_pg_slot(spg_t pgid, OSDShard *sdata, OSDShard::pg_slot& slot);
 
     /// prime slots for splitting pgs
     void prime_splits(const set<spg_t>& pgs);
@@ -1702,8 +1683,8 @@ private:
     void _enqueue_front(OpQueueItem&& item) override;
       
     void return_waiting_threads() override {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
+      for(uint32_t i = 0; i < osd->num_shards; i++) {
+	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata); 
 	sdata->sdata_lock.Lock();
 	sdata->stop_waiting = true;
@@ -1713,8 +1694,8 @@ private:
     }
 
     void stop_return_waiting_threads() override {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	ShardData* sdata = shard_list[i];
+      for(uint32_t i = 0; i < osd->num_shards; i++) {
+	OSDShard* sdata = osd->shards[i];
 	assert (NULL != sdata);
 	sdata->sdata_lock.Lock();
 	sdata->stop_waiting = false;
@@ -1723,8 +1704,8 @@ private:
     }
 
     void dump(Formatter *f) {
-      for(uint32_t i = 0; i < num_shards; i++) {
-	auto &&sdata = shard_list[i];
+      for(uint32_t i = 0; i < osd->num_shards; i++) {
+	auto &&sdata = osd->shards[i];
 
 	char queue_name[32] = {0};
 	snprintf(queue_name, sizeof(queue_name), "%s%d", "OSD:ShardedOpWQ:", i);
@@ -1767,8 +1748,8 @@ private:
     };
 
     bool is_shard_empty(uint32_t thread_index) override {
-      uint32_t shard_index = thread_index % num_shards; 
-      auto &&sdata = shard_list[shard_index];
+      uint32_t shard_index = thread_index % osd->num_shards;
+      auto &&sdata = osd->shards[shard_index];
       assert(sdata);
       Mutex::Locker l(sdata->sdata_op_ordering_lock);
       return sdata->pqueue->empty();
@@ -1851,6 +1832,11 @@ private:
     return service.add_map_inc_bl(e, bl);
   }
 
+public:
+  // -- shards --
+  vector<OSDShard*> shards;
+  uint32_t num_shards = 0;
+
 protected:
   // -- placement groups --
   RWLock pg_map_lock; // this lock orders *above* individual PG _locks
@@ -1880,7 +1866,6 @@ public:
 protected:
   PGRef _open_pg(
     OSDMapRef createmap,   ///< map pg is created in
-    OSDMapRef servicemap,  ///< latest service map
     spg_t pg);
 
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
@@ -2265,7 +2250,7 @@ public:
 };
 
 
-std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q);
+std::ostream& operator<<(std::ostream& out, const io_queue& q);
 
 
 //compatibility of the executable
