@@ -2036,7 +2036,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_queue(get_io_queue()),
   op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
-    get_num_op_shards(),
     this,
     cct->_conf->osd_op_thread_timeout,
     cct->_conf->osd_op_thread_suicide_timeout,
@@ -2067,10 +2066,28 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   ss << "osd." << whoami;
   trace_endpoint.copy_name(ss.str());
 #endif
+
+  // initialize shards
+  num_shards = get_num_op_shards();
+  for (uint32_t i = 0; i < num_shards; i++) {
+    char lock_name[128] = {0};
+    snprintf(lock_name, sizeof(lock_name), "OSDShard.%d::sdata_lock", i);
+    char order_lock[128] = {0};
+    snprintf(order_lock, sizeof(order_lock), "OSDShard.%d::sdata_op_ordering_lock", i);
+    OSDShard *one_shard = new OSDShard(
+      lock_name, order_lock,
+      cct->_conf->osd_op_pq_max_tokens_per_priority,
+      cct->_conf->osd_op_pq_min_cost, cct, op_queue);
+    shards.push_back(one_shard);
+  }
 }
 
 OSD::~OSD()
 {
+  while (!shards.empty()) {
+    delete shards.back();
+    shards.pop_back();
+  }
   delete authorize_handler_cluster_registry;
   delete authorize_handler_service_registry;
   delete class_handler;
@@ -3807,23 +3824,16 @@ void OSD::recursive_remove_collection(CephContext* cct,
 
 PGRef OSD::_open_pg(
   OSDMapRef createmap,
-  OSDMapRef servicemap,
   spg_t pgid)
 {
-  PG* pg = _make_pg(createmap, pgid);
+  PGRef pg = _make_pg(createmap, pgid);
   {
     RWLock::WLocker l(pg_map_lock);
     assert(pg_map.count(pgid) == 0);
-    pg_map[pgid] = pg;
+    pg_map[pgid] = pg.get();
     pg_map_size = pg_map.size();
     pg->get("PGMap");  // because it's in pg_map
     service.pg_add_epoch(pg->pg_id, createmap->get_epoch());
-
-    // make sure we register any splits that happened between when the pg
-    // was created and our latest map.
-    set<spg_t> new_children;
-    service.init_splits_between(pgid, createmap, servicemap, &new_children);
-    op_shardedwq.prime_splits(new_children);
   }
   return pg;
 }
@@ -3957,7 +3967,7 @@ void OSD::load_pgs()
       continue;
     }
 
-    PG *pg = NULL;
+    PGRef pg;
     if (map_epoch > 0) {
       OSDMapRef pgosdmap = service.try_get_map(map_epoch);
       if (!pgosdmap) {
@@ -3975,9 +3985,9 @@ void OSD::load_pgs()
 	  assert(0 == "Missing map in load_pgs");
 	}
       }
-      pg = _open_pg(pgosdmap, osdmap, pgid);
+      pg = _open_pg(pgosdmap, pgid);
     } else {
-      pg = _open_pg(osdmap, osdmap, pgid);
+      pg = _open_pg(osdmap, pgid);
     }
     // there can be no waiters here, so we don't call wake_pg_waiters
 
@@ -4052,7 +4062,19 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
     role = -1;
   }
 
-  PGRef pg = _open_pg(createmap, osdmap, pgid);
+  PGRef pg = _open_pg(createmap, pgid);
+
+  // We need to avoid racing with consume_map().  This should get
+  // redone as a structured waterfall of incoming osdmaps from osd ->
+  // shard, and something here that gets the to-be-split pg slots
+  // primed, even when they land on other shards.  (I think it will be
+  // iterative to handle the case where it races with newer incoming
+  // maps.)  For now, just cross our fingers. FIXME
+  {
+    set<spg_t> new_children;
+    service.init_splits_between(pg->pg_id, createmap, osdmap, &new_children);
+    op_shardedwq.prime_splits(new_children);
+  }
 
   pg->lock(true);
 
@@ -4076,7 +4098,7 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
 
   dispatch_context(rctx, pg.get(), osdmap, nullptr);
 
-  dout(10) << *pg << " is new" << dendl;
+  dout(10) << __func__ << " new pg " << *pg << dendl;
   return pg;
 }
 
@@ -9453,8 +9475,8 @@ int OSD::init_op_flags(OpRequestRef& op)
 
 void OSD::ShardedOpWQ::_wake_pg_slot(
   spg_t pgid,
-  ShardData *sdata,
-  ShardData::pg_slot& slot)
+  OSDShard *sdata,
+  OSDShard::pg_slot& slot)
 {
   dout(20) << __func__ << " " << pgid
 	   << " to_process " << slot.to_process
@@ -9488,8 +9510,8 @@ void OSD::ShardedOpWQ::_wake_pg_slot(
 
 void OSD::ShardedOpWQ::wake_pg_split_waiters(spg_t pgid)
 {
-  uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
-  auto sdata = shard_list[shard_index];
+  uint32_t shard_index = pgid.hash_to_shard(osd->shards.size());
+  auto sdata = osd->shards[shard_index];
   bool queued = false;
   {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
@@ -9510,10 +9532,10 @@ void OSD::ShardedOpWQ::prime_splits(const set<spg_t>& pgs)
 {
   dout(20) << __func__ << " " << pgs << dendl;
   for (auto pgid : pgs) {
-    unsigned shard_index = pgid.hash_to_shard(shard_list.size());
-    ShardData* sdata = shard_list[shard_index];
+    unsigned shard_index = pgid.hash_to_shard(osd->shards.size());
+    OSDShard* sdata = osd->shards[shard_index];
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
-    ShardData::pg_slot& slot = sdata->pg_slots[pgid];
+    OSDShard::pg_slot& slot = sdata->pg_slots[pgid];
     slot.waiting_for_split = true;
   }
 }
@@ -9522,12 +9544,12 @@ void OSD::ShardedOpWQ::prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami)
 {
   unsigned pushes_to_free = 0;
   bool queued = false;
-  for (auto sdata : shard_list) {
+  for (auto sdata : osd->shards) {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
     sdata->waiting_for_pg_osdmap = osdmap;
     auto p = sdata->pg_slots.begin();
     while (p != sdata->pg_slots.end()) {
-      ShardData::pg_slot& slot = p->second;
+      OSDShard::pg_slot& slot = p->second;
       if (slot.waiting_for_split) {
 	dout(20) << __func__ << "  " << p->first
 		 << " waiting for split" << dendl;
@@ -9588,8 +9610,8 @@ void OSD::ShardedOpWQ::prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami)
 void OSD::ShardedOpWQ::clear_pg_pointer(PG *pg)
 {
   spg_t pgid = pg->get_pgid();
-  uint32_t shard_index = pgid.hash_to_shard(shard_list.size());
-  auto sdata = shard_list[shard_index];
+  uint32_t shard_index = pgid.hash_to_shard(osd->shards.size());
+  auto sdata = osd->shards[shard_index];
   Mutex::Locker l(sdata->sdata_op_ordering_lock);
   auto p = sdata->pg_slots.find(pgid);
   if (p != sdata->pg_slots.end()) {
@@ -9602,7 +9624,7 @@ void OSD::ShardedOpWQ::clear_pg_pointer(PG *pg)
 
 void OSD::ShardedOpWQ::clear_pg_slots()
 {
-  for (auto sdata : shard_list) {
+  for (auto sdata : osd->shards) {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
     sdata->pg_slots.clear();
     sdata->waiting_for_pg_osdmap.reset();
@@ -9612,7 +9634,7 @@ void OSD::ShardedOpWQ::clear_pg_slots()
 
 void OSD::ShardedOpWQ::_add_slot_waiter(
   spg_t pgid,
-  OSD::ShardedOpWQ::ShardData::pg_slot& slot,
+  OSDShard::pg_slot& slot,
   OpQueueItem&& qi)
 {
   if (qi.is_peering()) {
@@ -9635,8 +9657,8 @@ void OSD::ShardedOpWQ::_add_slot_waiter(
 
 void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 {
-  uint32_t shard_index = thread_index % num_shards;
-  auto& sdata = shard_list[shard_index];
+  uint32_t shard_index = thread_index % osd->num_shards;
+  auto& sdata = osd->shards[shard_index];
   assert(sdata);
   // peek at spg_t
   sdata->sdata_op_ordering_lock.Lock();
@@ -9806,6 +9828,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	    pg = osd->handle_pg_create_info(osdmap, create_info);
 	    if (pg) {
 	      // we created the pg! drop out and continue "normally"!
+	      slot.pg = pg;	      // install in shard slot
 	      _wake_pg_slot(token, sdata, slot);
 	      break;
 	    }
@@ -9905,9 +9928,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
 void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   uint32_t shard_index =
-    item.get_ordering_token().hash_to_shard(shard_list.size());
+    item.get_ordering_token().hash_to_shard(osd->shards.size());
 
-  ShardData* sdata = shard_list[shard_index];
+  OSDShard* sdata = osd->shards[shard_index];
   assert (NULL != sdata);
   unsigned priority = item.get_priority();
   unsigned cost = item.get_cost();
@@ -9930,8 +9953,8 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
 
 void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
 {
-  auto shard_index = item.get_ordering_token().hash_to_shard(shard_list.size());
-  auto& sdata = shard_list[shard_index];
+  auto shard_index = item.get_ordering_token().hash_to_shard(osd->shards.size());
+  auto& sdata = osd->shards[shard_index];
   assert(sdata);
   sdata->sdata_op_ordering_lock.Lock();
   auto p = sdata->pg_slots.find(item.get_ordering_token());
@@ -9984,18 +10007,18 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
 }} // namespace ceph::osd_cmds
 
 
-std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q) {
+std::ostream& operator<<(std::ostream& out, const io_queue& q) {
   switch(q) {
-  case OSD::io_queue::prioritized:
+  case io_queue::prioritized:
     out << "prioritized";
     break;
-  case OSD::io_queue::weightedpriority:
+  case io_queue::weightedpriority:
     out << "weightedpriority";
     break;
-  case OSD::io_queue::mclock_opclass:
+  case io_queue::mclock_opclass:
     out << "mclock_opclass";
     break;
-  case OSD::io_queue::mclock_client:
+  case io_queue::mclock_client:
     out << "mclock_client";
     break;
   }
