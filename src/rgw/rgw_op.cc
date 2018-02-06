@@ -406,8 +406,10 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
        */
-      if (store->get_zonegroup().is_master && s->op == OP_DELETE && s->system_request) {
-        /*If the operation is delete and if this is the master, don't redirect*/
+      if (store->get_zonegroup().is_master_zonegroup() && s->system_request) {
+        /*If this is the master, don't redirect*/
+      } else if (s->op_type == RGW_OP_GET_BUCKET_LOCATION ) {
+        /* If op is get bucket location, don't redirect */
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           s->object.empty()) {
@@ -2018,7 +2020,7 @@ void RGWCreateBucket::execute()
   if (op_ret < 0)
     return;
 
-  if (!store->get_zonegroup().is_master &&
+  if (!store->get_zonegroup().is_master_zonegroup() &&
       store->get_zonegroup().api_name != location_constraint) {
     ldout(s->cct, 0) << "location constraint (" << location_constraint << ") doesn't match zonegroup" << " (" << store->get_zonegroup().api_name << ")" << dendl;
     op_ret = -EINVAL;
@@ -4856,7 +4858,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
       goto delop_fail;
     }
 
-    if (!store->get_zonegroup().is_master) {
+    if (!store->get_zonegroup().is_master_zonegroup()) {
       bufferlist in_data;
       ret = forward_request_to_master(s, &ot.read_version, store, in_data,
 				      NULL);

@@ -429,6 +429,7 @@ public:
 
   virtual void send_response() = 0;
   virtual const string name() { return "get_bucket_location"; }
+  virtual RGWOpType get_type() { return RGW_OP_GET_BUCKET_LOCATION; }
   virtual uint32_t op_mask() { return RGW_OP_TYPE_READ; }
 };
 

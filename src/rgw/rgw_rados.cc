@@ -1676,7 +1676,7 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
        iter != zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
-    if (zonegroup.is_master) {
+    if (zonegroup.is_master_zonegroup()) {
       master_zonegroup = zonegroup.get_id();
     }
   }
@@ -1684,7 +1684,7 @@ void RGWPeriodMap::decode(bufferlist::iterator& bl) {
 
 int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
 {
-  if (zonegroup.is_master && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
+  if (zonegroup.is_master_zonegroup() && (!master_zonegroup.empty() && zonegroup.get_id() != master_zonegroup)) {
     ldout(cct,0) << "Error updating periodmap, multiple master zonegroups configured "<< dendl;
     ldout(cct,0) << "master zonegroup: " << master_zonegroup << " and  " << zonegroup.get_id() <<dendl;
     return -EINVAL;
@@ -1702,7 +1702,7 @@ int RGWPeriodMap::update(const RGWZoneGroup& zonegroup, CephContext *cct)
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
   }
 
-  if (zonegroup.is_master) {
+  if (zonegroup.is_master_zonegroup()) {
     master_zonegroup = zonegroup.get_id();
   } else if (master_zonegroup == zonegroup.get_id()) {
     master_zonegroup = "";
@@ -1804,7 +1804,7 @@ void RGWZoneGroupMap::decode(bufferlist::iterator& bl) {
        iter != zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
     zonegroups_by_api[zonegroup.api_name] = zonegroup;
-    if (zonegroup.is_master) {
+    if (zonegroup.is_master_zonegroup()) {
       master_zonegroup = zonegroup.get_name();
     }
   }
@@ -3435,7 +3435,7 @@ int RGWRados::replace_region_with_zonegroup()
 	  ldout(cct, 0) <<  __func__ << " failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
 	  return ret;
       }
-      if (region.is_master) {
+      if (region.is_master_zonegroup()) {
 	master_region = region.get_id();
 	master_zone = region.master_zone;
       }
@@ -3727,7 +3727,7 @@ int RGWRados::init_zg_from_local(bool *creating_defaults)
     }
   }
   ldout(cct, 20) << "zonegroup " << zonegroup.get_name() << dendl;
-  if (zonegroup.is_master) {
+  if (zonegroup.is_master_zonegroup()) {
     // use endpoints from the zonegroup's master zone
     auto master = zonegroup.zones.find(zonegroup.master_zone);
     if (master == zonegroup.zones.end()) {
@@ -7423,7 +7423,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
 bool RGWRados::is_meta_master()
 {
-  if (!get_zonegroup().is_master) {
+  if (!get_zonegroup().is_master_zonegroup()) {
     return false;
   }
 
@@ -7444,7 +7444,7 @@ bool RGWRados::is_syncing_bucket_meta(rgw_bucket& bucket)
   }
 
   /* zonegroup is not master zonegroup */
-  if (!get_zonegroup().is_master) {
+  if (!get_zonegroup().is_master_zonegroup()) {
     return false;
   }
 
