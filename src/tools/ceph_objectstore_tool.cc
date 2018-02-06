@@ -2995,6 +2995,7 @@ int main(int argc, char **argv)
   pd.add("object", 1).add("objcmd", 1).add("arg1", 1).add("arg2", 1);
 
   vector<string> ceph_option_strings;
+
   po::variables_map vm;
   try {
     po::parsed_options parsed =
@@ -3032,6 +3033,27 @@ int main(int argc, char **argv)
 
   head = (vm.count("head") > 0);
 
+  // infer osd id so we can authenticate
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/whoami", dpath.c_str());
+  int fd = ::open(fn, O_RDONLY);
+  if (fd >= 0) {
+    bufferlist bl;
+    bl.read_fd(fd, 64);
+    string s(bl.c_str(), bl.length());
+    int whoami = atoi(s.c_str());
+    vector<string> tmp;
+    // identify ourselves as this osd so we can auth and fetch our configs
+    tmp.push_back("-n");
+    tmp.push_back(string("osd.") + stringify(whoami));
+    // populate osd_data so that the default keyring location works
+    tmp.push_back("--osd-data");
+    tmp.push_back(dpath);
+    tmp.insert(tmp.end(), ceph_option_strings.begin(),
+	       ceph_option_strings.end());
+    tmp.swap(ceph_option_strings);
+  }
+
   vector<const char *> ceph_options;
   ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
   for (vector<string>::iterator i = ceph_option_strings.begin();
@@ -3040,9 +3062,8 @@ int main(int argc, char **argv)
     ceph_options.push_back(i->c_str());
   }
 
-  char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/type", dpath.c_str());
-  int fd = ::open(fn, O_RDONLY);
+  fd = ::open(fn, O_RDONLY);
   if (fd >= 0) {
     bufferlist bl;
     bl.read_fd(fd, 64);
@@ -3056,6 +3077,7 @@ int main(int argc, char **argv)
     }
     ::close(fd);
   }
+
   if (!vm.count("type") && type == "") {
     type = "bluestore";
   }
@@ -3136,9 +3158,10 @@ int main(int argc, char **argv)
   }
 
   auto cct = global_init(
-    NULL, ceph_options, CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY_NODOUT, 0);
-    //CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+    NULL, ceph_options,
+    CEPH_ENTITY_TYPE_OSD,
+    CODE_ENVIRONMENT_UTILITY_NODOUT,
+    0);
   common_init_finish(g_ceph_context);
   g_conf = g_ceph_context->_conf;
   if (debug) {
