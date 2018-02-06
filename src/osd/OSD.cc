@@ -9508,7 +9508,7 @@ void OSD::ShardedOpWQ::prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami)
   bool queued = false;
   for (auto sdata : osd->shards) {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
-    sdata->waiting_for_pg_osdmap = osdmap;
+    sdata->osdmap = osdmap;
     auto p = sdata->pg_slots.begin();
     while (p != sdata->pg_slots.end()) {
       OSDShard::pg_slot& slot = p->second;
@@ -9589,7 +9589,7 @@ void OSD::ShardedOpWQ::clear_pg_slots()
   for (auto sdata : osd->shards) {
     Mutex::Locker l(sdata->sdata_op_ordering_lock);
     sdata->pg_slots.clear();
-    sdata->waiting_for_pg_osdmap.reset();
+    sdata->osdmap.reset();
     // don't bother with reserved pushes; we are shutting down
   }
 }
@@ -9761,7 +9761,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   while (!pg) {
     // should this pg shard exist on this osd in this (or a later) epoch?
-    OSDMapRef osdmap = sdata->waiting_for_pg_osdmap;
+    OSDMapRef osdmap = sdata->osdmap;
     const PGCreateInfo *create_info = qi.creates_pg();
     if (slot.waiting_for_split) {
       dout(20) << __func__ << " " << token
@@ -9820,7 +9820,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	Session *session = static_cast<Session *>(
 	  (*_op)->get_req()->get_connection()->get_priv());
 	if (session) {
-	  osd->maybe_share_map(session, *_op, sdata->waiting_for_pg_osdmap);
+	  osd->maybe_share_map(session, *_op, sdata->osdmap);
 	  session->put();
 	}
       }
@@ -9835,7 +9835,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     return;
   }
   if (qi.is_peering()) {
-    OSDMapRef osdmap = sdata->waiting_for_pg_osdmap;
+    OSDMapRef osdmap = sdata->osdmap;
     if (qi.get_map_epoch() > osdmap->get_epoch()) {
       _add_slot_waiter(token, slot, std::move(qi));
       sdata->sdata_op_ordering_lock.Unlock();
