@@ -1,10 +1,18 @@
 import {
-  Component, ComponentFactoryResolver, EventEmitter, Input, OnChanges, OnInit, Output, Type, ViewChild
+  Component,
+  ComponentFactoryResolver,
+  EventEmitter,
+  Input,
+  OnChanges,
+  OnInit,
+  Output,
+  Type,
+  ViewChild
 } from '@angular/core';
 
-import {DatatableComponent, TableColumn} from '@swimlane/ngx-datatable';
+import { DatatableComponent, TableColumn } from '@swimlane/ngx-datatable';
 
-import {TableDetailsDirective} from './table-details.directive';
+import { TableDetailsDirective } from './table-details.directive';
 
 @Component({
   selector: 'cd-table',
@@ -15,12 +23,16 @@ export class TableComponent implements OnInit, OnChanges {
   @ViewChild(DatatableComponent) table: DatatableComponent;
   @ViewChild(TableDetailsDirective) detailTemplate: TableDetailsDirective;
 
-  @Input() data: any[]; // This is the array with the items to be shown
-  @Input() columns: TableColumn[]; // each item -> { prop: 'attribute name', name: 'display name' }
-  @Input() detailsComponent?: string; // name of the component fe 'TableDetailsComponent'
-  @Input() header ? = true;
+  // This is the array with the items to be shown
+  @Input() data: any[];
+  // each item -> { prop: 'attribute name', name: 'display name' }
+  @Input() columns: TableColumn[];
+  // name of the component fe 'TableDetailsComponent'
+  @Input() detailsComponent?: string;
+  @Input() header ?= true;
 
-  @Output() fetchData = new EventEmitter(); // Should be the function that will update the input data
+  // Should be the function that will update the input data
+  @Output() fetchData = new EventEmitter();
 
   selectable: String = undefined;
   search = '';
@@ -34,7 +46,7 @@ export class TableComponent implements OnInit, OnChanges {
   };
   limit = 10;
 
-  constructor(private componentFactoryResolver: ComponentFactoryResolver) {}
+  constructor(private componentFactoryResolver: ComponentFactoryResolver) { }
 
   ngOnInit() {
     this.reloadData();
@@ -91,7 +103,7 @@ export class TableComponent implements OnInit, OnChanges {
     this.rows = this.data.filter(function (d) {
       return columns.filter((c) => {
         return (typeof d[c.prop] === 'string' || typeof d[c.prop] === 'number')
-               && (d[c.prop] + '').toLowerCase().indexOf(val) !== -1;
+          && (d[c.prop] + '').toLowerCase().indexOf(val) !== -1;
       }).length > 0;
     });
     // Whenever the filter changes, always go back to the first page
