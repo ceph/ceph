@@ -4478,6 +4478,11 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Period in seconds from last beacon to manager dropping "
                      "state about a monitored service (RGW, rbd-mirror etc)"),
+    
+    Option("mgr_load_config_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(5.0)
+    .add_service("mgr")
+    .set_description("Period in seconds from mgr load config "),
 
     Option("mon_mgr_digest_period", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(5)

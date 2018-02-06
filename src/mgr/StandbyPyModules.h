@@ -119,10 +119,15 @@ private:
     protected:
       MonClient *monc;
       StandbyPyModuleState *state;
+      mutable Mutex loadconfig_lock{"LoadConfigThread::loadconfig_lock"};
+      Cond loadconfig_cond;
+      bool loadconfig_stop;
     public:
     LoadConfigThread(MonClient *monc_, StandbyPyModuleState *state_)
       : monc(monc_), state(state_)
-    {}
+    {
+      loadconfig_stop = false;
+    }
     void *entry() override;
   };
 
