@@ -5121,7 +5121,7 @@ next:
     int num_target_shards = (new_bucket_info.num_shards > 0 ? new_bucket_info.num_shards : 1);
 
     BucketReshardManager target_shards_mgr(store, new_bucket_info, num_target_shards);
-    
+
     if (verbose) {
       formatter->open_array_section("entries");
     }
@@ -5207,6 +5207,14 @@ next:
       cerr << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << std::endl;
       return -r;
     }
+
+    r = rgw_bucket_set_attrs(store, new_bucket_info, attrs, &new_bucket_info.objv_tracker);
+    if (r < 0) {
+      cerr << "failed to reset attrs for bucket " << new_bucket_info.bucket.name <<
+	" instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-ret)
+	   << ")" << std::endl;
+    }
+
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
