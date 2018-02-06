@@ -1058,7 +1058,7 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
   string val;
   if (bl.length() > 0) {
-    val.assign(bl.c_str(), bl.length());
+    val.assign(bl.c_str());
   }
   f->dump_string(field_name, val);
 

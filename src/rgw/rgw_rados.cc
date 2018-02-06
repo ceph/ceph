@@ -8217,7 +8217,7 @@ int RGWRados::get_system_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObj
 
   bufferlist manifest_bl = s->attrset[RGW_ATTR_MANIFEST];
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_system_obj_state: setting s->obj_tag to " << string(s->obj_tag.c_str(), s->obj_tag.length()) << dendl;
+    ldout(cct, 20) << "get_system_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
     ldout(cct, 20) << "get_system_obj_state: s->obj_tag was set empty" << dendl;
 
@@ -8337,7 +8337,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, rgw_obj& obj, RGWObjState *
     }
   }
   if (s->obj_tag.length())
-    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << string(s->obj_tag.c_str(), s->obj_tag.length()) << dendl;
+    ldout(cct, 20) << "get_obj_state: setting s->obj_tag to " << s->obj_tag.c_str() << dendl;
   else
     ldout(cct, 20) << "get_obj_state: s->obj_tag was set empty" << dendl;
 
