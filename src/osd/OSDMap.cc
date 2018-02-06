@@ -3412,9 +3412,9 @@ void OSDMap::print_oneline_summary(ostream& out) const
       << get_num_up_osds() << " up, "
       << get_num_in_osds() << " in";
   if (test_flag(CEPH_OSDMAP_FULL))
-    out << " full";
+    out << "; full flag set";
   else if (test_flag(CEPH_OSDMAP_NEARFULL))
-    out << " nearfull";
+    out << "; nearfull flag set";
 }
 
 bool OSDMap::crush_rule_in_use(int rule_id) const
