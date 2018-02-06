@@ -1839,9 +1839,7 @@ public:
 
 protected:
   // -- placement groups --
-  RWLock pg_map_lock; // this lock orders *above* individual PG _locks
-  ceph::unordered_map<spg_t, PG*> pg_map; // protected by pg_map lock
-  std::atomic<size_t> pg_map_size = {0};
+  std::atomic<size_t> num_pgs = {0};
 
   std::mutex pending_creates_lock;
   using create_from_osd_t = std::pair<pg_t, bool /* is primary*/>;
@@ -1852,17 +1850,13 @@ protected:
 
   PGRef _lookup_pg(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
+  void _register_pg(PGRef pg);
 
-  void _get_pgs(vector<PGRef> *v);
+  void _get_pgs(vector<PGRef> *v, bool clear_too=false);
   void _get_pgids(vector<spg_t> *v);
 
 public:
   PG   *lookup_lock_pg(spg_t pgid);
-
-  int get_num_pgs() {
-    RWLock::RLocker l(pg_map_lock);
-    return pg_map.size();
-  }
 
 protected:
   PGRef _open_pg(
