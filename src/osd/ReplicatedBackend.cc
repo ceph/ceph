@@ -961,7 +961,7 @@ Message * ReplicatedBackend::generate_subop(
   eversion_t pg_roll_forward_to,
   hobject_t new_temp_oid,
   hobject_t discard_temp_oid,
-  const vector<pg_log_entry_t> &log_entries,
+  const bufferlist &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_hist,
   ObjectStore::Transaction &op_t,
   pg_shard_t peer,
@@ -991,7 +991,7 @@ Message * ReplicatedBackend::generate_subop(
     wr->get_header().data_off = op_t.get_data_alignment();
   }
 
-  encode(log_entries, wr->logbl);
+  wr->logbl = log_entries;
 
   if (pinfo.is_incomplete())
     wr->pg_stats = pinfo.stats;  // reflects backfill progress
@@ -1021,44 +1021,44 @@ void ReplicatedBackend::issue_op(
   InProgressOp *op,
   ObjectStore::Transaction &op_t)
 {
-  if (op->op) {
-    op->op->pg_trace.event("issue replication ops");
-    if (parent->get_actingbackfill_shards().size() > 1) {
+  if (parent->get_actingbackfill_shards().size() > 1) {
+    if (op->op) {
+      op->op->pg_trace.event("issue replication ops");
       ostringstream ss;
       set<pg_shard_t> replicas = parent->get_actingbackfill_shards();
       replicas.erase(parent->whoami_shard());
       ss << "waiting for subops from " << replicas;
       op->op->mark_sub_op_sent(ss.str());
     }
-  }
 
-  for (set<pg_shard_t>::const_iterator i =
-	 parent->get_actingbackfill_shards().begin();
-       i != parent->get_actingbackfill_shards().end();
-       ++i) {
-    if (*i == parent->whoami_shard()) continue;
-    pg_shard_t peer = *i;
-    const pg_info_t &pinfo = parent->get_shard_info().find(peer)->second;
+    // avoid doing the same work in generate_subop
+    bufferlist logs;
+    encode(log_entries, logs);
 
-    Message *wr;
-    wr = generate_subop(
-      soid,
-      at_version,
-      tid,
-      reqid,
-      pg_trim_to,
-      pg_roll_forward_to,
-      new_temp_oid,
-      discard_temp_oid,
-      log_entries,
-      hset_hist,
-      op_t,
-      peer,
-      pinfo);
-    if (op->op && op->op->pg_trace)
-      wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
-    get_parent()->send_message_osd_cluster(
-      peer.osd, wr, get_osdmap()->get_epoch());
+    for (const auto& shard : get_parent()->get_actingbackfill_shards()) {
+      if (shard == parent->whoami_shard()) continue;
+      const pg_info_t &pinfo = parent->get_shard_info().find(shard)->second;
+
+      Message *wr;
+      wr = generate_subop(
+	  soid,
+	  at_version,
+	  tid,
+	  reqid,
+	  pg_trim_to,
+	  pg_roll_forward_to,
+	  new_temp_oid,
+	  discard_temp_oid,
+	  logs,
+	  hset_hist,
+	  op_t,
+	  shard,
+	  pinfo);
+      if (op->op && op->op->pg_trace)
+	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
+      get_parent()->send_message_osd_cluster(
+	  shard.osd, wr, get_osdmap()->get_epoch());
+    }
   }
 }
 
