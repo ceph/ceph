@@ -35,14 +35,8 @@ Existing OSDs
 If the cluster has OSDs that were provisioned with ``ceph-disk``, then
 ``ceph-volume`` can take over the management of these with
 :ref:`ceph-volume-simple`. A scan is done on the data device or OSD directory,
-and ``ceph-disk`` is fully disabled.
+and ``ceph-disk`` is fully disabled. Encryption is fully supported.
 
-Encrypted OSDs
-^^^^^^^^^^^^^^
-If using encryption with OSDs, there is currently no support in ``ceph-volume``
-for this scenario (although support for this is coming soon). In this case, it
-is OK to continue to use ``ceph-disk`` until ``ceph-volume`` fully supports it.
-This page will be updated when that happens.
 
 .. toctree::
    :hidden:

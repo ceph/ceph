@@ -3,6 +3,13 @@ import stat
 from ceph_volume import process
 
 
+# The blkid CLI tool has some oddities which prevents having one common call
+# to extract the information instead of having separate utilities. The `udev`
+# type of output is needed in older versions of blkid (v 2.23) that will not
+# work correctly with just the ``-p`` flag to bypass the cache for example.
+# Xenial doesn't have this problem as it uses a newer blkid version.
+
+
 def get_partuuid(device):
     """
     If a device is a partition, it will probably have a PARTUUID on it that
@@ -13,6 +20,20 @@ def get_partuuid(device):
         ['blkid', '-s', 'PARTUUID', '-o', 'value', device]
     )
     return ' '.join(out).strip()
+
+
+def get_part_entry_type(device):
+    """
+    Parses the ``ID_PART_ENTRY_TYPE`` from the "low level" (bypasses the cache)
+    output that uses the ``udev`` type of output. This output is intended to be
+    used for udev rules, but it is useful in this case as it is the only
+    consistent way to retrieve the GUID used by ceph-disk to identify devices.
+    """
+    out, err, rc = process.call(['blkid', '-p', '-o', 'udev', device])
+    for line in out:
+        if 'ID_PART_ENTRY_TYPE=' in line:
+            return line.split('=')[-1].strip()
+    return ''
 
 
 def get_device_from_partuuid(partuuid):
@@ -34,7 +55,42 @@ def _stat_is_device(stat_obj):
     return stat.S_ISBLK(stat_obj)
 
 
-def lsblk(device, columns=None):
+def _lsblk_parser(line):
+    """
+    Parses lines in lsblk output. Requires output to be in pair mode (``-P`` flag). Lines
+    need to be whole strings, the line gets split when processed.
+
+    :param line: A string, with the full line from lsblk output
+    """
+    # parse the COLUMN="value" output to construct the dictionary
+    pairs = line.split('" ')
+    parsed = {}
+    for pair in pairs:
+        try:
+            column, value = pair.split('=')
+        except ValueError:
+            continue
+        parsed[column] = value.strip().strip().strip('"')
+    return parsed
+
+
+def device_family(device):
+    """
+    Returns a list of associated devices. It assumes that ``device`` is
+    a parent device. It is up to the caller to ensure that the device being
+    used is a parent, not a partition.
+    """
+    labels = ['NAME', 'PARTLABEL', 'TYPE']
+    command = ['lsblk', '-P', '-p', '-o', ','.join(labels), device]
+    out, err, rc = process.call(command)
+    devices = []
+    for line in out:
+        devices.append(_lsblk_parser(line))
+
+    return devices
+
+
+def lsblk(device, columns=None, abspath=False):
     """
     Create a dictionary of identifying values for a device using ``lsblk``.
     Each supported column is a key, in its *raw* format (all uppercase
@@ -43,8 +99,7 @@ def lsblk(device, columns=None):
     ``lsblk`` versions. The newer versions support a richer set of columns,
     while older ones were a bit limited.
 
-    These are the default lsblk columns reported which are safe to use for
-    Ubuntu 14.04.5 LTS:
+    These are a subset of lsblk columns which are known to work on both CentOS 7 and Xenial:
 
          NAME  device name
         KNAME  internal kernel device name
@@ -70,6 +125,7 @@ def lsblk(device, columns=None):
         SCHED  I/O scheduler name
       RQ-SIZE  request queue size
          TYPE  device type
+      PKNAME   internal parent kernel device name
      DISC-ALN  discard alignment offset
     DISC-GRAN  discard granularity
      DISC-MAX  discard max bytes
@@ -94,37 +150,33 @@ def lsblk(device, columns=None):
         NAME="sda1" KNAME="sda1" MAJ:MIN="8:1" FSTYPE="ext4" MOUNTPOINT="/"
 
     :param columns: A list of columns to report as keys in its original form.
+    :param abspath: Set the flag for absolute paths on the report
     """
     default_columns = [
         'NAME', 'KNAME', 'MAJ:MIN', 'FSTYPE', 'MOUNTPOINT', 'LABEL', 'UUID',
         'RO', 'RM', 'MODEL', 'SIZE', 'STATE', 'OWNER', 'GROUP', 'MODE',
         'ALIGNMENT', 'PHY-SEC', 'LOG-SEC', 'ROTA', 'SCHED', 'TYPE', 'DISC-ALN',
-        'DISC-GRAN', 'DISC-MAX', 'DISC-ZERO'
+        'DISC-GRAN', 'DISC-MAX', 'DISC-ZERO', 'PKNAME', 'PARTLABEL'
     ]
     device = device.rstrip('/')
     columns = columns or default_columns
     # --nodeps -> Avoid adding children/parents to the device, only give information
     #             on the actual device we are querying for
     # -P       -> Produce pairs of COLUMN="value"
+    # -p       -> Return full paths to devices, not just the names, when ``abspath`` is set
     # -o       -> Use the columns specified or default ones provided by this function
-    command = ['lsblk', '--nodeps', '-P', '-o']
-    command.append(','.join(columns))
-    command.append(device)
-    out, err, rc = process.call(command)
+    base_command = ['lsblk', '--nodeps', '-P']
+    if abspath:
+        base_command.append('-p')
+    base_command.append('-o')
+    base_command.append(','.join(columns))
+    base_command.append(device)
+    out, err, rc = process.call(base_command)
 
     if rc != 0:
         return {}
 
-    # parse the COLUMN="value" output to construct the dictionary
-    pairs = ' '.join(out).split()
-    parsed = {}
-    for pair in pairs:
-        try:
-            column, value = pair.split('=')
-        except ValueError:
-            continue
-        parsed[column] = value.strip().strip().strip('"')
-    return parsed
+    return _lsblk_parser(' '.join(out))
 
 
 def _lsblk_type(device):

@@ -85,11 +85,17 @@ class tmp_mount(object):
     """
     Temporarily mount a device on a temporary directory,
     and unmount it upon exit
+
+    When ``encrypted`` is set to ``True``, the exit method will call out to
+    close the device so that it doesn't remain open after mounting. It is
+    assumed that it will be open because otherwise it wouldn't be possible to
+    mount in the first place
     """
 
-    def __init__(self, device):
+    def __init__(self, device, encrypted=False):
         self.device = device
         self.path = None
+        self.encrypted = encrypted
 
     def __enter__(self):
         self.path = tempfile.mkdtemp()
@@ -107,6 +113,10 @@ class tmp_mount(object):
             '-v',
             self.path
         ])
+        if self.encrypted:
+            # avoid a circular import from the encryption module
+            from ceph_volume.util import encryption
+            encryption.dmcrypt_close(self.device)
 
 
 def path_is_mounted(path, destination=None):
@@ -118,8 +128,6 @@ def path_is_mounted(path, destination=None):
     mounted_locations = mounts.get(realpath, [])
 
     if destination:
-        if destination.startswith('/'):
-            destination = os.path.realpath(destination)
         return destination in mounted_locations
     return mounted_locations != []
 
@@ -130,9 +138,8 @@ def device_is_mounted(dev, destination=None):
     destination exists
     """
     mounts = get_mounts(devices=True)
-    realpath = os.path.realpath(dev) if dev.startswith('/') else dev
     destination = os.path.realpath(destination) if destination else None
-    mounted_locations = mounts.get(realpath, [])
+    mounted_locations = mounts.get(dev, [])
 
     if destination:
         return destination in mounted_locations
@@ -166,7 +173,7 @@ def get_mounts(devices=False, paths=False):
         fields = [as_string(f) for f in line.split()]
         if len(fields) < 3:
             continue
-        device = os.path.realpath(fields[0]) if fields[0].startswith('/') else fields[0]
+        device = fields[0]
         path = os.path.realpath(fields[1])
         # only care about actual existing devices
         if not os.path.exists(device) or not device.startswith('/'):

@@ -149,7 +149,6 @@ already running there are a few things to take into account:
 
 * Preferably, no other mechanisms to mount the volume should exist, and should
   be removed (like fstab mount points)
-* There is currently no support for encrypted volumes
 
 The one time process for an existing OSD, with an ID of 0 and using
 a ``"ceph"`` cluster name would look like (the following command will **destroy
