@@ -1242,7 +1242,7 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 1);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 1u);
-    ASSERT_EQ(to_collect[0], AllocExtent(100,10) );
+    ASSERT_EQ(to_collect[0], bluestore_pextent_t(100,10) );
 
     em.clear();
     old_extents.clear();
@@ -1312,10 +1312,10 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
-		  to_collect[1] == AllocExtent(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
-		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
+		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
+		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
 
     em.clear();
     old_extents.clear();
@@ -1433,10 +1433,10 @@ TEST(GarbageCollector, BasicTest)
     ASSERT_EQ(saving, 2);
     auto& to_collect = gc.get_extents_to_collect();
     ASSERT_EQ(to_collect.size(), 2u);
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x0,0x8000) ||
-		  to_collect[1] == AllocExtent(0x0,0x8000));
-    ASSERT_TRUE(to_collect[0] == AllocExtent(0x3f000,0x1000) ||
-		  to_collect[1] == AllocExtent(0x3f000,0x1000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x0,0x8000) ||
+		  to_collect[1] == bluestore_pextent_t(0x0,0x8000));
+    ASSERT_TRUE(to_collect[0] == bluestore_pextent_t(0x3f000,0x1000) ||
+		  to_collect[1] == bluestore_pextent_t(0x3f000,0x1000));
 
     em.clear();
     old_extents.clear();

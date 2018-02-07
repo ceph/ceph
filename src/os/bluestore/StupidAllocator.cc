@@ -208,7 +208,7 @@ int64_t StupidAllocator::allocate(
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
-  mempool::bluestore_alloc::vector<AllocExtent> *extents)
+  PExtentVector *extents)
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;

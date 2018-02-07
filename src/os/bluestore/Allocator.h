@@ -34,10 +34,10 @@ public:
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
 			   uint64_t max_alloc_size, int64_t hint,
-			   AllocExtentVector *extents) = 0;
+			   PExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
-		   int64_t hint, AllocExtentVector *extents) {
+		   int64_t hint, PExtentVector *extents) {
     return allocate(want_size, alloc_unit, want_size, hint, extents);
   }
 
