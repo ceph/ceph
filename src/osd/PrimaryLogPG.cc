@@ -9888,29 +9888,6 @@ bool PrimaryLogPG::is_present_clone(hobject_t coid)
 // ========================================================================
 // rep op gather
 
-class C_OSD_RepopApplied : public Context {
-  PrimaryLogPGRef pg;
-  boost::intrusive_ptr<PrimaryLogPG::RepGather> repop;
-public:
-  C_OSD_RepopApplied(PrimaryLogPG *pg, PrimaryLogPG::RepGather *repop)
-  : pg(pg), repop(repop) {}
-  void finish(int) override {
-    pg->repop_all_applied(repop.get());
-  }
-};
-
-
-void PrimaryLogPG::repop_all_applied(RepGather *repop)
-{
-  dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all applied "
-	   << dendl;
-  assert(!repop->applies_with_commit);
-  repop->all_applied = true;
-  if (!repop->rep_aborted) {
-    eval_repop(repop);
-  }
-}
-
 class C_OSD_RepopCommit : public Context {
   PrimaryLogPGRef pg;
   boost::intrusive_ptr<PrimaryLogPG::RepGather> repop;
@@ -10090,7 +10067,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   }
 
   Context *on_all_commit = new C_OSD_RepopCommit(this, repop);
-  Context *on_all_applied = new C_OSD_RepopApplied(this, repop);
   if (!(ctx->log.empty())) {
     assert(ctx->at_version >= projected_last_update);
     projected_last_update = ctx->at_version;
@@ -10107,11 +10083,12 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     min_last_complete_ondisk,
     ctx->log,
     ctx->updated_hset_history,
-    on_all_applied,
+    nullptr,
     on_all_commit,
     repop->rep_tid,
     ctx->reqid,
     ctx->op);
+  repop->all_applied = true;
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
