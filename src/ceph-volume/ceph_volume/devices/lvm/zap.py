@@ -62,10 +62,10 @@ class Zap(object):
 
         # check if there was a pv created with the
         # name of device
-        pv = api.PVolumes().get(pv_name=device)
+        pv = api.get_pv(pv_name=device)
         if pv:
             vg_name = pv.vg_name
-            lv = api.Volumes().get(vg_name=vg_name)
+            lv = api.get_lv(vg_name=vg_name)
 
         if lv:
             osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
