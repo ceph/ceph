@@ -198,6 +198,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(test_features, bool(uint64_t test_features,
                                          const RWLock &in_snap_lock));
 
+  MOCK_CONST_METHOD1(test_op_features, bool(uint64_t op_features));
+
   MOCK_METHOD1(cancel_async_requests, void(Context*));
 
   MOCK_METHOD0(create_exclusive_lock, MockExclusiveLock*());

@@ -5,6 +5,8 @@
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/image/DetachChildRequest.h"
+#include "librbd/Types.h"
 #include "librbd/io/ObjectRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -66,7 +68,7 @@ bool FlattenRequest<I>::should_complete(int r) {
   if (r == -ERESTART) {
     ldout(cct, 5) << "flatten operation interrupted" << dendl;
     return true;
-  } else if (r < 0 && !(r == -ENOENT && m_ignore_enoent) ) {
+  } else if (r < 0 && r != -ENOENT) {
     lderr(cct) << "flatten encountered an error: " << cpp_strerror(r) << dendl;
     return true;
   }
@@ -75,14 +77,14 @@ bool FlattenRequest<I>::should_complete(int r) {
   switch (m_state) {
   case STATE_FLATTEN_OBJECTS:
     ldout(cct, 5) << "FLATTEN_OBJECTS" << dendl;
+    return send_detach_child();
+
+  case STATE_DETACH_CHILD:
+    ldout(cct, 5) << "DETACH_CHILD" << dendl;
     return send_update_header();
 
   case STATE_UPDATE_HEADER:
     ldout(cct, 5) << "UPDATE_HEADER" << dendl;
-    return send_update_children();
-
-  case STATE_UPDATE_CHILDREN:
-    ldout(cct, 5) << "UPDATE_CHILDREN" << dendl;
     return true;
 
   default:
@@ -111,6 +113,36 @@ void FlattenRequest<I>::send_op() {
 }
 
 template <typename I>
+bool FlattenRequest<I>::send_detach_child() {
+  I &image_ctx = this->m_image_ctx;
+  assert(image_ctx.owner_lock.is_locked());
+  CephContext *cct = image_ctx.cct;
+
+  // should have been canceled prior to releasing lock
+  assert(image_ctx.exclusive_lock == nullptr ||
+         image_ctx.exclusive_lock->is_lock_owner());
+
+  // if there are no snaps, remove from the children object as well
+  // (if snapshots remain, they have their own parent info, and the child
+  // will be removed when the last snap goes away)
+  {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if ((image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
+        !image_ctx.snaps.empty()) {
+      return send_update_header();
+    }
+  }
+
+  ldout(cct, 2) << "detaching child" << dendl;
+  m_state = STATE_DETACH_CHILD;
+
+  auto req = image::DetachChildRequest<I>::create(
+    image_ctx, this->create_callback_context());
+  req->send();
+  return false;
+}
+
+template <typename I>
 bool FlattenRequest<I>::send_update_header() {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.owner_lock.is_locked());
@@ -131,9 +163,7 @@ bool FlattenRequest<I>::send_update_header() {
       ldout(cct, 5) << "image already flattened" << dendl;
       return true;
     }
-    m_parent_spec = image_ctx.parent_md.spec;
   }
-  m_ignore_enoent = true;
 
   // remove parent from this (base) image
   librados::ObjectWriteOperation op;
@@ -142,39 +172,6 @@ bool FlattenRequest<I>::send_update_header() {
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid,
         				 rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
-  return false;
-}
-
-template <typename I>
-bool FlattenRequest<I>::send_update_children() {
-  I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
-  CephContext *cct = image_ctx.cct;
-
-  // should have been canceled prior to releasing lock
-  assert(image_ctx.exclusive_lock == nullptr ||
-         image_ctx.exclusive_lock->is_lock_owner());
-
-  // if there are no snaps, remove from the children object as well
-  // (if snapshots remain, they have their own parent info, and the child
-  // will be removed when the last snap goes away)
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
-  if ((image_ctx.features & RBD_FEATURE_DEEP_FLATTEN) == 0 &&
-      !image_ctx.snaps.empty()) {
-    return true;
-  }
-
-  ldout(cct, 2) << "removing child from children list..." << dendl;
-  m_state = STATE_UPDATE_CHILDREN;
-
-  librados::ObjectWriteOperation op;
-  cls_client::remove_child(&op, m_parent_spec, image_ctx.id);
-
-  librados::AioCompletion *rados_completion = this->create_callback_completion();
-  int r = image_ctx.md_ctx.aio_operate(RBD_CHILDREN, rados_completion,
-    				     &op);
   assert(r == 0);
   rados_completion->release();
   return false;

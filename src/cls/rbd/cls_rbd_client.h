@@ -139,6 +139,9 @@ namespace librbd {
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
+    void snapshot_trash_add(librados::ObjectWriteOperation *op,
+                            snapid_t snap_id);
+
     void get_snapcontext_start(librados::ObjectReadOperation *op);
     int get_snapcontext_finish(bufferlist::iterator *it,
                                ::SnapContext *snapc);
@@ -230,6 +233,24 @@ namespace librbd {
                         const std::string &key);
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &key, string *v);
+
+    void child_attach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_attach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void child_detach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_detach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void children_list_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id);
+    int children_list_finish(bufferlist::iterator *it,
+                             cls::rbd::ChildImageSpecs *child_images);
+    int children_list(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id,
+                      cls::rbd::ChildImageSpecs *child_images);
 
     // operations on rbd_id objects
     void get_id_start(librados::ObjectReadOperation *op);

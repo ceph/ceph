@@ -212,6 +212,30 @@ std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
   return os;
 }
 
+void ChildImageSpec::encode(bufferlist &bl) const {
+  ENCODE_START(1, 1, bl);
+  encode(pool_id, bl);
+  encode(image_id, bl);
+  ENCODE_FINISH(bl);
+}
+
+void ChildImageSpec::decode(bufferlist::iterator &it) {
+  DECODE_START(1, it);
+  decode(pool_id, it);
+  decode(image_id, it);
+  DECODE_FINISH(it);
+}
+
+void ChildImageSpec::dump(Formatter *f) const {
+  f->dump_int("pool_id", pool_id);
+  f->dump_string("image_id", image_id);
+}
+
+void ChildImageSpec::generate_test_instances(std::list<ChildImageSpec*> &o) {
+  o.push_back(new ChildImageSpec());
+  o.push_back(new ChildImageSpec(123, "abc"));
+}
+
 void GroupImageSpec::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   encode(image_id, bl);
@@ -355,6 +379,27 @@ void GroupSnapshotNamespace::dump(Formatter *f) const {
   f->dump_string("group_snapshot_id", group_snapshot_id);
 }
 
+void TrashSnapshotNamespace::encode(bufferlist& bl) const {
+  using ceph::encode;
+  encode(original_name, bl);
+  encode(static_cast<uint32_t>(original_snapshot_namespace_type), bl);
+}
+
+void TrashSnapshotNamespace::decode(bufferlist::iterator& it) {
+  using ceph::decode;
+  decode(original_name, it);
+  uint32_t snap_type;
+  decode(snap_type, it);
+  original_snapshot_namespace_type = static_cast<SnapshotNamespaceType>(
+    snap_type);
+}
+
+void TrashSnapshotNamespace::dump(Formatter *f) const {
+  f->dump_string("original_name", original_name);
+  f->dump_stream("original_snapshot_namespace")
+    << original_snapshot_namespace_type;
+}
+
 class EncodeSnapshotNamespaceVisitor : public boost::static_visitor<void> {
 public:
   explicit EncodeSnapshotNamespaceVisitor(bufferlist &bl) : m_bl(bl) {
@@ -422,6 +467,7 @@ void SnapshotInfo::encode(bufferlist& bl) const {
   encode(name, bl);
   encode(image_size, bl);
   encode(timestamp, bl);
+  encode(child_count, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -432,6 +478,7 @@ void SnapshotInfo::decode(bufferlist::iterator& it) {
   decode(name, it);
   decode(image_size, it);
   decode(timestamp, it);
+  decode(child_count, it);
   DECODE_FINISH(it);
 }
 
@@ -448,10 +495,14 @@ void SnapshotInfo::dump(Formatter *f) const {
 
 void SnapshotInfo::generate_test_instances(std::list<SnapshotInfo*> &o) {
   o.push_back(new SnapshotInfo(1ULL, UserSnapshotNamespace{}, "snap1", 123,
-                               {123456, 0}));
+                               {123456, 0}, 12));
   o.push_back(new SnapshotInfo(2ULL,
                                GroupSnapshotNamespace{567, "group1", "snap1"},
-                               "snap1", 123, {123456, 0}));
+                               "snap1", 123, {123456, 0}, 987));
+  o.push_back(new SnapshotInfo(3ULL,
+                               TrashSnapshotNamespace{
+                                 SNAPSHOT_NAMESPACE_TYPE_USER, "snap1"},
+                               "12345", 123, {123456, 0}, 429));
 }
 
 void SnapshotNamespace::encode(bufferlist& bl) const {
@@ -472,6 +523,9 @@ void SnapshotNamespace::decode(bufferlist::iterator &p)
     case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_GROUP:
       *this = GroupSnapshotNamespace();
       break;
+    case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+      *this = TrashSnapshotNamespace();
+      break;
     default:
       *this = UnknownSnapshotNamespace();
       break;
@@ -481,25 +535,55 @@ void SnapshotNamespace::decode(bufferlist::iterator &p)
 }
 
 void SnapshotNamespace::dump(Formatter *f) const {
-  boost::apply_visitor(DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"), *this);
+  boost::apply_visitor(
+    DumpSnapshotNamespaceVisitor(f, "snapshot_namespace_type"), *this);
 }
 
 void SnapshotNamespace::generate_test_instances(std::list<SnapshotNamespace*> &o) {
   o.push_back(new SnapshotNamespace(UserSnapshotNamespace()));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a", "2118643c9732")));
-  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869", "33352be8933c")));
+  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(0, "10152ae8944a",
+                                                           "2118643c9732")));
+  o.push_back(new SnapshotNamespace(GroupSnapshotNamespace(5, "1018643c9869",
+                                                           "33352be8933c")));
+  o.push_back(new SnapshotNamespace(TrashSnapshotNamespace()));
+}
+
+std::ostream& operator<<(std::ostream& os, const SnapshotNamespaceType& type) {
+  switch (type) {
+  case SNAPSHOT_NAMESPACE_TYPE_USER:
+    os << "user";
+    break;
+  case SNAPSHOT_NAMESPACE_TYPE_GROUP:
+    os << "group";
+    break;
+  case SNAPSHOT_NAMESPACE_TYPE_TRASH:
+    os << "trash";
+    break;
+  default:
+    os << "unknown";
+    break;
+  }
+  return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const UserSnapshotNamespace& ns) {
-  os << "[user]";
+  os << "[" << SNAPSHOT_NAMESPACE_TYPE_USER << "]";
   return os;
 }
 
 std::ostream& operator<<(std::ostream& os, const GroupSnapshotNamespace& ns) {
-  os << "[group"
-     << " group_pool=" << ns.group_pool
-     << " group_id=" << ns.group_id
-     << " group_snapshot_id=" << ns.group_snapshot_id << "]";
+  os << "[" << SNAPSHOT_NAMESPACE_TYPE_GROUP << " "
+     << "group_pool=" << ns.group_pool << ", "
+     << "group_id=" << ns.group_id << ", "
+     << "group_snapshot_id=" << ns.group_snapshot_id << "]";
+  return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const TrashSnapshotNamespace& ns) {
+  os << "[" << SNAPSHOT_NAMESPACE_TYPE_TRASH << " "
+     << "original_name=" << ns.original_name << ", "
+     << "original_snapshot_namespace=" << ns.original_snapshot_namespace_type
+     << "]";
   return os;
 }
 

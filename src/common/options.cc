@@ -6002,6 +6002,22 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("default krbd map options"),
 
+    Option("rbd_default_clone_format", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_enum_allowed({"1", "2", "auto"})
+    .set_default("auto")
+    .set_description("default internal format for handling clones")
+    .set_long_description("This sets the internal format for tracking cloned "
+                          "images. The setting of '1' requires attaching to "
+                          "protected snapshots that cannot be removed until "
+                          "the clone is removed/flattened. The setting of '2' "
+                          "will allow clones to be attached to any snapshot "
+                          "and permits removing in-use parent snapshots but "
+                          "requires Mimic or later clients. The default "
+                          "setting of 'auto' will use the v2 format if the "
+                          "cluster is configured to require mimic or later "
+                          "clients.")
+    .set_safe(),
+
     Option("rbd_journal_order", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_min(12)
     .set_default(24)

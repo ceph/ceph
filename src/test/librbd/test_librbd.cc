@@ -2833,6 +2833,10 @@ TEST_F(TestLibRBD, TestIOToSnapshot)
 TEST_F(TestLibRBD, TestClone)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_default_clone_format", "1"));
+  BOOST_SCOPE_EXIT_ALL(&) {
+    ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_default_clone_format", "auto"));
+  };
 
   rados_ioctx_t ioctx;
   rbd_image_info_t pinfo, cinfo;
@@ -2993,6 +2997,10 @@ TEST_F(TestLibRBD, TestClone)
 TEST_F(TestLibRBD, TestClone2)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_default_clone_format", "2"));
+  BOOST_SCOPE_EXIT_ALL(&) {
+    ASSERT_EQ(0, rados_conf_set(_cluster, "rbd_default_clone_format", "auto"));
+  };
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
@@ -3054,18 +3062,6 @@ TEST_F(TestLibRBD, TestClone2)
   printf("made snapshot \"parent@parent_snap\"\n");
   ASSERT_EQ(0, rbd_close(parent));
   ASSERT_EQ(0, rbd_open(ioctx, parent_name.c_str(), &parent, "parent_snap"));
-
-  ASSERT_EQ(-EINVAL, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",
-                                 ioctx, child_name.c_str(), features, &order));
-
-  // unprotected image should fail unprotect
-  ASSERT_EQ(-EINVAL, rbd_snap_unprotect(parent, "parent_snap"));
-  printf("can't unprotect an unprotected snap\n");
-
-  ASSERT_EQ(0, rbd_snap_protect(parent, "parent_snap"));
-  // protecting again should fail
-  ASSERT_EQ(-EBUSY, rbd_snap_protect(parent, "parent_snap"));
-  printf("can't protect a protected snap\n");
 
   // This clone and open should work
   ASSERT_EQ(0, clone_image(ioctx, parent, parent_name.c_str(), "parent_snap",

@@ -225,7 +225,12 @@ template <typename I>
 void SnapshotPurgeRequest<I>::handle_snap_remove(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EBUSY) {
+    dout(10) << "snapshot in-use" << dendl;
+    m_ret_val = r;
+    close_image();
+    return;
+  } else if (r < 0) {
     derr << "failed to remove snapshot: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_image();

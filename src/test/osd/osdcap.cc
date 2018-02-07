@@ -1285,5 +1285,12 @@ TEST(OSDCap, AllowProfile) {
   ASSERT_FALSE(cap.is_capable("foo", "", 0, {}, "rbd_children", true, false, {}));
   ASSERT_TRUE(cap.is_capable("abc", "", 0, {}, "asdf", true, false,
                              {{"rbd", "", true, false, true}}));
+  ASSERT_FALSE(cap.is_capable("abc", "", 0, {}, "asdf", true, true, {}));
+  ASSERT_TRUE(cap.is_capable("abc", "", 0, {}, "rbd_header.ABC", false, false,
+                             {{"rbd", "child_attach", true, true, true}}));
+  ASSERT_TRUE(cap.is_capable("abc", "", 0, {}, "rbd_header.ABC", false, false,
+                             {{"rbd", "child_detach", true, true, true}}));
+  ASSERT_FALSE(cap.is_capable("abc", "", 0, {}, "rbd_header.ABC", false, false,
+                              {{"rbd", "other function", true, true, true}}));
 }
 
