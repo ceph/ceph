@@ -6232,10 +6232,6 @@ void PG::_delete_some()
 {
   dout(10) << __func__ << dendl;
 
-  // we do not need to flush here because (1) we only start deleting after
-  // the initial metadata changes are applied and committed, and (2) we do not
-  // process the next chunk until we have applied and committed our work.
-
   vector<ghobject_t> olist;
   ObjectStore::Transaction t;
   int max = std::min(osd->store->get_ideal_list_max(),
