@@ -154,11 +154,30 @@ class Module(MgrModule):
         def __init__(self, mgrmod):
             self.ctrls = load_controllers(mgrmod)
             logger.debug('Loaded controllers: %s', self.ctrls)
-            for ctrl in self.ctrls:
+
+            first_level_ctrls = [ctrl for ctrl in self.ctrls
+                                 if '/' not in ctrl._cp_path_]
+            multi_level_ctrls = set(self.ctrls).difference(first_level_ctrls)
+
+            for ctrl in first_level_ctrls:
                 logger.info('Adding controller: %s -> /api/%s', ctrl.__name__,
                             ctrl._cp_path_)
-                ins = ctrl()
-                setattr(Module.ApiRoot, ctrl._cp_path_, ins)
+                inst = ctrl()
+                setattr(Module.ApiRoot, ctrl._cp_path_, inst)
+
+            for ctrl in multi_level_ctrls:
+                path_parts = ctrl._cp_path_.split('/')
+                path = '/'.join(path_parts[:-1])
+                key = path_parts[-1]
+                parent_ctrl_classes = [c for c in self.ctrls
+                                       if c._cp_path_ == path]
+                if len(parent_ctrl_classes) != 1:
+                    logger.error('No parent controller found for {}! '
+                                 'Please check your path in the ApiController '
+                                 'decorator!'.format(ctrl))
+                else:
+                    inst = ctrl()
+                    setattr(parent_ctrl_classes[0], key, inst)
 
         @cherrypy.expose
         def index(self):
