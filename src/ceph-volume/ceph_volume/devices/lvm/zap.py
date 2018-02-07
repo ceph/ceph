@@ -103,8 +103,8 @@ class Zap(object):
         filesystems present on the given device, vg/lv, or partition will be removed and
         all data will be purged.
 
-        If the logicial volume, raw device or partition is being used for any ceph related
-        mountpoints they will be unmounted.
+        If the logical volume, raw device or partition is being used for any ceph related
+        mount points they will be unmounted.
 
         However, the lv or partition will be kept intact.
 
