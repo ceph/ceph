@@ -17,28 +17,6 @@
 #include "common/Checksummer.h"
 #include "include/stringify.h"
 
-void ExtentList::add_extents(int64_t start, int64_t count) {
-  bluestore_pextent_t *last_extent = NULL;
-  bool can_merge = false;
-
-  if (!m_extents->empty()) {
-    last_extent = &(m_extents->back());
-    uint64_t last_offset = last_extent->end() / m_block_size;
-    uint32_t last_length = last_extent->length / m_block_size;
-    if ((last_offset == (uint64_t) start) &&
-        (!m_max_blocks || (last_length + count) <= m_max_blocks)) {
-      can_merge = true;
-    }
-  }
-
-  if (can_merge) {
-    last_extent->length += (count * m_block_size);
-  } else {
-    m_extents->emplace_back(bluestore_pextent_t(start * m_block_size,
-					count * m_block_size));
-  }
-}
-
 // bluestore_bdev_label_t
 
 void bluestore_bdev_label_t::encode(bufferlist& bl) const
