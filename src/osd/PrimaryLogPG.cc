@@ -10022,7 +10022,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     min_last_complete_ondisk,
     ctx->log,
     ctx->updated_hset_history,
-    nullptr,
     on_all_commit,
     repop->rep_tid,
     ctx->reqid,

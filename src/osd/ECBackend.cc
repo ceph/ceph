@@ -1071,12 +1071,6 @@ void ECBackend::handle_sub_write_reply(
     i->second.pending_apply.erase(from);
   }
 
-  if (i->second.pending_apply.empty() && i->second.on_all_applied) {
-    dout(10) << __func__ << " Calling on_all_applied on " << i->second << dendl;
-    i->second.on_all_applied->complete(0);
-    i->second.on_all_applied = 0;
-    i->second.trace.event("ec write all applied");
-  }
   if (i->second.pending_commit.empty() && i->second.on_all_commit) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
     i->second.on_all_commit->complete(0);
@@ -1413,7 +1407,6 @@ void ECBackend::submit_transaction(
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
-  Context *on_all_applied,
   Context *on_all_commit,
   ceph_tid_t tid,
   osd_reqid_t reqid,
@@ -1429,7 +1422,6 @@ void ECBackend::submit_transaction(
   op->roll_forward_to = std::max(roll_forward_to, committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
-  op->on_all_applied = on_all_applied;
   op->on_all_commit = on_all_commit;
   op->tid = tid;
   op->reqid = reqid;

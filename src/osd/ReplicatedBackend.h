@@ -330,25 +330,21 @@ private:
   struct InProgressOp {
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
-    set<pg_shard_t> waiting_for_applied;
     Context *on_commit;
-    Context *on_applied;
     OpRequestRef op;
     eversion_t v;
     InProgressOp(
-      ceph_tid_t tid, Context *on_commit, Context *on_applied,
+      ceph_tid_t tid, Context *on_commit,
       OpRequestRef op, eversion_t v)
-      : tid(tid), on_commit(on_commit), on_applied(on_applied),
+      : tid(tid), on_commit(on_commit),
 	op(op), v(v) {}
     bool done() const {
-      return waiting_for_commit.empty() &&
-	waiting_for_applied.empty();
+      return waiting_for_commit.empty();
     }
   };
   map<ceph_tid_t, InProgressOp> in_progress_ops;
 public:
   friend class C_OSD_OnOpCommit;
-  friend class C_OSD_OnOpApplied;
 
   void call_write_ordered(std::function<void(void)> &&cb) override {
     // ReplicatedBackend submits writes inline in submit_transaction, so
@@ -365,7 +361,6 @@ public:
     const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
-    Context *on_all_applied,
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
@@ -400,29 +395,26 @@ private:
     boost::optional<pg_hit_set_history_t> &hset_history,
     InProgressOp *op,
     ObjectStore::Transaction &op_t);
-  void op_applied(InProgressOp *op);
   void op_commit(InProgressOp *op);
   void do_repop_reply(OpRequestRef op);
   void do_repop(OpRequestRef op);
 
   struct RepModify {
     OpRequestRef op;
-    bool applied, committed;
+    bool committed;
     int ackerosd;
     eversion_t last_complete;
     epoch_t epoch_started;
 
     ObjectStore::Transaction opt, localt;
     
-    RepModify() : applied(false), committed(false), ackerosd(-1),
+    RepModify() : committed(false), ackerosd(-1),
 		  epoch_started(0) {}
   };
   typedef ceph::shared_ptr<RepModify> RepModifyRef;
 
-  struct C_OSD_RepModifyApply;
   struct C_OSD_RepModifyCommit;
 
-  void repop_applied(RepModifyRef rm);
   void repop_commit(RepModifyRef rm);
   bool auto_repair_supported() const override { return false; }
 
