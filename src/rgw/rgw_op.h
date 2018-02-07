@@ -1294,7 +1294,8 @@ protected:
 
   off_t last_ofs;
 
-  string version_id;
+  string src_version_id;
+  string dst_version_id;
   uint64_t olh_epoch;
 
   boost::optional<ceph::real_time> delete_at;

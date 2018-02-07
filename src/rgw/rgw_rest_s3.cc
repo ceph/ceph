@@ -2078,7 +2078,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
   dest_tenant_name = s->bucket.tenant;
   dest_bucket_name = s->bucket.name;
   dest_object = s->object.name;
-
+  src_version_id = src_object.get_instance();
   if (s->system_request) {
     source_zone = s->info.args.get(RGW_SYS_PARAM_PREFIX "source-zone");
     s->info.args.get_bool(RGW_SYS_PARAM_PREFIX "copy-if-newer", &copy_if_newer, false);
@@ -2134,7 +2134,8 @@ void RGWCopyObj_ObjStore_S3::send_partial_response(off_t ofs)
     if (op_ret)
     set_req_state_err(s, op_ret);
     dump_errno(s);
-
+    dump_header_if_nonempty(s, "x-amz-version-id", dst_version_id);
+    dump_header_if_nonempty(s, "x-amz-copy-source-version-id", src_version_id);
     end_header(s, this, "application/xml");
     dump_start(s);
     if (op_ret == 0) {

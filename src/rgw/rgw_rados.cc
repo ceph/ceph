@@ -8144,10 +8144,12 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     return ret;
   }
 
-  if (version_id && !version_id->empty()) {
-    dest_obj.key.set_instance(*version_id);
-  } else if (dest_bucket_info.versioning_enabled()) {
-    gen_rand_obj_instance_name(&dest_obj);
+  if (dest_bucket_info.versioning_enabled()) {
+    if (version_id && !version_id->empty()) {
+      dest_obj.key.set_instance(*version_id);
+    } else { 
+      gen_rand_obj_instance_name(&dest_obj);
+    }
   }
 
   bufferlist first_chunk;
@@ -11420,15 +11422,21 @@ int RGWRados::unlink_obj_instance(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_i
   return 0;
 }
 
-void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
+void RGWRados::gen_rand_obj_instance_name(string &instance)
 {
 #define OBJ_INSTANCE_LEN 32
   char buf[OBJ_INSTANCE_LEN + 1];
 
   gen_rand_alphanumeric_no_underscore(cct, buf, OBJ_INSTANCE_LEN); /* don't want it to get url escaped,
                                                                       no underscore for instance name due to the way we encode the raw keys */
+  instance = buf;
+}
 
-  target_obj->key.set_instance(buf);
+void RGWRados::gen_rand_obj_instance_name(rgw_obj *target_obj)
+{
+  string instance;
+  gen_rand_obj_instance_name(instance);
+  target_obj->key.set_instance(instance);
 }
 
 static void filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,

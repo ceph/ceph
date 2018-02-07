@@ -4351,7 +4351,7 @@ int RGWCopyObj::verify_permission()
   if (op_ret < 0)
     return op_ret;
 
-  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+  op_ret = get_system_versioning_params(s, &olh_epoch, &dst_version_id);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -4537,32 +4537,35 @@ void RGWCopyObj::execute()
     return;
   }
 
+  if (dst_version_id.empty() && dest_bucket_info.versioning_enabled()) { 
+    store->gen_rand_obj_instance_name(dst_version_id);
+  }
   op_ret = store->copy_obj(obj_ctx,
-			   s->user->user_id,
-			   client_id,
-			   op_id,
-			   &s->info,
-			   source_zone,
-			   dst_obj,
-			   src_obj,
-			   dest_bucket_info,
-			   src_bucket_info,
-			   &src_mtime,
-			   &mtime,
-			   mod_ptr,
-			   unmod_ptr,
-                           high_precision_time,
-			   if_match,
-			   if_nomatch,
-			   attrs_mod,
-                           copy_if_newer,
-			   attrs, RGW_OBJ_CATEGORY_MAIN,
-			   olh_epoch,
-			   (delete_at ? *delete_at : real_time()),
-			   (version_id.empty() ? NULL : &version_id),
-			   &s->req_id, /* use req_id as tag */
-			   &etag,
-			   copy_obj_progress_cb, (void *)this
+                  s->user->user_id,
+                  client_id,
+                  op_id,
+                  &s->info,
+                  source_zone,
+                  dst_obj,
+                  src_obj,
+                  dest_bucket_info,
+                  src_bucket_info,
+                  &src_mtime,
+                  &mtime,
+                  mod_ptr,
+                  unmod_ptr,
+                  high_precision_time,
+                  if_match,
+                  if_nomatch,
+                  attrs_mod,
+                  copy_if_newer,
+                  attrs, RGW_OBJ_CATEGORY_MAIN,
+                  olh_epoch,
+                  (delete_at ? *delete_at : real_time()),
+                  &dst_version_id,
+                  &s->req_id, /* use req_id as tag */
+                  &etag,
+                  copy_obj_progress_cb, (void *)this
     );
 }
 
