@@ -220,38 +220,20 @@ int main(int argc, const char **argv)
 
   boost::optional<std::string> compression_type;
 
-  int ret = parse_commandline_parameters(args, user_id, tenant, access_key, subuser, secret_key, user_email,user_op,
-                                         display_name, bucket_name, pool_name, pool, object, object_version, client_id,
-                                         op_id, state_str, op_mask_str, key_type, job_id, gen_access_key,
-                                         gen_secret_key, show_log_entries, show_log_sum, skip_zero_entries, admin,
-                                         admin_specified, system, system_specified, verbose, staging, commit,
-                                         min_rewrite_size, max_rewrite_size, min_rewrite_stripe_size, max_buckets,
-                                         max_buckets_specified, max_entries, max_entries_specified, max_size,
-                                         have_max_size, max_objects, have_max_objects, date, start_date, end_date,
-                                         num_shards, num_shards_specified, max_concurrent_ios, orphan_stale_secs,
-                                         shard_id, specified_shard_id, daemon_id, specified_daemon_id, access,
-                                         perm_mask, set_perm, temp_url_keys, set_temp_url_key, bucket_id, format,
-                                         categories, delete_child_objects, pretty_format, purge_data, purge_keys,
-                                         yes_i_really_mean_it, fix, remove_bad, check_head_obj_locator, check_objects,
-                                         sync_stats, include_all, extra_info, bypass_gc, warnings_only,
-                                         inconsistent_index, caps, infile, metadata_key, marker, start_marker,
-                                         end_marker, quota_scope, replica_log_type_str, replica_log_type, bi_index_type,
-                                         is_master, is_master_set, set_default, redirect_zone, redirect_zone_set,
-                                         read_only, is_read_only_set, master_zone, period_id, period_epoch, remote, url,
-                                         realm_id, realm_new_name, zonegroup_id, zonegroup_new_name, placement_id, tags,
-                                         tags_add, tags_rm, api_name, zone_id, zone_new_name, endpoints, sync_from,
-                                         sync_from_rm, sync_from_all, sync_from_all_specified, source_zone_name,
-                                         tier_type, tier_type_specified, tier_config_add, tier_config_rm, index_pool,
-                                         data_pool, data_extra_pool, placement_index_type, index_type_specified,
-                                         compression_type, role_name, path, assume_role_doc, policy_name,
-                                         perm_policy_doc, path_prefix);
-  if (ret != 0) {
+  int ret = parse_common_commandline_params(args, user_id, access_key, gen_access_key,
+                                            secret_key, gen_secret_key, metadata_key, tenant, date,
+                                            start_date, end_date, infile, source_zone_name, bucket_id,
+                                            bucket_name, start_marker, end_marker, marker,
+                                            yes_i_really_mean_it, max_entries, max_entries_specified,
+                                            object, shard_id, specified_shard_id, fix, period_id,
+                                            realm_id, realm_name, format, pretty_format,
+                                            purge_data, delete_child_objects, max_concurrent_ios);
+  if (ret > 0) {
     return ret;
   }
 
   ret = parse_command(access_key, gen_access_key, secret_key, gen_secret_key, args, opt_cmd,
-                      metadata_key, tenant,
-                      user_id);
+                      metadata_key, tenant, user_id);
   if (ret != 0) {
     return ret;
   }
@@ -273,9 +255,30 @@ int main(int argc, const char **argv)
     ceph_abort();
   }
 
+  ret = parse_multisite_commandline_params(args, set_default, url, commit, period_epoch, remote,
+                                           staging, realm_new_name, api_name, compression_type,
+                                           index_pool, data_pool, data_extra_pool, endpoints,
+                                           placement_index_type, index_type_specified, is_master,
+                                           is_master_set, read_only, is_read_only_set, master_zone,
+                                           placement_id, redirect_zone, redirect_zone_set, sync_from,
+                                           sync_from_rm, sync_from_all, sync_from_all_specified,
+                                           tags, tags_add, tags_rm, tier_type, tier_type_specified,
+                                           tier_config_add, tier_config_rm, zone_id, zone_name,
+                                           zone_new_name, zonegroup_id, zonegroup_name,
+                                           zonegroup_new_name);
+  if (ret > 0) {
+    return ret;
+  }
+
   realm_name = g_conf->rgw_realm;
   zone_name = g_conf->rgw_zone;
   zonegroup_name = g_conf->rgw_zonegroup;
+
+  ret = parse_quota_commandline_params(args, quota_scope, max_size, have_max_size, max_objects,
+                                       have_max_objects);
+  if (ret > 0) {
+    return ret;
+  }
 
   RGWStreamFlusher rgw_stream_flusher(formatter, cout);
 
@@ -480,6 +483,15 @@ int main(int argc, const char **argv)
     }
   }
 
+  ret = parse_user_commandline_params(args, subuser, display_name, user_email, user_op, caps,
+                                      op_mask_str, key_type, purge_keys, max_buckets,
+                                      max_buckets_specified, admin, admin_specified, system,
+                                      system_specified, set_temp_url_key, temp_url_keys, access,
+                                      perm_mask, set_perm, sync_stats);
+  if (ret > 0) {
+    return ret;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -557,6 +569,15 @@ int main(int argc, const char **argv)
     }
   }
 
+  ret = parse_bucket_commandline_params(args, num_shards, num_shards_specified, object_version,
+                                        bi_index_type, verbose, warnings_only, bypass_gc,
+                                        check_head_obj_locator, remove_bad, check_objects,
+                                        inconsistent_index, min_rewrite_size, max_rewrite_size,
+                                        min_rewrite_stripe_size);
+  if (ret > 0) {
+    return ret;
+  }
+
   /* populate bucket operation */
   bucket_op.set_bucket_name(bucket_name);
   bucket_op.set_object(object);
@@ -567,6 +588,12 @@ int main(int argc, const char **argv)
 
   // required to gather errors from operations
   std::string err_msg;
+
+  ret = parse_role_commandline_params(args, role_name, policy_name, assume_role_doc,
+                                      perm_policy_doc, path, path_prefix);
+  if (ret > 0) {
+    return ret;
+  }
 
   bool output_user_info = true;
 
@@ -721,6 +748,15 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
     return handle_opt_bucket_unlink(bucket_op, store);
+  }
+
+  ret = parse_other_commandline_params(args, pool_name, pool, daemon_id, specified_daemon_id,
+                                       replica_log_type_str, replica_log_type, extra_info,
+                                       include_all, client_id, op_id, state_str, show_log_entries,
+                                       show_log_sum, skip_zero_entries, categories,
+                                       orphan_stale_secs, job_id);
+  if (ret > 0) {
+    return ret;
   }
 
   if (opt_cmd == OPT_LOG_LIST) {

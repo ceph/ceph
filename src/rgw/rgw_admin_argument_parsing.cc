@@ -872,51 +872,26 @@ int parse_command(const std::string& access_key, int gen_access_key, const std::
   return 0;
 }
 
-int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, std::string& tenant, std::string& access_key,
-                                 std::string& subuser, std::string& secret_key, std::string& user_email, RGWUserAdminOpState& user_op,
-                                 std::string& display_name, std::string& bucket_name, std::string& pool_name, rgw_pool& pool,
-                                 std::string& object, std::string& object_version, std::string& client_id, std::string& op_id,
-                                 std::string& state_str, std::string& op_mask_str, int& key_type, std::string& job_id,
-                                 int& gen_access_key, int& gen_secret_key, int& show_log_entries, int& show_log_sum,
-                                 int& skip_zero_entries, int& admin, bool& admin_specified, int& system,
-                                 bool& system_specified, int& verbose, int& staging, int& commit,
-                                 uint64_t& min_rewrite_size, uint64_t& max_rewrite_size,
-                                 uint64_t& min_rewrite_stripe_size, int& max_buckets, bool& max_buckets_specified,
-                                 int& max_entries, bool& max_entries_specified, int64_t& max_size, bool& have_max_size,
-                                 int64_t& max_objects, bool& have_max_objects, std::string& date, std::string& start_date,
-                                 std::string& end_date, int& num_shards, bool& num_shards_specified, int& max_concurrent_ios,
-                                 uint64_t& orphan_stale_secs, int& shard_id, bool& specified_shard_id,
-                                 std::string& daemon_id, bool& specified_daemon_id, std::string& access, uint32_t& perm_mask,
-                                 bool& set_perm, map<int, std::string>& temp_url_keys, bool& set_temp_url_key,
-                                 std::string& bucket_id, std::string& format, map<std::string, bool>& categories,
-                                 int& delete_child_objects, int& pretty_format, int& purge_data, int& purge_keys,
-                                 int& yes_i_really_mean_it, int& fix, int& remove_bad, int& check_head_obj_locator,
-                                 int& check_objects, int& sync_stats, int& include_all, int& extra_info, int& bypass_gc,
-                                 int& warnings_only, int& inconsistent_index, std::string& caps, std::string& infile,
-                                 std::string& metadata_key, std::string& marker, std::string& start_marker, std::string& end_marker,
-                                 std::string& quota_scope, std::string& replica_log_type_str, ReplicaLogType& replica_log_type,
-                                 BIIndexType& bi_index_type, bool& is_master, bool& is_master_set, int& set_default,
-                                 std::string& redirect_zone, bool& redirect_zone_set, bool& read_only, int& is_read_only_set,
-                                 std::string& master_zone, std::string& period_id, std::string& period_epoch, std::string& remote,
-                                 std::string& url, std::string& realm_id,std::string& realm_new_name, std::string& zonegroup_id,
-                                 std::string& zonegroup_new_name, std::string& placement_id, list<std::string>& tags,
-                                 list<std::string>& tags_add, list<std::string>& tags_rm, std::string& api_name, std::string& zone_id,
-                                 std::string& zone_new_name, list<std::string>& endpoints, list<std::string>& sync_from,
-                                 list<std::string>& sync_from_rm, bool& sync_from_all, int& sync_from_all_specified,
-                                 std::string& source_zone_name, std::string& tier_type, bool& tier_type_specified,
-                                 map<std::string, std::string, ltstr_nocase>& tier_config_add,
-                                 map<std::string, std::string, ltstr_nocase>& tier_config_rm, boost::optional<std::string>& index_pool,
-                                 boost::optional<std::string>& data_pool, boost::optional<std::string>& data_extra_pool,
-                                 RGWBucketIndexType& placement_index_type, bool& index_type_specified,
-                                 boost::optional<std::string>& compression_type, std::string& role_name, std::string& path,
-                                 std::string& assume_role_doc, std::string& policy_name, std::string& perm_policy_doc,
-                                 std::string& path_prefix)
+int parse_common_commandline_params(std::vector<const char*>& args, rgw_user& user_id,
+                                    std::string& access_key, int& gen_access_key,
+                                    std::string& secret_key, int& gen_secret_key,
+                                    std::string& metadata_key, std::string& tenant, std::string& date,
+                                    std::string& start_date, std::string& end_date,
+                                    std::string& infile, std::string& source_zone_name,
+                                    std::string& bucket_id, std::string& bucket_name,
+                                    std::string& start_marker, std::string& end_marker,
+                                    std::string& marker, int& yes_i_really_mean_it,
+                                    int& max_entries, bool& max_entries_specified,
+                                    std::string& object, int& shard_id, bool& specified_shard_id,
+                                    int& fix, std::string& period_id, std::string& realm_id,
+                                    std::string& realm_name, std::string& format, int& pretty_format,
+                                    int& purge_data, int& delete_child_objects, int& max_concurrent_ios)
 {
-  int is_master_int, read_only_int, tmp_int;
   long long tmp = 0;
   std::string val, key_type_str, err;
   std::ostringstream errs;
-  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+  int unused_param;
+  for (auto i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
       break;
     } else if (ceph_argparse_flag(args, i, "-h", "--help", (char*) nullptr)) {
@@ -928,83 +903,21 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*) nullptr)) {
       access_key = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr)) {
-      subuser = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*) nullptr)) {
       secret_key = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr)) {
-      user_email = val;
-      user_op.user_email_specified=true;
-    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr)) {
-      display_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-b", "--bucket", (char*) nullptr)) {
       bucket_name = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr)) {
-      pool_name = val;
-      pool = rgw_pool(pool_name);
     } else if (ceph_argparse_witharg(args, i, &val, "-o", "--object", (char*) nullptr)) {
       object = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr)) {
-      object_version = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr)) {
-      client_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr)) {
-      op_id = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr)) {
-      state_str = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr)) {
-      op_mask_str = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr)) {
-      key_type_str = val;
-      if (key_type_str.compare("swift") == 0) {
-        key_type = KEY_TYPE_SWIFT;
-      } else if (key_type_str.compare("s3") == 0) {
-        key_type = KEY_TYPE_S3;
-      } else {
-        cerr << "bad key type: " << key_type_str << std::endl;
-        usage();
-        ceph_abort();
-      }
-    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr)) {
-      job_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, nullptr, "--gen-access-key", (char*) nullptr)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &gen_secret_key, nullptr, "--gen-secret", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, nullptr, "--show-log-entries", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, nullptr, "--show-log-sum", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, nullptr, "--skip-zero-entries", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &admin, nullptr, "--admin", (char*) nullptr)) {
-      admin_specified = true;
-    } else if (ceph_argparse_binary_flag(args, i, &system, nullptr, "--system", (char*) nullptr)) {
-      system_specified = true;
-    } else if (ceph_argparse_binary_flag(args, i, &verbose, nullptr, "--verbose", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &staging, nullptr, "--staging", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &commit, nullptr, "--commit", (char*) nullptr)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &tmp, errs, "-a", "--auth-uid", (char*) nullptr)) {
       if (!errs.str().empty()) {
         cerr << errs.str() << std::endl;
         exit(EXIT_FAILURE);
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr)) {
-      min_rewrite_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr)) {
-      max_rewrite_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr)) {
-      min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr)) {
-      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
-        return EINVAL;
-      }
-      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*) nullptr)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       max_entries_specified = true;
@@ -1012,20 +925,6 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
         cerr << "ERROR: failed to parse max entries: " << err << std::endl;
         return EINVAL;
       }
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr)) {
-      max_size = strict_si_cast<int64_t>(val.c_str(), &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max size: " << err << std::endl;
-        return EINVAL;
-      }
-      have_max_size = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr)) {
-      max_objects = (int64_t)strict_strtoll(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max objects: " << err << std::endl;
-        return EINVAL;
-      }
-      have_max_objects = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--date", "--time", (char*) nullptr)) {
       date = val;
       if (end_date.empty())
@@ -1034,25 +933,6 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       start_date = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-date", "--end-time", (char*) nullptr)) {
       end_date = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr)) {
-      num_shards = (int)strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse num shards: " << err << std::endl;
-        return EINVAL;
-      }
-      num_shards_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*) nullptr)) {
-      max_concurrent_ios = (int)strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
-        return EINVAL;
-      }
-    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr)) {
-      orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
-        return EINVAL;
-      }
     } else if (ceph_argparse_witharg(args, i, &val, "--shard-id", (char*) nullptr)) {
       shard_id = (int)strict_strtol(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -1060,19 +940,6 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
         return EINVAL;
       }
       specified_shard_id = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr)) {
-      daemon_id = val;
-      specified_daemon_id = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr)) {
-      access = val;
-      perm_mask = rgw_str_to_perm(access.c_str());
-      set_perm = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr)) {
-      temp_url_keys[0] = val;
-      set_temp_url_key = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr)) {
-      temp_url_keys[1] = val;
-      set_temp_url_key = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*) nullptr)) {
       bucket_id = val;
       if (bucket_id.empty()) {
@@ -1082,46 +949,12 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*) nullptr)) {
       format = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr)) {
-      std::string cat_str = val;
-      list<std::string> cat_list;
-      list<std::string>::iterator iter;
-      get_str_list(cat_str, cat_list);
-      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-        categories[*iter] = true;
-      }
-    } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, nullptr, "--purge-objects", (char*) nullptr)) {
-      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &pretty_format, nullptr, "--pretty-format", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &purge_data, nullptr, "--purge-data", (char*) nullptr)) {
-      delete_child_objects = purge_data;
-    } else if (ceph_argparse_binary_flag(args, i, &purge_keys, nullptr, "--purge-keys", (char*) nullptr)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &yes_i_really_mean_it, nullptr, "--yes-i-really-mean-it", (char*) nullptr)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &fix, nullptr, "--fix", (char*) nullptr)) {
       // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, nullptr, "--remove-bad", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, nullptr, "--check-head-obj-locator", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &check_objects, nullptr, "--check-objects", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, nullptr, "--sync-stats", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &include_all, nullptr, "--include-all", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &extra_info, nullptr, "--extra-info", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, nullptr, "--bypass-gc", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &warnings_only, nullptr, "--warnings-only", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, nullptr, "--inconsistent-index", (char*) nullptr)) {
-      // do nothing
-    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr)) {
-      caps = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--infile", (char*) nullptr)) {
       infile = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--metadata-key", (char*) nullptr)) {
@@ -1132,15 +965,161 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       start_marker = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--end-marker", (char*) nullptr)) {
       end_marker = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr)) {
-      quota_scope = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr)) {
-      replica_log_type_str = val;
-      replica_log_type = get_replicalog_type(replica_log_type_str);
-      if (replica_log_type == ReplicaLog_Invalid) {
-        cerr << "ERROR: invalid replica log type" << std::endl;
+    } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*) nullptr)) {
+      period_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*) nullptr)) {
+      realm_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*) nullptr)) {
+      source_zone_name = val;
+    } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, nullptr, "--purge-objects", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &purge_data, nullptr, "--purge-data", (char*) nullptr)) {
+      delete_child_objects = purge_data;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-concurrent-ios", (char*) nullptr)) {
+      max_concurrent_ios = (int) strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
         return EINVAL;
       }
+    }
+      // keep the parsing of other options to ensure the validity of the passed parameters
+    else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-entries", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--show-log-sum", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--skip-zero-entries", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--admin", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--system", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--verbose", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--staging", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--commit", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--purge-keys", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--remove-bad", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-head-obj-locator", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--check-objects", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-stats", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--include-all", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--extra-info", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--bypass-gc", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--warnings-only", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--inconsistent-index", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--master", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--default", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--redirect-zone", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--read-only", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--master-zone", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--epoch", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--remote", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--url", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--zonegroup-new-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--placement-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tags", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tags-add", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--api-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--zone-id", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--endpoints", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--sync-from", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*) nullptr) ||
+        ceph_argparse_binary_flag(args, i, &unused_param, nullptr, "--sync-from-all", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tier-type", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tier-config", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--tier-config-rm", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--index-pool", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--data-pool", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--data-extra-pool", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--placement-index-type", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--compression", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--role-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--path", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--assume-role-policy-doc", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--policy-name", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--policy-doc", (char*) nullptr) ||
+        ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*) nullptr)) {
+      // do nothing
+    } else if (strncmp(*i, "-", 1) == 0) {
+      cerr << "ERROR: invalid flag " << *i << std::endl;
+      return EINVAL;
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_bucket_commandline_params(std::vector<const char*>& args, int& num_shards,
+                                    bool& num_shards_specified, std::string& object_version,
+                                    BIIndexType& bi_index_type, int& verbose, int& warnings_only,
+                                    int& bypass_gc, int& check_head_obj_locator, int& remove_bad,
+                                    int& check_objects, int& inconsistent_index,
+                                    uint64_t& min_rewrite_size, uint64_t& max_rewrite_size,
+                                    uint64_t& min_rewrite_stripe_size)
+{
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "--object-version", (char*) nullptr)) {
+      object_version = val;
+    } else if (ceph_argparse_binary_flag(args, i, &verbose, nullptr, "--verbose", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-size", (char*) nullptr)) {
+      min_rewrite_size = (uint64_t)atoll(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-rewrite-size", (char*) nullptr)) {
+      max_rewrite_size = (uint64_t)atoll(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*) nullptr)) {
+      min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
+    } else if (ceph_argparse_witharg(args, i, &val, "--num-shards", (char*) nullptr)) {
+      num_shards = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse num shards: " << err << std::endl;
+        return EINVAL;
+      }
+      num_shards_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &remove_bad, nullptr, "--remove-bad", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &check_head_obj_locator, nullptr, "--check-head-obj-locator", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &check_objects, nullptr, "--check-objects", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &bypass_gc, nullptr, "--bypass-gc", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &warnings_only, nullptr, "--warnings-only", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, nullptr, "--inconsistent-index", (char*) nullptr)) {
+      // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*) nullptr)) {
       std::string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
@@ -1148,6 +1127,47 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_multisite_commandline_params(std::vector<const char*>& args, int& set_default,
+                                       std::string& url, int& commit, std::string& period_epoch,
+                                       std::string& remote, int& staging, std::string& realm_new_name,
+                                       std::string& api_name, boost::optional<std::string>& compression_type,
+                                       boost::optional<std::string>& index_pool,
+                                       boost::optional<std::string>& data_pool,
+                                       boost::optional<std::string>& data_extra_pool,
+                                       std::list<std::string>& endpoints,
+                                       RGWBucketIndexType& placement_index_type, bool& index_type_specified,
+                                       bool& is_master, bool& is_master_set, bool& read_only,
+                                       int& is_read_only_set, std::string& master_zone,
+                                       std::string& placement_id, std::string& redirect_zone,
+                                       bool& redirect_zone_set, std::list<std::string>& sync_from,
+                                       std::list<std::string>& sync_from_rm, bool& sync_from_all,
+                                       int& sync_from_all_specified, std::list<std::string>& tags,
+                                       std::list<std::string>& tags_add, std::list<std::string>& tags_rm,
+                                       std::string& tier_type, bool& tier_type_specified,
+                                       map<std::string, std::string, ltstr_nocase>& tier_config_add,
+                                       map<std::string, std::string, ltstr_nocase>& tier_config_rm,
+                                       std::string& zone_id, std::string& zone_name,
+                                       std::string& zone_new_name, std::string& zonegroup_id,
+                                       std::string& zonegroup_name, std::string& zonegroup_new_name)
+{
+  int is_master_int, read_only_int, tmp_int;
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_binary_flag(args, i, &staging, nullptr, "--staging", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &commit, nullptr, "--commit", (char*) nullptr)) {
+      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &is_master_int, nullptr, "--master", (char*) nullptr)) {
       is_master = (bool)is_master_int;
       is_master_set = true;
@@ -1161,16 +1181,12 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       is_read_only_set = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--master-zone", (char*) nullptr)) {
       master_zone = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--period", (char*) nullptr)) {
-      period_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--epoch", (char*) nullptr)) {
       period_epoch = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--remote", (char*) nullptr)) {
       remote = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--url", (char*) nullptr)) {
       url = val;
-    } else if (ceph_argparse_witharg(args, i, &val, "--realm-id", (char*) nullptr)) {
-      realm_id = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--realm-new-name", (char*) nullptr)) {
       realm_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zonegroup-id", (char*) nullptr)) {
@@ -1200,8 +1216,6 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
     } else if (ceph_argparse_binary_flag(args, i, &tmp_int, nullptr, "--sync-from-all", (char*) nullptr)) {
       sync_from_all = (bool)tmp_int;
       sync_from_all_specified = true;
-    } else if (ceph_argparse_witharg(args, i, &val, "--source-zone", (char*) nullptr)) {
-      source_zone_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tier-type", (char*) nullptr)) {
       tier_type = val;
       tier_type_specified = true;
@@ -1230,6 +1244,60 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       index_type_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--compression", (char*) nullptr)) {
       compression_type = val;
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_quota_commandline_params(std::vector<const char*>& args, std::string& quota_scope,
+                                   int64_t& max_size, bool& have_max_size,
+                                   int64_t& max_objects, bool& have_max_objects)
+{
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-size", (char*) nullptr)) {
+      max_size = strict_si_cast<int64_t>(val.c_str(), &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max size: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_size = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-objects", (char*) nullptr)) {
+      max_objects = (int64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max objects: " << err << std::endl;
+        return EINVAL;
+      }
+      have_max_objects = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--quota-scope", (char*) nullptr)) {
+      quota_scope = val;
+    } else if (strncmp(*i, "-", 1) == 0) {
+      cerr << "ERROR: invalid flag " << *i << std::endl;
+      return EINVAL;
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_role_commandline_params(std::vector<const char*>& args, std::string& role_name,
+                                  std::string& policy_name, std::string& assume_role_doc,
+                                  std::string& perm_policy_doc, std::string& path,
+                                  std::string& path_prefix)
+{
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
     } else if (ceph_argparse_witharg(args, i, &val, "--role-name", (char*) nullptr)) {
       role_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path", (char*) nullptr)) {
@@ -1242,9 +1310,143 @@ int parse_commandline_parameters(vector<const char*>& args, rgw_user& user_id, s
       perm_policy_doc = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--path-prefix", (char*) nullptr)) {
       path_prefix = val;
-    } else if (strncmp(*i, "-", 1) == 0) {
-      cerr << "ERROR: invalid flag " << *i << std::endl;
-      return EINVAL;
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_user_commandline_params(std::vector<const char*>& args,
+                                  std::string& subuser, std::string& display_name,
+                                  std::string& user_email, RGWUserAdminOpState& user_op,
+                                  std::string& caps, std::string& op_mask_str, int& key_type,
+                                  int& purge_keys, int& max_buckets, bool& max_buckets_specified,
+                                  int& admin, bool& admin_specified, int& system, bool& system_specified,
+                                  bool& set_temp_url_key, map<int, std::string>& temp_url_keys,
+                                  std::string& access, uint32_t& perm_mask, bool& set_perm,
+                                  int& sync_stats)
+{
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*) nullptr)) {
+      subuser = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*) nullptr)) {
+      user_email = val;
+      user_op.user_email_specified=true;
+    } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*) nullptr)) {
+      display_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-mask", (char*) nullptr)) {
+      op_mask_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--key-type", (char*) nullptr)) {
+      key_type_str = val;
+      if (key_type_str.compare("swift") == 0) {
+        key_type = KEY_TYPE_SWIFT;
+      } else if (key_type_str.compare("s3") == 0) {
+        key_type = KEY_TYPE_S3;
+      } else {
+        cerr << "bad key type: " << key_type_str << std::endl;
+        usage();
+        ceph_abort();
+      }
+    } else if (ceph_argparse_binary_flag(args, i, &admin, nullptr, "--admin", (char*) nullptr)) {
+      admin_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &system, nullptr, "--system", (char*) nullptr)) {
+      system_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*) nullptr)) {
+      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+        return EINVAL;
+      }
+      max_buckets_specified = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--access", (char*) nullptr)) {
+      access = val;
+      perm_mask = rgw_str_to_perm(access.c_str());
+      set_perm = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key", (char*) nullptr)) {
+      temp_url_keys[0] = val;
+      set_temp_url_key = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--temp-url-key2", "--temp-url-key-2", (char*) nullptr)) {
+      temp_url_keys[1] = val;
+      set_temp_url_key = true;
+    } else if (ceph_argparse_binary_flag(args, i, &purge_keys, nullptr, "--purge-keys", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &sync_stats, nullptr, "--sync-stats", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--caps", (char*) nullptr)) {
+      caps = val;
+    } else {
+      ++i;
+    }
+  }
+  return 0;
+}
+
+int parse_other_commandline_params(std::vector<const char*>& args, std::string& pool_name,
+                                   rgw_pool& pool, std::string& daemon_id, bool& specified_daemon_id,
+                                   std::string& replica_log_type_str,
+                                   ReplicaLogType& replica_log_type, int& extra_info,
+                                   int& include_all, std::string& client_id, std::string& op_id,
+                                   std::string& state_str, int& show_log_entries, int& show_log_sum,
+                                   int& skip_zero_entries, std::map<std::string, bool>& categories,
+                                   uint64_t& orphan_stale_secs, std::string& job_id)
+{
+  long long tmp = 0;
+  std::string val, key_type_str, err;
+  std::ostringstream errs;
+  for (auto i = args.begin(); i != args.end(); ) {
+    if (ceph_argparse_double_dash(args, i)) {
+      break;
+    } else if (ceph_argparse_witharg(args, i, &val, "-p", "--pool", (char*) nullptr)) {
+      pool_name = val;
+      pool = rgw_pool(pool_name);
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-id", (char*) nullptr)) {
+      client_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--op-id", (char*) nullptr)) {
+      op_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--state", (char*) nullptr)) {
+      state_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*) nullptr)) {
+      job_id = val;
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_entries, nullptr, "--show-log-entries", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &show_log_sum, nullptr, "--show-log-sum", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &skip_zero_entries, nullptr, "--skip-zero-entries", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*) nullptr)) {
+      orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse orphan stale secs: " << err << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--daemon-id", (char*) nullptr)) {
+      daemon_id = val;
+      specified_daemon_id = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*) nullptr)) {
+      std::string cat_str = val;
+      list<std::string> cat_list;
+      list<std::string>::iterator iter;
+      get_str_list(cat_str, cat_list);
+      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
+        categories[*iter] = true;
+      }
+    } else if (ceph_argparse_binary_flag(args, i, &include_all, nullptr, "--include-all", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &extra_info, nullptr, "--extra-info", (char*) nullptr)) {
+      // do nothing
+    } else if (ceph_argparse_witharg(args, i, &val, "--replica-log-type", (char*) nullptr)) {
+      replica_log_type_str = val;
+      replica_log_type = get_replicalog_type(replica_log_type_str);
+      if (replica_log_type == ReplicaLog_Invalid) {
+        cerr << "ERROR: invalid replica log type" << std::endl;
+        return EINVAL;
+      }
     } else {
       ++i;
     }
