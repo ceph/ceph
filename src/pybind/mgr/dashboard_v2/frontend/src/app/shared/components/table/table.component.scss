@@ -74,6 +74,9 @@
       }
     }
   }
+  .input-group.dataTables_paginate {
+    width: 8%;
+  }
 }
 
 ::ng-deep .oadatatable {
