@@ -168,6 +168,8 @@ public:
   void SetUp() override {
     TestMockFixture::SetUp();
 
+    ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "2"));
+
     ASSERT_EQ(0, open_image(m_image_name, &image_ctx));
     ASSERT_EQ(0, image_ctx->operations->snap_create(
                    cls::rbd::UserSnapshotNamespace{}, "snap"));
@@ -180,6 +182,16 @@ public:
                                  &ctx);
       ASSERT_EQ(0, ctx.wait());
     }
+  }
+
+  void expect_get_min_compat_client(int8_t min_compat_client, int r) {
+    auto mock_rados_client = get_mock_io_ctx(m_ioctx).get_mock_rados_client();
+    EXPECT_CALL(*mock_rados_client, get_min_compatible_client(_, _))
+      .WillOnce(Invoke([min_compat_client, r](int8_t* min, int8_t* required_min) {
+                  *min = min_compat_client;
+                  *required_min = min_compat_client;
+                  return r;
+                }));
   }
 
   void expect_get_image_size(MockTestImageCtx &mock_image_ctx, uint64_t snap_id,
@@ -218,6 +230,29 @@ public:
       .WillOnce(InvokeWithoutArgs([r]() {
                   return r;
                 }));
+  }
+
+  void expect_op_features_set(librados::IoCtx& io_ctx,
+                              const std::string& clone_id, int r) {
+    bufferlist bl;
+    encode(static_cast<uint64_t>(RBD_OPERATION_FEATURE_CLONE_CHILD), bl);
+    encode(static_cast<uint64_t>(RBD_OPERATION_FEATURE_CLONE_CHILD), bl);
+
+    EXPECT_CALL(get_mock_io_ctx(io_ctx),
+                exec(util::header_name(clone_id), _, StrEq("rbd"),
+                     StrEq("op_features_set"), ContentsEqual(bl), _, _))
+      .WillOnce(Return(r));
+  }
+
+  void expect_child_attach(MockImageCtx &mock_image_ctx, int r) {
+    bufferlist bl;
+    encode(mock_image_ctx.snap_id, bl);
+    encode(cls::rbd::ChildImageSpec{m_ioctx.get_id(), mock_image_ctx.id}, bl);
+
+    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                exec(mock_image_ctx.header_oid, _, StrEq("rbd"),
+                     StrEq("child_attach"), ContentsEqual(bl), _, _))
+      .WillOnce(Return(r));
   }
 
   void expect_add_child(librados::IoCtx& io_ctx, int r) {
@@ -296,12 +331,6 @@ public:
     EXPECT_CALL(mock_image_ctx, destroy());
   }
 
-  void expect_remove_child(librados::IoCtx& io_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(io_ctx),
-                exec(RBD_CHILDREN, _, StrEq("rbd"), StrEq("remove_child"), _, _, _))
-      .WillOnce(Return(r));
-  }
-
   void expect_remove(MockRemoveRequest& mock_remove_request, int r) {
     EXPECT_CALL(mock_remove_request, send())
       .WillOnce(Invoke([this, &mock_remove_request, r]() {
@@ -312,13 +341,104 @@ public:
   librbd::ImageCtx *image_ctx;
 };
 
-TEST_F(TestMockImageCloneRequest, Success) {
+TEST_F(TestMockImageCloneRequest, SuccessV1) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "1"));
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
+  expect_is_snap_protected(mock_image_ctx, true, 0);
+
+  MockCreateRequest mock_create_request;
+  expect_create(mock_create_request, 0);
+
+  expect_open(mock_image_ctx, 0);
+  expect_set_parent(mock_image_ctx, 0);
+  expect_add_child(m_ioctx, 0);
+
+  MockRefreshRequest mock_refresh_request;
+  expect_refresh(mock_refresh_request, 0);
+  expect_is_snap_protected(mock_image_ctx, true, 0);
+
+  expect_metadata_list(mock_image_ctx, {{"key", {}}}, 0);
+  expect_metadata_set(m_ioctx, mock_image_ctx, {{"key", {}}}, 0);
+
+  MockMirrorEnableRequest mock_mirror_enable_request;
+  if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
+    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+    expect_mirror_mode_get(mock_image_ctx, cls::rbd::MIRROR_MODE_POOL, 0);
+
+    expect_mirror_enable(mock_mirror_enable_request, 0);
+  } else {
+    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
+  }
+
+  expect_close(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  ImageOptions clone_opts;
+  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
+                                  "clone id", clone_opts, "", "",
+                                  image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageCloneRequest, SuccessV2) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
   expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
+  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
+  expect_is_snap_protected(mock_image_ctx, true, 0);
+
+  MockCreateRequest mock_create_request;
+  expect_create(mock_create_request, 0);
+
+  expect_open(mock_image_ctx, 0);
+  expect_set_parent(mock_image_ctx, 0);
+
+  expect_op_features_set(m_ioctx, mock_image_ctx.id, 0);
+  expect_child_attach(mock_image_ctx, 0);
+
+  expect_metadata_list(mock_image_ctx, {{"key", {}}}, 0);
+  expect_metadata_set(m_ioctx, mock_image_ctx, {{"key", {}}}, 0);
+
+  MockMirrorEnableRequest mock_mirror_enable_request;
+  if (is_feature_enabled(RBD_FEATURE_JOURNALING)) {
+    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
+    expect_mirror_mode_get(mock_image_ctx, cls::rbd::MIRROR_MODE_POOL, 0);
+
+    expect_mirror_enable(mock_mirror_enable_request, 0);
+  } else {
+    expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
+  }
+
+  expect_close(mock_image_ctx, 0);
+
+  C_SaferCond ctx;
+  ImageOptions clone_opts;
+  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
+                                  "clone id", clone_opts, "", "",
+                                  image_ctx->op_work_queue, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
+TEST_F(TestMockImageCloneRequest, SuccessAuto) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "auto"));
+
+  MockTestImageCtx mock_image_ctx(*image_ctx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_get_min_compat_client(1, 0);
   expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
   expect_is_snap_protected(mock_image_ctx, true, 0);
 
@@ -437,6 +557,7 @@ TEST_F(TestMockImageCloneRequest, SetParentError) {
 
 TEST_F(TestMockImageCloneRequest, AddChildError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "1"));
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
   expect_op_work_queue(mock_image_ctx);
@@ -467,6 +588,7 @@ TEST_F(TestMockImageCloneRequest, AddChildError) {
 
 TEST_F(TestMockImageCloneRequest, RefreshError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "1"));
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
   expect_op_work_queue(mock_image_ctx);
@@ -485,7 +607,6 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
   MockRefreshRequest mock_refresh_request;
   expect_refresh(mock_refresh_request, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -502,6 +623,7 @@ TEST_F(TestMockImageCloneRequest, RefreshError) {
 
 TEST_F(TestMockImageCloneRequest, MetadataListError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "1"));
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
   expect_op_work_queue(mock_image_ctx);
@@ -523,7 +645,6 @@ TEST_F(TestMockImageCloneRequest, MetadataListError) {
 
   expect_metadata_list(mock_image_ctx, {{"key", {}}}, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -553,16 +674,13 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
 
   expect_open(mock_image_ctx, 0);
   expect_set_parent(mock_image_ctx, 0);
-  expect_add_child(m_ioctx, 0);
 
-  MockRefreshRequest mock_refresh_request;
-  expect_refresh(mock_refresh_request, 0);
-  expect_is_snap_protected(mock_image_ctx, true, 0);
+  expect_op_features_set(m_ioctx, mock_image_ctx.id, 0);
+  expect_child_attach(mock_image_ctx, 0);
 
   expect_metadata_list(mock_image_ctx, {{"key", {}}}, 0);
   expect_metadata_set(m_ioctx, mock_image_ctx, {{"key", {}}}, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -579,6 +697,7 @@ TEST_F(TestMockImageCloneRequest, MetadataSetError) {
 
 TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_JOURNALING);
+  ASSERT_EQ(0, _rados.conf_set("rbd_default_clone_format", "1"));
 
   MockTestImageCtx mock_image_ctx(*image_ctx);
   expect_op_work_queue(mock_image_ctx);
@@ -603,7 +722,6 @@ TEST_F(TestMockImageCloneRequest, GetMirrorModeError) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, true);
   expect_mirror_mode_get(mock_image_ctx, cls::rbd::MIRROR_MODE_POOL, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -633,11 +751,9 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
 
   expect_open(mock_image_ctx, 0);
   expect_set_parent(mock_image_ctx, 0);
-  expect_add_child(m_ioctx, 0);
 
-  MockRefreshRequest mock_refresh_request;
-  expect_refresh(mock_refresh_request, 0);
-  expect_is_snap_protected(mock_image_ctx, true, 0);
+  expect_op_features_set(m_ioctx, mock_image_ctx.id, 0);
+  expect_child_attach(mock_image_ctx, 0);
 
   expect_metadata_list(mock_image_ctx, {}, 0);
 
@@ -647,7 +763,6 @@ TEST_F(TestMockImageCloneRequest, MirrorEnableError) {
   MockMirrorEnableRequest mock_mirror_enable_request;
   expect_mirror_enable(mock_mirror_enable_request, -EINVAL);
 
-  expect_remove_child(m_ioctx, 0);
   expect_close(mock_image_ctx, 0);
 
   MockRemoveRequest mock_remove_request;
@@ -677,51 +792,14 @@ TEST_F(TestMockImageCloneRequest, CloseError) {
 
   expect_open(mock_image_ctx, 0);
   expect_set_parent(mock_image_ctx, 0);
-  expect_add_child(m_ioctx, 0);
 
-  MockRefreshRequest mock_refresh_request;
-  expect_refresh(mock_refresh_request, 0);
-  expect_is_snap_protected(mock_image_ctx, true, 0);
+  expect_op_features_set(m_ioctx, mock_image_ctx.id, 0);
+  expect_child_attach(mock_image_ctx, 0);
 
   expect_metadata_list(mock_image_ctx, {}, 0);
   expect_test_features(mock_image_ctx, RBD_FEATURE_JOURNALING, false);
 
   expect_close(mock_image_ctx, -EINVAL);
-
-  C_SaferCond ctx;
-  ImageOptions clone_opts;
-  auto req = new MockCloneRequest(&mock_image_ctx, m_ioctx, "clone name",
-                                  "clone id", clone_opts, "", "",
-                                  image_ctx->op_work_queue, &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
-}
-
-TEST_F(TestMockImageCloneRequest, RemoveChildError) {
-  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
-
-  MockTestImageCtx mock_image_ctx(*image_ctx);
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-  expect_get_image_size(mock_image_ctx, mock_image_ctx.snaps.front(), 123);
-  expect_is_snap_protected(mock_image_ctx, true, 0);
-
-  MockCreateRequest mock_create_request;
-  expect_create(mock_create_request, 0);
-
-  expect_open(mock_image_ctx, 0);
-  expect_set_parent(mock_image_ctx, 0);
-  expect_add_child(m_ioctx, 0);
-
-  MockRefreshRequest mock_refresh_request;
-  expect_refresh(mock_refresh_request, -EINVAL);
-
-  expect_remove_child(m_ioctx, -EPERM);
-  expect_close(mock_image_ctx, 0);
-
-  MockRemoveRequest mock_remove_request;
-  expect_remove(mock_remove_request, 0);
 
   C_SaferCond ctx;
   ImageOptions clone_opts;

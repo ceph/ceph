@@ -31,6 +31,13 @@
 
   * The rbd CLI's "showmapped" JSON and XML output has changed.
 
+  * RBD now optionally supports simplified image clone semantics where
+    non-protected snapshots can be cloned; and snapshots with linked clones
+    can be removed and the space automatically reclaimed once all remaining
+    linked clones are detached. This feature is enabled by default if
+    the OSD "require-min-compat-client" flag is set to mimic or later; or can be
+    overridden via the "rbd_default_clone_format" configuration option.
+
 * The sample ``crush-location-hook`` script has been removed.  Its output is
   equivalent to the built-in default behavior, so it has been replaced with an
   example in the CRUSH documentation.

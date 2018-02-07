@@ -641,6 +641,14 @@ namespace librbd {
       op->exec("rbd", "snapshot_rename", bl);
     }
 
+    void snapshot_trash_add(librados::ObjectWriteOperation *op,
+                            snapid_t snap_id)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      op->exec("rbd", "snapshot_trash_add", bl);
+    }
+
     void get_snapcontext_start(librados::ObjectReadOperation *op)
     {
       bufferlist bl;
@@ -1439,6 +1447,93 @@ namespace librbd {
         return -EBADMSG;
       }
 
+      return 0;
+    }
+
+    void child_attach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      encode(child_image, bl);
+      op->exec("rbd", "child_attach", bl);
+    }
+
+    int child_attach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image)
+    {
+      librados::ObjectWriteOperation op;
+      child_attach(&op, snap_id, child_image);
+
+      int r = ioctx->operate(oid, &op);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    void child_detach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      encode(child_image, bl);
+      op->exec("rbd", "child_detach", bl);
+    }
+
+    int child_detach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image)
+    {
+      librados::ObjectWriteOperation op;
+      child_detach(&op, snap_id, child_image);
+
+      int r = ioctx->operate(oid, &op);
+      if (r < 0) {
+        return r;
+      }
+      return 0;
+    }
+
+    void children_list_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id)
+    {
+      bufferlist bl;
+      encode(snap_id, bl);
+      op->exec("rbd", "children_list", bl);
+    }
+
+    int children_list_finish(bufferlist::iterator *it,
+                             cls::rbd::ChildImageSpecs *child_images)
+    {
+      child_images->clear();
+      try {
+        decode(*child_images, *it);
+      } catch (const buffer::error &err) {
+        return -EBADMSG;
+      }
+      return 0;
+    }
+
+    int children_list(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id,
+                      cls::rbd::ChildImageSpecs *child_images)
+    {
+      librados::ObjectReadOperation op;
+      children_list_start(&op, snap_id);
+
+      bufferlist out_bl;
+      int r = ioctx->operate(oid, &op, &out_bl);
+      if (r < 0) {
+        return r;
+      }
+
+      bufferlist::iterator it = out_bl.begin();
+      r = children_list_finish(&it, child_images);
+      if (r < 0) {
+        return r;
+      }
       return 0;
     }
 

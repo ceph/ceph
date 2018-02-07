@@ -1007,6 +1007,13 @@ uint64_t Rados::get_instance_id() {
   return impl->get_instance_id();
 }
 
+int Rados::get_min_compatible_client(int8_t* min_compat_client,
+                                     int8_t* require_min_compat_client) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_client(min_compat_client,
+                                         require_min_compat_client);
+}
+
 int Rados::init(const char * const id) {
   return rados_create(reinterpret_cast<rados_t *>(&client), id);
 }

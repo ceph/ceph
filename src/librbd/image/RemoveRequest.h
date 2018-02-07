@@ -4,6 +4,8 @@
 #ifndef CEPH_LIBRBD_IMAGE_REMOVE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_REMOVE_REQUEST_H
 
+#include "include/rados/librados.hpp"
+#include "librbd/ImageCtx.h"
 #include "librbd/image/TypeTraits.h"
 
 class Context;
@@ -12,7 +14,6 @@ class SafeTimer;
 
 namespace librbd {
 
-class ImageCtx;
 class ProgressContext;
 
 namespace image {
@@ -63,7 +64,7 @@ private:
    * |                              TRIM IMAGE                  |
    * |                                   |                      |
    * v                                   v                      |
-   * |                            REMOVE CHILD                  |
+   * |                              DETACH CHILD                |
    * |                                   |                      |
    * |                                   v                      v
    * \--------->------------------>CLOSE IMAGE                  |
@@ -118,6 +119,8 @@ private:
   bool m_unknown_format = true;
   ImageCtxT *m_image_ctx;
 
+  librados::IoCtx m_parent_io_ctx;
+
   decltype(m_image_ctx->exclusive_lock) m_exclusive_lock = nullptr;
 
   int m_ret_val = 0;
@@ -163,8 +166,8 @@ private:
   void trim_image();
   void handle_trim_image(int r);
 
-  void remove_child();
-  void handle_remove_child(int r);
+  void detach_child();
+  void handle_detach_child(int r);
 
   void send_disable_mirror();
   void handle_disable_mirror(int r);

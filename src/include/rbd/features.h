@@ -70,23 +70,26 @@
 
 /// features that will be implicitly enabled
 #define RBD_FEATURES_IMPLICIT_ENABLE  (RBD_FEATURE_STRIPINGV2 | \
-                                       RBD_FEATURE_DATA_POOL | \
+                                       RBD_FEATURE_DATA_POOL  | \
                                        RBD_FEATURE_OPERATIONS)
 
 /// features that cannot be controlled by the user
 #define RBD_FEATURES_INTERNAL         (RBD_FEATURE_OPERATIONS)
 
-#define RBD_OPERATION_FEATURE_CLONE_V2        (1ULL<<0)
-#define RBD_OPERATION_FEATURE_GROUP           (1ULL<<1)
-#define RBD_OPERATION_FEATURE_SNAP_TRASH      (1ULL<<2)
+#define RBD_OPERATION_FEATURE_CLONE_PARENT      (1ULL<<0)
+#define RBD_OPERATION_FEATURE_CLONE_CHILD       (1ULL<<1)
+#define RBD_OPERATION_FEATURE_GROUP             (1ULL<<2)
+#define RBD_OPERATION_FEATURE_SNAP_TRASH        (1ULL<<3)
 
-#define RBD_OPERATION_FEATURE_NAME_CLONE_V2   "clone"
-#define RBD_OPERATION_FEATURE_NAME_GROUP      "group"
-#define RBD_OPERATION_FEATURE_NAME_SNAP_TRASH "snap-trash"
+#define RBD_OPERATION_FEATURE_NAME_CLONE_PARENT "clone-parent"
+#define RBD_OPERATION_FEATURE_NAME_CLONE_CHILD  "clone-child"
+#define RBD_OPERATION_FEATURE_NAME_GROUP        "group"
+#define RBD_OPERATION_FEATURE_NAME_SNAP_TRASH   "snap-trash"
 
 /// all valid operation features
-#define RBD_OPERATION_FEATURES_ALL (RBD_OPERATION_FEATURE_CLONE_V2 | \
-                                    RBD_OPERATION_FEATURE_GROUP | \
+#define RBD_OPERATION_FEATURES_ALL (RBD_OPERATION_FEATURE_CLONE_PARENT | \
+                                    RBD_OPERATION_FEATURE_CLONE_CHILD  | \
+                                    RBD_OPERATION_FEATURE_GROUP        | \
                                     RBD_OPERATION_FEATURE_SNAP_TRASH)
 
 #endif

@@ -176,8 +176,9 @@ typedef struct {
 } rbd_group_snap_info_t;
 
 typedef enum {
-  RBD_SNAP_NAMESPACE_TYPE_USER = 0,
-  RBD_SNAP_NAMESPACE_TYPE_GROUP = 1
+  RBD_SNAP_NAMESPACE_TYPE_USER  = 0,
+  RBD_SNAP_NAMESPACE_TYPE_GROUP = 1,
+  RBD_SNAP_NAMESPACE_TYPE_TRASH = 2
 } rbd_snap_namespace_type_t;
 
 typedef struct {

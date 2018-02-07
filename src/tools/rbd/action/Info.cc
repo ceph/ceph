@@ -59,7 +59,8 @@ static void format_features(Formatter *f, uint64_t features)
 static void format_op_features(Formatter *f, uint64_t op_features)
 {
   static std::map<uint64_t, std::string> mapping = {
-    {RBD_OPERATION_FEATURE_CLONE_V2, RBD_OPERATION_FEATURE_NAME_CLONE_V2},
+    {RBD_OPERATION_FEATURE_CLONE_PARENT, RBD_OPERATION_FEATURE_NAME_CLONE_PARENT},
+    {RBD_OPERATION_FEATURE_CLONE_CHILD, RBD_OPERATION_FEATURE_NAME_CLONE_CHILD},
     {RBD_OPERATION_FEATURE_GROUP, RBD_OPERATION_FEATURE_NAME_GROUP},
     {RBD_OPERATION_FEATURE_SNAP_TRASH, RBD_OPERATION_FEATURE_NAME_SNAP_TRASH}};
   format_bitmask(f, "op_feature", mapping, op_features);
