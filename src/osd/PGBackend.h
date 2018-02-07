@@ -216,9 +216,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
      virtual void release_locks(ObcLockManager &manager) = 0;
 
-     virtual void op_applied(
-       const eversion_t &applied_version) = 0;
-
      virtual bool should_send_op(
        pg_shard_t peer,
        const hobject_t &hoid) = 0;
@@ -438,7 +435,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
-     Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
