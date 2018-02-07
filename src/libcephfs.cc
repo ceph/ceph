@@ -1559,14 +1559,14 @@ extern "C" int64_t ceph_ll_readv(class ceph_mount_info *cmount,
 				 struct Fh *fh, const struct iovec *iov,
 				 int iovcnt, int64_t off)
 {
-  return -1; // TODO:  implement
+  return (cmount->get_client()->ll_readv(fh, iov, iovcnt, off));
 }
 
 extern "C" int64_t ceph_ll_writev(class ceph_mount_info *cmount,
 				  struct Fh *fh, const struct iovec *iov,
 				  int iovcnt, int64_t off)
 {
-  return -1; // TODO:  implement
+  return (cmount->get_client()->ll_writev(fh, iov, iovcnt, off));
 }
 
 extern "C" int ceph_ll_close(class ceph_mount_info *cmount, Fh* fh)

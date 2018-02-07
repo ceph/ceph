@@ -9022,18 +9022,9 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
-int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
+				   unsigned iovcnt, int64_t offset, bool write)
 {
-    Mutex::Locker lock(client_lock);
-    tout(cct) << fd << std::endl;
-    tout(cct) << offset << std::endl;
-
-    if (unmounting)
-     return -ENOTCONN;
-
-    Fh *fh = get_filehandle(fd);
-    if (!fh)
-        return -EBADF;
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
         return -EBADF;
@@ -9044,12 +9035,12 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     }
     if (write) {
         int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt);
-        ldout(cct, 3) << "pwritev(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
+        ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
         int64_t r = _read(fh, offset, totallen, &bl);
-        ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
+        ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
         if (r <= 0)
           return r;
 
@@ -9070,6 +9061,21 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
         }
         return r;  
     }
+}
+
+int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+{
+    Mutex::Locker lock(client_lock);
+    tout(cct) << fd << std::endl;
+    tout(cct) << offset << std::endl;
+
+    if (unmounting)
+     return -ENOTCONN;
+
+    Fh *fh = get_filehandle(fd);
+    if (!fh)
+        return -EBADF;
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write);
 }
 
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
@@ -9106,7 +9112,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int64_t r = _lseek(f, 0, SEEK_END);
+      int r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
@@ -12783,6 +12789,22 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
+}
+
+int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true);
+}
+
+int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false);
 }
 
 int Client::ll_flush(Fh *fh)
