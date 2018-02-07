@@ -5175,9 +5175,8 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     int r = alloc->reserve(gift);
     assert(r == 0);
 
-    AllocExtentVector exts;
     int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					0, 0, &exts);
+					0, 0, extents);
 
     if (alloc_len <= 0) {
       dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
@@ -5193,10 +5192,8 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
       alloc->unreserve(gift - alloc_len);
       _dump_alloc_on_rebalance_failure();
     }
-    for (auto& p : exts) {
-      bluestore_pextent_t e = bluestore_pextent_t(p);
+    for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-      extents->push_back(e);
     }
     gift = 0;
 
@@ -5215,7 +5212,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 
     while (reclaim > 0) {
       // NOTE: this will block and do IO.
-      AllocExtentVector extents;
+      PExtentVector extents;
       int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
 				     &extents);
       if (r < 0) {
@@ -10326,7 +10323,7 @@ int BlueStore::_do_alloc_write(
 	 << dendl;
     return r;
   }
-  AllocExtentVector prealloc;
+  PExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());;
   int prealloc_left = 0;
   prealloc_left = alloc->allocate(
@@ -10384,7 +10381,7 @@ int BlueStore::_do_alloc_write(
       }
     }
 
-    AllocExtentVector extents;
+    PExtentVector extents;
     int64_t left = final_length;
     while (left > 0) {
       assert(prealloc_left > 0);

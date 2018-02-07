@@ -284,16 +284,16 @@ TEST(BitAllocator, test_zone_alloc)
   bmap_test_assert(lock);
 
   int64_t blk_size = 1024;
-  AllocExtentVector extents;
-  ExtentList *block_list = new ExtentList(&extents, blk_size);
+  PExtentVector extents;
+  ExtentList* block_list = new ExtentList(&extents, blk_size);
   allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, block_list);
   bmap_test_assert(allocated == zone->size() / 2);
 
 
   {
     int64_t blk_size = 1024;
-    AllocExtentVector extents;
-    ExtentList *block_list = new ExtentList(&extents, blk_size);
+    PExtentVector extents;
+    ExtentList* block_list = new ExtentList(&extents, blk_size);
 
     zone = new BitMapZone(g_ceph_context, total_blocks, 0);
     lock = zone->lock_excl_try();
@@ -315,7 +315,7 @@ TEST(BitAllocator, test_zone_alloc)
    */
   {
     int64_t blk_size = 1;
-    AllocExtentVector extents;
+    PExtentVector extents;
 
     for (int i = 1; i <= total_blocks - BmapEntry::size(); i = i << 1) {
       for (int64_t j = 0; j <= BmapEntry::size(); j = 1 << j) {
@@ -429,8 +429,9 @@ TEST(BitAllocator, test_bmap_alloc)
     for (int64_t iter = 0; iter < max_iter; iter++) {
       for (int64_t j = 0; alloc_size <= total_blocks; j++) {
         int64_t blk_size = 1024;
-        AllocExtentVector extents;
-        ExtentList *block_list = new ExtentList(&extents, blk_size, alloc_size);
+        PExtentVector extents;
+        ExtentList* block_list = new ExtentList(&extents, blk_size, alloc_size);
+
         for (int64_t i = 0; i < total_blocks; i += alloc_size) {
           bmap_test_assert(alloc->reserve_blocks(alloc_size) == true);
           allocated = alloc->alloc_blocks_dis_res(alloc_size, MIN(alloc_size, zone_size),
@@ -451,7 +452,7 @@ TEST(BitAllocator, test_bmap_alloc)
     }
 
     int64_t blk_size = 1024;
-    AllocExtentVector extents;
+    PExtentVector extents;
 
     ExtentList *block_list = new ExtentList(&extents, blk_size);
   
@@ -492,7 +493,7 @@ bool alloc_extents_max_block(BitAllocator *alloc,
   int64_t allocated = 0;
   int64_t verified = 0;
   int64_t count = 0;
-  AllocExtentVector extents;
+  PExtentVector extents;
 
   ExtentList *block_list = new ExtentList(&extents, blk_size, max_alloc);
 
@@ -537,8 +538,8 @@ do_work_dis(BitAllocator *alloc)
   int64_t alloced = 0;
   int64_t num_blocks = alloc->size() / NUM_THREADS;
 
-  AllocExtentVector extents;
-  ExtentList *block_list = new ExtentList(&extents, 4096);
+  PExtentVector extents;
+  ExtentList* block_list = new ExtentList(&extents, 4096);
 
   while (num_iters--) {
     alloc_assert(alloc->reserve_blocks(num_blocks));
