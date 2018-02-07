@@ -47,6 +47,19 @@ def fake_call(monkeypatch):
 
 
 @pytest.fixture
+def stub_call(monkeypatch):
+    """
+    Monkeypatches process.call, so that a caller can add behavior to the response
+    """
+    def apply(return_value):
+        monkeypatch.setattr(
+            'ceph_volume.process.call',
+            lambda *a, **kw: return_value)
+
+    return apply
+
+
+@pytest.fixture
 def conf_ceph(monkeypatch):
     """
     Monkeypatches ceph_volume.conf.ceph, which is meant to parse/read
