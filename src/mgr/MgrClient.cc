@@ -313,6 +313,7 @@ void MgrClient::send_report()
     daemon_dirty_status = false;
   }
 
+  report->osd_health_metrics = std::move(osd_health_metrics);
   session->con->send_message(report);
 
   if (stats_period != 0) {
@@ -460,4 +461,9 @@ int MgrClient::service_daemon_update_status(
   daemon_status = status;
   daemon_dirty_status = true;
   return 0;
+}
+
+void MgrClient::update_osd_health(std::vector<OSDHealthMetric>&& metrics)
+{
+  osd_health_metrics = std::move(metrics);
 }
