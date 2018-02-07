@@ -31,6 +31,7 @@
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/StandardPolicy.h"
+#include "librbd/cache/FileImageCache.h"
 
 #include "osdc/Striper.h"
 #include <boost/bind.hpp>
@@ -189,6 +190,7 @@ struct C_InvalidateCache : public Context {
       extra_read_flags(0),
       old_format(true),
       order(0), size(0), features(0),
+      ssd_cache_size(0),
       format_string(NULL),
       id(image_id), parent(NULL),
       stripe_unit(0), stripe_count(0), flags(0),
@@ -320,6 +322,10 @@ struct C_InvalidateCache : public Context {
       object_set = new ObjectCacher::ObjectSet(NULL, data_ctx.get_id(), 0);
       object_set->return_enoent = true;
       object_cacher->start();
+    }
+
+    if (persistent_cache_enabled) {
+      ssd_cache_size = cct->_conf->get_val<uint64_t>("rbd_persistent_cache_size");
     }
 
     readahead.set_trigger_requests(readahead_trigger_requests);
@@ -1027,7 +1033,8 @@ struct C_InvalidateCache : public Context {
         "rbd_mirroring_delete_delay", false)(
         "rbd_mirroring_replay_delay", false)(
         "rbd_skip_partial_discard", false)(
-	"rbd_qos_iops_limit", false);
+	"rbd_qos_iops_limit", false)(
+        "rbd_persistent_cache_enabled", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1090,7 +1097,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
     ASSIGN_OPTION(qos_iops_limit, uint64_t);
-
+    ASSIGN_OPTION(persistent_cache_enabled, bool);
     if (thread_safe) {
       ASSIGN_OPTION(journal_pool, std::string);
     }

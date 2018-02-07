@@ -594,6 +594,7 @@ TEST_F(TestInternal, SnapshotCopyup)
 
   librbd::ImageCtx *ictx2;
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
+  REQUIRE(ictx2->image_cache == nullptr);
 
   ASSERT_EQ(0, snap_create(*ictx2, "snap1"));
   ASSERT_EQ(0, snap_create(*ictx2, "snap2"));

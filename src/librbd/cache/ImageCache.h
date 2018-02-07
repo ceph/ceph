@@ -19,10 +19,15 @@ namespace cache {
 struct ImageCache {
   typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
+  enum CacheMode {
+    CACHE_MODE_WRITEBACK,
+    CACHE_MODE_WRITETHROUGH
+  };
+
   virtual ~ImageCache() {
   }
 
-  /// client AIO methods
+  // client AIO methods
   virtual void aio_read(Extents&& image_extents, ceph::bufferlist* bl,
                         int fadvise_flags, Context *on_finish) = 0;
   virtual void aio_write(Extents&& image_extents, ceph::bufferlist&& bl,
@@ -40,9 +45,11 @@ struct ImageCache {
                                      int fadvise_flags,
                                      Context *on_finish) = 0;
 
-  /// internal state methods
+  // internal state methods
   virtual void init(Context *on_finish) = 0;
+  virtual void remove(Context *on_finish) = 0;
   virtual void shut_down(Context *on_finish) = 0;
+  virtual void set_parent() = 0;
 
   virtual void invalidate(Context *on_finish) = 0;
   virtual void flush(Context *on_finish) = 0;

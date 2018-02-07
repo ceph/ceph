@@ -30,7 +30,7 @@ set(librbd_internal_srcs
   api/Mirror.cc
   api/Snapshot.cc
   cache/ImageWriteback.cc
-  cache/PassthroughImageCache.cc
+  cache/FileImageCache.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc
@@ -38,6 +38,13 @@ set(librbd_internal_srcs
   deep_copy/SnapshotCopyRequest.cc
   deep_copy/SnapshotCreateRequest.cc
   deep_copy/Utils.cc
+  cache/BlockGuard.cc
+  cache/ImageWriteback.cc
+  cache/FileImageCache.cc
+  cache/file/ImageStore.cc
+  cache/file/MetaStore.cc
+  cache/file/StupidPolicy.cc
+  cache/file/Types.cc
   exclusive_lock/AutomaticPolicy.cc
   exclusive_lock/PreAcquireRequest.cc
   exclusive_lock/PostAcquireRequest.cc
@@ -114,11 +121,13 @@ set(librbd_internal_srcs
   trash/MoveRequest.cc
   watcher/Notifier.cc
   watcher/RewatchRequest.cc
-  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc)
+  ${CMAKE_SOURCE_DIR}/src/common/ContextCompletion.cc
+  ${CMAKE_SOURCE_DIR}/src/os/CacheStore/SyncFile.cc)
 
 add_library(rbd_api STATIC librbd.cc)
 add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
+  ${libos_cache_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
   add_dependencies(rbd_internal librbd-tp)
@@ -142,6 +151,7 @@ target_link_libraries(librbd PRIVATE
   cls_journal_client 
   ceph-common
   pthread
+  cachestore
   ${CMAKE_DL_LIBS}
   ${EXTRALIBS})
 if(HAVE_UDEV)

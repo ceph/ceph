@@ -205,6 +205,12 @@ public:
     ASSERT_NE("", m_pool_name = create_pool());
   }
 
+  bool is_rbd_persistent_cache_enabled() {
+    std::string value;
+    EXPECT_EQ(0, _rados.conf_get("rbd_persistent_cache_enabled", value));
+    return value == "true";
+  }
+
   bool is_skip_partial_discard_enabled() {
     std::string value;
     EXPECT_EQ(0, _rados.conf_get("rbd_skip_partial_discard", value));
@@ -2993,6 +2999,7 @@ TEST_F(TestLibRBD, TestClone)
 TEST_F(TestLibRBD, TestClone2)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   rados_ioctx_t ioctx;
   rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx);
@@ -3822,6 +3829,7 @@ TYPED_TEST(DiffIterateTest, DiffIterate)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   {
     librbd::RBD rbd;
@@ -3899,6 +3907,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
+
   librbd::RBD rbd;
   librbd::Image image;
   int order = 0;
@@ -3972,6 +3982,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateStress)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -4046,6 +4057,8 @@ TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
   librados::IoCtx ioctx;
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
+
   librbd::RBD rbd;
   librbd::Image image;
   int order = 0;
@@ -4093,6 +4106,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateIgnoreParent)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;
@@ -4144,6 +4158,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateCallbackError)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   {
     librbd::RBD rbd;
@@ -4176,6 +4191,7 @@ TYPED_TEST(DiffIterateTest, DiffIterateParentDiscard)
   ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
 
   bool skip_discard = this->is_skip_partial_discard_enabled();
+  REQUIRE(!this->is_rbd_persistent_cache_enabled());
 
   librbd::RBD rbd;
   librbd::Image image;

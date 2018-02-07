@@ -200,6 +200,7 @@ struct TestMockIoImageRequest : public TestMockFixture {
     EXPECT_CALL(mock_image_ctx, flush(_))
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
+
 };
 
 TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
