@@ -19,11 +19,9 @@
 #include <map>
 #include <set>
 #include <vector>
+#include <experimental/filesystem>       // For path
 
-#include <boost/filesystem/path.hpp>       // For path
-#include <boost/filesystem/operations.hpp> // For exists, is_directory
-
-namespace bfs = boost::filesystem;
+namespace fs = std::experimental::filesystem;
 
 using socket_results = std::map<std::string, std::string>;
 using test_functions =
@@ -72,7 +70,7 @@ private:
   std::map<std::string, test_functions> tests;
 
   std::string prefix = "ceph-";
-  bfs::path socketdir = "/var/run/ceph";
+  fs::path socketdir = "/var/run/ceph";
 };
 
 #endif // CEPH_ADMIN_SOCKET_OUTPUT_H
