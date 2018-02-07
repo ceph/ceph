@@ -114,6 +114,8 @@ protected:
     set<mds_rank_t> warning_ack_waiting;
     set<mds_rank_t> notify_ack_waiting;
     map<inodeno_t,map<client_t,Capability::Import> > peer_imported;
+    set<CDir*> residual_dirs;
+
     MutationRef mut;
     // for freeze tree deadlock detection
     utime_t last_cum_auth_pins_change;
@@ -145,14 +147,15 @@ protected:
 
   void handle_export_discover_ack(MExportDirDiscoverAck *m);
   void export_frozen(CDir *dir, uint64_t tid);
+  void check_export_size(CDir *dir, export_state_t& stat, set<client_t> &client_set);
   void handle_export_prep_ack(MExportDirPrepAck *m);
   void export_sessions_flushed(CDir *dir, uint64_t tid);
   void export_go(CDir *dir);
   void export_go_synced(CDir *dir, uint64_t tid);
   void export_try_cancel(CDir *dir, bool notify_peer=true);
   void export_cancel_finish(CDir *dir);
-  void export_reverse(CDir *dir);
-  void export_notify_abort(CDir *dir, set<CDir*>& bounds);
+  void export_reverse(CDir *dir, export_state_t& stat);
+  void export_notify_abort(CDir *dir, export_state_t& stat, set<CDir*>& bounds);
   void handle_export_ack(MExportDirAck *m);
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(MExportDirNotifyAck *m);
@@ -175,7 +178,7 @@ protected:
 
   void import_reverse_discovering(dirfrag_t df);
   void import_reverse_discovered(dirfrag_t df, CInode *diri);
-  void import_reverse_prepping(CDir *dir);
+  void import_reverse_prepping(CDir *dir, import_state_t& stat);
   void import_remove_pins(CDir *dir, set<CDir*>& bounds);
   void import_reverse_unfreeze(CDir *dir);
   void import_reverse_final(CDir *dir);
@@ -295,7 +298,6 @@ public:
   }
   
   void get_export_lock_set(CDir *dir, set<SimpleLock*>& locks);
-  void get_export_client_set(CDir *dir, set<client_t> &client_set);
   void get_export_client_set(CInode *in, set<client_t> &client_set);
 
   void encode_export_inode(CInode *in, bufferlist& bl, 
