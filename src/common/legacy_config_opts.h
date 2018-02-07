@@ -812,6 +812,8 @@ OPTION(osd_fast_info, OPT_BOOL) // use fast info attr, if we can
 // determines whether PGLog::check() compares written out log to stored log
 OPTION(osd_debug_pg_log_writeout, OPT_BOOL)
 OPTION(osd_loop_before_reset_tphandle, OPT_U32) // Max number of loop before we reset thread-pool's handle
+OPTION(osd_max_snap_prune_intervals_per_epoch, OPT_U64) // Max number of snap intervals to report to mgr in pg_stat_t
+
 // default timeout while caling WaitInterval on an empty queue
 OPTION(threadpool_default_timeout, OPT_INT)
 // default wait time for an empty queue before pinging the hb timeout
@@ -1029,7 +1031,7 @@ OPTION(bluestore_cache_size_hdd, OPT_U64)
 OPTION(bluestore_cache_size_ssd, OPT_U64)
 OPTION(bluestore_cache_meta_ratio, OPT_DOUBLE)
 OPTION(bluestore_cache_kv_ratio, OPT_DOUBLE)
-OPTION(bluestore_cache_kv_max, OPT_U64) // limit the maximum amount of cache for the kv store
+OPTION(bluestore_cache_kv_max, OPT_INT) // limit the maximum amount of cache for the kv store
 OPTION(bluestore_kvbackend, OPT_STR)
 OPTION(bluestore_allocator, OPT_STR)     // stupid | bitmap
 OPTION(bluestore_freelist_blocks_per_key, OPT_INT)

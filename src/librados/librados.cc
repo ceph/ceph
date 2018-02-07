@@ -4269,8 +4269,6 @@ extern "C" int rados_getxattrs(rados_ioctx_t io, const char *oid,
   }
   it->i = it->attrset.begin();
 
-  librados::RadosXattrsIter **iret = (librados::RadosXattrsIter**)iter;
-  *iret = it;
   *iter = it;
   tracepoint(librados, rados_getxattrs_exit, 0, *iter);
   return 0;
@@ -4281,6 +4279,10 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
 {
   tracepoint(librados, rados_getxattrs_next_enter, iter);
   librados::RadosXattrsIter *it = static_cast<librados::RadosXattrsIter*>(iter);
+  if (it->val) {
+    free(it->val);
+    it->val = NULL;
+  }
   if (it->i == it->attrset.end()) {
     *name = NULL;
     *val = NULL;
@@ -4288,7 +4290,6 @@ extern "C" int rados_getxattrs_next(rados_xattrs_iter_t iter,
     tracepoint(librados, rados_getxattrs_next_exit, 0, NULL, NULL, 0);
     return 0;
   }
-  free(it->val);
   const std::string &s(it->i->first);
   *name = s.c_str();
   bufferlist &bl(it->i->second);

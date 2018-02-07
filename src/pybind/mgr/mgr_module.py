@@ -125,6 +125,7 @@ class OSDMapIncremental(ceph_module.BasePyOSDMapIncremental):
 
 class CRUSHMap(ceph_module.BasePyCRUSH):
     ITEM_NONE = 0x7fffffff
+    DEFAULT_CHOOSE_ARGS = '-1'
 
     def dump(self):
         return self._dump()
@@ -141,6 +142,15 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
     def get_take_weight_osd_map(self, root):
         uglymap = self._get_take_weight_osd_map(root)
         return { int(k): v for k, v in uglymap.get('weights', {}).iteritems() }
+
+    @staticmethod
+    def have_default_choose_args(dump):
+        return CRUSHMap.DEFAULT_CHOOSE_ARGS in dump.get('choose_args', {})
+
+    @staticmethod
+    def get_default_choose_args(dump):
+        return dump.get('choose_args').get(CRUSHMap.DEFAULT_CHOOSE_ARGS, [])
+
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     """

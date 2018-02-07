@@ -5494,9 +5494,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
   object_info_t& oi = obs.oi;
   const hobject_t& soid = oi.soid;
   bool skip_data_digest = osd->store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
-  auto osd_max_object_size = cct->_conf->get_val<uint64_t>(
-    "osd_max_object_size");
+    cct->_conf->osd_skip_data_digest;
+  const uint64_t osd_max_object_size = cct->_conf->osd_max_object_size;
 
   PGTransaction* t = ctx->op_t.get();
 
@@ -10005,12 +10004,7 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   if (is_primary()) {
     if (scrubber.active) {
       if (last_update_applied >= scrubber.subset_last_update) {
-        if (ops_blocked_by_scrub()) {
-          requeue_scrub(true);
-        } else {
-          requeue_scrub(false);
-        }
-
+	requeue_scrub(ops_blocked_by_scrub());
       }
     } else {
       assert(scrubber.start == scrubber.end);
@@ -11211,11 +11205,7 @@ void PrimaryLogPG::_applied_recovered_object(ObjectContextRef obc)
   // requeue an active chunky scrub waiting on recovery ops
   if (!deleting && active_pushes == 0
       && scrubber.is_chunky_scrub_active()) {
-    if (ops_blocked_by_scrub()) {
-      requeue_scrub(true);
-    } else {
-      requeue_scrub(false);
-    }
+    requeue_scrub(ops_blocked_by_scrub());
   }
 }
 

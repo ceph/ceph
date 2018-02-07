@@ -529,13 +529,9 @@ flushjournal_out:
 				   client_byte_throttler.get(),
 				   nullptr);
   ms_public->set_policy(entity_name_t::TYPE_MON,
-                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_OSDENC));
+                        Messenger::Policy::lossy_client(osd_required));
   ms_public->set_policy(entity_name_t::TYPE_MGR,
-                               Messenger::Policy::lossy_client(CEPH_FEATURE_UID |
-							       CEPH_FEATURE_PGID64 |
-							       CEPH_FEATURE_OSDENC));
+                        Messenger::Policy::lossy_client(osd_required));
 
   //try to poison pill any OSD connections on the wrong address
   ms_public->set_policy(entity_name_t::TYPE_OSD,
@@ -599,6 +595,10 @@ flushjournal_out:
   global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
 
+  // install signal handlers
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+
   TracepointProvider::initialize<osd_tracepoint_traits>(g_ceph_context);
   TracepointProvider::initialize<os_tracepoint_traits>(g_ceph_context);
 #ifdef WITH_OSD_INSTRUMENT_FUNCTIONS
@@ -658,9 +658,6 @@ flushjournal_out:
   cephd_preload_rados_classes(osd);
 #endif
 
-  // install signal handlers
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_osd_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_osd_signal);
 

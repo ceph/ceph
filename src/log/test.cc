@@ -59,7 +59,7 @@ TEST(Log, ReuseBad)
   {
     auto e = log.create_entry(l, 1);
     auto& out = e->get_ostream();
-    out << (const char*)nullptr;
+    out << (std::streambuf*)nullptr;
     EXPECT_TRUE(out.bad()); // writing nullptr to a stream sets its badbit
     log.submit_entry(e);
   }
