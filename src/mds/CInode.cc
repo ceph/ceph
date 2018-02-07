@@ -3951,6 +3951,12 @@ next:
                                        << "(" << path << "), rewriting it";
         in->_mark_dirty_parent(in->mdcache->mds->mdlog->get_current_segment(),
                            false);
+        // Flag that we repaired this BT so that it won't go into damagetable
+        results->backtrace.repaired = true;
+
+        // Flag that we did some repair work so that our repair operation
+        // can be flushed at end of scrub
+        in->scrub_infop->header->set_repaired();
       }
 
       // If the inode's number was free in the InoTable, fix that
@@ -4089,6 +4095,7 @@ next:
 	    dir->scrub_infop->pending_scrub_error) {
 	  dir->scrub_infop->pending_scrub_error = false;
 	  if (dir->scrub_infop->header->get_repair()) {
+            results->raw_stats.repaired = true;
 	    results->raw_stats.error_str
 	      << "dirfrag(" << p->first << ") has bad stats (will be fixed); ";
 	  } else {
@@ -4107,6 +4114,7 @@ next:
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones (will be fixed)";
 	  in->mdcache->repair_inode_stats(in);
+          results->raw_stats.repaired = true;
 	} else {
 	  results->raw_stats.error_str
 	    << "freshly-calculated rstats don't match existing ones";
@@ -4179,6 +4187,18 @@ void CInode::validated_data::dump(Formatter *f) const
     f->dump_int("return_code", rc);
   }
   f->close_section(); // results
+}
+
+bool CInode::validated_data::all_damage_repaired() const
+{
+  bool unrepaired =
+    (raw_stats.checked && !raw_stats.passed && !raw_stats.repaired)
+    ||
+    (backtrace.checked && !backtrace.passed && !backtrace.repaired)
+    ||
+    (inode.checked && !inode.passed && !inode.repaired);
+
+  return !unrepaired;
 }
 
 void CInode::dump(Formatter *f) const
@@ -4316,7 +4336,7 @@ void CInode::scrub_maybe_delete_info()
 }
 
 void CInode::scrub_initialize(CDentry *scrub_parent,
-			      const ScrubHeaderRefConst& header,
+			      ScrubHeaderRef& header,
 			      MDSInternalContextBase *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
@@ -4446,7 +4466,12 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    clog->info() << "scrub complete with tag '" << scrub_infop->header->get_tag() << "'";
+    if (scrub_infop->header->get_tag().empty()) {
+      clog->info() << "scrub complete";
+    } else {
+      clog->info() << "scrub complete with tag '"
+                   << scrub_infop->header->get_tag() << "'";
+    }
   }
 }
 
