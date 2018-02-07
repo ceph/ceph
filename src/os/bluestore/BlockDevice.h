@@ -32,6 +32,7 @@ struct IOContext {
 private:
   std::mutex lock;
   std::condition_variable cond;
+  int r = 0;
 
 public:
   CephContext* cct;
@@ -46,9 +47,10 @@ public:
   std::list<aio_t> running_aios;    ///< submitting or submitted
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};
+  bool allow_eio;
 
-  explicit IOContext(CephContext* cct, void *p)
-    : cct(cct), priv(p)
+  explicit IOContext(CephContext* cct, void *p, bool allow_eio = false)
+    : cct(cct), priv(p), allow_eio(allow_eio)
     {}
 
   // no copying
@@ -75,6 +77,14 @@ public:
     } else {
       --num_running;
     }
+  }
+
+  void set_return_value(int _r) {
+    r = _r;
+  }
+
+  int get_return_value() const {
+    return r;
   }
 };
 

@@ -3966,6 +3966,8 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_gc_merged, "bluestore_gc_merged",
 		    "Sum for extents that have been merged due to garbage "
 		    "collection");
+  b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
+                    "Read EIO errors propagated to high level callers");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -6452,6 +6454,9 @@ int BlueStore::read(
       length = o->onode.size;
 
     r = _do_read(c, o, offset, length, bl, op_flags);
+    if (r == -EIO) {
+      logger->inc(l_bluestore_read_eio);
+    }
   }
 
  out:
@@ -6609,7 +6614,7 @@ int BlueStore::_do_read(
                                     // measure the whole block below.
                                     // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
-  IOContext ioc(cct, NULL);
+  IOContext ioc(cct, NULL, true); // allow EIO
   for (auto& p : blobs2read) {
     BlobRef bptr = p.first;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
@@ -6636,7 +6641,14 @@ int BlueStore::_do_read(
             return r;
           return 0;
 	});
+      if (r < 0) {
+        derr << __func__ << " bdev-read failed: " << cpp_strerror(r) << dendl;
+        if (r == -EIO) {
+          // propagate EIO to caller
+          return r;
+        }
         assert(r == 0);
+      }
     } else {
       // read the pieces
       for (auto& reg : p.second) {
@@ -6674,7 +6686,15 @@ int BlueStore::_do_read(
               return r;
             return 0;
 	  });
-	assert(r == 0);
+        if (r < 0) {
+          derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
+               << dendl;
+          if (r == -EIO) {
+            // propagate EIO to caller
+            return r;
+          }
+          assert(r == 0);
+        }
 	assert(reg.bl.length() == r_len);
       }
     }
@@ -6683,6 +6703,11 @@ int BlueStore::_do_read(
     bdev->aio_submit(&ioc);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
+    r = ioc.get_return_value();
+    if (r < 0) {
+      assert(r == -EIO); // no other errors allowed
+      return -EIO;
+    }
   }
   logger->tinc(l_bluestore_read_wait_aio_lat, ceph_clock_now() - start);
 
