@@ -184,7 +184,7 @@ void BlueFS::add_block_extent(unsigned id, uint64_t offset, uint64_t length)
 }
 
 int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
-			   AllocExtentVector *extents)
+			   PExtentVector *extents)
 {
   std::unique_lock<std::mutex> l(lock);
   dout(1) << __func__ << " bdev " << id
@@ -1935,7 +1935,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   uint64_t left = round_up_to(len, min_alloc_size);
   int r = -ENOSPC;
   int64_t alloc_len = 0;
-  AllocExtentVector extents;
+  PExtentVector extents;
   
   if (alloc[id]) {
     r = alloc[id]->reserve(left);
