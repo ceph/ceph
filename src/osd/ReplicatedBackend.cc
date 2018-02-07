@@ -518,7 +518,6 @@ void ReplicatedBackend::op_applied(
   }
 
   op->waiting_for_applied.erase(get_parent()->whoami_shard());
-  parent->op_applied(op->v);
 
   if (op->waiting_for_applied.empty()) {
     op->on_applied->complete(0);
@@ -1148,7 +1147,6 @@ void ReplicatedBackend::repop_applied(RepModifyRef rm)
       rm->ackerosd, ack, get_osdmap()->get_epoch());
   }
 
-  parent->op_applied(version);
 }
 
 void ReplicatedBackend::repop_commit(RepModifyRef rm)

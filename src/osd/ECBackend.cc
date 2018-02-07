@@ -929,7 +929,6 @@ void ECBackend::handle_sub_write(
   tls.push_back(std::move(op.t));
   tls.push_back(std::move(localt));
   get_parent()->queue_transactions(tls, msg);
-  parent->op_applied(op.at_version);
 }
 
 void ECBackend::handle_sub_read(
