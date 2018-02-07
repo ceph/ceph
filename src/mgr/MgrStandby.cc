@@ -95,6 +95,9 @@ void MgrStandby::handle_conf_change(
 
 int MgrStandby::init()
 {
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+
   Mutex::Locker l(lock);
 
   // Initialize Messenger
@@ -436,8 +439,6 @@ int MgrStandby::main(vector<const char *> args)
 {
   // Enable signal handlers
   signal_mgr = this;
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
