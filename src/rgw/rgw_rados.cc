@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
@@ -3663,6 +3662,15 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  auto admin_socket = cct->get_admin_socket();
+  for (auto cmd : admin_commands) {
+    int r = admin_socket->unregister_command(cmd[0]);
+    if (r < 0) {
+      lderr(cct) << "ERROR: fail to unregister admin socket command (r=" << r
+                 << ")" << dendl;
+    }
+  }
+
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
@@ -3768,6 +3776,17 @@ void RGWRados::finalize()
 int RGWRados::init_rados()
 {
   int ret = 0;
+  auto admin_socket = cct->get_admin_socket();
+  for (auto cmd : admin_commands) {
+    int r = admin_socket->register_command(cmd[0], cmd[1], this,
+                                           cmd[2]);
+    if (r < 0) {
+      lderr(cct) << "ERROR: fail to register admin socket command (r=" << r
+                 << ")" << dendl;
+      return r;
+    }
+  }
+
   auto handles = std::vector<librados::Rados>{cct->_conf->rgw_num_rados_handles};
 
   for (auto& r : handles) {
@@ -13991,3 +14010,70 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
   }
 }
 
+bool RGWRados::call(std::string command, cmdmap_t& cmdmap, std::string format,
+                    bufferlist& out)
+{
+  if (command == "cache list"sv) {
+    std::optional<std::string> filter;
+    if (auto i = cmdmap.find("filter"); i != cmdmap.cend()) {
+      filter = boost::get<std::string>(i->second);
+    }
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
+    if (f) {
+      f->open_array_section("cache_entries");
+      call_list(filter, f.get());
+      f->close_section();
+      f->flush(out);
+      return true;
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache inspect"sv) {
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
+    if (f) {
+      const auto& target = boost::get<std::string>(cmdmap["target"]);
+      if (call_inspect(target, f.get())) {
+        f->flush(out);
+        return true;
+      } else {
+        out.append("Unable to find entry "s + target + ".\n");
+        return false;
+      }
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache erase"sv) {
+    const auto& target = boost::get<std::string>(cmdmap["target"]);
+    if (call_erase(target)) {
+      return true;
+    } else {
+      out.append("Unable to find entry "s + target + ".\n");
+      return false;
+    }
+  } else if (command == "cache zap"sv) {
+    call_zap();
+    return true;
+  }
+  return false;
+}
+
+void RGWRados::call_list(const std::optional<std::string>&,
+                         ceph::Formatter*)
+{
+  return;
+}
+
+bool RGWRados::call_inspect(const std::string&, Formatter*)
+{
+  return false;
+}
+
+bool RGWRados::call_erase(const std::string&) {
+  return false;
+}
+
+void RGWRados::call_zap() {
+  return;
+}
