@@ -9904,11 +9904,6 @@ void PrimaryLogPG::repop_all_committed(RepGather *repop)
   dout(10) << __func__ << ": repop tid " << repop->rep_tid << " all committed "
 	   << dendl;
   repop->all_committed = true;
-  if (repop->applies_with_commit) {
-    assert(!repop->all_applied);
-    repop->all_applied = true;
-  }
-
   if (!repop->rep_aborted) {
     if (repop->v != eversion_t()) {
       last_update_ondisk = repop->v;
@@ -9957,16 +9952,9 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
     m = static_cast<const MOSDOp *>(repop->op->get_req());
 
   if (m)
-    dout(10) << "eval_repop " << *repop
-	     << (repop->rep_done ? " DONE" : "")
-	     << dendl;
+    dout(10) << "eval_repop " << *repop << dendl;
   else
-    dout(10) << "eval_repop " << *repop << " (no op)"
-	     << (repop->rep_done ? " DONE" : "")
-	     << dendl;
-
-  if (repop->rep_done)
-    return;
+    dout(10) << "eval_repop " << *repop << " (no op)" << dendl;
 
   // ondisk?
   if (repop->all_committed) {
@@ -9989,24 +9977,6 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
       }
       waiting_for_ondisk.erase(it);
     }
-  }
-
-  // applied?
-  if (repop->all_applied) {
-    if (repop->applies_with_commit) {
-      assert(repop->on_applied.empty());
-    }
-    dout(10) << " applied: " << *repop << " " << dendl;
-    for (auto p = repop->on_applied.begin();
-	 p != repop->on_applied.end();
-	 repop->on_applied.erase(p++)) {
-      (*p)();
-    }
-  }
-
-  // done.
-  if (repop->all_applied && repop->all_committed) {
-    repop->rep_done = true;
 
     publish_stats_to_osd();
     calc_min_last_complete_ondisk();
@@ -10014,16 +9984,10 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
     dout(10) << " removing " << *repop << dendl;
     assert(!repop_queue.empty());
     dout(20) << "   q front is " << *repop_queue.front() << dendl; 
-    if (repop_queue.front() != repop) {
-      if (!repop->applies_with_commit) {
-	dout(0) << " removing " << *repop << dendl;
-	dout(0) << "   q front is " << *repop_queue.front() << dendl;
-	assert(repop_queue.front() == repop);
-      }
-    } else {
+    if (repop_queue.front() == repop) {
       RepGather *to_remove = nullptr;
       while (!repop_queue.empty() &&
-	     (to_remove = repop_queue.front())->rep_done) {
+	     (to_remove = repop_queue.front())->all_committed) {
 	repop_queue.pop_front();
 	for (auto p = to_remove->on_success.begin();
 	     p != to_remove->on_success.end();
@@ -10088,7 +10052,6 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     repop->rep_tid,
     ctx->reqid,
     ctx->op);
-  repop->all_applied = true;
 }
 
 PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
@@ -10101,7 +10064,7 @@ PrimaryLogPG::RepGather *PrimaryLogPG::new_repop(
     dout(10) << "new_repop rep_tid " << rep_tid << " (no op)" << dendl;
 
   RepGather *repop = new RepGather(
-    ctx, rep_tid, info.last_complete, false);
+    ctx, rep_tid, info.last_complete);
 
   repop->start = ceph_clock_now();
 
@@ -10127,7 +10090,6 @@ boost::intrusive_ptr<PrimaryLogPG::RepGather> PrimaryLogPG::new_repop(
     std::move(on_complete),
     osd->get_tid(),
     info.last_complete,
-    true,
     r);
   repop->v = version;
 
@@ -11453,7 +11415,6 @@ void PrimaryLogPG::apply_and_flush_repops(bool requeue)
     repop_queue.pop_front();
     dout(10) << " canceling repop tid " << repop->rep_tid << dendl;
     repop->rep_aborted = true;
-    repop->on_applied.clear();
     repop->on_committed.clear();
     repop->on_success.clear();
 
@@ -14140,12 +14101,6 @@ bool PrimaryLogPG::already_ack(eversion_t v)
       dout(20) << __func__ << ": " << **i
 	       << " (*i)->v past v" << dendl;
       break;
-    }
-    if (!(*i)->all_applied) {
-      dout(20) << __func__ << ": " << **i
-	       << " not applied, returning false"
-	       << dendl;
-      return false;
     }
   }
   dout(20) << __func__ << ": returning true" << dendl;

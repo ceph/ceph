@@ -701,11 +701,8 @@ public:
 
     ceph_tid_t rep_tid;
 
-    bool rep_aborted, rep_done;
-
-    bool all_applied;
+    bool rep_aborted;
     bool all_committed;
-    const bool applies_with_commit;
     
     utime_t   start;
     
@@ -713,26 +710,22 @@ public:
 
     ObcLockManager lock_manager;
 
-    list<std::function<void()>> on_applied;
     list<std::function<void()>> on_committed;
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
     
     RepGather(
       OpContext *c, ceph_tid_t rt,
-      eversion_t lc,
-      bool applies_with_commit) :
+      eversion_t lc) :
       hoid(c->obc->obs.oi.soid),
       op(c->op),
       queue_item(this),
       nref(1),
       rep_tid(rt), 
-      rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false),
-      applies_with_commit(applies_with_commit),
+      rep_aborted(false),
+      all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
-      on_applied(std::move(c->on_applied)),
       on_committed(std::move(c->on_committed)),
       on_success(std::move(c->on_success)),
       on_finish(std::move(c->on_finish)) {}
@@ -743,16 +736,14 @@ public:
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
       eversion_t lc,
-      bool applies_with_commit,
       int r) :
       op(o),
       queue_item(this),
       nref(1),
       r(r),
       rep_tid(rt),
-      rep_aborted(false), rep_done(false),
-      all_applied(false), all_committed(false),
-      applies_with_commit(applies_with_commit),
+      rep_aborted(false),
+      all_committed(false),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
       if (on_complete) {
@@ -767,7 +758,6 @@ public:
     void put() {
       assert(nref > 0);
       if (--nref == 0) {
-	assert(on_applied.empty());
 	delete this;
 	//generic_dout(0) << "deleting " << this << dendl;
       }
@@ -873,7 +863,6 @@ protected:
   xlist<RepGather*> repop_queue;
 
   friend class C_OSD_RepopCommit;
-  void repop_all_applied(RepGather *repop);
   void repop_all_committed(RepGather *repop);
   void eval_repop(RepGather*);
   void issue_repop(RepGather *repop, OpContext *ctx);
@@ -1874,7 +1863,6 @@ inline ostream& operator<<(ostream& out, const PrimaryLogPG::RepGather& repop)
       << " " << repop.v
       << " rep_tid=" << repop.rep_tid 
       << " committed?=" << repop.all_committed
-      << " applied?=" << repop.all_applied
       << " r=" << repop.r
       << ")";
   return out;
