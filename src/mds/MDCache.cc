@@ -5883,18 +5883,19 @@ void MDCache::open_snaprealms()
     gather.activate();
   } else {
     if (!reconnected_snaprealms.empty()) {
-      stringstream warn_str;
-      for (map<inodeno_t,map<client_t,snapid_t> >::iterator p = reconnected_snaprealms.begin();
-	   p != reconnected_snaprealms.end();
-	   ++p) {
-	warn_str << " unconnected snaprealm " << p->first << "\n";
-	for (map<client_t,snapid_t>::iterator q = p->second.begin();
-	     q != p->second.end();
-	     ++q)
-	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
+      dout(5) << "open_snaprealms has unconnected snaprealm:" << dendl;
+      for (auto& p : reconnected_snaprealms) {
+	stringstream warn_str;
+	warn_str << " " << p.first << " {";
+	bool first = true;
+	for (auto& q : p.second) {
+	  if (!first)
+	    warn_str << ", ";
+	  warn_str << "client." << q.first << "/" << q.second;
+	}
+	warn_str << "}";
+	dout(5) << warn_str.str() << dendl;
       }
-      mds->clog->warn() << "open_snaprealms has:";
-      mds->clog->warn(warn_str);
     }
     assert(rejoin_waiters.empty());
     assert(rejoin_pending_snaprealms.empty());
