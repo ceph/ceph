@@ -189,8 +189,9 @@ void EventCenter::set_owner()
   owner = pthread_self();
   ldout(cct, 2) << __func__ << " idx=" << idx << " owner=" << owner << dendl;
   if (!global_centers) {
-    cct->lookup_or_create_singleton_object<EventCenter::AssociatedCenters>(
-        global_centers, "AsyncMessenger::EventCenter::global_center::"+type);
+    global_centers = &cct->lookup_or_create_singleton_object<
+      EventCenter::AssociatedCenters>(
+	"AsyncMessenger::EventCenter::global_center::" + type);
     assert(global_centers);
     global_centers->centers[idx] = this;
     if (driver->need_wakeup()) {
