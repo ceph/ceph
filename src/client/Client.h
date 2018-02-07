@@ -835,6 +835,7 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
   int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
+  int64_t _preadv_pwritev_locked(Fh *f, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
   int _fsync(Fh *fh, bool syncdataonly);
@@ -1214,6 +1215,8 @@ public:
 
   int ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl);
   int ll_write(Fh *fh, loff_t off, loff_t len, const char *data);
+  int64_t ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
+  int64_t ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off);
   loff_t ll_lseek(Fh *fh, loff_t offset, int whence);
   int ll_flush(Fh *fh);
   int ll_fsync(Fh *fh, bool syncdataonly);
