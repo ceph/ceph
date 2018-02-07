@@ -5,7 +5,7 @@ import json
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, decorators, terminal
+from ceph_volume import process, decorators, terminal, conf
 from ceph_volume.util import system, disk
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.systemd import systemctl
@@ -94,6 +94,7 @@ class Activate(object):
         osd_id = osd_metadata.get('whoami', args.osd_id)
         osd_fsid = osd_metadata.get('fsid', args.osd_fsid)
         data_uuid = osd_metadata.get('data', {}).get('uuid')
+        conf.cluster = osd_metadata.get('cluster_name', 'ceph')
         if not data_uuid:
             raise RuntimeError(
                 'Unable to activate OSD %s - no "uuid" key found for data' % args.osd_id
