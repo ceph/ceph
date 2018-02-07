@@ -284,22 +284,22 @@ TEST(BitAllocator, test_zone_alloc)
 
   int64_t blk_size = 1024;
   PExtentVector extents;
-  std::unique_ptr<ExtentList> block_list = std::make_unique<ExtentList>(&extents, blk_size);
-  allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, block_list.get());
+  AllocatorExtentList block_list(&extents, blk_size);
+  allocated = zone->alloc_blocks_dis(zone->size() / 2, 1, 0, 0, &block_list);
   bmap_test_assert(allocated == zone->size() / 2);
 
 
   {
     int64_t blk_size = 1024;
     PExtentVector extents;
-    std::unique_ptr<ExtentList> block_list = std::make_unique<ExtentList>(&extents, blk_size);
+    AllocatorExtentList block_list(&extents, blk_size);
 
     zone = std::make_unique<BitMapZone>(g_ceph_context, total_blocks, 0);
     lock = zone->lock_excl_try();
     bmap_test_assert(lock);
     for (int i = 0; i < zone->size(); i += 4) {
-      block_list->reset();
-      allocated = zone->alloc_blocks_dis(1, 1, i, 0, block_list.get());
+      block_list.reset();
+      allocated = zone->alloc_blocks_dis(1, 1, i, 0, &block_list);
       bmap_test_assert(allocated == 1);
       EXPECT_EQ(extents[0].offset, (uint64_t) i * blk_size);
     }
@@ -319,24 +319,23 @@ TEST(BitAllocator, test_zone_alloc)
     for (int i = 1; i <= total_blocks - BmapEntry::size(); i = i << 1) {
       for (int64_t j = 0; j <= BmapEntry::size(); j = 1 << j) {
 	extents.clear();
-        ExtentList *block_list = new ExtentList(&extents, blk_size);
+        AllocatorExtentList block_list(&extents, blk_size);
 	zone = std::make_unique<BitMapZone>(g_ceph_context, total_blocks, 0);
         lock = zone->lock_excl_try();
         bmap_test_assert(lock);
 
-        block_list->reset();
+        block_list.reset();
         int64_t need_blks = (((total_blocks - j) / i) * i);
-        allocated = zone->alloc_blocks_dis(need_blks, i, j, 0, block_list);
+        allocated = zone->alloc_blocks_dis(need_blks, i, j, 0, &block_list);
         bmap_test_assert(allocated == need_blks);
         bmap_test_assert(extents[0].offset ==  (uint64_t) j);
-        delete block_list;
       }
     }
 
     //allocation in loop
     {
       extents.clear();
-      ExtentList *block_list = new ExtentList(&extents, blk_size);
+      AllocatorExtentList block_list(&extents, blk_size);
       zone = std::make_unique<BitMapZone>(g_ceph_context, total_blocks, 0);
       lock = zone->lock_excl_try();
 
@@ -344,17 +343,17 @@ TEST(BitAllocator, test_zone_alloc)
         for (int i = 1; i <= total_blocks; i = i << 1) {
           for (int j = 0; j < total_blocks; j +=i) {
             bmap_test_assert(lock);
-            block_list->reset();
+            block_list.reset();
             int64_t need_blks = i;
-            allocated = zone->alloc_blocks_dis(need_blks, i, 0, 0, block_list);
+            allocated = zone->alloc_blocks_dis(need_blks, i, 0, 0, &block_list);
             bmap_test_assert(allocated == need_blks);
             bmap_test_assert(extents[0].offset ==  (uint64_t) j);
-            block_list->reset();
+            block_list.reset();
           }
           {
-            allocated = zone->alloc_blocks_dis(1, 1, 0, 0, block_list);
+            allocated = zone->alloc_blocks_dis(1, 1, 0, 0, &block_list);
             bmap_test_assert(allocated == 0);
-            block_list->reset();
+            block_list.reset();
           }
          
           for (int j = 0; j < total_blocks; j +=i) {
@@ -362,34 +361,33 @@ TEST(BitAllocator, test_zone_alloc)
           }
         }
       }
-      delete block_list;
     }
 
     {
       extents.clear();
-      std::unique_ptr<ExtentList> block_list(new ExtentList(&extents, blk_size));
+      AllocatorExtentList block_list(&extents, blk_size);
       zone = std::make_unique<BitMapZone>(g_ceph_context, total_blocks, 0);
       lock = zone->lock_excl_try();
       bmap_test_assert(lock);
 
-      block_list->reset();
-      allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, block_list.get());
+      block_list.reset();
+      allocated = zone->alloc_blocks_dis(total_blocks + 1, total_blocks + 1, 0, 1024, &block_list);
       bmap_test_assert(allocated == 0);
 
-      block_list->reset();
-      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, block_list.get());
+      block_list.reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 1, 1024, &block_list);
       bmap_test_assert(allocated == 0);
 
-      block_list->reset();
-      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, block_list.get());
+      block_list.reset();
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks, 0, 0, &block_list);
       bmap_test_assert(allocated == total_blocks);
       bmap_test_assert(extents[0].offset == 0);
 
       zone->free_blocks(extents[0].offset, allocated);
         
       extents.clear();
-      block_list = std::make_unique<ExtentList>(&extents, blk_size, total_blocks / 4 * blk_size);
-      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, block_list.get());
+      block_list = AllocatorExtentList(&extents, blk_size, total_blocks / 4 * blk_size);
+      allocated = zone->alloc_blocks_dis(total_blocks, total_blocks / 4, 0, 0, &block_list);
       bmap_test_assert(allocated == total_blocks);
       for (int i = 0; i < 4; i++) {
 	bmap_test_assert(extents[i].offset == (uint64_t) i * (total_blocks / 4));
@@ -426,18 +424,18 @@ TEST(BitAllocator, test_bmap_alloc)
       for (int64_t j = 0; alloc_size <= total_blocks; j++) {
         int64_t blk_size = 1024;
         PExtentVector extents;
-        std::unique_ptr<ExtentList> block_list = std::make_unique<ExtentList>(&extents, blk_size, alloc_size);
+        AllocatorExtentList block_list(&extents, blk_size, alloc_size);
         for (int64_t i = 0; i < total_blocks; i += alloc_size) {
           bmap_test_assert(alloc->reserve_blocks(alloc_size) == true);
           allocated = alloc->alloc_blocks_dis_res(alloc_size, std::min(alloc_size, zone_size),
-                                                  0, block_list.get());
+                                                  0, &block_list);
           bmap_test_assert(alloc_size == allocated);
-          bmap_test_assert(block_list->get_extent_count() == 
+          bmap_test_assert(block_list.get_extent_count() == 
                            (alloc_size > zone_size? alloc_size / zone_size: 1));
           bmap_test_assert(extents[0].offset == (uint64_t) i * blk_size);
           bmap_test_assert((int64_t) extents[0].length == 
                            ((alloc_size > zone_size? zone_size: alloc_size) * blk_size));
-          block_list->reset();
+          block_list.reset();
         }
         for (int64_t i = 0; i < total_blocks; i += alloc_size) {
           alloc->free_blocks(i, alloc_size);
@@ -449,27 +447,26 @@ TEST(BitAllocator, test_bmap_alloc)
     int64_t blk_size = 1024;
     PExtentVector extents;
 
-    ExtentList *block_list = new ExtentList(&extents, blk_size);
+    AllocatorExtentList block_list(&extents, blk_size);
   
     ASSERT_EQ(alloc->reserve_blocks(alloc->size() / 2), true);
-    allocated = alloc->alloc_blocks_dis_res(alloc->size()/2, 1, 0, block_list);
+    allocated = alloc->alloc_blocks_dis_res(alloc->size()/2, 1, 0, &block_list);
     ASSERT_EQ(alloc->size()/2, allocated);
 
-    block_list->reset();
+    block_list.reset();
     ASSERT_EQ(alloc->reserve_blocks(1), true);
-    allocated = alloc->alloc_blocks_dis_res(1, 1, 0, block_list);
+    allocated = alloc->alloc_blocks_dis_res(1, 1, 0, &block_list);
     bmap_test_assert(allocated == 1);
 
     alloc->free_blocks(alloc->size()/2, 1);
 
-    block_list->reset();
+    block_list.reset();
     ASSERT_EQ(alloc->reserve_blocks(1), true);
-    allocated = alloc->alloc_blocks_dis_res(1, 1, 0, block_list);
+    allocated = alloc->alloc_blocks_dis_res(1, 1, 0, &block_list);
     bmap_test_assert(allocated == 1);
 
     bmap_test_assert((int64_t) extents[0].offset == alloc->size()/2 * blk_size);
 
-    delete block_list;
     delete alloc;
 
   }
@@ -490,10 +487,10 @@ bool alloc_extents_max_block(BitAllocator *alloc,
   int64_t count = 0;
   PExtentVector extents;
 
-  std::unique_ptr<ExtentList> block_list = std::make_unique<ExtentList>(&extents, blk_size, max_alloc);
+  AllocatorExtentList block_list(&extents, blk_size, max_alloc);
 
   EXPECT_EQ(alloc->reserve_blocks(total_alloc), true);
-  allocated = alloc->alloc_blocks_dis_res(total_alloc, blk_size, 0, block_list.get());
+  allocated = alloc->alloc_blocks_dis_res(total_alloc, blk_size, 0, &block_list);
   EXPECT_EQ(allocated, total_alloc);
 
   max_alloc = total_alloc > max_alloc? max_alloc: total_alloc;
@@ -534,16 +531,16 @@ do_work_dis(BitAllocator *alloc)
   int64_t num_blocks = alloc->size() / NUM_THREADS;
 
   PExtentVector extents;
-  std::unique_ptr<ExtentList> block_list = std::make_unique<ExtentList>(&extents, 4096);
+  AllocatorExtentList block_list(&extents, 4096);
 
   while (num_iters--) {
     alloc_assert(alloc->reserve_blocks(num_blocks));
-    alloced = alloc->alloc_blocks_dis_res(num_blocks, 1, 0, block_list.get());
+    alloced = alloc->alloc_blocks_dis_res(num_blocks, 1, 0, &block_list);
     alloc_assert(alloced == num_blocks);
 
-    alloc_assert(alloc->is_allocated_dis(block_list.get(), num_blocks));
-    alloc->free_blocks_dis(num_blocks, block_list.get());
-    block_list.get()->reset();
+    alloc_assert(alloc->is_allocated_dis(&block_list, num_blocks));
+    alloc->free_blocks_dis(num_blocks, &block_list);
+    block_list.reset();
   }
 }
 
