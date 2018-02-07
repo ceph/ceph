@@ -7536,6 +7536,11 @@ int PrimaryLogPG::_rollback_to(OpContext *ctx, ceph_osd_op& op)
     block_write_on_degraded_snap(missing_oid, ctx->op);
     return ret;
   }
+  if(is_degraded_or_backfilling_object(soid)) {
+    dout(10) << __func__ << " " << soid << " is a degraded or backfilling object" << dendl;
+    block_write_on_degraded_snap(soid, ctx->op);
+    return -EAGAIN;
+  }
   {
     ObjectContextRef promote_obc;
     cache_result_t tier_mode_result;
