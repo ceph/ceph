@@ -437,13 +437,7 @@ ceph_test() {
 		ceph_rgw_multiparser \
 		ceph_scratchtool \
 		ceph_scratchtoolpp \
-		ceph_smalliobench \
-		ceph_smalliobenchdumb \
-		ceph_smalliobenchfs \
-		ceph_smalliobenchrbd \
 		ceph_test_* \
-		ceph_tpbench \
-		ceph_xattr_bench \
 		ceph-coverage \
 		ceph-monstore-tool \
 		ceph-osdomap-tool \

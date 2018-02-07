@@ -17,6 +17,7 @@
 #include "include/Context.h"
 #include "include/buffer.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -117,101 +118,46 @@ public:
   virtual const PerfCounters* get_perf_counters() const = 0;
 
   /**
-   * a sequencer orders transactions
+   * a collection also orders transactions
    *
-   * Any transactions queued under a given sequencer will be applied in
-   * sequence.  Transactions queued under different sequencers may run
+   * Any transactions queued under a given collection will be applied in
+   * sequence.  Transactions queued under different collections may run
    * in parallel.
    *
-   * Clients of ObjectStore create and maintain their own Sequencer objects.
-   * When a list of transactions is queued the caller specifies a Sequencer to be used.
-   *
+   * ObjectStore users my get collection handles with open_collection() (or,
+   * for bootstrapping a new collection, create_new_collection()).
    */
+  struct CollectionImpl : public RefCountedObject {
+    const coll_t cid;
 
-  /**
-   * ABC for Sequencer implementation, private to the ObjectStore derived class.
-   * created in ...::queue_transaction(s)
-   */
-  struct Sequencer_impl : public RefCountedObject {
-    CephContext* cct;
+    CollectionImpl(const coll_t& c)
+      : RefCountedObject(NULL, 0),
+	cid(c) {}
 
+    /// wait for any queued transactions to apply
     // block until any previous transactions are visible.  specifically,
     // collection_list and collection_empty need to reflect prior operations.
     virtual void flush() = 0;
-
-    // called when we are done with the impl.  the impl may have a different
-    // (longer) lifecycle than the Sequencer.
-    virtual void discard() {}
 
     /**
      * Async flush_commit
      *
      * There are two cases:
-     * 1) sequencer is currently idle: the method returns true.  c is
+     * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
-     * 2) sequencer is not idle: the method returns false and c is
+     * 2) collection is not idle: the method returns false and c is
      *    called asyncronously with a value of 0 once all transactions
-     *    queued on this sequencer prior to the call have been applied
+     *    queued on this collection prior to the call have been applied
      *    and committed.
      */
-    virtual bool flush_commit(
-      Context *c ///< [in] context to call upon flush/commit
-      ) = 0; ///< @return true if idle, false otherwise
+    virtual bool flush_commit(Context *c) = 0;
 
-    Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
-    ~Sequencer_impl() override {}
-  };
-  typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
-
-  /**
-   * External (opaque) sequencer implementation
-   */
-  struct Sequencer {
-    string name;
-    spg_t shard_hint;
-    Sequencer_implRef p;
-
-    explicit Sequencer(string n)
-      : name(n), shard_hint(spg_t()), p(NULL) {
-    }
-    ~Sequencer() {
-      if (p)
-	p->discard();  // tell impl we are done with it
-    }
-
-    /// return a unique string identifier for this sequencer
-    const string& get_name() const {
-      return name;
-    }
-    /// wait for any queued transactions on this sequencer to apply
-    void flush() {
-      if (p)
-	p->flush();
-    }
-
-    /// @see Sequencer_impl::flush_commit()
-    bool flush_commit(Context *c) {
-      if (!p) {
-	return true;
-      } else {
-	return p->flush_commit(c);
-      }
-    }
-  };
-
-  struct CollectionImpl : public RefCountedObject {
-    virtual const coll_t &get_cid() = 0;
-    CollectionImpl() : RefCountedObject(NULL, 0) {}
-  };
-  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
-
-  struct CompatCollectionHandle : public CollectionImpl {
-    coll_t cid;
-    explicit CompatCollectionHandle(coll_t c) : cid(c) {}
-    const coll_t &get_cid() override {
+    const coll_t &get_cid() {
       return cid;
     }
   };
+  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+
 
   /*********************************
    *
@@ -489,8 +435,6 @@ public:
   private:
     TransactionData data;
 
-    void *osr {nullptr}; // NULL on replay
-
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32> object_index;
 
@@ -520,7 +464,6 @@ public:
     // override default move operations to reset default values
     Transaction(Transaction&& other) noexcept :
       data(std::move(other.data)),
-      osr(other.osr),
       coll_index(std::move(other.coll_index)),
       object_index(std::move(other.object_index)),
       coll_id(other.coll_id),
@@ -531,14 +474,12 @@ public:
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
     }
 
     Transaction& operator=(Transaction&& other) noexcept {
       data = std::move(other.data);
-      osr = other.osr;
       coll_index = std::move(other.coll_index);
       object_index = std::move(other.object_index);
       coll_id = other.coll_id;
@@ -549,7 +490,6 @@ public:
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
       return *this;
@@ -877,14 +817,6 @@ public:
     /// Number of operations in the transation
     int get_num_ops() {
       return data.ops;
-    }
-
-    void set_osr(void *s) {
-      osr = s;
-    }
-
-    void *get_osr() {
-      return osr;
     }
 
     /**
@@ -1484,24 +1416,24 @@ public:
   };
 
   // synchronous wrappers
-  unsigned apply_transaction(Sequencer *osr, Transaction&& t, Context *ondisk=0) {
+  unsigned apply_transaction(CollectionHandle& ch, Transaction&& t, Context *ondisk=0) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return apply_transactions(osr, tls, ondisk);
+    return apply_transactions(ch, tls, ondisk);
   }
-  unsigned apply_transactions(Sequencer *osr, vector<Transaction>& tls, Context *ondisk=0);
+  unsigned apply_transactions(CollectionHandle& ch, vector<Transaction>& tls, Context *ondisk=0);
 
-  int queue_transaction(Sequencer *osr, Transaction&& t, Context *onreadable, Context *ondisk=0,
+  int queue_transaction(CollectionHandle& ch, Transaction&& t, Context *onreadable, Context *ondisk=0,
 				Context *onreadable_sync=0,
 				TrackedOpRef op = TrackedOpRef(),
 				ThreadPool::TPHandle *handle = NULL) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
+    return queue_transactions(ch, tls, onreadable, ondisk, onreadable_sync,
 	                      op, handle);
   }
 
-  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
+  int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 Context *onreadable, Context *ondisk=0,
 			 Context *onreadable_sync=0,
 			 TrackedOpRef op = TrackedOpRef(),
@@ -1510,17 +1442,17 @@ public:
     tls.back().register_on_applied(onreadable);
     tls.back().register_on_commit(ondisk);
     tls.back().register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    return queue_transactions(ch, tls, op, handle);
   }
 
   virtual int queue_transactions(
-    Sequencer *osr, vector<Transaction>& tls,
+    CollectionHandle& ch, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
 
   int queue_transactions(
-    Sequencer *osr,
+    CollectionHandle& ch,
     vector<Transaction>& tls,
     Context *onreadable,
     Context *oncommit,
@@ -1529,7 +1461,7 @@ public:
     TrackedOpRef op);
 
   int queue_transaction(
-    Sequencer *osr,
+    CollectionHandle& ch,
     Transaction&& t,
     Context *onreadable,
     Context *oncommit,
@@ -1540,7 +1472,7 @@ public:
     vector<Transaction> tls;
     tls.push_back(std::move(t));
     return queue_transactions(
-      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
+      ch, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
   }
 
  public:
@@ -1686,9 +1618,16 @@ public:
    * Provide a trivial handle as a default to avoid converting legacy
    * implementations.
    */
-  virtual CollectionHandle open_collection(const coll_t &cid) {
-    return new CompatCollectionHandle(cid);
-  }
+  virtual CollectionHandle open_collection(const coll_t &cid) = 0;
+
+  /**
+   * get a collection handle for a soon-to-be-created collection
+   *
+   * This handle must be used by queue_transaction that includes a
+   * create_collection call in order to become valid.  It will become the
+   * reference to the created collection.
+   */
+  virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
 
   /**
@@ -1702,10 +1641,7 @@ public:
    * @param oid oid of object
    * @returns true if object exists, false otherwise
    */
-  virtual bool exists(const coll_t& cid, const ghobject_t& oid) = 0; // useful?
-  virtual bool exists(CollectionHandle& c, const ghobject_t& oid) {
-    return exists(c->get_cid(), oid);
-  }
+  virtual bool exists(CollectionHandle& c, const ghobject_t& oid) = 0;
   /**
    * set_collection_opts -- set pool options for a collectioninformation for an object
    *
@@ -1714,7 +1650,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) = 0;
 
   /**
@@ -1727,18 +1663,10 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) = 0; // struct stat?
-  virtual int stat(
     CollectionHandle &c,
     const ghobject_t& oid,
     struct stat *st,
-    bool allow_eio = false) {
-    return stat(c->get_cid(), oid, st, allow_eio);
-  }
-
+    bool allow_eio = false) = 0;
   /**
    * read -- read a byte range of data from an object
    *
@@ -1754,21 +1682,12 @@ public:
    * @returns number of bytes read on success, or negative error code on failure.
    */
    virtual int read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0) = 0;
-   virtual int read(
      CollectionHandle &c,
      const ghobject_t& oid,
      uint64_t offset,
      size_t len,
      bufferlist& bl,
-     uint32_t op_flags = 0) {
-     return read(c->get_cid(), oid, offset, len, bl, op_flags);
-   }
+     uint32_t op_flags = 0) = 0;
 
   /**
    * fiemap -- get extent map of data of an object
@@ -1786,19 +1705,10 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) = 0;
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len,
- 		     map<uint64_t, uint64_t>& destmap) = 0;
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) {
-     return fiemap(c->get_cid(), oid, offset, len, bl);
-   }
+		      uint64_t offset, size_t len, bufferlist& bl) = 0;
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
-     return fiemap(c->get_cid(), oid, offset, len, destmap);
-   }
+		      uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1809,12 +1719,8 @@ public:
    * @param value place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattr(const coll_t& cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value) = 0;
   virtual int getattr(CollectionHandle &c, const ghobject_t& oid,
-		      const char *name, bufferptr& value) {
-    return getattr(c->get_cid(), oid, name, value);
-  }
+		      const char *name, bufferptr& value) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1825,21 +1731,6 @@ public:
    * @param value place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferlist& value) {
-    bufferptr bp;
-    int r = getattr(cid, oid, name, bp);
-    if (bp.length())
-      value.push_back(bp);
-    return r;
-  }
-  int getattr(
-    coll_t cid, const ghobject_t& oid,
-    const string& name, bufferlist& value) {
-    bufferptr bp;
-    int r = getattr(cid, oid, name.c_str(), bp);
-    value.push_back(bp);
-    return r;
-  }
   int getattr(
     CollectionHandle &c, const ghobject_t& oid,
     const string& name, bufferlist& value) {
@@ -1857,12 +1748,8 @@ public:
    * @param aset place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(const coll_t& cid, const ghobject_t& oid,
-		       map<string,bufferptr>& aset) = 0;
   virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
-		       map<string,bufferptr>& aset) {
-    return getattrs(c->get_cid(), oid, aset);
-  }
+		       map<string,bufferptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1872,16 +1759,6 @@ public:
    * @param aset place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
-    map<string,bufferptr> bmap;
-    int r = getattrs(cid, oid, bmap);
-    for (map<string,bufferptr>::iterator i = bmap.begin();
-	i != bmap.end();
-	++i) {
-      aset[i->first].append(i->second);
-    }
-    return r;
-  }
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
 	       map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
@@ -1920,7 +1797,7 @@ public:
    * @param empty true if the specified collection is empty, false otherwise
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int collection_empty(const coll_t& c, bool *empty) = 0;
+  virtual int collection_empty(CollectionHandle& c, bool *empty) = 0;
 
   /**
    * return the number of significant bits of the coll_t::pgid.
@@ -1929,7 +1806,7 @@ public:
    * set.  A legacy backend may return -EAGAIN if the value is unavailable
    * (because we upgraded from an older version, e.g., FileStore).
    */
-  virtual int collection_bits(const coll_t& c) = 0;
+  virtual int collection_bits(CollectionHandle& c) = 0;
 
 
   /**
@@ -1944,96 +1821,51 @@ public:
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list(const coll_t& c,
-			      const ghobject_t& start, const ghobject_t& end,
-			      int max,
-			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
 			      int max,
-			      vector<ghobject_t> *ls, ghobject_t *next) {
-    return collection_list(c->get_cid(), start, end, max, ls, next);
-  }
+			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
 
   /// OMAP
   /// Get omap contents
   virtual int omap_get(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
-    ) = 0;
-  virtual int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
-    ) {
-    return omap_get(c->get_cid(), oid, header, out);
-  }
+    ) = 0;
 
   /// Get omap header
   virtual int omap_get_header(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
-    ) = 0;
-  virtual int omap_get_header(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
-    ) {
-    return omap_get_header(c->get_cid(), oid, header, allow_eio);
-  }
+    ) = 0;
 
   /// Get keys defined on oid
-  virtual int omap_get_keys(
-    const coll_t& c,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
-    ) = 0;
   virtual int omap_get_keys(
     CollectionHandle &c,   ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
-    ) {
-    return omap_get_keys(c->get_cid(), oid, keys);
-  }
+    ) = 0;
 
   /// Get key values
-  virtual int omap_get_values(
-    const coll_t& c,                    ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
-    ) = 0;
   virtual int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
-    ) {
-    return omap_get_values(c->get_cid(), oid, keys, out);
-  }
+    ) = 0;
 
   /// Filters keys into out which are defined on oid
-  virtual int omap_check_keys(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
-    ) = 0;
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
-    ) {
-    return omap_check_keys(c->get_cid(), oid, keys, out);
-  }
+    ) = 0;
 
   /**
    * Returns an object map iterator
@@ -2045,15 +1877,9 @@ public:
    * @return iterator, null on error
    */
   virtual ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) = 0;
-  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
-    ) {
-    return get_omap_iterator(c->get_cid(), oid);
-  }
+    ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
@@ -2086,14 +1912,6 @@ public:
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
 
-static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
-  s->get();
-}
-static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
-  s->put();
-}
-
-ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx);
 
 #endif

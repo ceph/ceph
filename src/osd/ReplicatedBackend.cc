@@ -717,7 +717,7 @@ int ReplicatedBackend::be_deep_scrub(
 
     bufferlist hdrbl;
     r = store->omap_get_header(
-      coll,
+      ch,
       ghobject_t(
 	poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
       &hdrbl, true);
@@ -736,7 +736,7 @@ int ReplicatedBackend::be_deep_scrub(
 
   // omap
   ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(
-    coll,
+    ch,
     ghobject_t(
       poid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard));
   assert(iter);
@@ -1919,7 +1919,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
 
   eversion_t v  = recovery_info.version;
   if (progress.first) {
-    int r = store->omap_get_header(coll, ghobject_t(recovery_info.soid), &out_op->omap_header);
+    int r = store->omap_get_header(ch, ghobject_t(recovery_info.soid), &out_op->omap_header);
     if(r < 0) {
       dout(1) << __func__ << " get omap header failed: " << cpp_strerror(-r) << dendl; 
       return r;
@@ -1962,7 +1962,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
   uint64_t available = cct->_conf->osd_recovery_max_chunk;
   if (!progress.omap_complete) {
     ObjectMap::ObjectMapIterator iter =
-      store->get_omap_iterator(coll,
+      store->get_omap_iterator(ch,
 			       ghobject_t(recovery_info.soid));
     assert(iter);
     for (iter->lower_bound(progress.omap_recovered_to);

@@ -29,7 +29,7 @@
 
 class OSDriver : public MapCacher::StoreDriver<std::string, bufferlist> {
   ObjectStore *os;
-  coll_t cid;
+  ObjectStore::CollectionHandle ch;
   ghobject_t hoid;
 
 public:
@@ -60,11 +60,14 @@ public:
 
   OSTransaction get_transaction(
     ObjectStore::Transaction *t) {
-    return OSTransaction(cid, hoid, t);
+    return OSTransaction(ch->cid, hoid, t);
   }
 
-  OSDriver(ObjectStore *os, coll_t cid, const ghobject_t &hoid) :
-    os(os), cid(cid), hoid(hoid) {}
+  OSDriver(ObjectStore *os, const coll_t& cid, const ghobject_t &hoid) :
+    os(os),
+    hoid(hoid) {
+    ch = os->open_collection(cid);
+  }
   int get_keys(
     const std::set<std::string> &keys,
     std::map<std::string, bufferlist> *out) override;

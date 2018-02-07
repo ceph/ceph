@@ -560,13 +560,25 @@ int KStore::OnodeHashLRU::trim(int max)
 #undef dout_prefix
 #define dout_prefix *_dout << "kstore(" << store->path << ").collection(" << cid << ") "
 
-KStore::Collection::Collection(KStore *ns, coll_t c)
-  : store(ns),
-    cid(c),
+KStore::Collection::Collection(KStore *ns, coll_t cid)
+  : CollectionImpl(cid),
+    store(ns),
     lock("KStore::Collection::lock", true, false),
+    osr(new OpSequencer()),
     onode_map(store->cct)
 {
 }
+
+void KStore::Collection::flush()
+{
+  osr->flush();
+}
+
+bool KStore::Collection::flush_commit(Context *c)
+{
+  return osr->flush_commit(c);
+}
+
 
 KStore::OnodeRef KStore::Collection::get_onode(
   const ghobject_t& oid,
@@ -1071,6 +1083,20 @@ int KStore::statfs(struct store_statfs_t* buf)
   return db->get_statfs(buf);
 }
 
+
+ObjectStore::CollectionHandle KStore::open_collection(const coll_t& cid)
+{
+  return _get_collection(cid);
+}
+
+ObjectStore::CollectionHandle KStore::create_new_collection(const coll_t& cid)
+{
+  auto *c = new Collection(this, cid);
+  RWLock::WLocker l(coll_lock);
+  new_coll_map[cid] = c;
+  return c;
+}
+
 // ---------------
 // cache
 
@@ -1122,12 +1148,10 @@ void KStore::_reap_collections()
 // ---------------
 // read operations
 
-bool KStore::exists(const coll_t& cid, const ghobject_t& oid)
+bool KStore::exists(CollectionHandle& ch, const ghobject_t& oid)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return false;
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists)
@@ -1136,15 +1160,13 @@ bool KStore::exists(const coll_t& cid, const ghobject_t& oid)
 }
 
 int KStore::stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
+  CollectionHandle& ch,
+  const ghobject_t& oid,
+  struct stat *st,
+  bool allow_eio)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists)
@@ -1157,27 +1179,25 @@ int KStore::stat(
 }
 
 int KStore::set_collection_opts(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const pool_opts_t& opts)
 {
   return -EOPNOTSUPP;
 }
 
 int KStore::read(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
   bufferlist& bl,
   uint32_t op_flags)
 {
-  dout(15) << __func__ << " " << cid << " " << oid
+  dout(15) << __func__ << " " << ch->cid << " " << oid
 	   << " " << offset << "~" << length
 	   << dendl;
   bl.clear();
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
 
   int r;
@@ -1194,7 +1214,7 @@ int KStore::read(
   r = _do_read(o, offset, length, bl, op_flags);
 
  out:
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(10) << __func__ << " " << ch->cid << " " << oid
 	   << " " << offset << "~" << length
 	   << " = " << r << dendl;
   return r;
@@ -1272,29 +1292,28 @@ int KStore::_do_read(
 }
 
 int KStore::fiemap(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
   bufferlist& bl)
 {
   map<uint64_t, uint64_t> m;
-  int r = fiemap(cid, oid, offset, len, m);
+  int r = fiemap(ch, oid, offset, len, m);
   if (r >= 0) {
     encode(m, bl);
   }
-
   return r;
 }
 
 int KStore::fiemap(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   uint64_t offset,
   size_t len,
   map<uint64_t, uint64_t>& destmap)
 {
-  CollectionRef c = _get_collection(cid);
+  CollectionRef c = static_cast<Collection*>(ch.get());
   if (!c)
     return -ENOENT;
   RWLock::RLocker l(c->lock);
@@ -1324,15 +1343,13 @@ int KStore::fiemap(
 }
 
 int KStore::getattr(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   const char *name,
   bufferptr& value)
 {
-  dout(15) << __func__ << " " << cid << " " << oid << " " << name << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " " << oid << " " << name << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r;
   string k(name);
@@ -1350,20 +1367,18 @@ int KStore::getattr(
   value = o->onode.attrs[k];
   r = 0;
  out:
-  dout(10) << __func__ << " " << cid << " " << oid << " " << name
+  dout(10) << __func__ << " " << ch->cid << " " << oid << " " << name
 	   << " = " << r << dendl;
   return r;
 }
 
 int KStore::getattrs(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const ghobject_t& oid,
   map<string,bufferptr>& aset)
 {
-  dout(15) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r;
 
@@ -1375,7 +1390,7 @@ int KStore::getattrs(
   aset = o->onode.attrs;
   r = 0;
  out:
-  dout(10) << __func__ << " " << cid << " " << oid
+  dout(10) << __func__ << " " << ch->cid << " " << oid
 	   << " = " << r << dendl;
   return r;
 }
@@ -1396,12 +1411,12 @@ bool KStore::collection_exists(const coll_t& c)
   return coll_map.count(c);
 }
 
-int KStore::collection_empty(const coll_t& cid, bool *empty)
+int KStore::collection_empty(CollectionHandle& ch, bool *empty)
 {
-  dout(15) << __func__ << " " << cid << dendl;
+  dout(15) << __func__ << " " << ch->cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), 1,
+  int r = collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1,
 			  &ls, &next);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
@@ -1409,30 +1424,17 @@ int KStore::collection_empty(const coll_t& cid, bool *empty)
     return r;
   }
   *empty = ls.empty();
-  dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
+  dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
   return 0;
 }
 
-int KStore::collection_bits(const coll_t& cid)
+int KStore::collection_bits(CollectionHandle& ch)
 {
-  dout(15) << __func__ << " " << cid << dendl;
-  CollectionHandle ch = _get_collection(cid);
-  if (!ch)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
-  dout(10) << __func__ << " " << cid << " = " << c->cnode.bits << dendl;
+  dout(10) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
   return c->cnode.bits;
-}
-
-int KStore::collection_list(
-  const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return collection_list(c, start, end, max, ls, pnext);
 }
 
 int KStore::collection_list(
@@ -1441,6 +1443,7 @@ int KStore::collection_list(
 
 {
   Collection *c = static_cast<Collection*>(c_.get());
+  c->flush();
   dout(15) << __func__ << " " << c->cid
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;
@@ -1646,16 +1649,14 @@ bufferlist KStore::OmapIteratorImpl::value()
 }
 
 int KStore::omap_get(
-  const coll_t& cid,                ///< [in] Collection containing oid
+  CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   map<string, bufferlist> *out /// < [out] Key to value map
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -1691,21 +1692,19 @@ int KStore::omap_get(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
   return r;
 }
 
 int KStore::omap_get_header(
-  const coll_t& cid,                ///< [in] Collection containing oid
+  CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   bufferlist *header,      ///< [out] omap header
   bool allow_eio ///< [in] don't assert on eio
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -1726,20 +1725,18 @@ int KStore::omap_get_header(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
   return r;
 }
 
 int KStore::omap_get_keys(
-  const coll_t& cid,              ///< [in] Collection containing oid
+  CollectionHandle& ch,              ///< [in] Collection containing oid
   const ghobject_t &oid, ///< [in] Object containing omap
   set<string> *keys      ///< [out] Keys defined on oid
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -1771,21 +1768,19 @@ int KStore::omap_get_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
   return r;
 }
 
 int KStore::omap_get_values(
-  const coll_t& cid,                    ///< [in] Collection containing oid
+  CollectionHandle& ch,                    ///< [in] Collection containing oid
   const ghobject_t &oid,       ///< [in] Object containing omap
   const set<string> &keys,     ///< [in] Keys to get
   map<string, bufferlist> *out ///< [out] Returned keys and values
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -1807,21 +1802,19 @@ int KStore::omap_get_values(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
   return r;
 }
 
 int KStore::omap_check_keys(
-  const coll_t& cid,                ///< [in] Collection containing oid
+  CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
   const set<string> &keys, ///< [in] Keys to check
   set<string> *out         ///< [out] Subset of keys defined on oid
   )
 {
-  dout(15) << __func__ << " " << cid << " oid " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << " oid " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
@@ -1846,22 +1839,18 @@ int KStore::omap_check_keys(
     }
   }
  out:
-  dout(10) << __func__ << " " << cid << " oid " << oid << " = " << r << dendl;
+  dout(10) << __func__ << " " << ch->cid << " oid " << oid << " = " << r << dendl;
   return r;
 }
 
 ObjectMap::ObjectMapIterator KStore::get_omap_iterator(
-  const coll_t& cid,              ///< [in] collection
+  CollectionHandle& ch,              ///< [in] collection
   const ghobject_t &oid  ///< [in] object
   )
 {
 
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c) {
-    dout(10) << __func__ << " " << cid << "doesn't exist" <<dendl;
-    return ObjectMap::ObjectMapIterator();
-  }
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
@@ -2133,10 +2122,10 @@ void KStore::_kv_sync_thread()
 // transactions
 
 int KStore::queue_transactions(
-    Sequencer *posr,
-    vector<Transaction>& tls,
-    TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
   Context *onreadable;
   Context *ondisk;
@@ -2145,17 +2134,9 @@ int KStore::queue_transactions(
     tls, &onreadable, &ondisk, &onreadable_sync);
 
   // set up the sequencer
-  OpSequencer *osr;
-  assert(posr);
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
-  } else {
-    osr = new OpSequencer(cct);
-    osr->parent = posr;
-    posr->p = osr;
-    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
-  }
+  Collection *c = static_cast<Collection*>(ch.get());
+  OpSequencer *osr = c->osr.get();
+  dout(10) << __func__ << " ch " << ch.get() << " " << c->cid << dendl;
 
   // prepare
   TransContext *txc = _txc_create(osr);
@@ -2164,7 +2145,6 @@ int KStore::queue_transactions(
   txc->oncommit = ondisk;
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
-    (*p).set_osr(osr);
     txc->ops += (*p).get_num_ops();
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
@@ -3275,9 +3255,13 @@ int KStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    c->reset(new Collection(this, cid));
+    auto p = new_coll_map.find(cid);
+    assert(p != new_coll_map.end());
+    *c = p->second;
+    assert((*c)->cid == cid);
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
+    new_coll_map.erase(p);
   }
   encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);

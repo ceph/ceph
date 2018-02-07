@@ -69,18 +69,20 @@ int main(int argc, char **argv) {
   boost::scoped_ptr<ObjectStore> store(new FileStore(cct.get(), store_path,
 						     store_dev));
 
-  ObjectStore::Sequencer osr(__func__);
   coll_t coll(spg_t(pg_t(0,12),shard_id_t::NO_SHARD));
+  ObjectStore::CollectionHandle ch;
 
   if (start_new) {
     std::cerr << "mkfs" << std::endl;
     assert(!store->mkfs());
     ObjectStore::Transaction t;
     assert(!store->mount());
+    ch = store->create_new_collection(coll);
     t.create_collection(coll, 0);
-    store->apply_transaction(&osr, std::move(t));
+    store->apply_transaction(ch, std::move(t));
   } else {
     assert(!store->mount());
+    ch = store->open_collection(coll);
   }
 
   FileStoreTracker tracker(store.get(), db.get());

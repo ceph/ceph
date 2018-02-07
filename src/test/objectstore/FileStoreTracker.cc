@@ -73,10 +73,10 @@ void FileStoreTracker::submit_transaction(Transaction &t)
        ++i) {
     (**i)(this, &out);
   }
-  store->queue_transaction(
-    0, std::move(*out.t),
-    new OnApplied(this, in_flight),
-    new OnCommitted(this, in_flight));
+  out.t->register_on_applied(new OnApplied(this, in_flight));
+  out.t->register_on_commit(new OnCommitted(this, in_flight));
+  auto ch = store->open_collection(coll_t());
+  store->queue_transaction(ch, std::move(*out.t), nullptr);
   delete out.t;
 }
 
@@ -278,7 +278,8 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
   pair<uint64_t, uint64_t> valid_reads = get_valid_reads(make_pair(coll, obj));
   std::cerr << "valid_reads is " << valid_reads << std::endl;
   bufferlist contents;
-  int r = store->read(coll_t(coll),
+  auto ch = store->open_collection(coll_t(coll));
+  int r = store->read(ch,
 		      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))),
 		      0,
 		      2*SIZE,
