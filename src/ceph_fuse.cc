@@ -145,6 +145,9 @@ int main(int argc, const char **argv, const char *envp[]) {
 
   {
     common_init_finish(g_ceph_context);
+   
+    init_async_signal_handler();
+    register_async_signal_handler(SIGHUP, sighup_handler);
 
     //cout << "child, mounting" << std::endl;
     class RemountTest : public Thread {
@@ -239,9 +242,6 @@ int main(int argc, const char **argv, const char *envp[]) {
       cerr << "ceph-fuse[" << getpid() << "]: ceph messenger failed with " << cpp_strerror(-r) << std::endl;
       goto out_messenger_start_failed;
     }
-
-    init_async_signal_handler();
-    register_async_signal_handler(SIGHUP, sighup_handler);
 
     // start client
     r = client->init();
