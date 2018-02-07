@@ -29,7 +29,12 @@ struct ImageCtx;
 
 namespace cache {
 
-static const uint32_t BLOCK_SIZE = 512;
+static const uint32_t MIN_WRITE_SIZE = 1;
+static const uint32_t BLOCK_SIZE = MIN_WRITE_SIZE;
+static const uint32_t MIN_MIN_WRITE_ALLOC_SIZE = 512;
+static const uint32_t MIN_WRITE_ALLOC_SIZE =
+  (MIN_WRITE_SIZE > MIN_MIN_WRITE_ALLOC_SIZE ?
+   MIN_WRITE_SIZE : MIN_MIN_WRITE_ALLOC_SIZE);
 
 BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes);
 BlockExtent block_extent(ImageCache::Extent& image_extent);
@@ -111,21 +116,26 @@ public:
   uint8_t *pmem_buffer;
   uint32_t log_entry_index;
   uint32_t referring_map_entries;
+  uint32_t reader_count;
   /* TODO: occlusion by subsequent writes */
   /* TODO: flush state: portions flushed, in-progress flushes */
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : ram_entry(image_offset_bytes, write_bytes), pmem_entry(NULL), pmem_buffer(NULL),
-      log_entry_index(0), referring_map_entries(0) {
+      log_entry_index(0), referring_map_entries(0), reader_count(0) {
   }
   WriteLogEntry() {} 
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
   BlockExtent block_extent() { return ram_entry.block_extent(); }
+  void add_reader();
+  void remove_reader();
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogEntry &entry) {
     os << "ram_entry=[" << entry.ram_entry << "], "
        << "log_entry_index=" << entry.log_entry_index << ", "
-       << "pmem_entry=" << (void*)entry.pmem_entry;
+       << "pmem_entry=" << (void*)entry.pmem_entry << ", "
+       << "referring_map_entries=" << entry.referring_map_entries << ", "
+       << "reader_count=" << entry.reader_count;
     return os;
   };
 };

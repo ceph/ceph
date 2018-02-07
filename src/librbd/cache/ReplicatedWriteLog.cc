@@ -4,6 +4,7 @@
 #include "ReplicatedWriteLog.h"
 #include "include/buffer.h"
 #include "include/Context.h"
+#include "common/deleter.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
@@ -29,8 +30,8 @@ using namespace librbd::cache::file;
 
 BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes)
 {
-  return BlockExtent(offset_bytes / BLOCK_SIZE,
-		     ((offset_bytes + length_bytes) / BLOCK_SIZE) - 1);
+  return BlockExtent(offset_bytes / MIN_WRITE_SIZE,
+		     ((offset_bytes + length_bytes) / MIN_WRITE_SIZE) - 1);
 }
 
 BlockExtent block_extent(ImageCache::Extent& image_extent)
@@ -40,8 +41,8 @@ BlockExtent block_extent(ImageCache::Extent& image_extent)
 
 ImageCache::Extent image_extent(BlockExtent block_extent)
 {
-  return ImageCache::Extent(block_extent.block_start * BLOCK_SIZE,
-			    (block_extent.block_end - block_extent.block_start + 1) * BLOCK_SIZE);
+  return ImageCache::Extent(block_extent.block_start * MIN_WRITE_SIZE,
+			    (block_extent.block_end - block_extent.block_start + 1) * MIN_WRITE_SIZE);
 }
 
 namespace rwl {
@@ -87,6 +88,9 @@ WriteLogOperationSet::WriteLogOperationSet(CephContext *cct, SyncPoint *sync_poi
 }
 
 WriteLogOperationSet::~WriteLogOperationSet() { }
+
+void WriteLogEntry::add_reader() { reader_count++; }
+void WriteLogEntry::remove_reader() { reader_count--; }
 
 /**
  * Add a write log entry to the map. Subsequent queries for blocks
@@ -216,6 +220,7 @@ void WriteLogMap::remove_entry_locked(WriteLogEntry *log_entry) {
 void WriteLogMap::add_map_entry_locked(WriteLogMapEntry &map_entry)
 {
   m_block_to_log_entry_map.insert(map_entry);
+  map_entry.log_entry->referring_map_entries++;
 }
 
 void WriteLogMap::remove_map_entry_locked(WriteLogMapEntry &map_entry)
@@ -296,7 +301,7 @@ WriteLogMapEntries WriteLogMap::find_map_entries_locked(BlockExtent &block_exten
 
 bool is_block_aligned(const ImageCache::Extents &image_extents) {
   for (auto &extent : image_extents) {
-    if (extent.first % BLOCK_SIZE != 0 || extent.second % BLOCK_SIZE != 0) {
+    if (extent.first % MIN_WRITE_SIZE != 0 || extent.second % MIN_WRITE_SIZE != 0) {
       return false;
     }
   }
@@ -430,19 +435,31 @@ public:
 	last_image_byte = extent.first + extent.second;
       }
     }
-    first_block = first_image_byte / BLOCK_SIZE;
-    last_block = last_image_byte / BLOCK_SIZE;
+    first_block = first_image_byte / MIN_WRITE_SIZE;
+    last_block = last_image_byte / MIN_WRITE_SIZE;
   }
 };
+
+struct ImageExtentBuf : public ImageCache::Extent {
+public:
+  buffer::raw *m_buf;
+  ImageExtentBuf(ImageCache::Extent extent, buffer::raw *buf)
+    : ImageCache::Extent(extent), m_buf(buf) {}
+  ImageExtentBuf(ImageCache::Extent extent)
+    : ImageExtentBuf(extent, NULL) {}
+};
+typedef std::vector<ImageExtentBuf> ImageExtentBufs;
 
 struct C_ReadRequest : public Context {
   CephContext *m_cct;
   Context *m_on_finish;
-  ImageCache::Extents m_miss_extents;
+  ImageCache::Extents m_miss_extents; // move back to caller
+  ImageExtentBufs m_read_extents;
   bufferlist m_miss_bl;
+  bufferlist *m_out_bl;
   
-  C_ReadRequest(CephContext *cct, Context *on_finish)
-    : m_cct(cct), m_on_finish(on_finish) {
+  C_ReadRequest(CephContext *cct, bufferlist *out_bl, Context *on_finish)
+    : m_cct(cct), m_on_finish(on_finish), m_out_bl(out_bl) {
     ldout(m_cct, 99) << this << dendl;
   }
   ~C_ReadRequest() {
@@ -451,23 +468,50 @@ struct C_ReadRequest : public Context {
 
   virtual void finish(int r) override {
     ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
+    if (r >= 0) {
+      /*
+       * At this point the miss read has completed. We'll iterate through
+       * m_read_extents and produce *m_out_bl by assembling pieces of m_miss_bl
+       * and the individual hit extent bufs in the read extents that represent
+       * hits.
+       */
+      uint64_t miss_bl_offset = 0;
+      for (auto &extent : m_read_extents) {
+	if (NULL == extent.m_buf) {
+	  /* This was a miss. */
+	  bufferlist miss_extent_bl;
+	  miss_extent_bl.substr_of(m_miss_bl, miss_bl_offset, extent.second);
+	  /* Add this read miss bullerlist to the output bufferlist */
+	  m_out_bl->claim_append(miss_extent_bl);
+	  /* Consume these bytes in the read miss bufferlist */
+	  miss_bl_offset += extent.second;
+	} else {
+	  /* This was a hit */
+	  bufferlist hit_extent_bl;
+	  hit_extent_bl.append(extent.m_buf);
+	  m_out_bl->claim_append(hit_extent_bl);
+	}
+      }
+    }
+    ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << " bl=" << *m_out_bl << dendl;
     m_on_finish->complete(r);
   }
   
   virtual const char *get_name() const {
     return "C_ReadRequest";
   }
-};
-  
+}; 
+ 
 template <typename I>
 void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
                                  int fadvise_flags, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  C_ReadRequest *read_ctx = new C_ReadRequest(cct, on_finish);
-  uint64_t buffer_offset = 0;
+  C_ReadRequest *read_ctx = new C_ReadRequest(cct, bl, on_finish);
   ldout(cct, 5) << "image_extents=" << image_extents << ", "
-		<< "bl=" << *bl << ", "
+		<< "bl=" << bl << ", "
 		<< "on_finish=" << on_finish << dendl;
+
+  bl->clear();
 
   // TODO: Handle unaligned IO.
   if (!is_block_aligned(image_extents)) {
@@ -484,12 +528,19 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   /*
    * The strategy here is to look up all the WriteLogMapEntries that overlap
    * this read, and iterate through those to separate this read into hits and
-   * misses. For hits we copy the data here from the RWL entry in pmem to the
-   * appropriate position in the bufferlist. A new Extents object is produced
-   * here with Extents for each miss region. At the same time a new bufferlist
-   * is constructed containing the regions of the input bufferlist that
-   * correspond to the miss Extents. The miss Extents and bufferlist is then
-   * passed on to the read cache below RWL.
+   * misses. A new Extents object is produced here with Extents for each miss
+   * region. The miss Extents is then passed on to the read cache below RWL. We
+   * also produce an ImageExtentBufs for all the extents (hit or miss) in this
+   * read. When the read from the lower cache layer completes, we iterate
+   * through the ImageExtentBufs and insert buffers for each cache hit at the
+   * appropriate spot in the buferlist returned from below for the miss
+   * read. The buffers we insert here refer directly to regions of various
+   * write log entry data buffers.
+   *
+   * TBD: These buffer objects hold a reference on those write log entries to
+   * prevent them from being retired from the log while the read is
+   * completing. The WriteLogEntry references are released by the buffer
+   * destructor.
    */
   for (auto &extent : image_extents) {
     uint64_t extent_offset = 0;
@@ -503,11 +554,9 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
 	uint64_t miss_extent_length = entry_image_extent.first - miss_extent_start;
 	ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
 	read_ctx->m_miss_extents.push_back(miss_extent);
-	/* Add corresponding region of buffer to miss extents */
-	bufferlist leading_miss_bl;
-	leading_miss_bl.substr_of(*bl, buffer_offset, miss_extent_length);
-	read_ctx->m_miss_bl.append(leading_miss_bl);
-	buffer_offset += miss_extent_length;
+	/* Add miss range to read extents */
+	ImageExtentBuf miss_extent_buf(miss_extent);
+	read_ctx->m_read_extents.push_back(miss_extent_buf);
 	extent_offset += miss_extent_length;
       }
       assert(entry_image_extent.first <= extent.first + extent_offset);
@@ -521,18 +570,29 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
 	 entry, whichever is less. */
       uint64_t entry_hit_length = min(entry_image_extent.second - entry_offset,
 				      extent.second - extent_offset);
+      ImageCache::Extent hit_extent(entry_image_extent.first, entry_hit_length);
       /* Offset of the map entry into the log entry's buffer */
       uint64_t map_entry_buffer_offset = entry_image_extent.first - entry.log_entry->ram_entry.image_offset_bytes;
       /* Offset into the log entry buffer of this read hit */
       uint64_t read_buffer_offset = map_entry_buffer_offset + entry_offset;
-      /* Copy data from RWL entry hit to bufferlist */
-      bufferlist read_hit_bl;
-      read_hit_bl.substr_of(*bl, buffer_offset, entry_hit_length);
-      bufferlist::iterator i(&read_hit_bl);
-      i.copy_in(entry_hit_length,
-		(const char*)(entry.log_entry->pmem_buffer + read_buffer_offset));
+      /* Create buffer object referring to pmem pool for this read hit */
+      WriteLogEntry *log_entry = entry.log_entry;
+      ldout(cct, 5) << "adding reader: log_entry=" << *log_entry << dendl;
+      log_entry->add_reader();
+      buffer::raw *hit_buf =
+	buffer::claim_buffer(entry_hit_length,
+			     (char*)(log_entry->pmem_buffer + read_buffer_offset),
+			     make_deleter([this, log_entry]
+					  {
+					    CephContext *cct = m_image_ctx.cct;
+					    ldout(cct, 5) << "removing reader: log_entry="
+							  << *log_entry << dendl;
+					    log_entry->remove_reader();
+					  }));
+      /* Add hit extent to read extents */
+      ImageExtentBuf hit_extent_buf(hit_extent, hit_buf);
+      read_ctx->m_read_extents.push_back(hit_extent_buf);
       /* Exclude RWL hit range from buffer and extent */
-      buffer_offset += entry_hit_length;
       extent_offset += entry_hit_length;
       ldout(cct, 20) << entry << dendl;
     }
@@ -542,11 +602,10 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
       uint64_t miss_extent_start = extent.first + extent_offset;
       uint64_t miss_extent_length = extent.second - extent_offset;
       ImageCache::Extent miss_extent(miss_extent_start, miss_extent_length);
-      /* Add corresponding region of buffer to miss extents */
-      bufferlist trailing_miss_bl;
-      trailing_miss_bl.substr_of(*bl, buffer_offset, miss_extent_length);
-      read_ctx->m_miss_bl.append(trailing_miss_bl);
-      buffer_offset += miss_extent_length;
+      read_ctx->m_miss_extents.push_back(miss_extent);
+      /* Add miss range to read extents */
+      ImageExtentBuf miss_extent_buf(miss_extent);
+      read_ctx->m_read_extents.push_back(miss_extent_buf);
       extent_offset += miss_extent_length;
     }
   }
@@ -554,10 +613,16 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
   ldout(cct, 5) << "miss_extents=" << read_ctx->m_miss_extents << ", "
 		<< "miss_bl=" << read_ctx->m_miss_bl << dendl;
 
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
+  if (read_ctx->m_miss_extents.empty()) {
+    /* All of this read comes from RWL */
+    read_ctx->complete(0);
   } else {
-    m_image_writeback.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
+    /* Pass the read misses on to the layer below RWL */
+    if (m_image_ctx.persistent_cache_enabled) {
+      m_image_cache.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
+    } else {
+      m_image_writeback.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
+    }
   }
 }
 
@@ -929,10 +994,15 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 	/* Allocate data blocks */
 	operation->log_entry->ram_entry.has_data = 1;
 	/* TODO: Handle failure */
+	unsigned int alloc_bytes = MIN_WRITE_ALLOC_SIZE;
+	if (operation->log_entry->ram_entry.write_bytes > alloc_bytes) {
+	  alloc_bytes = operation->log_entry->ram_entry.write_bytes;
+	}
 	operation->log_entry->ram_entry.write_data = pmemobj_reserve(m_log_pool,
 								     &operation->buffer_alloc_action,
-								     operation->log_entry->ram_entry.write_bytes,
+								     alloc_bytes,
 								     0 /* Object type */);
+	assert(!TOID_IS_NULL(operation->log_entry->ram_entry.write_data));
 	operation->log_entry->pmem_buffer = D_RW(operation->log_entry->ram_entry.write_data);
 	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;
 	if (set->m_persist_on_flush) {
@@ -1294,7 +1364,7 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 
     /* new pool, calculate and store metadata */
     size_t effective_pool_size = (size_t)(m_log_pool_size * USABLE_SIZE);
-    size_t small_write_size = BLOCK_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogPmemEntry);
+    size_t small_write_size = MIN_WRITE_ALLOC_SIZE + BLOCK_ALLOC_OVERHEAD_BYTES + sizeof(struct WriteLogPmemEntry);
     uint64_t num_small_writes = (uint64_t)(effective_pool_size / small_write_size);
     /* Log ring empty */
     m_first_free_entry = 0;
@@ -1303,7 +1373,7 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       TX_ADD(pool_root);
       D_RW(pool_root)->header.layout_version = RWL_POOL_VERSION;
       D_RW(pool_root)->log_entries = TX_ZALLOC(struct WriteLogPmemEntry, num_small_writes);
-      D_RW(pool_root)->block_size = BLOCK_SIZE;
+      D_RW(pool_root)->block_size = MIN_WRITE_ALLOC_SIZE;
       D_RW(pool_root)->num_log_entries = num_small_writes-1; // leave one free
       D_RW(pool_root)->first_free_entry = m_first_free_entry;
       D_RW(pool_root)->first_valid_entry = m_first_valid_entry;
@@ -1334,8 +1404,8 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       on_finish->complete(-1);
       return;
     }
-    if (D_RO(pool_root)->block_size != BLOCK_SIZE) {
-      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size << " expected " << BLOCK_SIZE << dendl;
+    if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
+      lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
       on_finish->complete(-1);
       return;
     }
@@ -1507,7 +1577,7 @@ void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
     C_WritebackRequest<I> *req = new C_WritebackRequest<I>(
       m_image_ctx, m_image_writeback, *m_policy, *m_journal_store,
       *m_image_store, m_release_block, m_async_op_tracker, tid, block, io_type,
-      demoted, BLOCK_SIZE);
+      demoted, MIN_WRITE_SIZE);
     req->send();
   }
 #endif
@@ -1556,9 +1626,9 @@ void ReplicatedWriteLog<I>::invalidate(Extents&& image_extents,
     uint64_t image_offset = extent.first;
     uint64_t image_length = extent.second;
     while (image_length > 0) {
-      uint32_t block_start_offset = image_offset % BLOCK_SIZE;
+      uint32_t block_start_offset = image_offset % MIN_WRITE_SIZE;
       uint32_t block_end_offset = MIN(block_start_offset + image_length,
-                                      BLOCK_SIZE);
+                                      MIN_WRITE_SIZE);
       uint32_t block_length = block_end_offset - block_start_offset;
 
       image_offset += block_length;
