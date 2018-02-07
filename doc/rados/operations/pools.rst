@@ -199,6 +199,10 @@ To delete a pool, execute::
 To remove a pool the mon_allow_pool_delete flag must be set to true in the Monitor's
 configuration. Otherwise they will refuse to remove a pool.
 
+In addition Monitors will not allow pools to be removed which still contain objects.
+To remove a pool which still contains objects set the mon_allow_pool_delete_non_empty
+option to true.
+
 See `Monitor Configuration`_ for more information.
 
 .. _Monitor Configuration: ../../configuration/mon-config-ref

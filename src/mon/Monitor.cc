@@ -445,6 +445,7 @@ const char** Monitor::get_tracked_conf_keys() const
     // scrub interval
     "mon_scrub_interval",
     "mon_allow_pool_delete",
+    "mon_allow_pool_delete_non_empty",
     NULL
   };
   return KEYS;

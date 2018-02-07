@@ -11309,6 +11309,12 @@ int OSDMonitor::_check_remove_pool(int64_t pool_id, const pg_pool_t& pool,
     return -EPERM;
   }
 
+  const pool_stat_t& st = get_pg_pool_sum_stat(pool_id);
+  if (st.sum.num_objects > 0 && !g_conf->mon_allow_pool_delete_non_empty) {
+    *ss << "pool is not empty; please delete all objects before removing it";
+    return -ENOTEMPTY;
+  }
+
   *ss << "pool '" << poolstr << "' removed";
   return 0;
 }
