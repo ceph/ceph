@@ -334,9 +334,9 @@ Journal<I>::Journal(I &image_ctx)
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 5) << this << ": ictx=" << &m_image_ctx << dendl;
 
-  ThreadPoolSingleton *thread_pool_singleton;
-  cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-    thread_pool_singleton, "librbd::journal::thread_pool");
+  auto thread_pool_singleton =
+    &cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
+      "librbd::journal::thread_pool", cct);
   m_work_queue = new ContextWQ("librbd::journal::work_queue",
                                cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
                                thread_pool_singleton);

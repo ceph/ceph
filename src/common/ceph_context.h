@@ -15,12 +15,17 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <set>
+#include <atomic>
+#include <map>
 #include <memory>
 #include <mutex>
-#include <atomic>
+#include <set>
+#include <string>
+#include <string_view>
+#include <typeinfo>
+#include <typeindex>
 
-#include <boost/noncopyable.hpp>
+#include "include/any.h"
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
@@ -60,6 +65,11 @@ public:
   CephContext(uint32_t module_type_,
               enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY,
               int init_flags_ = 0);
+
+  CephContext(const CephContext&) = delete;
+  CephContext& operator =(const CephContext&) = delete;
+  CephContext(CephContext&&) = delete;
+  CephContext& operator =(CephContext&&) = delete;
 
   // ref count!
 private:
@@ -129,20 +139,28 @@ public:
   void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
 		  ceph::bufferlist *out);
 
-  template<typename T>
-  void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    std::lock_guard<ceph::spinlock> lg(_associated_objs_lock);
+  static constexpr std::size_t largest_singleton = sizeof(void*) * 72;
 
-    if (!_associated_objs.count(name)) {
-      p = new T(this);
-      _associated_objs[name] = new TypedSingletonWrapper<T>(p);
-    } else {
-      TypedSingletonWrapper<T> *wrapper =
-        dynamic_cast<TypedSingletonWrapper<T> *>(_associated_objs[name]);
-      assert(wrapper != NULL);
-      p = wrapper->singleton;
+  template<typename T, typename... Args>
+  T& lookup_or_create_singleton_object(std::string_view name,
+				       Args&&... args) {
+    static_assert(sizeof(T) <= largest_singleton,
+		  "Please increase largest singleton.");
+    std::lock_guard lg(associated_objs_lock);
+    std::type_index type = typeid(T);
+
+    auto i = associated_objs.find(std::make_pair(name, type));
+    if (i == associated_objs.cend()) {
+      i = associated_objs.emplace_hint(
+	i,
+	std::piecewise_construct,
+	std::forward_as_tuple(name, type),
+	std::forward_as_tuple(std::in_place_type<T>,
+			      std::forward<Args>(args)...));
     }
+    return ceph::any_cast<T&>(i->second);
   }
+
   /**
    * get a crypto handler
    */
@@ -206,23 +224,7 @@ public:
   }
 
 private:
-  struct SingletonWrapper : boost::noncopyable {
-    virtual ~SingletonWrapper() {}
-  };
 
-  template <typename T>
-  struct TypedSingletonWrapper : public SingletonWrapper {
-    TypedSingletonWrapper(T *p) : singleton(p) {
-    }
-    ~TypedSingletonWrapper() override {
-      delete singleton;
-    }
-
-    T *singleton;
-  };
-
-  CephContext(const CephContext &rhs);
-  CephContext &operator=(const CephContext &rhs);
 
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
@@ -260,8 +262,21 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  ceph::spinlock _associated_objs_lock;
-  std::map<std::string, SingletonWrapper*> _associated_objs;
+  ceph::spinlock associated_objs_lock;
+
+  struct associated_objs_cmp {
+    using is_transparent = std::true_type;
+    template<typename T, typename U>
+    bool operator ()(const std::pair<T, std::type_index>& l,
+		     const std::pair<U, std::type_index>& r) const noexcept {
+      return ((l.first < r.first)  ||
+	      (l.first == r.first && l.second < r.second));
+    }
+  };
+
+  std::map<std::pair<std::string, std::type_index>,
+	   ceph::immobile_any<largest_singleton>,
+	   associated_objs_cmp> associated_objs;
 
   ceph::spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;

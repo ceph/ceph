@@ -639,17 +639,13 @@ CephContext::CephContext(uint32_t module_type_,
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);
   _crypto_random.reset(new CryptoRandom());
 
-  MempoolObs *mempool_obs = 0;
-  lookup_or_create_singleton_object(mempool_obs, "mempool_obs");
+  lookup_or_create_singleton_object<MempoolObs>("mempool_obs", this);
 }
 
 CephContext::~CephContext()
 {
+  associated_objs.clear();
   join_service_thread();
-
-  for (map<string, SingletonWrapper*>::iterator it = _associated_objs.begin();
-       it != _associated_objs.end(); ++it)
-    delete it->second;
 
   if (_cct_perf) {
     _perf_counters_collection->remove(_cct_perf);
