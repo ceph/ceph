@@ -34,7 +34,7 @@ class ObjectStoreTool : public RadosDump
     int dump_object(Formatter *formatter,
 				bufferlist &bl);
     int get_object(
-      ObjectStore *store, coll_t coll,
+      ObjectStore *store, OSDriver& driver, SnapMapper& mapper, coll_t coll,
       bufferlist &bl, OSDMap &curmap, bool *skipped_objects);
     int export_file(
         ObjectStore *store, coll_t cid, ghobject_t &obj);
