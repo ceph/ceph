@@ -1769,11 +1769,13 @@ private:
     spg_t pgid,
     PGPeeringEventRef ref);
   void dequeue_peering_evt(
+    OSDShard *sdata,
     PG *pg,
     PGPeeringEventRef ref,
     ThreadPool::TPHandle& handle);
 
   void dequeue_delete(
+    OSDShard *sdata,
     PG *pg,
     epoch_t epoch,
     ThreadPool::TPHandle& handle);
