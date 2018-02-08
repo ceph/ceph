@@ -26,18 +26,21 @@ import socket
 
 import cherrypy
 import jinja2
-import urlparse
+try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
 
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
-from types import OsdMap, NotFound, Config, FsMap, MonMap, \
+from .types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
-import rbd_iscsi
-import rbd_mirroring
-from rbd_ls import RbdLs, RbdPoolLs
-from cephfs_clients import CephFSClients
-from rgw import RGWDaemons
+from . import rbd_iscsi
+from . import rbd_mirroring
+from .rbd_ls import RbdLs, RbdPoolLs
+from .cephfs_clients import CephFSClients
+from .rgw import RGWDaemons
 
 log = logging.getLogger("dashboard")
 

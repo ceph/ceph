@@ -1,7 +1,7 @@
 # -*- code: utf-8 -*-
 
 import json
-from remote_view_cache import RemoteViewCache
+from .remote_view_cache import RemoteViewCache
 
 import logging
 
