@@ -81,6 +81,10 @@ void DispatchQueue::enqueue(Message *m, int priority, uint64_t id)
 {
 
   Mutex::Locker l(lock);
+  if (stop) {
+    m->put();
+    return;
+  }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
   add_arrival(m);
   if (priority >= CEPH_MSG_PRIO_LOW) {
