@@ -799,7 +799,7 @@ public:
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
   void queue_for_pg_delete(spg_t pgid, epoch_t e);
-  void finish_pg_delete(PG *pg);
+  void finish_pg_delete(PG *pg, unsigned old_pg_num);
 
 private:
   // -- pg recovery and associated throttling --
@@ -921,6 +921,13 @@ public:
     }
     return get_deleted_pool_pg_num(pool);
   }
+
+  /// identify split child pgids over a osdmap interval
+  void identify_split_children(
+    OSDMapRef old_map,
+    OSDMapRef new_map,
+    spg_t pgid,
+    set<spg_t> *new_children);
 
   void need_heartbeat_peer_update();
 
@@ -1115,6 +1122,9 @@ enum class io_queue {
 };
 
 struct OSDShard {
+  const unsigned shard_id;
+  CephContext *cct;
+  OSD *osd;
   Mutex sdata_lock;
   Cond sdata_cond;
 
@@ -1142,7 +1152,7 @@ struct OSDShard {
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
-  /// pg lock.  slots are removed only by prune_or_wake_pg_waiters.
+  /// pg lock.  slots are removed by consume_map.
   unordered_map<spg_t,pg_slot> pg_slots;
 
   /// priority queue
@@ -1163,11 +1173,30 @@ struct OSDShard {
 	priority, cost, std::move(item));
   }
 
+  /// push osdmap into shard
+  void consume_map(
+    OSDMapRef& osdmap,
+    unsigned *pushes_to_free,
+    set<spg_t> *new_children);
+
+  void _wake_pg_slot(spg_t pgid, OSDShard::pg_slot& slot);
+
+  void _prime_splits(set<spg_t> *pgids);
+  void prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
+  void register_and_wake_split_child(PG *pg);
+  void unprime_split_children(spg_t parent, unsigned old_pg_num);
+
   OSDShard(
+    int id,
+    CephContext *cct,
+    OSD *osd,
     string lock_name, string ordering_lock,
-    uint64_t max_tok_per_prio, uint64_t min_cost, CephContext *cct,
+    uint64_t max_tok_per_prio, uint64_t min_cost,
     io_queue opqueue)
-    : sdata_lock(lock_name.c_str(), false, true, false, cct),
+    : shard_id(id),
+      cct(cct),
+      osd(osd),
+      sdata_lock(lock_name.c_str(), false, true, false, cct),
       sdata_op_ordering_lock(ordering_lock.c_str(), false, true,
 			     false, cct) {
     if (opqueue == io_queue::weightedpriority) {
@@ -1610,7 +1639,9 @@ private:
   friend std::ostream& operator<<(std::ostream& out, const io_queue& q);
 
   const io_queue op_queue;
+public:
   const unsigned int op_prio_cutoff;
+protected:
 
   /*
    * The ordered op delivery chain is:
@@ -1658,17 +1689,6 @@ private:
 
     /// wake any pg waiters after a PG is split
     void wake_pg_split_waiters(spg_t pgid);
-
-    void _wake_pg_slot(spg_t pgid, OSDShard *sdata, OSDShard::pg_slot& slot);
-
-    /// prime slots for splitting pgs
-    void prime_splits(const set<spg_t>& pgs);
-
-    /// prune ops (and possibly pg_slots) for pgs that shouldn't be here
-    void prune_or_wake_pg_waiters(OSDMapRef osdmap, int whoami);
-
-    /// clear cached PGRef on pg deletion
-    void clear_pg_pointer(PG *pg);
 
     /// clear pg_slots on shutdown
     void clear_pg_slots();
@@ -1839,10 +1859,10 @@ public:
   vector<OSDShard*> shards;
   uint32_t num_shards = 0;
 
-protected:
   // -- placement groups --
   std::atomic<size_t> num_pgs = {0};
 
+protected:
   std::mutex pending_creates_lock;
   using create_from_osd_t = std::pair<pg_t, bool /* is primary*/>;
   std::set<create_from_osd_t> pending_creates_from_osd;
@@ -1852,7 +1872,8 @@ protected:
 
   PGRef _lookup_pg(spg_t pgid);
   PG   *_lookup_lock_pg(spg_t pgid);
-  void _register_pg(PGRef pg);
+  void register_pg(PGRef pg);
+  void unregister_pg(PG *pg);
 
   void _get_pgs(vector<PGRef> *v, bool clear_too=false);
   void _get_pgids(vector<spg_t> *v);

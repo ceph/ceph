@@ -6543,7 +6543,7 @@ void PG::_delete_some()
       osd->meta_ch, std::move(t));
     assert(r == 0);
 
-    osd->finish_pg_delete(this);
+    osd->finish_pg_delete(this, pool.info.get_pg_num());
     deleted = true;
 
     // cancel reserver here, since the PG is about to get deleted and the
