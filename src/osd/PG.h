@@ -58,6 +58,7 @@
 
 class OSD;
 class OSDService;
+class OSDShard;
 class MOSDOp;
 class MOSDPGScan;
 class MOSDPGBackfill;
@@ -501,6 +502,9 @@ protected:
   // -------------
   // protected
   OSDService *osd;
+public:
+  OSDShard *osd_shard = nullptr;
+protected:
   CephContext *cct;
 
   // osdmap
