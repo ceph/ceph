@@ -23,6 +23,12 @@ from werkzeug.serving import make_server, make_ssl_devcert
 from hooks import ErrorHook
 from mgr_module import MgrModule, CommandResult
 
+
+try:
+    iteritems = dict.iteritems
+except:
+    iteritems = dict.items
+
 # Global instance to share
 instance = None
 
@@ -51,10 +57,8 @@ class CommandsRequest(object):
         self.id = str(id(self))
 
         # Filter out empty sub-requests
-        commands_arrays = filter(
-            lambda x: len(x) != 0,
-            commands_arrays,
-        )
+        commands_arrays = [x for x in commands_arrays
+                           if len(x) != 0]
 
         self.running = []
         self.waiting = commands_arrays[1:]
@@ -251,7 +255,7 @@ class Module(MgrModule):
                 self._serve()
                 self.server.socket.close()
             except CannotServe as cs:
-                self.log.warn("server not running: {0}".format(cs.message))
+                self.log.warn("server not running: %s", cs)
             except:
                 self.log.error(str(traceback.format_exc()))
 
@@ -262,7 +266,7 @@ class Module(MgrModule):
     def refresh_keys(self):
         self.keys = {}
         rawkeys = self.get_config_prefix('keys/') or {}
-        for k, v in rawkeys.iteritems():
+        for k, v in iteritems(rawkeys):
             self.keys[k[5:]] = v  # strip of keys/ prefix
 
     def _serve(self):
@@ -286,7 +290,7 @@ class Module(MgrModule):
         cert = self.get_localized_config("crt")
         if cert is not None:
             cert_tmp = tempfile.NamedTemporaryFile()
-            cert_tmp.write(cert)
+            cert_tmp.write(cert.encode('utf-8'))
             cert_tmp.flush()
             cert_fname = cert_tmp.name
         else:
@@ -295,7 +299,7 @@ class Module(MgrModule):
         pkey = self.get_localized_config("key")
         if pkey is not None:
             pkey_tmp = tempfile.NamedTemporaryFile()
-            pkey_tmp.write(pkey)
+            pkey_tmp.write(pkey.encode('utf-8'))
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
@@ -362,10 +366,7 @@ class Module(MgrModule):
             if tag == 'seq':
                 return
 
-            request = filter(
-                lambda x: x.is_running(tag),
-                self.requests)
-
+            request = [x for x in self.requests if x.is_running(tag)]
             if len(request) != 1:
                 self.log.warn("Unknown request '%s'" % str(tag))
                 return
@@ -438,9 +439,8 @@ class Module(MgrModule):
 
         elif command['prefix'] == "restful create-self-signed-cert":
             cert, pkey = self.create_self_signed_cert()
-
-            self.set_config(self.get_mgr_id() + '/crt', cert)
-            self.set_config(self.get_mgr_id() + '/key', pkey)
+            self.set_config(self.get_mgr_id() + '/crt', cert.decode('utf-8'))
+            self.set_config(self.get_mgr_id() + '/key', pkey.decode('utf-8'))
 
             self.restart()
             return (
@@ -533,10 +533,7 @@ class Module(MgrModule):
 
         # Filter by osd ids
         if ids is not None:
-            osds = filter(
-                lambda x: str(x['osd']) in ids,
-                osds
-            )
+            osds = [x for x in osds if str(x['osd']) in ids]
 
         # Get list of pools per osd node
         pools_map = self.get_osd_pools()
@@ -562,19 +559,14 @@ class Module(MgrModule):
         # Filter by pool
         if pool_id:
             pool_id = int(pool_id)
-            osds = filter(
-                lambda x: pool_id in x['pools'],
-                osds
-            )
+            osds = [x for x in osds if pool_id in x['pools']]
 
         return osds
 
 
     def get_osd_by_id(self, osd_id):
-        osd = filter(
-            lambda x: x['osd'] == osd_id,
-            self.get('osd_map')['osds']
-        )
+        osd = [x for x in self.get('osd_map')['osds']
+               if x['osd'] == osd_id]
 
         if len(osd) != 1:
             return None
@@ -583,10 +575,8 @@ class Module(MgrModule):
 
 
     def get_pool_by_id(self, pool_id):
-        pool = filter(
-            lambda x: x['pool'] == pool_id,
-            self.get('osd_map')['pools'],
-        )
+        pool = [x for x in self.get('osd_map')['pools']
+                if x['pool'] == pool_id]
 
         if len(pool) != 1:
             return None
