@@ -937,39 +937,6 @@ public:
   void shutdown_reserver();
   void shutdown();
 
-private:
-  // split
-  Mutex in_progress_split_lock;
-  // splits are "pending" after OSD has consumed the map indicating the PG should
-  // split but the PG has not yet processed the map.
-  map<spg_t, spg_t> pending_splits; // child -> parent
-  map<spg_t, set<spg_t> > rev_pending_splits; // parent -> [children]
-
-  // splits are "in progress" after the PG has gotten the map, and we hold the
-  // parent lock, but the children have not yet been created.
-  set<spg_t> in_progress_splits;       // child
-
-public:
-  void _start_split(spg_t parent, const set<spg_t> &children);
-  void start_split(spg_t parent, const set<spg_t> &children) {
-    Mutex::Locker l(in_progress_split_lock);
-    return _start_split(parent, children);
-  }
-  void mark_split_in_progress(spg_t parent, const set<spg_t> &pgs);
-  void complete_split(spg_t pgid);
-  void cancel_pending_splits_for_parent(spg_t parent);
-  void _cancel_pending_splits_for_parent(spg_t parent);
-  bool splitting(spg_t pgid);
-  void expand_pg_num(OSDMapRef old_map,
-		     OSDMapRef new_map,
-		     set<spg_t> *new_children);
-  void _maybe_split_pgid(OSDMapRef old_map,
-			 OSDMapRef new_map,
-			 spg_t pgid,
-			 set<spg_t> *new_children);
-  void init_splits_between(spg_t pgid, OSDMapRef frommap, OSDMapRef tomap,
-			   set<spg_t> *new_chilren);
-
   // -- stats --
   Mutex stat_lock;
   osd_stat_t osd_stat;
