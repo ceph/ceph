@@ -1208,32 +1208,28 @@ class Module(MgrModule):
             @cherrypy.expose
             def index(self, rgw_id=None):
                 if rgw_id is not None:
-		    template = env.get_template("rgw_detail.html")
-		    toplevel_data = self._toplevel_data()
-		    return template.render(
-			    url_prefix=global_instance().url_prefix,
-			    ceph_version=global_instance().version,
-			    path_info='/rgw' + cherrypy.request.path_info,
-			    toplevel_data=json.dumps(toplevel_data, indent=2),
-			    content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
-			)
+                    template = env.get_template("rgw_detail.html")
+                    toplevel_data = self._toplevel_data()
+                    return template.render(
+                            url_prefix=global_instance().url_prefix,
+                            ceph_version=global_instance().version,
+                            path_info='/rgw' + cherrypy.request.path_info,
+                            toplevel_data=json.dumps(toplevel_data, indent=2),
+                            content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
+                        )
                 else:
+                    # List all RGW servers
+                    template = env.get_template("rgw.html")
+                    toplevel_data = self._toplevel_data()
+                    content_data = self._rgw_daemons()
+                    return template.render(
+                        url_prefix = global_instance().url_prefix,
+                        ceph_version=global_instance().version,
+                        path_info='/rgw' + cherrypy.request.path_info,
+                        toplevel_data=json.dumps(toplevel_data, indent=2),
+                        content_data=json.dumps(content_data, indent=2)
+                    )
 
-		    """ List all RGW servers """
-
-		    template = env.get_template("rgw.html")
-		    toplevel_data = self._toplevel_data()
-
-		    content_data = self._rgw_daemons()
-
-		    return template.render(
-			url_prefix = global_instance().url_prefix,
-			ceph_version=global_instance().version,
-			path_info='/rgw' + cherrypy.request.path_info,
-			toplevel_data=json.dumps(toplevel_data, indent=2),
-			content_data=json.dumps(content_data, indent=2)
-		    )
-            
             def _rgw_daemons(self):
                 status, data = global_instance().rgw_daemons.get()
                 if data is None:
@@ -1268,7 +1264,7 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def rgw_data(self, rgw_id):
-	        return self._rgw(rgw_id)
+                return self._rgw(rgw_id)
 
         cherrypy.tree.mount(Root(), get_prefixed_url("/"), conf)
         cherrypy.tree.mount(OSDEndpoint(), get_prefixed_url("/osd"), conf)
