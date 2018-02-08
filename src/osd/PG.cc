@@ -1615,7 +1615,6 @@ void PG::activate(ObjectStore::Transaction& t,
     last_update_ondisk = info.last_update;
     min_last_complete_ondisk = eversion_t(0,0);  // we don't know (yet)!
   }
-  last_update_applied = info.last_update;
   last_rollback_info_trimmed_to_applied = pg_log.get_can_rollback_to();
 
   need_up_thru = false;
@@ -4355,8 +4354,7 @@ void PG::repair_object(
 
 /* replica_scrub
  *
- * Wait for last_update_applied to match msg->scrub_to as above. Wait
- * for pushes to complete in case of recent recovery. Build a single
+ * Wait for pushes to complete in case of recent recovery. Build a single
  * scrubmap of objects that are in the range [msg->start, msg->end).
  */
 void PG::replica_scrub(
