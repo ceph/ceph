@@ -13,6 +13,7 @@
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
+#include "librbd/operation/SnapshotRemoveRequest.h"
 #include "librbd/operation/TrimRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -22,6 +23,21 @@
 
 namespace librbd {
 namespace image {
+
+namespace {
+
+bool auto_delete_snapshot(const SnapInfo& snap_info) {
+  auto snap_namespace_type = cls::rbd::get_snap_namespace_type(
+    snap_info.snap_namespace);
+  switch (snap_namespace_type) {
+  case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+    return true;
+  default:
+    return false;
+  }
+}
+
+} // anonymous namespace
 
 using librados::IoCtx;
 using util::create_context_callback;
@@ -166,11 +182,19 @@ template<typename I>
 void RemoveRequest<I>::check_image_snaps() {
   ldout(m_cct, 20) << dendl;
 
-  if (m_image_ctx->snaps.size()) {
-    lderr(m_cct) << "image has snapshots - not removing" << dendl;
-    send_close_image(-ENOTEMPTY);
-    return;
+  m_image_ctx->snap_lock.get_read();
+  for (auto& snap_info : m_image_ctx->snap_info) {
+    if (auto_delete_snapshot(snap_info.second)) {
+      m_snap_infos.insert(snap_info);
+    } else {
+      m_image_ctx->snap_lock.put_read();
+
+      lderr(m_cct) << "image has snapshots - not removing" << dendl;
+      send_close_image(-ENOTEMPTY);
+      return;
+    }
   }
+  m_image_ctx->snap_lock.put_read();
 
   list_image_watchers();
 }
@@ -296,6 +320,11 @@ void RemoveRequest<I>::check_image_watchers() {
 
 template<typename I>
 void RemoveRequest<I>::check_group() {
+  if (m_old_format) {
+    trim_image();
+    return;
+  }
+
   ldout(m_cct, 20) << dendl;
 
   librados::ObjectReadOperation op;
@@ -333,7 +362,50 @@ void RemoveRequest<I>::handle_check_group(int r) {
     return;
   }
 
-  trim_image();
+  remove_snapshot();
+}
+
+template<typename I>
+void RemoveRequest<I>::remove_snapshot() {
+  if (m_snap_infos.empty()) {
+    trim_image();
+    return;
+  }
+
+  auto snap_id = m_snap_infos.begin()->first;
+  auto& snap_info = m_snap_infos.begin()->second;
+  ldout(m_cct, 20) << "snap_id=" << snap_id << ", "
+                   << "snap_name=" << snap_info.name << dendl;
+
+  RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
+  auto ctx = create_context_callback<
+    RemoveRequest<I>, &RemoveRequest<I>::handle_remove_snapshot>(this);
+  auto req = librbd::operation::SnapshotRemoveRequest<I>::create(
+    *m_image_ctx, snap_info.snap_namespace, snap_info.name,
+    snap_id, ctx);
+  req->send();
+}
+
+template<typename I>
+void RemoveRequest<I>::handle_remove_snapshot(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    auto snap_id = m_snap_infos.begin()->first;
+    lderr(m_cct) << "failed to auto-prune snapshot " << snap_id << ": "
+                 << cpp_strerror(r) << dendl;
+
+    if (r == -EBUSY) {
+      r = -ENOTEMPTY;
+    }
+    send_close_image(r);
+    return;
+  }
+
+  assert(!m_snap_infos.empty());
+  m_snap_infos.erase(m_snap_infos.begin());
+
+  remove_snapshot();
 }
 
 template<typename I>

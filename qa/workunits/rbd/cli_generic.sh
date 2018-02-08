@@ -3,7 +3,7 @@
 # make sure rbd pool is EMPTY.. this is a test script!!
 rbd ls | wc -l | grep -v '^0$' && echo "nonempty rbd pool, aborting!  run this script on an empty test cluster only." && exit 1
 
-IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 clone2"
+IMGS="testimg1 testimg2 testimg3 testimg4 testimg5 testimg6 testimg-diff1 testimg-diff2 testimg-diff3 foo foo2 bar bar2 test1 test2 test3 test4 clone2"
 
 tiered=0
 if ceph osd dump | grep ^pool | grep "'rbd'" | grep tier; then
@@ -505,6 +505,41 @@ test_deep_copy_clone() {
     remove_images
 }
 
+test_clone_v2() {
+    echo "testing clone v2..."
+    remove_images
+
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd snap create test1@1
+    rbd clone --rbd-default-clone-format=1 test1@1 test2 && exit 1 || true
+    rbd clone --rbd-default-clone-format=2 test1@1 test2
+    rbd clone --rbd-default-clone-format=2 test1@1 test3
+
+    rbd snap protect test1@1
+    rbd clone --rbd-default-clone-format=1 test1@1 test4
+
+    rbd children test1@1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
+
+    rbd remove test4
+    rbd snap unprotect test1@1
+
+    rbd snap remove test1@1
+    rbd snap list --all test1 | grep -E "trash[ ]*$"
+
+    rbd snap create test1@2
+    rbd rm test1 2>&1 | grep 'image has snapshots'
+
+    rbd snap rm test1@2
+    rbd rm test1 2>&1 | grep 'linked clones'
+
+    rbd rm test3
+    rbd rm test1 2>&1 | grep 'linked clones'
+
+    rbd flatten test2
+    rbd rm test1
+    rbd rm test2
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -519,5 +554,6 @@ test_clone
 test_trash
 test_purge
 test_deep_copy_clone
+test_clone_v2
 
 echo OK

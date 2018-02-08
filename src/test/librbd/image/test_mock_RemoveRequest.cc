@@ -9,14 +9,15 @@
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "librbd/ImageState.h"
 #include "librbd/internal.h"
-#include "librbd/journal/RemoveRequest.h"
 #include "librbd/Operations.h"
-#include "librbd/operation/TrimRequest.h"
 #include "librbd/image/TypeTraits.h"
 #include "librbd/image/DetachChildRequest.h"
 #include "librbd/image/RemoveRequest.h"
 #include "librbd/image/RefreshParentRequest.h"
+#include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
+#include "librbd/operation/SnapshotRemoveRequest.h"
+#include "librbd/operation/TrimRequest.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include <arpa/inet.h>
@@ -76,6 +77,30 @@ DetachChildRequest<MockTestImageCtx> *DetachChildRequest<MockTestImageCtx>::s_in
 } // namespace image
 
 namespace operation {
+
+template <>
+class SnapshotRemoveRequest<MockTestImageCtx> {
+public:
+  static SnapshotRemoveRequest *s_instance;
+  static SnapshotRemoveRequest *create(MockTestImageCtx &image_ctx,
+                                       cls::rbd::SnapshotNamespace sn,
+                                       std::string name,
+                                       uint64_t id, Context *on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->on_finish = on_finish;
+    return s_instance;
+  }
+
+  Context *on_finish = nullptr;
+
+  SnapshotRemoveRequest() {
+    s_instance = this;
+  }
+
+  MOCK_METHOD0(send, void());
+};
+
+SnapshotRemoveRequest<MockTestImageCtx> *SnapshotRemoveRequest<MockTestImageCtx>::s_instance;
 
 template <>
 class TrimRequest<MockTestImageCtx> {
@@ -181,6 +206,7 @@ public:
   typedef typename TypeTraits::ContextWQ ContextWQ;
   typedef RemoveRequest<MockTestImageCtx> MockRemoveRequest;
   typedef DetachChildRequest<MockTestImageCtx> MockDetachChildRequest;
+  typedef librbd::operation::SnapshotRemoveRequest<MockTestImageCtx> MockSnapshotRemoveRequest;
   typedef librbd::operation::TrimRequest<MockTestImageCtx> MockTrimRequest;
   typedef librbd::journal::RemoveRequest<MockTestImageCtx> MockJournalRemoveRequest;
   typedef librbd::mirror::DisableRequest<MockTestImageCtx> MockMirrorDisableRequest;
@@ -189,14 +215,17 @@ public:
   MockTestImageCtx *m_mock_imctx = NULL;
 
 
-  void TestImageRemoveSetUp() {
+  void SetUp() override {
+    TestMockFixture::SetUp();
+
     ASSERT_EQ(0, open_image(m_image_name, &m_test_imctx));
     m_mock_imctx = new MockTestImageCtx(*m_test_imctx);
     librbd::MockTestImageCtx::s_instance = m_mock_imctx;
   }
-  void TestImageRemoveTearDown() {
+  void TearDown() override {
     librbd::MockTestImageCtx::s_instance = NULL;
     delete m_mock_imctx;
+    TestMockFixture::TearDown();
   }
 
   void expect_state_open(MockTestImageCtx &mock_image_ctx, int r) {
@@ -235,6 +264,13 @@ public:
     }
   }
 
+  void expect_remove_snap(MockTestImageCtx &mock_image_ctx,
+                          MockSnapshotRemoveRequest& mock_snap_remove_request,
+                          int r) {
+    EXPECT_CALL(mock_snap_remove_request, send())
+      .WillOnce(FinishRequest(&mock_snap_remove_request, r, &mock_image_ctx));
+  }
+
   void expect_trim(MockTestImageCtx &mock_image_ctx,
                    MockTrimRequest &mock_trim_request, int r) {
     EXPECT_CALL(mock_trim_request, send())
@@ -244,13 +280,13 @@ public:
   void expect_journal_remove(MockTestImageCtx &mock_image_ctx,
                    MockJournalRemoveRequest &mock_journal_remove_request, int r) {
     EXPECT_CALL(mock_journal_remove_request, send())
-                  .WillOnce(FinishRequest(&mock_journal_remove_request, r, &mock_image_ctx));
+      .WillOnce(FinishRequest(&mock_journal_remove_request, r, &mock_image_ctx));
   }
 
   void expect_mirror_disable(MockTestImageCtx &mock_image_ctx,
                    MockMirrorDisableRequest &mock_mirror_disable_request, int r) {
     EXPECT_CALL(mock_mirror_disable_request, send())
-                  .WillOnce(FinishRequest(&mock_mirror_disable_request, r, &mock_image_ctx));
+      .WillOnce(FinishRequest(&mock_mirror_disable_request, r, &mock_image_ctx));
   }
 
   void expect_remove_mirror_image(librados::IoCtx &ioctx, int r) {
@@ -261,10 +297,12 @@ public:
   }
 
   void expect_mirror_image_get(MockTestImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),
-                     _, _, _))
-      .WillOnce(Return(r));
+    if ((mock_image_ctx.features & RBD_FEATURE_JOURNALING) != 0ULL) {
+      EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+                  exec(RBD_MIRRORING, _, StrEq("rbd"),
+                       StrEq("mirror_image_get"), _, _, _))
+        .WillOnce(Return(r));
+    }
   }
 
   void expect_dir_remove_image(librados::IoCtx &ioctx, int r) {
@@ -283,63 +321,49 @@ public:
 
 TEST_F(TestMockImageRemoveRequest, SuccessV1) {
   REQUIRE_FORMAT_V1();
-  TestImageRemoveSetUp();
-
-  C_SaferCond ctx;
-  librbd::NoOpProgressContext no_op;
-  ContextWQ op_work_queue;
-  MockTrimRequest mock_trim_request;
-  MockJournalRemoveRequest mock_journal_remove_request;
+  expect_op_work_queue(*m_mock_imctx);
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, 0);
-  expect_get_group(*m_mock_imctx, 0);
+
+  MockTrimRequest mock_trim_request;
   expect_trim(*m_mock_imctx, mock_trim_request, 0);
-  expect_op_work_queue(*m_mock_imctx);
+
   expect_state_close(*m_mock_imctx);
+
+  ContextWQ op_work_queue;
   expect_wq_queue(op_work_queue, 0);
 
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
 					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-
-  TestImageRemoveTearDown();
 }
 
 TEST_F(TestMockImageRemoveRequest, OpenFailV1) {
   REQUIRE_FORMAT_V1();
-  TestImageRemoveSetUp();
-
-  C_SaferCond ctx;
-  librbd::NoOpProgressContext no_op;
-  ContextWQ op_work_queue;
-  MockTrimRequest mock_trim_request;
 
   InSequence seq;
   expect_state_open(*m_mock_imctx, -ENOENT);
+
+  ContextWQ op_work_queue;
   expect_wq_queue(op_work_queue, 0);
 
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
 					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-
-  TestImageRemoveTearDown();
 }
 
 TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV1) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-  TestImageRemoveSetUp();
-
-  C_SaferCond ctx;
-  librbd::NoOpProgressContext no_op;
-  ContextWQ op_work_queue;
-  MockTrimRequest mock_trim_request;
-  MockJournalRemoveRequest mock_journal_remove_request;
-  MockMirrorDisableRequest mock_mirror_disable_request;
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  expect_op_work_queue(*m_mock_imctx);
 
   m_mock_imctx->parent_md.spec.pool_id = m_ioctx.get_id();
   m_mock_imctx->parent_md.spec.image_id = "parent id";
@@ -349,38 +373,37 @@ TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV1) {
   expect_state_open(*m_mock_imctx, 0);
   expect_mirror_image_get(*m_mock_imctx, 0);
   expect_get_group(*m_mock_imctx, 0);
+
+  MockTrimRequest mock_trim_request;
   expect_trim(*m_mock_imctx, mock_trim_request, 0);
-  expect_op_work_queue(*m_mock_imctx);
 
   MockDetachChildRequest mock_detach_child_request;
   expect_detach_child(*m_mock_imctx, mock_detach_child_request, 0);
 
+  MockMirrorDisableRequest mock_mirror_disable_request;
   expect_mirror_disable(*m_mock_imctx, mock_mirror_disable_request, 0);
+
   expect_state_close(*m_mock_imctx);
-  expect_wq_queue(op_work_queue, 0);
+
+  MockJournalRemoveRequest mock_journal_remove_request;
   expect_journal_remove(*m_mock_imctx, mock_journal_remove_request, 0);
+
   expect_remove_mirror_image(m_ioctx, 0);
   expect_dir_remove_image(m_ioctx, 0);
 
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
 					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-
-  TestImageRemoveTearDown();
 }
 
 TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV2) {
-  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-  TestImageRemoveSetUp();
-
-  C_SaferCond ctx;
-  librbd::NoOpProgressContext no_op;
-  ContextWQ op_work_queue;
-  MockTrimRequest mock_trim_request;
-  MockJournalRemoveRequest mock_journal_remove_request;
-  MockMirrorDisableRequest mock_mirror_disable_request;
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+  expect_op_work_queue(*m_mock_imctx);
 
   m_mock_imctx->parent_md.spec.pool_id = m_ioctx.get_id();
   m_mock_imctx->parent_md.spec.image_id = "parent id";
@@ -390,38 +413,37 @@ TEST_F(TestMockImageRemoveRequest, SuccessV2CloneV2) {
   expect_state_open(*m_mock_imctx, 0);
   expect_mirror_image_get(*m_mock_imctx, 0);
   expect_get_group(*m_mock_imctx, 0);
+
+  MockTrimRequest mock_trim_request;
   expect_trim(*m_mock_imctx, mock_trim_request, 0);
-  expect_op_work_queue(*m_mock_imctx);
 
   MockDetachChildRequest mock_detach_child_request;
   expect_detach_child(*m_mock_imctx, mock_detach_child_request, 0);
 
+  MockMirrorDisableRequest mock_mirror_disable_request;
   expect_mirror_disable(*m_mock_imctx, mock_mirror_disable_request, 0);
+
   expect_state_close(*m_mock_imctx);
-  expect_wq_queue(op_work_queue, 0);
+
+  MockJournalRemoveRequest mock_journal_remove_request;
   expect_journal_remove(*m_mock_imctx, mock_journal_remove_request, 0);
+
   expect_remove_mirror_image(m_ioctx, 0);
   expect_dir_remove_image(m_ioctx, 0);
 
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
 					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
 
   ASSERT_EQ(0, ctx.wait());
-
-  TestImageRemoveTearDown();
 }
 
 TEST_F(TestMockImageRemoveRequest, NotExistsV2) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
-  TestImageRemoveSetUp();
-
-  C_SaferCond ctx;
-  librbd::NoOpProgressContext no_op;
-  ContextWQ op_work_queue;
-  MockTrimRequest mock_trim_request;
-  MockJournalRemoveRequest mock_journal_remove_request;
-  MockMirrorDisableRequest mock_mirror_disable_request;
+  expect_op_work_queue(*m_mock_imctx);
 
   m_mock_imctx->parent_md.spec.pool_id = m_ioctx.get_id();
   m_mock_imctx->parent_md.spec.image_id = "parent id";
@@ -431,25 +453,92 @@ TEST_F(TestMockImageRemoveRequest, NotExistsV2) {
   expect_state_open(*m_mock_imctx, 0);
   expect_mirror_image_get(*m_mock_imctx, 0);
   expect_get_group(*m_mock_imctx, 0);
+
+  MockTrimRequest mock_trim_request;
   expect_trim(*m_mock_imctx, mock_trim_request, 0);
-  expect_op_work_queue(*m_mock_imctx);
 
   MockDetachChildRequest mock_detach_child_request;
   expect_detach_child(*m_mock_imctx, mock_detach_child_request, 0);
 
+  MockMirrorDisableRequest mock_mirror_disable_request;
   expect_mirror_disable(*m_mock_imctx, mock_mirror_disable_request, 0);
+
   expect_state_close(*m_mock_imctx);
-  expect_wq_queue(op_work_queue, 0);
+
+  MockJournalRemoveRequest mock_journal_remove_request;
   expect_journal_remove(*m_mock_imctx, mock_journal_remove_request, 0);
+
   expect_remove_mirror_image(m_ioctx, 0);
   expect_dir_remove_image(m_ioctx, -ENOENT);
 
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
   MockRemoveRequest *req = MockRemoveRequest::create(m_ioctx, m_image_name, "",
 					      true, false, no_op, &op_work_queue, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
+}
 
-  TestImageRemoveTearDown();
+TEST_F(TestMockImageRemoveRequest, Snapshots) {
+  m_mock_imctx->snap_info = {
+    {123, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}};
+
+  InSequence seq;
+  expect_state_open(*m_mock_imctx, 0);
+  expect_state_close(*m_mock_imctx);
+
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
+  MockRemoveRequest *req = MockRemoveRequest::create(
+    m_ioctx, m_image_name, "", true, false, no_op, &op_work_queue, &ctx);
+  req->send();
+
+  ASSERT_EQ(-ENOTEMPTY, ctx.wait());
+}
+
+TEST_F(TestMockImageRemoveRequest, AutoDeleteSnapshots) {
+  REQUIRE_FORMAT_V2();
+  expect_op_work_queue(*m_mock_imctx);
+
+  m_mock_imctx->snap_info = {
+    {123, {"snap1", {cls::rbd::TrashSnapshotNamespace{}}, {}, {}, {}, {}, {}}}};
+
+  InSequence seq;
+  expect_state_open(*m_mock_imctx, 0);
+  expect_mirror_image_get(*m_mock_imctx, 0);
+  expect_get_group(*m_mock_imctx, 0);
+
+  MockSnapshotRemoveRequest mock_snap_remove_request;
+  expect_remove_snap(*m_mock_imctx, mock_snap_remove_request, 0);
+
+  MockTrimRequest mock_trim_request;
+  expect_trim(*m_mock_imctx, mock_trim_request, 0);
+
+  MockDetachChildRequest mock_detach_child_request;
+  expect_detach_child(*m_mock_imctx, mock_detach_child_request, 0);
+
+  MockMirrorDisableRequest mock_mirror_disable_request;
+  expect_mirror_disable(*m_mock_imctx, mock_mirror_disable_request, 0);
+
+  expect_state_close(*m_mock_imctx);
+
+  MockJournalRemoveRequest mock_journal_remove_request;
+  expect_journal_remove(*m_mock_imctx, mock_journal_remove_request, 0);
+
+  expect_remove_mirror_image(m_ioctx, 0);
+  expect_dir_remove_image(m_ioctx, 0);
+
+  C_SaferCond ctx;
+  librbd::NoOpProgressContext no_op;
+  ContextWQ op_work_queue;
+  MockRemoveRequest *req = MockRemoveRequest::create(
+    m_ioctx, m_image_name, "", true, false, no_op, &op_work_queue, &ctx);
+  req->send();
+
+  ASSERT_EQ(0, ctx.wait());
+
 }
 
 } // namespace image
