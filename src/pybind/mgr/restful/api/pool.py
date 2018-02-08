@@ -34,7 +34,7 @@ class PoolId(RestController):
         """
         Modify the information for the pool id
         """
-	try:
+        try:
             args = request.json
         except ValueError:
             response.status = 400
