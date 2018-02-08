@@ -520,6 +520,11 @@ struct spg_t {
   bool parse(const std::string& s) {
     return parse(s.c_str());
   }
+
+  spg_t get_ancestor(unsigned old_pg_num) const {
+    return spg_t(pgid.get_ancestor(old_pg_num), shard);
+  }
+
   bool is_split(unsigned old_pg_num, unsigned new_pg_num,
 		set<spg_t> *pchildren) const {
     set<pg_t> _children;
