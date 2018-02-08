@@ -41,8 +41,8 @@ public:
 
   void exec();
 
-  void mod_for_vstart() {
-    socketdir = "./out";
+  void mod_for_vstart(const std::string& dir) {
+    socketdir = dir;
     prefix = "";
   }
 
