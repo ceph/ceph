@@ -11963,6 +11963,23 @@ int MDCache::cache_status(Formatter *f)
   return 0;
 }
 
+/**
+* use this function to dump a specific inode 
+*/
+void MDCache::dump_inode(std::string const &path, Formatter *f, std::ostream &ss)
+{
+  dout(1) << __func__ << path << dendl;
+  filepath fp(path.c_str());
+  CInode *in = cache_traverse(fp);
+  if (NULL == in) {
+    ss << "inode not in mds cache";
+    return;
+  }
+  f->open_object_section("inode");
+  in->dump(f); 
+  f->close_section();
+}
+
 int MDCache::dump_cache(std::string const &file_name)
 {
   return dump_cache(file_name.c_str(), NULL);
