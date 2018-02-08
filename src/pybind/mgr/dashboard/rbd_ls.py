@@ -1,8 +1,8 @@
 
 import rbd
 import rados
-from types import OsdMap
-from remote_view_cache import RemoteViewCache
+from .types import OsdMap
+from .remote_view_cache import RemoteViewCache
 
 class RbdPoolLs(RemoteViewCache):
     def _get(self):

@@ -3,7 +3,7 @@ import json
 import re
 import rados
 import rbd
-from remote_view_cache import RemoteViewCache
+from .remote_view_cache import RemoteViewCache
 
 class DaemonsAndPools(RemoteViewCache):
     def _get(self):

@@ -2,7 +2,7 @@ from pecan.hooks import PecanHook
 
 import traceback
 
-import module
+from . import module
 
 class ErrorHook(PecanHook):
     def on_error(self, stat, exc):
