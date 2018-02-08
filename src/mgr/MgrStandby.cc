@@ -255,6 +255,8 @@ void MgrStandby::shutdown()
 
 void MgrStandby::respawn()
 {
+  shutdown();
+
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
