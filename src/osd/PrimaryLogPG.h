@@ -414,8 +414,6 @@ public:
     append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
 
-  void op_applied(const eversion_t &applied_version);  // remove me
-
   bool should_send_op(
     pg_shard_t peer,
     const hobject_t &hoid) override {
