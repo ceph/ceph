@@ -1484,7 +1484,6 @@ public:
       INACTIVE,
       NEW_CHUNK,
       WAIT_PUSHES,
-      WAIT_LAST_UPDATE,
       BUILD_MAP,
       BUILD_MAP_DONE,
       WAIT_REPLICAS,
@@ -1521,7 +1520,6 @@ public:
         case INACTIVE: ret = "INACTIVE"; break;
         case NEW_CHUNK: ret = "NEW_CHUNK"; break;
         case WAIT_PUSHES: ret = "WAIT_PUSHES"; break;
-        case WAIT_LAST_UPDATE: ret = "WAIT_LAST_UPDATE"; break;
         case BUILD_MAP: ret = "BUILD_MAP"; break;
         case BUILD_MAP_DONE: ret = "BUILD_MAP_DONE"; break;
         case WAIT_REPLICAS: ret = "WAIT_REPLICAS"; break;

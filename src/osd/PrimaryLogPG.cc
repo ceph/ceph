@@ -9918,31 +9918,6 @@ void PrimaryLogPG::op_applied(const eversion_t &applied_version)
   dout(10) << "op_applied version " << applied_version << dendl;
   assert(applied_version == info.last_update);
   last_update_applied = applied_version;
-  if (is_primary()) {
-    if (scrubber.active) {
-      if (last_update_applied >= scrubber.subset_last_update) {
-	requeue_scrub(ops_blocked_by_scrub());
-      }
-    } else {
-      assert(scrubber.start == scrubber.end);
-    }
-  } else {
-    if (scrubber.active_rep_scrub) {
-      if (last_update_applied >= static_cast<const MOSDRepScrub*>(
-	    scrubber.active_rep_scrub->get_req())->scrub_to) {
-	auto& op = scrubber.active_rep_scrub;
-	osd->enqueue_back(
-          OpQueueItem(
-	    unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(info.pgid, op)),
-	    op->get_req()->get_cost(),
-	    op->get_req()->get_priority(),
-	    op->get_req()->get_recv_stamp(),
-	    op->get_req()->get_source().num(),
-	    get_osdmap()->get_epoch()));
-	scrubber.active_rep_scrub = OpRequestRef();
-      }
-    }
-  }
 }
 
 void PrimaryLogPG::eval_repop(RepGather *repop)
@@ -12856,11 +12831,7 @@ void PrimaryLogPG::update_range(
   if (bi->version < info.log_tail) {
     dout(10) << __func__<< ": bi is old, rescanning local backfill_info"
 	     << dendl;
-    if (last_update_applied >= info.log_tail) {
-      bi->version = last_update_applied;
-    } else {
-      bi->version = info.last_update;
-    }
+    bi->version = info.last_update;
     scan_range(local_min, local_max, bi, handle);
   }
 
