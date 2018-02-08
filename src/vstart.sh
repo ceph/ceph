@@ -16,10 +16,15 @@ if [ -n "$VSTART_DEST" ]; then
   CEPH_OUT_DIR=$VSTART_DEST/out
 fi
 
+get_cmake_variable() {
+    local variable=$1
+    grep "$variable" CMakeCache.txt | cut -d "=" -f 2
+}
+
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
   # Out of tree build, learn source location from CMakeCache.txt
-  CEPH_ROOT=`grep ceph_SOURCE_DIR CMakeCache.txt | cut -d "=" -f 2`
+  CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
 fi
