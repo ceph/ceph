@@ -14,6 +14,12 @@ except ImportError:
 import cherrypy
 from mgr_module import MgrModule
 
+if 'COVERAGE_ENABLED' in os.environ:
+    import coverage
+    _cov = coverage.Coverage(config_file="{}/.coveragerc".format(os.path.dirname(__file__)))
+    _cov.start()
+
+# pylint: disable=wrong-import-position
 from .controllers.auth import Auth
 from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
                    NotificationQueue
@@ -105,6 +111,8 @@ class Module(MgrModule):
         cherrypy.tree.mount(Module.StaticRoot(), '/', config=config)
 
     def serve(self):
+        if 'COVERAGE_ENABLED' in os.environ:
+            _cov.start()
         self.configure_cherrypy()
 
         cherrypy.engine.start()
@@ -112,6 +120,9 @@ class Module(MgrModule):
         logger.info('Waiting for engine...')
         self.log.info('Waiting for engine...')
         cherrypy.engine.block()
+        if 'COVERAGE_ENABLED' in os.environ:
+            _cov.stop()
+            _cov.save()
         logger.info('Engine done')
 
     def shutdown(self):
