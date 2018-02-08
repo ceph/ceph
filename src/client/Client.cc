@@ -6083,8 +6083,23 @@ int Client::_lookup(Inode *dir, const string& dname, int mask, InodeRef *target,
   }
 
   if (dname == "..") {
-    if (dir->dentries.empty())
-      *target = dir;
+    if (dir->dentries.empty()) {
+      MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
+      filepath path(dir->ino);
+      req->set_filepath(path);
+
+      InodeRef tmptarget;
+      int r = make_request(req, perms, &tmptarget, NULL, rand() % mdsmap->get_num_in_mds());
+
+      if (r == 0) {
+	Inode *tempino = tmptarget.get();
+	_ll_get(tempino);
+	*target = tempino;
+	ldout(cct, 3) << __func__ << " found target " << (*target)->ino << dendl;
+      } else {
+	*target = dir;
+      }
+    }
     else
       *target = dir->get_first_parent()->dir->parent_inode; //dirs can't be hard-linked
     goto done;
