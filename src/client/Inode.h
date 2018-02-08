@@ -93,10 +93,14 @@ struct CapSnap {
   bool writing, dirty_data;
   uint64_t flush_tid;
 
+  int64_t cap_dirtier_uid;
+  int64_t cap_dirtier_gid;
+
   explicit CapSnap(Inode *i)
     : in(i), issued(0), dirty(0), size(0), time_warp_seq(0), change_attr(0),
       mode(0), uid(0), gid(0), xattr_version(0), inline_version(0),
-      writing(false), dirty_data(false), flush_tid(0)
+      writing(false), dirty_data(false), flush_tid(0), cap_dirtier_uid(-1),
+      cap_dirtier_gid(-1)
   {}
 
   void dump(Formatter *f) const;
