@@ -129,8 +129,6 @@ simply ``mgr`` will pick the current active daemon.
 Configuration
 -------------
 
-OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr") // where to load python modules from
-
 ``mgr module path``
 
 :Description: Path to load modules from
