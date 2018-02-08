@@ -409,8 +409,10 @@ namespace rgw {
       goto unlock;
     }
 
-    /* forbid renaming open files (violates intent, for now) */
-    if (rgw_fh->is_open()) {
+    /* forbid renaming open files (violates intent, for now)
+     * NFSv3 is stateless, do not check its state
+     */
+    if (rgw_fh->is_open() && !rgw_fh->stateless_open()) {
       ldout(get_context(), 12) << __func__
 			<< " rejecting attempt to rename open file path="
 			<< rgw_fh->full_object_name()
