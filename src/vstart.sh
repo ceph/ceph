@@ -27,6 +27,16 @@ if [ -e CMakeCache.txt ]; then
   CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+  if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
+      CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
+  else
+      if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
+          CEPH_PY_VERSION_MAJOR=2
+      else
+          CEPH_PY_VERSION_MAJOR=3
+      fi
+  fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install' 
@@ -35,6 +45,7 @@ if [ -n "$CEPH_BUILD_ROOT" ]; then
         [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
         [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
         [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+        # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
         [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
         [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
@@ -51,7 +62,7 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.2:$PYTHONPATH
+export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:$PYTHONPATH
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
