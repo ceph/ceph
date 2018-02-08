@@ -216,10 +216,10 @@ bool InoTable::repair(inodeno_t id)
   }
 
   assert(is_marked_free(id));
-  dout(10) << "repair: before status. ino = 0x" << std::hex << id << " pver =" << projected_version << " ver= " << version << dendl;
+  dout(10) << "repair: before status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   free.erase(id);
   projected_free.erase(id);
   projected_version = ++version;
-  dout(10) << "repair: after status. ino = 0x" << std::hex <<id << " pver =" << projected_version << " ver= " << version << dendl;
+  dout(10) << "repair: after status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   return true;
 }

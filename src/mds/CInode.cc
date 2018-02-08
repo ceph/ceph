@@ -4047,14 +4047,12 @@ next:
 
         if (inotable->is_marked_free(inode.ino)) {
           LogChannelRef clog = in->mdcache->mds->clog;
-          clog->error() << "scrub: inode wrongly marked free: 0x" << std::hex
-            << inode.ino;
+          clog->error() << "scrub: inode wrongly marked free: " << inode.ino;
 
           if (in->scrub_infop->header->get_repair()) {
             bool repaired = inotable->repair(inode.ino);
             if (repaired) {
-              clog->error() << "inode table repaired for inode: 0x" << std::hex
-                << inode.ino;
+              clog->error() << "inode table repaired for inode: " << inode.ino;
 
               inotable->save();
             } else {
