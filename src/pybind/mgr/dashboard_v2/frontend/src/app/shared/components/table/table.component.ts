@@ -25,12 +25,18 @@ export class TableComponent implements OnInit, OnChanges {
 
   // This is the array with the items to be shown
   @Input() data: any[];
-  // each item -> { prop: 'attribute name', name: 'display name' }
+  // Each item -> { prop: 'attribute name', name: 'display name' }
   @Input() columns: TableColumn[];
-  // name of the component fe 'TableDetailsComponent'
+  // Method used for setting column widths.
+  @Input() columnMode ?= 'force';
+  // Name of the component fe 'TableDetailsComponent'
   @Input() detailsComponent?: string;
+  // Display the tool header, including reload button, pagination and search fields?
+  @Input() toolHeader ?= true;
+  // Display the table header?
   @Input() header ?= true;
-
+  // Display the table footer?
+  @Input() footer ?= true;
   // Should be the function that will update the input data
   @Output() fetchData = new EventEmitter();
 
