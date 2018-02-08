@@ -24,6 +24,7 @@ import { HealthColorPipe } from './health-color.pipe';
     EllipsisPipe
   ],
   providers: [
+    CephShortVersionPipe,
     DimlessBinaryPipe,
     DimlessPipe
   ]

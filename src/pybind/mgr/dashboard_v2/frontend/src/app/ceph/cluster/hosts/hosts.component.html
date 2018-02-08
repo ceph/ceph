@@ -4,31 +4,9 @@
     <li class="breadcrumb-item active">Hosts</li>
   </ol>
 </nav>
-<table class="table table-bordered">
-  <thead>
-  <tr>
-    <th>
-      Hostname
-    </th>
-    <th>
-      Services
-    </th>
-    <th>
-      Version
-    </th>
-  </tr>
-  </thead>
-  <tbody>
-  <tr *ngFor="let host of hosts">
-    <td>
-      {{ host.hostname }}
-    </td>
-    <td>
-      {{ host.services | serviceList }}
-    </td>
-    <td>
-      {{ host.ceph_version | cephShortVersion }}
-    </td>
-  </tr>
-  </tbody>
-</table>
+<cd-table [data]="hosts"
+          [columns]="columns"
+          columnMode="flex"
+          [toolHeader]="false"
+          [footer]="false">
+</cd-table>

@@ -1,6 +1,6 @@
 <div class="dataTables_wrapper">
   <div class="dataTables_header clearfix"
-       *ngIf="header">
+       *ngIf="toolHeader">
     <!-- actions -->
     <div class="oadatatableactions">
         <ng-content select="table-actions"></ng-content>
@@ -54,9 +54,10 @@
                  [selected]="selected"
                  (select)="toggleExpandRow($event)"
                  [columns]="columns"
-                 [columnMode]="'force'"
+                 [columnMode]="columnMode"
                  [rows]="rows"
-                 [footerHeight]="'auto'"
+                 [headerHeight]="header ? 'auto' : 0"
+                 [footerHeight]="footer ? 'auto' : 0"
                  [limit]="limit"
                  [loadingIndicator]="true"
                  [rowHeight]="'auto'">
