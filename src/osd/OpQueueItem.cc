@@ -15,9 +15,11 @@
 #include "OpQueueItem.h"
 #include "OSD.h"
 
-void PGOpItem::run(OSD *osd,
-                   PGRef& pg,
-                   ThreadPool::TPHandle &handle)
+void PGOpItem::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
 {
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
@@ -25,31 +27,38 @@ void PGOpItem::run(OSD *osd,
 
 void PGPeeringItem::run(
   OSD *osd,
+  OSDShard *sdata,
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
   osd->dequeue_peering_evt(pg.get(), evt, handle);
 }
 
-void PGSnapTrim::run(OSD *osd,
-                   PGRef& pg,
-                   ThreadPool::TPHandle &handle)
+void PGSnapTrim::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
 {
   pg->snap_trimmer(epoch_queued);
   pg->unlock();
 }
 
-void PGScrub::run(OSD *osd,
-                   PGRef& pg,
-                   ThreadPool::TPHandle &handle)
+void PGScrub::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
 {
   pg->scrub(epoch_queued, handle);
   pg->unlock();
 }
 
-void PGRecovery::run(OSD *osd,
-                   PGRef& pg,
-                   ThreadPool::TPHandle &handle)
+void PGRecovery::run(
+  OSD *osd,
+  OSDShard *sdata,
+  PGRef& pg,
+  ThreadPool::TPHandle &handle)
 {
   osd->do_recovery(pg.get(), epoch_queued, reserved_pushes, handle);
   pg->unlock();
@@ -57,6 +66,7 @@ void PGRecovery::run(OSD *osd,
 
 void PGRecoveryContext::run(
   OSD *osd,
+  OSDShard *sdata,
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
@@ -66,6 +76,7 @@ void PGRecoveryContext::run(
 
 void PGDelete::run(
   OSD *osd,
+  OSDShard *sdata,
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
