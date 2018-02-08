@@ -23,6 +23,7 @@ pytest==3.3.2
 pytest-cov==2.5.1
 python-bcrypt==0.3.2
 pytz==2017.3
+requests==2.18.4
 singledispatch==3.4.0.3
 six==1.11.0
 tempora==1.10
