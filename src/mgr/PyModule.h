@@ -77,7 +77,13 @@ public:
   ~PyModule();
 
   int load(PyThreadState *pMainThreadState);
-
+#if PY_MAJOR_VERSION >= 3
+  static PyObject* init_ceph_logger();
+  static PyObject* init_ceph_module();
+#else
+  static void init_ceph_logger();
+  static void init_ceph_module();
+#endif
 
   /**
    * Extend `out` with the contents of `this->commands`
