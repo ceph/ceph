@@ -3700,8 +3700,7 @@ void OSD::_get_pgs(vector<PGRef> *v, bool clear_too)
 	  !j.second.pg->is_deleted()) {
 	v->push_back(j.second.pg);
 	if (clear_too) {
-	  j.second.pg.reset();
-	  --num_pgs;
+	  s->_detach_pg(j.second);
 	}
       }
     }
@@ -3731,22 +3730,19 @@ void OSD::register_pg(PGRef pg)
   auto& slot = sdata->pg_slots[pgid];
   assert(!slot.pg);
   dout(20) << __func__ << " " << pgid << " " << pg << dendl;
-  slot.pg = pg;
-  ++num_pgs;
+  sdata->_attach_pg(slot, pg.get());
 }
 
 void OSD::unregister_pg(PG *pg)
 {
-  spg_t pgid = pg->get_pgid();
-  uint32_t shard_index = pgid.hash_to_shard(num_shards);
-  auto sdata = shards[shard_index];
+  auto sdata = pg->osd_shard;
+  assert(sdata);
   Mutex::Locker l(sdata->sdata_op_ordering_lock);
   auto p = sdata->pg_slots.find(pg->pg_id);
   if (p != sdata->pg_slots.end() &&
       p->second.pg) {
-    dout(20) << __func__ << " " << pg->pg_id << " cleared" << dendl;
-    p->second.pg.reset();
-    --num_pgs;
+    dout(20) << __func__ << " " << pg->pg_id << " " << pg << dendl;
+    sdata->_detach_pg(p->second);
   } else {
     dout(20) << __func__ << " " << pg->pg_id << " not found" << dendl;
   }
@@ -9266,6 +9262,22 @@ int OSD::init_op_flags(OpRequestRef& op)
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->get_nodeid() << ":" << shard_id << "." << __func__ << " "
 
+void OSDShard::_attach_pg(pg_slot& slot, PG *pg)
+{
+  dout(10) << pg->pg_id << " " << pg << dendl;
+  slot.pg = pg;
+  pg->osd_shard = this;
+  ++osd->num_pgs;
+}
+
+void OSDShard::_detach_pg(pg_slot& slot)
+{
+  dout(10) << slot.pg->pg_id << " " << slot.pg << dendl;
+  slot.pg->osd_shard = nullptr;
+  slot.pg = nullptr;
+  --osd->num_pgs;
+}
+
 void OSDShard::consume_map(
   OSDMapRef& new_osdmap,
   unsigned *pushes_to_free,
@@ -9334,7 +9346,6 @@ void OSDShard::consume_map(
 	  !slot.pg) {
 	dout(20) << __func__ << "  " << pgid << " empty, pruning" << dendl;
 	p = pg_slots.erase(p);
-	--osd->num_pgs;
 	continue;
       }
     }
@@ -9447,8 +9458,7 @@ void OSDShard::register_and_wake_split_child(PG *pg)
     auto& slot = p->second;
     assert(!slot.pg);
     assert(slot.waiting_for_split);
-    slot.pg = pg;
-    ++osd->num_pgs;
+    _attach_pg(slot, pg);
     _wake_pg_slot(pg->pg_id, slot);
   }
   sdata_lock.Lock();
@@ -9682,8 +9692,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 	    pg = osd->handle_pg_create_info(osdmap, create_info);
 	    if (pg) {
 	      // we created the pg! drop out and continue "normally"!
-	      slot.pg = pg;	      // install in shard slot
-	      ++osd->num_pgs;
+	      sdata->_attach_pg(slot, pg.get());
 	      sdata->_wake_pg_slot(token, slot);
 
 	      // identify split children between create epoch and shard epoch.

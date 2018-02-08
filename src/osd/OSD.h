@@ -1140,6 +1140,9 @@ struct OSDShard {
 	priority, cost, std::move(item));
   }
 
+  void _attach_pg(pg_slot& slot, PG *pg);
+  void _detach_pg(pg_slot& slot);
+
   /// push osdmap into shard
   void consume_map(
     OSDMapRef& osdmap,
