@@ -31,7 +31,7 @@ void PGPeeringItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  osd->dequeue_peering_evt(pg.get(), evt, handle);
+  osd->dequeue_peering_evt(sdata, pg.get(), evt, handle);
 }
 
 void PGSnapTrim::run(
@@ -80,5 +80,5 @@ void PGDelete::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
-  osd->dequeue_delete(pg.get(), epoch_queued, handle);
+  osd->dequeue_delete(sdata, pg.get(), epoch_queued, handle);
 }
