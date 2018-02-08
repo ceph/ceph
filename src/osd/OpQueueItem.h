@@ -57,6 +57,7 @@
 #include "PGPeeringEvent.h"
 
 class OSD;
+class OSDShard;
 
 class OpQueueItem {
 public:
@@ -108,7 +109,7 @@ public:
 
     virtual ostream &print(ostream &rhs) const = 0;
 
-    virtual void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
+    virtual void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) = 0;
     virtual ~OpQueueable() {}
     friend ostream& operator<<(ostream& out, const OpQueueable& q) {
       return q.print(out);
@@ -172,8 +173,8 @@ public:
   uint64_t get_reserved_pushes() const {
     return qitem->get_reserved_pushes();
   }
-  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) {
-    qitem->run(osd, pg, handle);
+  void run(OSD *osd, OSDShard *sdata,PGRef& pg, ThreadPool::TPHandle &handle) {
+    qitem->run(osd, sdata, pg, handle);
   }
   unsigned get_priority() const { return priority; }
   int get_cost() const { return cost; }
@@ -255,7 +256,7 @@ public:
   boost::optional<OpRequestRef> maybe_get_op() const override final {
     return op;
   }
-  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
 class PGPeeringItem : public PGOpQueueable {
@@ -268,7 +269,7 @@ public:
   ostream &print(ostream &rhs) const override final {
     return rhs << "PGPeeringEvent(" << evt->get_desc() << ")";
   }
-  void run(OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+  void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
   bool is_peering() const override {
     return true;
   }
@@ -296,7 +297,7 @@ public:
 	       << ")";
   }
   void run(
-    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
 class PGScrub : public PGOpQueueable {
@@ -315,7 +316,7 @@ public:
 	       << ")";
   }
   void run(
-    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
 class PGRecovery : public PGOpQueueable {
@@ -342,7 +343,7 @@ public:
     return reserved_pushes;
   }
   virtual void run(
-    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
 class PGRecoveryContext : public PGOpQueueable {
@@ -362,7 +363,7 @@ public:
 	       << ")";
   }
   void run(
-    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };
 
 class PGDelete : public PGOpQueueable {
@@ -382,5 +383,5 @@ public:
 	       << ")";
   }
   void run(
-    OSD *osd, PGRef& pg, ThreadPool::TPHandle &handle) override final;
+    OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) override final;
 };

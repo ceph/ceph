@@ -9720,7 +9720,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       if (!qi.peering_requires_pg()) {
 	// for pg-less events, we run them under the ordering lock, since
 	// we don't have the pg lock to keep them ordered.
-	qi.run(osd, pg, tp_handle);
+	qi.run(osd, sdata, pg, tp_handle);
       } else if (osdmap->is_up_acting_osd_shard(token, osd->whoami)) {
 	if (create_info) {
 	  if (create_info->by_mon &&
@@ -9819,7 +9819,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   delete f;
   *_dout << dendl;
 
-  qi.run(osd, pg, tp_handle);
+  qi.run(osd, sdata, pg, tp_handle);
 
   {
 #ifdef WITH_LTTNG
