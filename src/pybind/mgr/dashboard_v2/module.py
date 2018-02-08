@@ -48,6 +48,12 @@ class Module(MgrModule):
                    'name=password,type=CephString',
             'desc': 'Set the login credentials',
             'perm': 'w'
+        },
+        {
+            'cmd': 'dashboard set-session-expire '
+                   'name=seconds,type=CephInt',
+            'desc': 'Set the session expire timeout',
+            'perm': 'w'
         }
     ]
 
@@ -60,7 +66,7 @@ class Module(MgrModule):
         logger.logger = self._logger
         self._url_prefix = ''
 
-    def configure_cherrypy(self, in_unittest=False):
+    def configure_cherrypy(self):
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
         if server_addr is None:
@@ -87,14 +93,11 @@ class Module(MgrModule):
 
         # Apply the 'global' CherryPy configuration.
         config = {
-            'engine.autoreload.on': False
+            'engine.autoreload.on': False,
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'error_page.default': json_error_page
         }
-        if not in_unittest:
-            config.update({
-                'server.socket_host': server_addr,
-                'server.socket_port': int(server_port),
-                'error_page.default': json_error_page
-            })
         cherrypy.config.update(config)
 
         current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -135,6 +138,9 @@ class Module(MgrModule):
         if cmd['prefix'] == 'dashboard set-login-credentials':
             Auth.set_login_credentials(cmd['username'], cmd['password'])
             return 0, 'Username and password updated', ''
+        elif cmd['prefix'] == 'dashboard set-session-expire':
+            self.set_config('session-expire', str(cmd['seconds']))
+            return 0, 'Session expiration timeout updated', ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))

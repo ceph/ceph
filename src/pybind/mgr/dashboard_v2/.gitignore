@@ -5,6 +5,7 @@ coverage.xml
 junit*xml
 __pycache__
 .cache
+ceph.conf
 
 # IDE
 .vscode

@@ -6,8 +6,8 @@ from __future__ import absolute_import
 
 import os
 
-if 'UNITTEST' not in os.environ:
 
+if 'UNITTEST' not in os.environ:
     class _LoggerProxy(object):
         def __init__(self):
             self.logger = None
@@ -18,18 +18,10 @@ if 'UNITTEST' not in os.environ:
             return getattr(self.logger, item)
 
     logger = _LoggerProxy()
-
-    # pylint: disable=W0403,W0401
-
+    # pylint: disable=wildcard-import, wrong-import-position
     from .module import *  # NOQA
 else:
     import logging
-    import sys
-    # pylint: disable=W0403
-    from .cephmock import ceph_module_mock, rados_mock, rbd_mock
-    sys.modules['ceph_module'] = ceph_module_mock
-    sys.modules['rados'] = rados_mock
-    sys.modules['rbd'] = rbd_mock
-    logging.basicConfig(level=logging.WARNING)
+    logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
-    logging.root.handlers[0].setLevel(logging.WARNING)
+    logging.root.handlers[0].setLevel(logging.DEBUG)
