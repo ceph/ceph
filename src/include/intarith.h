@@ -15,6 +15,7 @@
 #ifndef CEPH_INTARITH_H
 #define CEPH_INTARITH_H
 
+#include <limits>
 #include <type_traits>
 
 #ifndef MIN
@@ -219,5 +220,63 @@ template<class T>
     return 0;
   return (sizeof(v) * 8) - __builtin_clzll(v);
 }
+
+namespace ceph {
+namespace math {
+
+template<class UnsignedValueT>
+class p2_t {
+  typedef uint8_t exponent_type;
+  typedef UnsignedValueT value_type;
+
+  static_assert(std::is_unsigned_v<value_type>);
+  static_assert(std::numeric_limits<exponent_type>::max() >
+		std::numeric_limits<value_type>::digits);
+
+  value_type value;
+
+  struct _check_skipper_t {};
+  p2_t(const value_type value, _check_skipper_t)
+    : value(value) {
+  }
+
+public:
+  p2_t(const value_type value)
+    : value(value) {
+    // 0 isn't a power of two. Additional validation is necessary as
+    // the isp2 routine doesn't sanitize that case.
+    //assert(value != 0);
+    assert(isp2(value));
+  }
+
+  static p2_t<value_type> from_p2(const exponent_type exponent) {
+    return p2_t(1 << exponent, _check_skipper_t());
+  }
+
+  exponent_type get_exponent() const {
+    return ctz(value);
+  }
+
+  value_type get_value() const {
+    return value;
+  }
+
+  operator value_type() const {
+    return value;
+  }
+
+  friend value_type operator/(const value_type& l,
+                                  const p2_t<value_type>& r) {
+    return l >> (cbits(r.value) - 1);
+  }
+
+  friend value_type operator%(const value_type& l,
+                                  const p2_t<value_type>& r) {
+    return l & (r.value - 1);
+  }
+};
+
+} // math
+} // ceph
 
 #endif

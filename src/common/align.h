@@ -17,14 +17,26 @@
 #ifndef CEPH_COMMON_ALIGN_H
 #define CEPH_COMMON_ALIGN_H
 
+#include "include/intarith.h"
+
 template <typename T>
 inline constexpr T align_up(T v, T align) {
   return (v + align - 1) & ~(align - 1);
 }
 
 template <typename T>
+inline constexpr T align_up(T v, const ceph::math::p2_t<T>& align) {
+  return (v + align - 1) & ~(align - 1);
+}
+
+template <typename T>
 inline constexpr T align_down(T v, T align) {
-  return v & ~(align - 1);
+  return v & ~(static_cast<T>(align) - 1);
+}
+
+template <typename T>
+inline constexpr T align_down(T v, const ceph::math::p2_t<T>& align) {
+  return v & ~(static_cast<T>(align) - 1);
 }
 
 #endif /* CEPH_COMMON_ALIGN_H */
