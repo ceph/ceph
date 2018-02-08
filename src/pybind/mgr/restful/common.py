@@ -27,10 +27,7 @@ POOL_QUOTA_PROPERTIES = [
     ('quota_max_objects', 'max_objects'),
 ]
 
-POOL_ARGS = POOL_PROPERTIES + map(
-    lambda x: x[0],
-    POOL_QUOTA_PROPERTIES
-)
+POOL_ARGS = POOL_PROPERTIES + [x for x,_ in POOL_QUOTA_PROPERTIES]
 
 
 # Transform command to a human readable form
