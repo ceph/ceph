@@ -1072,6 +1072,8 @@ int ObjectStoreTool::dump_object(Formatter *formatter,
 }
 
 int ObjectStoreTool::get_object(ObjectStore *store,
+				OSDriver& driver,
+				SnapMapper& mapper,
 				coll_t coll,
 				bufferlist &bl, OSDMap &curmap,
 				bool *skipped_objects)
@@ -1081,13 +1083,6 @@ int ObjectStoreTool::get_object(ObjectStore *store,
   bufferlist::iterator ebliter = bl.begin();
   object_begin ob;
   ob.decode(ebliter);
-  OSDriver driver(
-    store,
-    coll_t(),
-    OSD::make_snapmapper_oid());
-  spg_t pg;
-  coll.is_pg_prefix(&pg);
-  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pg.shard);
 
   if (ob.hoid.hobj.is_temp()) {
     cerr << "ERROR: Export contains temporary object '" << ob.hoid << "'" << std::endl;
@@ -1714,6 +1709,12 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     store->queue_transaction(ch, std::move(t));
   }
 
+  OSDriver driver(
+    store,
+    coll_t(),
+    OSD::make_snapmapper_oid());
+  SnapMapper mapper(g_ceph_context, &driver, 0, 0, 0, pgid.shard);
+
   cout << "Importing pgid " << pgid;
   if (orig_pgid != pgid) {
     cout << " exported as " << orig_pgid;
@@ -1737,7 +1738,7 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     }
     switch(type) {
     case TYPE_OBJECT_BEGIN:
-      ret = get_object(store, coll, ebl, curmap, &skipped_objects);
+      ret = get_object(store, driver, mapper, coll, ebl, curmap, &skipped_objects);
       if (ret) return ret;
       break;
     case TYPE_PG_METADATA:
@@ -1832,6 +1833,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
     store->queue_transaction(ch, std::move(t));
   }
 
+  // make sure we flush onreadable items before mapper/driver are destroyed.
+  ch->flush();
   return 0;
 }
 
