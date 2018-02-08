@@ -11369,10 +11369,13 @@ bool OSDMonitor::_check_remove_tier(
   // Apply CephFS-specific checks
   const FSMap &pending_fsmap = mon->mdsmon()->get_pending();
   if (pending_fsmap.pool_in_use(base_pool_id)) {
-    if (base_pool->type != pg_pool_t::TYPE_REPLICATED) {
-      // If the underlying pool is erasure coded, we can't permit the
-      // removal of the replicated tier that CephFS relies on to access it
-      *ss << "pool '" << base_pool_name << "' is in use by CephFS via its tier";
+    if (base_pool->is_erasure() && !base_pool->allows_ecoverwrites()) {
+      // If the underlying pool is erasure coded and does not allow EC
+      // overwrites, we can't permit the removal of the replicated tier that
+      // CephFS relies on to access it
+      *ss << "pool '" << base_pool_name <<
+          "' does not allow EC overwrites and is in use by CephFS"
+          " via its tier";
       *err = -EBUSY;
       return false;
     }
