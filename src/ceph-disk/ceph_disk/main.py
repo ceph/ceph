@@ -1239,6 +1239,7 @@ def get_conf_with_default(cluster, variable):
         out = _check_output(
             args=[
                 'ceph-osd',
+                '--no-mon-config',
                 '--cluster={cluster}'.format(
                     cluster=cluster,
                 ),
@@ -1544,6 +1545,7 @@ def check_journal_reqs(args):
     log_file = "/var/log/ceph/$cluster-osd-check.log"
     _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
+        '--no-mon-config',
         '-i', '0',
         '--log-file', log_file,
         '--cluster', args.cluster,
@@ -1552,6 +1554,7 @@ def check_journal_reqs(args):
     ])
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
+        '--no-mon-config',
         '-i', '0',
         '--log-file', log_file,
         '--cluster', args.cluster,
@@ -1560,6 +1563,7 @@ def check_journal_reqs(args):
     ])
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
+        '--no-mon-config',
         '-i', '0',
         '--log-file', log_file,
         '--cluster', args.cluster,
@@ -3172,6 +3176,7 @@ def mkfs(
         command_check_call(
             [
                 'ceph-osd',
+                '--no-mon-config',
                 '--cluster', cluster,
                 '--mkfs',
                 '-i', osd_id,
@@ -3186,6 +3191,7 @@ def mkfs(
         command_check_call(
             [
                 'ceph-osd',
+                '--no-mon-config',
                 '--cluster', cluster,
                 '--mkfs',
                 '-i', osd_id,
@@ -4133,6 +4139,7 @@ def get_space_osd_uuid(name, path):
         out = _check_output(
             args=[
                 'ceph-osd',
+                '--no-mon-config',
                 '--get-device-fsid',
                 path,
             ],
