@@ -13,6 +13,26 @@ namespace rbd {
 namespace action {
 namespace remove {
 
+namespace {
+
+bool is_auto_delete_snapshot(librbd::Image* image,
+                             const librbd::snap_info_t &snap_info) {
+  librbd::snap_namespace_type_t namespace_type;
+  int r = image->snap_get_namespace_type(snap_info.id, &namespace_type);
+  if (r < 0) {
+    return false;
+  }
+
+  switch (namespace_type) {
+  case RBD_SNAP_NAMESPACE_TYPE_TRASH:
+    return true;
+  default:
+    return false;
+  }
+}
+
+} // anonymous namespace
+
 namespace at = argument_types;
 namespace po = boost::program_options;
 
@@ -62,9 +82,30 @@ int execute(const po::variables_map &vm,
                 vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     if (r == -ENOTEMPTY) {
-      std::cerr << "rbd: image has snapshots - these must be deleted"
-                << " with 'rbd snap purge' before the image can be removed."
-                << std::endl;
+      librbd::Image image;
+      std::vector<librbd::snap_info_t> snaps;
+      r = utils::open_image(io_ctx, image_name, true, &image);
+      if (r >= 0) {
+        r = image.snap_list(snaps);
+      }
+      if (r >= 0) {
+        snaps.erase(std::remove_if(snaps.begin(), snaps.end(),
+			           [&image](const librbd::snap_info_t& snap) {
+                                     return is_auto_delete_snapshot(&image,
+                                                                    snap);
+                                   }),
+                    snaps.end());
+      }
+
+      if (!snaps.empty()) {
+        std::cerr << "rbd: image has snapshots - these must be deleted"
+                  << " with 'rbd snap purge' before the image can be removed."
+                  << std::endl;
+      } else {
+        std::cerr << "rbd: image has snapshots with linked clones - these must "
+                  << "be deleted or flattened before the image can be removed."
+                  << std::endl;
+      }
     } else if (r == -EBUSY) {
       std::cerr << "rbd: error: image still has watchers"
                 << std::endl
