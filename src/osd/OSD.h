@@ -1104,6 +1104,9 @@ struct OSDShardPGSlot {
 
   /// waiting for split child to materialize
   bool waiting_for_split = false;
+
+  epoch_t epoch = 0;
+  boost::intrusive::set_member_hook<> pg_epoch_item;
 };
 
 struct OSDShard {
@@ -1121,6 +1124,21 @@ struct OSDShard {
   /// from pqueue while _process thread drops shard lock to acquire the
   /// pg lock.  stale slots are removed by consume_map.
   unordered_map<spg_t,unique_ptr<OSDShardPGSlot>> pg_slots;
+
+  struct pg_slot_compare_by_epoch {
+    bool operator()(const OSDShardPGSlot& l, const OSDShardPGSlot& r) const {
+      return l.epoch < r.epoch;
+    }
+  };
+
+  /// maintain an ordering of pg slots by pg epoch
+  boost::intrusive::multiset<
+    OSDShardPGSlot,
+    boost::intrusive::member_hook<
+      OSDShardPGSlot,
+      boost::intrusive::set_member_hook<>,
+      &OSDShardPGSlot::pg_epoch_item>,
+    boost::intrusive::compare<pg_slot_compare_by_epoch>> pg_slots_by_epoch;
 
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
@@ -1142,6 +1160,9 @@ struct OSDShard {
 
   void _attach_pg(OSDShardPGSlot *slot, PG *pg);
   void _detach_pg(OSDShardPGSlot *slot);
+
+  void update_pg_epoch(OSDShardPGSlot *slot, epoch_t epoch);
+  epoch_t get_min_pg_epoch();
 
   /// push osdmap into shard
   void consume_map(

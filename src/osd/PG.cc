@@ -6399,6 +6399,7 @@ void PG::handle_advance_map(
 	   << " -- " << up_primary << "/" << acting_primary
 	   << dendl;
   update_osdmap_ref(osdmap);
+  osd_shard->update_pg_epoch(pg_slot, osdmap->get_epoch());
 
   pool.update(cct, osdmap);
 

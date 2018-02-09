@@ -9252,6 +9252,9 @@ void OSDShard::_attach_pg(OSDShardPGSlot *slot, PG *pg)
   pg->osd_shard = this;
   pg->pg_slot = slot;
   ++osd->num_pgs;
+
+  slot->epoch = pg->get_osdmap_epoch();
+  pg_slots_by_epoch.insert(*slot);
 }
 
 void OSDShard::_detach_pg(OSDShardPGSlot *slot)
@@ -9261,6 +9264,32 @@ void OSDShard::_detach_pg(OSDShardPGSlot *slot)
   slot->pg->pg_slot = nullptr;
   slot->pg = nullptr;
   --osd->num_pgs;
+
+  pg_slots_by_epoch.erase(pg_slots_by_epoch.iterator_to(*slot));
+  slot->epoch = 0;
+}
+
+void OSDShard::update_pg_epoch(OSDShardPGSlot *slot, epoch_t e)
+{
+  Mutex::Locker l(sdata_op_ordering_lock);
+  dout(20) << "min was " << pg_slots_by_epoch.begin()->epoch
+	   << " on " << pg_slots_by_epoch.begin()->pg->pg_id << dendl;
+  pg_slots_by_epoch.erase(pg_slots_by_epoch.iterator_to(*slot));
+  dout(20) << slot->pg->pg_id << " " << slot->epoch << " -> " << e << dendl;
+  slot->epoch = e;
+  pg_slots_by_epoch.insert(*slot);
+  dout(20) << "min is now " << pg_slots_by_epoch.begin()->epoch
+	   << " on " << pg_slots_by_epoch.begin()->pg->pg_id << dendl;
+}
+
+epoch_t OSDShard::get_min_pg_epoch()
+{
+  Mutex::Locker l(sdata_op_ordering_lock);
+  auto p = pg_slots_by_epoch.begin();
+  if (p == pg_slots_by_epoch.end()) {
+    return 0;
+  }
+  return p->epoch;
 }
 
 void OSDShard::consume_map(
