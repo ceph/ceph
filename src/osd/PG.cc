@@ -6245,6 +6245,13 @@ void PG::_delete_some()
 
     // final flush here to ensure completions drop refs.  Of particular concern
     // are the SnapMapper ContainerContexts.
+    {
+      ObjectStore::Transaction t;
+      PGRef pgref(this);
+      t.register_on_commit(new ContainerContext<PGRef>(pgref));
+      t.register_on_applied(new ContainerContext<PGRef>(pgref));
+      osd->store->queue_transaction(ch, std::move(t));
+    }
     ch->flush();
 
     ObjectStore::Transaction t;
