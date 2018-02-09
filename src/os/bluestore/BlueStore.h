@@ -1898,7 +1898,6 @@ private:
 
   ///< block size of block device (power of 2)
   ceph::math::p2_t<uint64_t> block_size = 0;
-  uint64_t block_mask = 0;     ///< mask to get just the block offset
   size_t block_size_order = 0; ///< bits to shift to get block size
 
   uint64_t min_alloc_size = 0; ///< minimum allocation unit (power of 2)

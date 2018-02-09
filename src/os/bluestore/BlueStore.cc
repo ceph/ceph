@@ -4297,7 +4297,6 @@ int BlueStore::_open_bdev(bool create)
 
   // initialize global block parameters
   block_size = bdev->get_block_size();
-  block_mask = ~(block_size - 1);
   // TODO(rzarzynski): introduce a subtype with cached exponent to eradicate
   // *_order members.
   block_size_order = block_size.get_exponent();
