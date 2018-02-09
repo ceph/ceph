@@ -4,7 +4,7 @@ tasks:
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev']
 - print: "**** done install jewel"
 - install.upgrade:
-   exclude_packages: ['ceph-test', 'ceph-test-dbg','libcephfs1']
+   exclude_packages: ['ceph', 'ceph-mds', 'ceph-mgr', 'ceph-common', 'ceph-test', 'ceph-test-dbg', 'ceph-radosgw', 'libcephfs1']
    client.1:
 - print: "**** done install.upgrade to -x on client.0"
 - ceph:
