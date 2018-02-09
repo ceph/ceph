@@ -189,6 +189,30 @@ int init_collections(std::unique_ptr<ObjectStore>& os,
 
   const int split_bits = cbits(count - 1);
 
+  {
+    // propagate Superblock object to ensure proper functioning of tools that
+    // need it. E.g. ceph-objectstore-tool
+    coll_t cid(coll_t::meta());
+    bool exists = os->collection_exists(cid);
+    if (!exists) {
+      auto ch = os->create_new_collection(cid);
+
+      OSDSuperblock superblock;
+      bufferlist bl;
+      encode(superblock, bl);
+
+      ObjectStore::Transaction t;
+      t.create_collection(cid, split_bits);
+      t.write(cid, OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+      int r = os->apply_transaction(ch, std::move(t));
+
+      if (r < 0) {
+	derr << "Failure to write OSD superblock: " << cpp_strerror(-r) << dendl;
+	return r;
+      }
+    }
+  }
+
   for (uint32_t i = 0; i < count; i++) {
     auto pg = spg_t{pg_t{i, pool}};
     coll_t cid(pg);
