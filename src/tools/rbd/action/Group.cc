@@ -536,7 +536,7 @@ int execute_group_snap_list(const po::variables_map &vm,
   if (f) {
     f->close_section();
     f->flush(std::cout);
-  } else {
+  } else if (snaps.size()) {
     std::cout << t;
   }
   return 0;
