@@ -10,6 +10,7 @@ import {
 } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { RgwDaemonListComponent } from './ceph/rgw/rgw-daemon-list/rgw-daemon-list.component';
 import { LoginComponent } from './core/auth/login/login.component';
+import { NotFoundComponent } from './core/not-found/not-found.component';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 
 const routes: Routes = [
@@ -29,7 +30,9 @@ const routes: Routes = [
     component: PerformanceCounterComponent,
     canActivate: [AuthGuardService]
   },
-  { path: 'monitor', component: MonitorComponent, canActivate: [AuthGuardService] }
+  { path: 'monitor', component: MonitorComponent, canActivate: [AuthGuardService] },
+  { path: '404', component: NotFoundComponent },
+  { path: '**', redirectTo: '/404'}
 ];
 
 @NgModule({

@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 
 import { AuthModule } from './auth/auth.module';
 import { NavigationModule } from './navigation/navigation.module';
+import { NotFoundComponent } from './not-found/not-found.component';
 
 @NgModule({
   imports: [
@@ -11,6 +12,6 @@ import { NavigationModule } from './navigation/navigation.module';
     AuthModule
   ],
   exports: [NavigationModule],
-  declarations: []
+  declarations: [NotFoundComponent]
 })
 export class CoreModule { }
