@@ -1504,7 +1504,7 @@ protected:
 
   Context *finish_sync_event;
 
-  void finish_recovery(list<Context*>& tfin);
+  Context *finish_recovery();
   void _finish_recovery(Context *c);
   struct C_PG_FinishRecovery : public Context {
     PGRef pg;
