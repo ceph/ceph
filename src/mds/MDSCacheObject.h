@@ -31,15 +31,16 @@ struct ClientLease {
   client_t client;
   MDSCacheObject *parent;
 
-  ceph_seq_t seq;
+  ceph_seq_t seq = 0;
   utime_t ttl;
   xlist<ClientLease*>::item item_session_lease; // per-session list
   xlist<ClientLease*>::item item_lease;         // global list
 
   ClientLease(client_t c, MDSCacheObject *p) : 
-    client(c), parent(p), seq(0),
+    client(c), parent(p),
     item_session_lease(this),
     item_lease(this) { }
+  ClientLease() = delete;
 };
 
 
@@ -102,12 +103,7 @@ class MDSCacheObject {
   // ============================================
   // cons
  public:
-  MDSCacheObject() :
-    state(0), 
-    ref(0),
-    auth_pins(0), nested_auth_pins(0),
-    replica_nonce(0)
-  {}
+  MDSCacheObject() {}
   virtual ~MDSCacheObject() {}
 
   // printing
@@ -119,7 +115,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // state
  protected:
-  __u32 state;     // state bits
+  __u32 state = 0;     // state bits
 
  public:
   unsigned get_state() const { return state; }
@@ -143,7 +139,7 @@ class MDSCacheObject {
   // --------------------------------------------
   // pins
 protected:
-  __s32      ref;       // reference count
+  __s32      ref = 0;       // reference count
 #ifdef MDS_REF_SET
   mempool::mds_co::map<int,int> ref_map;
 #endif
@@ -223,8 +219,8 @@ protected:
   }
 
   protected:
-  int auth_pins;
-  int nested_auth_pins;
+  int auth_pins = 0;
+  int nested_auth_pins = 0;
 #ifdef MDS_AUTHPIN_SET
   mempool::mds_co::multiset<void*> auth_pin_set;
 #endif
@@ -252,8 +248,8 @@ protected:
   // --------------------------------------------
   // replication (across mds cluster)
  protected:
-  unsigned		replica_nonce; // [replica] defined on replica
-  typedef compact_map<mds_rank_t,unsigned> replica_map_type;
+  unsigned		replica_nonce = 0; // [replica] defined on replica
+  typedef mempool::mds_co::compact_map<mds_rank_t,unsigned> replica_map_type;
   replica_map_type replica_map;   // [auth] mds -> nonce
 
  public:

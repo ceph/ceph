@@ -16,6 +16,8 @@
 #ifndef CEPH_MDENTRYLINK_H
 #define CEPH_MDENTRYLINK_H
 
+#include <string_view>
+
 class MDentryLink : public Message {
   dirfrag_t subtree;
   dirfrag_t dirfrag;
@@ -32,7 +34,7 @@ class MDentryLink : public Message {
 
   MDentryLink() :
     Message(MSG_MDS_DENTRYLINK) { }
-  MDentryLink(dirfrag_t r, dirfrag_t df, string& n, bool p) :
+  MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
     Message(MSG_MDS_DENTRYLINK),
     subtree(r),
     dirfrag(df),

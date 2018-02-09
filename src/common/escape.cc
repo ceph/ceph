@@ -32,10 +32,10 @@
 #define SGL_QUOTE_XESCAPE		"&apos;"
 #define DBL_QUOTE_XESCAPE		"&quot;"
 
-int escape_xml_attr_len(const char *buf)
+size_t escape_xml_attr_len(const char *buf)
 {
 	const char *b;
-	int ret = 0;
+	size_t ret = 0;
 	for (b = buf; *b; ++b) {
 		unsigned char c = *b;
 		switch (c) {
@@ -173,11 +173,10 @@ std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e)
 #define TAB_JESCAPE "\\t"
 #define NEWLINE_JESCAPE "\\n"
 
-int escape_json_attr_len(const char *buf, int src_len)
+size_t escape_json_attr_len(const char *buf, size_t src_len)
 {
 	const char *b;
-	int ret = 0;
-	int i;
+	size_t i, ret = 0;
 	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
 		switch (c) {
@@ -208,11 +207,11 @@ int escape_json_attr_len(const char *buf, int src_len)
 	return ret;
 }
 
-void escape_json_attr(const char *buf, int src_len, char *out)
+void escape_json_attr(const char *buf, size_t src_len, char *out)
 {
 	char *o = out;
 	const char *b;
-	int i;
+	size_t i;
 	for (i = 0, b = buf; i < src_len; ++i, ++b) {
 		unsigned char c = *b;
 		switch (c) {

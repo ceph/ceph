@@ -979,9 +979,7 @@ void MDBalancer::find_exports(CDir *dir,
   dout(7) << " find_exports in " << dir_pop << " " << *dir << " need " << need << " (" << needmin << " - " << needmax << ")" << dendl;
 
   double subdir_sum = 0;
-  for (CDir::map_t::iterator it = dir->begin();
-       it != dir->end();
-       ++it) {
+  for (auto it = dir->begin(); it != dir->end(); ++it) {
     CInode *in = it->second->get_linkage()->get_inode();
     if (!in) continue;
     if (!in->is_dir()) continue;
@@ -1278,7 +1276,7 @@ int MDBalancer::dump_loads(Formatter *f)
     dir->dump_load(f, now, decayrate);
     f->close_section();
 
-    for (CDir::map_t::iterator it = dir->begin(); it != dir->end(); ++it) {
+    for (auto it = dir->begin(); it != dir->end(); ++it) {
       CInode *in = it->second->get_linkage()->get_inode();
       if (!in || !in->is_dir())
 	continue;

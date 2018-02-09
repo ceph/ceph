@@ -390,7 +390,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     if (parent) {
       auto dir = parent->get_dir();
       mdcache->mds->damage_table.notify_dentry(
-          dir->inode->ino(), dir->frag, parent->last, parent->name, path);
+          dir->inode->ino(), dir->frag, parent->last, parent->get_name(), path);
     }
   }
 

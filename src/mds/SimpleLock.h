@@ -177,14 +177,15 @@ protected:
 private:
   int num_rdlock;
 
+  // XXX not in mempool
   struct unstable_bits_t {
     set<__s32> gather_set;  // auth+rep.  >= 0 is mds, < 0 is client
 
     // local state
-    int num_wrlock, num_xlock;
+    int num_wrlock = 0, num_xlock = 0;
     MutationRef xlock_by;
-    client_t xlock_by_client;
-    client_t excl_client;
+    client_t xlock_by_client = -1;
+    client_t excl_client = -1;
 
     bool empty() {
       return
@@ -196,11 +197,7 @@ private:
 	excl_client == -1;
     }
 
-    unstable_bits_t() : num_wrlock(0),
-			num_xlock(0),
-			xlock_by(),
-			xlock_by_client(-1),
-			excl_client(-1) {}
+    unstable_bits_t() {}
   };
 
   mutable std::unique_ptr<unstable_bits_t> _unstable;

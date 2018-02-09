@@ -501,10 +501,9 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   inode.dump(f);
   f->close_section(); // inode
   f->open_object_section("xattrs");
-  for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
-      iter != xattrs.end(); ++iter) {
-    string s(iter->second.c_str(), iter->second.length());
-    f->dump_string(iter->first.c_str(), s);
+  for (const auto &p : xattrs) {
+    std::string s(p.second.c_str(), p.second.length());
+    f->dump_string(p.first.c_str(), s);
   }
   f->close_section(); // xattrs
   if (inode.is_symlink()) {
@@ -523,12 +522,10 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->dump_string("state", state_string());
   if (!old_inodes.empty()) {
     f->open_array_section("old inodes");
-    for (old_inodes_t::const_iterator iter = old_inodes.begin();
-	 iter != old_inodes.end();
-	 ++iter) {
+    for (const auto &p : old_inodes) {
       f->open_object_section("inode");
-      f->dump_int("snapid", iter->first);
-      iter->second.dump(f);
+      f->dump_int("snapid", p.first);
+      p.second.dump(f);
       f->close_section(); // inode
     }
     f->close_section(); // old inodes
@@ -537,9 +534,9 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
 
 void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
 {
-  inode_t inode;
+  CInode::mempool_inode inode;
   fragtree_t fragtree;
-  map<string,bufferptr> empty_xattrs;
+  CInode::mempool_xattr_map empty_xattrs;
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
                                 inode, fragtree, empty_xattrs, "", 0, empty_snapbl,
@@ -983,21 +980,21 @@ void EMetaBlob::get_paths(
 
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
-      std::string const &dentry = (*iter)->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = (*iter)->dn;
+      children[dir_ino].emplace_back(dentry);
       ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
     }
 
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = iter->dn;
+      children[dir_ino].emplace_back(dentry);
     }
 
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = iter->dn;
+      children[dir_ino].emplace_back(dentry);
     }
   }
 
@@ -1014,7 +1011,7 @@ void EMetaBlob::get_paths(
     list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
-      std::string const &dentry = (*iter)->dn;
+      std::string_view dentry = (*iter)->dn;
       if (children.find((*iter)->inode.ino) == children.end()) {
         leaf_locations.push_back(Location(dir_ino, dentry));
       }
@@ -1023,14 +1020,14 @@ void EMetaBlob::get_paths(
     list<nullbit> const &nb_list = dl.get_dnull();
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
+      std::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
 
     list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
+      std::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
   }
