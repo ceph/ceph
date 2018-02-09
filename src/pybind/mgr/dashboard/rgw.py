@@ -1,5 +1,7 @@
 # -*- code: utf-8 -*-
 
+from __future__ import absolute_import
+
 import json
 from .remote_view_cache import RemoteViewCache
 

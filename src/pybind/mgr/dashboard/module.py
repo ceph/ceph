@@ -3,6 +3,8 @@
 Demonstrate writing a Ceph web interface inside a mgr module.
 """
 
+from __future__ import absolute_import
+
 # We must share a global reference to this instance, because it is the
 # gatekeeper to all accesses to data from the C++ side (e.g. the REST API
 # request handlers need to see it)
