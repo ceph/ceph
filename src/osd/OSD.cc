@@ -3244,8 +3244,6 @@ int OSD::shutdown()
     finished.clear(); // zap waiters (bleh, this is messy)
   }
 
-  op_shardedwq.clear_pg_slots();
-
   // unregister commands
   cct->get_admin_socket()->unregister_command("status");
   cct->get_admin_socket()->unregister_command("flush_journal");
@@ -9473,36 +9471,6 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 #define dout_context osd->cct
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->whoami << " op_wq "
-
-void OSD::ShardedOpWQ::wake_pg_split_waiters(spg_t pgid)
-{
-  uint32_t shard_index = pgid.hash_to_shard(osd->shards.size());
-  auto sdata = osd->shards[shard_index];
-  bool queued = false;
-  {
-    Mutex::Locker l(sdata->sdata_op_ordering_lock);
-    auto p = sdata->pg_slots.find(pgid);
-    if (p != sdata->pg_slots.end()) {
-      sdata->_wake_pg_slot(pgid, p->second);
-      queued = true;
-    }
-  }
-  if (queued) {
-    sdata->sdata_lock.Lock();
-    sdata->sdata_cond.SignalOne();
-    sdata->sdata_lock.Unlock();
-  }
-}
-
-void OSD::ShardedOpWQ::clear_pg_slots()
-{
-  for (auto sdata : osd->shards) {
-    Mutex::Locker l(sdata->sdata_op_ordering_lock);
-    sdata->pg_slots.clear();
-    sdata->osdmap.reset();
-    // don't bother with reserved pushes; we are shutting down
-  }
-}
 
 void OSD::ShardedOpWQ::_add_slot_waiter(
   spg_t pgid,
