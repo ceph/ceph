@@ -126,7 +126,7 @@ class SyntheticClient {
   }
 
   int get_random_fh() {
-    int r = ceph::util::generate_random_number(open_files.size());
+    int r = ceph::util::generate_random_number(open_files.size() - 1);
     set<int>::iterator it = open_files.begin();
     while (r--) ++it;
     return *it;
@@ -136,7 +136,7 @@ class SyntheticClient {
   filepath n1;
   const char *get_random_subdir() {
     assert(!subdirs.empty());
-    int r = (ceph::util::generate_random_number(subdirs.size()) + ceph::util::generate_random_number(subdirs.size())) / 2;  // non-uniform distn
+    int r = (ceph::util::generate_random_number(subdirs.size() - 1) + ceph::util::generate_random_number(subdirs.size() - 1)) / 2;  // non-uniform distn
     set<string>::iterator it = subdirs.begin();
     while (r--) ++it;
 
@@ -147,7 +147,7 @@ class SyntheticClient {
   filepath n2;
   const char *get_random_sub() {
     assert(!contents.empty());
-    int r = (ceph::util::generate_random_number(contents.size()) + ceph::util::generate_random_number(contents.size())) / 2;  // non-uniform distn
+    int r = (ceph::util::generate_random_number(contents.size() - 1) + ceph::util::generate_random_number(contents.size() - 1)) / 2;  // non-uniform distn
     if (cwd.depth() && cwd.last_dentry().length()) 
       r += cwd.last_dentry().c_str()[0];                                         // slightly permuted
     r %= contents.size();
@@ -163,7 +163,7 @@ class SyntheticClient {
   filepath sub;
   char sub_s[50];
   const char *make_sub(const char *base) {
-    snprintf(sub_s, sizeof(sub_s), "%s.%d", base, ceph::util::generate_random_number(100));
+    snprintf(sub_s, sizeof(sub_s), "%s.%d", base, ceph::util::generate_random_number(100 - 1));
     string f = sub_s;
     sub = cwd;
     sub.push_dentry(f);
