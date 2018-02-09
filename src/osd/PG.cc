@@ -8502,7 +8502,7 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   pg->on_removal(t);
   RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
   Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
-  rctx->on_safe->contexts.push_back(fin);
+  rctx->transaction->register_on_commit(fin);
 }
 
 boost::statechart::result PG::RecoveryState::Deleting::react(
