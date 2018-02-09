@@ -6243,6 +6243,10 @@ void PG::_delete_some()
       _exit(1);
     }
 
+    // final flush here to ensure completions drop refs.  Of particular concern
+    // are the SnapMapper ContainerContexts.
+    ch->flush();
+
     ObjectStore::Transaction t;
     PGLog::clear_info_log(info.pgid, &t);
     t.remove_collection(coll);
