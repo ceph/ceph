@@ -8138,16 +8138,13 @@ void OSD::handle_pg_create(OpRequestRef op)
 PG::RecoveryCtx OSD::create_context()
 {
   ObjectStore::Transaction *t = new ObjectStore::Transaction;
-  C_Contexts *on_applied = new C_Contexts(cct);
-  C_Contexts *on_safe = new C_Contexts(cct);
   map<int, map<spg_t,pg_query_t> > *query_map =
     new map<int, map<spg_t, pg_query_t> >;
   map<int,vector<pair<pg_notify_t, PastIntervals> > > *notify_list =
     new map<int, vector<pair<pg_notify_t, PastIntervals> > >;
   map<int,vector<pair<pg_notify_t, PastIntervals> > > *info_map =
     new map<int,vector<pair<pg_notify_t, PastIntervals> > >;
-  PG::RecoveryCtx rctx(query_map, info_map, notify_list,
-		       on_applied, on_safe, t);
+  PG::RecoveryCtx rctx(query_map, info_map, notify_list, t);
   return rctx;
 }
 
@@ -8155,18 +8152,12 @@ void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
-    if (ctx.on_applied)
-      ctx.transaction->register_on_applied(ctx.on_applied);
-    if (ctx.on_safe)
-      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), TrackedOpRef(), handle);
     assert(tr == 0);
     delete (ctx.transaction);
     ctx.transaction = new ObjectStore::Transaction;
-    ctx.on_applied = new C_Contexts(cct);
-    ctx.on_safe = new C_Contexts(cct);
   }
 }
 
@@ -8185,17 +8176,9 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
   delete ctx.notify_list;
   delete ctx.query_map;
   delete ctx.info_map;
-  if ((ctx.on_applied->empty() &&
-       ctx.on_safe->empty() &&
-       ctx.transaction->empty()) || !pg) {
+  if (ctx.transaction->empty() || !pg) {
     delete ctx.transaction;
-    delete ctx.on_applied;
-    delete ctx.on_safe;
   } else {
-    if (ctx.on_applied)
-      ctx.transaction->register_on_applied(ctx.on_applied);
-    if (ctx.on_safe)
-      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
       std::move(*ctx.transaction), TrackedOpRef(),

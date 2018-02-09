@@ -3762,7 +3762,7 @@ void PG::read_state(ObjectStore *store)
       set_role(-1);
   }
 
-  PG::RecoveryCtx rctx(0, 0, 0, 0, 0, new ObjectStore::Transaction);
+  PG::RecoveryCtx rctx(0, 0, 0, new ObjectStore::Transaction);
   handle_initialize(&rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.
@@ -8500,9 +8500,7 @@ PG::RecoveryState::Deleting::Deleting(my_context ctx)
   pg->deleting = true;
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   pg->on_removal(t);
-  RecoveryCtx *rctx = context<RecoveryMachine>().get_recovery_ctx();
-  Context *fin = new C_DeleteMore(pg, pg->get_osdmap()->get_epoch());
-  rctx->transaction->register_on_commit(fin);
+  t->register_on_commit(new C_DeleteMore(pg, pg->get_osdmap()->get_epoch()));
 }
 
 boost::statechart::result PG::RecoveryState::Deleting::react(
