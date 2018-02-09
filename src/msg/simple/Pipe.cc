@@ -1761,9 +1761,9 @@ void Pipe::reader()
 
       if (delay_thread) {
         utime_t release;
-        if (ceph::util::generate_random_number(10000) < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
+        if (ceph::util::generate_random_number(10000 - 1) < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
           release = m->get_recv_stamp();
-          release += msgr->cct->_conf->ms_inject_delay_max * ceph::util::generate_random_number<double>(10000.0) / 10000.0;
+          release += msgr->cct->_conf->ms_inject_delay_max * ceph::util::generate_random_number<double>(10000.0 - 1.0) / 10000.0;
           lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
         }
         delay_thread->queue(release, m);
@@ -2462,7 +2462,7 @@ int Pipe::tcp_read(char *buf, unsigned len)
   while (len > 0) {
 
     if (msgr->cct->_conf->ms_inject_socket_failures && sd >= 0) {
-      if (ceph::util::generate_random_number(msgr->cct->_conf->ms_inject_socket_failures) == 0) {
+      if (ceph::util::generate_random_number(msgr->cct->_conf->ms_inject_socket_failures - 1) == 0) {
 	ldout(msgr->cct, 0) << "injecting socket failure" << dendl;
 	::shutdown(sd, SHUT_RDWR);
       }

@@ -1059,7 +1059,7 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
   ssize_t r = ::read(sd, &msg, sizeof(msg));
   // Drop incoming qpt
   if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+    if (ceph::util::generate_random_number(cct->_conf->ms_inject_socket_failures - 1) == 0) {
       ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
       return -EINVAL;
     }
@@ -1183,7 +1183,7 @@ retry:
   r = ::write(sd, msg, sizeof(msg));
   // Drop incoming qpt
   if (cct->_conf->ms_inject_socket_failures && sd >= 0) {
-    if (ceph::util::generate_random_number(cct->_conf->ms_inject_socket_failures) == 0) {
+    if (ceph::util::generate_random_number(cct->_conf->ms_inject_socket_failures - 1) == 0) {
       ldout(cct, 0) << __func__ << " injecting socket failure" << dendl;
       return -EINVAL;
     }
