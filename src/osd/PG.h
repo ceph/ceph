@@ -2915,9 +2915,7 @@ protected:
     ObjectStore::Transaction *t);
   void on_new_interval();
   virtual void _on_new_interval() = 0;
-  void start_flush(ObjectStore::Transaction *t,
-		   list<Context *> *on_applied,
-		   list<Context *> *on_safe);
+  void start_flush(ObjectStore::Transaction *t);
   void set_last_peering_reset();
 
   void update_history(const pg_history_t& history);
