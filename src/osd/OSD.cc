@@ -3641,14 +3641,6 @@ void OSD::recursive_remove_collection(CephContext* cct,
 // ======================================================
 // PG's
 
-PGRef OSD::_open_pg(
-  OSDMapRef createmap,
-  spg_t pgid)
-{
-  PGRef pg = _make_pg(createmap, pgid);
-  return pg;
-}
-
 PG* OSD::_make_pg(
   OSDMapRef createmap,
   spg_t pgid)
@@ -3829,9 +3821,9 @@ void OSD::load_pgs()
 	  assert(0 == "Missing map in load_pgs");
 	}
       }
-      pg = _open_pg(pgosdmap, pgid);
+      pg = _make_pg(pgosdmap, pgid);
     } else {
-      pg = _open_pg(osdmap, pgid);
+      pg = _make_pg(osdmap, pgid);
     }
     // there can be no waiters here, so we don't call wake_pg_waiters
 
@@ -3905,7 +3897,7 @@ PGRef OSD::handle_pg_create_info(OSDMapRef osdmap, const PGCreateInfo *info)
     role = -1;
   }
 
-  PGRef pg = _open_pg(createmap, pgid);
+  PGRef pg = _make_pg(createmap, pgid);
   pg->ch = store->create_new_collection(pg->coll);
 
   pg->lock(true);
