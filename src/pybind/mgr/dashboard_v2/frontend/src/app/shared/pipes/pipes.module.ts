@@ -4,7 +4,6 @@ import { NgModule } from '@angular/core';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
-import { EllipsisPipe } from './ellipsis.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 
 @NgModule({
@@ -13,15 +12,13 @@ import { HealthColorPipe } from './health-color.pipe';
     DimlessBinaryPipe,
     HealthColorPipe,
     DimlessPipe,
-    CephShortVersionPipe,
-    EllipsisPipe
+    CephShortVersionPipe
   ],
   exports: [
     DimlessBinaryPipe,
     HealthColorPipe,
     DimlessPipe,
-    CephShortVersionPipe,
-    EllipsisPipe
+    CephShortVersionPipe
   ],
   providers: [
     CephShortVersionPipe,
