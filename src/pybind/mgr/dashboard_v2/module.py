@@ -172,9 +172,9 @@ class Module(MgrModule):
                 parent_ctrl_classes = [c for c in self.ctrls
                                        if c._cp_path_ == path]
                 if len(parent_ctrl_classes) != 1:
-                    logger.error('No parent controller found for {}! '
+                    logger.error('No parent controller found for %s! '
                                  'Please check your path in the ApiController '
-                                 'decorator!'.format(ctrl))
+                                 'decorator!', ctrl)
                 else:
                     inst = ctrl()
                     setattr(parent_ctrl_classes[0], key, inst)
