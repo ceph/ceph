@@ -159,7 +159,7 @@ struct MonSessionMap {
     // ok, this isn't actually random, but close enough.
     if (by_osd.empty())
       return 0;
-    int n = by_osd.rbegin()->first + 1;
+    int n = by_osd.rbegin()->first;
     int r = ceph::util::generate_random_number(n);
 
     multimap<int,MonSession*>::iterator p = by_osd.lower_bound(r);
