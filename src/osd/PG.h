@@ -1469,7 +1469,6 @@ protected:
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
-    list<Context*>& tfin,
     map<int, map<spg_t,pg_query_t> >& query_map,
     map<int,
       vector<pair<pg_notify_t, PastIntervals> > > *activator_map,

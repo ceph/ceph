@@ -1753,7 +1753,6 @@ void PG::build_might_have_unfound()
 
 void PG::activate(ObjectStore::Transaction& t,
 		  epoch_t activation_epoch,
-		  list<Context*>& tfin,
 		  map<int, map<spg_t,pg_query_t> >& query_map,
 		  map<int,
 		      vector<
@@ -7822,7 +7821,6 @@ PG::RecoveryState::Active::Active(my_context ctx)
   pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       pg->get_osdmap()->get_epoch(),
-	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       *context< RecoveryMachine >().get_query_map(),
 	       context< RecoveryMachine >().get_info_map(),
 	       context< RecoveryMachine >().get_recovery_ctx());
@@ -8241,7 +8239,6 @@ boost::statechart::result PG::RecoveryState::ReplicaActive::react(
   map<int, map<spg_t, pg_query_t> > query_map;
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       actevt.activation_epoch,
-	       *context< RecoveryMachine >().get_on_safe_context_list(),
 	       query_map, NULL, NULL);
   ldout(pg->cct, 10) << "Activate Finished" << dendl;
   return discard_event();
