@@ -23,7 +23,8 @@ import { ServicesModule } from './services/services.module';
     PipesModule,
     ComponentsModule,
     ServicesModule,
-    PasswordButtonDirective
+    PasswordButtonDirective,
+    ComponentsModule
   ],
   declarations: [
     PasswordButtonDirective

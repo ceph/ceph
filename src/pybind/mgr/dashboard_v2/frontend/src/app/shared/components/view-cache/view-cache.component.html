@@ -1,0 +1,14 @@
+<alert type="info"
+       *ngIf="status === vcs.ValueNone">
+  Retrieving data, please wait.
+</alert>
+
+<alert type="warning"
+       *ngIf="status === vcs.ValueStale">
+  Displaying previously cached data.
+</alert>
+
+<alert type="danger"
+       *ngIf="status === vcs.ValueException">
+  Could not load data. Please check the cluster health.
+</alert>
