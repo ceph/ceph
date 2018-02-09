@@ -2148,7 +2148,8 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
 		       int (*cb)(uint64_t, size_t, const char *, void *),
 		       void *arg)
   {
-    utime_t start_time, elapsed;
+    coarse_mono_time start_time;
+    ceph::timespan elapsed;
 
     ldout(ictx->cct, 20) << "read_iterate " << ictx << " off = " << off
 			 << " len = " << len << dendl;
@@ -2174,7 +2175,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    start_time = ceph_clock_now();
+    start_time = coarse_mono_clock::now();
     while (left > 0) {
       uint64_t period_off = off - (off % period);
       uint64_t read_len = min(period_off + period - off, left);
@@ -2202,7 +2203,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       off += ret;
     }
 
-    elapsed = ceph_clock_now() - start_time;
+    elapsed = coarse_mono_clock::now() - start_time;
     ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed);
     ictx->perfcounter->inc(l_librbd_rd);
     ictx->perfcounter->inc(l_librbd_rd_bytes, mylen);
