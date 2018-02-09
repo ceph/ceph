@@ -52,7 +52,7 @@ int main(int argc, char **argv)
       if (r < 0) cout << "r = " << r << " " << strerror(errno) << endl;
 
       int range = 1000000/4096;
-      so = o + 4096*ceph::util::generate_random_number(range);//- range/2);
+      so = o + 4096*ceph::util::generate_random_number(range - 1);//- range/2);
       //cout << o << " " << so << " " << (so-o) << endl;
 
       utime_t start = ceph_clock_now();

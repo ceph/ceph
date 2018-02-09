@@ -42,7 +42,7 @@ int main(int argc, char **argv) {
   for (int i=0; i<10000; i++) {
     
     // ping random nodes
-    int d = ceph::util::generate_random_number(world);
+    int d = ceph::util::generate_random_number(world - 1);
     if (d != myrank) {
       //cout << "sending " << i << " to " << d << endl;
       p->messenger->send_message(new MPing(), d);

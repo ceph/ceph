@@ -39,7 +39,7 @@ std::string StRadosCreatePool::
 get_random_buf(int sz)
 {
   ostringstream oss;
-  int size = ceph::util::generate_random_number(sz);
+  int size = ceph::util::generate_random_number(sz - 1);
   for (int i = 0; i < size; ++i) {
     oss << ".";
   }

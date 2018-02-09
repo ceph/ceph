@@ -115,13 +115,13 @@ TEST_P(CompressorTest, big_round_trip_randomish)
   const char *alphabet = "abcdefghijklmnopqrstuvwxyz";
   if (false) {
     while (orig.length() < len) {
-      orig.append(alphabet[ceph::util::generate_random_number(10)]);
+      orig.append(alphabet[ceph::util::generate_random_number(10 - 1)]);
     }
   } else {
     bufferptr bp(len);
     char *p = bp.c_str();
     for (unsigned i=0; i<len; ++i) {
-      p[i] = alphabet[ceph::util::generate_random_number(10)];
+      p[i] = alphabet[ceph::util::generate_random_number(10 - 1)];
     }
     orig.append(bp);
   }
@@ -358,7 +358,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   char test[101];
   ceph::util::randomize_rng();
   for (int i=0; i<100; ++i)
-    test[i] = 'a' + ceph::util::generate_random_number(26);
+    test[i] = 'a' + ceph::util::generate_random_number(26 - 1);
   test[100] = '\0';
   int len = strlen(test);
   bufferlist in, out;
@@ -425,12 +425,12 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_random)
   for (int cnt=0; cnt<100; cnt++)
   {
     ceph::util::randomize_rng();
-    int log2 = ceph::util::generate_random_number(18) + 1;
-    int size = ceph::util::generate_random_number(1 << log2) + 1;
+    int log2 = ceph::util::generate_random_number(1, 17);
+    int size = ceph::util::generate_random_number(1, (1 << log2) - 1);
 
     char test[size];
     for (int i=0; i<size; ++i)
-      test[i] = ceph::util::generate_random_number(256);
+      test[i] = ceph::util::generate_random_number(255);
     bufferlist in, out;
     in.append(test, size);
 
@@ -461,15 +461,15 @@ TEST(ZlibCompressor, isal_compress_zlib_decompress_walk)
   for (int cnt=0; cnt<100; cnt++)
   {
     ceph::util::randomize_rng();
-    int log2 = ceph::util::generate_random_number(18) + 1;
-    int size = ceph::util::generate_random_number(1 << log2) + 1;
+    int log2 = ceph::util::generate_random_number(1, 17);
+    int size = ceph::util::generate_random_number(1, (1 << log2) - 1);
 
     int range = 1;
 
     char test[size];
-    test[0] = ceph::util::generate_random_number(256);
+    test[0] = ceph::util::generate_random_number(255);
     for (int i=1; i<size; ++i)
-      test[i] = test[i-1] + ceph::util::generate_random_number(range*2+1) - range;
+      test[i] = test[i-1] + ceph::util::generate_random_number(range*2) - range;
     bufferlist in, out;
     in.append(test, size);
 

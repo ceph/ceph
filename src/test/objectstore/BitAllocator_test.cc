@@ -413,7 +413,7 @@ TEST(BitAllocator, test_bmap_alloc)
     g_conf->set_val("bluestore_bitmapallocator_blocks_per_zone", val.str());
 
     // choose randomized span_size
-    int64_t span_size = 512ull << ceph::util::generate_random_number(4);
+    int64_t span_size = 512ull << ceph::util::generate_random_number(3);
     val.str("");
     val << span_size;
     g_conf->set_val("bluestore_bitmapallocator_span_size", val.str());

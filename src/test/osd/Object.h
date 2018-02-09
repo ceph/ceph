@@ -239,7 +239,7 @@ public:
     RandWrap rand(in.seqnum);
     if (max_length == 0)
       return 0;
-    return (ceph::util::generate_random_number(max_length/2)) + ((max_length - 1)/2) + 1;
+    return (ceph::util::generate_random_number((max_length/2) - 1) + ((max_length - 1)/2) + 1;
   }
 };
 
@@ -257,9 +257,9 @@ public:
     RandWrap rand(in.seqnum);
     // make some attrs big
     if (in.seqnum & 3)
-      return ceph::util::generate_random_number(max_len);
+      return ceph::util::generate_random_number(max_len - 1);
     else
-      return ceph::util::generate_random_number(big_max_len);
+      return ceph::util::generate_random_number(big_max_len - 1);
   }
   bufferlist gen_bl(const ContDesc &in) {
     bufferlist bl;

@@ -251,7 +251,7 @@ void WorkloadGenerator::get_filled_byte_array(bufferlist& bl, size_t size)
   bufferptr bp(size);
   if (false) {
     for (unsigned int i = 0; i < size - 1; i++) {
-      bp[i] = alphanum[ceph::util::generate_random_number(sizeof(alphanum))];
+      bp[i] = alphanum[ceph::util::generate_random_number(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
   } else {

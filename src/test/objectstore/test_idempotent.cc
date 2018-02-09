@@ -43,7 +43,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = ceph::util::generate_random_number(cont.size());
+  int index = ceph::util::generate_random_number(cont.size() - 1);
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;

@@ -228,7 +228,7 @@ public:
 	  max_len = contents2.most_recent_gen()->get_length(contents2.most_recent());
 	}
 	uint32_t rand_offset = generate_random_number(max_len - 1);
-	uint32_t rand_length = generate_random_number(max_len);
+	uint32_t rand_length = generate_random_number(max_len - 1);
 
 	rand_offset = rand_offset - (rand_offset % 512);
 	rand_length = rand_length - (rand_length % 512);

@@ -1079,8 +1079,8 @@ TEST(pg_pool_t_test, get_random_pg_position) {
     pg_pool_t p;
     p.set_pg_num(1 + ceph::util::generate_random_number(1000));
     p.set_pgp_num(p.get_pg_num());
-    pg_t pgid(ceph::util::generate_random_number(p.get_pg_num()), 1);
-    uint32_t h = p.get_random_pg_position(pgid, ceph::util::generate_random_number());
+    pg_t pgid(generate_random_number(p.get_pg_num() - 1), 1);
+    uint32_t h = p.get_random_pg_position(pgid, generate_random_number());
     uint32_t ps = p.raw_hash_to_pg(h);
     cout << p.get_pg_num() << " " << pgid << ": "
 	 << h << " -> " << pg_t(ps, 1) << std::endl;

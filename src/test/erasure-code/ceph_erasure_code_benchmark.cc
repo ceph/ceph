@@ -315,7 +315,7 @@ int ErasureCodeBench::decode()
       for (int j = 0; j < erasures; j++) {
 	int erasure;
 	do {
-	  erasure = ceph::util::generate_random_number(k + m);
+	  erasure = ceph::util::generate_random_number((k + m) - 1);
 	} while(chunks.count(erasure) == 0);
 	chunks.erase(erasure);
       }

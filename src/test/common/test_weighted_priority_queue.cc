@@ -197,7 +197,6 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_static) {
   test_queue(1000);
 } 
 
-TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
   test_queue(generate_random_number(500, 1500 - 1), true);
 } 
 

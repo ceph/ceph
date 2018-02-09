@@ -116,7 +116,7 @@ void write_image(librbd::Image &image) {
 
   // disturb all thread's offset, used by seq write
   for (i = 0; i < NUM_THREADS; i++) {
-    start_pos = ceph::util::generate_random_number(size / max_io_bytes) * max_io_bytes;
+    start_pos = ceph::util::generate_random_number((size / max_io_bytes) - 1) * max_io_bytes;
     thread_offset.push_back(start_pos);
   }
 
@@ -128,12 +128,12 @@ void write_image(librbd::Image &image) {
     for (uint32_t i = 0; i < NUM_THREADS; ++i) {
       // mostly small writes with a small chance of large writes
       uint32_t io_modulo = MIN_IO_SIZE + 1;
-      if (ceph::util::generate_random_number(30) == 0) {
+      if (ceph::util::generate_random_number(30 - 1) == 0) {
         io_modulo += MAX_IO_SIZE;
       }
 
       uint32_t io_size = ((ceph::util::generate_random_number(io_modulo) + MIN_IO_SIZE) * 1024);
-      thread_offset[i] = ceph::util::generate_random_number(size / io_size) * io_size;
+      thread_offset[i] = ceph::util::generate_random_number(((size / io_size) - 1) * io_size;
       if (!b.start_write(NUM_THREADS, thread_offset[i], io_size, bl,
                          LIBRADOS_OP_FLAG_FADVISE_RANDOM)) {
         break;

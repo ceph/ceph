@@ -128,11 +128,11 @@ int main(int argc, const char **argv, const char *envp[]) {
       cond.Wait(test_lock);
     }
 
-    int t = ceph::util::generate_random_number(mc.get_num_mon());
+    int t = ceph::util::generate_random_number(mc.get_num_mon() - 1);
     if (t == whoami)
       continue;
     
-    if (ceph::util::generate_random_number(10) == 0) {
+    if (ceph::util::generate_random_number(10 - 1) == 0) {
       //cerr << "mark_down " << t << std::endl;
       dout(0) << "mark_down " << t << dendl;
       messenger->mark_down(mc.get_mon_addr(t));

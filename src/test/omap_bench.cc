@@ -339,9 +339,9 @@ int OmapBench::generate_non_uniform_omap(const int omap_entries,
     std::map<std::string,bufferlist> * out_omap) {
   bufferlist bl;
 
-  int num_entries = ceph::util::generate_random_number(omap_entries) + 1;
-  int key_len = ceph::util::generate_random_number(key_size) + 1;
-  int val_len = ceph::util::generate_random_number(value_size) + 1;
+  int num_entries = ceph::util::generate_random_number(1, omap_entries);
+  int key_len = ceph::util::generate_random_number(1, key_size); 
+  int val_len = ceph::util::generate_random_number(1, value_size);
 
   //setup omap
   for (int i = 0; i < num_entries; i++) {

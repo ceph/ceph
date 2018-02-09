@@ -93,8 +93,8 @@ void FileStoreTracker::write(const pair<coll_t, string> &obj,
   std::cerr << "Writing " << obj << std::endl;
   ObjectContents contents = get_current_content(obj);
 
-  uint64_t offset = ceph::util::generate_random_number(SIZE/2);
-  uint64_t len = ceph::util::generate_random_number(SIZE/2);
+  uint64_t offset = ceph::util::generate_random_number((SIZE/2) - 1);
+  uint64_t len = ceph::util::generate_random_number((SIZE/2) - 1);
   if (!len) len = 10;
   contents.write(ceph::util::generate_random_number(), offset, len);
 
@@ -146,8 +146,8 @@ void FileStoreTracker::clone_range(const pair<coll_t, string> &from,
 
   uint64_t new_size = from_contents.size();
   interval_set<uint64_t> interval_to_clone;
-  uint64_t offset = ceph::util::generate_random_number(new_size/2);
-  uint64_t len = ceph::util::generate_random_number(new_size/2);
+  uint64_t offset = ceph::util::generate_random_number((new_size/2) - 1);
+  uint64_t len = ceph::util::generate_random_number((new_size/2) - 1);
   if (!len) len = 10;
   interval_to_clone.insert(offset, len);
   to_contents.clone_range(from_contents, interval_to_clone);

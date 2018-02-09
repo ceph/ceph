@@ -21,8 +21,8 @@ using namespace std;
 	  // thrash it a bit.
 	  for (int n=0; n<10000; n++) {
 		bufferlist bl2;
-		unsigned off = ceph::util::generate_random_number(bl.length() - 1);
-		unsigned len = 1 + ceph::util::generate_random_number(bl.length() - off - 1);
+		unsigned off = ceph::util::generate_random_number(bl.length() - 2);
+		unsigned len = 1 + ceph::util::generate_random_number(bl.length() - off - 2);
 		bl2.substr_of(bl, off, len);
 		bufferlist bl3;
 		bl3.append(bl);

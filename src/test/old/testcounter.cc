@@ -42,12 +42,12 @@ int main(int argc, char **argv)
 
   for (int ms=0; ms < 300*1000; ms++) {
 	if (ms % 30000 == 0) {
-	  target = 1 + ceph::util::generate_random_number(10) * 10;
+	  target = 1 + ceph::util::generate_random_number(9) * 10;
 	  if (ms > 200000) target = 0;
 	}
 
 	if (target &&
-		(ceph::util::generate_random_number(1000/target) == 0)) {
+		(ceph::util::generate_random_number((1000/target) - 1) == 0)) {
 	  dc.hit();
 	  rc.hit(ms);
 	}

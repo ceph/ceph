@@ -46,7 +46,7 @@ typename T::iterator rand_choose(T &cont) {
   if (cont.size() == 0) {
     return cont.end();
   }
-  int index = ceph::util::generate_random_number(cont.size());
+  int index = ceph::util::generate_random_number(cont.size() - 1);
   typename T::iterator retval = cont.begin();
 
   for (; index > 0; --index) ++retval;
@@ -1183,7 +1183,7 @@ public:
     context->state_lock.Unlock();
 
     int r = 0;
-    if (ceph::util::generate_random_number(2)) {
+    if (ceph::util::generate_random_number(1)) {
       librados::ObjectWriteOperation op;
       op.assert_exists();
       op.remove();
@@ -1263,7 +1263,7 @@ public:
     uint64_t len = 0;
     if (old_value.has_contents())
       len = old_value.most_recent_gen()->get_length(old_value.most_recent());
-    if (context->no_sparse || ceph::util::generate_random_number(2)) {
+    if (context->no_sparse || ceph::util::generate_random_number(1)) {
       is_sparse_read[index] = false;
       read_op.read(0,
 		   len,
@@ -1286,7 +1286,7 @@ public:
   void _begin() override
   {
     context->state_lock.Lock();
-    if (!(ceph::util::generate_random_number(4)) && !context->snaps.empty()) {
+    if (!(ceph::util::generate_random_number(3)) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
@@ -1332,10 +1332,10 @@ public:
     for (map<string, ContDesc>::iterator i = old_value.attrs.begin();
 	 i != old_value.attrs.end();
 	 ++i) {
-      if (ceph::util::generate_random_number(2)) {
+      if (ceph::util::generate_random_number(1)) {
 	string key = i->first;
-	if (ceph::util::generate_random_number(2))
-	  key.push_back(ceph::util::generate_random_number(26) + 'a');
+	if (ceph::util::generate_random_number(1))
+	  key.push_back(ceph::util::generate_random_number(25) + 'a');
 	omap_requested_keys.insert(key);
       }
     }
@@ -1901,7 +1901,7 @@ public:
       context->oid_not_in_use.erase(oid_src);
 
       // choose source snap
-      if (0 && !ceph::util::generate_random_number(4) && !context->snaps.empty()) {
+      if (0 && !ceph::util::generate_random_number(2) && !context->snaps.empty()) {
 	snap = rand_choose(context->snaps)->first;
 	in_use = context->snaps_in_use.lookup_or_create(snap, snap);
       } else {
@@ -2740,7 +2740,7 @@ public:
 	done = true;
       } else {
 	cerr << num << ": hitsets are " << ls << std::endl;
-	int r = ceph::util::generate_random_number(ls.size());
+	int r = ceph::util::generate_random_number(ls.size() - 1);
 	std::list<pair<time_t,time_t> >::iterator p = ls.begin();
 	while (r--)
 	  ++p;
@@ -2863,7 +2863,7 @@ public:
   {
     context->state_lock.Lock();
 
-    if (!ceph::util::generate_random_number(4) && !context->snaps.empty()) {
+    if (!ceph::util::generate_random_number(3) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
@@ -2961,7 +2961,7 @@ public:
   {
     context->state_lock.Lock();
 
-    if (!ceph::util::generate_random_number(4) && !context->snaps.empty()) {
+    if (!ceph::util::generate_random_number(3) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {
@@ -3062,7 +3062,7 @@ public:
     context->state_lock.Lock();
 
     int snap;
-    if (!ceph::util::generate_random_number(4) && !context->snaps.empty()) {
+    if (!ceph::util::generate_random_number(3) && !context->snaps.empty()) {
       snap = rand_choose(context->snaps)->first;
       in_use = context->snaps_in_use.lookup_or_create(snap, snap);
     } else {

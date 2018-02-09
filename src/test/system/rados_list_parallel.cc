@@ -93,7 +93,7 @@ public:
     while (true) {
       if (to_delete.empty())
 	break;
-      int r = ceph::util::generate_random_number(to_delete.size());
+      int r = ceph::util::generate_random_number(to_delete.size() - 1);
       std::map <int, std::string>::iterator d = to_delete.begin();
       for (int i = 0; i < r; ++i)
 	++d;
@@ -178,7 +178,7 @@ public:
     while (true) {
       if (to_add.empty())
 	break;
-      int r = ceph::util::generate_random_number(to_add.size());
+      int r = ceph::util::generate_random_number(to_add.size() - 1);
       std::map <int, std::string>::iterator d = to_add.begin();
       for (int i = 0; i < r; ++i)
 	++d;

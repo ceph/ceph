@@ -102,7 +102,7 @@ int queue_transaction(
   T &store,
   ObjectStore::CollectionHandle ch,
   ObjectStore::Transaction &&t) {
-  if (ceph::util::generate_random_number(2)) {
+  if (ceph::util::generate_random_number(1)) {
     ObjectStore::Transaction t2;
     t2.append(t);
     return store->queue_transaction(ch, std::move(t2));
@@ -3558,7 +3558,7 @@ public:
     bufferptr bp(size);
     for (unsigned int i = 0; i < size - 1; i++) {
       // severely limit entropy so we can compress...
-      bp[i] = alphanum[ceph::util::generate_random_number(10)]; //(sizeof(alphanum) - 1)];
+      bp[i] = alphanum[ceph::util::generate_random_number(10 - 1)]; //(sizeof(alphanum) - 1)];
     }
     bp[size - 1] = '\0';
 

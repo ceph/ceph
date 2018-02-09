@@ -58,8 +58,8 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size,
 {
   uint64_t object_size = 1 << image_ctx->order;
   for (int i=0; i<num_ops; i++) {
-    uint64_t off = ceph::util::generate_random_number(object_size - max_size + 1);
-    uint64_t len = 1 + ceph::util::generate_random_number(max_size);
+    uint64_t off = ceph::util::generate_random_number(object_size - max_size);
+    uint64_t len = ceph::util::generate_random_number(max_size);
 
     bufferlist bl;
     bl.append(std::string(len, '1'));
@@ -660,7 +660,7 @@ TEST_F(TestMockImageSyncObjectCopyRequest, Trim) {
   ASSERT_EQ(0, create_snap("one"));
 
   // trim the object
-  uint64_t trim_offset = ceph::util::generate_random_number(one.range_end());
+  uint64_t trim_offset = ceph::util::generate_random_number(one.range_end() - 1);
   ASSERT_LE(0, m_remote_image_ctx->io_work_queue->discard(
     trim_offset, one.range_end() - trim_offset, m_remote_image_ctx->skip_partial_discard));
   ASSERT_EQ(0, create_snap("sync"));
