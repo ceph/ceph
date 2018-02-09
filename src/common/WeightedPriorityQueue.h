@@ -256,7 +256,7 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	      // The next op's cost is multiplied by .9 and subtracted from the
 	      // max cost seen. Ops with lower costs will have a larger value
 	      // and allow them to be selected easier than ops with high costs.
-	      if (max_cost == 0 || generate_random_number() % max_cost <=
+	      if (max_cost == 0 || generate_random_number(max_cost - 1) <=
 		  (max_cost - ((i->get_cost() * 9) / 10))) {
 		break;
 	      }

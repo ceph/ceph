@@ -7,7 +7,6 @@
 #include <vector>
 #include <numeric>
 
-#include "include/util.h"
 #include "include/random.h"
 
 #include "common/Formatter.h"
@@ -19,6 +18,8 @@
 #define CEPH_OP_CLASS_NORMAL	0
 #define CEPH_OP_QUEUE_BACK	0
 #define CEPH_OP_QUEUE_FRONT	0
+
+using namespace ceph::util;
 
 class WeightedPriorityQueueTest : public testing::Test
 {
@@ -43,16 +44,16 @@ protected:
     for (unsigned i = 1; i <= item_size; ++i) {
       // Choose priority, class, cost and 'op' for this op.
       if (randomize) {
-        p = ceph::util::generate_random_number(max_prios - 1) * 64;
-        k = ceph::util::generate_random_number(klasses - 1);
-        c = ceph::util::generate_random_number((1<<22( - 1);  // 4M cost
+        p = generate_random_number(max_prios - 1) * 64;
+        k = generate_random_number(klasses - 1); 
+        c = generate_random_number((1 << 22) - 1); // 4M cost
         // Make some of the costs 0, but make sure small costs
         // still work ok.
         if (c > (1<<19) && c < (1<<20)) {
           c = 0;
 	}
-        op_queue = ceph::util::generate_random_number(10 - 1);
-        fob = ceph::util::generate_random_number(10 - 1);
+        op_queue = generate_random_number(10 - 1);
+        fob = generate_random_number(10 - 1);
       } else {
         p = (i % max_prios) * 64;
         k = i % klasses;
@@ -60,7 +61,7 @@ protected:
         op_queue = i % 7; // Use prime numbers to
         fob = i % 11;     // get better coverage
       }
-      o = ceph::util::generate_random_number((1<<16) - 1);
+      o = generate_random_number((1 << 16) - 1); 
       // Choose how to enqueue this op.
       switch (op_queue) {
       case 6 :
@@ -157,8 +158,7 @@ protected:
     }
   }
 
-  virtual void SetUp() {
-    ceph::util::randomize_rng();
+  void SetUp() override {
   }
   void TearDown() override {
   }
@@ -198,7 +198,7 @@ TEST_F(WeightedPriorityQueueTest, wpq_test_static) {
 } 
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_random) {
-  test_queue(ceph::util::generate_random_number(1, 1000), true);
+  test_queue(generate_random_number(500, 1500 - 1), true);
 } 
 
 TEST_F(WeightedPriorityQueueTest, wpq_test_remove_by_class_null) {
