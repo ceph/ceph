@@ -1966,18 +1966,6 @@ protected:
 	return state->rctx->info_map;
       }
 
-      list< Context* > *get_on_safe_context_list() {
-	assert(state->rctx);
-	assert(state->rctx->on_safe);
-	return &(state->rctx->on_safe->contexts);
-      }
-
-      list< Context * > *get_on_applied_context_list() {
-	assert(state->rctx);
-	assert(state->rctx->on_applied);
-	return &(state->rctx->on_applied->contexts);
-      }
-
       RecoveryCtx *get_recovery_ctx() { return &*(state->rctx); }
 
       void send_notify(pg_shard_t to,
