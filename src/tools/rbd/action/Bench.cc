@@ -14,6 +14,8 @@
 #include <boost/accumulators/statistics/rolling_sum.hpp>
 #include <boost/program_options.hpp>
 
+using namespace std::chrono;
+
 namespace rbd {
 namespace action {
 namespace bench {
@@ -228,8 +230,8 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
   srand(time(NULL) % (unsigned long) -1);
 
-  utime_t start = ceph_clock_now();
-  utime_t last;
+  coarse_mono_time start = coarse_mono_clock::now();
+  chrono::duration<double> last = chrono::duration<double>::zero();
   unsigned ios = 0;
 
   vector<uint64_t> thread_offset;
@@ -301,12 +303,12 @@ int do_bench(librbd::Image& image, io_type_t io_type,
         write_ops++;
     }
 
-    utime_t now = ceph_clock_now();
-    utime_t elapsed = now - start;
-    if (last.is_zero()) {
+    coarse_mono_time now = coarse_mono_clock::now();
+    chrono::duration<double> elapsed = now - start;
+    if (last == chrono::duration<double>::zero()) {
       last = elapsed;
-    } else if (elapsed.sec() != last.sec()) {
-      time_acc(elapsed - last);
+    } else if ((int)elapsed.count() != (int)last.count()) {
+      time_acc((elapsed - last).count());
       ios_acc(static_cast<double>(cur_ios));
       off_acc(static_cast<double>(cur_off));
       cur_ios = 0;
@@ -314,7 +316,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
 
       double time_sum = boost::accumulators::rolling_sum(time_acc);
       printf("%5d  %8d  %8.2lf  %8.2lf\n",
-             (int)elapsed,
+             (int)elapsed.count(),
              (int)(ios - io_threads),
              boost::accumulators::rolling_sum(ios_acc) / time_sum,
              boost::accumulators::rolling_sum(off_acc) / time_sum);
@@ -331,18 +333,21 @@ int do_bench(librbd::Image& image, io_type_t io_type,
     }
   }
 
-  utime_t now = ceph_clock_now();
-  double elapsed = now - start;
+  coarse_mono_time now = coarse_mono_clock::now();
+  chrono::duration<double> elapsed = now - start;
 
   printf("elapsed: %5d  ops: %8d  ops/sec: %8.2lf  bytes/sec: %8.2lf\n",
-         (int)elapsed, ios, (double)ios / elapsed, (double)off / elapsed);
+         (int)elapsed.count(), ios, (double)ios / elapsed.count(),
+         (double)off / elapsed.count());
 
   if (io_type == IO_TYPE_RW) {
     printf("read_ops: %5d   read_ops/sec: %8.2lf   read_bytes/sec: %8.2lf\n",
-           read_ops, (double)read_ops / elapsed, (double)read_ops * io_size / elapsed);
+           read_ops, (double)read_ops / elapsed.count(),
+           (double)read_ops * io_size / elapsed.count());
 
     printf("write_ops: %5d   write_ops/sec: %8.2lf   write_bytes/sec: %8.2lf\n",
-           write_ops, (double)write_ops / elapsed, (double)write_ops * io_size / elapsed);
+           write_ops, (double)write_ops / elapsed.count(),
+           (double)write_ops * io_size / elapsed.count());
   }
 
   return 0;
