@@ -3725,7 +3725,7 @@ void OSD::register_pg(PGRef pg)
   uint32_t shard_index = pgid.hash_to_shard(num_shards);
   auto sdata = shards[shard_index];
   Mutex::Locker l(sdata->sdata_op_ordering_lock);
-  auto r = sdata->pg_slots.emplace(pgid, make_unique<OSDShard::pg_slot>());
+  auto r = sdata->pg_slots.emplace(pgid, make_unique<OSDShardPGSlot>());
   assert(r.second);
   auto *slot = r.first->second.get();
   dout(20) << __func__ << " " << pgid << " " << pg << dendl;
@@ -9245,7 +9245,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 #undef dout_prefix
 #define dout_prefix *_dout << "osd." << osd->get_nodeid() << ":" << shard_id << "." << __func__ << " "
 
-void OSDShard::_attach_pg(pg_slot *slot, PG *pg)
+void OSDShard::_attach_pg(OSDShardPGSlot *slot, PG *pg)
 {
   dout(10) << pg->pg_id << " " << pg << dendl;
   slot->pg = pg;
@@ -9253,7 +9253,7 @@ void OSDShard::_attach_pg(pg_slot *slot, PG *pg)
   ++osd->num_pgs;
 }
 
-void OSDShard::_detach_pg(pg_slot *slot)
+void OSDShard::_detach_pg(OSDShardPGSlot *slot)
 {
   dout(10) << slot->pg->pg_id << " " << slot->pg << dendl;
   slot->pg->osd_shard = nullptr;
@@ -9277,7 +9277,7 @@ void OSDShard::consume_map(
   // check slots
   auto p = pg_slots.begin();
   while (p != pg_slots.end()) {
-    OSDShard::pg_slot *slot = p->second.get();
+    OSDShardPGSlot *slot = p->second.get();
     const spg_t& pgid = p->first;
     dout(20) << __func__ << " " << pgid << dendl;
     if (old_osdmap &&
@@ -9344,7 +9344,7 @@ void OSDShard::consume_map(
 
 void OSDShard::_wake_pg_slot(
   spg_t pgid,
-  OSDShard::pg_slot *slot)
+  OSDShardPGSlot *slot)
 {
   dout(20) << __func__ << " " << pgid
 	   << " to_process " << slot->to_process
@@ -9409,7 +9409,7 @@ void OSDShard::_prime_splits(set<spg_t> *pgids)
   while (p != pgids->end()) {
     unsigned shard_index = p->hash_to_shard(osd->num_shards);
     if (shard_index == shard_id) {
-      auto r = pg_slots.emplace(*p, make_unique<OSDShard::pg_slot>());
+      auto r = pg_slots.emplace(*p, make_unique<OSDShardPGSlot>());
       if (r.second) {
 	dout(10) << "priming slot " << *p << dendl;
 	r.first->second->waiting_for_split = true;
@@ -9474,7 +9474,7 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 
 void OSD::ShardedOpWQ::_add_slot_waiter(
   spg_t pgid,
-  OSDShard::pg_slot *slot,
+  OSDShardPGSlot *slot,
   OpQueueItem&& qi)
 {
   if (qi.is_peering()) {
@@ -9533,7 +9533,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   uint64_t requeue_seq;
   const auto token = item.get_ordering_token();
   {
-    auto r = sdata->pg_slots.emplace(token, make_unique<OSDShard::pg_slot>());
+    auto r = sdata->pg_slots.emplace(token, make_unique<OSDShardPGSlot>());
     auto *slot = r.first->second.get();
     dout(30) << __func__ << " " << token
 	     << (r.second ? " (new)" : "")
