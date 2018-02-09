@@ -4593,7 +4593,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    break;
 	  }
 	} else if (cct->_conf->osd_debug_drop_ping_probability >
-               (ceph::util::generate_random_number(100.0d) / 100.0d)) {
+               (ceph::util::generate_random_number(100.0d - 1.0d) / 100.0d)) {
 	  heartbeat_drop =
 	    debug_heartbeat_drops_remaining.insert(std::make_pair(from,
 	                     cct->_conf->osd_debug_drop_ping_duration)).first;
@@ -4716,7 +4716,7 @@ void OSD::heartbeat_entry()
     heartbeat();
 
     double wait = .5 + 
-                  ceph::util::generate_random_number(10.0f) * 
+                  ceph::util::generate_random_number(10.0f - 1.0f) * 
                   static_cast<float>(cct->_conf->osd_heartbeat_interval);
     utime_t w;
     w.set_from_double(wait);
@@ -6102,7 +6102,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       unsigned offset = 0;
       if (onum && osize) {
 	snprintf(nm, sizeof(nm), "disk_bw_test_%d", static_cast<int>(ceph::util::generate_random_number(onum)));
-	offset = ceph::util::generate_random_number((osize / bsize) * bsize);
+	offset = ceph::util::generate_random_number(((osize / bsize) * bsize) - 1);
       } else {
 	snprintf(nm, sizeof(nm), "disk_bw_test_%lld", (long long)pos);
       }
@@ -7252,7 +7252,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       bool injected_failure = false;
       if (cct->_conf->osd_inject_bad_map_crc_probability > 0 &&
-         ceph::util::generate_random_number(10000.0) < cct->_conf->osd_inject_bad_map_crc_probability*10000.0) {
+         ceph::util::generate_random_number(10000.0 - 1.0) < cct->_conf->osd_inject_bad_map_crc_probability*10000.0) {
 	derr << __func__ << " injecting map crc failure" << dendl;
 	injected_failure = true;
       }

@@ -719,7 +719,7 @@ public:
   bool promote_throttle() {
     // NOTE: lockless!  we rely on the probability being a single word.
     promote_counter.attempt();
-    if (static_cast<unsigned>(ceph::util::generate_random_number(1000)) > promote_probability_millis)
+    if (static_cast<unsigned>(ceph::util::generate_random_number(1000 - 1)) > promote_probability_millis)
       return true;  // yes throttle (no promote)
     if (promote_max_objects &&
 	promote_counter.objects > promote_max_objects)
@@ -2156,7 +2156,7 @@ private:
 					 io_queue::mclock_opclass,
 					 io_queue::mclock_client };
       constexpr int range = sizeof(index_lookup) / sizeof(index_lookup[0]);
-      int which = ceph::util::generate_random_number(range);
+      int which = ceph::util::generate_random_number(range - 1);
       return index_lookup[which];
     } else if (cct->_conf->osd_op_queue == "prioritized") {
       return io_queue::prioritized;
@@ -2172,7 +2172,7 @@ private:
 
   unsigned int get_io_prio_cut() const {
     if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
-      return (ceph::util::generate_random_number(2) < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
+      return (ceph::util::generate_random_number(1) < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
     } else if (cct->_conf->osd_op_queue_cut_off == "high") {
       return CEPH_MSG_PRIO_HIGH;
     } else {
