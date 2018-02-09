@@ -396,8 +396,8 @@ test_trash() {
     echo "testing trash..."
     remove_images
 
-    rbd create --image-format 2 -s 1 test1
-    rbd create --image-format 2 -s 1 test2
+    rbd create $RBD_CREATE_ARGS -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 1 test2
     rbd ls | grep test1
     rbd ls | grep test2
     rbd ls | wc -l | grep 2
@@ -434,7 +434,7 @@ test_trash() {
     rbd trash rm $ID 2>&1 | grep 'Deferment time has not expired'
     rbd trash rm --image-id $ID --force
 
-    rbd create --image-format 2 -s 1 test1
+    rbd create $RBD_CREATE_ARGS -s 1 test1
     rbd snap create test1@snap1
     rbd snap protect test1@snap1
     rbd trash mv test1
@@ -469,8 +469,8 @@ test_purge() {
     rbd trash purge
     rbd trash ls | wc -l | grep 0
 
-    rbd create foo -s 1
-    rbd create bar -s 1
+    rbd create $RBD_CREATE_ARGS foo -s 1
+    rbd create $RBD_CREATE_ARGS bar -s 1
 
     rbd trash mv foo --expires-at "10 sec"
     rbd trash mv bar --expires-at "30 sec"
