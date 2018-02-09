@@ -4394,7 +4394,7 @@ int BlueStore::_open_fm(bool create)
       bool stop = false;
 
       while (!stop && start < end) {
-	uint64_t l = ceph::util::generate_random_number(max_b + 1) * min_alloc_size;
+	uint64_t l = ceph::util::generate_random_number(max_b) * min_alloc_size;
 	if (start + l > end) {
 	  l = end - start;
           l = p2align(l, min_alloc_size);

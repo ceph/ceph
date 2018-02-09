@@ -165,7 +165,7 @@ int64_t StupidAllocator::allocate_int(
   *length = std::min(std::max(alloc_unit, want_size), p2align((p.get_len() - skew), alloc_unit));
   if (cct->_conf->bluestore_debug_small_allocations) {
     uint64_t max =
-      alloc_unit * ceph::util::generate_random_number(cct->_conf->bluestore_debug_small_allocations);
+      alloc_unit * ceph::util::generate_random_number(cct->_conf->bluestore_debug_small_allocations - 1);
     if (max && *length > max) {
       ldout(cct, 10) << __func__ << " shortening allocation of 0x" << std::hex
 	       	     << *length << " -> 0x"
