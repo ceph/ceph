@@ -87,7 +87,7 @@ void RecoveryQueue::advance()
 
 void RecoveryQueue::_start(CInode *in)
 {
-  inode_t *pi = in->get_projected_inode();
+  auto pi = in->get_projected_inode();
 
   // blech
   if (pi->client_ranges.size() && !pi->get_max_size()) {

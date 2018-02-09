@@ -7615,7 +7615,7 @@ int Client::_readdir_get_frag(dir_result_t *dirp)
   req->head.args.readdir.frag = fg;
   req->head.args.readdir.flags = CEPH_READDIR_REPLY_BITFLAGS;
   if (dirp->last_name.length()) {
-    req->path2.set_path(dirp->last_name.c_str());
+    req->path2.set_path(dirp->last_name);
   } else if (dirp->hash_order()) {
     req->head.args.readdir.offset_hash = dirp->offset_high();
   }

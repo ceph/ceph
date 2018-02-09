@@ -12,6 +12,8 @@
  * 
  */
 
+#include <string_view>
+
 #include "snap.h"
 
 #include "common/Formatter.h"
@@ -66,7 +68,7 @@ ostream& operator<<(ostream& out, const SnapInfo &sn)
 	     << "' " << sn.stamp << ")";
 }
 
-const string& SnapInfo::get_long_name()
+std::string_view SnapInfo::get_long_name()
 {
   if (long_name.length() == 0) {
     char nm[80];
