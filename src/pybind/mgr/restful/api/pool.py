@@ -1,7 +1,7 @@
 from pecan import expose, request, response
 from pecan.rest import RestController
 
-from restful import common, module
+from restful import common, context
 from restful.decorators import auth
 
 
@@ -16,7 +16,7 @@ class PoolId(RestController):
         """
         Show the information for the pool id
         """
-        pool = module.instance.get_pool_by_id(self.pool_id)
+        pool = context.instance.get_pool_by_id(self.pool_id)
 
         if not pool:
             response.status = 500
@@ -41,7 +41,7 @@ class PoolId(RestController):
             return {'message': 'Bad request: malformed JSON or wrong Content-Type'}
 
         # Get the pool info for its name
-        pool = module.instance.get_pool_by_id(self.pool_id)
+        pool = context.instance.get_pool_by_id(self.pool_id)
         if not pool:
             response.status = 500
             return {'message': 'Failed to identify the pool id "%d"' % self.pool_id}
@@ -53,7 +53,7 @@ class PoolId(RestController):
             return {'message': 'Invalid arguments found: "%s"' % str(invalid)}
 
         # Schedule the update request
-        return module.instance.submit_request(common.pool_update_commands(pool['pool_name'], args), **kwargs)
+        return context.instance.submit_request(common.pool_update_commands(pool['pool_name'], args), **kwargs)
 
 
     @expose(template='json')
@@ -62,13 +62,13 @@ class PoolId(RestController):
         """
         Remove the pool data for the pool id
         """
-        pool = module.instance.get_pool_by_id(self.pool_id)
+        pool = context.instance.get_pool_by_id(self.pool_id)
 
         if not pool:
             response.status = 500
             return {'message': 'Failed to identify the pool id "%d"' % self.pool_id}
 
-        return module.instance.submit_request([[{
+        return context.instance.submit_request([[{
             'prefix': 'osd pool delete',
             'pool': pool['pool_name'],
             'pool2': pool['pool_name'],
@@ -84,7 +84,7 @@ class Pool(RestController):
         """
         Show the information for all the pools
         """
-        pools = module.instance.get('osd_map')['pools']
+        pools = context.instance.get('osd_map')['pools']
 
         # pgp_num is called pg_placement_num, deal with that
         for pool in pools:
@@ -128,7 +128,7 @@ class Pool(RestController):
             return {'message': 'Invalid arguments found: "%s"' % str(invalid)}
 
         # Schedule the creation and update requests
-        return module.instance.submit_request(
+        return context.instance.submit_request(
             [[create_command]] +
             common.pool_update_commands(pool_name, args),
             **kwargs
