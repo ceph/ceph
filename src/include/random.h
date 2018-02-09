@@ -18,14 +18,42 @@
 #include <mutex>
 #include <random>
 #include <optional>
+#include <type_traits>
 
 #include "common/backport_std.h"
 
 // Basic random number facility, adapted from N3551:
-namespace ceph {
-namespace util {
+namespace ceph::util {
 
-inline namespace version_1_0_1 {
+inline namespace version_1_0_2 {
+
+namespace detail {
+
+template <typename T0, typename T1>
+using larger_of = typename std::conditional<
+                    sizeof(T0) >= sizeof(T1), 
+                    T0, T1>
+                  ::type;
+
+// avoid mixing floating point and integers:
+template <typename NumberT0, typename NumberT1>
+using has_compatible_numeric_types =
+            std::disjunction<
+                std::conjunction<
+                    std::is_floating_point<NumberT0>, std::is_floating_point<NumberT1>
+                >,
+                std::conjunction<
+                    std::is_integral<NumberT0>, std::is_integral<NumberT1>
+                >
+            >;
+
+
+// Select the larger of type compatible numeric types:
+template <typename NumberT0, typename NumberT1>
+using select_number_t = std::enable_if_t<detail::has_compatible_numeric_types<NumberT0, NumberT1>::value,
+                                         detail::larger_of<NumberT0, NumberT1>>;
+
+} // namespace detail
 
 namespace detail {
 
@@ -45,7 +73,7 @@ struct select_distribution<NumberT, false>
 
 template <typename NumberT>
 using default_distribution = typename
-	select_distribution<NumberT, std::is_integral<NumberT>::value>::type;
+    select_distribution<NumberT, std::is_integral<NumberT>::value>::type;
 
 } // namespace detail
 
@@ -171,24 +199,28 @@ NumberT generate_random_number()
           (0, std::numeric_limits<NumberT>::max());
 }
 
-template <typename NumberT>
-NumberT generate_random_number(const NumberT min, const NumberT max)
+template <typename NumberT0, typename NumberT1,
+          typename NumberT = detail::select_number_t<NumberT0, NumberT1>
+         >
+NumberT generate_random_number(const NumberT0 min, const NumberT1 max)
 {
   return detail::generate_random_number<NumberT,
                                         detail::default_distribution<NumberT>,
                                         std::default_random_engine>
-                                       (min, max); 
+                                       (static_cast<NumberT>(min), static_cast<NumberT>(max)); 
 }
 
-template <typename NumberT,
+template <typename NumberT0, typename NumberT1,
           typename DistributionT,
-          typename EngineT>
+          typename EngineT,
+          typename NumberT = detail::select_number_t<NumberT0, NumberT1>
+		 >
 NumberT generate_random_number(const NumberT min, const NumberT max,
                                EngineT& e)
 {
  return detail::generate_random_number<NumberT,
-				       DistributionT,
-				       EngineT>(min, max, e);
+                       DistributionT,
+                       EngineT>(static_cast<NumberT>(min), static_cast<NumberT>(max), e);
 }
 
 template <typename NumberT>
@@ -208,9 +240,9 @@ class random_number_generator final
   using seed_type = typename decltype(e)::result_type;
  
   public:
-  using number_type			= NumberT;
-  using random_engine_type	= decltype(e);
-  using random_device_type	= decltype(rd);
+  using number_type         = NumberT;
+  using random_engine_type  = decltype(e);
+  using random_device_type  = decltype(rd);
 
   public:
   random_device_type& random_device() noexcept { return rd; } 
@@ -254,6 +286,6 @@ class random_number_generator final
 
 } // inline namespace version_*
 
-}} // namespace ceph::util
+} // namespace ceph::util
 
 #endif

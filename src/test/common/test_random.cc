@@ -127,7 +127,7 @@ TEST(util, test_random)
   // Check bounding on zero (checking appropriate value for zero compiles and works):
   for (auto n = 10; n; --n) {
 	ASSERT_EQ(0, ceph::util::generate_random_number<int>(0, 0));
-	ASSERT_EQ(0, ceph::util::generate_random_number<float>(0, 0));
+	ASSERT_EQ(0, ceph::util::generate_random_number<float>(0.0, 0.0));
   }
  
   // Multiple types (integral):
@@ -156,6 +156,37 @@ TEST(util, test_random)
   {
     float min = 1.0, max = 0.0;
     type_check_ok(min, max);
+  }
+
+  // When combining types, everything should convert to the largest type:
+  {
+    // Check with integral types:
+    {
+	int x = 0;
+	long long y = 1;
+
+	auto z = ceph::util::generate_random_number(x, y);
+
+    bool result = std::is_same_v<decltype(z), decltype(y)>;
+
+    ASSERT_TRUE(result);
+	}
+
+    // Check with floating-point types:
+    {
+	float x = 0.0;
+	long double y = 1.0;
+
+	auto z = ceph::util::generate_random_number(x, y);
+
+    bool result = std::is_same_v<decltype(z), decltype(y)>;
+
+    ASSERT_TRUE(result);
+	}
+
+	// It would be nice to have a test to check that mixing integral and floating point
+    // numbers should not compile, however we currently have no good way I know of
+    // to do such negative tests.
   }
 }
 
