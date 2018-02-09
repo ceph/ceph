@@ -290,7 +290,7 @@ int do_bench(librbd::Image& image, io_type_t io_type,
       b.start_io(io_threads, thread_offset[i], io_size, op_flags, read_flag);
 
       if (random) {
-        thread_offset[i] = ceph::util::generate_random_number(size / io_size) * io_size;
+        thread_offset[i] = ceph::util::generate_random_number((size / io_size) - 1) * io_size;
       } else {
         thread_offset[i] += io_size;
         if (thread_offset[i] + io_size > size)
