@@ -9250,6 +9250,7 @@ void OSDShard::_attach_pg(OSDShardPGSlot *slot, PG *pg)
   dout(10) << pg->pg_id << " " << pg << dendl;
   slot->pg = pg;
   pg->osd_shard = this;
+  pg->pg_slot = slot;
   ++osd->num_pgs;
 }
 
@@ -9257,6 +9258,7 @@ void OSDShard::_detach_pg(OSDShardPGSlot *slot)
 {
   dout(10) << slot->pg->pg_id << " " << slot->pg << dendl;
   slot->pg->osd_shard = nullptr;
+  slot->pg->pg_slot = nullptr;
   slot->pg = nullptr;
   --osd->num_pgs;
 }
