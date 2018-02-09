@@ -19,8 +19,12 @@ void ResizeRequest::resize(ceph::BitVector<2> *object_map, uint64_t num_objs,
                            uint8_t default_state) {
   size_t orig_object_map_size = object_map->size();
   object_map->resize(num_objs);
-  for (uint64_t i = orig_object_map_size; i < object_map->size(); ++i) {
-    (*object_map)[i] = default_state;
+  if (num_objs > orig_object_map_size) {
+    auto it = object_map->begin() + orig_object_map_size;
+    auto end_it = object_map->begin() + num_objs;
+    for (;it != end_it; ++it) {
+      *it = default_state;
+    }
   }
 }
 
