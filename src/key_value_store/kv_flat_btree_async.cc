@@ -159,14 +159,14 @@ int KvFlatBtreeAsync::nothing() {
 }
 
 int KvFlatBtreeAsync::wait() {
-  if (ceph::util::generate_random_number(10) == 0) {
+  if (ceph::util::generate_random_number(10 - 1) == 0) {
     usleep(wait_ms);
   }
   return 0;
 }
 
 int KvFlatBtreeAsync::suicide() {
-  if (ceph::util::generate_random_number(10) == 0) {
+  if (ceph::util::generate_random_number(10 - 1) == 0) {
     if (verbose) cout << client_name << " is suiciding" << std::endl;
     return 1;
   }
