@@ -294,65 +294,6 @@ public:
   }
 
 private:
-  // -- map epoch lower bound --
-  Mutex pg_epoch_lock;
-  Cond pg_cond;
-  multiset<epoch_t> pg_epochs;
-  map<spg_t,epoch_t> pg_epoch;
-
-public:
-  void pg_add_epoch(spg_t pgid, epoch_t epoch) {
-    Mutex::Locker l(pg_epoch_lock);
-    map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
-    assert(t == pg_epoch.end());
-    pg_epoch[pgid] = epoch;
-    pg_epochs.insert(epoch);
-    if (*pg_epochs.begin() == epoch) {
-      // we are the (new?) blocking epoch
-      pg_cond.Signal();
-    }
-  }
-  void pg_update_epoch(spg_t pgid, epoch_t epoch) {
-    Mutex::Locker l(pg_epoch_lock);
-    map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
-    assert(t != pg_epoch.end());
-    if (*pg_epochs.begin() == t->second) {
-      // we were on the blocking epoch
-      pg_cond.Signal();
-    }
-    pg_epochs.erase(pg_epochs.find(t->second));
-    t->second = epoch;
-    pg_epochs.insert(epoch);
-  }
-  void pg_remove_epoch(spg_t pgid) {
-    Mutex::Locker l(pg_epoch_lock);
-    map<spg_t,epoch_t>::iterator t = pg_epoch.find(pgid);
-    if (t != pg_epoch.end()) {
-      if (*pg_epochs.begin() == t->second) {
-	// we were on the blocking epoch
-	pg_cond.Signal();
-      }
-      pg_epochs.erase(pg_epochs.find(t->second));
-      pg_epoch.erase(t);
-    }
-  }
-  epoch_t get_min_pg_epoch() {
-    Mutex::Locker l(pg_epoch_lock);
-    if (pg_epochs.empty())
-      return 0;
-    else
-      return *pg_epochs.begin();
-  }
-
-  void wait_min_pg_epoch(epoch_t e) {
-    Mutex::Locker l(pg_epoch_lock);
-    while (!pg_epochs.empty() &&
-	   *pg_epochs.begin() < e) {
-      pg_cond.Wait(pg_epoch_lock);
-    }
-  }
-
-private:
   // -- superblock --
   Mutex publish_lock, pre_publish_lock; // pre-publish orders before publish
   OSDSuperblock superblock;

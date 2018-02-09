@@ -229,7 +229,6 @@ OSDService::OSDService(OSD *osd) :
   class_handler(osd->class_handler),
   osd_max_object_size(*cct->_conf, "osd_max_object_size"),
   osd_skip_data_digest(*cct->_conf, "osd_skip_data_digest"),
-  pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
   pre_publish_lock("OSDService::pre_publish_lock"),
   max_oldest_map(0),
@@ -1618,8 +1617,6 @@ void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
 
 void OSDService::finish_pg_delete(PG *pg, unsigned old_pg_num)
 {
-  pg_remove_epoch(pg->get_pgid());
-
   osd->unregister_pg(pg);
   for (auto shard : osd->shards) {
     shard->unprime_split_children(pg->pg_id, old_pg_num);
@@ -3649,7 +3646,6 @@ PGRef OSD::_open_pg(
   spg_t pgid)
 {
   PGRef pg = _make_pg(createmap, pgid);
-  service.pg_add_epoch(pg->pg_id, createmap->get_epoch());
   return pg;
 }
 
@@ -7688,11 +7684,6 @@ void OSD::_finish_splits(set<PGRef>& pgs)
     pg->lock();
     dout(10) << __func__ << " " << *pg << dendl;
     epoch_t e = pg->get_osdmap_epoch();
-    pg->unlock();
-
-    service.pg_add_epoch(pg->pg_id, e);
-
-    pg->lock();
     pg->handle_initialize(&rctx);
     pg->queue_null(e, e);
     dispatch_context_transaction(rctx, pg);
@@ -7750,7 +7741,6 @@ void OSD::advance_pg(
     handle.reset_tp_timeout();
   }
   pg->handle_activate_map(rctx);
-  service.pg_update_epoch(pg->pg_id, lastmap->get_epoch());
 
   if (!new_pgs.empty()) {
     rctx->transaction->register_on_applied(new C_FinishSplits(this, new_pgs));
