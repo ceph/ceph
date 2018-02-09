@@ -1139,6 +1139,8 @@ struct OSDShard {
       boost::intrusive::set_member_hook<>,
       &OSDShardPGSlot::pg_epoch_item>,
     boost::intrusive::compare<pg_slot_compare_by_epoch>> pg_slots_by_epoch;
+  bool waiting_for_min_pg_epoch = false;
+  Cond min_pg_epoch_cond;
 
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
@@ -1163,6 +1165,7 @@ struct OSDShard {
 
   void update_pg_epoch(OSDShardPGSlot *slot, epoch_t epoch);
   epoch_t get_min_pg_epoch();
+  void wait_min_pg_epoch(epoch_t need);
 
   /// push osdmap into shard
   void consume_map(
