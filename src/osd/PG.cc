@@ -5777,17 +5777,15 @@ struct FlushState {
 };
 typedef ceph::shared_ptr<FlushState> FlushStateRef;
 
-void PG::start_flush(ObjectStore::Transaction *t,
-		     list<Context *> *on_applied,
-		     list<Context *> *on_safe)
+void PG::start_flush(ObjectStore::Transaction *t)
 {
   // flush in progress ops
   FlushStateRef flush_trigger (std::make_shared<FlushState>(
                                this, get_osdmap()->get_epoch()));
   t->nop();
   flushes_in_progress++;
-  on_applied->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
-  on_safe->push_back(new ContainerContext<FlushStateRef>(flush_trigger));
+  t->register_on_applied(new ContainerContext<FlushStateRef>(flush_trigger));
+  t->register_on_commit(new ContainerContext<FlushStateRef>(flush_trigger));
 }
 
 void PG::reset_interval_flush()
@@ -7821,10 +7819,7 @@ PG::RecoveryState::Active::Active(my_context ctx)
   assert(!pg->backfill_reserved);
   assert(pg->is_primary());
   ldout(pg->cct, 10) << "In Active, about to call activate" << dendl;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   pg->activate(*context< RecoveryMachine >().get_cur_transaction(),
 	       pg->get_osdmap()->get_epoch(),
 	       *context< RecoveryMachine >().get_on_safe_context_list(),
@@ -8235,10 +8230,7 @@ PG::RecoveryState::ReplicaActive::ReplicaActive(my_context ctx)
   context< RecoveryMachine >().log_enter(state_name);
 
   PG *pg = context< RecoveryMachine >().pg;
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
 }
 
 
@@ -8344,10 +8336,7 @@ PG::RecoveryState::Stray::Stray(my_context ctx)
     ldout(pg->cct,10) << __func__ << " pool is deleted" << dendl;
     post_event(DeleteStart());
   } else {
-    pg->start_flush(
-      context< RecoveryMachine >().get_cur_transaction(),
-      context< RecoveryMachine >().get_on_applied_context_list(),
-      context< RecoveryMachine >().get_on_safe_context_list());
+    pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   }
 }
 
@@ -8786,10 +8775,7 @@ boost::statechart::result PG::RecoveryState::GetLog::react(const GotLog&)
 			msg->info, msg->log, msg->missing,
 			auth_log_shard);
   }
-  pg->start_flush(
-    context< RecoveryMachine >().get_cur_transaction(),
-    context< RecoveryMachine >().get_on_applied_context_list(),
-    context< RecoveryMachine >().get_on_safe_context_list());
+  pg->start_flush(context< RecoveryMachine >().get_cur_transaction());
   return transit< GetMissing >();
 }
 
