@@ -81,22 +81,6 @@ test_others() {
     rbd snap ls testimg4 | grep -v 'SNAPID' | wc -l | grep 1
     rbd snap ls testimg4 | grep '.*snap1.*'
 
-    # deep copy clone-image
-    rbd snap rm testimg4@snap1
-    rbd snap rm testimg5@snap1
-    rbd rm testimg4
-    rbd rm testimg5
-    rbd snap protect testimg1@snap1
-    rbd clone testimg1@snap1 testimg4
-    rbd snap create testimg4@snap2
-    rbd deep copy testimg4 testimg5
-    rbd info testimg5 | grep 'size 256 MB'
-    rbd snap ls testimg5 | grep -v 'SNAPID' | wc -l | grep 1
-    rbd snap ls testimg5 | grep '.*snap2.*'
-    rbd flatten testimg4
-    rbd flatten testimg5
-    rbd snap unprotect testimg1@snap1
-
     rbd export testimg1 /tmp/img1.new
     rbd export testimg2 /tmp/img2.new
     rbd export testimg3 /tmp/img3.new
@@ -499,6 +483,28 @@ test_purge() {
     rbd trash rm $LAST_IMG --force --no-progress | grep -v '.' | wc -l | grep 0
 }
 
+test_deep_copy_clone() {
+    echo "testing deep copy clone..."
+    remove_images
+
+    rbd create testimg1 $RBD_CREATE_ARGS --size 256
+    rbd snap create testimg1 --snap=snap1
+    rbd snap protect testimg1@snap1
+    rbd clone testimg1@snap1 testimg2
+    rbd snap create testimg2@snap2
+    rbd deep copy testimg2 testimg3
+    rbd info testimg3 | grep 'size 256 MB'
+    rbd snap ls testimg3 | grep -v 'SNAPID' | wc -l | grep 1
+    rbd snap ls testimg3 | grep '.*snap2.*'
+    rbd info testimg2 | grep 'features:.*deep-flatten' || rbd snap rm testimg2@snap2
+    rbd info testimg3 | grep 'features:.*deep-flatten' || rbd snap rm testimg3@snap2
+    rbd flatten testimg2
+    rbd flatten testimg3
+    rbd snap unprotect testimg1@snap1
+
+    remove_images
+}
+
 test_pool_image_args
 test_rename
 test_ls
@@ -512,5 +518,6 @@ test_locking
 test_clone
 test_trash
 test_purge
+test_deep_copy_clone
 
 echo OK
