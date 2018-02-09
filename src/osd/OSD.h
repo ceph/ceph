@@ -1120,7 +1120,7 @@ struct OSDShard {
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
   /// pg lock.  slots are removed by consume_map.
-  unordered_map<spg_t,pg_slot> pg_slots;
+  unordered_map<spg_t,unique_ptr<pg_slot>> pg_slots;
 
   /// priority queue
   std::unique_ptr<OpQueue<OpQueueItem, uint64_t>> pqueue;
@@ -1140,8 +1140,8 @@ struct OSDShard {
 	priority, cost, std::move(item));
   }
 
-  void _attach_pg(pg_slot& slot, PG *pg);
-  void _detach_pg(pg_slot& slot);
+  void _attach_pg(pg_slot *slot, PG *pg);
+  void _detach_pg(pg_slot *slot);
 
   /// push osdmap into shard
   void consume_map(
@@ -1149,7 +1149,7 @@ struct OSDShard {
     unsigned *pushes_to_free,
     set<spg_t> *new_children);
 
-  void _wake_pg_slot(spg_t pgid, OSDShard::pg_slot& slot);
+  void _wake_pg_slot(spg_t pgid, OSDShard::pg_slot *slot);
 
   void _prime_splits(set<spg_t> *pgids);
   void prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
@@ -1654,7 +1654,7 @@ protected:
 
     void _add_slot_waiter(
       spg_t token,
-      OSDShard::pg_slot& slot,
+      OSDShard::pg_slot *slot,
       OpQueueItem&& qi);
 
     /// try to do some work
