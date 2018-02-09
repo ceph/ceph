@@ -2926,7 +2926,7 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
       int osd;
       bool read = is_read && !is_write;
       if (read && (t->flags & CEPH_OSD_FLAG_BALANCE_READS)) {
-	int p = ceph::util::generate_random_number(acting.size());
+	int p = ceph::util::generate_random_number(acting.size() - 1);
 	if (p)
 	  t->used_replica = true;
 	osd = acting[p];
