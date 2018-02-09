@@ -2874,7 +2874,6 @@ protected:
   void prepare_write_info(map<string,bufferlist> *km);
 
   void update_store_with_options();
-  void update_store_on_load();
 
 public:
   static int _prepare_write_info(
