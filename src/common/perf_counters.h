@@ -241,7 +241,7 @@ public:
                                  const std::string &counter = "") {
     dump_formatted_generic(f, schema, true, counter);
   }
-  pair<uint64_t, uint64_t> get_tavg_ms(int idx) const;
+  pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
   const std::string& get_name() const;
   void set_name(std::string s) {

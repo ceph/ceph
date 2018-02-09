@@ -129,13 +129,13 @@ public:
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
   struct FSPerfTracker {
-    PerfCounters::avg_tracker<uint64_t> os_commit_latency;
-    PerfCounters::avg_tracker<uint64_t> os_apply_latency;
+    PerfCounters::avg_tracker<uint64_t> os_commit_latency_ns;
+    PerfCounters::avg_tracker<uint64_t> os_apply_latency_ns;
 
     objectstore_perf_stat_t get_cur_stats() const {
       objectstore_perf_stat_t ret;
-      ret.os_commit_latency = os_commit_latency.current_avg();
-      ret.os_apply_latency = os_apply_latency.current_avg();
+      ret.os_commit_latency_ns = os_commit_latency_ns.current_avg();
+      ret.os_apply_latency_ns = os_apply_latency_ns.current_avg();
       return ret;
     }
 
