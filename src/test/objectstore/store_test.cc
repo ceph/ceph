@@ -6516,16 +6516,16 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
   size_t block_size = 0x10000;
   StartDeferred(block_size);
 
-  ObjectStore::Sequencer osr("test");
   int r;
   coll_t cid;
   ghobject_t hoid1(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
   ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
 
   {
     ObjectStore::Transaction t;
     t.create_collection(cid, 0);
-    r = apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   {
@@ -6538,7 +6538,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     while(offs < (uint64_t)400 * 1024 * 1024) {
       t.write(cid, hoid1, offs, bl.length(), bl, 0);
       t.write(cid, hoid2, offs, bl.length(), bl, 0);
-      r = apply_transaction(store, &osr, std::move(t));
+      r = apply_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
       offs += bl.length();
       if( (offs % (100 * 1024 * 1024)) == 0) {
@@ -6560,7 +6560,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     while(offs < 112 * 1024 * 1024) {
       t.write(cid, hoid1, offs, bl.length(), bl, 0);
       t.write(cid, hoid2, offs, bl.length(), bl, 0);
-      r = apply_transaction(store, &osr, std::move(t));
+      r = apply_transaction(store, ch, std::move(t));
       ASSERT_EQ(r, 0);
       // this will produce high fragmentation if original allocations
       // were contiguous
@@ -6576,7 +6576,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     // Which should fail as there is no long enough pextents.
     ObjectStore::Transaction t;
     t.remove(cid, hoid2);
-    r = apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
 
@@ -6589,7 +6589,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     // touch another object to triggerrebalance
     ObjectStore::Transaction t;
     t.touch(cid, hoid1);
-    r = apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   {
@@ -6598,7 +6598,7 @@ TEST_P(StoreTestSpecificAUSize, ExcessiveFragmentation) {
     t.remove(cid, hoid2);
     t.remove_collection(cid);
     cerr << "Cleaning" << std::endl;
-    r = apply_transaction(store, &osr, std::move(t));
+    r = apply_transaction(store, ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
   g_conf->set_val("bluestore_block_size",
