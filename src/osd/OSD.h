@@ -1811,10 +1811,6 @@ public:
   PG   *lookup_lock_pg(spg_t pgid);
 
 protected:
-  PGRef _open_pg(
-    OSDMapRef createmap,   ///< map pg is created in
-    spg_t pg);
-
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
 
   bool maybe_wait_for_max_pg(OSDMapRef osdmap, spg_t pgid, bool is_mon_create);
