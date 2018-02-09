@@ -2448,7 +2448,7 @@ public:
             goto done;
           }
           if (error_injection &&
-              ceph::util::generate_random_number(10000) < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
+              ceph::util::generate_random_number(10000 - 1) < cct->_conf->rgw_sync_data_inject_err_probability * 10000.0) {
             tn->log(0, SSTR(": injecting data sync error on key=" << key.name));
             retcode = -EIO;
           } else if (op == CLS_RGW_OP_ADD ||

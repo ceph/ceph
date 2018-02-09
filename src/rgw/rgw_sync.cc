@@ -1221,7 +1221,7 @@ int RGWMetaSyncSingleEntryCR::operate() {
 #define NUM_TRANSIENT_ERROR_RETRIES 10
 
     if (error_injection &&
-        ceph::util::generate_random_number(10000) < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
+        ceph::util::generate_random_number(10000 - 1) < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
       ldout(sync_env->cct, 0) << __FILE__ << ":" << __LINE__ << ": injecting meta sync error on key=" << raw_key << dendl;
       return set_cr_error(-EIO);
     }
