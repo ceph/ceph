@@ -46,7 +46,7 @@ class Distribution {
   void random() {
     float sum = 0.0;
     for (unsigned i=0; i<p.size(); i++) {
-      p[i] = static_cast<float>(ceph::util::generate_random_number(10000));
+      p[i] = static_cast<float>(ceph::util::generate_random_number(10000 - 1));
       sum += p[i];
     }
     for (unsigned i=0; i<p.size(); i++) 
@@ -54,7 +54,7 @@ class Distribution {
   }
 
   int sample() {
-    float s = ceph::util::generate_random_number(10000) / 10000.0;
+    float s = ceph::util::generate_random_number(10000 - 1) / 10000.0;
     for (unsigned i=0; i<p.size(); i++) {
       if (s < p[i]) return v[i];
       s -= p[i];
