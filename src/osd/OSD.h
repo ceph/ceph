@@ -1657,12 +1657,6 @@ protected:
       OSDShard::pg_slot& slot,
       OpQueueItem&& qi);
 
-    /// wake any pg waiters after a PG is split
-    void wake_pg_split_waiters(spg_t pgid);
-
-    /// clear pg_slots on shutdown
-    void clear_pg_slots();
-
     /// try to do some work
     void _process(uint32_t thread_index, heartbeat_handle_d *hb) override;
 
