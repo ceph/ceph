@@ -977,8 +977,6 @@ public:
     map<int, map<spg_t, pg_query_t> > *query_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
-    C_Contexts *on_applied;
-    C_Contexts *on_safe;
     ObjectStore::Transaction *transaction;
     ThreadPool::TPHandle* handle;
     RecoveryCtx(map<int, map<spg_t, pg_query_t> > *query_map,
@@ -986,13 +984,9 @@ public:
 		    vector<pair<pg_notify_t, PastIntervals> > > *info_map,
 		map<int,
 		    vector<pair<pg_notify_t, PastIntervals> > > *notify_list,
-		C_Contexts *on_applied,
-		C_Contexts *on_safe,
 		ObjectStore::Transaction *transaction)
       : query_map(query_map), info_map(info_map), 
 	notify_list(notify_list),
-	on_applied(on_applied),
-	on_safe(on_safe),
 	transaction(transaction),
         handle(NULL) {}
 
@@ -1000,8 +994,6 @@ public:
       : query_map(&(buf.query_map)),
 	info_map(&(buf.info_map)),
 	notify_list(&(buf.notify_list)),
-	on_applied(rctx.on_applied),
-	on_safe(rctx.on_safe),
 	transaction(rctx.transaction),
         handle(rctx.handle) {}
 
