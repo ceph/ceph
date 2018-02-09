@@ -975,7 +975,6 @@ public:
     map<int, map<spg_t, pg_query_t> > *query_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *info_map;
     map<int, vector<pair<pg_notify_t, PastIntervals> > > *notify_list;
-    set<PGRef> created_pgs;
     C_Contexts *on_applied;
     C_Contexts *on_safe;
     ObjectStore::Transaction *transaction;
