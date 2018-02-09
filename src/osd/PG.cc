@@ -2398,7 +2398,7 @@ unsigned PG::get_delete_priority()
   }
 }
 
-void PG::finish_recovery(list<Context*>& tfin)
+Context *PG::finish_recovery()
 {
   dout(10) << "finish_recovery" << dendl;
   assert(info.last_complete == info.last_update);
@@ -2409,7 +2409,7 @@ void PG::finish_recovery(list<Context*>& tfin)
    * sync all this before purging strays.  but don't block!
    */
   finish_sync_event = new C_PG_FinishRecovery(this);
-  tfin.push_back(finish_sync_event);
+  return finish_sync_event;
 }
 
 void PG::_finish_recovery(Context *c)
@@ -7760,7 +7760,8 @@ PG::RecoveryState::Clean::Clean(my_context ctx)
   if (pg->info.last_complete != pg->info.last_update) {
     ceph_abort();
   }
-  pg->finish_recovery(*context< RecoveryMachine >().get_on_safe_context_list());
+  Context *c = pg->finish_recovery();
+  context< RecoveryMachine >().get_cur_transaction()->register_on_commit(c);
 
   if (pg->is_active()) {
     pg->mark_clean();
