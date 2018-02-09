@@ -48,8 +48,16 @@ namespace {
   string ldap_searchfilter = "";
   string ldap_dnattr = "uid";
 
+  const auto enable_cache = true;
+  const auto cache_ttl = 300;
+  const auto lru_lanes = 5;
+  const auto lru_hiwat = 911;
+  const auto cache_npart = 3;
+  const auto cache_size = 1579;
+
   rgw::LDAPHelper ldh(ldap_uri, ldap_binddn, ldap_bindpw, ldap_searchdn,
-		      ldap_searchfilter, ldap_dnattr);
+		      ldap_searchfilter, ldap_dnattr, enable_cache, cache_ttl,
+		      lru_lanes, lru_hiwat, cache_npart, cache_size);
 
 } /* namespace */
 

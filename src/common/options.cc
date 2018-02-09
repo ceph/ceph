@@ -4923,6 +4923,33 @@ std::vector<Option> get_rgw_options() {
     .set_default(false)
     .set_description("Should S3 authentication use LDAP."),
 
+    Option("rgw_ldap_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable LDAP auth cache.")
+    .set_long_description(
+      "If enabled, positive and negative auth attempts with given credentials will be cached for rgw_ldap_cache_ttl_s seconds"),
+
+    Option("rgw_ldap_cache_ttl_s", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(300)
+    .set_description("Positive and negative auth cache TTL"),
+
+    Option("rgw_ldap_lru_lanes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description(""),
+
+    Option("rgw_ldap_lane_hiwat", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(911)
+    .set_description(""),
+
+    Option("rgw_ldap_cache_partitions", Option::TYPE_INT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_description(""),
+
+    Option("rgw_ldap_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1579)
+    .set_description(""),
+
     Option("rgw_ldap_searchfilter", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("LDAP search filter."),

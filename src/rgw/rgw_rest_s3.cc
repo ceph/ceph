@@ -4037,15 +4037,31 @@ void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
   if (! ldh) {
     std::lock_guard<std::mutex> lck(mtx);
     if (! ldh) {
-      const string& ldap_uri = cct->_conf->rgw_ldap_uri;
-      const string& ldap_binddn = cct->_conf->rgw_ldap_binddn;
-      const string& ldap_searchdn = cct->_conf->rgw_ldap_searchdn;
-      const string& ldap_searchfilter = cct->_conf->rgw_ldap_searchfilter;
-      const string& ldap_dnattr = cct->_conf->rgw_ldap_dnattr;
+      auto& conf = cct->_conf;
+      const string& ldap_uri = conf->rgw_ldap_uri;
+      const string& ldap_binddn = conf->rgw_ldap_binddn;
+      const string& ldap_searchdn = conf->rgw_ldap_searchdn;
+      const string& ldap_searchfilter = conf->rgw_ldap_searchfilter;
+      const string& ldap_dnattr = conf->rgw_ldap_dnattr;
+      const auto enable_cache =
+	conf->get_val<bool>("rgw_ldap_cache_enabled");
+      const auto cache_ttl =
+	conf->get_val<uint64_t>("rgw_ldap_cache_ttl_s");
+      const auto lru_lanes =
+	conf->get_val<uint64_t>("rgw_ldap_lru_lanes");
+      const auto lru_hiwat =
+	conf->get_val<uint64_t>("rgw_ldap_lru_hiwat");
+      const auto cache_npart =
+	conf->get_val<uint64_t>("rgw_ldap_cache_partitions");
+      const auto part_size =
+	conf->get_val<uint64_t>("rgw_ldap_cache_size");
+
       std::string ldap_bindpw = parse_rgw_ldap_bindpw(cct);
 
       ldh = new rgw::LDAPHelper(ldap_uri, ldap_binddn, ldap_bindpw,
-                                ldap_searchdn, ldap_searchfilter, ldap_dnattr);
+                                ldap_searchdn, ldap_searchfilter, ldap_dnattr,
+				enable_cache, cache_ttl, lru_lanes, lru_hiwat,
+				cache_npart, part_size);
 
       ldh->init();
       ldh->bind();

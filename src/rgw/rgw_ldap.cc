@@ -41,7 +41,34 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
 #if defined(HAVE_OPENLDAP)
 namespace rgw {
 
-  int LDAPHelper::auth(const std::string uid, const std::string pwd) {
+  ldap::AuthResult ldap::Cred::auth_result()
+  {
+    unique_lock uniq(mtx);
+    if (unlikely(result == AuthResult::AUTH_INIT)) {
+      ++waiters;
+      while (unlikely(result == AuthResult::AUTH_INIT)) {
+	cv.wait(uniq);
+      }
+      --waiters;
+    }
+    if ((ceph::coarse_mono_clock::now() - time_added) > ldh->ttl_s) {
+      result = AuthResult::AUTH_EXPIRED;
+    }
+    return result;
+  } /* ldap::Cred::auth_result() */
+
+  bool ldap::Cred::reclaim()
+  {
+    /* in the non-delete case, handle may still be in handle table */
+    if (cache_hook.is_linked()) {
+      /* in this case, we are being called from a context which holds
+       * the partition lock */
+      ldh->cache.remove(key.hk, this, Cache::FLAG_NONE);
+    }
+    return true; /* reclaimable? */
+  }
+
+  int LDAPHelper::_auth(const std::string& uid, const std::string& pwd) {
     int ret;
     std::string filter;
     if (msad) {
@@ -118,7 +145,84 @@ namespace rgw {
       }
     }
     return (ret == LDAP_SUCCESS) ? ret : -EACCES;
+  } /* LDAPHelper::_auth */
+
+  int LDAPHelper::auth(const std::string uid, const std::string pwd) {
+
+    using namespace ldap;
+
+    CKey k(uid, pwd);
+    Cred::Cache::Latch latch;
+    AuthResult auth_r{AuthResult::AUTH_FAIL};
+
+    /* check cache */
+  retry:
+    Cred* cred =
+      cache.find_latch(k.hk, k, latch, Cred::Cache::FLAG_LOCK);
+    if (cred) {
+      /* need initial ref from LRU (fast path) */
+      if (! lru.ref(cred, cohort::lru::FLAG_INITIAL)) {
+	latch.lock->unlock();
+	goto retry; /* !LATCHED */
+      }
+      auth_r = cred->auth_result();
+      switch(auth_r) {
+      case AuthResult::AUTH_SUCCESS:
+      {
+	latch.lock->unlock();
+	(void) lru.unref(cred, cohort::lru::FLAG_NONE);
+	return LDAP_SUCCESS;
+      }
+      break;
+      case AuthResult::AUTH_FAIL:
+      {
+	latch.lock->unlock();
+	(void) lru.unref(cred, cohort::lru::FLAG_NONE);
+	return -EACCES;
+      }
+      break;
+      case AuthResult::AUTH_EXPIRED: /* refresh */
+	cred->reset();
+	break;
+      default:
+	break;
+      };
+    } else {
+      Cred::Factory prototype(k, this);
+      uint32_t iflags{cohort::lru::FLAG_INITIAL};
+      cred = static_cast<Cred*>(
+	lru.insert(&prototype,
+		   cohort::lru::Edge::MRU,
+		   iflags));
+      if (likely(!!cred)) {
+	/* lock fh (LATCHED) */
+	if (likely(! (iflags & cohort::lru::FLAG_RECYCLE))) {
+	  /* inserts at cached insert iterator, releasing latch */
+	  cache.insert_latched(
+	    cred, latch, Cred::Cache::FLAG_UNLOCK);
+	} else {
+	  /* recycle step invalidates Latch */
+	  cache.insert(k.hk, cred, Cred::Cache::FLAG_NONE);
+	  latch.lock->unlock(); /* !LATCHED */
+	}
+      } else {
+	latch.lock->unlock();
+	goto retry; /* !LATCHED */
+      }
+      lru.ref(cred, cohort::lru::FLAG_INITIAL); /* ref and adjust */
+    }
+
+    int ldap_r = _auth(uid, pwd);
+
+    cred->result = (ldap_r == LDAP_SUCCESS)
+      ? AuthResult::AUTH_SUCCESS
+      : AuthResult::AUTH_FAIL;
+
+    (void) lru.unref(cred, cohort::lru::FLAG_NONE);
+
+    return ldap_r;
   } /* LDAPHelper::auth */
-}
+
+} /* rgw */
 
 #endif /* defined(HAVE_OPENLDAP) */
