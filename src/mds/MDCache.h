@@ -1192,7 +1192,7 @@ public:
 
   CInode *hack_pick_random_inode() {
     assert(!inode_map.empty());
-    int n = ceph::util::generate_random_number(inode_map.size());
+    int n = ceph::util::generate_random_number(inode_map.size() - 1);
     auto p = inode_map.begin();
     while (n--) ++p;
     return p->second;
