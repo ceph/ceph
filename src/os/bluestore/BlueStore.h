@@ -1479,7 +1479,7 @@ public:
     }
   };
 
-  struct TransContext : public AioContext {
+  struct TransContext final : public AioContext {
     MEMPOOL_CLASS_HELPERS();
 
     typedef enum {
@@ -1620,7 +1620,7 @@ public:
       boost::intrusive::list_member_hook<>,
       &TransContext::deferred_queue_item> > deferred_queue_t;
 
-  struct DeferredBatch : public AioContext {
+  struct DeferredBatch final : public AioContext {
     OpSequencer *osr;
     struct deferred_io {
       bufferlist bl;    ///< data
