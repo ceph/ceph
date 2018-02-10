@@ -115,14 +115,45 @@ following code::
     def default(self, *args):
       return "Hello"
 
-Reload the Dashboard module and then you can access the above controller from
-the web browser using the URL http://mgr_hostname:8080/api/ping2.
+Every path given in the ``ApiController`` decorator will automatically be
+prefixed with ``api``.  After reloading the Dashboard module you can access the
+above mentioned controller by pointing your browser to
+http://mgr_hostname:8080/api/ping2.
+
+It is also possible to have nested controllers.  The ``RgwController`` uses
+this technique to make the daemons available through the URL
+http://mgr_hostname:8080/api/rgw/daemon::
+
+  @ApiController('rgw')
+  @AuthRequired()
+  class Rgw(RESTController):
+    pass
+
+
+  @ApiController('rgw/daemon')
+  @AuthRequired()
+  class RgwDaemon(RESTController):
+
+    def list(self):
+      pass
+
+
+Note that paths must be unique and that a path like ``rgw/daemon`` has to have
+a parent ``rgw``.  Otherwise it won't work.
+
+How does the RESTController work?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We also provide a simple mechanism to create REST based controllers using the
-``RESTController`` class.
+``RESTController`` class.  Any class which inherits from ``RESTController``
+will, by default, return JSON.
 
-For example, we can adapt the above controller to return JSON when accessing
-the endpoint with a GET request::
+The ``RESTController`` is basically an additional abstraction layer which eases
+and unifies the work with collections.  A collection is just an array of
+objects with a specific type.  ``RestController`` enable some default mappings
+of request type and given parameters to specific method names.  This may sound
+complicated at first, but it's fairly easy.  Lets have look at the following
+example::
 
   import cherrypy
   from ..tools import ApiController, RESTController
@@ -132,6 +163,37 @@ the endpoint with a GET request::
     def list(self):
       return {"msg": "Hello"}
 
+    def get(self, id):
+      return self.objects[id]
+
+In this case, the ``list`` method is automatically used for all requests to
+``api/ping2`` where no additional argument is given and where the request type
+is ``GET``.  If the request is given an additional argument, the ID in our
+case, it won't map to ``list`` anymore but to ``get`` and return the element
+with the given ID (assuming that ``self.objects`` has been filled before).  The
+same applies to other request types:
+
++--------------+------------+----------------+-------------+
+| Request type | Arguments  | Method         | Status Code |
++==============+============+================+=============+
+| GET          | No         | list           | 200         |
++--------------+------------+----------------+-------------+
+| PUT          | No         | bulk_set       | 200         |
++--------------+------------+----------------+-------------+
+| PATCH        | No         | bulk_set       | 200         |
++--------------+------------+----------------+-------------+
+| POST         | No         | create         | 201         |
++--------------+------------+----------------+-------------+
+| DELETE       | No         | bulk_delete    | 204         |
++--------------+------------+----------------+-------------+
+| GET          | Yes        | get            | 200         |
++--------------+------------+----------------+-------------+
+| PUT          | Yes        | set            | 200         |
++--------------+------------+----------------+-------------+
+| PATCH        | Yes        | set            | 200         |
++--------------+------------+----------------+-------------+
+| DELETE       | Yes        | delete         | 204         |
++--------------+------------+----------------+-------------+
 
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
