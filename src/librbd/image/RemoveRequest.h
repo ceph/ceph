@@ -59,7 +59,10 @@ private:
    * |               |                   v                |     |
    * |               |            VALIDATE IMAGE REMOVAL<-/     |
    * |               |                /  |                      v
-   * |               \------<--------/   |             		|
+   * |               \------<--------/   |   /------\ 		|
+   * |                                   v   v      |           |
+   * |                             REMOVE SNAPS ----/           |
+   * |                                   |                      |
    * |                                   v                      |
    * |                              TRIM IMAGE                  |
    * |                                   |                      |
@@ -128,6 +131,8 @@ private:
   std::list<obj_watch_t> m_watchers;
   std::list<obj_watch_t> m_mirror_watchers;
 
+  std::map<uint64_t, SnapInfo> m_snap_infos;
+
   void open_image();
   void handle_open_image(int r);
 
@@ -162,6 +167,9 @@ private:
 
   void check_group();
   void handle_check_group(int r);
+
+  void remove_snapshot();
+  void handle_remove_snapshot(int r);
 
   void trim_image();
   void handle_trim_image(int r);
