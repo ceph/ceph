@@ -49,9 +49,6 @@ class FlagSetHandler : public FileSystemCommandHandler
     string flag_val;
     cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
-    string confirm;
-    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
-
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
       int r = parse_bool(flag_val, &flag_bool, ss);
@@ -64,9 +61,6 @@ class FlagSetHandler : public FileSystemCommandHandler
       if (flag_bool && !jewel) {
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
-      }
-      if (confirm != "--yes-i-really-mean-it") {
-	ss << EXPERIMENTAL_WARNING;
       }
       fsmap.set_enable_multiple(flag_bool);
       return 0;
@@ -155,8 +149,8 @@ class FsNewHandler : public FileSystemCommandHandler
 
     if (fsmap.filesystem_count() > 0
         && !fsmap.get_enable_multiple()) {
-      ss << "Creation of multiple filesystems is disabled.  To enable "
-            "this experimental feature, use 'ceph fs flag set enable_multiple "
+      ss << "Creation of multiple filesystems is disabled by default. To enable "
+            "this feature, use 'ceph fs flag set enable_multiple "
             "true'";
       return -EINVAL;
     }

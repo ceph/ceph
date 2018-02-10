@@ -51,28 +51,6 @@ to 400 snapshots (http://tracker.ceph.com/issues/21420).
 
 Snapshotting was blocked off with the "allow_new_snaps" flag prior to Firefly.
 
-Multiple filesystems within a Ceph cluster
-------------------------------------------
-Code was merged prior to the Jewel release which enables administrators
-to create multiple independent CephFS filesystems within a single Ceph cluster.
-These independent filesystems have their own set of active MDSes, cluster maps,
-and data. But the feature required extensive changes to data structures which
-are not yet fully qualified, and has security implications which are not all
-apparent nor resolved.
-
-There are no known bugs, but any failures which do result from having multiple
-active filesystems in your cluster will require manual intervention and, so far,
-will not have been experienced by anybody else -- knowledgeable help will be
-extremely limited. You also probably do not have the security or isolation
-guarantees you want or think you have upon doing so.
-
-Note that snapshots and multiple filesystems are *not* tested in combination
-and may not work together; see above.
-
-Multiple filesystems were available starting in the Jewel release candidates
-but were protected behind the "enable_multiple" flag before the final release.
-
-
 Previously experimental features
 ================================
 
@@ -106,3 +84,20 @@ enabling multiple active metadata servers as follows:
 Note that the default size of the active mds cluster (``max_mds``) is
 still set to 1 initially.
 
+Multiple filesystems within a Ceph cluster
+------------------------------------------
+Code was merged prior to the *Jewel* release which enables administrators
+to create multiple independent CephFS filesystems within a single Ceph cluster.
+These independent filesystems have their own set of active MDSes, cluster maps,
+and data. This feature required extensive changes to data structures and had
+security implications which were not all apparent nor resolved at the
+experimental stage.
+
+There are no known bugs, but any failures which do result from having multiple
+active filesystems in your cluster will require manual intervention.
+
+Note that snapshots and multiple filesystems are *not* tested in combination
+and may not work together; see above.
+
+Multiple filesystems were available starting in the *Jewel* release candidates
+but were protected behind the ``enable_multiple`` flag before the final release.
