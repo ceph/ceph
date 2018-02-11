@@ -678,14 +678,21 @@ start_mgr() {
         host = $HOSTNAME
 EOF
 
-	ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
-	DASH_URLS+="http://$IP:$MGR_PORT/"
-	MGR_PORT=$(($MGR_PORT + 1000))
+        ceph_adm config-key set mgr/dashboard/$name/server_port $MGR_PORT
+        if [ $mgr -eq 1 ]; then
+            DASH_URLS="http://$IP:$MGR_PORT"
+        else
+            DASH_URLS+=", http://$IP:$MGR_PORT"
+        fi
+        MGR_PORT=$(($MGR_PORT + 1000))
 
-	ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
-
-	RESTFUL_URLS+="https://$IP:$MGR_PORT"
-	MGR_PORT=$(($MGR_PORT + 1000))
+        ceph_adm config-key set mgr/restful/$name/server_port $MGR_PORT
+        if [ $mgr -eq 1 ]; then
+            RESTFUL_URLS="https://$IP:$MGR_PORT"
+        else
+            RESTFUL_URLS+=", https://$IP:$MGR_PORT"
+        fi
+        MGR_PORT=$(($MGR_PORT + 1000))
 
         echo "Starting mgr.${name}"
         run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
