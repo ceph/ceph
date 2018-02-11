@@ -854,10 +854,15 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
     if (op.tag.size()) {
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
-      return cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-    } else {
-      return 0;
+      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
+      if (rc < 0)
+        return rc;
     }
+
+    if (op.log_op && !header.syncstopped) {
+      return write_bucket_header(hctx, &header);
+    }
+    return 0;
   }
 
   if (entry.exists) {
