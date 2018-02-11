@@ -24,7 +24,7 @@ class TestDashboard(MgrTestCase):
         self.mgr_cluster.mgr_fail(original_active)
 
         failed_over_uri = self._get_uri("dashboard")
-        log.info("After failover running at {0}".format(original_uri))
+        log.info("After failover running at {0}".format(failed_over_uri))
 
         self.assertNotEqual(original_uri, failed_over_uri)
 
