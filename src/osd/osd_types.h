@@ -904,11 +904,11 @@ struct objectstore_perf_stat_t {
     os_apply_latency_ns -= o.os_apply_latency_ns;
   }
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(std::list<objectstore_perf_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(objectstore_perf_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
 /** osd_stat
  * aggregate stats for an osd
@@ -952,11 +952,11 @@ struct osd_stat_t {
   }
 
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
 
 inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.kb == r.kb &&
