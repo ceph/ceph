@@ -38,7 +38,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(num_osd, bl);
   encode(pg_pool_sum, bl, features);
   encode(pg_sum, bl, features);
-  encode(osd_sum, bl);
+  encode(osd_sum, bl, features);
   if (v >= 2) {
     encode(num_pg_by_state, bl);
   } else {
@@ -1340,7 +1340,7 @@ void PGMap::encode(bufferlist &bl, uint64_t features) const
   ENCODE_START(7, 7, bl);
   encode(version, bl);
   encode(pg_stat, bl);
-  encode(osd_stat, bl);
+  encode(osd_stat, bl, features);
   encode(last_osdmap_epoch, bl);
   encode(last_pg_scan, bl);
   encode(stamp, bl);
