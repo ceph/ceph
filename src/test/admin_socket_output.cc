@@ -76,7 +76,7 @@ bool AdminSocketOutput::init_sockets() {
   std::cout << "Initialising sockets" << std::endl;
   for (const auto &x : fs::directory_iterator(socketdir)) {
     std::cout << x.path() << std::endl;
-    if (fs::path(x.path()).extension() == ".asok") {
+    if (x.path().extension() == ".asok") {
       for (auto &target : targets) {
         if (std::regex_search(x.path().filename().string(),
             std::regex(prefix + target + R"(\..*\.asok)"))) {
