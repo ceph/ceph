@@ -13,6 +13,7 @@
 #define CEPH_COMPAT_H
 
 #include "acconfig.h"
+#include <sys/types.h>
 
 #if defined(__linux__)
 #define PROCPREFIX
@@ -164,5 +165,7 @@
       *name = '\0';                                \
     0; })
 #endif
+
+int ceph_posix_fallocate(int fd, off_t offset, off_t len);
 
 #endif /* !CEPH_COMPAT_H */

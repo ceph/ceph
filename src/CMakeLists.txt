@@ -531,6 +531,7 @@ set(libcommon_files
   common/bit_str.cc
   osdc/Striper.cc
   osdc/Objecter.cc
+  common/compat.cc
   common/Graylog.cc
   common/fs_types.cc
   common/dns_resolve.cc
