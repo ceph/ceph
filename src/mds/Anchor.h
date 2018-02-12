@@ -31,15 +31,11 @@ public:
   inodeno_t ino;	// anchored ino
   inodeno_t dirino;
   std::string d_name;
-  __u8 d_type;
-  union {
-    mutable int nref;		// how many children
-    mutable mds_rank_t auth;	// auth hint
-  };
+  __u8 d_type = 0;
 
-  Anchor() : d_type(0), nref(0) {}
-  Anchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp, int nr) :
-    ino(i), dirino(di), d_name(str), d_type(tp), nref(nr) { }
+  Anchor() {}
+  Anchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp) :
+    ino(i), dirino(di), d_name(str), d_type(tp) {}
 
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -54,5 +50,22 @@ inline bool operator==(const Anchor &l, const Anchor &r) {
 }
 
 ostream& operator<<(ostream& out, const Anchor &a);
+
+class RecoveredAnchor : public Anchor {
+public:
+  RecoveredAnchor() {}
+
+  mds_rank_t auth = MDS_RANK_NONE; // auth hint
+};
+
+class OpenedAnchor : public Anchor {
+public:
+  OpenedAnchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp, int nr) :
+      Anchor(i, di, str, tp),
+      nref(nr)
+  {}
+
+  mutable int nref = 0; // how many children
+};
 
 #endif
