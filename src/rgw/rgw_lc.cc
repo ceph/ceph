@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <string.h>
 #include <iostream>
 #include <map>
@@ -433,10 +436,10 @@ int RGWLC::bucket_lc_process(string& shard_id)
         continue;
       }
       if (prefix_iter != prefix_map.begin() && 
-        (prefix_iter->first.compare(0, prev(prefix_iter)->first.length(), prev(prefix_iter)->first) == 0)) {
-        list_op.next_marker = pre_marker;
+          (prefix_iter->first.compare(0, prev(prefix_iter)->first.length(), prev(prefix_iter)->first) == 0)) {
+	list_op.get_next_marker() = pre_marker;
       } else {
-        pre_marker = list_op.get_next_marker();
+	pre_marker = list_op.get_next_marker();
       }
       list_op.params.prefix = prefix_iter->first;
       rgw_bucket_dir_entry pre_obj;
@@ -473,7 +476,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
               if ((obj_iter + 1)==objs.end()) {
                 if (is_truncated) {
                   //deal with it in next round because we can't judge whether this marker is the only version
-                  list_op.next_marker = obj_iter->key;
+                  list_op.get_next_marker() = obj_iter->key;
                   break;
                 }
               } else if (obj_iter->key.name.compare((obj_iter + 1)->key.name) == 0) {   //*obj_iter is delete marker and isn't the only version, do nothing.

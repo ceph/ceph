@@ -1150,19 +1150,18 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   while (is_truncated) {
     map<string, rgw_bucket_dir_entry> result;
 
-    int r = store->cls_bucket_list(bucket_info, RGW_NO_SHARD, marker, prefix, 1000, true,
-                                   result, &is_truncated, &marker,
-                                   bucket_object_check_filter);
+    int r = store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD,
+					   marker, prefix, 1000, true,
+					   result, &is_truncated, &marker,
+					   bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {
       set_err_msg(err_msg, "ERROR: failed operation r=" + cpp_strerror(-r));
     }
 
-
     dump_bucket_index(result, formatter);
     flusher.flush();
-
   }
 
   formatter->close_section();
