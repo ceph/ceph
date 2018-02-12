@@ -17,6 +17,7 @@
 
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
+#include <boost/scope_exit.hpp>
 
 namespace librbd {
 
@@ -242,18 +243,20 @@ TEST_F(TestMockDeepCopyRequest, SimpleCopy) {
   librbd::MockExclusiveLock mock_exclusive_lock;
   mock_dst_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  librbd::MockObjectMap *mock_object_map =
-    is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ?
-    new librbd::MockObjectMap() : nullptr;
-  mock_dst_image_ctx.object_map = mock_object_map;
+  librbd::MockObjectMap mock_object_map;
+
+  mock_dst_image_ctx.object_map = nullptr;
+  if (is_feature_enabled(RBD_FEATURE_OBJECT_MAP)) {
+    mock_dst_image_ctx.object_map = &mock_object_map;
+  }
 
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
-  if (mock_object_map != nullptr) {
-    expect_refresh_object_map(mock_dst_image_ctx, mock_object_map, 0);
+  if (mock_dst_image_ctx.object_map != nullptr) {
+    expect_refresh_object_map(mock_dst_image_ctx, &mock_object_map, 0);
   }
   expect_copy_metadata(mock_metadata_copy_request, 0);
 
@@ -348,18 +351,20 @@ TEST_F(TestMockDeepCopyRequest, ErrorOnCopyMetadata) {
   librbd::MockExclusiveLock mock_exclusive_lock;
   mock_dst_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  librbd::MockObjectMap *mock_object_map =
-    is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ?
-    new librbd::MockObjectMap() : nullptr;
-  mock_dst_image_ctx.object_map = mock_object_map;
+  librbd::MockObjectMap mock_object_map;
+
+  mock_dst_image_ctx.object_map = nullptr;
+  if (is_feature_enabled(RBD_FEATURE_OBJECT_MAP)) {
+    mock_dst_image_ctx.object_map = &mock_object_map;
+  }
 
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
-  if (mock_object_map != nullptr) {
-    expect_refresh_object_map(mock_dst_image_ctx, mock_object_map, 0);
+  if (mock_dst_image_ctx.object_map != nullptr) {
+    expect_refresh_object_map(mock_dst_image_ctx, &mock_object_map, 0);
   }
   expect_copy_metadata(mock_metadata_copy_request, -EINVAL);
 
@@ -388,19 +393,19 @@ TEST_F(TestMockDeepCopyRequest, Snap) {
   librbd::MockExclusiveLock mock_exclusive_lock;
   mock_dst_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
-  librbd::MockObjectMap *mock_object_map =
-    is_feature_enabled(RBD_FEATURE_OBJECT_MAP) ?
-    new librbd::MockObjectMap() : nullptr;
-  mock_dst_image_ctx.object_map = mock_object_map;
+  librbd::MockObjectMap mock_object_map;
+  if (is_feature_enabled(RBD_FEATURE_OBJECT_MAP)) {
+    mock_dst_image_ctx.object_map = &mock_object_map;
+  }
 
   expect_test_features(mock_dst_image_ctx);
 
   InSequence seq;
   expect_copy_snapshots(mock_snapshot_copy_request, 0);
   expect_copy_image(mock_image_copy_request, 0);
-  if (mock_object_map != nullptr) {
-    expect_copy_object_map(mock_exclusive_lock, mock_object_map, 0);
-    expect_refresh_object_map(mock_dst_image_ctx, mock_object_map, 0);
+  if (mock_dst_image_ctx.object_map != nullptr) {
+    expect_copy_object_map(mock_exclusive_lock, &mock_object_map, 0);
+    expect_refresh_object_map(mock_dst_image_ctx, &mock_object_map, 0);
   }
   expect_copy_metadata(mock_metadata_copy_request, 0);
 
