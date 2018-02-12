@@ -208,7 +208,7 @@ int64_t StupidAllocator::allocate(
   uint64_t alloc_unit,
   uint64_t max_alloc_size,
   int64_t hint,
-  mempool::bluestore_alloc::vector<AllocExtent> *extents)
+  PExtentVector *extents)
 {
   uint64_t allocated_size = 0;
   uint64_t offset = 0;
@@ -219,8 +219,6 @@ int64_t StupidAllocator::allocate(
     max_alloc_size = want_size;
   }
 
-  ExtentList block_list = ExtentList(extents, 1, max_alloc_size);
-
   while (allocated_size < want_size) {
     res = allocate_int(std::min(max_alloc_size, (want_size - allocated_size)),
        alloc_unit, hint, &offset, &length);
@@ -230,7 +228,19 @@ int64_t StupidAllocator::allocate(
        */
       break;
     }
-    block_list.add_extents(offset, length);
+    bool can_append = true;
+    if (!extents->empty()) {
+      bluestore_pextent_t &last_extent  = extents->back();
+      if ((last_extent.end() == offset) &&
+	  ((last_extent.length + length) <= max_alloc_size)) {
+	can_append = false;
+	last_extent.length += length;
+      }
+    }
+    if (can_append) {
+      extents->emplace_back(bluestore_pextent_t(offset, length));
+    }
+
     allocated_size += length;
     hint = offset + length;
   }

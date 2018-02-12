@@ -937,7 +937,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<AllocExtent>& get_extents_to_collect() const {
+    const vector<bluestore_pextent_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -967,8 +967,8 @@ public:
                                          ///< copies that are affected by the
                                          ///< specific write
 
-    vector<AllocExtent> extents_to_collect; ///< protrusive extents that should
-                                            ///< be collected if GC takes place
+    ///< protrusive extents that should be collected if GC takes place
+    vector<bluestore_pextent_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
