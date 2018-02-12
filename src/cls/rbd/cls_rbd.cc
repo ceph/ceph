@@ -2002,8 +2002,15 @@ int snapshot_remove(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return r;
   }
 
+  cls_rbd_parent parent;
+  r = read_key(hctx, "parent", &parent);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+  bool has_parent = (r >= 0 && parent.pool != -1);
+
   uint64_t op_features_mask = 0ULL;
-  if (!has_child_snaps) {
+  if (!has_child_snaps && !has_parent) {
     // disable clone child op feature if no longer associated
     op_features_mask |= RBD_OPERATION_FEATURE_CLONE_CHILD;
   }
