@@ -305,6 +305,7 @@ Summary:       Ceph Base Package
 %if 0%{?suse_version}
 Group:         System/Filesystems
 %endif
+Provides:      ceph-test:/usr/bin/ceph-kvstore-tool
 Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
@@ -379,6 +380,7 @@ Summary:	Ceph Monitor Daemon
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Provides:	ceph-test:/usr/bin/ceph-monstore-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
@@ -501,6 +503,7 @@ Summary:	Ceph Object Storage Daemon
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
 Requires:	sudo
