@@ -508,10 +508,10 @@ add_executable(ceph_test_admin_socket_output
   )
 target_link_libraries(ceph_test_admin_socket_output
   ceph-common)
-if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
+if(CXX_STDLIB STREQUAL "libstdc++")
   target_link_libraries(ceph_test_admin_socket_output
     -lstdc++fs)
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(CXX_STDLIB STREQUAL "libc++")
   target_link_libraries(ceph_test_admin_socket_output
     -lc++experimental)
 endif()
