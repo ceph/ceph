@@ -734,9 +734,7 @@ public:
   int omap_check_keys(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
 		      set<string> *out) override;
   using ObjectStore::get_omap_iterator;
-  ObjectMap::ObjectMapIterator get_omap_iterator(CollectionHandle& c, const ghobject_t &oid) override {
-    return get_omap_iterator(c->cid, oid);
-  }
+  ObjectMap::ObjectMapIterator get_omap_iterator(CollectionHandle& c, const ghobject_t &oid) override;
   ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& cid, const ghobject_t &oid);
 
   int _create_collection(const coll_t& c, int bits,

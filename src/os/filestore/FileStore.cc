@@ -5247,6 +5247,15 @@ int FileStore::omap_check_keys(CollectionHandle& ch, const ghobject_t &hoid,
   return 0;
 }
 
+ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(
+  CollectionHandle& ch,
+  const ghobject_t &oid)
+{
+  auto osr = static_cast<OpSequencer*>(ch.get());
+  osr->wait_for_apply(oid);
+  return get_omap_iterator(ch->cid, oid);
+}
+
 ObjectMap::ObjectMapIterator FileStore::get_omap_iterator(const coll_t& _c,
 							  const ghobject_t &hoid)
 {
