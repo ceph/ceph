@@ -124,34 +124,33 @@ Context *DisableFeaturesRequest<I>::handle_block_writes(int *result) {
     }
   }
 
-  send_acquire_exclusive_lock();
-  return nullptr;
+  return send_acquire_exclusive_lock(result);
 }
 
 template <typename I>
-void DisableFeaturesRequest<I>::send_acquire_exclusive_lock() {
+Context *DisableFeaturesRequest<I>::send_acquire_exclusive_lock(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
-
-  Context *ctx = create_context_callback<
-    DisableFeaturesRequest<I>,
-    &DisableFeaturesRequest<I>::handle_acquire_exclusive_lock>(this);
 
   {
     std::unique_lock locker{image_ctx.owner_lock};
     // if disabling features w/ exclusive lock supported, we need to
     // acquire the lock to temporarily block IO against the image
     if (image_ctx.exclusive_lock != nullptr &&
-	!image_ctx.exclusive_lock->is_lock_owner()) {
+        !image_ctx.exclusive_lock->is_lock_owner()) {
       m_acquired_lock = true;
 
+      Context *ctx = create_context_callback<
+        DisableFeaturesRequest<I>,
+        &DisableFeaturesRequest<I>::handle_acquire_exclusive_lock>(
+          this, image_ctx.exclusive_lock);
       image_ctx.exclusive_lock->acquire_lock(ctx);
-      return;
+      return nullptr;
     }
   }
 
-  ctx->complete(0);
+  return handle_acquire_exclusive_lock(result);
 }
 
 template <typename I>
@@ -385,7 +384,7 @@ Context *DisableFeaturesRequest<I>::handle_close_journal(int *result) {
   }
 
   ceph_assert(m_journal != nullptr);
-  delete m_journal;
+  m_journal->put();
   m_journal = nullptr;
 
   send_remove_journal();
@@ -607,7 +606,8 @@ void DisableFeaturesRequest<I>::send_release_exclusive_lock() {
 
   Context *ctx = create_context_callback<
     DisableFeaturesRequest<I>,
-    &DisableFeaturesRequest<I>::handle_release_exclusive_lock>(this);
+    &DisableFeaturesRequest<I>::handle_release_exclusive_lock>(
+      this, image_ctx.exclusive_lock);
 
   image_ctx.exclusive_lock->release_lock(ctx);
 }

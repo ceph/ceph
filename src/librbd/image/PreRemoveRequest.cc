@@ -68,10 +68,12 @@ void PreRemoveRequest<I>::acquire_exclusive_lock() {
     m_image_ctx->set_journal_policy(new journal::DisabledPolicy());
   }
 
-  auto ctx = create_context_callback<
-    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this);
+  m_exclusive_lock = m_image_ctx->exclusive_lock;
 
-  m_image_ctx->exclusive_lock->try_acquire_lock(ctx);
+  auto ctx = create_context_callback<
+    PreRemoveRequest<I>, &PreRemoveRequest<I>::handle_exclusive_lock>(this, m_exclusive_lock);
+
+  m_exclusive_lock->try_acquire_lock(ctx);
 }
 
 template <typename I>
@@ -118,7 +120,7 @@ void PreRemoveRequest<I>::handle_shut_down_exclusive_lock(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << "r=" << r << dendl;
 
-  delete m_exclusive_lock;
+  m_exclusive_lock->put();
   m_exclusive_lock = nullptr;
 
   if (r < 0) {
