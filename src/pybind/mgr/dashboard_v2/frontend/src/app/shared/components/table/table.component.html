@@ -67,3 +67,9 @@
   </ngx-datatable>
 </div>
 <ng-template cdTableDetails></ng-template>
+<!-- cell templates that can be accessed from outside -->
+<ng-template #bold
+             let-row="row"
+             let-value="value">
+  <strong>{{ value }}</strong>
+</ng-template>
