@@ -27,7 +27,7 @@ class RGWMongoose : public RGWStreamIO
   bool explicit_conn_close;
 
 public:
-  void init_env(CephContext *cct);
+  int init_env(CephContext *cct) override;
 
   int write_data(const char *buf, int len);
   int read_data(char *buf, int len);

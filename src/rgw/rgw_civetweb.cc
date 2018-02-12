@@ -103,16 +103,22 @@ int RGWMongoose::complete_request()
   return 0;
 }
 
-void RGWMongoose::init_env(CephContext *cct)
+int RGWMongoose::init_env(CephContext *cct)
 {
   env.init(cct);
   struct mg_request_info *info = mg_get_request_info(conn);
 
-  if (!info)
-    return;
+  if (!info) {
+    return -EINVAL;
+  }
 
   for (int i = 0; i < info->num_headers; i++) {
     struct mg_request_info::mg_header *header = &info->http_headers[i];
+
+    if (header->name == nullptr || header->value == nullptr) {
+      lderr(cct) << "client supplied malformed headers" << dendl;
+      return -EINVAL;
+    }
 
     if (strcasecmp(header->name, "content-length") == 0) {
       env.set("CONTENT_LENGTH", header->value);
@@ -165,6 +171,7 @@ void RGWMongoose::init_env(CephContext *cct)
   if (info->is_ssl) {
     env.set("SERVER_PORT_SECURE", port_buf);
   }
+  return 0;
 }
 
 int RGWMongoose::send_status(int status, const char *status_name)

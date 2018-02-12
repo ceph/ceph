@@ -9,8 +9,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-void RGWClientIO::init(CephContext *cct) {
-  init_env(cct);
+int RGWClientIO::init(CephContext *cct) {
+  int init_error = init_env(cct);
+
+  if (init_error != 0)
+    return init_error;
 
   if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
     std::map<string, string, ltstr_nocase>& env_map = env.get_map();
@@ -20,6 +23,8 @@ void RGWClientIO::init(CephContext *cct) {
       ldout(cct, 20) << iter->first << "=" << iter->second << dendl;
     }
   }
+
+  return init_error;
 }
 
 int RGWStreamIO::print(const char *format, ...)
@@ -85,7 +90,6 @@ int RGWStreamIO::read(char *buf, int max, int *actual, bool hash /* = false */)
     }
     calc_hash_sha256_update_stream(sha256_hash, buf, *actual);
   }
-
   return 0;
 }
 
