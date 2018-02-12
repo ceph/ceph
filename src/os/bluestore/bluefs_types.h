@@ -8,13 +8,16 @@
 #include "include/encoding.h"
 #include "include/denc.h"
 
-class bluefs_extent_t : public AllocExtent{
+class bluefs_extent_t {
 public:
   uint8_t bdev;
+  uint64_t offset = 0;
+  uint32_t length = 0;
 
   bluefs_extent_t(uint8_t b = 0, uint64_t o = 0, uint32_t l = 0)
-    : AllocExtent(o, l), bdev(b) {}
+    : bdev(b), offset(o), length(l) {}
 
+  uint64_t end() const { return  offset + length; }
   DENC(bluefs_extent_t, v, p) {
     DENC_START(1, 1, p);
     denc_lba(v.offset, p);
