@@ -11777,7 +11777,8 @@ void MDCache::show_subtrees(int dbl)
     return;  // i won't print anything.
 
   if (subtrees.empty()) {
-    dout(dbl) << "show_subtrees - no subtrees" << dendl;
+    dout(ceph::dout::need_dynamic(dbl)) << "show_subtrees - no subtrees"
+					<< dendl;
     return;
   }
 
@@ -11866,7 +11867,8 @@ void MDCache::show_subtrees(int dbl)
       snprintf(s, sizeof(s), "%2d,%2d", int(dir->get_dir_auth().first), int(dir->get_dir_auth().second));
     
     // print
-    dout(dbl) << indent << "|_" << pad << s << " " << auth << *dir << dendl;
+    dout(ceph::dout::need_dynamic(dbl)) << indent << "|_" << pad << s
+					<< " " << auth << *dir << dendl;
 
     if (dir->ino() == MDS_INO_ROOT)
       assert(dir->inode == root);

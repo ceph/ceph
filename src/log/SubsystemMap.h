@@ -73,10 +73,11 @@ public:
     return ceph_subsys_get_as_array()[subsys].name;
   }
 
-  template <unsigned SubV>
-  bool should_gather(int level) {
+  template <unsigned SubV, int LvlV>
+  bool should_gather() {
     static_assert(SubV < get_num(), "wrong subsystem ID");
-    return level <= m_gather_levels[SubV];
+    static_assert(LvlV >= -1 && LvlV <= 200);
+    return LvlV <= m_gather_levels[SubV];
   }
   bool should_gather(const unsigned sub, int level) {
     assert(sub < m_subsys.size());
