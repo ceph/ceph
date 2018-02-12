@@ -25,6 +25,7 @@
 #include "common/WorkQueue.h"
 #include "common/AsyncReserver.h"
 #include "common/ceph_context.h"
+#include "common/config_cacher.h"
 #include "common/zipkin_trace.h"
 
 #include "mgr/MgrClient.h"
@@ -259,6 +260,9 @@ public:
   MonClient   *&monc;
   GenContextWQ recovery_gen_wq;
   ClassHandler  *&class_handler;
+
+  md_config_cacher_t<uint64_t> osd_max_object_size;
+  md_config_cacher_t<bool> osd_skip_data_digest;
 
   void enqueue_back(OpQueueItem&& qi);
   void enqueue_front(OpQueueItem&& qi);
