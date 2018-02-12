@@ -72,10 +72,14 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
 #define dout_impl(cct, sub, v)						\
   do {									\
   const bool should_gather = [&](const auto cctX) {			\
-    if constexpr (ceph::dout::is_dynamic<decltype(sub)>::value) {	\
+    if constexpr (ceph::dout::is_dynamic<decltype(sub)>::value ||	\
+		  ceph::dout::is_dynamic<decltype(v)>::value) {		\
       return cctX->_conf->subsys.should_gather(sub, v);			\
     } else {								\
-      return cctX->_conf->subsys.template should_gather<sub>(v);	\
+      /* The parentheses are **essential** because commas in angle	\
+       * brackets are NOT ignored on macro expansion! A language's	\
+       * limitation, sorry. */						\
+      return (cctX->_conf->subsys.template should_gather<sub, v>());	\
     }									\
   }(cct);								\
 									\

@@ -178,7 +178,7 @@ public:
   void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
 	    va_list ap) override {
     int v = rocksdb::NUM_INFO_LOG_LEVELS - log_level - 1;
-    dout(v);
+    dout(ceph::dout::need_dynamic(v));
     char buf[65536];
     vsnprintf(buf, sizeof(buf), format, ap);
     *_dout << buf << dendl;

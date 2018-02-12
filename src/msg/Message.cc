@@ -841,7 +841,8 @@ Message *decode_message(CephContext *cct, int crcflags,
       lderr(cct) << "failed to decode message of type " << type
 		 << " v" << header.version
 		 << ": " << e.what() << dendl;
-      ldout(cct, cct->_conf->ms_dump_corrupt_message_level) << "dump: \n";
+      ldout(cct, ceph::dout::need_dynamic(
+	cct->_conf->ms_dump_corrupt_message_level)) << "dump: \n";
       m->get_payload().hexdump(*_dout);
       *_dout << dendl;
       if (cct->_conf->ms_die_on_bad_msg)

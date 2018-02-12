@@ -40,7 +40,8 @@ static int dout_wrapper(lua_State *L)
 {
   int level = luaL_checkinteger(L, 1);
   lua_concat(L, lua_gettop(L)-1);
-  mantle_dout(level) << lua_tostring(L, 2) << mantle_dendl;
+  mantle_dout(ceph::dout::need_dynamic(level)) << lua_tostring(L, 2)
+					       << mantle_dendl;
   return 0;
 }
 
