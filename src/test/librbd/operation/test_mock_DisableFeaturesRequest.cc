@@ -292,13 +292,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, All) {
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal mock_journal_stack;
-  MockJournal *mock_journal = &mock_journal_stack;
-  if (features_to_disable & RBD_FEATURE_JOURNALING) {
-    mock_journal = new MockJournal();
-  }
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);
@@ -444,9 +440,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, Mirroring) {
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal *mock_journal = new MockJournal();
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);
@@ -487,9 +483,9 @@ TEST_F(TestMockOperationDisableFeaturesRequest, MirroringError) {
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
-  MockJournal *mock_journal = new MockJournal();
+  MockJournal mock_journal;
   MockObjectMap mock_object_map;
-  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, *mock_journal,
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
 		      mock_object_map);
 
   expect_verify_lock_ownership(mock_image_ctx);

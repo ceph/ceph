@@ -25,9 +25,12 @@ public:
 
   int when_open_object_map(librbd::ImageCtx *ictx) {
     C_SaferCond ctx;
-    librbd::ObjectMap<> object_map(*ictx, ictx->snap_id);
-    object_map.open(&ctx);
-    return ctx.wait();
+    librbd::ObjectMap<> *object_map = new librbd::ObjectMap<>(*ictx, ictx->snap_id);
+    object_map->open(&ctx);
+    int r = ctx.wait();
+    object_map->put();
+
+    return r;
   }
 };
 

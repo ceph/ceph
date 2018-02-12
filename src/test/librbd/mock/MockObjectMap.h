@@ -26,6 +26,9 @@ struct MockObjectMap {
   MOCK_METHOD3(aio_resize, void(uint64_t new_size, uint8_t default_object_state,
                                 Context *on_finish));
 
+  void get() {}
+  void put() {}
+
   template <typename T, void(T::*MF)(int) = &T::complete>
   bool aio_update(uint64_t snap_id, uint64_t start_object_no, uint8_t new_state,
                   const boost::optional<uint8_t> &current_state,
