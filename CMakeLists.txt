@@ -96,7 +96,7 @@ CHECK_FUNCTION_EXISTS(getgrouplist HAVE_GETGROUPLIST)
 if(NOT APPLE)
   CHECK_FUNCTION_EXISTS(fdatasync HAVE_FDATASYNC)
 endif()
-CHECK_FUNCTION_EXISTS(strerror_r HAVE_STRERROR_R)
+CHECK_FUNCTION_EXISTS(strerror_r HAVE_Strerror_R)
 CHECK_FUNCTION_EXISTS(name_to_handle_at HAVE_NAME_TO_HANDLE_AT)
 CHECK_FUNCTION_EXISTS(pipe2 HAVE_PIPE2)
 set(CMAKE_REQUIRED_LIBRARIES pthread)
@@ -593,6 +593,19 @@ set(Boost_USE_MULTITHREADED ON)
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
+
+execute_process(
+  COMMAND ./librarytest.sh ${CMAKE_CXX_COMPILER} ${CMAKE_CXX_FLAGS}
+  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+  OUTPUT_VARIABLE CXX_STDLIB
+  )
+
+if(CXX_STDLIB STREQUAL "libstdc++" OR CXX_STDLIB STREQUAL "libc++")
+  message(STATUS "We are using ${CXX_STDLIB}.")
+else()
+  message(FATAL_ERROR
+    "Unable to determine C++ standard library, got ${CXX_STDLIB}.")
+endif()
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)
