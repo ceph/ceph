@@ -7082,7 +7082,7 @@ static int parse_reweights(CephContext *cct,
       if (osd_weight.second.type() != json_spirit::str_type) {
 	return -EINVAL;
       }
-      auto weight = std::stoul(osd_weight.second.get_str());
+      auto weight = CEPH_OSD_IN*std::stod(osd_weight.second.get_str());
       weights->insert({osd_id, weight});
     }
   } catch (const std::logic_error& e) {
