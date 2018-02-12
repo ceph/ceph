@@ -497,7 +497,9 @@ public:
       const uuid_d& uuid,
       int32_t* existing_id,
       stringstream& ss);
-  void do_osd_create(const int32_t id, const uuid_d& uuid, int32_t* new_id);
+  void do_osd_create(const int32_t id, const uuid_d& uuid,
+		     const string& device_class,
+		     int32_t* new_id);
   int prepare_command_osd_purge(int32_t id, stringstream& ss);
   int prepare_command_osd_destroy(int32_t id, stringstream& ss);
   int _prepare_command_osd_crush_remove(

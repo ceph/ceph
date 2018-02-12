@@ -1266,7 +1266,6 @@ function test_mon_osd_create_destroy()
   ceph osd rm $id2
   ceph osd setmaxosd $old_maxosd
 
-  ceph osd new $uuid -i $bad_json 2>&1 | grep 'EINVAL'
   ceph osd new $uuid -i $no_cephx 2>&1 | grep 'EINVAL'
   ceph osd new $uuid -i $no_lockbox 2>&1 | grep 'EINVAL'
 

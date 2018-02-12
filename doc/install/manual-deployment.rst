@@ -438,6 +438,10 @@ OSDs with the long form procedure, execute the following steps for each OSD.
 	ceph osd new $UUID -i - \
 	-n client.bootstrap-osd -k /var/lib/ceph/bootstrap-osd/ceph.keyring)
 
+   It is also possible to include a ``crush_device_class`` property in the JSON
+   to set an initial class other than the default (``ssd`` or ``hdd`` based on
+   the auto-detected device type).
+
 #. Create the default directory on your new OSD. ::
 
      mkdir /var/lib/ceph/osd/ceph-$ID
