@@ -1251,6 +1251,10 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    if (!name_map.empty() &&
+	name_map.rbegin()->first >= crush->max_devices) {
+      crush->max_devices = name_map.rbegin()->first + 1;
+    }
     have_uniform_rules = !has_legacy_rule_ids();
   }
   int bucket_set_alg(int id, int alg);
