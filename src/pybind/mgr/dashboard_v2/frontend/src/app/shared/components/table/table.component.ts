@@ -6,12 +6,14 @@ import {
   OnChanges,
   OnInit,
   Output,
+  TemplateRef,
   Type,
   ViewChild
 } from '@angular/core';
 
-import { DatatableComponent, TableColumn } from '@swimlane/ngx-datatable';
+import { DatatableComponent } from '@swimlane/ngx-datatable';
 
+import { CdTableColumn } from '../../models/cd-table-column';
 import { TableDetailsDirective } from './table-details.directive';
 
 @Component({
@@ -26,7 +28,7 @@ export class TableComponent implements OnInit, OnChanges {
   // This is the array with the items to be shown
   @Input() data: any[];
   // Each item -> { prop: 'attribute name', name: 'display name' }
-  @Input() columns: TableColumn[];
+  @Input() columns: CdTableColumn[];
   // Method used for setting column widths.
   @Input() columnMode ?= 'force';
   // Name of the component fe 'TableDetailsComponent'
@@ -39,6 +41,11 @@ export class TableComponent implements OnInit, OnChanges {
   @Input() footer ?= true;
   // Should be the function that will update the input data
   @Output() fetchData = new EventEmitter();
+
+  @ViewChild('bold') bold: TemplateRef<any>;
+  cellTemplates: {
+    [key: string]: TemplateRef<any>
+  } = {};
 
   selectable: String = undefined;
   search = '';
@@ -55,10 +62,21 @@ export class TableComponent implements OnInit, OnChanges {
   constructor(private componentFactoryResolver: ComponentFactoryResolver) { }
 
   ngOnInit() {
+    this._addTemplates();
+    this.columns.map((column) => {
+      if (column.cellTransformation) {
+        column.cellTemplate = this.cellTemplates[column.cellTransformation];
+      }
+      return column;
+    });
     this.reloadData();
     if (this.detailsComponent) {
       this.selectable = 'multi';
     }
+  }
+
+  _addTemplates () {
+    this.cellTemplates.bold = this.bold;
   }
 
   ngOnChanges(changes) {
