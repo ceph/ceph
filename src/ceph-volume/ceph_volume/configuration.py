@@ -65,6 +65,11 @@ class Conf(configparser.SafeConfigParser):
         except (configparser.NoSectionError, configparser.NoOptionError):
             raise exceptions.ConfigurationKeyError('global', 'fsid')
 
+    def optionxform(self, s):
+        s = s.replace('_', ' ')
+        s = '_'.join(s.split())
+        return s
+
     def get_safe(self, section, key, default=None):
         """
         Attempt to get a configuration value from a certain section
