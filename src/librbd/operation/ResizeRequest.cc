@@ -281,9 +281,11 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map->aio_resize(
-    m_new_size, OBJECT_NONEXISTENT, create_context_callback<
-      ResizeRequest<I>, &ResizeRequest<I>::handle_grow_object_map>(this));
+  Context *ctx = create_context_callback<
+    ResizeRequest<I>, &ResizeRequest<I>::handle_grow_object_map>(
+      this, image_ctx.object_map);
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT, ctx);
+
   image_ctx.snap_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;
@@ -323,9 +325,11 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   assert(image_ctx.exclusive_lock == nullptr ||
          image_ctx.exclusive_lock->is_lock_owner());
 
-  image_ctx.object_map->aio_resize(
-    m_new_size, OBJECT_NONEXISTENT, create_context_callback<
-      ResizeRequest<I>, &ResizeRequest<I>::handle_shrink_object_map>(this));
+  Context *ctx = create_context_callback<
+    ResizeRequest<I>, &ResizeRequest<I>::handle_shrink_object_map>(
+      this, image_ctx.object_map);
+  image_ctx.object_map->aio_resize(m_new_size, OBJECT_NONEXISTENT, ctx);
+
   image_ctx.snap_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;

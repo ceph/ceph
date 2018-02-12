@@ -124,7 +124,7 @@ private:
   void send_block_writes();
   Context *handle_block_writes(int *result);
 
-  void send_acquire_exclusive_lock();
+  Context *send_acquire_exclusive_lock(int *result);
   Context *handle_acquire_exclusive_lock(int *result);
 
   void send_get_mirror_mode();

@@ -234,7 +234,7 @@ void SnapshotRemoveRequest<I>::remove_object_map() {
 
       auto ctx = create_context_callback<
         SnapshotRemoveRequest<I>,
-        &SnapshotRemoveRequest<I>::handle_remove_object_map>(this);
+        &SnapshotRemoveRequest<I>::handle_remove_object_map>(this, image_ctx.object_map);
       image_ctx.object_map->snapshot_remove(m_snap_id, ctx);
       return;
     }

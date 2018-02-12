@@ -88,7 +88,8 @@ void DemoteRequest<I>::acquire_lock() {
   ldout(cct, 20) << dendl;
 
   auto ctx = create_context_callback<
-    DemoteRequest<I>, &DemoteRequest<I>::handle_acquire_lock>(this);
+    DemoteRequest<I>,
+    &DemoteRequest<I>::handle_acquire_lock>(this, m_image_ctx.exclusive_lock);
   m_image_ctx.exclusive_lock->acquire_lock(ctx);
   m_image_ctx.owner_lock.put_read();
 }
@@ -153,7 +154,8 @@ void DemoteRequest<I>::release_lock() {
   }
 
   auto ctx = create_context_callback<
-    DemoteRequest<I>, &DemoteRequest<I>::handle_release_lock>(this);
+    DemoteRequest<I>,
+    &DemoteRequest<I>::handle_release_lock>(this, m_image_ctx.exclusive_lock);
   m_image_ctx.exclusive_lock->release_lock(ctx);
   m_image_ctx.owner_lock.put_read();
 }

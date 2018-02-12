@@ -223,10 +223,10 @@ Context *SnapshotCreateRequest<I>::send_create_object_map() {
 
   {
     RWLock::RLocker object_map_lock(image_ctx.object_map_lock);
-    image_ctx.object_map->snapshot_add(
-      m_snap_id, create_context_callback<
-        SnapshotCreateRequest<I>,
-        &SnapshotCreateRequest<I>::handle_create_object_map>(this));
+    Context *ctx = create_context_callback<
+      SnapshotCreateRequest<I>,
+      &SnapshotCreateRequest<I>::handle_create_object_map>(this, image_ctx.object_map);
+    image_ctx.object_map->snapshot_add(m_snap_id, ctx);
   }
   image_ctx.snap_lock.put_read();
   return nullptr;

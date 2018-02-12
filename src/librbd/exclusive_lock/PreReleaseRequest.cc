@@ -225,8 +225,8 @@ void PreReleaseRequest<I>::send_close_journal() {
   ldout(cct, 10) << dendl;
 
   using klass = PreReleaseRequest<I>;
-  Context *ctx = create_context_callback<klass, &klass::handle_close_journal>(
-    this);
+  Context *ctx = create_context_callback<
+    klass, &klass::handle_close_journal>(this, m_journal);
   m_journal->close(ctx);
 }
 
@@ -240,7 +240,8 @@ void PreReleaseRequest<I>::handle_close_journal(int r) {
     lderr(cct) << "failed to close journal: " << cpp_strerror(r) << dendl;
   }
 
-  delete m_journal;
+  m_journal->put();
+  m_journal = nullptr;
 
   send_close_object_map();
 }
@@ -262,7 +263,7 @@ void PreReleaseRequest<I>::send_close_object_map() {
 
   using klass = PreReleaseRequest<I>;
   Context *ctx = create_context_callback<
-    klass, &klass::handle_close_object_map>(this);
+    klass, &klass::handle_close_object_map>(this, m_object_map);
   m_object_map->close(ctx);
 }
 
@@ -273,7 +274,7 @@ void PreReleaseRequest<I>::handle_close_object_map(int r) {
 
   // object map shouldn't return errors
   assert(r == 0);
-  delete m_object_map;
+  m_object_map->put();
 
   send_unlock();
 }

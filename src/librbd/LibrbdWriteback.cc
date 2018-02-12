@@ -31,6 +31,8 @@
 
 namespace librbd {
 
+using util::create_context_callback;
+
   /**
    * callback to finish a rados completion as a Context
    *
@@ -240,10 +242,11 @@ namespace librbd {
       if (new_journal_tid != 0) {
         // ensure new journal event is safely committed to disk before
         // committing old event
-        m_ictx->journal->flush_event(
-          new_journal_tid, new C_CommitIOEventExtent(m_ictx,
-                                                     original_journal_tid,
-                                                     it->first, it->second));
+        Context *ctx = new C_CommitIOEventExtent(m_ictx, original_journal_tid,
+                                                 it->first, it->second);
+        ctx = create_context_callback<
+          Context, &Context::complete, Journal<>>(ctx, m_ictx->journal);
+        m_ictx->journal->flush_event(new_journal_tid, ctx);
       } else {
         m_ictx->journal->commit_io_event_extent(original_journal_tid, it->first,
 					        it->second, 0);

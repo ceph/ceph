@@ -325,7 +325,8 @@ std::ostream &operator<<(std::ostream &os,
 
 template <typename I>
 Journal<I>::Journal(I &image_ctx)
-  : m_image_ctx(image_ctx), m_journaler(NULL),
+  : RefCountedObject(image_ctx.cct),
+    m_image_ctx(image_ctx), m_journaler(NULL),
     m_lock("Journal<I>::m_lock"), m_state(STATE_UNINITIALIZED),
     m_error_result(0), m_replay_handler(this), m_close_pending(false),
     m_event_lock("Journal<I>::m_event_lock"), m_event_tid(0),

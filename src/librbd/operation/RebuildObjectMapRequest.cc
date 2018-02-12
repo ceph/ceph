@@ -24,6 +24,8 @@
 namespace librbd {
 namespace operation {
 
+using util::create_context_callback;
+
 template <typename I>
 void RebuildObjectMapRequest<I>::send() {
   send_resize_object_map();
@@ -115,8 +117,9 @@ void RebuildObjectMapRequest<I>::send_resize_object_map() {
   assert(m_image_ctx.exclusive_lock == nullptr ||
          m_image_ctx.exclusive_lock->is_lock_owner());
 
-  m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT,
-                                     this->create_callback_context());
+  Context *ctx = create_context_callback
+    <AsyncRequest<I>, &AsyncRequest<I>::complete>(this, m_image_ctx.object_map);
+  m_image_ctx.object_map->aio_resize(size, OBJECT_NONEXISTENT, ctx);
   m_image_ctx.snap_lock.put_read();
 }
 
@@ -201,7 +204,10 @@ void RebuildObjectMapRequest<I>::send_save_object_map() {
 
   RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
   assert(m_image_ctx.object_map != nullptr);
-  m_image_ctx.object_map->aio_save(this->create_callback_context());
+
+  Context *ctx = create_context_callback
+    <AsyncRequest<I>, &AsyncRequest<I>::complete>(this, m_image_ctx.object_map);
+  m_image_ctx.object_map->aio_save(ctx);
 }
 
 template <typename I>
