@@ -550,7 +550,7 @@ int RGWGetObj_BlockDecrypt::read_manifest(bufferlist& manifest_bl) {
       }
       parts_len.back() += mi.get_stripe_size();
     }
-    if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+    if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
       for (size_t i = 0; i<parts_len.size(); i++) {
         ldout(cct, 20) << "Manifest part " << i << ", size=" << parts_len[i] << dendl;
       }
