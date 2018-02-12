@@ -8707,7 +8707,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
-int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
+int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
@@ -9043,12 +9043,12 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
         totallen += iov[i].iov_len;
     }
     if (write) {
-        int w = _write(fh, offset, totallen, NULL, iov, iovcnt);
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt);
         ldout(cct, 3) << "pwritev(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
-        int r = _read(fh, offset, totallen, &bl);
+        int64_t r = _read(fh, offset, totallen, &bl);
         ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
         if (r <= 0)
           return r;
@@ -9072,8 +9072,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     }
 }
 
-int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-                  const struct iovec *iov, int iovcnt)
+int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
+	                const struct iovec *iov, int iovcnt)
 {
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
@@ -9106,7 +9106,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
      * change out from under us.
      */
     if (f->flags & O_APPEND) {
-      int r = _lseek(f, 0, SEEK_END);
+      int64_t r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
@@ -9249,7 +9249,7 @@ success:
   logger->tinc(l_c_wrlat, lat);
 
   totalwritten = size;
-  r = (int)totalwritten;
+  r = (int64_t)totalwritten;
 
   // extend file?
   if (totalwritten + offset > in->size) {
