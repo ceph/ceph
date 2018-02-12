@@ -68,7 +68,7 @@ protected:
 
   version_t omap_version = 0;
 
-  map<inodeno_t, Anchor> anchor_map;
+  map<inodeno_t, OpenedAnchor> anchor_map;
   set<dirfrag_t> dirfrags;
 
   std::map<inodeno_t, unsigned> dirty_items; // ino -> dirty state
@@ -95,7 +95,7 @@ protected:
   void _commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin);
 
   std::map<std::string, bufferlist> loaded_journal;
-  map<inodeno_t, Anchor> loaded_anchor_map;
+  map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
   set<dirfrag_t> loaded_dirfrags;
   list<MDSInternalContextBase*> waiting_for_load;
   bool load_done = false;

@@ -483,7 +483,7 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 					    std::piecewise_construct,
 					    std::make_tuple(ino),
 					    std::make_tuple());
-    Anchor& anchor = it->second;
+    RecoveredAnchor& anchor = it->second;
     decode(anchor, p);
     assert(ino == anchor.ino);
     anchor.auth = MDS_RANK_NONE;
