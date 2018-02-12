@@ -8,6 +8,7 @@ from ceph_volume.api import lvm as api
 from ceph_volume.util import system
 
 logger = logging.getLogger(__name__)
+mlogger = terminal.MultiLogger(__name__)
 
 
 def wipefs(path):
@@ -57,8 +58,7 @@ class Zap(object):
             #TODO: ensure device is a partition
             path = device
 
-        logger.info("Zapping: %s", path)
-        terminal.write("Zapping: %s" % path)
+        mlogger.info("Zapping: %s", path)
 
         # check if there was a pv created with the
         # name of device
@@ -70,22 +70,18 @@ class Zap(object):
         if lv:
             osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
             if system.path_is_mounted(osd_path):
-                logger.info("Unmounting %s", osd_path)
-                terminal.write("Unmounting %s" % osd_path)
+                mlogger.info("Unmounting %s", osd_path)
                 system.unmount(osd_path)
 
         if args.destroy and pv:
             logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
             vg_name = pv.vg_name
-            logger.info("Destroying volume group %s because --destroy was given", vg_name)
-            terminal.write("Destroying volume group %s because --destroy was given" % vg_name)
+            mlogger.info("Destroying volume group %s because --destroy was given", vg_name)
             api.remove_vg(vg_name)
-            logger.info("Destroying physical volume %s because --destroy was given", device)
-            terminal.write("Destroying physical volume %s because --destroy was given" % device)
+            mlogger.info("Destroying physical volume %s because --destroy was given", device)
             api.remove_pv(device)
         elif args.destroy and not pv:
-            logger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
-            terminal.write("Skipping --destroy because no associated physical volumes are found for %s" % device)
+            mlogger.info("Skipping --destroy because no associated physical volumes are found for %s", device)
 
         wipefs(path)
         zap_data(path)
