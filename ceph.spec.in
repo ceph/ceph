@@ -233,6 +233,7 @@ Summary:       Ceph Base Package
 %if 0%{?suse_version}
 Group:         System/Filesystems
 %endif
+Provides:      ceph-test:/usr/bin/ceph-kvstore-tool
 Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
@@ -301,6 +302,7 @@ Summary:	Ceph Monitor Daemon
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Provides:	ceph-test:/usr/bin/ceph-monstore-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 # For ceph-rest-api
 %if 0%{?fedora} || 0%{?rhel}
@@ -419,6 +421,7 @@ Summary:	Ceph Object Storage Daemon
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
+Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 # for sgdisk, used by ceph-disk
 %if 0%{?fedora} || 0%{?rhel}
