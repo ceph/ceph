@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_EXCLUSIVE_LOCK_H
 #define CEPH_TEST_LIBRBD_MOCK_EXCLUSIVE_LOCK_H
 
+#include "common/RefCountedObj.h"
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "gmock/gmock.h"
@@ -31,6 +32,9 @@ struct MockExclusiveLock {
   MOCK_METHOD0(accept_ops, bool());
 
   MOCK_METHOD0(start_op, Context*());
+
+  void get() {}
+  void put() {}
 };
 
 } // namespace librbd
