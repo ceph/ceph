@@ -3860,6 +3860,8 @@ void RGWPostObj::execute()
       ldout(s->cct, 15) << "supplied_md5=" << supplied_md5 << dendl;
     }
 
+    rgw_data_placement_volatile_config dest_dpvc;
+    store->get_zone_params().get_data_placement_volatile_config(s->bucket_info.placement_rule, &dest_dpvc);
     RGWPutObjProcessor_Atomic processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
                                         s->bucket_info,
                                         s->bucket,
@@ -3868,6 +3870,7 @@ void RGWPostObj::execute()
                                         s->cct->_conf->rgw_obj_stripe_size,
                                         s->req_id,
                                         s->bucket_info.versioning_enabled());
+    processor.set_data_placement_volatile_config(dest_dpvc);
     /* No filters by default. */
     filter = &processor;
 
