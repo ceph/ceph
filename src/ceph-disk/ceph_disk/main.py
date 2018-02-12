@@ -1609,8 +1609,9 @@ def zap_linux(dev):
         # Thoroughly wipe all partitions of any traces of
         # Filesystems or OSD Journals
         #
-        # In addition we need to write 10M of data to each partition
-        # to make sure that after re-creating the same partition
+        # In addition we need to write 110M (read following comment for more
+        # details on the context of this magic number) of data to each
+        # partition to make sure that after re-creating the same partition
         # there is no trace left of any previous Filesystem or OSD
         # Journal
 
@@ -1626,13 +1627,29 @@ def zap_linux(dev):
                 ],
             )
 
+            # for an typical bluestore device, it has
+            # 1. a 100M xfs data partition
+            # 2. a bluestore_block_size block partition
+            # 3. a bluestore_block_db_size block.db partition
+            # 4. a bluestore_block_wal_size block.wal partition
+            # so we need to wipe out the bits storing the bits storing
+            # bluestore's collections' meta information in that case to
+            # prevent OSD from comparing the meta data, like OSD id and fsid,
+            # stored on the device to be zapped with the oness passed in. here,
+            # we assume that the allocator of bluestore puts these meta data
+            # at the beginning of the block partition. without knowning the
+            # actual layout of the bluefs, we add extra 10M to be on the safe
+            # side. if this partition was formatted for a filesystem, 10MB
+            # would be more than enough to nuke its superblock.
+            count = min(PrepareBluestoreData.SPACE_SIZE + 10,
+                        get_dev_size(partition))
             command_check_call(
                 [
                     'dd',
                     'if=/dev/zero',
                     'of={path}'.format(path=partition),
                     'bs=1M',
-                    'count=10',
+                    'count={count}'.format(count=count),
                 ],
             )
 
@@ -3113,9 +3130,10 @@ class PrepareFilestoreData(PrepareData):
 
 
 class PrepareBluestoreData(PrepareData):
+    SPACE_SIZE = 100
 
     def get_space_size(self):
-        return 100  # MB
+        return self.SPACE_SIZE  # MB
 
     def prepare_device(self, *to_prepare_list):
         super(PrepareBluestoreData, self).prepare_device(*to_prepare_list)
