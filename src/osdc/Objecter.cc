@@ -581,9 +581,10 @@ void Objecter::_send_linger(LingerOp *info,
 
   // do not resend this; we will send a new op to reregister
   o->should_resend = false;
+  o->ctx_budgeted = true;
 
   if (info->register_tid) {
-    // repeat send.  cancel old registeration op, if any.
+    // repeat send.  cancel old registration op, if any.
     OSDSession::unique_lock sl(info->session->lock);
     if (info->session->ops.count(info->register_tid)) {
       Op *o = info->session->ops[info->register_tid];
@@ -591,12 +592,9 @@ void Objecter::_send_linger(LingerOp *info,
       _cancel_linger_op(o);
     }
     sl.unlock();
-
-    _op_submit(o, sul, &info->register_tid);
-  } else {
-    // first send
-    _op_submit_with_budget(o, sul, &info->register_tid);
   }
+
+  _op_submit_with_budget(o, sul, &info->register_tid, &info->ctx_budget);
 
   logger->inc(l_osdc_linger_send);
 }
@@ -793,7 +791,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
 					      const object_locator_t& oloc,
 					      int flags)
 {
-  LingerOp *info = new LingerOp;
+  LingerOp *info = new LingerOp(this);
   info->target.base_oid = oid;
   info->target.base_oloc = oloc;
   if (info->target.base_oloc.key == oid)
@@ -835,6 +833,8 @@ ceph_tid_t Objecter::linger_watch(LingerOp *info,
   info->pobjver = objver;
   info->on_reg_commit = oncommit;
 
+  info->ctx_budget = take_linger_budget(info);
+
   shunique_lock sul(rwlock, ceph::acquire_unique);
   _linger_submit(info, sul);
   logger->inc(l_osdc_linger_active);
@@ -857,6 +857,8 @@ ceph_tid_t Objecter::linger_notify(LingerOp *info,
   info->pobjver = objver;
   info->on_reg_commit = onfinish;
 
+  info->ctx_budget = take_linger_budget(info);
+  
   shunique_lock sul(rwlock, ceph::acquire_unique);
   _linger_submit(info, sul);
   logger->inc(l_osdc_linger_active);
@@ -868,6 +870,7 @@ void Objecter::_linger_submit(LingerOp *info, shunique_lock& sul)
 {
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
   assert(info->linger_id);
+  assert(info->ctx_budget != -1); // caller needs to have taken budget already!
 
   // Populate Op::target
   OSDSession *s = NULL;
@@ -3345,6 +3348,11 @@ void Objecter::_throttle_op(Op *op,
     else
       sul.lock_shared();
   }
+}
+
+int Objecter::take_linger_budget(LingerOp *info)
+{
+  return 1;
 }
 
 void Objecter::unregister_op(Op *op)
