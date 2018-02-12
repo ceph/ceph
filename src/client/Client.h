@@ -832,8 +832,8 @@ private:
 	      const char *data_pool, bool *created, const UserPerm &perms);
 
   loff_t _lseek(Fh *fh, loff_t offset, int whence);
-  int _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
-  int _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
+  int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl);
+  int64_t _write(Fh *fh, int64_t offset, uint64_t size, const char *buf,
           const struct iovec *iov, int iovcnt);
   int _preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write);
   int _flush(Fh *fh);
