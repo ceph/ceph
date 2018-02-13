@@ -4,6 +4,7 @@ overrides:
       - Scrub error on inode
       - Behind on trimming
       - Metadata damage detected
+      - bad backtrace on inode
       - overall HEALTH_
       - (MDS_TRIM)
     conf:
