@@ -54,6 +54,9 @@
   already been dropped from those supported distros where Python 3 is standard
   and Python 2 is optional (currently only SUSE).
 
+* The -f option of the rados tool now means "--format" instead of "--force",
+  for consistency with the ceph tool.
+
 >= 12.2.2
 ---------
 
