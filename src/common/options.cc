@@ -1361,7 +1361,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description(""),
 
-    Option("mon_daemon_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_daemon_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(400ul << 20)
     .set_description(""),
 
@@ -1373,7 +1373,7 @@ std::vector<Option> get_global_options() {
     .set_default(10)
     .set_description(""),
 
-    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_reweight_min_bytes_per_osd", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description(""),
 
