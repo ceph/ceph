@@ -5,6 +5,7 @@ tasks:
 - install:
     flavor: notcmalloc
 - ceph:
+- ssl:
 - rgw:
     client.0:
       valgrind: [--tool=memcheck]
