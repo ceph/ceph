@@ -711,7 +711,7 @@ static inline int handle_metadata_errors(req_state* const s, const int op_ret)
      * (stored as xattr) size. */
     const auto error_message = boost::str(
       boost::format("Metadata value longer than %lld")
-        % s->cct->_conf->get_val<size_t>("rgw_max_attr_size"));
+        % s->cct->_conf->get_val<Option::size_t>("rgw_max_attr_size"));
     set_req_state_err(s, EINVAL, error_message);
     return -EINVAL;
   } else if (op_ret == -E2BIG) {
@@ -1779,7 +1779,7 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
     formatter.dump_int("max_meta_name_length", meta_name_limit);
   }
 
-  const size_t meta_value_limit = g_conf->get_val<size_t>("rgw_max_attr_size");
+  const size_t meta_value_limit = g_conf->get_val<Option::size_t>("rgw_max_attr_size");
   if (meta_value_limit) {
     formatter.dump_int("max_meta_value_length", meta_value_limit);
   }

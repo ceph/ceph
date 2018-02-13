@@ -4718,7 +4718,7 @@ std::vector<Option> get_rgw_options() {
     .set_default(100)
     .set_description("Max number of ACL grants in a single request"),
 
-    Option("rgw_max_chunk_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_chunk_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_M)
     .set_description("Set RGW max chunk size")
     .set_long_description(
@@ -4728,7 +4728,7 @@ std::vector<Option> get_rgw_options() {
         "need to be atomic, and anything larger than this would require more than a single "
         "operation."),
 
-    Option("rgw_put_obj_min_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_min_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("The minimum RADOS write window size (in bytes).")
     .set_long_description(
@@ -4738,13 +4738,13 @@ std::vector<Option> get_rgw_options() {
         "in order to better utilize the pipe.")
     .add_see_also({"rgw_put_obj_max_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_put_obj_max_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_put_obj_max_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description("The maximum RADOS write window size (in bytes).")
     .set_long_description("The window size may be dynamically adjusted, but will not surpass this value.")
     .add_see_also({"rgw_put_obj_min_window_size", "rgw_max_chunk_size"}),
 
-    Option("rgw_max_put_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_G)
     .set_description("Max size (in bytes) of regular (non multi-part) object upload.")
     .set_long_description(
@@ -4752,11 +4752,11 @@ std::vector<Option> get_rgw_options() {
         "objects, a special upload mechanism is required. The S3 API provides the "
         "multi-part upload, and Swift provides DLO and SLO."),
 
-    Option("rgw_max_put_param_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_put_param_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("The maximum size (in bytes) of data input of certain RESTful requests."),
 
-    Option("rgw_max_attr_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_max_attr_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("The maximum length of metadata value. 0 skips the check"),
 
@@ -5502,7 +5502,7 @@ std::vector<Option> get_rgw_options() {
     .set_description("RGW shutdown timeout")
     .set_long_description("Number of seconds to wait for a process before exiting unconditionally."),
 
-    Option("rgw_get_obj_window_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_get_obj_window_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("RGW object read window size")
     .set_long_description("The window size in bytes for a single object read request"),
@@ -5560,7 +5560,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "If true, RGW will send progress information when copy operation is executed. "),
 
-    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rgw_copy_obj_progress_every_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description("Send copy-object progress info after these many bytes"),
 
