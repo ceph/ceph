@@ -24,12 +24,16 @@ class ControllerTestCase(unittest.TestCase):
     DASHBOARD_PORT = os.environ.get('DASHBOARD_V2_PORT', 8080)
 
     def __init__(self, *args, **kwargs):
+        self.dashboard_host = kwargs.pop('dashboard_host') \
+            if 'dashboard_host' in kwargs else self.DASHBOARD_HOST
+        self.dashboard_port = kwargs.pop('dashboard_port') \
+            if 'dashboard_port' in kwargs else self.DASHBOARD_PORT
         super(ControllerTestCase, self).__init__(*args, **kwargs)
         self._session = requests.Session()
         self._resp = None
 
     def _request(self, url, method, data=None):
-        url = "http://{}:{}{}".format(self.DASHBOARD_HOST, self.DASHBOARD_PORT,
+        url = "http://{}:{}{}".format(self.dashboard_host, self.dashboard_port,
                                       url)
         if method == 'GET':
             self._resp = self._session.get(url)
