@@ -4393,7 +4393,17 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 			      MDSInternalContextBase *f)
 {
   dout(20) << __func__ << " with scrub_version " << get_version() << dendl;
-  assert(!scrub_is_in_progress());
+  if (scrub_is_in_progress()) {
+    dout(20) << __func__ << " inode moved during scrub, reinitializing "
+	     << dendl;
+    assert(scrub_infop->scrub_parent);
+    CDentry *dn = scrub_infop->scrub_parent;
+    CDir *dir = dn->dir;
+    dn->put(CDentry::PIN_SCRUBPARENT);
+    assert(dir->scrub_infop && dir->scrub_infop->directory_scrubbing);
+    dir->scrub_infop->directories_scrubbing.erase(dn->key());
+    dir->scrub_infop->others_scrubbing.erase(dn->key());
+  }
   scrub_info();
   if (!scrub_infop)
     scrub_infop = new scrub_info_t();
