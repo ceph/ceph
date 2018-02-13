@@ -8232,9 +8232,8 @@ int Client::lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
  * the resulting Inode object in one operation, so that caller
  * can safely assume inode will still be there after return.
  */
-int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
+int Client::_lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
 {
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino << ")" << dendl;
 
   if (unmounting)
@@ -8256,16 +8255,19 @@ int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
   return r;
 }
 
-
+int Client::lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_ino(ino, perms, inode);
+}
 
 /**
  * Find the parent inode of `ino` and insert it into
  * our cache.  Conditionally also set `parent` to a referenced
  * Inode* if caller provides non-NULL value.
  */
-int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
+int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
@@ -8304,16 +8306,19 @@ int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   return r;
 }
 
+int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_parent(ino, perms, parent);
+}
 
 /**
  * Populate the parent dentry for `ino`, provided it is
  * a child of `parent`.
  */
-int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
+int Client::_lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
 {
   assert(parent->is_dir());
-
-  Mutex::Locker lock(client_lock);
   ldout(cct, 3) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
   if (unmounting)
@@ -8329,6 +8334,11 @@ int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
   return r;
 }
 
+int Client::lookup_name(Inode *ino, Inode *parent, const UserPerm& perms)
+{
+  Mutex::Locker lock(client_lock);
+  return _lookup_name(ino, parent, perms);
+}
 
 Fh *Client::_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms)
 {
@@ -10283,6 +10293,51 @@ int Client::ll_lookup(Inode *parent, const char *name, struct stat *attr,
   return r;
 }
 
+int Client::ll_lookup_inode(
+    struct inodeno_t ino,
+    const UserPerm& perms,
+    Inode **inode)
+{
+  Mutex::Locker lock(client_lock);
+  ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
+   
+  // Num1: get inode and *inode
+  int r = _lookup_ino(ino, perms, inode);
+  if (r) {
+    return r;
+  }
+  assert(inode != NULL);
+  assert(*inode != NULL);
+
+  // Num2: Request the parent inode, so that we can look up the name
+  Inode *parent;
+  r = _lookup_parent(*inode, perms, &parent);
+  if (r && r != -EINVAL) {
+    // Unexpected error
+    _ll_forget(*inode, 1);  
+    return r;
+  } else if (r == -EINVAL) {
+    // EINVAL indicates node without parents (root), drop out now
+    // and don't try to look up the non-existent dentry.
+    return 0;
+  }
+  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
+  // is already in cache
+  assert(parent != NULL);
+
+  // Num3: Finally, get the name (dentry) of the requested inode
+  r = _lookup_name(*inode, parent, perms);
+  if (r) {
+    // Unexpected error
+    _ll_forget(parent, 1);
+    _ll_forget(*inode, 1);
+    return r;
+  }
+
+  _ll_forget(parent, 1);
+  return 0;
+}
+
 int Client::ll_lookupx(Inode *parent, const char *name, Inode **out,
 		       struct ceph_statx *stx, unsigned want, unsigned flags,
 		       const UserPerm& perms)
@@ -10412,9 +10467,8 @@ void Client::_ll_drop_pins()
   }
 }
 
-bool Client::ll_forget(Inode *in, int count)
+bool Client::_ll_forget(Inode *in, int count)
 {
-  Mutex::Locker lock(client_lock);
   inodeno_t ino = _get_inodeno(in);
 
   ldout(cct, 3) << __func__ << " " << ino << " " << count << dendl;
@@ -10440,6 +10494,12 @@ bool Client::ll_forget(Inode *in, int count)
   }
 
   return last;
+}
+
+bool Client::ll_forget(Inode *in, int count)
+{
+  Mutex::Locker lock(client_lock);
+  return _ll_forget(in, count);
 }
 
 bool Client::ll_put(Inode *in)
