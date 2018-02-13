@@ -423,6 +423,8 @@ protected:
   void _reset_faked_inos();
   vinodeno_t _map_faked_ino(ino_t ino);
 
+  std::map<snapid_t, int> ll_snap_ref;
+
   Inode*                 root;
   map<Inode*, InodeRef>  root_parents;
   Inode*                 root_ancestor;
@@ -1148,6 +1150,8 @@ public:
 			const UserPerm& perms);
   bool ll_forget(Inode *in, int count);
   bool ll_put(Inode *in);
+  int ll_get_snap_ref(snapid_t snap);
+
   int ll_getattr(Inode *in, struct stat *st, const UserPerm& perms);
   int ll_getattrx(Inode *in, struct ceph_statx *stx, unsigned int want,
 		  unsigned int flags, const UserPerm& perms);

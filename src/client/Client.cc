@@ -10367,6 +10367,8 @@ void Client::_ll_get(Inode *in)
       assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->get(); // pin dentry
     }
+    if (in->snapid != CEPH_NOSNAP)
+      ll_snap_ref[in->snapid]++;
   }
   in->ll_get();
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
@@ -10380,6 +10382,13 @@ int Client::_ll_put(Inode *in, int num)
     if (in->is_dir() && !in->dentries.empty()) {
       assert(in->dentries.size() == 1); // dirs can't be hard-linked
       in->get_first_parent()->put(); // unpin dentry
+    }
+    if (in->snapid != CEPH_NOSNAP) {
+      auto p = ll_snap_ref.find(in->snapid);
+      assert(p != ll_snap_ref.end());
+      assert(p->second > 0);
+      if (--p->second == 0)
+	ll_snap_ref.erase(p);
     }
     put_inode(in);
     return 0;
@@ -10437,6 +10446,15 @@ bool Client::ll_put(Inode *in)
 {
   /* ll_forget already takes the lock */
   return ll_forget(in, 1);
+}
+
+int Client::ll_get_snap_ref(snapid_t snap)
+{
+  Mutex::Locker lock(client_lock);
+  auto p = ll_snap_ref.find(snap);
+  if (p != ll_snap_ref.end())
+    return p->second;
+  return 0;
 }
 
 snapid_t Client::ll_get_snapid(Inode *in)
