@@ -52,7 +52,7 @@
                  [cssClasses]="paginationClasses"
                  [selectionType]="selectable"
                  [selected]="selected"
-                 (select)="toggleExpandRow($event)"
+                 (select)="toggleExpandRow()"
                  [columns]="columns"
                  [columnMode]="columnMode"
                  [rows]="rows"
@@ -62,7 +62,7 @@
                  [loadingIndicator]="true"
                  [rowHeight]="'auto'">
     <!-- Row Detail Template -->
-    <ngx-datatable-row-detail (toggle)="updateDetailView($event)">
+    <ngx-datatable-row-detail (toggle)="updateDetailView()">
     </ngx-datatable-row-detail>
   </ngx-datatable>
 </div>
