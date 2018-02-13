@@ -25,3 +25,5 @@ else:
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger(__name__)
     logging.root.handlers[0].setLevel(logging.DEBUG)
+    os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
+                                        os.environ['PATH'])
