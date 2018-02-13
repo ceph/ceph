@@ -2045,7 +2045,7 @@ struct rgw_obj {
           if (pos < 0) {
             throw buffer::error();
           }
-          key.name = key.name.substr(pos);
+          key.name = key.name.substr(pos + 1);
         }
       }
     } else {
