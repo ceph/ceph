@@ -290,14 +290,14 @@ int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
       ceph_abort();
     }
   }
-  for (auto& i : values) {
-    auto j = i.second.find(CONF_MON);
-    if (j != i.second.end()) {
-      if (kv.find(i.first) == kv.end()) {
-	ldout(cct,10) << __func__ << " " << i.first
-		      << " cleared (was " << j->second << ")"
+  for (const auto& [name,configs] : values) {
+    auto j = configs.find(CONF_MON);
+    if (j != configs.end()) {
+      if (kv.find(name) == kv.end()) {
+	ldout(cct,10) << __func__ << " " << name
+		      << " cleared (was " << Option::to_str(j->second) << ")"
 		      << dendl;
-	_rm_val(i.first, CONF_MON);
+	_rm_val(name, CONF_MON);
       }
     }
   }
@@ -1174,10 +1174,11 @@ Option::value_t md_config_t::_expand_meta(
 	    // substitution loop; break the cycle
 	    if (err) {
 	      *err << "variable expansion loop at " << var << "="
-		   << *match->second << "\n"
+		   << Option::to_str(*match->second) << "\n"
 		   << "expansion stack:\n";
 	      for (auto i = stack->rbegin(); i != stack->rend(); ++i) {
-		*err << i->first->name << "=" << *i->second << "\n";
+		*err << i->first->name << "="
+		     << Option::to_str(*i->second) << "\n";
 	      }
 	    }
 	    return Option::value_t(std::string("$") + o->name);
@@ -1492,7 +1493,7 @@ static void dump(Formatter *f, int level, Option::value_t in)
   } else if (const double *v = boost::get<const double>(&in)) {
     f->dump_float(ceph_conf_level_name(level), *v);
   } else {
-    f->dump_stream(ceph_conf_level_name(level)) << in;
+    f->dump_stream(ceph_conf_level_name(level)) << Option::to_str(in);
   }
 }
 

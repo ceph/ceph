@@ -17,6 +17,39 @@
 // rbd feature validation
 #include "librbd/Features.h"
 
+namespace {
+class printer : public boost::static_visitor<> {
+  ostream& out;
+public:
+  explicit printer(ostream& os)
+    : out(os) {}
+  template<typename T>
+  void operator()(const T& v) const {
+    out << v;
+  }
+  void operator()(boost::blank blank) const {
+    return;
+  }
+  void operator()(bool v) const {
+    out << (v ? "true" : "false");
+  }
+  void operator()(double v) const {
+    out << std::fixed << v << std::defaultfloat;
+  }
+  void operator()(const Option::size_t& v) const {
+    out << v.value;
+  }
+  void operator()(const std::chrono::seconds v) const {
+    out << v.count();
+  }
+};
+}
+
+ostream& operator<<(ostream& os, const Option::value_t& v) {
+  printer p{os};
+  v.apply_visitor(p);
+  return os;
+}
 
 void Option::dump_value(const char *field_name,
     const Option::value_t &v, Formatter *f) const
@@ -24,21 +57,21 @@ void Option::dump_value(const char *field_name,
   if (boost::get<boost::blank>(&v)) {
     // This should be nil but Formatter doesn't allow it.
     f->dump_string(field_name, "");
-  } else if (type == TYPE_UINT) {
-    f->dump_unsigned(field_name, boost::get<uint64_t>(v));
-  } else if (type == TYPE_INT) {
-    f->dump_int(field_name, boost::get<int64_t>(v));
-  } else if (type == TYPE_STR) {
-    f->dump_string(field_name, boost::get<std::string>(v));
-  } else if (type == TYPE_FLOAT) {
-    f->dump_float(field_name, boost::get<double>(v));
-  } else if (type == TYPE_BOOL) {
-    f->dump_bool(field_name, boost::get<bool>(v));
-  } else if (type == TYPE_SIZE) {
-    auto bytes = boost::get<size_t>(v);
-    f->dump_stream(field_name) << prettybyte_t(bytes.value);
-  } else {
-    f->dump_stream(field_name) << v;
+    return;
+  }
+  switch (type) {
+  case TYPE_INT:
+    f->dump_int(field_name, boost::get<int64_t>(v)); break;
+  case TYPE_UINT:
+    f->dump_unsigned(field_name, boost::get<uint64_t>(v)); break;
+  case TYPE_STR:
+    f->dump_string(field_name, boost::get<std::string>(v)); break;
+  case TYPE_FLOAT:
+    f->dump_float(field_name, boost::get<double>(v)); break;
+  case TYPE_BOOL:
+    f->dump_bool(field_name, boost::get<bool>(v)); break;
+  default:
+    f->dump_stream(field_name) << v; break;
   }
 }
 
@@ -90,6 +123,72 @@ int Option::validate(const Option::value_t &new_value, std::string *err) const
 
   return 0;
 }
+
+namespace {
+template<class Duration>
+std::chrono::seconds
+do_parse_duration(const char* unit, string val,
+		  size_t start, size_t* new_start)
+{
+  auto found = val.find(unit, start);
+  if (found == val.npos) {
+    *new_start = start;
+    return Duration{0};
+  }
+  val[found] = '\0';
+  string err;
+  char* s = &val[start];
+  auto intervals = strict_strtoll(s, 10, &err);
+  if (!err.empty()) {
+    throw invalid_argument(s);
+  }
+  auto secs = chrono::duration_cast<chrono::seconds>(Duration{intervals});
+  *new_start = found + strlen(unit);
+  return secs;
+}
+
+std::chrono::seconds parse_duration(const std::string& s)
+{
+  using namespace std::chrono;
+  auto secs = 0s;
+  size_t start = 0;
+  size_t new_start = 0;
+  using days_t = duration<int, std::ratio<3600 * 24>>;
+  auto v = s;
+  v.erase(std::remove_if(begin(v), end(v),
+			 [](char c){ return std::isspace(c);}), end(v));
+  if (auto delta = do_parse_duration<days_t>("days", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<hours>("hours", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<minutes>("minutes", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (auto delta = do_parse_duration<seconds>("seconds", v, start, &new_start);
+      delta.count()) {
+    start = new_start;
+    secs += delta;
+  }
+  if (new_start == 0) {
+    string err;
+    if (auto delta = std::chrono::seconds{strict_strtoll(s.c_str(), 10, &err)};
+	err.empty()) {
+      secs += delta;
+    } else {
+      throw invalid_argument(err);
+    }
+  }
+  return secs;
+}
+} // anonymous namespace
 
 int Option::parse_value(
   const std::string& raw_val,
@@ -155,6 +254,12 @@ int Option::parse_value(
       return -EINVAL;
     }
     *out = sz;
+  } else if (type == Option::TYPE_SECS) {
+    try {
+      *out = parse_duration(val);
+    } catch (const invalid_argument&) {
+      return -EINVAL;
+    }
   } else {
     ceph_abort();
   }

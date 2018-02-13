@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <string>
 #include <vector>
 #include <boost/variant.hpp>
@@ -20,6 +21,7 @@ struct Option {
     TYPE_ADDR,
     TYPE_UUID,
     TYPE_SIZE,
+    TYPE_SECS,
   };
 
   const char *type_to_str(type_t t) const {
@@ -32,6 +34,7 @@ struct Option {
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_UUID: return "uuid_d";
     case TYPE_SIZE: return "size_t";
+    case TYPE_SECS: return "secs";
     default: return "unknown";
     }
   }
@@ -83,6 +86,7 @@ struct Option {
     double,
     bool,
     entity_addr_t,
+    std::chrono::seconds,
     size_t,
     uuid_d>;
   const std::string name;
@@ -154,6 +158,8 @@ struct Option {
       value = uuid_d(); break;
     case TYPE_SIZE:
       value = size_t{0}; break;
+    case TYPE_SECS:
+      value = std::chrono::seconds{0}; break;
     default:
       ceph_abort();
     }
@@ -202,6 +208,8 @@ struct Option {
       v = bool(new_value); break;
     case TYPE_SIZE:
       v = size_t{static_cast<std::size_t>(new_value)}; break;
+    case TYPE_SECS:
+      v = std::chrono::seconds{new_value}; break;
     default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
@@ -316,7 +324,7 @@ struct Option {
       (has_flag(FLAG_RUNTIME)
        || type == TYPE_BOOL || type == TYPE_INT
        || type == TYPE_UINT || type == TYPE_FLOAT
-       || type == TYPE_SIZE)
+       || type == TYPE_SIZE || type == TYPE_SECS)
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

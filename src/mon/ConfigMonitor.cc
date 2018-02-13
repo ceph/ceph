@@ -240,9 +240,9 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
       }
       if (!entity.is_client() &&
 	  !boost::get<boost::blank>(&opt->daemon_value)) {
-	odata.append(stringify(opt->daemon_value));
+	odata.append(Option::to_str(opt->daemon_value));
       } else {
-	odata.append(stringify(opt->value));
+	odata.append(Option::to_str(opt->value));
       }
       odata.append("\n");
     } else {
