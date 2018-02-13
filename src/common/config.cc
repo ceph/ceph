@@ -325,8 +325,13 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
       int log, gather;
       int r = sscanf(val.c_str(), "%d/%d", &log, &gather);
       if (r >= 1) {
-	if (r < 2)
+	if (r < 2) {
 	  gather = log;
+	}
+        if (log < 0 || gather < 0) {
+          cerr << "ERROR for " << as_option << "."
+	       << "log nor gather levels cannot be negative!";
+        }
 	//	cout << "config subsys " << subsys.get_name(o) << " log " << log << " gather " << gather << std::endl;
 	subsys.set_log_level(o, log);
 	subsys.set_gather_level(o, gather);
