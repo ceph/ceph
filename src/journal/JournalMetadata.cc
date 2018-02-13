@@ -740,16 +740,25 @@ void JournalMetadata::handle_immutable_metadata(int r, Context *on_init) {
 
 void JournalMetadata::refresh(Context *on_complete) {
   ldout(m_cct, 10) << "refreshing mutable metadata" << dendl;
-  C_Refresh *refresh = new C_Refresh(this, on_complete);
+
+  {
+    Mutex::Locker locker(m_lock);
+    if (on_complete != nullptr) {
+      m_refresh_ctxs.push_back(on_complete);
+    }
+    ++m_refreshes_in_progress;
+  }
+
+  auto refresh = new C_Refresh(this);
   get_mutable_metadata(&refresh->minimum_set, &refresh->active_set,
 		       &refresh->registered_clients, refresh);
 }
 
 void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
   ldout(m_cct, 10) << "refreshed mutable metadata: r=" << r << dendl;
-  if (r == 0) {
-    Mutex::Locker locker(m_lock);
 
+  m_lock.Lock();
+  if (r == 0) {
     Client client(m_client_id, bufferlist());
     RegisteredClients::iterator it = refresh->registered_clients.find(client);
     if (it != refresh->registered_clients.end()) {
@@ -778,8 +787,16 @@ void JournalMetadata::handle_refresh_complete(C_Refresh *refresh, int r) {
     }
   }
 
-  if (refresh->on_finish != NULL) {
-    refresh->on_finish->complete(r);
+  Contexts refresh_ctxs;
+  assert(m_refreshes_in_progress > 0);
+  --m_refreshes_in_progress;
+  if (m_refreshes_in_progress == 0) {
+    std::swap(refresh_ctxs, m_refresh_ctxs);
+  }
+  m_lock.Unlock();
+
+  for (auto ctx : refresh_ctxs) {
+    ctx->complete(r);
   }
 }
 
