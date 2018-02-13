@@ -15,6 +15,7 @@
 #ifndef CEPH_SUBSYS_TYPES_H
 #define CEPH_SUBSYS_TYPES_H
 
+#include <algorithm>
 #include <array>
 
 enum ceph_subsys_id_t {
@@ -50,6 +51,29 @@ ceph_subsys_get_as_array() {
   };
 #undef SUBSYS
 #undef DEFAULT_SUBSYS
+}
+
+// Compile time-capable version of std::strlen. Resorting to own
+// implementation only because C++17 doesn't mandate constexpr
+// on the standard one.
+constexpr static std::size_t strlen_ct(const char* const s) {
+  std::size_t l = 0;
+  while (s[l] != '\0') {
+    ++l;
+  }
+  return l;
+}
+
+constexpr static std::size_t ceph_subsys_max_name_length() {
+  return std::max({
+#define SUBSYS(name, log, gather) \
+  strlen_ct(#name),
+#define DEFAULT_SUBSYS(log, gather) \
+  strlen_ct("none"),
+#include "common/subsys.h"
+#undef SUBSYS
+#undef DEFAULT_SUBSYS
+  });
 }
 
 #endif // CEPH_SUBSYS_TYPES_H
