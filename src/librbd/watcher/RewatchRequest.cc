@@ -40,13 +40,14 @@ void RewatchRequest::unwatch() {
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   ldout(cct, 10) << dendl;
 
+  uint64_t watch_handle = 0;
+  std::swap(*m_watch_handle, watch_handle);
+
   librados::AioCompletion *aio_comp = create_rados_callback<
                         RewatchRequest, &RewatchRequest::handle_unwatch>(this);
-  int r = m_ioctx.aio_unwatch(*m_watch_handle, aio_comp);
+  int r = m_ioctx.aio_unwatch(watch_handle, aio_comp);
   assert(r == 0);
   aio_comp->release();
-
-  *m_watch_handle = 0;
 }
 
 void RewatchRequest::handle_unwatch(int r) {
