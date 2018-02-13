@@ -145,6 +145,14 @@ TEST(md_config_t, set_val)
     free(run_dir);
     free(admin_socket);
   }
+  // set_val should support SI conversion
+  {
+    auto expected = Option::size_t{512 << 20};
+    EXPECT_EQ(0, conf.set_val("mgr_osd_bytes", "512M", nullptr));
+    EXPECT_EQ(expected, conf.get_val<Option::size_t>("mgr_osd_bytes"));
+    EXPECT_EQ(-EINVAL, conf.set_val("mgr_osd_bytes", "512 bits", nullptr));
+    EXPECT_EQ(expected, conf.get_val<Option::size_t>("mgr_osd_bytes"));
+  }
 }
 
 TEST(Option, validation)
