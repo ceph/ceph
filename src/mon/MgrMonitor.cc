@@ -510,13 +510,13 @@ void MgrMonitor::tick()
 
   const auto now = ceph::coarse_mono_clock::now();
 
-  const auto mgr_beacon_grace = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mon_mgr_beacon_grace"));
+  const auto mgr_beacon_grace =
+      g_conf->get_val<std::chrono::seconds>("mon_mgr_beacon_grace");
 
   // Note that this is the mgr daemon's tick period, not ours (the
   // beacon is sent with this period).
-  const auto mgr_tick_period = std::chrono::seconds(
-      g_conf->get_val<int64_t>("mgr_tick_period"));
+  const auto mgr_tick_period =
+      g_conf->get_val<std::chrono::seconds>("mgr_tick_period");
 
   if (last_tick != ceph::coarse_mono_clock::time_point::min()
       && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
