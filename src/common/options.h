@@ -19,6 +19,7 @@ struct Option {
     TYPE_BOOL,
     TYPE_ADDR,
     TYPE_UUID,
+    TYPE_SIZE,
   };
 
   const char *type_to_str(type_t t) const {
@@ -30,6 +31,7 @@ struct Option {
     case TYPE_BOOL: return "bool";
     case TYPE_ADDR: return "entity_addr_t";
     case TYPE_UUID: return "uuid_d";
+    case TYPE_SIZE: return "size_t";
     default: return "unknown";
     }
   }
@@ -63,6 +65,16 @@ struct Option {
     FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
   };
 
+  struct size_t {
+    std::size_t value;
+    operator uint64_t() const {
+      return static_cast<uint64_t>(value);
+    }
+    bool operator==(const size_t& rhs) const {
+      return value == rhs.value;
+    }
+  };
+
   using value_t = boost::variant<
     boost::blank,
     std::string,
@@ -71,6 +83,7 @@ struct Option {
     double,
     bool,
     entity_addr_t,
+    size_t,
     uuid_d>;
   const std::string name;
   const type_t type;
@@ -124,21 +137,24 @@ struct Option {
     // While value_t is nullable (via boost::blank), we don't ever
     // want it set that way in an Option instance: within an instance,
     // the type of ::value should always match the declared type.
-    if (type == TYPE_INT) {
-      value = int64_t(0);
-    } else if (type == TYPE_UINT) {
-      value = uint64_t(0);
-    } else if (type == TYPE_STR) {
-      value = std::string("");
-    } else if (type == TYPE_FLOAT) {
-      value = 0.0;
-    } else if (type == TYPE_BOOL) {
-      value = false;
-    } else if (type == TYPE_ADDR) {
-      value = entity_addr_t();
-    } else if (type == TYPE_UUID) {
-      value = uuid_d();
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      value = int64_t(0); break;
+    case TYPE_UINT:
+      value = uint64_t(0); break;
+    case TYPE_STR:
+      value = std::string(""); break;
+    case TYPE_FLOAT:
+      value = 0.0; break;
+    case TYPE_BOOL:
+      value = false; break;
+    case TYPE_ADDR:
+      value = entity_addr_t(); break;
+    case TYPE_UUID:
+      value = uuid_d(); break;
+    case TYPE_SIZE:
+      value = size_t{0}; break;
+    default:
       ceph_abort();
     }
   }
@@ -175,15 +191,18 @@ struct Option {
   // a float option to "0" actually sets the double part of variant.
   template<typename T, typename is_integer<T>::type = 0>
   Option& set_value(value_t& v, T new_value) {
-    if (type == TYPE_INT) {
-      v = int64_t(new_value);
-    } else if (type == TYPE_UINT) {
-      v = uint64_t(new_value);
-    } else if (type == TYPE_FLOAT) {
-      v = double(new_value);
-    } else if (type == TYPE_BOOL) {
-      v = bool(new_value);
-    } else {
+    switch (type) {
+    case TYPE_INT:
+      v = int64_t(new_value); break;
+    case TYPE_UINT:
+      v = uint64_t(new_value); break;
+    case TYPE_FLOAT:
+      v = double(new_value); break;
+    case TYPE_BOOL:
+      v = bool(new_value); break;
+    case TYPE_SIZE:
+      v = size_t{static_cast<std::size_t>(new_value)}; break;
+    default:
       std::cerr << "Bad type in set_value: " << name << ": "
                 << typeid(T).name() << std::endl;
       ceph_abort();
@@ -296,7 +315,8 @@ struct Option {
     return
       (has_flag(FLAG_RUNTIME)
        || type == TYPE_BOOL || type == TYPE_INT
-       || type == TYPE_UINT || type == TYPE_FLOAT)
+       || type == TYPE_UINT || type == TYPE_FLOAT
+       || type == TYPE_SIZE)
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

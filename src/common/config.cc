@@ -1413,6 +1413,22 @@ int md_config_t::_rm_val(const std::string& key, int level)
   return 0;
 }
 
+namespace {
+template<typename Size>
+struct get_size_visitor : public boost::static_visitor<Size>
+{
+  template<typename T>
+  Size operator()(const T&) const {
+    return -1;
+  }
+  Size operator()(const Option::size_t& sz) const {
+    return static_cast<Size>(sz.value);
+  }
+  Size operator()(const Size& v) const {
+    return v;
+  }
+};
+
 /**
  * Handles assigning from a variant-of-types to a variant-of-pointers-to-types
  */
@@ -1433,7 +1449,20 @@ class assign_visitor : public boost::static_visitor<>
 
     *member = boost::get<T>(val);
   }
+  void operator()(uint64_t md_config_t::* ptr) const
+  {
+    using T = uint64_t;
+    auto member = const_cast<T*>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+  }
+  void operator()(int64_t md_config_t::* ptr) const
+  {
+    using T = int64_t;
+    auto member = const_cast<T*>(&(conf->*(boost::get<const T md_config_t::*>(ptr))));
+    *member = boost::apply_visitor(get_size_visitor<T>{}, val);
+  }
 };
+} // anonymous namespace
 
 void md_config_t::update_legacy_vals()
 {
