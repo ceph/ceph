@@ -1174,9 +1174,11 @@ struct RGWZonePlacementInfo {
   RGWBucketIndexType index_type;
   std::string compression_type;
   RGWBucketDataLayoutType data_layout_type;
+  uint64_t max_head_size;
 
   RGWZonePlacementInfo() : index_type(RGWBIType_Normal),
-                           data_layout_type(RGWDLType_SinglePool) {}
+                           data_layout_type(RGWDLType_SinglePool),
+                           max_head_size(std::numeric_limits<uint64_t>::max()){}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(7, 1, bl);
@@ -1188,6 +1190,7 @@ struct RGWZonePlacementInfo {
     encode((uint32_t)data_layout_type, bl);
     encode(current_tail_pool.to_str(), bl);
     encode(data_tail_pools, bl);
+    encode(max_head_size, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1220,6 +1223,7 @@ struct RGWZonePlacementInfo {
       decode(current_tail_pool_str, bl);
       current_tail_pool = rgw_pool(current_tail_pool_str);
       decode(data_tail_pools, bl);
+      decode(max_head_size, bl);
     }
 
     DECODE_FINISH(bl);
@@ -1232,6 +1236,9 @@ struct RGWZonePlacementInfo {
   }
   const rgw_pool& get_tail_data_pool() const {
     return current_tail_pool;
+  }
+  uint64_t get_max_head_size() const {
+    return max_head_size;
   }
 
   void dump(Formatter *f) const;
@@ -2652,6 +2659,11 @@ public:
     const string& placement_rule,
     const rgw_obj& obj,
     uint64_t *max_chunk_size);
+  int get_max_head_size(const rgw_pool& pool, const uint64_t config_max_size, uint64_t *max_head_size);
+  int get_max_head_size(
+    const string& placement_rule,
+    const rgw_obj& obj,
+    uint64_t *max_head_size);
 
   uint32_t get_max_bucket_shards() {
     return rgw_shards_max();
@@ -4079,9 +4091,11 @@ class RGWPutObjProcessor_Atomic : public RGWPutObjProcessor_Aio
   off_t next_part_ofs;
   int cur_part_id;
   off_t data_ofs;
+  bool first_chunk_claimed;
 
   bufferlist pending_data_bl;
   uint64_t max_chunk_size;
+  uint64_t max_head_size;
 
   bool versioned_object;
   uint64_t olh_epoch;
@@ -4120,7 +4134,9 @@ public:
                                 next_part_ofs(_p),
                                 cur_part_id(0),
                                 data_ofs(0),
+                                first_chunk_claimed(false),
                                 max_chunk_size(0),
+                                max_head_size(0),
                                 versioned_object(versioned),
                                 olh_epoch(0),
                                 bucket(_b),

@@ -949,6 +949,7 @@ void RGWZonePlacementInfo::dump(Formatter *f) const
   encode_json("index_type", (uint32_t)index_type, f);
   encode_json("compression", compression_type, f);
   encode_json("data_layout_type", (uint32_t)data_layout_type, f);
+  encode_json("max_head_size", max_head_size, f);
 }
 
 void RGWZonePlacementInfo::decode_json(JSONObj *obj)

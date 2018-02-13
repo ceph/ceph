@@ -2669,6 +2669,11 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
 {
   *phandle = NULL;
   uint64_t max_write_size = std::min(max_chunk_size, (uint64_t)next_part_ofs - data_ofs);
+  if (!first_chunk_claimed && !immutable_head()) {
+    // since first chunk has not been preserved, first_chunk will claim the data first and
+    // thus max_write_size should take the head size into consideration
+    max_write_size = std::min(max_head_size, max_write_size);
+  }
 
   pending_data_bl.claim_append(bl);
   if (pending_data_bl.length() < max_write_size) {
@@ -2681,8 +2686,10 @@ int RGWPutObjProcessor_Atomic::handle_data(bufferlist& bl, off_t ofs, void **pha
   /* do we have enough data pending accumulated that needs to be written? */
   *again = (pending_data_bl.length() >= max_chunk_size);
 
-  if (!data_ofs && !immutable_head()) {
+  if (!first_chunk_claimed && !immutable_head()) {
     first_chunk.claim(bl);
+    // first_chunk_claimed is used instead of "! data_ofs" because the 0 size head need be considered
+    first_chunk_claimed = true;
     obj_len = (uint64_t)first_chunk.length();
     int r = prepare_next_part(obj_len);
     if (r < 0) {
@@ -2716,6 +2723,13 @@ int RGWPutObjProcessor_Atomic::prepare_init(RGWRados *store, string *oid_rand)
   if (r < 0) {
     return r;
   }
+  r = store->get_max_head_size(
+    bucket_info.placement_rule,
+    head_obj,
+    &max_head_size);
+  if (r < 0) {
+    return r;
+  }
 
   return 0;
 }
@@ -2738,7 +2752,7 @@ int RGWPutObjProcessor_Atomic::prepare(RGWRados *store, string *oid_rand)
     }
   }
 
-  manifest.set_trivial_rule(max_chunk_size, store->ctx()->_conf->rgw_obj_stripe_size);
+  manifest.set_trivial_rule(max_head_size, store->ctx()->_conf->rgw_obj_stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(),
                                 &manifest,
@@ -2777,7 +2791,7 @@ int RGWPutObjProcessor_Atomic::complete_parts()
 
 int RGWPutObjProcessor_Atomic::complete_writing_data()
 {
-  if (!data_ofs && !immutable_head()) {
+  if (!first_chunk_claimed && !immutable_head()) {
     /* only claim if pending_data_bl() is not empty. This is needed because we might be called twice
      * (e.g., when a retry due to race happens). So a second call to first_chunk.claim() would
      * clobber first_chunk
@@ -3463,6 +3477,67 @@ int RGWRados::get_max_chunk_size(
   *max_chunk_size = big;
   return 0;
 }
+
+int RGWRados::get_max_head_size(
+  const rgw_pool& pool,
+  const uint64_t config_head_size,
+  uint64_t *max_head_size)
+{
+  if (config_head_size == 0) {
+    *max_head_size = config_head_size;
+    return 0;
+  }
+  uint64_t alignment = 0;
+  int r = get_required_alignment(pool, &alignment);
+  if (r < 0) {
+    return r;
+  }
+
+  if (alignment == 0) {
+    *max_head_size = config_head_size;
+    return 0;
+  }
+
+  if (config_head_size <= alignment) {
+    *max_head_size = alignment;
+    return 0;
+  }
+
+  *max_head_size = config_head_size - (config_head_size % alignment);
+
+  ldout(cct, 20) << "max_head_size=" << *max_head_size << dendl;
+
+  return 0;
+}
+
+int RGWRados::get_max_head_size(
+  const string& placement_id,
+  const rgw_obj& obj,
+  uint64_t *max_head_size)
+{
+  rgw_pool data_pool;
+  if (!get_obj_data_pool(placement_id, obj, &data_pool)) {
+    ldout(cct, 0) << "ERROR: failed to get data pool for object " << obj << dendl;
+    return -EIO;
+  }
+  RGWZonePlacementInfo placement;
+  if (!zone_params.get_placement(placement_id, &placement)) {
+    if (!zone_params.get_placement(zonegroup.default_placement, &placement)) {
+      return -EIO;
+    }
+  }
+  int r = get_max_head_size(
+    data_pool,
+    std::min(placement.get_max_head_size(),
+             (uint64_t)cct->_conf->rgw_max_chunk_size),
+    max_head_size);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+
 
 class RGWIndexCompletionManager;
 

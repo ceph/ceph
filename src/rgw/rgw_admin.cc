@@ -280,6 +280,8 @@ void usage()
   cout << "                             placement target index type (normal, indexless, or #id)\n";
   cout << "   --placement-data-layout-type=<type>\n";
   cout << "                             placement target data layout type (singlepool, splitpool, or #id)\n";
+  cout << "   --placement-max-head-size=<size>\n";
+  cout << "                             max head size (in B/K/M)\n";
   cout << "   --compression=<type>      placement target compression type (plugin name or empty/none)\n";
   cout << "   --tier-type=<type>        zone tier type\n";
   cout << "   --tier-config=<k>=<v>[,...]\n";
@@ -2545,6 +2547,8 @@ int main(int argc, const char **argv)
   RGWBucketDataLayoutType placement_data_layout_type = RGWDLType_SinglePool;
   bool index_type_specified = false;
   bool data_layout_type_specified = false;
+  int64_t max_head_size = -1;
+  bool has_max_head_size = false;
 
   boost::optional<std::string> compression_type;
 
@@ -2895,6 +2899,17 @@ int main(int argc, const char **argv)
 			tail_pools = tmp_tail_pools;
     } else if (ceph_argparse_witharg(args, i, &val, "--new-tail-pool", (char*)NULL)) {
       new_tail_pool = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--placement-max-head-size", (char*)NULL)) {
+      max_head_size = strict_si_cast<int64_t>(val.c_str(), &err);
+      if (!err.empty()) {
+        cerr << "ERROR: failed to parse max head size: " << err << std::endl;
+        return EINVAL;
+      }
+      if (max_head_size < 0) {
+        cerr << "ERROR: max head size must be a non-negative value" << std::endl;
+        return EINVAL;
+      }
+      has_max_head_size = true;
     } else if (strncmp(*i, "-", 1) == 0) {
       cerr << "ERROR: invalid flag " << *i << std::endl;
       return EINVAL;
@@ -4416,6 +4431,9 @@ int main(int argc, const char **argv)
                  << std::endl;
             return EINVAL;
 					}
+          if (has_max_head_size) {
+            info.max_head_size = max_head_size;
+          }
 
           ret = check_pool_support_omap(info.get_data_extra_pool());
           if (ret < 0) {
@@ -4470,6 +4488,9 @@ int main(int argc, const char **argv)
                    << std::endl;
               return EINVAL;
             }
+          }
+          if (has_max_head_size) {
+            info.max_head_size = max_head_size;
           }
           
           ret = check_pool_support_omap(info.get_data_extra_pool());
