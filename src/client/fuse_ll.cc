@@ -43,7 +43,8 @@
 
 #define FINO_INO(x) ((x) & ((1ull<<48)-1ull))
 #define FINO_STAG(x) ((x) >> 48)
-#define MAKE_FINO(i,s) ((i) | ((s) << 48))
+#define MAKE_FINO(i,s) ((i) | ((int64_t)(s) << 48))
+#define STAG_MASK 0xffff
 
 #define MINORBITS	20
 #define MINORMASK	((1U << MINORBITS) - 1)
@@ -1225,13 +1226,35 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
       return FUSE_ROOT_ID;
 
     Mutex::Locker l(stag_lock);
-    uint64_t stag;
-    if (snap_stag_map.count(snapid) == 0) {
-      stag = ++last_stag;
-      snap_stag_map[snapid] = stag;
-      stag_snap_map[stag] = snapid;
-    } else
-      stag = snap_stag_map[snapid];
+    auto p = snap_stag_map.find(snapid);
+    if (p != snap_stag_map.end()) {
+      inodeno_t fino = MAKE_FINO(ino, p->second);
+      return fino;
+    }
+
+    int first = last_stag & STAG_MASK;
+    int stag =  (++last_stag) & STAG_MASK;
+    for (; stag != first; stag = (++last_stag) & STAG_MASK) {
+      if (stag == 0)
+	continue;
+
+      auto p = stag_snap_map.find(stag);
+      if (p == stag_snap_map.end()) {
+	snap_stag_map[snapid] = stag;
+	stag_snap_map[stag] = snapid;
+	break;
+      }
+
+      if (!client->ll_get_snap_ref(p->second)) {
+	snap_stag_map.erase(p->second);
+	snap_stag_map[snapid] = stag;
+	p->second = snapid;
+	break;
+      }
+    }
+    if (stag == first)
+      assert(0 == "run out of stag");
+
     inodeno_t fino = MAKE_FINO(ino, stag);
     //cout << "make_fake_ino " << ino << "." << snapid << " -> " << fino << std::endl;
     return fino;
