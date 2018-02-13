@@ -151,6 +151,7 @@ enum {
 
 static const char *config_keys[] = {
   "crush_location",
+  "objecter_mclock_service_tracker",
   NULL
 };
 
@@ -222,12 +223,26 @@ void Objecter::handle_conf_change(const struct md_config_t *conf,
   if (changed.count("crush_location")) {
     update_crush_location();
   }
+  if (changed.count("objecter_mclock_service_tracker")) {
+    update_mclock_service_tracker();
+  }
 }
 
 void Objecter::update_crush_location()
 {
   unique_lock wl(rwlock);
   crush_location = cct->crush_location.get_location();
+}
+
+void Objecter::update_mclock_service_tracker()
+{
+  unique_lock wl(rwlock);
+  if (cct->_conf->objecter_mclock_service_tracker && (!mclock_service_tracker)) {
+    qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
+  } else if (!cct->_conf->objecter_mclock_service_tracker) {
+    qos_trk.reset();
+  }
+  mclock_service_tracker = cct->_conf->objecter_mclock_service_tracker;
 }
 
 // messages ------------------------------
@@ -603,7 +618,7 @@ void Objecter::_linger_commit(LingerOp *info, int r, bufferlist& outbl)
     // make note of the notify_id
     bufferlist::iterator p = outbl.begin();
     try {
-      ::decode(info->notify_id, p);
+      decode(info->notify_id, p);
       ldout(cct, 10) << "_linger_commit  notify_id=" << info->notify_id
 		     << dendl;
     }
@@ -677,7 +692,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
     return;
   }
 
-  ceph::mono_time now = ceph::mono_clock::now();
+  ceph::coarse_mono_time now = ceph::coarse_mono_clock::now();
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now
 		 << dendl;
 
@@ -693,17 +708,16 @@ void Objecter::_send_linger_ping(LingerOp *info)
   o->target = info->target;
   o->should_resend = false;
   _send_op_account(o);
-  MOSDOp *m = _prepare_osd_op(o);
   o->tid = ++last_tid;
   _session_op_assign(info->session, o);
-  _send_op(o, m);
+  _send_op(o);
   info->ping_tid = o->tid;
 
   onack->sent = now;
   logger->inc(l_osdc_linger_ping);
 }
 
-void Objecter::_linger_ping(LingerOp *info, int r, mono_time sent,
+void Objecter::_linger_ping(LingerOp *info, int r, ceph::coarse_mono_time sent,
 			    uint32_t register_gen)
 {
   LingerOp::unique_lock l(info->watch_lock);
@@ -730,10 +744,10 @@ int Objecter::linger_check(LingerOp *info)
 {
   LingerOp::shared_lock l(info->watch_lock);
 
-  mono_time stamp = info->watch_valid_thru;
+  ceph::coarse_mono_time stamp = info->watch_valid_thru;
   if (!info->watch_pending_async.empty())
-    stamp = MIN(info->watch_valid_thru, info->watch_pending_async.front());
-  auto age = mono_clock::now() - stamp;
+    stamp = std::min(info->watch_valid_thru, info->watch_pending_async.front());
+  auto age = ceph::coarse_mono_clock::now() - stamp;
 
   ldout(cct, 10) << __func__ << " " << info->linger_id
 		 << " err " << info->last_error
@@ -785,7 +799,7 @@ Objecter::LingerOp *Objecter::linger_register(const object_t& oid,
   if (info->target.base_oloc.key == oid)
     info->target.base_oloc.key.clear();
   info->target.flags = flags;
-  info->watch_valid_thru = mono_clock::now();
+  info->watch_valid_thru = ceph::coarse_mono_clock::now();
 
   unique_lock l(rwlock);
 
@@ -961,9 +975,6 @@ void Objecter::_do_watch_notify(LingerOp *info, MWatchNotify *m)
 bool Objecter::ms_dispatch(Message *m)
 {
   ldout(cct, 10) << __func__ << " " << cct << " " << *m << dendl;
-  if (!initialized)
-    return false;
-
   switch (m->get_type()) {
     // these we exlusively handle
   case CEPH_MSG_OSD_OPREPLY:
@@ -1009,14 +1020,16 @@ bool Objecter::ms_dispatch(Message *m)
   return false;
 }
 
-void Objecter::_scan_requests(OSDSession *s,
-			      bool force_resend,
-			      bool cluster_full,
-			      map<int64_t, bool> *pool_full_map,
-			      map<ceph_tid_t, Op*>& need_resend,
-			      list<LingerOp*>& need_resend_linger,
-			      map<ceph_tid_t, CommandOp*>& need_resend_command,
-			      shunique_lock& sul)
+void Objecter::_scan_requests(
+  OSDSession *s,
+  bool skipped_map,
+  bool cluster_full,
+  map<int64_t, bool> *pool_full_map,
+  map<ceph_tid_t, Op*>& need_resend,
+  list<LingerOp*>& need_resend_linger,
+  map<ceph_tid_t, CommandOp*>& need_resend_command,
+  shunique_lock& sul,
+  const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps)
 {
   assert(sul.owns_lock() && sul.mutex() == &rwlock);
 
@@ -1040,7 +1053,7 @@ void Objecter::_scan_requests(OSDSession *s,
 	(*pool_full_map)[op->target.base_oloc.pool];
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1065,6 +1078,10 @@ void Objecter::_scan_requests(OSDSession *s,
     Op *op = p->second;
     ++p;   // check_op_pool_dne() may touch ops; prevent iterator invalidation
     ldout(cct, 10) << " checking op " << op->tid << dendl;
+    _prune_snapc(osdmap->get_new_removed_snaps(), op);
+    if (skipped_map) {
+      _prune_snapc(*gap_removed_snaps, op);
+    }
     bool force_resend_writes = cluster_full;
     if (pool_full_map)
       force_resend_writes = force_resend_writes ||
@@ -1073,7 +1090,7 @@ void Objecter::_scan_requests(OSDSession *s,
 			 op->session ? op->session->con.get() : nullptr);
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
-      if (!force_resend && !(force_resend_writes && op->respects_full()))
+      if (!skipped_map && !(force_resend_writes && op->respects_full()))
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1103,7 +1120,7 @@ void Objecter::_scan_requests(OSDSession *s,
     switch (r) {
     case RECALC_OP_TARGET_NO_ACTION:
       // resend if skipped map; otherwise do nothing.
-      if (!force_resend && !force_resend_writes)
+      if (!skipped_map && !force_resend_writes)
 	break;
       // -- fall-thru --
     case RECALC_OP_TARGET_NEED_RESEND:
@@ -1218,15 +1235,23 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	update_pool_full_map(pool_full_map);
 
 	// check all outstanding requests on every epoch
+	for (auto& i : need_resend) {
+	  _prune_snapc(osdmap->get_new_removed_snaps(), i.second);
+	  if (skipped_map) {
+	    _prune_snapc(m->gap_removed_snaps, i.second);
+	  }
+	}
 	_scan_requests(homeless_session, skipped_map, cluster_full,
 		       &pool_full_map, need_resend,
-		       need_resend_linger, need_resend_command, sul);
+		       need_resend_linger, need_resend_command, sul,
+		       &m->gap_removed_snaps);
 	for (map<int,OSDSession*>::iterator p = osd_sessions.begin();
 	     p != osd_sessions.end(); ) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, skipped_map, cluster_full,
 			 &pool_full_map, need_resend,
-			 need_resend_linger, need_resend_command, sul);
+			 need_resend_linger, need_resend_command, sul,
+			 &m->gap_removed_snaps);
 	  ++p;
 	  // osd down or addr change?
 	  if (!osdmap->is_up(s->osd) ||
@@ -1246,7 +1271,8 @@ void Objecter::handle_osd_map(MOSDMap *m)
 	     p != osd_sessions.end(); ++p) {
 	  OSDSession *s = p->second;
 	  _scan_requests(s, false, false, NULL, need_resend,
-			 need_resend_linger, need_resend_command, sul);
+			 need_resend_linger, need_resend_command, sul,
+			 nullptr);
 	}
 	ldout(cct, 3) << "handle_osd_map decoding full epoch "
 		      << m->get_last() << dendl;
@@ -1254,7 +1280,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
 	_scan_requests(homeless_session, false, false, NULL,
 		       need_resend, need_resend_linger,
-		       need_resend_command, sul);
+		       need_resend_command, sul, nullptr);
       } else {
 	ldout(cct, 3) << "handle_osd_map hmm, i want a full map, requesting"
 		      << dendl;
@@ -2017,20 +2043,6 @@ bool Objecter::wait_for_map(epoch_t epoch, Context *c, int err)
   return false;
 }
 
-void Objecter::kick_requests(OSDSession *session)
-{
-  ldout(cct, 10) << "kick_requests for osd." << session->osd << dendl;
-
-  map<uint64_t, LingerOp *> lresend;
-  unique_lock wl(rwlock);
-
-  OSDSession::unique_lock sl(session->lock);
-  _kick_requests(session, lresend);
-  sl.unlock();
-
-  _linger_ops_resend(lresend, wl);
-}
-
 void Objecter::_kick_requests(OSDSession *session,
 			      map<uint64_t, LingerOp *>& lresend)
 {
@@ -2046,7 +2058,6 @@ void Objecter::_kick_requests(OSDSession *session,
        p != session->ops.end();) {
     Op *op = p->second;
     ++p;
-    logger->inc(l_osdc_op_resend);
     if (op->should_resend) {
       if (!op->target.paused)
 	resend[op->tid] = op;
@@ -2056,26 +2067,27 @@ void Objecter::_kick_requests(OSDSession *session,
     }
   }
 
+  logger->inc(l_osdc_op_resend, resend.size());
   while (!resend.empty()) {
     _send_op(resend.begin()->second);
     resend.erase(resend.begin());
   }
 
   // resend lingers
+  logger->inc(l_osdc_linger_resend, session->linger_ops.size());
   for (map<ceph_tid_t, LingerOp*>::iterator j = session->linger_ops.begin();
        j != session->linger_ops.end(); ++j) {
     LingerOp *op = j->second;
     op->get();
-    logger->inc(l_osdc_linger_resend);
     assert(lresend.count(j->first) == 0);
     lresend[j->first] = op;
   }
 
   // resend commands
+  logger->inc(l_osdc_command_resend, session->command_ops.size());
   map<uint64_t,CommandOp*> cresend;  // resend in order
   for (map<ceph_tid_t, CommandOp*>::iterator k = session->command_ops.begin();
        k != session->command_ops.end(); ++k) {
-    logger->inc(l_osdc_command_resend);
     cresend[k->first] = k->second;
   }
   while (!cresend.empty()) {
@@ -2097,7 +2109,7 @@ void Objecter::_linger_ops_resend(map<uint64_t, LingerOp *>& lresend,
     op->put();
     lresend.erase(lresend.begin());
   }
-  ul = unique_lock(sul.release_to_unique());
+  ul = sul.release_to_unique();
 }
 
 void Objecter::start_tick()
@@ -2127,7 +2139,7 @@ void Objecter::tick()
 
 
   // look for laggy requests
-  auto cutoff = ceph::mono_clock::now();
+  auto cutoff = ceph::coarse_mono_clock::now();
   cutoff -= ceph::make_timespan(cct->_conf->objecter_timeout);  // timeout
 
   unsigned laggy_ops = 0;
@@ -2451,11 +2463,6 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
     _maybe_request_map();
   }
 
-  MOSDOp *m = NULL;
-  if (need_send) {
-    m = _prepare_osd_op(op);
-  }
-
   OSDSession::unique_lock sl(s->lock);
   if (op->tid == 0)
     op->tid = ++last_tid;
@@ -2469,7 +2476,7 @@ void Objecter::_op_submit(Op *op, shunique_lock& sul, ceph_tid_t *ptid)
   _session_op_assign(s, op);
 
   if (need_send) {
-    _send_op(op, m);
+    _send_op(op);
   }
 
   // Last chance to touch Op here, after giving up session lock it can
@@ -2744,6 +2751,34 @@ int64_t Objecter::get_object_pg_hash_position(int64_t pool, const string& key,
   if (!p)
     return -ENOENT;
   return p->raw_hash_to_pg(p->hash_key(key, ns));
+}
+
+void Objecter::_prune_snapc(
+  const mempool::osdmap::map<int64_t,
+  OSDMap::snap_interval_set_t>& new_removed_snaps,
+  Op *op)
+{
+  bool match = false;
+  auto i = new_removed_snaps.find(op->target.base_pgid.pool());
+  if (i != new_removed_snaps.end()) {
+    for (auto s : op->snapc.snaps) {
+      if (i->second.contains(s)) {
+	match = true;
+	break;
+      }
+    }
+    if (match) {
+      vector<snapid_t> new_snaps;
+      for (auto s : op->snapc.snaps) {
+	if (!i->second.contains(s)) {
+	  new_snaps.push_back(s);
+	}
+      }
+      op->snapc.snaps.swap(new_snaps);
+      ldout(cct,10) << __func__ << " op " << op->tid << " snapc " << op->snapc
+		    << " (was " << new_snaps << ")" << dendl;
+    }
+  }
 }
 
 int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
@@ -3141,7 +3176,7 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     flags |= CEPH_OSD_FLAG_FULL_FORCE;
 
   op->target.paused = false;
-  op->stamp = ceph::mono_clock::now();
+  op->stamp = ceph::coarse_mono_clock::now();
 
   hobject_t hobj = op->target.get_hobj();
   MOSDOp *m = new MOSDOp(client_inc, op->tid,
@@ -3170,21 +3205,30 @@ MOSDOp *Objecter::_prepare_osd_op(Op *op)
     m->set_reqid(op->reqid);
   }
 
+  if (mclock_service_tracker) {
+    dmc::ReqParams rp = qos_trk->get_req_params(op->target.osd);
+    m->set_qos_params(rp);
+  }
+
   logger->inc(l_osdc_op_send);
-  logger->inc(l_osdc_op_send_bytes, m->get_data().length());
+  ssize_t sum = 0;
+  for (unsigned i = 0; i < m->ops.size(); i++) {
+    sum += m->ops[i].indata.length();
+  }
+  logger->inc(l_osdc_op_send_bytes, sum);
 
   return m;
 }
 
-void Objecter::_send_op(Op *op, MOSDOp *m)
+void Objecter::_send_op(Op *op)
 {
   // rwlock is locked
   // op->session->lock is locked
 
   // backoff?
-  hobject_t hoid = op->target.get_hobj();
   auto p = op->session->backoffs.find(op->target.actual_pgid);
   if (p != op->session->backoffs.end()) {
+    hobject_t hoid = op->target.get_hobj();
     auto q = p->second.lower_bound(hoid);
     if (q != p->second.begin()) {
       --q;
@@ -3205,10 +3249,8 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
     }
   }
 
-  if (!m) {
-    assert(op->tid > 0);
-    m = _prepare_osd_op(op);
-  }
+  assert(op->tid > 0);
+  MOSDOp *m = _prepare_osd_op(op);
 
   if (op->target.actual_pgid != m->get_spg()) {
     ldout(cct, 10) << __func__ << " " << op->tid << " pgid change from "
@@ -3241,8 +3283,6 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   }
 
   op->incarnation = op->session->incarnation;
-
-  m->set_tid(op->tid);
 
   if (op->trace.valid()) {
     m->trace.init("op msg", nullptr, &op->trace);
@@ -3342,7 +3382,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 						    " onnvram" : " ack"))
 		  << " ... stray" << dendl;
     sl.unlock();
-    put_session(s);
+    s->put();
     m->put();
     return;
   }
@@ -3365,7 +3405,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     }
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     _op_submit(op, sul, NULL);
     m->put();
@@ -3381,7 +3421,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		    << op->session->con->get_peer_addr() << dendl;
       m->put();
       sl.unlock();
-      put_session(s);
+      s->put();
       return;
     }
   } else {
@@ -3400,7 +3440,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     // FIXME: two redirects could race and reorder
 
@@ -3419,7 +3459,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
       num_in_flight--;
     _session_op_remove(s, op);
     sl.unlock();
-    put_session(s);
+    s->put();
 
     op->tid = 0;
     op->target.flags &= ~(CEPH_OSD_FLAG_BALANCE_READS |
@@ -3493,6 +3533,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   /* get it before we call _finish_op() */
   auto completion_lock = s->get_lock(op->target.base_oid);
 
+  if (mclock_service_tracker) {
+    qos_trk->track_resp(op->target.osd, m->get_qos_resp());
+  }
   ldout(cct, 15) << "handle_osd_op_reply completed tid " << tid << dendl;
   _finish_op(op, 0);
 
@@ -3513,7 +3556,7 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
   }
 
   m->put();
-  put_session(s);
+  s->put();
 }
 
 void Objecter::handle_osd_backoff(MOSDBackoff *m)
@@ -3739,9 +3782,9 @@ void Objecter::_nlist_reply(NListContext *list_context, int r,
   bufferlist::iterator iter = list_context->bl.begin();
   pg_nls_response_t response;
   bufferlist extra_info;
-  ::decode(response, iter);
+  decode(response, iter);
   if (!iter.end()) {
-    ::decode(extra_info, iter);
+    decode(extra_info, iter);
   }
 
   // if the osd returns 1 (newer code), or handle MAX, it means we
@@ -3835,7 +3878,7 @@ struct C_SelfmanagedSnap : public Context {
   void finish(int r) override {
     if (r == 0) {
       bufferlist::iterator p = bl.begin();
-      ::decode(*psnapid, p);
+      decode(*psnapid, p);
     }
     fin->complete(r);
   }
@@ -4019,7 +4062,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
   monc->send_mon_message(m);
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_poolop_send);
 }
@@ -4033,7 +4076,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
  */
 void Objecter::handle_pool_op_reply(MPoolOpReply *m)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   shunique_lock sul(rwlock, acquire_shared);
   if (!initialized) {
     sul.unlock();
@@ -4168,7 +4211,7 @@ void Objecter::_poolstat_submit(PoolStatOp *op)
   monc->send_mon_message(new MGetPoolStats(monc->get_fsid(), op->tid,
 					   op->pools,
 					   last_seen_pgmap_version));
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_poolstat_send);
 }
@@ -4270,7 +4313,7 @@ void Objecter::_fs_stats_submit(StatfsOp *op)
   monc->send_mon_message(new MStatfs(monc->get_fsid(), op->tid,
 				     op->data_pool,
 				     last_seen_pgmap_version));
-  op->last_submit = ceph::mono_clock::now();
+  op->last_submit = ceph::coarse_mono_clock::now();
 
   logger->inc(l_osdc_statfs_send);
 }
@@ -5115,9 +5158,9 @@ void Objecter::_enumerate_reply(
 
   // XXX extra_info doesn't seem used anywhere?
   bufferlist extra_info;
-  ::decode(response, iter);
+  decode(response, iter);
   if (!iter.end()) {
-    ::decode(extra_info, iter);
+    decode(extra_info, iter);
   }
 
   ldout(cct, 10) << __func__ << ": got " << response.entries.size()

@@ -28,7 +28,7 @@ int OSDriver::get_keys(
   const std::set<std::string> &keys,
   std::map<std::string, bufferlist> *out)
 {
-  return os->omap_get_values(cid, hoid, keys, out);
+  return os->omap_get_values(ch, hoid, keys, out);
 }
 
 int OSDriver::get_next(
@@ -36,7 +36,7 @@ int OSDriver::get_next(
   pair<std::string, bufferlist> *next)
 {
   ObjectMap::ObjectMapIterator iter =
-    os->get_omap_iterator(cid, hoid);
+    os->get_omap_iterator(ch, hoid);
   if (!iter) {
     ceph_abort();
     return -EINVAL;
@@ -59,14 +59,14 @@ struct Mapping {
   Mapping() : snap(0) {}
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(snap, bl);
-    ::encode(hoid, bl);
+    encode(snap, bl);
+    encode(hoid, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(snap, bl);
-    ::decode(hoid, bl);
+    decode(snap, bl);
+    decode(hoid, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -92,7 +92,7 @@ pair<string, bufferlist> SnapMapper::to_raw(
   const pair<snapid_t, hobject_t> &in)
 {
   bufferlist bl;
-  ::encode(Mapping(in), bl);
+  encode(Mapping(in), bl);
   return make_pair(
     to_raw_key(in),
     bl);
@@ -104,7 +104,7 @@ pair<snapid_t, hobject_t> SnapMapper::from_raw(
   Mapping map;
   bufferlist bl(image.second);
   bufferlist::iterator bp(bl.begin());
-  ::decode(map, bp);
+  decode(map, bp);
   return make_pair(map.snap, map.hoid);
 }
 
@@ -121,16 +121,16 @@ string SnapMapper::to_object_key(const hobject_t &hoid)
 void SnapMapper::object_snaps::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(oid, bl);
-  ::encode(snaps, bl);
+  encode(oid, bl);
+  encode(snaps, bl);
   ENCODE_FINISH(bl);
 }
 
 void SnapMapper::object_snaps::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(oid, bl);
-  ::decode(snaps, bl);
+  decode(oid, bl);
+  decode(snaps, bl);
   DECODE_FINISH(bl);
 }
 
@@ -143,13 +143,17 @@ int SnapMapper::get_snaps(
   map<string, bufferlist> got;
   keys.insert(to_object_key(oid));
   int r = backend.get_keys(keys, &got);
-  if (r < 0)
+  if (r < 0) {
+    dout(20) << __func__ << " " << oid << " got err " << r << dendl;
     return r;
-  if (got.empty())
+  }
+  if (got.empty()) {
+    dout(20) << __func__ << " " << oid << " got.empty()" << dendl;
     return -ENOENT;
+  }
   if (out) {
     bufferlist::iterator bp = got.begin()->second.begin();
-    ::decode(*out, bp);
+    decode(*out, bp);
     dout(20) << __func__ << " " << oid << " " << out->snaps << dendl;
     assert(!out->snaps.empty());
   } else {
@@ -182,7 +186,7 @@ void SnapMapper::set_snaps(
   assert(check(oid));
   map<string, bufferlist> to_set;
   bufferlist bl;
-  ::encode(in, bl);
+  encode(in, bl);
   to_set[to_object_key(oid)] = bl;
   dout(20) << __func__ << " " << oid << " " << in.snaps << dendl;
   if (g_conf->subsys.should_gather(ceph_subsys_osd, 20)) {

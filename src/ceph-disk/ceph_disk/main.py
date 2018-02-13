@@ -24,6 +24,7 @@ import argparse
 import base64
 import errno
 import fcntl
+import functools
 import json
 import logging
 import os
@@ -41,11 +42,22 @@ import pwd
 import grp
 import textwrap
 import glob
+import warnings
 
 CEPH_OSD_ONDISK_MAGIC = 'ceph osd volume v026'
 CEPH_LOCKBOX_ONDISK_MAGIC = 'ceph lockbox volume v001'
 
 KEY_MANAGEMENT_MODE_V1 = 'ceph-mon v1'
+
+DEPRECATION_WARNING = """
+*******************************************************************************
+This tool is now deprecated in favor of ceph-volume.
+It is recommended to use ceph-volume for OSD deployments. For details see:
+
+    http://docs.ceph.com/docs/master/ceph-volume/#migrating
+
+*******************************************************************************
+"""
 
 PTYPE = {
     'regular': {
@@ -149,6 +161,13 @@ PTYPE = {
         },
     },
 }
+
+try:
+    # see https://bugs.python.org/issue23098
+    os.major(0x80002b00)
+except OverflowError:
+    os.major = lambda devid: ((devid >> 8) & 0xfff) | ((devid >> 32) & ~0xfff)
+    os.minor = lambda devid: (devid & 0xff) | ((devid >> 12) & ~0xff)
 
 
 class Ptype(object):
@@ -721,6 +740,21 @@ def get_partition_mpath(dev, pnum):
         return None
 
 
+def retry(on_error=Exception, max_tries=10, wait=0.2, backoff=0):
+    def wrapper(func):
+        @functools.wraps(func)
+        def repeat(*args, **kwargs):
+            for tries in range(max_tries - 1):
+                try:
+                    return func(*args, **kwargs)
+                except on_error:
+                    time.sleep(wait + backoff * tries)
+            return func(*args, **kwargs)
+        return repeat
+    return wrapper
+
+
+@retry(Error)
 def get_partition_dev(dev, pnum):
     """
     get the device name for a partition
@@ -732,36 +766,25 @@ def get_partition_dev(dev, pnum):
        sda 1 -> sda1
        cciss/c0d1 1 -> cciss!c0d1p1
     """
-    max_retry = 10
-    for retry in range(0, max_retry + 1):
-        partname = None
-        error_msg = ""
-        if is_mpath(dev):
-            partname = get_partition_mpath(dev, pnum)
-        else:
-            name = get_dev_name(os.path.realpath(dev))
-            sys_entry = os.path.join(BLOCKDIR, name)
-            error_msg = " in %s" % sys_entry
-            for f in os.listdir(sys_entry):
-                if f.startswith(name) and f.endswith(str(pnum)):
-                    # we want the shortest name that starts with the base name
-                    # and ends with the partition number
-                    if not partname or len(f) < len(partname):
-                        partname = f
-        if partname:
-            if retry:
-                LOG.info('Found partition %d for %s after %d tries' %
-                         (pnum, dev, retry))
-            return get_dev_path(partname)
-        else:
-            if retry < max_retry:
-                LOG.info('Try %d/%d : partition %d for %s does not exist%s' %
-                         (retry + 1, max_retry, pnum, dev, error_msg))
-                time.sleep(.2)
-                continue
-            else:
-                raise Error('partition %d for %s does not appear to exist%s' %
-                            (pnum, dev, error_msg))
+    partname = None
+    error_msg = ""
+    if is_mpath(dev):
+        partname = get_partition_mpath(dev, pnum)
+    else:
+        name = get_dev_name(os.path.realpath(dev))
+        sys_entry = os.path.join(BLOCKDIR, name)
+        error_msg = " in %s" % sys_entry
+        for f in os.listdir(sys_entry):
+            if f.startswith(name) and f.endswith(str(pnum)):
+                # we want the shortest name that starts with the base name
+                # and ends with the partition number
+                if not partname or len(f) < len(partname):
+                    partname = f
+    if partname:
+        return get_dev_path(partname)
+    else:
+        raise Error('partition %d for %s does not appear to exist%s' %
+                    (pnum, dev, error_msg))
 
 
 def list_all_partitions():
@@ -859,7 +882,7 @@ def get_partition_base_mpath(dev):
 
 def is_partition(dev):
     """
-    Check whether a given device path is a partition or a full disk.
+    Check whether a given device path is a partition
     """
     if is_mpath(dev):
         return is_partition_mpath(dev)
@@ -879,7 +902,7 @@ def is_partition(dev):
     if os.path.exists('/sys/dev/block/%d:%d/partition' % (major, minor)):
         return True
 
-    raise Error('not a disk or partition', dev)
+    raise Error('not a disk partition', dev)
 
 
 def is_mounted(dev):
@@ -1012,8 +1035,8 @@ def write_one_line(parent, name, text):
     with open(tmp, 'wb') as tmp_file:
         tmp_file.write(text.encode('utf-8') + b'\n')
         os.fsync(tmp_file.fileno())
-    path_set_context(tmp)
     os.rename(tmp, path)
+    path_set_context(path)
 
 
 def init_get():
@@ -1242,7 +1265,8 @@ def get_fsid(cluster):
     :return: The fsid or raises Error.
     """
     fsid = get_conf_with_default(cluster=cluster, variable='fsid')
-    if fsid is None:
+    # uuids from boost always default to 'the empty uuid'
+    if fsid == '00000000-0000-0000-0000-000000000000':
         raise Error('getting cluster uuid from configuration failed')
     return fsid.lower()
 
@@ -1276,6 +1300,8 @@ def get_dmcrypt_key(
     path = os.path.join(STATEDIR, 'osd-lockbox', _uuid)
     if os.path.exists(path):
         mode = get_oneliner(path, 'key-management-mode')
+        if mode is None:
+            raise Error('unable to read key-management-mode from %s' % path)
         osd_uuid = get_oneliner(path, 'osd-uuid')
         ceph_fsid = read_one_line(path, 'ceph_fsid')
         if ceph_fsid is None:
@@ -1374,22 +1400,14 @@ def _dmcrypt_map(
         raise Error('unable to map device', rawdev, e)
 
 
-def dmcrypt_unmap(
-    _uuid
-):
+@retry(Error, max_tries=10, wait=0.5, backoff=1.0)
+def dmcrypt_unmap(_uuid):
     if not os.path.exists('/dev/mapper/' + _uuid):
         return
-    retries = 0
-    while True:
-        try:
-            command_check_call(['cryptsetup', 'remove', _uuid])
-            break
-        except subprocess.CalledProcessError as e:
-            if retries == 10:
-                raise Error('unable to unmap device', _uuid, e)
-            else:
-                time.sleep(0.5 + retries * 1.0)
-                retries += 1
+    try:
+        command_check_call(['cryptsetup', 'remove', _uuid])
+    except subprocess.CalledProcessError as e:
+        raise Error('unable to unmap device', _uuid, e)
 
 
 def mount(
@@ -1451,6 +1469,7 @@ def mount(
     return path
 
 
+@retry(UnmountError, max_tries=3, wait=0.5, backoff=1.0)
 def unmount(
     path,
     do_rm=True,
@@ -1458,25 +1477,17 @@ def unmount(
     """
     Unmount and removes the given mount point.
     """
-    retries = 0
-    while True:
-        try:
-            LOG.debug('Unmounting %s', path)
-            command_check_call(
-                [
-                    '/bin/umount',
-                    '--',
-                    path,
-                ],
-            )
-            break
-        except subprocess.CalledProcessError as e:
-            # on failure, retry 3 times with incremental backoff
-            if retries == 3:
-                raise UnmountError(e)
-            else:
-                time.sleep(0.5 + retries * 1.0)
-                retries += 1
+    try:
+        LOG.debug('Unmounting %s', path)
+        command_check_call(
+            [
+                '/bin/umount',
+                '--',
+                path,
+            ],
+        )
+    except subprocess.CalledProcessError as e:
+        raise UnmountError(e)
     if not do_rm:
         return
     os.rmdir(path)
@@ -1530,10 +1541,11 @@ def get_free_partition_index(dev):
 
 
 def check_journal_reqs(args):
+    log_file = "/var/log/ceph/$cluster-osd-check.log"
     _, _, allows_journal = command([
         'ceph-osd', '--check-allows-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1541,7 +1553,7 @@ def check_journal_reqs(args):
     _, _, wants_journal = command([
         'ceph-osd', '--check-wants-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1549,7 +1561,7 @@ def check_journal_reqs(args):
     _, _, needs_journal = command([
         'ceph-osd', '--check-needs-journal',
         '-i', '0',
-        '--log-file', '$run_dir/$cluster-osd-check.log',
+        '--log-file', log_file,
         '--cluster', args.cluster,
         '--setuser', get_ceph_user(),
         '--setgroup', get_ceph_group(),
@@ -1855,6 +1867,7 @@ class DevicePartition(object):
         return self.ptype_map[name]['ready']
 
     @staticmethod
+    @retry(OSError)
     def factory(path, dev, args):
         dmcrypt_type = CryptHelpers.get_dmcrypt_type(args)
         if ((path is not None and is_mpath(path)) or
@@ -2730,8 +2743,8 @@ class Lockbox(object):
             ptype = self.partition.get_ptype()
             ready = Ptype.get_ready_by_name('lockbox')
             if ptype not in ready:
-                LOG.warning('incorrect partition UUID: %s, expected %s'
-                            % (ptype, str(ready)))
+                LOG.warning('incorrect partition UUID: %s, expected %s',
+                            ptype, str(ready))
         else:
             LOG.debug('Creating osd partition on %s',
                       self.args.lockbox)
@@ -2775,12 +2788,12 @@ class Lockbox(object):
     def populate(self):
         maybe_mkdir(os.path.join(STATEDIR, 'osd-lockbox'))
         args = ['mkfs', '-t', 'ext4', self.partition.get_dev()]
-        LOG.debug('Creating lockbox fs on %s: ' + str(" ".join(args)))
+        LOG.debug('Creating lockbox fs: %s', " ".join(args))
         command_check_call(args)
         path = self.get_mount_point()
         maybe_mkdir(path)
         args = ['mount', '-t', 'ext4', self.partition.get_dev(), path]
-        LOG.debug('Mounting lockbox ' + str(" ".join(args)))
+        LOG.debug('Mounting lockbox: %s', " ".join(args))
         command_check_call(args)
         write_one_line(path, 'osd-uuid', self.args.osd_uuid)
         if self.args.cluster_uuid is None:
@@ -3761,23 +3774,18 @@ def main_activate(args):
             osd_data = get_mount_point(cluster, osd_id)
 
             args.cluster = cluster
-
-            # Check if encrypted block device in journal
-
-            block_dmcrypt_path = os.path.join(osd_data, 'block_dmcrypt')
-
-            if args.dmcrypt and os.path.exists(block_dmcrypt_path):
-                partition = DevicePartition.factory(
-                    path=None,
-                    dev=os.path.join(osd_data, 'block_dmcrypt'),
-                    args=args)
-
-                partition.osd_dm_key = get_dmcrypt_key(
-                    get_partition_uuid(args.path),
-                    args.dmcrypt_key_dir,
-                    CryptHelpers.get_dmcrypt_type(args) == "luks")
-
-                partition.map()
+            if args.dmcrypt:
+                for name in Space.NAMES:
+                    # Check if encrypted device in journal
+                    dev_path = os.path.join(osd_data, name + '_dmcrypt')
+                    if not os.path.exists(dev_path):
+                        continue
+                    partition = DevicePartition.factory(
+                        path=None,
+                        dev=dev_path,
+                        args=args)
+                    partition.rawdev = args.path
+                    partition.map()
 
         elif stat.S_ISDIR(mode):
             (cluster, osd_id) = activate_dir(
@@ -3797,24 +3805,24 @@ def main_activate(args):
             LOG.info("activate: Journal not present, not starting, yet")
             return
 
-        if (not args.no_start_daemon and args.mark_init == 'none'):
-            command_check_call(
-                [
-                    'ceph-osd',
-                    '--cluster={cluster}'.format(cluster=cluster),
-                    '--id={osd_id}'.format(osd_id=osd_id),
-                    '--osd-data={path}'.format(path=osd_data),
-                    '--osd-journal={journal}'.format(journal=osd_journal),
-                ],
-            )
+    if (not args.no_start_daemon and args.mark_init == 'none'):
+        command_check_call(
+            [
+                'ceph-osd',
+                '--cluster={cluster}'.format(cluster=cluster),
+                '--id={osd_id}'.format(osd_id=osd_id),
+                '--osd-data={path}'.format(path=osd_data),
+                '--osd-journal={journal}'.format(journal=osd_journal),
+            ],
+        )
 
-        if (not args.no_start_daemon and
-                args.mark_init not in (None, 'none')):
+    if (not args.no_start_daemon and
+            args.mark_init not in (None, 'none')):
 
-            start_daemon(
-                cluster=cluster,
-                osd_id=osd_id,
-            )
+        start_daemon(
+            cluster=cluster,
+            osd_id=osd_id,
+        )
 
 
 def main_activate_lockbox(args):
@@ -4165,10 +4173,10 @@ def main_activate_space(name, args):
             reactivate=args.reactivate,
         )
 
-        start_daemon(
-            cluster=cluster,
-            osd_id=osd_id,
-        )
+    start_daemon(
+        cluster=cluster,
+        osd_id=osd_id,
+    )
 
 
 ###########################
@@ -5652,6 +5660,8 @@ def make_zap_parser(subparsers):
 
 
 def main(argv):
+    # Deprecate from the very beginning
+    warnings.warn(DEPRECATION_WARNING)
     args = parse_args(argv)
 
     setup_logging(args.verbose, args.log_stdout)
@@ -5671,9 +5681,19 @@ def main(argv):
     CEPH_PREF_GROUP = args.setgroup
 
     if args.verbose:
-        args.func(args)
+        try:
+            args.func(args)
+        except Exception:
+            # warn on any exception when running with verbosity
+            warnings.warn(DEPRECATION_WARNING)
+            # but still raise the original issue
+            raise
+
     else:
         main_catch(args.func, args)
+
+    # if there aren't any errors, still log again at the very bottom
+    warnings.warn(DEPRECATION_WARNING)
 
 
 def setup_logging(verbose, log_stdout):
@@ -5701,6 +5721,8 @@ def main_catch(func, args):
         func(args)
 
     except Error as e:
+        # warn on generic 'error' exceptions
+        warnings.warn(DEPRECATION_WARNING)
         raise SystemExit(
             '{prog}: {msg}'.format(
                 prog=args.prog,
@@ -5709,6 +5731,8 @@ def main_catch(func, args):
         )
 
     except CephDiskException as error:
+        # warn on ceph-disk exceptions
+        warnings.warn(DEPRECATION_WARNING)
         exc_name = error.__class__.__name__
         raise SystemExit(
             '{prog} {exc_name}: {msg}'.format(

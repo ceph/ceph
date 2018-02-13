@@ -239,8 +239,10 @@ public:
   }
 
   void expect_ioctx_create(librados::IoCtx &io_ctx) {
+    librados::MockTestMemIoCtxImpl &io_ctx_impl = get_mock_io_ctx(io_ctx);
     EXPECT_CALL(*get_mock_io_ctx(io_ctx).get_mock_rados_client(), create_ioctx(_, _))
-      .WillOnce(Return(&get_mock_io_ctx(io_ctx)));
+      .WillOnce(DoAll(GetReference(&io_ctx_impl),
+                      Return(&get_mock_io_ctx(io_ctx))));
   }
 
   void expect_get_parent_global_image_id(librados::IoCtx &io_ctx,
@@ -249,7 +251,7 @@ public:
     mirror_image.global_image_id = global_id;
 
     bufferlist bl;
-    ::encode(mirror_image, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"), _, _, _))
@@ -262,7 +264,7 @@ public:
   void expect_mirror_image_get_image_id(librados::IoCtx &io_ctx,
                                         const std::string &image_id, int r) {
     bufferlist bl;
-    ::encode(image_id, bl);
+    encode(image_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get_image_id"), _, _, _))

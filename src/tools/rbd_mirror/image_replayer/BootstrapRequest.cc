@@ -51,6 +51,7 @@ BootstrapRequest<I>::BootstrapRequest(
         const std::string &local_mirror_uuid,
         const std::string &remote_mirror_uuid,
         Journaler *journaler,
+        cls::journal::ClientState *client_state,
         MirrorPeerClientMeta *client_meta,
         Context *on_finish,
         bool *do_resync,
@@ -64,8 +65,8 @@ BootstrapRequest<I>::BootstrapRequest(
     m_timer(timer), m_timer_lock(timer_lock),
     m_local_mirror_uuid(local_mirror_uuid),
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
-    m_client_meta(client_meta), m_progress_ctx(progress_ctx),
-    m_do_resync(do_resync),
+    m_client_state(client_state), m_client_meta(client_meta),
+    m_progress_ctx(progress_ctx), m_do_resync(do_resync),
     m_lock(unique_lock_name("BootstrapRequest::m_lock", this)) {
 }
 
@@ -124,7 +125,7 @@ void BootstrapRequest<I>::handle_get_remote_tag_class(int r) {
   librbd::journal::ClientData client_data;
   bufferlist::iterator it = m_client.data.begin();
   try {
-    ::decode(client_data, it);
+    decode(client_data, it);
   } catch (const buffer::error &err) {
     derr << ": failed to decode remote client meta data: " << err.what()
          << dendl;
@@ -172,73 +173,6 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     return;
   }
 
-  get_client();
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_client() {
-  dout(20) << dendl;
-
-  update_progress("GET_CLIENT");
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_client>(
-      this);
-  m_journaler->get_client(m_local_mirror_uuid, &m_client, ctx);
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_client(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  if (r == -ENOENT) {
-    dout(10) << ": client not registered" << dendl;
-  } else if (r < 0) {
-    derr << ": failed to retrieve client: " << cpp_strerror(r) << dendl;
-    m_ret_val = r;
-    close_remote_image();
-    return;
-  } else if (decode_client_meta()) {
-    // skip registration if it already exists
-    is_primary();
-    return;
-  }
-
-  register_client();
-}
-
-template <typename I>
-void BootstrapRequest<I>::register_client() {
-  dout(20) << dendl;
-
-  update_progress("REGISTER_CLIENT");
-
-  // record an place-holder record
-  librbd::journal::ClientData client_data{
-    librbd::journal::MirrorPeerClientMeta{m_local_image_id}};
-  bufferlist client_data_bl;
-  ::encode(client_data, client_data_bl);
-
-  Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_register_client>(
-      this);
-  m_journaler->register_client(client_data_bl, ctx);
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_register_client(int r) {
-  dout(20) << ": r=" << r << dendl;
-
-  if (r < 0) {
-    derr << ": failed to register with remote journal: " << cpp_strerror(r)
-         << dendl;
-    m_ret_val = r;
-    close_remote_image();
-    return;
-  }
-
-  m_client = {};
-  *m_client_meta = librbd::journal::MirrorPeerClientMeta(m_local_image_id);
   is_primary();
 }
 
@@ -276,6 +210,12 @@ void BootstrapRequest<I>::handle_is_primary(int r) {
     return;
   }
 
+  if (!m_client_meta->image_id.empty()) {
+    // have an image id -- use that to open the image since a deletion (resync)
+    // will leave the old image id registered in the peer
+    m_local_image_id = m_client_meta->image_id;
+  }
+
   if (m_local_image_id.empty()) {
     update_client_image();
     return;
@@ -300,7 +240,7 @@ void BootstrapRequest<I>::update_client_state() {
 
   librbd::journal::ClientData client_data(client_meta);
   bufferlist data_bl;
-  ::encode(client_data, data_bl);
+  encode(client_data, data_bl);
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_state>(
@@ -382,7 +322,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     return;
   }
 
-  if (m_client.state == cls::journal::CLIENT_STATE_DISCONNECTED) {
+  if (*m_client_state == cls::journal::CLIENT_STATE_DISCONNECTED) {
     dout(10) << ": client flagged disconnected -- skipping bootstrap" << dendl;
     // The caller is expected to detect disconnect initializing remote journal.
     m_ret_val = 0;
@@ -421,6 +361,45 @@ void BootstrapRequest<I>::handle_unregister_client(int r) {
 }
 
 template <typename I>
+void BootstrapRequest<I>::register_client() {
+  dout(20) << dendl;
+
+  update_progress("REGISTER_CLIENT");
+
+  librbd::journal::MirrorPeerClientMeta mirror_peer_client_meta{
+    m_local_image_id};
+  mirror_peer_client_meta.state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
+  librbd::journal::ClientData client_data{mirror_peer_client_meta};
+  bufferlist client_data_bl;
+  encode(client_data, client_data_bl);
+
+  Context *ctx = create_context_callback<
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_register_client>(
+      this);
+  m_journaler->register_client(client_data_bl, ctx);
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_register_client(int r) {
+  dout(20) << ": r=" << r << dendl;
+
+  if (r < 0) {
+    derr << ": failed to register with remote journal: " << cpp_strerror(r)
+         << dendl;
+    m_ret_val = r;
+    close_remote_image();
+    return;
+  }
+
+  *m_client_state = cls::journal::CLIENT_STATE_CONNECTED;
+  *m_client_meta = librbd::journal::MirrorPeerClientMeta(m_local_image_id);
+  m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
+
+  is_primary();
+}
+
+template <typename I>
 void BootstrapRequest<I>::update_client_image() {
   dout(20) << dendl;
   update_progress("UPDATE_CLIENT_IMAGE");
@@ -433,7 +412,7 @@ void BootstrapRequest<I>::update_client_image() {
 
   librbd::journal::ClientData client_data(client_meta);
   bufferlist data_bl;
-  ::encode(client_data, data_bl);
+  encode(client_data, data_bl);
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_update_client_image>(
@@ -487,7 +466,11 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
   dout(20) << ": r=" << r << dendl;
 
   if (r < 0) {
-    derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
+    if (r == -ENOENT) {
+      dout(10) << ": parent image does not exist" << dendl;
+    } else {
+      derr << ": failed to create local image: " << cpp_strerror(r) << dendl;
+    }
     m_ret_val = r;
     close_remote_image();
     return;
@@ -498,10 +481,6 @@ void BootstrapRequest<I>::handle_create_local_image(int r) {
 
 template <typename I>
 void BootstrapRequest<I>::get_remote_tags() {
-  dout(20) << dendl;
-
-  update_progress("GET_REMOTE_TAGS");
-
   if (m_client_meta->state == librbd::journal::MIRROR_PEER_STATE_SYNCING) {
     // optimization -- no need to compare remote tags if we just created
     // the image locally or sync was interrupted
@@ -510,6 +489,7 @@ void BootstrapRequest<I>::get_remote_tags() {
   }
 
   dout(20) << dendl;
+  update_progress("GET_REMOTE_TAGS");
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_tags>(this);
@@ -573,7 +553,7 @@ void BootstrapRequest<I>::handle_get_remote_tags(int r) {
 
     try {
       bufferlist::iterator it = remote_tag.data.begin();
-      ::decode(remote_tag_data, it);
+      decode(remote_tag_data, it);
       remote_tag_data_valid = true;
     } catch (const buffer::error &err) {
       derr << ": failed to decode remote tag " << remote_tag.tid << ": "
@@ -766,36 +746,6 @@ void BootstrapRequest<I>::handle_close_remote_image(int r) {
   }
 
   finish(m_ret_val);
-}
-
-template <typename I>
-bool BootstrapRequest<I>::decode_client_meta() {
-  dout(20) << dendl;
-
-  librbd::journal::ClientData client_data;
-  bufferlist::iterator it = m_client.data.begin();
-  try {
-    ::decode(client_data, it);
-  } catch (const buffer::error &err) {
-    derr << ": failed to decode client meta data: " << err.what() << dendl;
-    return false;
-  }
-
-  librbd::journal::MirrorPeerClientMeta *client_meta =
-    boost::get<librbd::journal::MirrorPeerClientMeta>(&client_data.client_meta);
-  if (client_meta == nullptr) {
-    derr << ": unknown peer registration" << dendl;
-    return false;
-  } else if (!client_meta->image_id.empty()) {
-    // have an image id -- use that to open the image
-    m_local_image_id = client_meta->image_id;
-  }
-
-  *m_client_meta = *client_meta;
-
-  dout(20) << ": client found: image_id=" << m_local_image_id
-	   << ", client_meta=" << *m_client_meta << dendl;
-  return true;
 }
 
 template <typename I>

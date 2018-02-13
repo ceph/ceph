@@ -44,10 +44,12 @@ The default Ceph configuration file locations in sequential order include:
 #. ``$CEPH_CONF`` (*i.e.,* the path following the ``$CEPH_CONF`` 
    environment variable)
 #. ``-c path/path``  (*i.e.,* the ``-c`` command line argument)
-#. ``/etc/ceph/ceph.conf``
-#. ``~/.ceph/config``
-#. ``./ceph.conf`` (*i.e.,* in the current working directory)
+#. ``/etc/ceph/$cluster.conf``
+#. ``~/.ceph/$cluster.conf``
+#. ``./$cluster.conf`` (*i.e.,* in the current working directory)
+#. On FreeBSD systems only, ``/usr/local/etc/ceph/$cluster.conf``
 
+where ``$cluster`` is the cluster's name (default ``ceph``).
 
 The Ceph configuration file uses an *ini* style syntax. You can add comments 
 by preceding comments with a pound sign (#) or a semi-colon (;).  For example:
@@ -430,19 +432,19 @@ useful for increasing/decreasing logging output, enabling/disabling debug
 settings, and even for runtime optimization. The following reflects runtime
 configuration usage::
 
-	ceph tell {daemon-type}.{id or *} injectargs --{name} {value} [--{name} {value}]
+	ceph tell {daemon-type}.{id or *} config set {name} {value}
 	
 Replace ``{daemon-type}`` with one of ``osd``, ``mon`` or ``mds``. You may apply
 the  runtime setting to all daemons of a particular type with ``*``, or specify
 a specific  daemon's ID (i.e., its number or letter). For example, to increase
 debug logging for a ``ceph-osd`` daemon named ``osd.0``, execute the following::
 
-	ceph tell osd.0 injectargs --debug-osd 20 --debug-ms 1
+	ceph tell osd.0 config set debug_osd 20
 
 In your ``ceph.conf`` file, you may use spaces when specifying a
 setting name.  When specifying a setting name on the command line,
 ensure that you use an underscore or hyphen (``_`` or ``-``) between
-terms (e.g., ``debug osd`` becomes ``--debug-osd``).
+terms (e.g., ``debug osd`` becomes ``debug_osd``).
 
 
 Viewing a Configuration at Runtime
@@ -561,7 +563,7 @@ Running Multiple Clusters
 
 With Ceph, you can run multiple Ceph Storage Clusters on the same hardware.
 Running multiple clusters provides a higher level of isolation compared to 
-using different pools on the same cluster with different CRUSH rulesets. A 
+using different pools on the same cluster with different CRUSH rules. A 
 separate cluster will have separate monitor, OSD and metadata server processes. 
 When running Ceph with  default settings, the default cluster name is ``ceph``, 
 which means you would  save your Ceph configuration file with the file name

@@ -19,10 +19,10 @@
 
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "include/ceph_features.h"
 #include "include/compat.h"
+#include "include/random.h"
 
 #include "common/config.h"
 #include "common/strtol.h"
@@ -144,8 +144,7 @@ int main(int argc, const char **argv)
       "MDS names may not start with a numeric digit." << dendl;
   }
 
-  uint64_t nonce = 0;
-  get_random_bytes((char*)&nonce, sizeof(nonce));
+  auto nonce = ceph::util::generate_random_number<uint64_t>();
 
   std::string public_msgr_type = g_conf->ms_public_type.empty() ? g_conf->get_val<std::string>("ms_type") : g_conf->ms_public_type;
   Messenger *msgr = Messenger::create(g_ceph_context, public_msgr_type,
@@ -175,7 +174,11 @@ int main(int argc, const char **argv)
 
   global_init_daemonize(g_ceph_context);
   common_init_finish(g_ceph_context);
-
+  
+  // set up signal handlers, now that we've daemonized/forked.
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  
   // get monmap
   MonClient mc(g_ceph_context);
   if (mc.build_initial_monmap() < 0)
@@ -197,9 +200,6 @@ int main(int argc, const char **argv)
     goto shutdown;
   }
 
-  // set up signal handlers, now that we've daemonized/forked.
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mds_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mds_signal);
 

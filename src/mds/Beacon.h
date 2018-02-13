@@ -16,6 +16,8 @@
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
+#include <string_view>
+
 #include "include/types.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
@@ -40,7 +42,7 @@ class MDSRank;
 class Beacon : public Dispatcher
 {
 public:
-  Beacon(CephContext *cct_, MonClient *monc_, std::string name);
+  Beacon(CephContext *cct_, MonClient *monc_, std::string_view name);
   ~Beacon() override;
 
   void init(MDSMap const *mdsmap);
@@ -87,7 +89,7 @@ private:
   mds_rank_t standby_for_rank;
   std::string standby_for_name;
   fs_cluster_id_t standby_for_fscid;
-  bool standby_replay;
+  bool standby_replay = false;
   MDSMap::DaemonState want_state;
 
   // Internal beacon state

@@ -1279,10 +1279,10 @@ int LFNIndex::hash_filename(const char *filename, char *hash, int buf_len)
   char hex[FILENAME_LFN_DIGEST_SIZE * 2];
 
   SHA1 h;
-  h.Update((const byte *)filename, strlen(filename));
-  h.Final((byte *)buf);
+  h.Update((const unsigned char *)filename, strlen(filename));
+  h.Final((unsigned char *)buf);
 
-  buf_to_hex((byte *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
+  buf_to_hex((unsigned char *)buf, (FILENAME_HASH_LEN + 1) / 2, hex);
   strncpy(hash, hex, FILENAME_HASH_LEN);
   hash[FILENAME_HASH_LEN] = '\0';
   return 0;

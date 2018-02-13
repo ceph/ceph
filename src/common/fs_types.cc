@@ -70,37 +70,39 @@ void file_layout_t::to_legacy(ceph_file_layout *fl) const
 
 void file_layout_t::encode(bufferlist& bl, uint64_t features) const
 {
+  using ceph::encode;
   if ((features & CEPH_FEATURE_FS_FILE_LAYOUT_V2) == 0) {
     ceph_file_layout fl;
     assert((stripe_unit & 0xff) == 0);  // first byte must be 0
     to_legacy(&fl);
-    ::encode(fl, bl);
+    encode(fl, bl);
     return;
   }
 
   ENCODE_START(2, 2, bl);
-  ::encode(stripe_unit, bl);
-  ::encode(stripe_count, bl);
-  ::encode(object_size, bl);
-  ::encode(pool_id, bl);
-  ::encode(pool_ns, bl);
+  encode(stripe_unit, bl);
+  encode(stripe_count, bl);
+  encode(object_size, bl);
+  encode(pool_id, bl);
+  encode(pool_ns, bl);
   ENCODE_FINISH(bl);
 }
 
 void file_layout_t::decode(bufferlist::iterator& p)
 {
+  using ceph::decode;
   if (*p == 0) {
     ceph_file_layout fl;
-    ::decode(fl, p);
+    decode(fl, p);
     from_legacy(fl);
     return;
   }
   DECODE_START(2, p);
-  ::decode(stripe_unit, p);
-  ::decode(stripe_count, p);
-  ::decode(object_size, p);
-  ::decode(pool_id, p);
-  ::decode(pool_ns, p);
+  decode(stripe_unit, p);
+  decode(stripe_count, p);
+  decode(object_size, p);
+  decode(pool_id, p);
+  decode(pool_ns, p);
   DECODE_FINISH(p);
 }
 

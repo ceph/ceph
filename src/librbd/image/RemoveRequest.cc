@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "librbd/image/RemoveRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/internal.h"
@@ -9,10 +10,11 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/image/DetachChildRequest.h"
 #include "librbd/journal/RemoveRequest.h"
-#include "librbd/image/RemoveRequest.h"
-#include "librbd/operation/TrimRequest.h"
 #include "librbd/mirror/DisableRequest.h"
+#include "librbd/operation/SnapshotRemoveRequest.h"
+#include "librbd/operation/TrimRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -21,6 +23,21 @@
 
 namespace librbd {
 namespace image {
+
+namespace {
+
+bool auto_delete_snapshot(const SnapInfo& snap_info) {
+  auto snap_namespace_type = cls::rbd::get_snap_namespace_type(
+    snap_info.snap_namespace);
+  switch (snap_namespace_type) {
+  case cls::rbd::SNAPSHOT_NAMESPACE_TYPE_TRASH:
+    return true;
+  default:
+    return false;
+  }
+}
+
+} // anonymous namespace
 
 using librados::IoCtx;
 using util::create_context_callback;
@@ -90,6 +107,12 @@ void RemoveRequest<I>::handle_open_image(int r) {
 
 template<typename I>
 void RemoveRequest<I>::check_exclusive_lock() {
+  if (m_image_ctx->operations_disabled) {
+    lderr(m_cct) << "image operations disabled due to unsupported op features" << dendl;
+    finish(-EROFS);
+    return;
+  }
+
   ldout(m_cct, 20) << dendl;
 
   if (m_image_ctx->exclusive_lock == nullptr) {
@@ -159,11 +182,19 @@ template<typename I>
 void RemoveRequest<I>::check_image_snaps() {
   ldout(m_cct, 20) << dendl;
 
-  if (m_image_ctx->snaps.size()) {
-    lderr(m_cct) << "image has snapshots - not removing" << dendl;
-    send_close_image(-ENOTEMPTY);
-    return;
+  m_image_ctx->snap_lock.get_read();
+  for (auto& snap_info : m_image_ctx->snap_info) {
+    if (auto_delete_snapshot(snap_info.second)) {
+      m_snap_infos.insert(snap_info);
+    } else {
+      m_image_ctx->snap_lock.put_read();
+
+      lderr(m_cct) << "image has snapshots - not removing" << dendl;
+      send_close_image(-ENOTEMPTY);
+      return;
+    }
   }
+  m_image_ctx->snap_lock.put_read();
 
   list_image_watchers();
 }
@@ -289,10 +320,15 @@ void RemoveRequest<I>::check_image_watchers() {
 
 template<typename I>
 void RemoveRequest<I>::check_group() {
+  if (m_old_format) {
+    trim_image();
+    return;
+  }
+
   ldout(m_cct, 20) << dendl;
 
   librados::ObjectReadOperation op;
-  librbd::cls_client::image_get_group_start(&op);
+  librbd::cls_client::image_group_get_start(&op);
 
   using klass = RemoveRequest<I>;
   librados::AioCompletion *rados_completion = create_rados_callback<
@@ -311,7 +347,7 @@ void RemoveRequest<I>::handle_check_group(int r) {
   cls::rbd::GroupSpec s;
   if (r == 0) {
     bufferlist::iterator it = m_out_bl.begin();
-    r = librbd::cls_client::image_get_group_finish(&it, &s);
+    r = librbd::cls_client::image_group_get_finish(&it, &s);
   }
   if (r < 0 && r != -EOPNOTSUPP) {
     lderr(m_cct) << "error fetching group for image: "
@@ -326,7 +362,50 @@ void RemoveRequest<I>::handle_check_group(int r) {
     return;
   }
 
-  trim_image();
+  remove_snapshot();
+}
+
+template<typename I>
+void RemoveRequest<I>::remove_snapshot() {
+  if (m_snap_infos.empty()) {
+    trim_image();
+    return;
+  }
+
+  auto snap_id = m_snap_infos.begin()->first;
+  auto& snap_info = m_snap_infos.begin()->second;
+  ldout(m_cct, 20) << "snap_id=" << snap_id << ", "
+                   << "snap_name=" << snap_info.name << dendl;
+
+  RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
+  auto ctx = create_context_callback<
+    RemoveRequest<I>, &RemoveRequest<I>::handle_remove_snapshot>(this);
+  auto req = librbd::operation::SnapshotRemoveRequest<I>::create(
+    *m_image_ctx, snap_info.snap_namespace, snap_info.name,
+    snap_id, ctx);
+  req->send();
+}
+
+template<typename I>
+void RemoveRequest<I>::handle_remove_snapshot(int r) {
+  ldout(m_cct, 20) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    auto snap_id = m_snap_infos.begin()->first;
+    lderr(m_cct) << "failed to auto-prune snapshot " << snap_id << ": "
+                 << cpp_strerror(r) << dendl;
+
+    if (r == -EBUSY) {
+      r = -ENOTEMPTY;
+    }
+    send_close_image(r);
+    return;
+  }
+
+  assert(!m_snap_infos.empty());
+  m_snap_infos.erase(m_snap_infos.begin());
+
+  remove_snapshot();
 }
 
 template<typename I>
@@ -358,41 +437,29 @@ void RemoveRequest<I>::handle_trim_image(int r) {
     return;
   }
 
-  remove_child();
+  detach_child();
 }
 
 template<typename I>
-void RemoveRequest<I>::remove_child() {
+void RemoveRequest<I>::detach_child() {
   ldout(m_cct, 20) << dendl;
 
-  m_image_ctx->parent_lock.get_read();
-  ParentInfo parent_info = m_image_ctx->parent_md;
-  m_image_ctx->parent_lock.put_read();
-
-  librados::ObjectWriteOperation op;
-  librbd::cls_client::remove_child(&op, parent_info.spec, m_image_id);
-
-  using klass = RemoveRequest<I>;
-  librados::AioCompletion *rados_completion =
-    create_rados_callback<klass, &klass::handle_remove_child>(this);
-  int r = m_image_ctx->md_ctx.aio_operate(RBD_CHILDREN, rados_completion, &op);
-  assert(r == 0);
-  rados_completion->release();
+  auto ctx = create_context_callback<
+    RemoveRequest<I>, &RemoveRequest<I>::handle_detach_child>(this);
+  auto req = DetachChildRequest<I>::create(*m_image_ctx, ctx);
+  req->send();
 }
 
 template<typename I>
-void RemoveRequest<I>::handle_remove_child(int r) {
+void RemoveRequest<I>::handle_detach_child(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  if (r == -ENOENT) {
-    r = 0;
-  } else if (r < 0) {
-    lderr(m_cct) << "error removing child from children list: "
+  if (r < 0) {
+    lderr(m_cct) << "failed to detach child from parent: "
                  << cpp_strerror(r) << dendl;
     send_close_image(r);
     return;
   }
-
 
   send_disable_mirror();
 }

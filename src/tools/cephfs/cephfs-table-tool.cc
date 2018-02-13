@@ -39,8 +39,6 @@ int main(int argc, const char **argv)
     std::cerr << "Error (" << cpp_strerror(rc) << ")" << std::endl;
   }
 
-  tt.shutdown();
-
   return rc;
 }
 

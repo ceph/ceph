@@ -16,7 +16,6 @@
 
 #include <iostream>
 #include <sstream>
-using namespace std;
 
 
 #include "common/config.h"
@@ -3358,7 +3357,7 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-  inode_t inode;
+  inode_t inode{};
   memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
   ret = client->fdescribe_layout(fd, &inode.layout);
@@ -3367,13 +3366,13 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t pos = 0;
   bufferlist from_before;
   while (pos < size) {
-    int get = MIN(size-pos, 1048576);
+    int get = std::min<int>(size - pos, 1048576);
 
     Mutex flock("synclient chunk_file lock");
     Cond cond;
     bool done;
     bufferlist bl;
-    
+
     flock.Lock();
     Context *onfinish = new C_SafeCond(&flock, &cond, &done);
     client->filer->read(inode.ino, &inode.layout, CEPH_NOSNAP, pos, get, &bl, 0,

@@ -76,6 +76,15 @@
   $ rbd cp foo@snap
   rbd: destination image name was not specified
   [22]
+  $ rbd deep cp
+  rbd: image name was not specified
+  [22]
+  $ rbd deep cp foo
+  rbd: destination image name was not specified
+  [22]
+  $ rbd deep cp foo@snap
+  rbd: destination image name was not specified
+  [22]
   $ rbd mv
   rbd: image name was not specified
   [22]
@@ -151,10 +160,10 @@
   $ rbd status
   rbd: image name was not specified
   [22]
-  $ rbd map
+  $ rbd device map
   rbd: image name was not specified
   [22]
-  $ rbd unmap
+  $ rbd device unmap
   rbd: unmap requires either image name or device path
   [22]
   $ rbd feature disable

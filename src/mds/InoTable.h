@@ -50,12 +50,12 @@ class InoTable : public MDSTable {
   void reset_state() override;
   void encode_state(bufferlist& bl) const override {
     ENCODE_START(2, 2, bl);
-    ::encode(free, bl);
+    encode(free, bl);
     ENCODE_FINISH(bl);
   }
   void decode_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-    ::decode(free, bl);
+    decode(free, bl);
     projected_free = free;
     DECODE_FINISH(bl);
   }
@@ -100,7 +100,7 @@ class InoTable : public MDSTable {
   {
     if (free.contains(ino)) {
       inodeno_t min = free.begin().get_start();
-      std::cerr << "Erasing 0x" << std::hex << min << " to 0x" << ino << std::dec << std::endl;
+      std::cerr << "Erasing " << min << " to " << ino << std::endl;
       free.erase(min, ino - min + 1);
       projected_free = free;
       projected_version = ++version;

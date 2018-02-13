@@ -197,7 +197,7 @@ static int do_image_resize(ImportDiffContext *idiffctx)
   bufferlist bl;
   bl.append(buf, sizeof(buf));
   bufferlist::iterator p = bl.begin();
-  ::decode(end_size, p);
+  decode(end_size, p);
 
   uint64_t cur_size;
   idiffctx->image->size(&cur_size);
@@ -224,8 +224,8 @@ static int do_image_io(ImportDiffContext *idiffctx, bool discard, size_t sparse_
   bufferlist::iterator p = bl.begin();
 
   uint64_t image_offset, buffer_length;
-  ::decode(image_offset, p);
-  ::decode(buffer_length, p);
+  decode(image_offset, p);
+  decode(buffer_length, p);
 
   if (!discard) {
     bufferptr bp = buffer::create(buffer_length);
@@ -333,7 +333,7 @@ static int read_tag(int fd, __u8 end_tag, int format, __u8 *tag, uint64_t *readl
     bufferlist bl;
     bl.append(buf, sizeof(buf));
     bufferlist::iterator p = bl.begin();
-    ::decode(*readlen, p);
+    decode(*readlen, p);
   }
 
   return 0;
@@ -441,14 +441,15 @@ void get_arguments_diff(po::options_description *positional,
   at::add_no_progress_option(options);
 }
 
-int execute_diff(const po::variables_map &vm) {
+int execute_diff(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
 
-  size_t arg_index = 1;
   std::string pool_name;
   std::string image_name;
   std::string snap_name;
@@ -546,7 +547,7 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
   it = bl.begin();
 
   uint64_t val;
-  ::decode(val, it);
+  decode(val, it);
 
   if (opts.get(imageopt, &val) != 0) {
     opts.set(imageopt, val);
@@ -555,7 +556,46 @@ static int decode_and_set_image_option(int fd, uint64_t imageopt, librbd::ImageO
   return 0;
 }
 
-static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts)
+static int do_import_metadata(int import_format, librbd::Image& image,
+                              const std::map<std::string, std::string> &imagemetas)
+{
+  int r = 0;
+
+  //v1 format
+  if (import_format == 1) {
+    return r;
+  }
+
+  for (std::map<std::string, std::string>::const_iterator it = imagemetas.begin();
+       it != imagemetas.end(); ++it) {
+    r = image.metadata_set(it->first, it->second);
+    if (r < 0)
+      return r;
+  }
+
+  return r;
+}
+
+static int decode_imagemeta(int fd, uint64_t length, std::map<std::string, std::string>* imagemetas)
+{
+  int r;
+  string key;
+  string value;
+
+  r = utils::read_string(fd, length, &key);
+  if (r < 0)
+    return r;
+
+  r = utils::read_string(fd, length, &value);
+  if (r < 0)
+    return r;
+
+  (*imagemetas)[key] = value;
+  return 0;
+}
+
+static int do_import_header(int fd, int import_format, uint64_t &size, librbd::ImageOptions& opts,
+                            std::map<std::string, std::string>* imagemetas)
 {
   // There is no header in v1 image.
   if (import_format == 1) {
@@ -580,7 +620,7 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
 
   while (r == 0) {
     __u8 tag;
-    uint64_t length;
+    uint64_t length = 0;
     r = read_tag(fd, RBD_EXPORT_IMAGE_END, image_format, &tag, &length);
     if (r < 0 || tag == RBD_EXPORT_IMAGE_END) {
       break;
@@ -594,6 +634,8 @@ static int do_import_header(int fd, int import_format, uint64_t &size, librbd::I
       r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_UNIT, opts);
     } else if (tag == RBD_EXPORT_IMAGE_STRIPE_COUNT) {
       r = decode_and_set_image_option(fd, RBD_IMAGE_OPTION_STRIPE_COUNT, opts);
+    } else if (tag == RBD_EXPORT_IMAGE_META) {
+      r = decode_imagemeta(fd, length, imagemetas);
     } else {
       std::cerr << "rbd: invalid tag in image properties zone: " << tag << "Skip it."
                 << std::endl;
@@ -623,8 +665,7 @@ static int do_import_v2(librados::Rados &rados, int fd, librbd::Image &image,
   bl.append(buf, sizeof(buf));
   bufferlist::iterator p = bl.begin();
   uint64_t diff_num;
-  ::decode(diff_num, p);
-
+  decode(diff_num, p);
   for (size_t i = 0; i < diff_num; i++) {
     r = do_import_diff_fd(rados, image, fd, true, 2, sparse_size);
     if (r < 0) {
@@ -743,6 +784,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   int fd, r;
   struct stat stat_buf;
   utils::ProgressContext pc("Importing image", no_progress);
+  std::map<std::string, std::string> imagemetas;
 
   assert(imgname);
 
@@ -796,7 +838,7 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
 #endif
   }
 
-  r = do_import_header(fd, import_format, size, opts);
+  r = do_import_header(fd, import_format, size, opts, &imagemetas);
   if (r < 0) {
     std::cerr << "rbd: import header failed." << std::endl;
     goto done;
@@ -811,6 +853,12 @@ static int do_import(librados::Rados &rados, librbd::RBD &rbd,
   r = rbd.open(io_ctx, image, imgname);
   if (r < 0) {
     std::cerr << "rbd: failed to open image" << std::endl;
+    goto err;
+  }
+
+  r = do_import_metadata(import_format, image, imagemetas);
+  if (r < 0) {
+    std::cerr << "rbd: failed to import image-meta" << std::endl;
     goto err;
   }
 
@@ -856,9 +904,11 @@ void get_arguments(po::options_description *positional,
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE, " (deprecated)");
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
@@ -893,7 +943,6 @@ int execute(const po::variables_map &vm) {
     sparse_size = vm[at::IMAGE_SPARSE_SIZE].as<size_t>();
   }
 
-  size_t arg_index = 1;
   std::string pool_name = deprecated_pool_name;
   std::string image_name;
   std::string snap_name = deprecated_snap_name;

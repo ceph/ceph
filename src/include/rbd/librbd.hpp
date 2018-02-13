@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -15,7 +15,6 @@
 #ifndef __LIBRBD_HPP
 #define __LIBRBD_HPP
 
-#include <stdbool.h>
 #include <string>
 #include <list>
 #include <map>
@@ -39,6 +38,14 @@ namespace librbd {
     uint64_t size;
     std::string name;
   } snap_info_t;
+
+  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
+
+  typedef struct {
+    int64_t group_pool;
+    std::string group_name;
+    std::string group_snap_name;
+  } snap_group_namespace_t;
 
   typedef struct {
     std::string client;
@@ -77,12 +84,19 @@ namespace librbd {
     std::string name;
     int64_t pool;
     group_image_state_t state;
-  } group_image_status_t;
+  } group_image_info_t;
 
   typedef struct {
     std::string name;
     int64_t pool;
-  } group_spec_t;
+  } group_info_t;
+
+  typedef rbd_group_snap_state_t group_snap_state_t;
+
+  typedef struct {
+    std::string name;
+    group_snap_state_t state;
+  } group_snap_info_t;
 
   typedef rbd_image_info_t image_info_t;
 
@@ -100,6 +114,19 @@ namespace librbd {
     time_t deletion_time;
     time_t deferment_end_time;
   } trash_image_info_t;
+
+  typedef struct {
+    std::string pool_name;
+    std::string image_name;
+    std::string image_id;
+    bool trash;
+  } child_info_t;
+
+  typedef struct {
+    std::string addr;
+    int64_t id;
+    uint64_t cookie;
+  } image_watcher_t;
 
 class CEPH_RBD_API RBD
 {
@@ -185,7 +212,7 @@ public:
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
 
-  // RBD consistency groups support functions
+  // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
   int group_remove(IoCtx& io_ctx, const char *group_name);
   int group_list(IoCtx& io_ctx, std::vector<std::string> *names);
@@ -197,7 +224,18 @@ public:
   int group_image_remove_by_id(IoCtx& io_ctx, const char *group_name,
                                IoCtx& image_io_ctx, const char *image_id);
   int group_image_list(IoCtx& io_ctx, const char *group_name,
-		       std::vector<group_image_status_t> *images);
+                       std::vector<group_image_info_t> *images,
+                       size_t group_image_info_size);
+
+  int group_snap_create(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_remove(IoCtx& io_ctx, const char *group_name,
+			const char *snap_name);
+  int group_snap_rename(IoCtx& group_ioctx, const char *group_name,
+                        const char *old_snap_name, const char *new_snap_name);
+  int group_snap_list(IoCtx& group_ioctx, const char *group_name,
+                      std::vector<group_snap_info_t> *snaps,
+                      size_t group_snap_info_size);
 
 private:
   /* We don't allow assignment or copying */
@@ -259,9 +297,10 @@ public:
                    std::string *parent_id, std::string *parent_snapname);
   int old_format(uint8_t *old);
   int size(uint64_t *size);
-  int get_group(group_spec_t *group_spec);
+  int get_group(group_info_t *group_info, size_t group_info_size);
   int features(uint64_t *features);
   int update_features(uint64_t features, bool enabled);
+  int get_op_features(uint64_t *op_features);
   int overlap(uint64_t *overlap);
   int get_flags(uint64_t *flags);
   int set_image_notification(int fd, int type);
@@ -293,6 +332,11 @@ public:
 			  ImageOptions& opts, ProgressContext &prog_ctx,
 			  size_t sparse_size);
 
+  /* deep copy */
+  int deep_copy(IoCtx& dest_io_ctx, const char *destname, ImageOptions& opts);
+  int deep_copy_with_progress(IoCtx& dest_io_ctx, const char *destname,
+                              ImageOptions& opts, ProgressContext &prog_ctx);
+
   /* striping */
   uint64_t get_stripe_unit() const;
   uint64_t get_stripe_count() const;
@@ -306,6 +350,11 @@ public:
    * of this image at the currently set snapshot.
    */
   int list_children(std::set<std::pair<std::string, std::string> > *children);
+  /**
+  * Returns a structure of poolname, imagename, imageid and trash flag
+  * for each clone of this image at the currently set snapshot.
+  */
+  int list_children2(std::vector<librbd::child_info_t> *children);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,
@@ -333,6 +382,11 @@ public:
   int snap_get_limit(uint64_t *limit);
   int snap_set_limit(uint64_t limit);
   int snap_get_timestamp(uint64_t snap_id, struct timespec *timestamp);
+  int snap_get_namespace_type(uint64_t snap_id,
+                              snap_namespace_type_t *namespace_type);
+  int snap_get_group_namespace(uint64_t snap_id,
+                               snap_group_namespace_t *group_namespace,
+                               size_t snap_group_namespace_size);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);
@@ -458,6 +512,8 @@ public:
 
   int update_watch(UpdateWatchCtx *ctx, uint64_t *handle);
   int update_unwatch(uint64_t handle);
+
+  int list_watchers(std::list<image_watcher_t> &watchers);
 
 private:
   friend class RBD;

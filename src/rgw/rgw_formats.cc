@@ -125,9 +125,9 @@ void RGWFormatter_Plain::dump_float(const char *name, double d)
   dump_value_int(name, "%f", d);
 }
 
-void RGWFormatter_Plain::dump_string(const char *name, const std::string& s)
+void RGWFormatter_Plain::dump_string(const char *name, std::string_view s)
 {
-  dump_format(name, "%s", s.c_str());
+  dump_format(name, "%s", s.data());
 }
 
 std::ostream& RGWFormatter_Plain::dump_stream(const char *name)
@@ -218,7 +218,7 @@ void RGWFormatter_Plain::write_data(const char *fmt, ...)
 done:
 #define LARGE_ENOUGH_BUF 4096
   if (!buf) {
-    max_len = max(LARGE_ENOUGH_BUF, size);
+    max_len = std::max(LARGE_ENOUGH_BUF, size);
     buf = (char *)malloc(max_len);
     if (!buf) {
       cerr << "ERROR: RGWFormatter_Plain::write_data: failed allocating " << max_len << " bytes" << std::endl;

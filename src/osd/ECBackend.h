@@ -97,8 +97,6 @@ public:
   void on_change() override;
   void clear_recovery_state() override;
 
-  void on_flushed() override;
-
   void dump_recovery_info(Formatter *f) const override;
 
   void call_write_ordered(std::function<void(void)> &&cb) override;
@@ -213,7 +211,7 @@ public:
 private:
   friend struct ECRecoveryHandle;
   uint64_t get_recovery_chunk_size() const {
-    return ROUND_UP_TO(cct->_conf->osd_recovery_max_chunk,
+    return round_up_to(cct->_conf->osd_recovery_max_chunk,
 			sinfo.get_stripe_width());
   }
 
@@ -320,6 +318,11 @@ private:
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
+  void get_all_avail_shards(
+    const hobject_t &hoid,
+    set<int> &have,
+    map<shard_id_t, pg_shard_t> &shards,
+    bool for_recovery);
 
 public:
   /**
@@ -354,12 +357,12 @@ public:
   };
   struct read_request_t {
     const list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
-    const set<pg_shard_t> need;
+    const map<pg_shard_t, vector<pair<int, int>>> need;
     const bool want_attrs;
     GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb;
     read_request_t(
       const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
-      const set<pg_shard_t> &need,
+      const map<pg_shard_t, vector<pair<int, int>>> &need,
       bool want_attrs,
       GenContext<pair<RecoveryMessages *, read_result_t& > &> *cb)
       : to_read(to_read), need(need), want_attrs(want_attrs),
@@ -593,11 +596,11 @@ public:
 	   ++i) {
 	have.insert(i->shard);
       }
-      set<int> min;
+      map<int, vector<pair<int, int>>> min;
       return ec_impl->minimum_to_decode(want, have, &min) == 0;
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return new ECRecPred(ec_impl);
   }
 
@@ -617,7 +620,7 @@ public:
       return _have.count(whoami) && rec_pred(_have);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() override {
+  IsPGReadablePredicate *get_is_readable_predicate() const override {
     return new ECReadPred(get_parent()->whoami_shard(), ec_impl);
   }
 
@@ -644,13 +647,14 @@ public:
     const set<int> &want,      ///< [in] desired shards
     bool for_recovery,         ///< [in] true if we may use non-acting replicas
     bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-    set<pg_shard_t> *to_read   ///< [out] shards to read
+    map<pg_shard_t, vector<pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
 
   int get_remaining_shards(
     const hobject_t &hoid,
     const set<int> &avail,
-    set<pg_shard_t> *to_read);
+    map<pg_shard_t, vector<pair<int, int>>> *to_read,
+    bool for_recovery);
 
   int objects_get_attrs(
     const hobject_t &hoid,
@@ -661,14 +665,13 @@ public:
     uint64_t old_size,
     ObjectStore::Transaction *t) override;
 
-  bool scrub_supported() override { return true; }
   bool auto_repair_supported() const override { return true; }
 
-  void be_deep_scrub(
-    const hobject_t &obj,
-    uint32_t seed,
-    ScrubMap::object &o,
-    ThreadPool::TPHandle &handle) override;
+  int be_deep_scrub(
+    const hobject_t &poid,
+    ScrubMap &map,
+    ScrubMapBuilder &pos,
+    ScrubMap::object &o) override;
   uint64_t be_get_ondisk_size(uint64_t logical_size) override {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }

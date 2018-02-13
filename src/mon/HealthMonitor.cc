@@ -15,13 +15,12 @@
 #include <stdlib.h>
 #include <limits.h>
 #include <sstream>
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "include/assert.h"
 #include "include/stringify.h"
 
 #include "mon/Monitor.h"
-#include "mon/HealthService.h"
 #include "mon/HealthMonitor.h"
 
 #include "messages/MMonHealthChecks.h"
@@ -61,7 +60,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon->store->get(service_name, "quorum", qbl);
   if (qbl.length()) {
     auto p = qbl.begin();
-    ::decode(quorum_checks, p);
+    decode(quorum_checks, p);
   } else {
     quorum_checks.clear();
   }
@@ -70,7 +69,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
   mon->store->get(service_name, "leader", lbl);
   if (lbl.length()) {
     auto p = lbl.begin();
-    ::decode(leader_checks, p);
+    decode(leader_checks, p);
   } else {
     leader_checks.clear();
   }
@@ -102,10 +101,10 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, version);
 
   bufferlist qbl;
-  ::encode(quorum_checks, qbl);
+  encode(quorum_checks, qbl);
   t->put(service_name, "quorum", qbl);
   bufferlist lbl;
-  ::encode(leader_checks, lbl);
+  encode(leader_checks, lbl);
   t->put(service_name, "leader", lbl);
 
   health_check_map_t pending_health;
@@ -119,20 +118,20 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     pending_health.merge(p.second);
   }
   for (auto &p : pending_health.checks) {
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%hasorhave%"),
+      std::regex("%hasorhave%"),
       names[p.first].size() > 1 ? "have" : "has");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%names%"), stringify(names[p.first]));
-    p.second.summary = boost::regex_replace(
+      std::regex("%names%"), stringify(names[p.first]));
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%plurals%"),
+      std::regex("%plurals%"),
       names[p.first].size() > 1 ? "s" : "");
-    p.second.summary = boost::regex_replace(
+    p.second.summary = std::regex_replace(
       p.second.summary,
-      boost::regex("%isorare%"),
+      std::regex("%isorare%"),
       names[p.first].size() > 1 ? "are" : "is");
   }
 

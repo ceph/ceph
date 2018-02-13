@@ -81,26 +81,33 @@
             };
 
             rivets.formatters.pg_status_style = function(pg_status) {
-                var unhealthy = false;
-                var scrubbing = false;
-                $.each(pg_status, function(state, count) {
-                    if (state == "active+clean") {
+                var warning = false;
+                var error = false;
 
-                    } else if (state == "active+clean+scrubbing"
-                    || state == "active+clean+scrubbing+deep") {
-                        scrubbing = true;
-                    } else {
-                        unhealthy = true;
+                $.each(pg_status, function(state, count) {
+                    if (state.includes("inconsistent") ||
+                        state.includes("incomplete") ||
+                        !state.includes("active")
+                    ) {
+                        error = true;
+                    }
+
+                    if (state != "active+clean"
+                     && state != "active+clean+scrubbing"
+                     && state != "active+clean+scrubbing+deep") {
+                        warning = true;
                     }
                 });
 
-                if (unhealthy) {
-                    return "color: #FFC200";
-                } else if (scrubbing) {
-                    return "color: #0000bb";
-                } else {
-                    return "color: #00bb00";
+                if (error) {
+                    return "color: #FF0000";
                 }
+
+                if (warning) {
+                    return "color: #FFC200";
+                }
+
+                return "color: #00BB00";
             };
 
             rivets.formatters.pg_status = function(pg_status) {
@@ -179,7 +186,15 @@
                         center_text: raw_usage_text,
                         responsive: true,
                         legend: {display: false},
-                        animation: {duration: 0}
+                        animation: {duration: 0},
+                        tooltips: {
+                            callbacks: {
+                                label: function(tooltipItem, chart) {
+                                    return chart.labels[tooltipItem.index] + ": " +
+					    rivets.formatters.dimless_binary(chart.datasets[0].data[tooltipItem.index]);
+                                }
+                            }
+                        }
                     }
                 });
 
@@ -213,7 +228,15 @@
                     options: {
                         responsive: true,
                         legend: {display: false},
-                        animation: {duration: 0}
+                        animation: {duration: 0},
+                        tooltips: {
+                            callbacks: {
+                                label: function(tooltipItem, chart) {
+                                    return chart.labels[tooltipItem.index] + ": " +
+					    rivets.formatters.dimless_binary(chart.datasets[0].data[tooltipItem.index]);
+                                }
+                            }
+                        }
                     }
                 });
             }
@@ -342,7 +365,8 @@
                             <th>Name</th>
                             <th>PG status</th>
                             <th>Usage</th>
-                            <th>Activity</th>
+                            <th colspan="2">Read</th>
+                            <th colspan="2">Write</th>
                             </thead>
                             <tbody>
                             <tr rv-each-pool="pools">
@@ -357,8 +381,16 @@
                                     {pool.stats.max_avail.latest | dimless_binary }
                                 </td>
                                 <td>
-                                    {pool.stats.rd_bytes.rate | dimless } rd, {
-                                    pool.stats.wr_bytes.rate | dimless } wr
+                                    {pool.stats.rd_bytes.rate | dimless }
+                                </td>
+                                <td>
+                                    {pool.stats.rd.rate | dimless } ops
+                                </td>
+                                <td>
+                                    {pool.stats.wr_bytes.rate | dimless }
+                                </td>
+                                <td>
+                                    {pool.stats.wr.rate | dimless } ops
                                 </td>
                             </tr>
                             </tbody>

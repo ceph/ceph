@@ -66,6 +66,26 @@ namespace rbd {
 namespace mirror {
 
 template <>
+struct ImageDeleter<librbd::MockTestImageCtx> {
+  static ImageDeleter* s_instance;
+
+  static void trash_move(librados::IoCtx& local_io_ctx,
+                         const std::string& global_image_id, bool resync,
+                         MockContextWQ* work_queue, Context* on_finish) {
+    assert(s_instance != nullptr);
+    s_instance->trash_move(global_image_id, resync, on_finish);
+  }
+
+  MOCK_METHOD3(trash_move, void(const std::string&, bool, Context*));
+
+  ImageDeleter() {
+    s_instance = this;
+  }
+};
+
+ImageDeleter<librbd::MockTestImageCtx>* ImageDeleter<librbd::MockTestImageCtx>::s_instance = nullptr;
+
+template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
   Mutex &timer_lock;
@@ -81,15 +101,6 @@ struct Threads<librbd::MockTestImageCtx> {
     delete timer;
     delete work_queue;
   }
-};
-
-template <>
-struct ImageDeleter<librbd::MockTestImageCtx> {
-  MOCK_METHOD4(schedule_image_delete, void(RadosRef, int64_t,
-                                           const std::string&, bool));
-  MOCK_METHOD4(wait_for_scheduled_deletion,
-               void(int64_t, const std::string&, Context*, bool));
-  MOCK_METHOD2(cancel_waiter, void(int64_t, const std::string&));
 };
 
 template<>
@@ -141,16 +152,28 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
   static PrepareRemoteImageRequest* s_instance;
   std::string *remote_mirror_uuid = nullptr;
   std::string *remote_image_id = nullptr;
+  cls::journal::ClientState *client_state;
+  ::journal::MockJournalerProxy **remote_journaler = nullptr;
+  librbd::journal::MirrorPeerClientMeta *client_meta = nullptr;
   Context *on_finish = nullptr;
 
-  static PrepareRemoteImageRequest* create(librados::IoCtx &,
+  static PrepareRemoteImageRequest* create(Threads<librbd::MockTestImageCtx> *threads,
+                                           librados::IoCtx &,
                                            const std::string &global_image_id,
+                                           const std::string &local_mirror_uuid,
+                                           const std::string &local_image_id,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
+                                           ::journal::MockJournalerProxy **remote_journaler,
+                                           cls::journal::ClientState *client_state,
+                                           librbd::journal::MirrorPeerClientMeta *client_meta,
                                            Context *on_finish) {
     assert(s_instance != nullptr);
     s_instance->remote_mirror_uuid = remote_mirror_uuid;
     s_instance->remote_image_id = remote_image_id;
+    s_instance->remote_journaler = remote_journaler;
+    s_instance->client_state = client_state;
+    s_instance->client_meta = client_meta;
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -179,6 +202,7 @@ struct BootstrapRequest<librbd::MockTestImageCtx> {
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
       ::journal::MockJournalerProxy *journaler,
+      cls::journal::ClientState *client_state,
       librbd::journal::MirrorPeerClientMeta *client_meta,
       Context *on_finish, bool *do_resync,
       rbd::mirror::ProgressContext *progress_ctx = nullptr) {
@@ -368,31 +392,19 @@ public:
         }));
   }
 
-  void expect_wait_for_scheduled_deletion(MockImageDeleter& mock_image_deleter,
-                                          const std::string& global_image_id,
-                                          int r) {
+  void expect_trash_move(MockImageDeleter& mock_image_deleter,
+                         const std::string& global_image_id,
+                         bool ignore_orphan, int r) {
     EXPECT_CALL(mock_image_deleter,
-                wait_for_scheduled_deletion(_, global_image_id, _, false))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *ctx) {
+                trash_move(global_image_id, ignore_orphan, _))
+      .WillOnce(WithArg<2>(Invoke([this, r](Context* ctx) {
                              m_threads->work_queue->queue(ctx, r);
                            })));
   }
 
-  void expect_cancel_waiter(MockImageDeleter& mock_image_deleter) {
-    EXPECT_CALL(mock_image_deleter, cancel_waiter(m_local_io_ctx.get_id(),
-                                                  "global image id"));
-  }
-
-  void expect_schedule_image_delete(MockImageDeleter& mock_image_deleter,
-                                    const std::string& global_image_id,
-                                    bool ignore_orphan) {
-    EXPECT_CALL(mock_image_deleter,
-                schedule_image_delete(_, _, global_image_id, ignore_orphan));
-  }
-
   bufferlist encode_tag_data(const librbd::journal::TagData &tag_data) {
     bufferlist bl;
-    ::encode(tag_data, bl);
+    encode(tag_data, bl);
     return bl;
   }
 
@@ -422,6 +434,10 @@ public:
                    int r) {
     EXPECT_CALL(mock_request, send())
       .WillOnce(Invoke([&mock_request, image_id, mirror_uuid, r]() {
+                  if (r >= 0) {
+                    *mock_request.remote_journaler = new ::journal::MockJournalerProxy();
+                  }
+
                   *mock_request.remote_mirror_uuid = mirror_uuid;
                   *mock_request.remote_image_id = image_id;
                   mock_request.on_finish->complete(r);
@@ -463,7 +479,7 @@ public:
     client_data.client_meta = image_client_meta;
 
     cls::journal::Client client;
-    ::encode(client_data, client.data);
+    encode(client_data, client.data);
 
     EXPECT_CALL(mock_journaler, get_cached_client("local_mirror_uuid", _))
       .WillOnce(DoAll(SetArgPointee<1>(client),
@@ -558,10 +574,9 @@ public:
                       WithArg<2>(CompleteContext(on_commit_r))));
   }
 
-  void create_image_replayer(MockThreads &mock_threads,
-                             MockImageDeleter &mock_image_deleter) {
+  void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
-      &mock_threads, &mock_image_deleter, &m_instance_watcher,
+      &mock_threads, &m_instance_watcher,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
       "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
     m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
@@ -598,7 +613,6 @@ TEST_F(TestMockImageReplayer, StartStop) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -617,7 +631,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -629,7 +643,6 @@ TEST_F(TestMockImageReplayer, StartStop) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_cancel_waiter(mock_image_deleter);
   expect_shut_down(mock_local_replay, true, 0);
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -650,22 +663,28 @@ TEST_F(TestMockImageReplayer, LocalImagePrimary) {
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
+  journal::MockJournaler mock_remote_journaler;
   MockThreads mock_threads(m_threads);
   expect_work_queue_repeatedly(mock_threads);
   expect_add_event_after_repeatedly(mock_threads);
 
   MockImageDeleter mock_image_deleter;
   MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "", 0);
+  expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
+              "remote image id", 0);
+  EXPECT_CALL(mock_remote_journaler, construct());
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+  expect_shut_down(mock_remote_journaler, 0);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -690,7 +709,6 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, "", "", -ENOENT);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, 0);
@@ -700,7 +718,7 @@ TEST_F(TestMockImageReplayer, LocalImageDNE) {
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -722,11 +740,10 @@ TEST_F(TestMockImageReplayer, PrepareLocalImageError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", -EINVAL);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -749,14 +766,13 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdDNE) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "", -ENOENT);
-  expect_schedule_image_delete(mock_image_deleter, "global image id", false);
+  expect_trash_move(mock_image_deleter, "global image id", false, 0);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -779,13 +795,12 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdNonLinkedDNE) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "some other mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               "", -ENOENT);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -808,13 +823,12 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
               m_remote_image_ctx->id, -EINVAL);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -840,7 +854,6 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -851,7 +864,7 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -883,7 +896,6 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -907,7 +919,7 @@ TEST_F(TestMockImageReplayer, StartExternalReplayError) {
   EXPECT_CALL(mock_remote_journaler, remove_listener(_));
   expect_shut_down(mock_remote_journaler, 0);
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -941,7 +953,6 @@ TEST_F(TestMockImageReplayer, StopError) {
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -960,7 +971,7 @@ TEST_F(TestMockImageReplayer, StopError) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -970,7 +981,6 @@ TEST_F(TestMockImageReplayer, StopError) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_cancel_waiter(mock_image_deleter);
   expect_shut_down(mock_local_replay, true, -EINVAL);
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -1013,7 +1023,6 @@ TEST_F(TestMockImageReplayer, Replay) {
   expect_committed(mock_remote_journaler, 2);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -1032,7 +1041,7 @@ TEST_F(TestMockImageReplayer, Replay) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -1080,7 +1089,6 @@ TEST_F(TestMockImageReplayer, Replay) {
   // STOP
 
   MockCloseImageRequest mock_close_local_image_request;
-  expect_cancel_waiter(mock_image_deleter);
   expect_shut_down(mock_local_replay, true, 0);
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());
@@ -1122,7 +1130,6 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   expect_get_commit_tid_in_debug(mock_replay_entry);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -1141,7 +1148,7 @@ TEST_F(TestMockImageReplayer, DecodeError) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -1224,7 +1231,6 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   expect_committed(mock_remote_journaler, 1);
 
   InSequence seq;
-  expect_wait_for_scheduled_deletion(mock_image_deleter, "global image id", 0);
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
               "remote mirror uuid", 0);
   expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
@@ -1243,7 +1249,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
 
   EXPECT_CALL(mock_remote_journaler, start_live_replay(_, _));
 
-  create_image_replayer(mock_threads, mock_image_deleter);
+  create_image_replayer(mock_threads);
 
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
@@ -1303,7 +1309,6 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
 
   MockCloseImageRequest mock_close_local_image_request;
 
-  expect_cancel_waiter(mock_image_deleter);
   expect_shut_down(mock_local_replay, true, 0);
   EXPECT_CALL(mock_local_journal, remove_listener(_));
   EXPECT_CALL(mock_local_journal, stop_external_replay());

@@ -25,6 +25,8 @@
 
 #include <boost/thread/shared_mutex.hpp>
 
+#include "dmclock/src/dmclock_client.h"
+
 #include "include/assert.h"
 #include "include/buffer.h"
 #include "include/types.h"
@@ -40,7 +42,6 @@
 #include "messages/MOSDOp.h"
 #include "osd/OSDMap.h"
 
-using namespace std;
 
 class Context;
 class Messenger;
@@ -160,7 +161,7 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(op);
     osd_op.op.pgls.count = count;
     osd_op.op.pgls.start_epoch = start_epoch;
-    ::encode(cookie, osd_op.indata);
+    encode(cookie, osd_op.indata);
   }
   void add_pgls_filter(int op, uint64_t count, const bufferlist& filter,
 		       collection_list_handle_t cookie, epoch_t start_epoch) {
@@ -169,10 +170,10 @@ struct ObjectOperation {
     osd_op.op.pgls.start_epoch = start_epoch;
     string cname = "pg";
     string mname = "filter";
-    ::encode(cname, osd_op.indata);
-    ::encode(mname, osd_op.indata);
+    encode(cname, osd_op.indata);
+    encode(mname, osd_op.indata);
     osd_op.indata.append(filter);
-    ::encode(cookie, osd_op.indata);
+    encode(cookie, osd_op.indata);
   }
   void add_alloc_hint(int op, uint64_t expected_object_size,
                       uint64_t expected_write_size,
@@ -238,8 +239,8 @@ struct ObjectOperation {
 	try {
 	  uint64_t size;
 	  ceph::real_time mtime;
-	  ::decode(size, p);
-	  ::decode(mtime, p);
+	  decode(size, p);
+	  decode(mtime, p);
 	  if (psize)
 	    *psize = size;
 	  if (pmtime)
@@ -335,13 +336,20 @@ struct ObjectOperation {
     void finish(int r) override {
       bufferlist::iterator iter = bl.begin();
       if (r >= 0) {
-	try {
-	  ::decode(*extents, iter);
-	  ::decode(*data_bl, iter);
-	} catch (buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
-	}
+        // NOTE: it's possible the sub-op has not been executed but the result
+        // code remains zeroed. Avoid the costly exception handling on a
+        // potential IO path.
+        if (bl.length() > 0) {
+	  try {
+	    decode(*extents, iter);
+	    decode(*data_bl, iter);
+	  } catch (buffer::error& e) {
+	    if (prval)
+              *prval = -EIO;
+	  }
+        } else if (prval) {
+          *prval = -EIO;
+        }
       }
     }
   };
@@ -439,15 +447,15 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
-	    ::decode(*pattrs, p);
+	    decode(*pattrs, p);
 	  if (ptruncated) {
 	    std::map<std::string,bufferlist> ignore;
 	    if (!pattrs) {
-	      ::decode(ignore, p);
+	      decode(ignore, p);
 	      pattrs = &ignore;
 	    }
 	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
+	      decode(*ptruncated, p);
 	    } else {
 	      // the OSD did not provide this.  since old OSDs do not
 	      // enfoce omap result limits either, we can infer it from
@@ -481,15 +489,15 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  if (pattrs)
-	    ::decode(*pattrs, p);
+	    decode(*pattrs, p);
 	  if (ptruncated) {
 	    std::set<std::string> ignore;
 	    if (!pattrs) {
-	      ::decode(ignore, p);
+	      decode(ignore, p);
 	      pattrs = &ignore;
 	    }
 	    if (!p.end()) {
-	      ::decode(*ptruncated, p);
+	      decode(*ptruncated, p);
 	    } else {
 	      // the OSD did not provide this.  since old OSDs do not
 	      // enforce omap result limits either, we can infer it from
@@ -516,7 +524,7 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  obj_list_watch_response_t resp;
-	  ::decode(resp, p);
+	  decode(resp, p);
 	  if (pwatchers) {
 	    for (list<watch_item_t>::iterator i = resp.entries.begin() ;
 		 i != resp.entries.end() ; ++i) {
@@ -549,7 +557,7 @@ struct ObjectOperation {
 	bufferlist::iterator p = bl.begin();
 	try {
 	  obj_list_snap_response_t resp;
-	  ::decode(resp, p);
+	  decode(resp, p);
 	  if (psnaps) {
 	    psnaps->clones.clear();
 	    for (vector<clone_info>::iterator ci = resp.clones.begin();
@@ -604,12 +612,12 @@ struct ObjectOperation {
   }
   void setxattrs(map<string, bufferlist>& attrs) {
     bufferlist bl;
-    ::encode(attrs, bl);
+    encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, 0, bl.length());
   }
   void resetxattrs(const char *prefix, map<string, bufferlist>& attrs) {
     bufferlist bl;
-    ::encode(attrs, bl);
+    encode(attrs, bl);
     add_xattr(CEPH_OSD_OP_RESETXATTRS, prefix, bl);
   }
 
@@ -643,8 +651,8 @@ struct ObjectOperation {
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETKEYS);
     bufferlist bl;
-    ::encode(start_after, bl);
-    ::encode(max_to_get, bl);
+    encode(start_after, bl);
+    encode(max_to_get, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -666,9 +674,9 @@ struct ObjectOperation {
 		     int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALS);
     bufferlist bl;
-    ::encode(start_after, bl);
-    ::encode(max_to_get, bl);
-    ::encode(filter_prefix, bl);
+    encode(start_after, bl);
+    encode(max_to_get, bl);
+    encode(filter_prefix, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -687,7 +695,7 @@ struct ObjectOperation {
 			    int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAPGETVALSBYKEYS);
     bufferlist bl;
-    ::encode(to_get, bl);
+    encode(to_get, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -705,7 +713,7 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp &op = add_op(CEPH_OSD_OP_OMAP_CMP);
     bufferlist bl;
-    ::encode(assertions, bl);
+    encode(assertions, bl);
     op.op.extent.offset = 0;
     op.op.extent.length = bl.length();
     op.indata.claim_append(bl);
@@ -762,7 +770,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	object_copy_data_t copy_reply;
-	::decode(copy_reply, p);
+	decode(copy_reply, p);
 	if (r == -ENOENT) {
 	  if (out_reqids)
 	    *out_reqids = copy_reply.reqids;
@@ -823,8 +831,8 @@ struct ObjectOperation {
 		int *prval) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
-    ::encode(*cursor, osd_op.indata);
-    ::encode(max, osd_op.indata);
+    encode(*cursor, osd_op.indata);
+    encode(max, osd_op.indata);
     unsigned p = ops.size() - 1;
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
@@ -854,7 +862,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	bool isdirty;
-	::decode(isdirty, p);
+	decode(isdirty, p);
 	if (pisdirty)
 	  *pisdirty = isdirty;
       } catch (buffer::error& e) {
@@ -890,7 +898,7 @@ struct ObjectOperation {
       try {
 	bufferlist::iterator p = bl.begin();
 	std::list< std::pair<ceph::real_time, ceph::real_time> > ls;
-	::decode(ls, p);
+	decode(ls, p);
 	if (ptls) {
 	  ptls->clear();
 	  for (auto p = ls.begin(); p != ls.end(); ++p)
@@ -970,7 +978,7 @@ struct ObjectOperation {
 
   void omap_set(const map<string, bufferlist> &map) {
     bufferlist bl;
-    ::encode(map, bl);
+    encode(map, bl);
     add_data(CEPH_OSD_OP_OMAPSETVALS, 0, bl.length(), bl);
   }
 
@@ -984,7 +992,7 @@ struct ObjectOperation {
 
   void omap_rm_keys(const std::set<std::string> &to_remove) {
     bufferlist bl;
-    ::encode(to_remove, bl);
+    encode(to_remove, bl);
     add_data(CEPH_OSD_OP_OMAPRMKEYS, 0, bl.length(), bl);
   }
 
@@ -1010,9 +1018,9 @@ struct ObjectOperation {
               bufferlist &bl, bufferlist *inbl) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY);
     osd_op.op.notify.cookie = cookie;
-    ::encode(prot_ver, *inbl);
-    ::encode(timeout, *inbl);
-    ::encode(bl, *inbl);
+    encode(prot_ver, *inbl);
+    encode(timeout, *inbl);
+    encode(bl, *inbl);
     osd_op.indata.append(*inbl);
   }
 
@@ -1020,9 +1028,9 @@ struct ObjectOperation {
 		  bufferlist& reply_bl) {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_NOTIFY_ACK);
     bufferlist bl;
-    ::encode(notify_id, bl);
-    ::encode(cookie, bl);
-    ::encode(reply_bl, bl);
+    encode(notify_id, bl);
+    encode(cookie, bl);
+    encode(reply_bl, bl);
     osd_op.indata.append(bl);
   }
 
@@ -1077,8 +1085,8 @@ struct ObjectOperation {
     osd_op.op.copy_from.src_version = src_version;
     osd_op.op.copy_from.flags = flags;
     osd_op.op.copy_from.src_fadvise_flags = src_fadvise_flags;
-    ::encode(src, osd_op.indata);
-    ::encode(src_oloc, osd_op.indata);
+    encode(src, osd_op.indata);
+    encode(src_oloc, osd_op.indata);
   }
 
   /**
@@ -1130,8 +1138,22 @@ struct ObjectOperation {
     OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_REDIRECT);
     osd_op.op.copy_from.snapid = snapid;
     osd_op.op.copy_from.src_version = tgt_version;
-    ::encode(tgt, osd_op.indata);
-    ::encode(tgt_oloc, osd_op.indata);
+    encode(tgt, osd_op.indata);
+    encode(tgt_oloc, osd_op.indata);
+  }
+
+  void set_chunk(uint64_t src_offset, uint64_t src_length, object_locator_t tgt_oloc,
+		 object_t tgt_oid, uint64_t tgt_offset) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_SET_CHUNK);
+    encode(src_offset, osd_op.indata);
+    encode(src_length, osd_op.indata);
+    encode(tgt_oloc, osd_op.indata);
+    encode(tgt_oid, osd_op.indata);
+    encode(tgt_offset, osd_op.indata);
+  }
+
+  void tier_promote() {
+    add_op(CEPH_OSD_OP_TIER_PROMOTE);
   }
 
   void set_alloc_hint(uint64_t expected_object_size,
@@ -1186,6 +1208,8 @@ public:
   MonClient *monc;
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
+  std::unique_ptr<dmc::ServiceTracker<int>> qos_trk;
+  std::atomic<bool> mclock_service_tracker;
 private:
   OSDMap    *osdmap;
 public:
@@ -1222,11 +1246,11 @@ private:
   version_t last_seen_pgmap_version;
 
   mutable boost::shared_mutex rwlock;
-  using lock_guard = std::unique_lock<decltype(rwlock)>;
+  using lock_guard = std::lock_guard<decltype(rwlock)>;
   using unique_lock = std::unique_lock<decltype(rwlock)>;
   using shared_lock = boost::shared_lock<decltype(rwlock)>;
   using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
-  ceph::timer<ceph::mono_clock> timer;
+  ceph::timer<ceph::coarse_mono_clock> timer;
 
   PerfCounters *logger;
 
@@ -1235,6 +1259,7 @@ private:
   void start_tick();
   void tick();
   void update_crush_location();
+  void update_mclock_service_tracker();
 
   class RequestStateHook;
 
@@ -1243,7 +1268,6 @@ private:
 public:
   /*** track pending operations ***/
   // read
- public:
 
   struct OSDSession;
 
@@ -1348,7 +1372,7 @@ public:
     version_t *objver;
     epoch_t *reply_epoch;
 
-    ceph::mono_time stamp;
+    ceph::coarse_mono_time stamp;
 
     epoch_t map_dne_bound;
 
@@ -1460,8 +1484,8 @@ public:
 	bufferlist::iterator p = bl.begin();
 	uint64_t s;
 	ceph::real_time m;
-	::decode(s, p);
-	::decode(m, p);
+	decode(s, p);
+	decode(m, p);
 	if (psize)
 	  *psize = s;
 	if (pmtime)
@@ -1480,7 +1504,7 @@ public:
     void finish(int r) override {
       if (r >= 0) {
 	bufferlist::iterator p = bl.begin();
-	::decode(attrset, p);
+	decode(attrset, p);
       }
       fin->complete(r);
     }
@@ -1549,7 +1573,7 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
   };
 
   struct StatfsOp {
@@ -1559,7 +1583,7 @@ public:
     Context *onfinish;
     uint64_t ontimeout;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
   };
 
   struct PoolOp {
@@ -1574,7 +1598,7 @@ public:
     snapid_t snapid;
     bufferlist *blp;
 
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
     PoolOp() : tid(0), pool(0), onfinish(NULL), ontimeout(0), pool_op(0),
 	       auid(0), crush_rule(0), snapid(0), blp(NULL) {}
   };
@@ -1600,7 +1624,7 @@ public:
 
     Context *onfinish = nullptr;
     uint64_t ontimeout = 0;
-    ceph::mono_time last_submit;
+    ceph::coarse_mono_time last_submit;
 
     CommandOp(
       int target_osd,
@@ -1669,7 +1693,7 @@ public:
     version_t *pobjver;
 
     bool is_watch;
-    ceph::mono_time watch_valid_thru; ///< send time for last acked ping
+    ceph::coarse_mono_time watch_valid_thru; ///< send time for last acked ping
     int last_error;  ///< error from last failed ping|reconnect, if any
     boost::shared_mutex watch_lock;
     using lock_guard = std::unique_lock<decltype(watch_lock)>;
@@ -1679,7 +1703,7 @@ public:
 
     // queue of pending async operations, with the timestamp of
     // when they were queued.
-    list<ceph::mono_time> watch_pending_async;
+    list<ceph::coarse_mono_time> watch_pending_async;
 
     uint32_t register_gen;
     bool registered;
@@ -1701,7 +1725,7 @@ public:
 
     void _queued_async() {
       // watch_lock ust be locked unique
-      watch_pending_async.push_back(ceph::mono_clock::now());
+      watch_pending_async.push_back(ceph::coarse_mono_clock::now());
     }
     void finished_async() {
       unique_lock l(watch_lock);
@@ -1726,9 +1750,8 @@ public:
 		 ping_tid(0),
 		 map_dne_bound(0) {}
 
-    // no copy!
-    const LingerOp &operator=(const LingerOp& r);
-    LingerOp(const LingerOp& o);
+    const LingerOp &operator=(const LingerOp& r) = delete;
+    LingerOp(const LingerOp& o) = delete;
 
     uint64_t get_cookie() {
       return reinterpret_cast<uint64_t>(this);
@@ -1772,7 +1795,7 @@ public:
   struct C_Linger_Ping : public Context {
     Objecter *objecter;
     LingerOp *info;
-    ceph::mono_time sent;
+    ceph::coarse_mono_time sent;
     uint32_t register_gen;
     C_Linger_Ping(Objecter *o, LingerOp *l)
       : objecter(o), info(l), register_gen(info->register_gen) {
@@ -1878,7 +1901,7 @@ public:
   ceph::timespan osd_timeout;
 
   MOSDOp *_prepare_osd_op(Op *op);
-  void _send_op(Op *op, MOSDOp *m = NULL);
+  void _send_op(Op *op);
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void finish_op(OSDSession *session, ceph_tid_t tid);
@@ -1898,6 +1921,9 @@ public:
   };
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
+  void _prune_snapc(
+    const mempool::osdmap::map<int64_t, OSDMap::snap_interval_set_t>& new_removed_snaps,
+    Op *op);
 
   bool target_should_be_paused(op_target_t *op);
   int _calc_target(op_target_t *t, Connection *con,
@@ -1922,7 +1948,7 @@ public:
   void _linger_commit(LingerOp *info, int r, bufferlist& outbl);
   void _linger_reconnect(LingerOp *info, int r);
   void _send_linger_ping(LingerOp *info);
-  void _linger_ping(LingerOp *info, int r, ceph::mono_time sent,
+  void _linger_ping(LingerOp *info, int r, ceph::coarse_mono_time sent,
 		    uint32_t register_gen);
   int _normalize_watch_error(int r);
 
@@ -1943,7 +1969,6 @@ private:
   void _send_command_map_check(CommandOp *op);
   void _command_cancel_map_check(CommandOp *op);
 
-  void kick_requests(OSDSession *session);
   void _kick_requests(OSDSession *session, map<uint64_t, LingerOp *>& lresend);
   void _linger_ops_resend(map<uint64_t, LingerOp *>& lresend, unique_lock& ul);
 
@@ -1998,6 +2023,7 @@ private:
 	   double osd_timeout) :
     Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
     trace_endpoint("0.0.0.0", 0, "Objecter"),
+    mclock_service_tracker(cct->_conf->objecter_mclock_service_tracker),
     osdmap(new OSDMap),
     max_linger_id(0),
     keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
@@ -2012,7 +2038,11 @@ private:
     op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
     epoch_barrier(0),
     retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+  {
+    if (cct->_conf->objecter_mclock_service_tracker) {
+      qos_trk = std::make_unique<dmc::ServiceTracker<int>>();
+    }
+  }
   ~Objecter() override;
 
   void init();
@@ -2055,14 +2085,16 @@ private:
   void set_osdmap_full_try() { osdmap_full_try = true; }
   void unset_osdmap_full_try() { osdmap_full_try = false; }
 
-  void _scan_requests(OSDSession *s,
-		      bool force_resend,
-		      bool cluster_full,
-		      map<int64_t, bool> *pool_full_map,
-		      map<ceph_tid_t, Op*>& need_resend,
-		      list<LingerOp*>& need_resend_linger,
-		      map<ceph_tid_t, CommandOp*>& need_resend_command,
-		      shunique_lock& sul);
+  void _scan_requests(
+    OSDSession *s,
+    bool skipped_map,
+    bool cluster_full,
+    map<int64_t, bool> *pool_full_map,
+    map<ceph_tid_t, Op*>& need_resend,
+    list<LingerOp*>& need_resend_linger,
+    map<ceph_tid_t, CommandOp*>& need_resend_command,
+    shunique_lock& sul,
+    const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
 
   int64_t get_object_hash_position(int64_t pool, const string& key,
 				   const string& ns);

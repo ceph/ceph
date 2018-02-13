@@ -21,6 +21,10 @@ namespace librbd {
 class MockImageCtx;
 }
 
+ACTION_P(CopyInBufferlist, str) {
+  arg0->append(str);
+}
+
 ACTION_P(CompleteContext, r) {
   arg0->complete(r);
 }
@@ -28,6 +32,10 @@ ACTION_P(CompleteContext, r) {
 ACTION_P2(CompleteContext, wq, r) {
   ContextWQ *context_wq = reinterpret_cast<ContextWQ *>(wq);
   context_wq->queue(arg0, r);
+}
+
+ACTION_P(GetReference, ref_object) {
+  ref_object->get();
 }
 
 MATCHER_P(ContentsEqual, bl, "") {

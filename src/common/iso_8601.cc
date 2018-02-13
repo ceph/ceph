@@ -1,10 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <iomanip>
+#include <sstream>
+
 #include "iso_8601.h"
 #include "include/timegm.h"
-
-#include <sstream>
 
 namespace ceph {
 using std::chrono::duration_cast;
@@ -58,7 +59,7 @@ optional<real_time> from_iso_8601(const string_ref s,
     return f;
   };
 
-  auto read_digits = [end, &read_digit](sriter& c, std::size_t n) {
+  auto read_digits = [&read_digit](sriter& c, std::size_t n) {
     auto v = 0ULL;
     for (auto i = 0U; i < n; ++i) {
       auto d = read_digit(c);

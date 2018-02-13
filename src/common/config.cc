@@ -41,7 +41,7 @@ using std::ostringstream;
 using std::pair;
 using std::string;
 
-const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
+static const char *CEPH_CONF_FILE_DEFAULT = "$data_dir/config, /etc/ceph/$cluster.conf, ~/.ceph/$cluster.conf, $cluster.conf"
 #if defined(__FreeBSD__)
     ", /usr/local/etc/ceph/$cluster.conf"
 #endif
@@ -87,9 +87,11 @@ md_config_t::md_config_t(bool is_daemon)
       // We may be instantiated pre-logging so send 
       std::cerr << "Duplicate config key in schema: '" << i.name << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
-    schema.insert({i.name, i});
+    schema.emplace(std::piecewise_construct,
+		   std::forward_as_tuple(i.name),
+		   std::forward_as_tuple(i));
   }
 
   // Populate list of legacy_values according to the OPTION() definitions
@@ -131,7 +133,7 @@ md_config_t::md_config_t(bool is_daemon)
         // This is the compiled-in default that is failing its own option's
         // validation, so this is super-invalid and should never make it
         // past a pull request: crash out.
-        assert(false);
+        ceph_abort();
       }
     }
 
@@ -160,7 +162,7 @@ void md_config_t::validate_schema()
       if (schema.count(see_also_key) == 0) {
         std::cerr << "Non-existent see-also key '" << see_also_key
                   << "' on option '" << opt.name << "'" << std::endl;
-        assert(false);
+        ceph_abort();
       }
     }
   }
@@ -169,7 +171,7 @@ void md_config_t::validate_schema()
     if (schema.count(i.first) == 0) {
       std::cerr << "Schema is missing legacy field '" << i.first << "'"
                 << std::endl;
-      assert(false);
+      ceph_abort();
     }
   }
 }
@@ -221,7 +223,7 @@ int md_config_t::parse_config_files(const char *conf_files,
 {
   Mutex::Locker l(lock);
 
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return -ENOSYS;
 
   if (!cluster.size() && !conf_files) {
@@ -372,7 +374,7 @@ int md_config_t::parse_config_files_impl(const std::list<std::string> &conf_file
 void md_config_t::parse_env()
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads)
+  if (safe_to_start_threads)
     return;
   if (getenv("CEPH_KEYRING")) {
     set_val_or_die("keyring", getenv("CEPH_KEYRING"));
@@ -389,6 +391,17 @@ void md_config_t::show_config(Formatter *f)
 {
   Mutex::Locker l(lock);
   _show_config(NULL, f);
+}
+
+void md_config_t::config_options(Formatter *f)
+{
+  Mutex::Locker l(lock);
+  f->open_array_section("options");
+  for (const auto& i: schema) {
+    const Option &opt = i.second;
+    opt.dump(f);
+  }
+  f->close_section();
 }
 
 void md_config_t::_show_config(std::ostream *out, Formatter *f)
@@ -430,7 +443,7 @@ void md_config_t::_show_config(std::ostream *out, Formatter *f)
 int md_config_t::parse_argv(std::vector<const char*>& args)
 {
   Mutex::Locker l(lock);
-  if (internal_safe_to_start_threads) {
+  if (safe_to_start_threads) {
     return -ENOSYS;
   }
 
@@ -662,13 +675,6 @@ void md_config_t::apply_changes(std::ostream *oss)
     _apply_changes(oss);
 }
 
-bool md_config_t::_internal_field(const string& s)
-{
-  if (s == "internal_safe_to_start_threads")
-    return true;
-  return false;
-}
-
 void md_config_t::_apply_changes(std::ostream *oss)
 {
   /* Maps observers to the configuration options that they care about which
@@ -698,8 +704,7 @@ void md_config_t::_apply_changes(std::ostream *oss)
     pair < obs_map_t::iterator, obs_map_t::iterator >
       range(observers.equal_range(key));
     if ((oss) &&
-	(!_get_val(key.c_str(), &bufptr, sizeof(buf))) &&
-	!_internal_field(key)) {
+	!_get_val(key.c_str(), &bufptr, sizeof(buf))) {
       (*oss) << key << " = '" << buf << "' ";
       if (range.first == range.second) {
 	(*oss) << "(not observed, change may require restart) ";
@@ -726,8 +731,16 @@ void md_config_t::_apply_changes(std::ostream *oss)
 void md_config_t::call_all_observers()
 {
   std::map<md_config_obs_t*,std::set<std::string> > obs;
+  // Have the scope of the lock extend to the scope of
+  // handle_conf_change since that function expects to be called with
+  // the lock held. (And the comment in config.h says that is the
+  // expected behavior.)
+  //
+  // An alternative might be to pass a std::unique_lock to
+  // handle_conf_change and have a version of get_var that can take it
+  // by reference and lock as appropriate.
+  Mutex::Locker l(lock);
   {
-    Mutex::Locker l(lock);
 
     expand_all_meta();
 
@@ -740,6 +753,16 @@ void md_config_t::call_all_observers()
        ++p) {
     p->first->handle_conf_change(this, p->second);
   }
+}
+
+void md_config_t::set_safe_to_start_threads()
+{
+  safe_to_start_threads = true;
+}
+
+void md_config_t::_clear_safe_to_start_threads()
+{
+  safe_to_start_threads = false;
 }
 
 int md_config_t::injectargs(const std::string& s, std::ostream *oss)
@@ -831,7 +854,7 @@ int md_config_t::set_val(const std::string &key, const char *val,
   const auto &opt_iter = schema.find(k);
   if (opt_iter != schema.end()) {
     const Option &opt = opt_iter->second;
-    if ((!opt.is_safe()) && internal_safe_to_start_threads) {
+    if ((!opt.is_safe()) && safe_to_start_threads) {
       // If threads have been started and the option is not thread safe
       if (observers.find(opt.name) == observers.end()) {
         // And there is no observer to safely change it...
@@ -866,10 +889,10 @@ int md_config_t::get_val(const std::string &key, char **buf, int len) const
 Option::value_t md_config_t::get_val_generic(const std::string &key) const
 {
   Mutex::Locker l(lock);
-  return _get_val(key);
+  return _get_val_generic(key);
 }
 
-Option::value_t md_config_t::_get_val(const std::string &key) const
+Option::value_t md_config_t::_get_val_generic(const std::string &key) const
 {
   assert(lock.is_locked());
 
@@ -893,8 +916,7 @@ Option::value_t md_config_t::_get_val(const std::string &key) const
 int md_config_t::_get_val(const std::string &key, std::string *value) const {
   assert(lock.is_locked());
 
-  std::string normalized_key(ConfFile::normalize_key_name(key));
-  Option::value_t config_value = _get_val(normalized_key.c_str());
+  auto config_value = _get_val_generic(key);
   if (!boost::get<boost::blank>(&config_value)) {
     ostringstream oss;
     if (bool *flag = boost::get<bool>(&config_value)) {

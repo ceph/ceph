@@ -188,8 +188,9 @@ void MonmapMonitor::on_active()
     mon->has_ever_joined = true;
   }
 
-  if (mon->is_leader())
-    mon->clog->info() << "monmap " << *mon->monmap;
+  if (mon->is_leader()) {
+    mon->clog->debug() << "monmap " << *mon->monmap;
+  }
 
   apply_mon_features(mon->get_quorum_mon_features());
 }
@@ -280,7 +281,7 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       p->decode(bl);
     }
 
-    assert(p != NULL);
+    assert(p);
 
     if (prefix == "mon getmap") {
       p->encode(rdata, m->get_connection()->get_features());
@@ -307,8 +308,10 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
       ss << "dumped monmap epoch " << p->get_epoch();
     }
-    if (p != mon->monmap)
+    if (p != mon->monmap) {
        delete p;
+       p = nullptr;
+    }
 
   } else if (prefix == "mon feature ls") {
    
@@ -766,7 +769,7 @@ void MonmapMonitor::check_sub(Subscription *sub)
   if (sub->next <= epoch) {
     mon->send_latest_monmap(sub->session->con.get());
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

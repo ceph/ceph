@@ -21,12 +21,13 @@ namespace librados {
 namespace librbd {
   namespace cls_client {
     // high-level interface to the header
-    void get_immutable_metadata_start(librados::ObjectReadOperation *op);
-    int get_immutable_metadata_finish(bufferlist::iterator *it,
-                                      std::string *object_prefix,
-                                      uint8_t *order);
-    int get_immutable_metadata(librados::IoCtx *ioctx, const std::string &oid,
-			       std::string *object_prefix, uint8_t *order);
+    void get_initial_metadata_start(librados::ObjectReadOperation *op);
+    int get_initial_metadata_finish(bufferlist::iterator *it,
+                                    std::string *object_prefix,
+                                    uint8_t *order,
+                                    uint64_t *features);
+    int get_initial_metadata(librados::IoCtx *ioctx, const std::string &oid,
+                             std::string *object_prefix, uint8_t *order, uint64_t *features);
 
     void get_mutable_metadata_start(librados::ObjectReadOperation *op,
                                     bool read_only);
@@ -71,9 +72,14 @@ namespace librbd {
     int set_size(librados::IoCtx *ioctx, const std::string &oid,
 		 uint64_t size);
     void set_size(librados::ObjectWriteOperation *op, uint64_t size);
+
+    void get_parent_start(librados::ObjectReadOperation *op, snapid_t snap_id);
+    int get_parent_finish(bufferlist::iterator *it, ParentSpec *pspec,
+                          uint64_t *parent_overlap);
     int get_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   snapid_t snap_id, ParentSpec *pspec,
 		   uint64_t *parent_overlap);
+
     int set_parent(librados::IoCtx *ioctx, const std::string &oid,
 		   const ParentSpec &pspec, uint64_t parent_overlap);
     void set_parent(librados::ObjectWriteOperation *op,
@@ -88,6 +94,14 @@ namespace librbd {
 		  vector<uint64_t> *snap_flags);
     void set_flags(librados::ObjectWriteOperation *op, snapid_t snap_id,
                    uint64_t flags, uint64_t mask);
+    void op_features_get_start(librados::ObjectReadOperation *op);
+    int op_features_get_finish(bufferlist::iterator *it, uint64_t *op_features);
+    int op_features_get(librados::IoCtx *ioctx, const std::string &oid,
+		        uint64_t *op_features);
+    void op_features_set(librados::ObjectWriteOperation *op,
+                         uint64_t op_features, uint64_t mask);
+    int op_features_set(librados::IoCtx *ioctx, const std::string &oid,
+                        uint64_t op_features, uint64_t mask);
     int remove_parent(librados::IoCtx *ioctx, const std::string &oid);
     void remove_parent(librados::ObjectWriteOperation *op);
     int add_child(librados::IoCtx *ioctx, const std::string &oid,
@@ -104,6 +118,20 @@ namespace librbd {
                             std::set<string> *children);
     int get_children(librados::IoCtx *ioctx, const std::string &oid,
                       const ParentSpec &pspec, set<string>& children);
+
+    void snapshot_get_start(librados::ObjectReadOperation *op,
+                            const std::vector<snapid_t> &ids);
+    int snapshot_get_finish(bufferlist::iterator *it,
+                            const std::vector<snapid_t> &ids,
+                            std::vector<cls::rbd::SnapshotInfo>* snaps,
+                            std::vector<ParentInfo> *parents,
+                            std::vector<uint8_t> *protection_statuses);
+    int snapshot_get(librados::IoCtx* ioctx, const std::string& oid,
+                     const std::vector<snapid_t>& ids,
+                     std::vector<cls::rbd::SnapshotInfo>* snaps,
+                     std::vector<ParentInfo> *parents,
+                     std::vector<uint8_t> *protection_statuses);
+
     void snapshot_add(librados::ObjectWriteOperation *op, snapid_t snap_id,
 		      const std::string &snap_name,
 		      const cls::rbd::SnapshotNamespace &snap_namespace);
@@ -111,9 +139,16 @@ namespace librbd {
     void snapshot_rename(librados::ObjectWriteOperation *op,
 			snapid_t src_snap_id,
 			const std::string &dst_name);
+    void snapshot_trash_add(librados::ObjectWriteOperation *op,
+                            snapid_t snap_id);
+
+    void get_snapcontext_start(librados::ObjectReadOperation *op);
+    int get_snapcontext_finish(bufferlist::iterator *it,
+                               ::SnapContext *snapc);
     int get_snapcontext(librados::IoCtx *ioctx, const std::string &oid,
 			::SnapContext *snapc);
 
+    /// NOTE: remove after Luminous is retired
     void snapshot_list_start(librados::ObjectReadOperation *op,
                              const std::vector<snapid_t> &ids);
     int snapshot_list_finish(bufferlist::iterator *it,
@@ -122,17 +157,6 @@ namespace librbd {
                              std::vector<uint64_t> *sizes,
                              std::vector<ParentInfo> *parents,
                              std::vector<uint8_t> *protection_statuses);
-    void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
-                                       const std::vector<snapid_t> &ids);
-
-    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
-                                       const std::vector<snapid_t> &ids,
-                                       std::vector<utime_t> *timestamps);
-
-    int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
-                                const std::vector<snapid_t> &ids,
-                                std::vector<utime_t> *timestamps);
-
     int snapshot_list(librados::IoCtx *ioctx, const std::string &oid,
 		      const std::vector<snapid_t> &ids,
 		      std::vector<string> *names,
@@ -140,14 +164,15 @@ namespace librbd {
 		      std::vector<ParentInfo> *parents,
 		      std::vector<uint8_t> *protection_statuses);
 
-    void snapshot_namespace_list_start(librados::ObjectReadOperation *op,
+    /// NOTE: remove after Luminous is retired
+    void snapshot_timestamp_list_start(librados::ObjectReadOperation *op,
                                        const std::vector<snapid_t> &ids);
-    int snapshot_namespace_list_finish(bufferlist::iterator *it,
+    int snapshot_timestamp_list_finish(bufferlist::iterator *it,
                                        const std::vector<snapid_t> &ids,
-                                       std::vector<cls::rbd::SnapshotNamespace> *namespaces);
-    int snapshot_namespace_list(librados::IoCtx *ioctx, const std::string &oid,
+                                       std::vector<utime_t> *timestamps);
+    int snapshot_timestamp_list(librados::IoCtx *ioctx, const std::string &oid,
                                 const std::vector<snapid_t> &ids,
-                                std::vector<cls::rbd::SnapshotNamespace> *namespaces);
+                                std::vector<utime_t> *timestamps);
 
     void get_all_features_start(librados::ObjectReadOperation *op);
     int get_all_features_finish(bufferlist::iterator *it,
@@ -157,8 +182,15 @@ namespace librbd {
 
     int copyup(librados::IoCtx *ioctx, const std::string &oid,
 	       bufferlist data);
+
+    /// NOTE: remove protection after clone v1 is retired
+    void get_protection_status_start(librados::ObjectReadOperation *op,
+                                     snapid_t snap_id);
+    int get_protection_status_finish(bufferlist::iterator *it,
+                                     uint8_t *protection_status);
     int get_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t *protection_status);
+
     int set_protection_status(librados::IoCtx *ioctx, const std::string &oid,
 			      snapid_t snap_id, uint8_t protection_status);
     void set_protection_status(librados::ObjectWriteOperation *op,
@@ -201,6 +233,24 @@ namespace librbd {
                         const std::string &key);
     int metadata_get(librados::IoCtx *ioctx, const std::string &oid,
                      const std::string &key, string *v);
+
+    void child_attach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_attach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void child_detach(librados::ObjectWriteOperation *op, snapid_t snap_id,
+                      const cls::rbd::ChildImageSpec& child_image);
+    int child_detach(librados::IoCtx *ioctx, const std::string &oid,
+                     snapid_t snap_id,
+                     const cls::rbd::ChildImageSpec& child_image);
+    void children_list_start(librados::ObjectReadOperation *op,
+                             snapid_t snap_id);
+    int children_list_finish(bufferlist::iterator *it,
+                             cls::rbd::ChildImageSpecs *child_images);
+    int children_list(librados::IoCtx *ioctx, const std::string &oid,
+                      snapid_t snap_id,
+                      cls::rbd::ChildImageSpecs *child_images);
 
     // operations on rbd_id objects
     void get_id_start(librados::ObjectReadOperation *op);
@@ -395,7 +445,6 @@ namespace librbd {
                                  const std::string &global_image_id);
 
     // Consistency groups functions
-    int group_create(librados::IoCtx *ioctx, const std::string &oid);
     int group_dir_list(librados::IoCtx *ioctx, const std::string &oid,
 		    const std::string &start, uint64_t max_return,
 		    map<string, string> *groups);
@@ -411,15 +460,26 @@ namespace librbd {
 			 std::vector<cls::rbd::GroupImageStatus> *images);
     int group_image_set(librados::IoCtx *ioctx, const std::string &oid,
 			const cls::rbd::GroupImageStatus &st);
-    int image_add_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_add(librados::IoCtx *ioctx, const std::string &oid,
 	                const cls::rbd::GroupSpec &group_spec);
-    int image_remove_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_remove(librados::IoCtx *ioctx, const std::string &oid,
 			   const cls::rbd::GroupSpec &group_spec);
-    void image_get_group_start(librados::ObjectReadOperation *op);
-    int image_get_group_finish(bufferlist::iterator *iter,
+    void image_group_get_start(librados::ObjectReadOperation *op);
+    int image_group_get_finish(bufferlist::iterator *iter,
                                cls::rbd::GroupSpec *group_spec);
-    int image_get_group(librados::IoCtx *ioctx, const std::string &oid,
+    int image_group_get(librados::IoCtx *ioctx, const std::string &oid,
 			cls::rbd::GroupSpec *group_spec);
+    int group_snap_set(librados::IoCtx *ioctx, const std::string &oid,
+		       const cls::rbd::GroupSnapshot &snapshot);
+    int group_snap_remove(librados::IoCtx *ioctx, const std::string &oid,
+			  const std::string &snap_id);
+    int group_snap_get_by_id(librados::IoCtx *ioctx, const std::string &oid,
+			     const std::string &snap_id,
+			     cls::rbd::GroupSnapshot *snapshot);
+    int group_snap_list(librados::IoCtx *ioctx, const std::string &oid,
+			const cls::rbd::GroupSnapshot &start,
+			uint64_t max_return,
+			std::vector<cls::rbd::GroupSnapshot> *snapshots);
 
     // operations on rbd_trash object
     void trash_add(librados::ObjectWriteOperation *op,

@@ -13,6 +13,7 @@
  */
 
 #include "include/compat.h"
+#include <iterator>
 #include <sys/socket.h>
 #include <netinet/tcp.h>
 #include <sys/uio.h>
@@ -59,7 +60,7 @@ int Accepter::create_selfpipe(int *pipe_rd, int *pipe_wr) {
 #else
   int ret = ::pipe(selfpipe);
   if (ret == 0) {
-    for (int i = 0; i < ceph::size(selfpipe); i++) {
+    for (int i = 0; i < std::size(selfpipe); i++) {
       int f = fcntl(selfpipe[i], F_GETFD);
       fcntl(selfpipe[i], F_SETFD, f | FD_CLOEXEC | O_NONBLOCK);
     }
@@ -295,7 +296,6 @@ void *Accepter::entry()
   ldout(msgr->cct,1) << __func__ << " start" << dendl;
   
   int errors = 0;
-  int ch;
 
   struct pollfd pfd[2];
   memset(pfd, 0, sizeof(pfd));
@@ -327,7 +327,8 @@ void *Accepter::entry()
     if (pfd[1].revents & (POLLIN | POLLERR | POLLNVAL | POLLHUP)) {
       // We got "signaled" to exit the poll
       // clean the selfpipe
-      if (::read(shutdown_rd_fd, &ch, 1) == -1) {
+      char ch;
+      if (::read(shutdown_rd_fd, &ch, sizeof(ch)) == -1) {
         if (errno != EAGAIN)
           ldout(msgr->cct,1) << __func__ << " Cannot read selfpipe: "
  			      << " errno " << errno << " " << cpp_strerror(errno) << dendl;
@@ -379,8 +380,8 @@ void Accepter::stop()
     return;
 
   // Send a byte to the shutdown pipe that the thread is listening to
-  char buf[1] = { 0x0 };
-  int ret = safe_write(shutdown_wr_fd, buf, 1);
+  char ch = 0x0;
+  int ret = safe_write(shutdown_wr_fd, &ch, sizeof(ch));
   if (ret < 0) {
     ldout(msgr->cct,1) << __func__ << "close failed: "
              << " errno " << errno << " " << cpp_strerror(errno) << dendl;

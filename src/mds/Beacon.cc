@@ -34,7 +34,7 @@
 #define dout_prefix *_dout << "mds.beacon." << name << ' '
 
 
-Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string name_) :
+Beacon::Beacon(CephContext *cct_, MonClient *monc_, std::string_view name_) :
   Dispatcher(cct_), lock("Beacon"), monc(monc_), timer(g_ceph_context, lock),
   name(name_), standby_for_rank(MDS_RANK_NONE),
   standby_for_fscid(FS_CLUSTER_ID_NONE), want_state(MDSMap::STATE_BOOT),
@@ -412,7 +412,7 @@ void Beacon::notify_health(MDSRank const *mds)
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
-          m.metadata["client_id"] = stringify(session->info.inst.name.num());
+          m.metadata["client_id"] = stringify(session->get_client());
           late_recall_metrics.push_back(m);
         } else {
           dout(20) << "  within timeout " << session->recalled_at << " vs. " << cutoff << dendl;
@@ -425,7 +425,7 @@ void Beacon::notify_health(MDSRank const *mds)
 	std::ostringstream oss;
 	oss << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid";
 	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());
-	m.metadata["client_id"] = stringify(session->info.inst.name.num());
+	m.metadata["client_id"] = stringify(session->get_client());
 	large_completed_requests_metrics.push_back(m);
       }
     }

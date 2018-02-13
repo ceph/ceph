@@ -30,7 +30,7 @@ using namespace libradosstriper;
 #include "common/TextTable.h"
 #include "include/stringify.h"
 #include "mds/inode_backtrace.h"
-#include "auth/Crypto.h"
+#include "include/random.h"
 #include <iostream>
 #include <fstream>
 
@@ -53,6 +53,7 @@ using namespace libradosstriper;
 #include "RadosImport.h"
 
 using namespace librados;
+using ceph::util::generate_random_number;
 
 // two steps seem to be necessary to do this right
 #define STR(x) _STR(x)
@@ -81,10 +82,10 @@ void usage(ostream& out)
 "   rmsnap <snap-name>               remove snap <snap-name>\n"
 "\n"
 "OBJECT COMMANDS\n"
-"   get <obj-name> [outfile]         fetch object\n"
-"   put <obj-name> [infile] [--offset offset]\n"
+"   get <obj-name> <outfile>         fetch object\n"
+"   put <obj-name> <infile> [--offset offset]\n"
 "                                    write object with start offset (default:0)\n"
-"   append <obj-name> [infile]       append object\n"
+"   append <obj-name> <infile>       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
 "   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
@@ -95,6 +96,7 @@ void usage(ostream& out)
 "   rmxattr <obj-name> attr\n"
 "   stat <obj-name>                  stat the named object\n"
 "   stat2 <obj-name>                 stat2 the named object (with high precision time)\n"
+"   touch <obj-name> [timestamp]     change the named object modification time\n"
 "   mapext <obj-name>\n"
 "   rollback <obj-name> <snap-name>  roll back object to snap <snap-name>\n"
 "\n"
@@ -113,6 +115,7 @@ void usage(ostream& out)
 "                                    in the object's object map\n"
 "   setomapval <obj-name> <key> <val>\n"
 "   rmomapkey <obj-name> <key>\n"
+"   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
 "   getomapheader <obj-name> [file]\n"
 "   setomapheader <obj-name> <val>\n"
 "   tmap-to-omap <obj-name>          convert tmap keys/values to omap\n"
@@ -121,6 +124,11 @@ void usage(ostream& out)
 "   listwatchers <obj-name>          list the watchers of this object\n"
 "   set-alloc-hint <obj-name> <expected-object-size> <expected-write-size>\n"
 "                                    set allocation hint for an object\n"
+"   set-redirect <object A> --target-pool <caspool> <target object A>\n"
+"                                    set redirect target\n"
+"   set-chunk <object A> <offset> <length> --target-pool <caspool> <target object A> <taget-offset>\n"
+"                                    convert an object to chunked object\n"
+"   tier-promote <obj-name>	     promote the object to the base tier\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -174,7 +182,6 @@ void usage(ostream& out)
 "   -s name\n"
 "   --snap name\n"
 "        select given snap name for (read) IO\n"
-"   -i infile\n"
 "   --create\n"
 "        create the pool or directory that was specified\n"
 "   -N namespace\n"
@@ -229,7 +236,7 @@ void usage(ostream& out)
 
 unsigned default_op_size = 1 << 22;
 
-static void usage_exit()
+[[noreturn]] static void usage_exit()
 {
   usage(cerr);
   exit(1);
@@ -514,22 +521,16 @@ public:
 
 static const char alphanum_table[]="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 
-int gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
+void gen_rand_alphanumeric(char *dest, int size) /* size should be the required string size + 1 */
 {
-  int ret = get_random_bytes(dest, size);
-  if (ret < 0) {
-    cerr << "cannot get random bytes: " << cpp_strerror(ret) << std::endl;
-    return -1;
-  }
+  const int max = sizeof(alphanum_table) - 2;
 
   int i;
   for (i=0; i<size - 1; i++) {
-    int pos = (unsigned)dest[i];
-    dest[i] = alphanum_table[pos & 63];
+    int pos = generate_random_number(0, max);
+    dest[i] = alphanum_table[pos];
   }
   dest[i] = '\0';
-
-  return 0;
 }
 
 struct obj_info {
@@ -554,7 +555,7 @@ public:
   int read_percent;
   int num_objs;
   size_t min_obj_len;
-  uint64_t max_obj_len;
+  size_t max_obj_len;
   size_t min_op_len;
   size_t max_op_len;
   size_t max_ops;
@@ -691,7 +692,7 @@ int LoadGen::bootstrap(const char *pool)
     gen_rand_alphanumeric(buf, 16);
     info.name = "obj-";
     info.name.append(buf);
-    info.len = get_random(min_obj_len, max_obj_len);
+    info.len = generate_random_number(min_obj_len, max_obj_len);
 
     // throttle...
     while (completions.size() > max_ops) {
@@ -753,14 +754,14 @@ void LoadGen::run_op(LoadGenOp *op)
 
 void LoadGen::gen_op(LoadGenOp *op)
 {
-  int i = get_random(0, objs.size() - 1);
+  int i = generate_random_number<int>(0, objs.size() - 1);
   obj_info& info = objs[i];
   op->oid = info.name;
 
-  size_t len = get_random(min_op_len, max_op_len);
+  size_t len = generate_random_number(min_op_len, max_op_len);
   if (len > info.len)
     len = info.len;
-  size_t off = get_random(0, info.len);
+  size_t off = generate_random_number<size_t>(0, info.len);
 
   if (off + len > info.len)
     off = info.len - len;
@@ -768,7 +769,7 @@ void LoadGen::gen_op(LoadGenOp *op)
   op->off = off;
   op->len = len;
 
-  i = get_random(1, 100);
+  i = generate_random_number(1, 100);
   if (i > read_percent)
     op->type = OP_WRITE;
   else
@@ -1373,7 +1374,7 @@ static void dump_shard(const shard_info_t& shard,
     map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
     assert(k != shard.attrs.end()); // Can't be missing
     bufferlist::iterator bliter = k->second.begin();
-    ::decode(oi, bliter);  // Can't be corrupted
+    decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
@@ -1449,7 +1450,7 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
       auto k = shard.attrs.find(OI_ATTR);
       assert(k != shard.attrs.end()); // Can't be missing
       bufferlist::iterator bliter = k->second.begin();
-      ::decode(oi, bliter);  // Can't be corrupted
+      decode(oi, bliter);  // Can't be corrupted
       f.dump_stream("selected_object_info") << oi;
       break;
     }
@@ -2274,6 +2275,31 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       cout << pool_name << "/" << oid
 	   << " mtime " << t << ", size " << size << std::endl;
     }
+  } 
+  else if (strcmp(nargs[0], "touch") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+    time_t timestamp = time(NULL);
+    if (nargs.size() > 2) {
+      char* endptr = NULL;
+      timestamp = static_cast<time_t>(strtoll(nargs[2], &endptr, 10));
+      if (*endptr) {
+        cerr << "Invalid value for timestamp: '" << nargs[2] << "'" << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+    }
+    
+    ObjectWriteOperation op;
+    op.create(false);
+    op.mtime(&timestamp);
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << " error touch-ing " << pool_name << "/" << oid << ": "
+	   << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
   }
   else if (strcmp(nargs[0], "get") == 0) {
     if (!pool_name || nargs.size() < 3)
@@ -2568,6 +2594,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     } else {
       ret = 0;
     }
+  } else if (strcmp(nargs[0], "clearomap") == 0) {
+    if (!pool_name || nargs.size() < 2) {
+      usage_exit();
+    }
+
+    for (unsigned i=1; i < nargs.size(); i++){
+      string oid(nargs[i]);
+      ret = io_ctx.omap_clear(oid);
+      if (ret < 0) {
+        cerr << "error clearing omap keys " << pool_name << "/" << oid << "/"
+             << cpp_strerror(ret) << std::endl;
+        goto out;
+      }
+    }
+    ret = 0;
   } else if (strcmp(nargs[0], "listomapvals") == 0) {
     if (!pool_name || nargs.size() < 2)
       usage_exit();
@@ -2701,8 +2742,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       bufferlist header;
       map<string, bufferlist> kv;
       try {
-	::decode(header, p);
-	::decode(kv, p);
+	decode(header, p);
+	decode(kv, p);
       }
       catch (buffer::error& e) {
 	cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
@@ -2728,9 +2769,9 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       string v(nargs[4]);
       bufferlist bl;
       char c = (strcmp(nargs[1], "set") == 0) ? CEPH_OSD_TMAP_SET : CEPH_OSD_TMAP_CREATE;
-      ::encode(c, bl);
-      ::encode(k, bl);
-      ::encode(v, bl);
+      encode(c, bl);
+      encode(k, bl);
+      encode(v, bl);
       ret = io_ctx.tmap_update(oid, bl);
     }
   }
@@ -2752,8 +2793,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     map<string, bufferlist> kv;
     bufferlist::iterator p = bl.begin();
     try {
-      ::decode(hdr, p);
-      ::decode(kv, p);
+      decode(hdr, p);
+      decode(kv, p);
     }
     catch (buffer::error& e) {
       cerr << "error decoding tmap " << pool_name << "/" << oid << std::endl;
@@ -3074,7 +3115,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     string oid(nargs[1]);
     string msg(nargs[2]);
     bufferlist bl, replybl;
-    ::encode(msg, bl);
+    encode(msg, bl);
     ret = io_ctx.notify2(oid, bl, 10000, &replybl);
     if (ret != 0)
       cerr << "error calling notify: " << cpp_strerror(ret) << std::endl;
@@ -3082,8 +3123,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       map<pair<uint64_t,uint64_t>,bufferlist> rm;
       set<pair<uint64_t,uint64_t> > missed;
       bufferlist::iterator p = replybl.begin();
-      ::decode(rm, p);
-      ::decode(missed, p);
+      decode(rm, p);
+      decode(missed, p);
       for (map<pair<uint64_t,uint64_t>,bufferlist>::iterator p = rm.begin();
 	   p != rm.end();
 	   ++p) {
@@ -3489,6 +3530,67 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = io_ctx.operate(nargs[1], &op);
     if (ret < 0) {
       cerr << "error set-redirect " << pool_name << "/" << nargs[1] << " => " << target << "/" << target_obj << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "set-chunk") == 0) {
+    if (!pool_name)
+      usage_exit();
+
+    const char *target = target_pool_name;
+    if (!target)
+      target = pool_name;
+
+    uint64_t offset;
+    uint64_t length;
+    uint64_t tgt_offset;
+    string tgt_oid;
+    if (nargs.size() < 6) {
+      usage_exit();
+    } else {
+      char* endptr = NULL;
+      offset = strtoull(nargs[2], &endptr, 10);
+      if (*endptr) {
+	cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
+      length = strtoull(nargs[3], &endptr, 10);
+      if (*endptr) {
+	cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
+      tgt_oid = string(nargs[4]);
+      tgt_offset = strtoull(nargs[5], &endptr, 10);
+      if (*endptr) {
+	cerr << "Invalid value for size: '" << nargs[2] << "'" << std::endl;
+	ret = -EINVAL;
+	goto out;
+      }
+    }
+
+    IoCtx target_ctx;
+    ret = rados.ioctx_create(target, target_ctx);
+    ObjectWriteOperation op;
+    op.set_chunk(offset, length, target_ctx, tgt_oid, tgt_offset);
+    ret = io_ctx.operate(nargs[1], &op);
+    if (ret < 0) {
+      cerr << "error set-chunk " << pool_name << "/" << nargs[1] << " " << " offset " << offset
+	    << " length " << length << " target_pool " << target 
+	    << "tgt_offset: " << tgt_offset << " : " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  } else if (strcmp(nargs[0], "tier-promote") == 0) {
+    if (!pool_name || nargs.size() < 2)
+      usage_exit();
+    string oid(nargs[1]);
+
+    ObjectWriteOperation op;
+    op.tier_promote();
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << "error tier-promote " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
   } else if (strcmp(nargs[0], "export") == 0) {

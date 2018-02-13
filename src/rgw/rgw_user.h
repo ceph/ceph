@@ -37,11 +37,13 @@ struct RGWUID
   void encode(bufferlist& bl) const {
     string s;
     user_id.to_str(s);
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
   void decode(bufferlist::iterator& bl) {
     string s;
-    ::decode(s, bl);
+    using ceph::decode;
+    decode(s, bl);
     user_id.from_str(s);
   }
 };
@@ -464,8 +466,7 @@ struct RGWUserAdminOpState {
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
     char sub_buf[RAND_SUBUSER_LEN + 1];
 
-    if (gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size) < 0)
-      return "";
+    gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
 
     rand_suffix = sub_buf;
     if (rand_suffix.empty())
@@ -693,7 +694,7 @@ public:
   friend class RGWUserCapPool;
 };
 
-/* Wrapers for admin API functionality */
+/* Wrappers for admin API functionality */
 
 class RGWUserAdminOp_User
 {

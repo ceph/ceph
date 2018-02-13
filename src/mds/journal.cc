@@ -416,75 +416,75 @@ void EMetaBlob::update_segment(LogSegment *ls)
 
 void EMetaBlob::fullbit::encode(bufferlist& bl, uint64_t features) const {
   ENCODE_START(8, 5, bl);
-  ::encode(dn, bl);
-  ::encode(dnfirst, bl);
-  ::encode(dnlast, bl);
-  ::encode(dnv, bl);
-  ::encode(inode, bl, features);
-  ::encode(xattrs, bl);
+  encode(dn, bl);
+  encode(dnfirst, bl);
+  encode(dnlast, bl);
+  encode(dnv, bl);
+  encode(inode, bl, features);
+  encode(xattrs, bl);
   if (inode.is_symlink())
-    ::encode(symlink, bl);
+    encode(symlink, bl);
   if (inode.is_dir()) {
-    ::encode(dirfragtree, bl);
-    ::encode(snapbl, bl);
+    encode(dirfragtree, bl);
+    encode(snapbl, bl);
   }
-  ::encode(state, bl);
+  encode(state, bl);
   if (old_inodes.empty()) {
-    ::encode(false, bl);
+    encode(false, bl);
   } else {
-    ::encode(true, bl);
-    ::encode(old_inodes, bl, features);
+    encode(true, bl);
+    encode(old_inodes, bl, features);
   }
   if (!inode.is_dir())
-    ::encode(snapbl, bl);
-  ::encode(oldest_snap, bl);
+    encode(snapbl, bl);
+  encode(oldest_snap, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::fullbit::decode(bufferlist::iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
-  ::decode(dn, bl);
-  ::decode(dnfirst, bl);
-  ::decode(dnlast, bl);
-  ::decode(dnv, bl);
-  ::decode(inode, bl);
-  ::decode(xattrs, bl);
+  decode(dn, bl);
+  decode(dnfirst, bl);
+  decode(dnlast, bl);
+  decode(dnv, bl);
+  decode(inode, bl);
+  decode(xattrs, bl);
   if (inode.is_symlink())
-    ::decode(symlink, bl);
+    decode(symlink, bl);
   if (inode.is_dir()) {
-    ::decode(dirfragtree, bl);
-    ::decode(snapbl, bl);
+    decode(dirfragtree, bl);
+    decode(snapbl, bl);
     if ((struct_v == 2) || (struct_v == 3)) {
       bool dir_layout_exists;
-      ::decode(dir_layout_exists, bl);
+      decode(dir_layout_exists, bl);
       if (dir_layout_exists) {
 	__u8 dir_struct_v;
-	::decode(dir_struct_v, bl); // default_file_layout version
-	::decode(inode.layout, bl); // and actual layout, that we care about
+	decode(dir_struct_v, bl); // default_file_layout version
+	decode(inode.layout, bl); // and actual layout, that we care about
       }
     }
   }
   if (struct_v >= 6) {
-    ::decode(state, bl);
+    decode(state, bl);
   } else {
     bool dirty;
-    ::decode(dirty, bl);
+    decode(dirty, bl);
     state = dirty ? EMetaBlob::fullbit::STATE_DIRTY : 0;
   }
 
   if (struct_v >= 3) {
     bool old_inodes_present;
-    ::decode(old_inodes_present, bl);
+    decode(old_inodes_present, bl);
     if (old_inodes_present) {
-      ::decode(old_inodes, bl);
+      decode(old_inodes, bl);
     }
   }
   if (!inode.is_dir()) {
     if (struct_v >= 7)
-      ::decode(snapbl, bl);
+      decode(snapbl, bl);
   }
   if (struct_v >= 8)
-    ::decode(oldest_snap, bl);
+    decode(oldest_snap, bl);
   else
     oldest_snap = CEPH_NOSNAP;
 
@@ -501,10 +501,9 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   inode.dump(f);
   f->close_section(); // inode
   f->open_object_section("xattrs");
-  for (map<string, bufferptr>::const_iterator iter = xattrs.begin();
-      iter != xattrs.end(); ++iter) {
-    string s(iter->second.c_str(), iter->second.length());
-    f->dump_string(iter->first.c_str(), s);
+  for (const auto &p : xattrs) {
+    std::string s(p.second.c_str(), p.second.length());
+    f->dump_string(p.first.c_str(), s);
   }
   f->close_section(); // xattrs
   if (inode.is_symlink()) {
@@ -523,12 +522,10 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
   f->dump_string("state", state_string());
   if (!old_inodes.empty()) {
     f->open_array_section("old inodes");
-    for (old_inodes_t::const_iterator iter = old_inodes.begin();
-	 iter != old_inodes.end();
-	 ++iter) {
+    for (const auto &p : old_inodes) {
       f->open_object_section("inode");
-      f->dump_int("snapid", iter->first);
-      iter->second.dump(f);
+      f->dump_int("snapid", p.first);
+      p.second.dump(f);
       f->close_section(); // inode
     }
     f->close_section(); // old inodes
@@ -537,9 +534,9 @@ void EMetaBlob::fullbit::dump(Formatter *f) const
 
 void EMetaBlob::fullbit::generate_test_instances(list<EMetaBlob::fullbit*>& ls)
 {
-  inode_t inode;
+  CInode::mempool_inode inode;
   fragtree_t fragtree;
-  map<string,bufferptr> empty_xattrs;
+  CInode::mempool_xattr_map empty_xattrs;
   bufferlist empty_snapbl;
   fullbit *sample = new fullbit("/testdn", 0, 0, 0,
                                 inode, fragtree, empty_xattrs, "", 0, empty_snapbl,
@@ -600,8 +597,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
       dout(0) << "EMetaBlob.replay invalid layout on ino " << *in
               << ": " << in->inode.layout << dendl;
       std::ostringstream oss;
-      oss << "Invalid layout for inode 0x" << std::hex << in->inode.ino
-          << std::dec << " in journal";
+      oss << "Invalid layout for inode " << in->ino() << " in journal";
       mds->clog->error() << oss.str();
       mds->damaged();
       ceph_abort();  // Should be unreachable because damaged() calls respawn()
@@ -614,26 +610,26 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
 void EMetaBlob::remotebit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(dn, bl);
-  ::encode(dnfirst, bl);
-  ::encode(dnlast, bl);
-  ::encode(dnv, bl);
-  ::encode(ino, bl);
-  ::encode(d_type, bl);
-  ::encode(dirty, bl);
+  encode(dn, bl);
+  encode(dnfirst, bl);
+  encode(dnlast, bl);
+  encode(dnv, bl);
+  encode(ino, bl);
+  encode(d_type, bl);
+  encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::remotebit::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(dn, bl);
-  ::decode(dnfirst, bl);
-  ::decode(dnlast, bl);
-  ::decode(dnv, bl);
-  ::decode(ino, bl);
-  ::decode(d_type, bl);
-  ::decode(dirty, bl);
+  decode(dn, bl);
+  decode(dnfirst, bl);
+  decode(dnlast, bl);
+  decode(dnv, bl);
+  decode(ino, bl);
+  decode(d_type, bl);
+  decode(dirty, bl);
   DECODE_FINISH(bl);
 }
 
@@ -680,22 +676,22 @@ generate_test_instances(list<EMetaBlob::remotebit*>& ls)
 void EMetaBlob::nullbit::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(dn, bl);
-  ::encode(dnfirst, bl);
-  ::encode(dnlast, bl);
-  ::encode(dnv, bl);
-  ::encode(dirty, bl);
+  encode(dn, bl);
+  encode(dnfirst, bl);
+  encode(dnlast, bl);
+  encode(dnv, bl);
+  encode(dirty, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::nullbit::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(dn, bl);
-  ::decode(dnfirst, bl);
-  ::decode(dnlast, bl);
-  ::decode(dnv, bl);
-  ::decode(dirty, bl);
+  decode(dn, bl);
+  decode(dnfirst, bl);
+  decode(dnlast, bl);
+  decode(dnv, bl);
+  decode(dirty, bl);
   DECODE_FINISH(bl);
 }
 
@@ -721,25 +717,25 @@ void EMetaBlob::nullbit::generate_test_instances(list<nullbit*>& ls)
 void EMetaBlob::dirlump::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(fnode, bl);
-  ::encode(state, bl);
-  ::encode(nfull, bl);
-  ::encode(nremote, bl);
-  ::encode(nnull, bl);
+  encode(fnode, bl);
+  encode(state, bl);
+  encode(nfull, bl);
+  encode(nremote, bl);
+  encode(nnull, bl);
   _encode_bits(features);
-  ::encode(dnbl, bl);
+  encode(dnbl, bl);
   ENCODE_FINISH(bl);
 }
 
 void EMetaBlob::dirlump::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl)
-  ::decode(fnode, bl);
-  ::decode(state, bl);
-  ::decode(nfull, bl);
-  ::decode(nremote, bl);
-  ::decode(nnull, bl);
-  ::decode(dnbl, bl);
+  decode(fnode, bl);
+  decode(state, bl);
+  decode(nfull, bl);
+  decode(nremote, bl);
+  decode(nnull, bl);
+  decode(dnbl, bl);
   dn_decoded = false;      // don't decode bits unless we need them.
   DECODE_FINISH(bl);
 }
@@ -795,82 +791,82 @@ void EMetaBlob::dirlump::generate_test_instances(list<dirlump*>& ls)
 void EMetaBlob::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(8, 5, bl);
-  ::encode(lump_order, bl);
-  ::encode(lump_map, bl, features);
-  ::encode(roots, bl, features);
-  ::encode(table_tids, bl);
-  ::encode(opened_ino, bl);
-  ::encode(allocated_ino, bl);
-  ::encode(used_preallocated_ino, bl);
-  ::encode(preallocated_inos, bl);
-  ::encode(client_name, bl);
-  ::encode(inotablev, bl);
-  ::encode(sessionmapv, bl);
-  ::encode(truncate_start, bl);
-  ::encode(truncate_finish, bl);
-  ::encode(destroyed_inodes, bl);
-  ::encode(client_reqs, bl);
-  ::encode(renamed_dirino, bl);
-  ::encode(renamed_dir_frags, bl);
+  encode(lump_order, bl);
+  encode(lump_map, bl, features);
+  encode(roots, bl, features);
+  encode(table_tids, bl);
+  encode(opened_ino, bl);
+  encode(allocated_ino, bl);
+  encode(used_preallocated_ino, bl);
+  encode(preallocated_inos, bl);
+  encode(client_name, bl);
+  encode(inotablev, bl);
+  encode(sessionmapv, bl);
+  encode(truncate_start, bl);
+  encode(truncate_finish, bl);
+  encode(destroyed_inodes, bl);
+  encode(client_reqs, bl);
+  encode(renamed_dirino, bl);
+  encode(renamed_dir_frags, bl);
   {
     // make MDSRank use v6 format happy
     int64_t i = -1;
     bool b = false;
-    ::encode(i, bl);
-    ::encode(b, bl);
+    encode(i, bl);
+    encode(b, bl);
   }
-  ::encode(client_flushes, bl);
+  encode(client_flushes, bl);
   ENCODE_FINISH(bl);
 }
 void EMetaBlob::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(7, 5, 5, bl);
-  ::decode(lump_order, bl);
-  ::decode(lump_map, bl);
+  decode(lump_order, bl);
+  decode(lump_map, bl);
   if (struct_v >= 4) {
-    ::decode(roots, bl);
+    decode(roots, bl);
   } else {
     bufferlist rootbl;
-    ::decode(rootbl, bl);
+    decode(rootbl, bl);
     if (rootbl.length()) {
       bufferlist::iterator p = rootbl.begin();
       roots.push_back(ceph::shared_ptr<fullbit>(new fullbit(p)));
     }
   }
-  ::decode(table_tids, bl);
-  ::decode(opened_ino, bl);
-  ::decode(allocated_ino, bl);
-  ::decode(used_preallocated_ino, bl);
-  ::decode(preallocated_inos, bl);
-  ::decode(client_name, bl);
-  ::decode(inotablev, bl);
-  ::decode(sessionmapv, bl);
-  ::decode(truncate_start, bl);
-  ::decode(truncate_finish, bl);
-  ::decode(destroyed_inodes, bl);
+  decode(table_tids, bl);
+  decode(opened_ino, bl);
+  decode(allocated_ino, bl);
+  decode(used_preallocated_ino, bl);
+  decode(preallocated_inos, bl);
+  decode(client_name, bl);
+  decode(inotablev, bl);
+  decode(sessionmapv, bl);
+  decode(truncate_start, bl);
+  decode(truncate_finish, bl);
+  decode(destroyed_inodes, bl);
   if (struct_v >= 2) {
-    ::decode(client_reqs, bl);
+    decode(client_reqs, bl);
   } else {
     list<metareqid_t> r;
-    ::decode(r, bl);
+    decode(r, bl);
     while (!r.empty()) {
 	client_reqs.push_back(pair<metareqid_t,uint64_t>(r.front(), 0));
 	r.pop_front();
     }
   }
   if (struct_v >= 3) {
-    ::decode(renamed_dirino, bl);
-    ::decode(renamed_dir_frags, bl);
+    decode(renamed_dirino, bl);
+    decode(renamed_dir_frags, bl);
   }
   if (struct_v >= 6) {
     // ignore
     int64_t i;
     bool b;
-    ::decode(i, bl);
-    ::decode(b, bl);
+    decode(i, bl);
+    decode(b, bl);
   }
   if (struct_v >= 8) {
-    ::decode(client_flushes, bl);
+    decode(client_flushes, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -984,21 +980,21 @@ void EMetaBlob::get_paths(
 
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
-      std::string const &dentry = (*iter)->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = (*iter)->dn;
+      children[dir_ino].emplace_back(dentry);
       ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
     }
 
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = iter->dn;
+      children[dir_ino].emplace_back(dentry);
     }
 
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
-      children[dir_ino].push_back(dentry);
+      std::string_view dentry = iter->dn;
+      children[dir_ino].emplace_back(dentry);
     }
   }
 
@@ -1015,26 +1011,23 @@ void EMetaBlob::get_paths(
     list<ceph::shared_ptr<fullbit> > const &fb_list = dl.get_dfull();
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
-      std::string const &dentry = (*iter)->dn;
-      children[dir_ino].push_back(dentry);
-      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+      std::string_view dentry = (*iter)->dn;
       if (children.find((*iter)->inode.ino) == children.end()) {
         leaf_locations.push_back(Location(dir_ino, dentry));
-
       }
     }
 
     list<nullbit> const &nb_list = dl.get_dnull();
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
+      std::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
 
     list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string const &dentry = iter->dn;
+      std::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
   }
@@ -1044,14 +1037,15 @@ void EMetaBlob::get_paths(
     Location const &loc = *i;
     std::string path = loc.second;
     inodeno_t ino = loc.first;
-    while(ino_locations.find(ino) != ino_locations.end()) {
-      Location const &loc = ino_locations[ino];
+    std::map<inodeno_t, Location>::iterator iter = ino_locations.find(ino);
+    while(iter != ino_locations.end()) {
+      Location const &loc = iter->second;
       if (!path.empty()) {
         path = loc.second + "/" + path;
       } else {
         path = loc.second + path;
       }
-      ino = loc.first;
+      iter = ino_locations.find(loc.first);
     }
 
     paths.push_back(path);
@@ -1502,10 +1496,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       unlinked.erase(*p);
     dout(10) << " unlinked set contains " << unlinked << dendl;
     for (map<CInode*, CDir*>::iterator p = unlinked.begin(); p != unlinked.end(); ++p) {
-      if (slaveup) // preserve unlinked inodes until slave commit
-	slaveup->unlinked.insert(p->first);
-      else
-	mds->mdcache->remove_inode_recursive(p->first);
+      CInode *in = p->first;
+      if (slaveup) { // preserve unlinked inodes until slave commit
+	slaveup->unlinked.insert(in);
+	if (in->snaprealm)
+	  in->snaprealm->adjust_parent();
+      } else
+	mds->mdcache->remove_inode_recursive(in);
     }
   }
 
@@ -1746,13 +1743,13 @@ void ESession::replay(MDSRank *mds)
 void ESession::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(client_inst, bl, features);
-  ::encode(open, bl);
-  ::encode(cmapv, bl);
-  ::encode(inos, bl);
-  ::encode(inotablev, bl);
-  ::encode(client_metadata, bl);
+  encode(stamp, bl);
+  encode(client_inst, bl, features);
+  encode(open, bl);
+  encode(cmapv, bl);
+  encode(inos, bl);
+  encode(inotablev, bl);
+  encode(client_metadata, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1760,14 +1757,14 @@ void ESession::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(client_inst, bl);
-  ::decode(open, bl);
-  ::decode(cmapv, bl);
-  ::decode(inos, bl);
-  ::decode(inotablev, bl);
+    decode(stamp, bl);
+  decode(client_inst, bl);
+  decode(open, bl);
+  decode(cmapv, bl);
+  decode(inos, bl);
+  decode(inotablev, bl);
   if (struct_v >= 4) {
-    ::decode(client_metadata, bl);
+    decode(client_metadata, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -1798,27 +1795,28 @@ void ESession::generate_test_instances(list<ESession*>& ls)
 void ESessions::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(client_map, bl, features);
-  ::encode(cmapv, bl);
-  ::encode(stamp, bl);
+  encode(client_map, bl, features);
+  encode(cmapv, bl);
+  encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
 
 void ESessions::decode_old(bufferlist::iterator &bl)
 {
-  ::decode(client_map, bl);
-  ::decode(cmapv, bl);
+  using ceph::decode;
+  decode(client_map, bl);
+  decode(cmapv, bl);
   if (!bl.end())
-    ::decode(stamp, bl);
+    decode(stamp, bl);
 }
 
 void ESessions::decode_new(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(client_map, bl);
-  ::decode(cmapv, bl);
+  decode(client_map, bl);
+  decode(cmapv, bl);
   if (!bl.end())
-    ::decode(stamp, bl);
+    decode(stamp, bl);
   DECODE_FINISH(bl);
 }
 
@@ -1869,14 +1867,14 @@ void ESessions::replay(MDSRank *mds)
 void ETableServer::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(table, bl);
-  ::encode(op, bl);
-  ::encode(reqid, bl);
-  ::encode(bymds, bl);
-  ::encode(mutation, bl);
-  ::encode(tid, bl);
-  ::encode(version, bl);
+  encode(stamp, bl);
+  encode(table, bl);
+  encode(op, bl);
+  encode(reqid, bl);
+  encode(bymds, bl);
+  encode(mutation, bl);
+  encode(tid, bl);
+  encode(version, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1884,14 +1882,14 @@ void ETableServer::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(table, bl);
-  ::decode(op, bl);
-  ::decode(reqid, bl);
-  ::decode(bymds, bl);
-  ::decode(mutation, bl);
-  ::decode(tid, bl);
-  ::decode(version, bl);
+    decode(stamp, bl);
+  decode(table, bl);
+  decode(op, bl);
+  decode(reqid, bl);
+  decode(bymds, bl);
+  decode(mutation, bl);
+  decode(tid, bl);
+  decode(version, bl);
   DECODE_FINISH(bl);
 }
 
@@ -1937,19 +1935,20 @@ void ETableServer::replay(MDSRank *mds)
 
   switch (op) {
   case TABLESERVER_OP_PREPARE:
+    server->_note_prepare(bymds, reqid, true);
     server->_prepare(mutation, reqid, bymds);
-    server->_note_prepare(bymds, reqid);
     break;
   case TABLESERVER_OP_COMMIT:
     server->_commit(tid);
-    server->_note_commit(tid);
+    server->_note_commit(tid, true);
     break;
   case TABLESERVER_OP_ROLLBACK:
     server->_rollback(tid);
-    server->_note_rollback(tid);
+    server->_note_rollback(tid, true);
     break;
   case TABLESERVER_OP_SERVER_UPDATE:
     server->_server_update(mutation);
+    server->_note_server_update(mutation, true);
     break;
   default:
     mds->clog->error() << "invalid tableserver op in ETableServer";
@@ -1968,10 +1967,10 @@ void ETableServer::replay(MDSRank *mds)
 void ETableClient::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(table, bl);
-  ::encode(op, bl);
-  ::encode(tid, bl);
+  encode(stamp, bl);
+  encode(table, bl);
+  encode(op, bl);
+  encode(tid, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -1979,10 +1978,10 @@ void ETableClient::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(table, bl);
-  ::decode(op, bl);
-  ::decode(tid, bl);
+    decode(stamp, bl);
+  decode(table, bl);
+  decode(op, bl);
+  decode(tid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2053,13 +2052,13 @@ void ESnap::replay(MDSRank *mds)
 void EUpdate::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(4, 4, bl);
-  ::encode(stamp, bl);
-  ::encode(type, bl);
-  ::encode(metablob, bl, features);
-  ::encode(client_map, bl);
-  ::encode(cmapv, bl);
-  ::encode(reqid, bl);
-  ::encode(had_slaves, bl);
+  encode(stamp, bl);
+  encode(type, bl);
+  encode(metablob, bl, features);
+  encode(client_map, bl);
+  encode(cmapv, bl);
+  encode(reqid, bl);
+  encode(had_slaves, bl);
   ENCODE_FINISH(bl);
 }
  
@@ -2067,14 +2066,14 @@ void EUpdate::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(type, bl);
-  ::decode(metablob, bl);
-  ::decode(client_map, bl);
+    decode(stamp, bl);
+  decode(type, bl);
+  decode(metablob, bl);
+  decode(client_map, bl);
   if (struct_v >= 3)
-    ::decode(cmapv, bl);
-  ::decode(reqid, bl);
-  ::decode(had_slaves, bl);
+    decode(cmapv, bl);
+  decode(reqid, bl);
+  decode(had_slaves, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2129,7 +2128,8 @@ void EUpdate::replay(MDSRank *mds)
       // open client sessions?
       map<client_t,entity_inst_t> cm;
       bufferlist::iterator blp = client_map.begin();
-      ::decode(cm, blp);
+      using ceph::decode;
+      decode(cm, blp);
       mds->sessionmap.open_sessions(cm);
 
       assert(mds->sessionmap.get_version() == cmapv);
@@ -2145,21 +2145,21 @@ void EUpdate::replay(MDSRank *mds)
 
 void EOpen::encode(bufferlist &bl, uint64_t features) const {
   ENCODE_START(4, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(metablob, bl, features);
-  ::encode(inos, bl);
-  ::encode(snap_inos, bl);
+  encode(stamp, bl);
+  encode(metablob, bl, features);
+  encode(inos, bl);
+  encode(snap_inos, bl);
   ENCODE_FINISH(bl);
 } 
 
 void EOpen::decode(bufferlist::iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(metablob, bl);
-  ::decode(inos, bl);
+    decode(stamp, bl);
+  decode(metablob, bl);
+  decode(inos, bl);
   if (struct_v >= 4)
-    ::decode(snap_inos, bl);
+    decode(snap_inos, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2230,8 +2230,8 @@ void ECommitted::replay(MDSRank *mds)
 void ECommitted::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(reqid, bl);
+  encode(stamp, bl);
+  encode(reqid, bl);
   ENCODE_FINISH(bl);
 } 
 
@@ -2239,8 +2239,8 @@ void ECommitted::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(reqid, bl);
+    decode(stamp, bl);
+  decode(reqid, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2263,24 +2263,24 @@ void ECommitted::generate_test_instances(list<ECommitted*>& ls)
 void link_rollback::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(reqid, bl);
-  ::encode(ino, bl);
-  ::encode(was_inc, bl);
-  ::encode(old_ctime, bl);
-  ::encode(old_dir_mtime, bl);
-  ::encode(old_dir_rctime, bl);
+  encode(reqid, bl);
+  encode(ino, bl);
+  encode(was_inc, bl);
+  encode(old_ctime, bl);
+  encode(old_dir_mtime, bl);
+  encode(old_dir_rctime, bl);
   ENCODE_FINISH(bl);
 }
 
 void link_rollback::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(reqid, bl);
-  ::decode(ino, bl);
-  ::decode(was_inc, bl);
-  ::decode(old_ctime, bl);
-  ::decode(old_dir_mtime, bl);
-  ::decode(old_dir_rctime, bl);
+  decode(reqid, bl);
+  decode(ino, bl);
+  decode(was_inc, bl);
+  decode(old_ctime, bl);
+  decode(old_dir_mtime, bl);
+  decode(old_dir_rctime, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2302,22 +2302,22 @@ void link_rollback::generate_test_instances(list<link_rollback*>& ls)
 void rmdir_rollback::encode(bufferlist& bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(reqid, bl);
-  ::encode(src_dir, bl);
-  ::encode(src_dname, bl);
-  ::encode(dest_dir, bl);
-  ::encode(dest_dname, bl);
+  encode(reqid, bl);
+  encode(src_dir, bl);
+  encode(src_dname, bl);
+  encode(dest_dir, bl);
+  encode(dest_dname, bl);
   ENCODE_FINISH(bl);
 }
 
 void rmdir_rollback::decode(bufferlist::iterator& bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(reqid, bl);
-  ::decode(src_dir, bl);
-  ::decode(src_dname, bl);
-  ::decode(dest_dir, bl);
-  ::decode(dest_dname, bl);
+  decode(reqid, bl);
+  decode(src_dir, bl);
+  decode(src_dname, bl);
+  decode(dest_dir, bl);
+  decode(dest_dname, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2338,28 +2338,28 @@ void rmdir_rollback::generate_test_instances(list<rmdir_rollback*>& ls)
 void rename_rollback::drec::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(dirfrag, bl);
-  ::encode(dirfrag_old_mtime, bl);
-  ::encode(dirfrag_old_rctime, bl);
-  ::encode(ino, bl);
-  ::encode(remote_ino, bl);
-  ::encode(dname, bl);
-  ::encode(remote_d_type, bl);
-  ::encode(old_ctime, bl);
+  encode(dirfrag, bl);
+  encode(dirfrag_old_mtime, bl);
+  encode(dirfrag_old_rctime, bl);
+  encode(ino, bl);
+  encode(remote_ino, bl);
+  encode(dname, bl);
+  encode(remote_d_type, bl);
+  encode(old_ctime, bl);
   ENCODE_FINISH(bl);
 }
 
 void rename_rollback::drec::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(dirfrag, bl);
-  ::decode(dirfrag_old_mtime, bl);
-  ::decode(dirfrag_old_rctime, bl);
-  ::decode(ino, bl);
-  ::decode(remote_ino, bl);
-  ::decode(dname, bl);
-  ::decode(remote_d_type, bl);
-  ::decode(old_ctime, bl);
+  decode(dirfrag, bl);
+  decode(dirfrag_old_mtime, bl);
+  decode(dirfrag_old_rctime, bl);
+  decode(ino, bl);
+  decode(remote_ino, bl);
+  decode(dname, bl);
+  decode(remote_d_type, bl);
+  decode(old_ctime, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2396,22 +2396,22 @@ void rename_rollback::drec::generate_test_instances(list<drec*>& ls)
 void rename_rollback::encode(bufferlist &bl) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(reqid, bl);
+  encode(reqid, bl);
   encode(orig_src, bl);
   encode(orig_dest, bl);
   encode(stray, bl);
-  ::encode(ctime, bl);
+  encode(ctime, bl);
   ENCODE_FINISH(bl);
 }
 
 void rename_rollback::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(reqid, bl);
+  decode(reqid, bl);
   decode(orig_src, bl);
   decode(orig_dest, bl);
   decode(stray, bl);
-  ::decode(ctime, bl);
+  decode(ctime, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2441,14 +2441,14 @@ void rename_rollback::generate_test_instances(list<rename_rollback*>& ls)
 void ESlaveUpdate::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(type, bl);
-  ::encode(reqid, bl);
-  ::encode(master, bl);
-  ::encode(op, bl);
-  ::encode(origop, bl);
-  ::encode(commit, bl, features);
-  ::encode(rollback, bl);
+  encode(stamp, bl);
+  encode(type, bl);
+  encode(reqid, bl);
+  encode(master, bl);
+  encode(op, bl);
+  encode(origop, bl);
+  encode(commit, bl, features);
+  encode(rollback, bl);
   ENCODE_FINISH(bl);
 } 
 
@@ -2456,14 +2456,14 @@ void ESlaveUpdate::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(type, bl);
-  ::decode(reqid, bl);
-  ::decode(master, bl);
-  ::decode(op, bl);
-  ::decode(origop, bl);
-  ::decode(commit, bl);
-  ::decode(rollback, bl);
+    decode(stamp, bl);
+  decode(type, bl);
+  decode(reqid, bl);
+  decode(master, bl);
+  decode(op, bl);
+  decode(origop, bl);
+  decode(commit, bl);
+  decode(rollback, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2533,12 +2533,12 @@ void ESlaveUpdate::replay(MDSRank *mds)
 void ESubtreeMap::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(6, 5, bl);
-  ::encode(stamp, bl);
-  ::encode(metablob, bl, features);
-  ::encode(subtrees, bl);
-  ::encode(ambiguous_subtrees, bl);
-  ::encode(expire_pos, bl);
-  ::encode(event_seq, bl);
+  encode(stamp, bl);
+  encode(metablob, bl, features);
+  encode(subtrees, bl);
+  encode(ambiguous_subtrees, bl);
+  encode(expire_pos, bl);
+  encode(event_seq, bl);
   ENCODE_FINISH(bl);
 }
  
@@ -2546,15 +2546,15 @@ void ESubtreeMap::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(6, 5, 5, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(metablob, bl);
-  ::decode(subtrees, bl);
+    decode(stamp, bl);
+  decode(metablob, bl);
+  decode(subtrees, bl);
   if (struct_v >= 4)
-    ::decode(ambiguous_subtrees, bl);
+    decode(ambiguous_subtrees, bl);
   if (struct_v >= 3)
-    ::decode(expire_pos, bl);
+    decode(expire_pos, bl);
   if (struct_v >= 6)
-    ::decode(event_seq, bl);
+    decode(event_seq, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2775,30 +2775,30 @@ void EFragment::replay(MDSRank *mds)
 
 void EFragment::encode(bufferlist &bl, uint64_t features) const {
   ENCODE_START(5, 4, bl);
-  ::encode(stamp, bl);
-  ::encode(op, bl);
-  ::encode(ino, bl);
-  ::encode(basefrag, bl);
-  ::encode(bits, bl);
-  ::encode(metablob, bl, features);
-  ::encode(orig_frags, bl);
-  ::encode(rollback, bl);
+  encode(stamp, bl);
+  encode(op, bl);
+  encode(ino, bl);
+  encode(basefrag, bl);
+  encode(bits, bl);
+  encode(metablob, bl, features);
+  encode(orig_frags, bl);
+  encode(rollback, bl);
   ENCODE_FINISH(bl);
 }
 
 void EFragment::decode(bufferlist::iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
+    decode(stamp, bl);
   if (struct_v >= 3)
-    ::decode(op, bl);
-  ::decode(ino, bl);
-  ::decode(basefrag, bl);
-  ::decode(bits, bl);
-  ::decode(metablob, bl);
+    decode(op, bl);
+  decode(ino, bl);
+  decode(basefrag, bl);
+  decode(bits, bl);
+  decode(metablob, bl);
   if (struct_v >= 5) {
-    ::decode(orig_frags, bl);
-    ::decode(rollback, bl);
+    decode(orig_frags, bl);
+    decode(rollback, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -2826,14 +2826,14 @@ void EFragment::generate_test_instances(list<EFragment*>& ls)
 void dirfrag_rollback::encode(bufferlist &bl) const
 {
   ENCODE_START(1, 1, bl);
-  ::encode(fnode, bl);
+  encode(fnode, bl);
   ENCODE_FINISH(bl);
 }
 
 void dirfrag_rollback::decode(bufferlist::iterator &bl)
 {
   DECODE_START(1, bl);
-  ::decode(fnode, bl);
+  decode(fnode, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2870,11 +2870,11 @@ void EExport::replay(MDSRank *mds)
 void EExport::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(4, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(metablob, bl, features);
-  ::encode(base, bl);
-  ::encode(bounds, bl);
-  ::encode(target, bl);
+  encode(stamp, bl);
+  encode(metablob, bl, features);
+  encode(base, bl);
+  encode(bounds, bl);
+  encode(target, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -2882,12 +2882,12 @@ void EExport::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(metablob, bl);
-  ::decode(base, bl);
-  ::decode(bounds, bl);
+    decode(stamp, bl);
+  decode(metablob, bl);
+  decode(base, bl);
+  decode(bounds, bl);
   if (struct_v >= 4)
-    ::decode(target, bl);
+    decode(target, bl);
   DECODE_FINISH(bl);
 }
 
@@ -2957,9 +2957,17 @@ void EImportStart::replay(MDSRank *mds)
 	     << " < " << cmapv << dendl;
     map<client_t,entity_inst_t> cm;
     bufferlist::iterator blp = client_map.begin();
-    ::decode(cm, blp);
+    using ceph::decode;
+    decode(cm, blp);
     mds->sessionmap.open_sessions(cm);
-    assert(mds->sessionmap.get_version() == cmapv);
+    if (mds->sessionmap.get_version() != cmapv)
+    {
+      derr << "sessionmap version " << mds->sessionmap.get_version()
+           << " != cmapv " << cmapv << dendl;
+      mds->clog->error() << "failure replaying journal (EImportStart)";
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
     mds->sessionmap.set_projected(mds->sessionmap.get_version());
   }
   update_segment();
@@ -2967,27 +2975,27 @@ void EImportStart::replay(MDSRank *mds)
 
 void EImportStart::encode(bufferlist &bl, uint64_t features) const {
   ENCODE_START(4, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(base, bl);
-  ::encode(metablob, bl, features);
-  ::encode(bounds, bl);
-  ::encode(cmapv, bl);
-  ::encode(client_map, bl);
-  ::encode(from, bl);
+  encode(stamp, bl);
+  encode(base, bl);
+  encode(metablob, bl, features);
+  encode(bounds, bl);
+  encode(cmapv, bl);
+  encode(client_map, bl);
+  encode(from, bl);
   ENCODE_FINISH(bl);
 }
 
 void EImportStart::decode(bufferlist::iterator &bl) {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(base, bl);
-  ::decode(metablob, bl);
-  ::decode(bounds, bl);
-  ::decode(cmapv, bl);
-  ::decode(client_map, bl);
+    decode(stamp, bl);
+  decode(base, bl);
+  decode(metablob, bl);
+  decode(bounds, bl);
+  decode(cmapv, bl);
+  decode(client_map, bl);
   if (struct_v >= 4)
-    ::decode(from, bl);
+    decode(from, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3039,9 +3047,9 @@ void EImportFinish::replay(MDSRank *mds)
 void EImportFinish::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(3, 3, bl);
-  ::encode(stamp, bl);
-  ::encode(base, bl);
-  ::encode(success, bl);
+  encode(stamp, bl);
+  encode(base, bl);
+  encode(success, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -3049,9 +3057,9 @@ void EImportFinish::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
   if (struct_v >= 2)
-    ::decode(stamp, bl);
-  ::decode(base, bl);
-  ::decode(success, bl);
+    decode(stamp, bl);
+  decode(base, bl);
+  decode(success, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3074,14 +3082,14 @@ void EImportFinish::generate_test_instances(list<EImportFinish*>& ls)
 void EResetJournal::encode(bufferlist& bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(stamp, bl);
+  encode(stamp, bl);
   ENCODE_FINISH(bl);
 }
  
 void EResetJournal::decode(bufferlist::iterator &bl)
 {
   DECODE_START_LEGACY_COMPAT_LEN(2, 2, 2, bl);
-  ::decode(stamp, bl);
+  decode(stamp, bl);
   DECODE_FINISH(bl);
 }
 
@@ -3119,10 +3127,10 @@ void EResetJournal::replay(MDSRank *mds)
 void ENoOp::encode(bufferlist &bl, uint64_t features) const
 {
   ENCODE_START(2, 2, bl);
-  ::encode(pad_size, bl);
+  encode(pad_size, bl);
   uint8_t const pad = 0xff;
   for (unsigned int i = 0; i < pad_size; ++i) {
-    ::encode(pad, bl);
+    encode(pad, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -3131,7 +3139,7 @@ void ENoOp::encode(bufferlist &bl, uint64_t features) const
 void ENoOp::decode(bufferlist::iterator &bl)
 {
   DECODE_START(2, bl);
-  ::decode(pad_size, bl);
+  decode(pad_size, bl);
   if (bl.get_remaining() != pad_size) {
     // This is spiritually an assertion, but expressing in a way that will let
     // journal debug tools catch it and recognise a malformed entry.

@@ -13,7 +13,6 @@
 #include "include/encoding.h"
 #include "key_value_store/kv_flat_btree_async.h"
 
-using namespace std;
 using ceph::bufferlist;
 
 struct assert_size_args {
@@ -24,14 +23,14 @@ struct assert_size_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(bound, bl);
-    ::encode(comparator, bl);
+    encode(bound, bl);
+    encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(bound, p);
-    ::decode(comparator, p);
+    decode(bound, p);
+    decode(comparator, p);
     DECODE_FINISH(p);
   }
 };
@@ -44,16 +43,16 @@ struct idata_from_key_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(key, bl);
-    ::encode(idata, bl);
-    ::encode(next_idata, bl);
+    encode(key, bl);
+    encode(idata, bl);
+    encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(key, p);
-    ::decode(idata, p);
-    ::decode(next_idata, p);
+    decode(key, p);
+    decode(idata, p);
+    decode(next_idata, p);
     DECODE_FINISH(p);
   }
 };
@@ -65,14 +64,14 @@ struct idata_from_idata_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(idata, bl);
-    ::encode(next_idata, bl);
+    encode(idata, bl);
+    encode(next_idata, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(idata, p);
-    ::decode(next_idata, p);
+    decode(idata, p);
+    decode(next_idata, p);
     DECODE_FINISH(p);
   }
 };
@@ -85,16 +84,16 @@ struct omap_set_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(omap, bl);
-    ::encode(bound, bl);
-    ::encode(exclusive, bl);
+    encode(omap, bl);
+    encode(bound, bl);
+    encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(omap, p);
-    ::decode(bound, p);
-    ::decode(exclusive, p);
+    decode(omap, p);
+    decode(bound, p);
+    decode(exclusive, p);
     DECODE_FINISH(p);
   }
 };
@@ -106,14 +105,14 @@ struct omap_rm_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(omap, bl);
-    ::encode(bound, bl);
+    encode(omap, bl);
+    encode(bound, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(omap, p);
-    ::decode(bound, p);
+    decode(omap, p);
+    decode(bound, p);
     DECODE_FINISH(p);
   }
 };
@@ -126,16 +125,16 @@ struct rebalance_args {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(odata, bl);
-    ::encode(bound, bl);
-    ::encode(comparator, bl);
+    encode(odata, bl);
+    encode(bound, bl);
+    encode(comparator, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &p) {
     DECODE_START(1, p);
-    ::decode(odata,p);
-    ::decode(bound, p);
-    ::decode(comparator, p);
+    decode(odata,p);
+    decode(bound, p);
+    decode(comparator, p);
     DECODE_FINISH(p);
   }
 };

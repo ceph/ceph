@@ -192,11 +192,12 @@ struct MDRequestImpl : public MutationImpl {
   inodeno_t alloc_ino, used_prealloc_ino;  
   interval_set<inodeno_t> prealloc_inos;
 
-  int snap_caps;
-  int getattr_caps;       ///< caps requested by getattr
-  bool did_early_reply;
-  bool o_trunc;           ///< request is an O_TRUNC mutation
-  bool has_completed;     ///< request has already completed
+  int snap_caps = 0;
+  int getattr_caps = 0;		///< caps requested by getattr
+  bool no_early_reply = false;
+  bool did_early_reply = false;
+  bool o_trunc = false;		///< request is an O_TRUNC mutation
+  bool has_completed = false;	///< request has already completed
 
   bufferlist reply_extra_bl;
 
@@ -292,26 +293,30 @@ struct MDRequestImpl : public MutationImpl {
     // keep these default values synced to MutationImpl's
     Params() : attempt(0), client_req(NULL),
         triggering_slave_req(NULL), slave_to(MDS_RANK_NONE), internal_op(-1) {}
+    const utime_t& get_recv_stamp() const {
+      return initiated;
+    }
+    const utime_t& get_throttle_stamp() const {
+      return throttled;
+    }
+    const utime_t& get_recv_complete_stamp() const {
+      return all_read;
+    }
+    const utime_t& get_dispatch_stamp() const {
+      return dispatched;
+    }
   };
-  MDRequestImpl(const Params& params, OpTracker *tracker) :
-    MutationImpl(tracker, params.initiated,
-		 params.reqid, params.attempt, params.slave_to),
+  MDRequestImpl(const Params* params, OpTracker *tracker) :
+    MutationImpl(tracker, params->initiated,
+		 params->reqid, params->attempt, params->slave_to),
     session(NULL), item_session_request(this),
-    client_request(params.client_req), straydn(NULL), snapid(CEPH_NOSNAP),
+    client_request(params->client_req), straydn(NULL), snapid(CEPH_NOSNAP),
     tracei(NULL), tracedn(NULL), alloc_ino(0), used_prealloc_ino(0),
-    snap_caps(0), getattr_caps(0),
-    did_early_reply(false), o_trunc(false), has_completed(false),
-    slave_request(NULL), internal_op(params.internal_op), internal_op_finish(NULL),
+    slave_request(NULL), internal_op(params->internal_op), internal_op_finish(NULL),
     internal_op_private(NULL),
     retry(0),
     waited_for_osdmap(false), _more(NULL) {
     in[0] = in[1] = NULL;
-    if (!params.throttled.is_zero())
-      mark_event("throttled", params.throttled);
-    if (!params.all_read.is_zero())
-      mark_event("all_read", params.all_read);
-    if (!params.dispatched.is_zero())
-      mark_event("dispatched", params.dispatched);
   }
   ~MDRequestImpl() override;
   
@@ -332,7 +337,7 @@ struct MDRequestImpl : public MutationImpl {
   const filepath& get_filepath2();
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
-  bool is_replay() const;
+  bool is_queued_for_replay() const;
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;

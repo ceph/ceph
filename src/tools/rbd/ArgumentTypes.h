@@ -37,6 +37,7 @@ static const std::string POSITIONAL_COMMAND_SPEC("positional-command-spec");
 static const std::string POSITIONAL_ARGUMENTS("positional-arguments");
 static const std::string IMAGE_SPEC("image-spec");
 static const std::string GROUP_SPEC("group-spec");
+static const std::string GROUP_SNAP_SPEC("group-snap-spec");
 static const std::string SNAPSHOT_SPEC("snap-spec");
 static const std::string IMAGE_OR_SNAPSHOT_SPEC("image-or-snap-spec");
 static const std::string JOURNAL_SPEC("journal-spec");
@@ -80,8 +81,6 @@ static const std::string FORMAT("format");
 static const std::string PRETTY_FORMAT("pretty-format");
 static const std::string VERBOSE("verbose");
 static const std::string NO_ERROR("no-error");
-
-static const std::string DELAY("delay");
 
 static const std::string LIMIT("limit");
 
@@ -129,6 +128,9 @@ std::string get_description_prefix(ArgumentModifier modifier);
 void add_special_pool_option(boost::program_options::options_description *opt,
 			     std::string prefix);
 
+void add_all_option(boost::program_options::options_description *opt,
+		    std::string description);
+
 void add_pool_option(boost::program_options::options_description *opt,
                      ArgumentModifier modifier,
                      const std::string &desc_suffix = "");
@@ -160,7 +162,7 @@ void add_image_spec_options(boost::program_options::options_description *pos,
 
 void add_group_spec_options(boost::program_options::options_description *pos,
 			    boost::program_options::options_description *opt,
-			    ArgumentModifier modifier);
+			    ArgumentModifier modifier, bool snap);
 
 void add_snap_spec_options(boost::program_options::options_description *pos,
                            boost::program_options::options_description *opt,

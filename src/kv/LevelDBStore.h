@@ -66,6 +66,7 @@ class LevelDBStore : public KeyValueDB {
 #endif
   boost::scoped_ptr<leveldb::DB> db;
 
+  int load_leveldb_options(bool create_if_missing, leveldb::Options &opts);
   int do_open(ostream &out, bool create_if_missing);
 
   // manage async compactions
@@ -174,15 +175,17 @@ public:
   int init(string option_str="") override;
 
   /// Opens underlying db
-  int open(ostream &out) override {
-    return do_open(out, false);
-  }
+  int open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
   /// Creates underlying db if missing and opens it
-  int create_and_open(ostream &out) override {
-    return do_open(out, true);
-  }
+  int create_and_open(ostream &out, const std::vector<ColumnFamily>& = {}) override;
 
   void close() override;
+
+  PerfCounters *get_perf_counters() override
+  {
+    return logger;
+  }
+  int repair(std::ostream &out) override;
 
   class LevelDBTransactionImpl : public KeyValueDB::TransactionImpl {
   public:
@@ -397,8 +400,7 @@ err:
   }
 
 
-protected:
-  WholeSpaceIterator _get_iterator() override {
+  WholeSpaceIterator get_wholespace_iterator() override {
     return std::make_shared<LevelDBWholeSpaceIteratorImpl>(
 	db->NewIterator(leveldb::ReadOptions()));
   }

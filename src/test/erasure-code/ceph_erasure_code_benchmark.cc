@@ -219,7 +219,7 @@ int ErasureCodeBench::decode_erasures(const map<int,bufferlist> &all_chunks,
 	want_to_read.insert(chunk);
 
     map<int,bufferlist> decoded;
-    code = erasure_code->decode(want_to_read, chunks, &decoded);
+    code = erasure_code->decode(want_to_read, chunks, &decoded, 0);
     if (code)
       return code;
     for (set<int>::iterator chunk = want_to_read.begin();
@@ -303,7 +303,7 @@ int ErasureCodeBench::decode()
 	return code;
     } else if (erased.size() > 0) {
       map<int,bufferlist> decoded;
-      code = erasure_code->decode(want_to_read, encoded, &decoded);
+      code = erasure_code->decode(want_to_read, encoded, &decoded, 0);
       if (code)
 	return code;
     } else {
@@ -316,7 +316,7 @@ int ErasureCodeBench::decode()
 	chunks.erase(erasure);
       }
       map<int,bufferlist> decoded;
-      code = erasure_code->decode(want_to_read, chunks, &decoded);
+      code = erasure_code->decode(want_to_read, chunks, &decoded, 0);
       if (code)
 	return code;
     }

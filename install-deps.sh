@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:8; indent-tabs-mode:t -*-
 #
 # Ceph distributed storage system
 #
@@ -25,6 +26,80 @@ function munge_ceph_spec_in {
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
 }
 
+function ensure_decent_gcc_on_deb {
+    # point gcc to the one offered by g++-7 if the used one is not
+    # new enough
+    local old=$(gcc -dumpversion)
+    local new=$1
+    if dpkg --compare-versions $old ge 7.0; then
+	return
+    fi
+
+    local dist=$(lsb_release --short --codename)
+
+    if [ ! -f /usr/bin/g++-${new} ]; then
+	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
+deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $dist main
+deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $dist main
+deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $dist main
+EOF
+	# import PPA's signing key into APT's keyring
+	$SUDO apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 1E9377A2BA9EF27F
+	$SUDO apt-get -y update -o Acquire::Languages=none -o Acquire::Translation=none || true
+	$SUDO apt-get install -y g++-7
+    fi
+
+    case $dist in
+        trusty)
+            old=4.8;;
+        xenial)
+            old=5;;
+    esac
+    $SUDO update-alternatives --remove-all gcc || true
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${new} 20 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${new}
+
+    $SUDO update-alternatives \
+	 --install /usr/bin/gcc gcc /usr/bin/gcc-${old} 10 \
+	 --slave   /usr/bin/g++ g++ /usr/bin/g++-${old}
+
+    $SUDO update-alternatives --auto gcc
+
+    # cmake uses the latter by default
+    $SUDO ln -nsf /usr/bin/gcc /usr/bin/x86_64-linux-gnu-gcc
+    $SUDO ln -nsf /usr/bin/g++ /usr/bin/x86_64-linux-gnu-g++
+}
+
+function version_lt {
+    test $1 != $(echo -e "$1\n$2" | sort -rV | head -n 1)
+}
+
+function ensure_decent_gcc_on_rh {
+    local old=$(gcc -dumpversion)
+    local expected=5.1
+    local dts_ver=$1
+    if version_lt $old $expected; then
+	if test -t 1; then
+	    # interactive shell
+	    cat <<EOF
+Your GCC is too old. Please run following command to add DTS to your environment:
+
+scl enable devtoolset-7 bash
+
+Or add following line to the end of ~/.bashrc to add it permanently:
+
+source scl_source enable devtoolset-7
+
+see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
+EOF
+	else
+	    # non-interactive shell
+	    source /opt/rh/devtoolset-$dts_ver/enable
+	fi
+    fi
+}
+
 if [ x`uname`x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
@@ -45,7 +120,6 @@ if [ x`uname`x = xFreeBSDx ]; then
         databases/leveldb \
         net/openldap-client \
         security/nss \
-        security/cryptopp \
         archivers/snappy \
         ftp/curl \
         misc/e2fsprogs-libuuid \
@@ -80,7 +154,15 @@ else
     debian|ubuntu|devuan)
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y lsb-release devscripts equivs
-        $SUDO apt-get install -y dpkg-dev gcc
+        $SUDO apt-get install -y dpkg-dev
+        case "$VERSION" in
+            *Trusty*|*Xenial*)
+                ensure_decent_gcc_on_deb 7
+                ;;
+            *)
+                $SUDO apt-get install -y gcc
+                ;;
+        esac
         if ! test -r debian/control ; then
             echo debian/control is not a readable file
             exit 1
@@ -112,6 +194,12 @@ else
             builddepcmd="dnf -y builddep --allowerasing"
         fi
         echo "Using $yumdnf to install dependencies"
+	if [ $(lsb_release -si) = CentOS -a $(uname -m) = aarch64 ]; then
+	    $SUDO yum-config-manager --disable centos-sclo-sclo || true
+	    $SUDO yum-config-manager --disable centos-sclo-rh || true
+	    $SUDO yum remove centos-release-scl || true
+	fi
+
         $SUDO $yumdnf install -y redhat-lsb-core
         case $(lsb_release -si) in
             Fedora)
@@ -123,8 +211,7 @@ else
                 $SUDO yum install -y yum-utils
                 MAJOR_VERSION=$(lsb_release -rs | cut -f1 -d.)
                 if test $(lsb_release -si) = RedHatEnterpriseServer ; then
-                    $SUDO yum install subscription-manager
-                    $SUDO subscription-manager repos --enable=rhel-$MAJOR_VERSION-server-optional-rpms
+                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
                 $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
@@ -132,14 +219,31 @@ else
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $(lsb_release -si) = CentOS -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
-                fi
-                if test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
+		    case $(uname -m) in
+			x86_64)
+			    $SUDO yum -y install centos-release-scl
+			    dts_ver=7
+			    ;;
+			aarch64)
+			    $SUDO yum -y install centos-release-scl-rh
+			    $SUDO yum-config-manager --disable centos-sclo-rh
+			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
+			    dts_ver=7
+			    ;;
+		    esac
+                elif test $(lsb_release -si) = RedHatEnterpriseServer -a $MAJOR_VERSION = 7 ; then
+                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
+                    dts_ver=7
+                elif test $(lsb_release -si) = VirtuozzoLinux -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable cr
                 fi
                 ;;
         esac
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
+	if [ -n dts_ver ]; then
+            ensure_decent_gcc_on_rh $dts_ver
+	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
         ;;
     opensuse|suse|sles)

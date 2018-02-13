@@ -18,7 +18,8 @@ public:
 
   template <typename Payload>
   inline void operator()(const Payload &payload) const {
-    ::encode(static_cast<uint32_t>(Payload::NOTIFY_OP), m_bl);
+    using ceph::encode;
+    encode(static_cast<uint32_t>(Payload::NOTIFY_OP), m_bl);
     payload.encode(m_bl);
   }
 
@@ -86,7 +87,7 @@ void LockReleasedPayload::dump(Formatter *f) const {
 }
 
 void UnknownPayload::encode(bufferlist &bl) const {
-  assert(false);
+  ceph_abort();
 }
 
 void UnknownPayload::decode(__u8 version, bufferlist::iterator &iter) {
@@ -105,7 +106,7 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
   DECODE_START(1, iter);
 
   uint32_t notify_op;
-  ::decode(notify_op, iter);
+  decode(notify_op, iter);
 
   // select the correct payload variant based upon the encoded op
   switch (notify_op) {

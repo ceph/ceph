@@ -24,6 +24,8 @@
 #include "include/timegm.h"
 #include "common/strtol.h"
 #include "common/ceph_time.h"
+#include "common/safe_io.h"
+#include "common/SubProcess.h"
 #include "include/denc.h"
 
 
@@ -79,7 +81,7 @@ public:
   }
   void set_from_double(double d) { 
     tv.tv_sec = (__u32)trunc(d);
-    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * (double)1000000000.0);
+    tv.tv_nsec = (__u32)((d - (double)tv.tv_sec) * 1000000000.0);
   }
 
   real_time to_real_time() const {
@@ -124,16 +126,18 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)(this), sizeof(__u32) + sizeof(__u32));
 #else
-    ::encode(tv.tv_sec, bl);
-    ::encode(tv.tv_nsec, bl);
+    using ceph::encode;
+    encode(tv.tv_sec, bl);
+    encode(tv.tv_nsec, bl);
 #endif
   }
   void decode(bufferlist::iterator &p) {
 #if defined(CEPH_LITTLE_ENDIAN)
     p.copy(sizeof(__u32) + sizeof(__u32), (char *)(this));
 #else
-    ::decode(tv.tv_sec, p);
-    ::decode(tv.tv_nsec, p);
+    using ceph::decode;
+    decode(tv.tv_sec, p);
+    decode(tv.tv_nsec, p);
 #endif
   }
 
@@ -167,6 +171,17 @@ public:
     localtime_r(&tt, &bdt);
     bdt.tm_sec = 0;
     bdt.tm_min = 0;
+    tt = mktime(&bdt);
+    return utime_t(tt, 0);
+  }
+
+  utime_t round_to_day() {
+    struct tm bdt;
+    time_t tt = sec();
+    localtime_r(&tt, &bdt);
+    bdt.tm_sec = 0;
+    bdt.tm_min = 0;
+    bdt.tm_hour = 0;
     tt = mktime(&bdt);
     return utime_t(tt, 0);
   }
@@ -322,6 +337,32 @@ public:
         bdt.tm_hour, bdt.tm_min, bdt.tm_sec);
   }
 
+  static int invoke_date(const std::string& date_str, utime_t *result) {
+     char buf[256];
+
+     SubProcess bin_date("/bin/date", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::KEEP);
+     bin_date.add_cmd_args("-d", date_str.c_str(), "+%s %N", NULL);
+
+     int r = bin_date.spawn();
+     if (r < 0) return r;
+
+     ssize_t n = safe_read(bin_date.get_stdout(), buf, sizeof(buf));
+
+     r = bin_date.join();
+     if (r || n <= 0) return -EINVAL;
+
+     uint64_t epoch, nsec;
+     std::istringstream iss(buf);
+
+     iss >> epoch;
+     iss >> nsec;
+
+     *result = utime_t(epoch, nsec);
+
+     return 0;
+  }
+
+
   static int parse_date(const string& date, uint64_t *epoch, uint64_t *nsec,
                         string *out_date=NULL, string *out_time=NULL) {
     struct tm tm;
@@ -404,7 +445,7 @@ inline utime_t& operator+=(utime_t& l, const utime_t& r) {
 }
 inline utime_t& operator+=(utime_t& l, double f) {
   double fs = trunc(f);
-  double ns = (f - fs) * (double)1000000000.0;
+  double ns = (f - fs) * 1000000000.0;
   l.sec_ref() += (long)fs;
   l.nsec_ref() += (long)ns;
   l.normalize();
@@ -427,7 +468,7 @@ inline utime_t& operator-=(utime_t& l, const utime_t& r) {
 }
 inline utime_t& operator-=(utime_t& l, double f) {
   double fs = trunc(f);
-  double ns = (f - fs) * (double)1000000000.0;
+  double ns = (f - fs) * 1000000000.0;
   l.sec_ref() -= (long)fs;
   long nsl = (long)ns;
   if (nsl) {

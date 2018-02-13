@@ -189,7 +189,8 @@ Replay<I>::~Replay() {
 template <typename I>
 int Replay<I>::decode(bufferlist::iterator *it, EventEntry *event_entry) {
   try {
-    ::decode(*event_entry, *it);
+    using ceph::decode;
+    decode(*event_entry, *it);
   } catch (const buffer::error &err) {
     return -EBADMSG;
   }
@@ -816,7 +817,8 @@ void Replay<I>::handle_event(const journal::MetadataSetEvent &event,
     return;
   }
 
-  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+  on_op_complete = new C_RefreshIfRequired<I>(m_image_ctx, on_op_complete);
+  op_event->on_op_finish_event = util::create_async_context_callback(
     m_image_ctx, new ExecuteOp<I, journal::MetadataSetEvent>(
       m_image_ctx, event, on_op_complete));
 
@@ -837,7 +839,8 @@ void Replay<I>::handle_event(const journal::MetadataRemoveEvent &event,
     return;
   }
 
-  op_event->on_op_finish_event = new C_RefreshIfRequired<I>(
+  on_op_complete = new C_RefreshIfRequired<I>(m_image_ctx, on_op_complete);
+  op_event->on_op_finish_event = util::create_async_context_callback(
     m_image_ctx, new ExecuteOp<I, journal::MetadataRemoveEvent>(
       m_image_ctx, event, on_op_complete));
 

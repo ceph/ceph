@@ -15,6 +15,8 @@
 #ifndef CEPH_SNAPCLIENT_H
 #define CEPH_SNAPCLIENT_H
 
+#include <string_view>
+
 #include "MDSTableClient.h"
 #include "snap.h"
 
@@ -29,44 +31,44 @@ public:
   void resend_queries() override {}
   void handle_query_result(MMDSTableRequest *m) override {}
 
-  void prepare_create(inodeno_t dirino, const string& name, utime_t stamp,
+  void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,
 		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
-    ::encode(op, bl);
-    ::encode(dirino, bl);
-    ::encode(name, bl);
-    ::encode(stamp, bl);
+    encode(op, bl);
+    encode(dirino, bl);
+    encode(name, bl);
+    encode(stamp, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
   void prepare_create_realm(inodeno_t ino, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_CREATE;
-    ::encode(op, bl);
-    ::encode(ino, bl);
+    encode(op, bl);
+    encode(ino, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
   void prepare_destroy(inodeno_t ino, snapid_t snapid, version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_DESTROY;
-    ::encode(op, bl);
-    ::encode(ino, bl);
-    ::encode(snapid, bl);
+    encode(op, bl);
+    encode(ino, bl);
+    encode(snapid, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
 
-  void prepare_update(inodeno_t ino, snapid_t snapid, const string& name, utime_t stamp,
-		      version_t *pstid, bufferlist *pbl, MDSInternalContextBase *onfinish) {
+  void prepare_update(inodeno_t ino, snapid_t snapid, std::string_view name, utime_t stamp,
+		      version_t *pstid, MDSInternalContextBase *onfinish) {
     bufferlist bl;
     __u32 op = TABLE_OP_UPDATE;
-    ::encode(op, bl);
-    ::encode(ino, bl);
-    ::encode(snapid, bl);
-    ::encode(name, bl);
-    ::encode(stamp, bl);
-    _prepare(bl, pstid, pbl, onfinish);
+    encode(op, bl);
+    encode(ino, bl);
+    encode(snapid, bl);
+    encode(name, bl);
+    encode(stamp, bl);
+    _prepare(bl, pstid, NULL, onfinish);
   }
 };
 

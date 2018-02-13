@@ -357,10 +357,6 @@ class MDSCluster(CephCluster):
     def get_mds_info(self, mds_id):
         return FSStatus(self.mon_manager).get_mds(mds_id)
 
-    def is_full(self):
-        flags = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['flags']
-        return 'full' in flags
-
     def is_pool_full(self, pool_name):
         pools = json.loads(self.mon_manager.raw_cluster_cmd("osd", "dump", "--format=json-pretty"))['pools']
         for pool in pools:
@@ -374,10 +370,12 @@ class Filesystem(MDSCluster):
     This object is for driving a CephFS filesystem.  The MDS daemons driven by
     MDSCluster may be shared with other Filesystems.
     """
-    def __init__(self, ctx, fscid=None, name=None, create=False):
+    def __init__(self, ctx, fscid=None, name=None, create=False,
+                 ec_profile=None):
         super(Filesystem, self).__init__(ctx)
 
         self.name = name
+        self.ec_profile = ec_profile
         self.id = None
         self.metadata_pool_name = None
         self.metadata_overlay = False
@@ -435,11 +433,18 @@ class Filesystem(MDSCluster):
             raise RuntimeError("cannot deactivate rank 0")
         self.mon_manager.raw_cluster_cmd("mds", "deactivate", "%d:%d" % (self.id, rank))
 
+    def set_var(self, var, *args):
+        a = map(str, args)
+        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
+
     def set_max_mds(self, max_mds):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+        self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_dirfrags(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+
+    def set_allow_new_snaps(self, yes):
+        self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
@@ -473,8 +478,22 @@ class Filesystem(MDSCluster):
                                              self.name, self.metadata_pool_name, data_pool_name,
                                              '--allow-dangerous-metadata-overlay')
         else:
-            self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create',
-                                             data_pool_name, pgs_per_fs_pool.__str__())
+            if self.ec_profile and 'disabled' not in self.ec_profile:
+                log.info("EC profile is %s", self.ec_profile)
+                cmd = ['osd', 'erasure-code-profile', 'set', data_pool_name]
+                cmd.extend(self.ec_profile)
+                self.mon_manager.raw_cluster_cmd(*cmd)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__(), 'erasure',
+                    data_pool_name)
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'set',
+                    data_pool_name, 'allow_ec_overwrites', 'true')
+            else:
+                self.mon_manager.raw_cluster_cmd(
+                    'osd', 'pool', 'create',
+                    data_pool_name, pgs_per_fs_pool.__str__())
             self.mon_manager.raw_cluster_cmd('fs', 'new',
                                              self.name, self.metadata_pool_name, data_pool_name)
         self.check_pool_application(self.metadata_pool_name)
@@ -539,6 +558,9 @@ class Filesystem(MDSCluster):
 
     def get_mds_map(self):
         return self.status().get_fsmap(self.id)['mdsmap']
+
+    def get_var(self, var):
+        return self.status().get_fsmap(self.id)['mdsmap'][var]
 
     def add_data_pool(self, name):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())
@@ -623,6 +645,9 @@ class Filesystem(MDSCluster):
 
         :return:
         """
+        # First, check to see that processes haven't exited with an error code
+        for mds in self._ctx.daemons.iter_daemons_of_role('mds'):
+            mds.check_status()
 
         active_count = 0
         try:
@@ -1195,3 +1220,6 @@ class Filesystem(MDSCluster):
             return workers[0].value
         else:
             return None
+
+    def is_full(self):
+        return self.is_pool_full(self.get_data_pool_name())

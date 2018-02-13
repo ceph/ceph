@@ -15,7 +15,6 @@
 #include "json_spirit/json_spirit.h"
 #include "common/debug.h"
 
-using namespace std;
 
 /**
  * Given a cmddesc like "foo baz name=bar,type=CephString",
@@ -343,7 +342,8 @@ handle_bad_get(CephContext *cct, const string& k, const char *tname)
 
   ostringstream oss;
   oss << BackTrace(1);
-  lderr(cct) << oss.rdbuf() << dendl;
+  lderr(cct) << oss.str() << dendl;
+
   if (status == 0)
     free((char *)typestr);
 }

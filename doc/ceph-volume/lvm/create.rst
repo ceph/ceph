@@ -15,14 +15,10 @@ once.
 There is nothing different to the process except the OSD will become up and in
 immediately after completion.
 
-Although initially :term:`filestore` is supported (and supported by default)
-the back end can be specified with:
+The backing objectstore can be specified with:
 
 * :ref:`--filestore <ceph-volume-lvm-prepare_filestore>`
-* ``--bluestore``
-
-.. when available, this will need to be updated to:
-.. * :ref:`--bluestore <ceph-volume-create_bluestore>`
+* :ref:`--bluestore <ceph-volume-lvm-prepare_bluestore>`
 
 All command line flags and options are the same as ``ceph-volume lvm prepare``.
 Please refer to :ref:`ceph-volume-lvm-prepare` for details.

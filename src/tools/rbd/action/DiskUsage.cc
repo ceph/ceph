@@ -208,7 +208,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       ++count;
     }
   }
-  if (!found) {
+  if (imgname != nullptr && !found) {
     std::cerr << "specified image " << imgname << " is not found." << std::endl;
     return -ENOENT;
   }
@@ -245,7 +245,8 @@ void get_arguments(po::options_description *positional,
      "snapshot starting point");
 }
 
-int execute(const po::variables_map &vm) {
+int execute(const po::variables_map &vm,
+            const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
   std::string image_name;
@@ -290,7 +291,7 @@ int execute(const po::variables_map &vm) {
 }
 
 Shell::Action action(
-  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot",
+  {"disk-usage"}, {"du"}, "Show disk usage stats for pool, image or snapshot.",
   "", &get_arguments, &execute);
 
 } // namespace disk_usage

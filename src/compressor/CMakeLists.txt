@@ -1,7 +1,6 @@
 
 set(compressor_srcs 
-  Compressor.cc
-  AsyncCompressor.cc)
+  Compressor.cc)
 add_library(compressor_objs OBJECT ${compressor_srcs})
 
 ## compressor plugins
@@ -12,8 +11,12 @@ add_subdirectory(snappy)
 add_subdirectory(zlib)
 add_subdirectory(zstd)
 
-if (HAVE_LZ4)
+if(HAVE_LZ4)
   add_subdirectory(lz4)
+endif()
+
+if(HAVE_BROTLI)
+  add_subdirectory(brotli)
 endif()
 
 set(ceph_compressor_libs
@@ -21,8 +24,12 @@ set(ceph_compressor_libs
     ceph_zlib
     ceph_zstd)
 
-if (HAVE_LZ4)
+if(HAVE_LZ4)
   list(APPEND ceph_compressor_libs ceph_lz4)
+endif()
+
+if(HAVE_BROTLI)
+  list(APPEND ceph_compressor_libs ceph_brotli)
 endif()
 
 add_custom_target(compressor_plugins DEPENDS
@@ -37,8 +44,11 @@ if(WITH_EMBEDDED)
       cephd_compressor_snappy
       cephd_compressor_zlib
       cephd_compressor_zstd)
-  if (HAVE_LZ4)
+  if(HAVE_LZ4)
     list(APPEND cephd_compressor_libs cephd_compressor_lz4)
+  endif()
+  if(HAVE_BROTLI)
+    list(APPEND cephd_compressor_libs cephd_compressor_brotli)
   endif()
   merge_static_libraries(cephd_compressor ${cephd_compressor_libs})
 endif()

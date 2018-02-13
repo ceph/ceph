@@ -50,6 +50,7 @@ static const std::string RBD_DIFF_BANNER_V2 ("rbd diff v2\n");
 #define RBD_EXPORT_IMAGE_FEATURES	'T'
 #define RBD_EXPORT_IMAGE_STRIPE_UNIT	'U'
 #define RBD_EXPORT_IMAGE_STRIPE_COUNT	'C'
+#define RBD_EXPORT_IMAGE_META		'M'
 #define RBD_EXPORT_IMAGE_END		'E'
 
 enum SnapshotPresence {
@@ -94,7 +95,8 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 
 int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
-		       std::string *group_name);
+		       std::string *group_name,
+                       std::string *snap_name);
 
 int extract_image_id_spec(const std::string &spec, std::string *pool_name,
                           std::string *image_id);
@@ -138,7 +140,8 @@ int get_pool_group_names(const boost::program_options::variables_map &vm,
 			 argument_types::ArgumentModifier mod,
 			 size_t *spec_arg_index,
 			 std::string *pool_name,
-			 std::string *group_name);
+			 std::string *group_name,
+                         std::string *snap_name);
 
 int get_pool_journal_names(
     const boost::program_options::variables_map &vm,
@@ -160,7 +163,7 @@ int get_image_size(const boost::program_options::variables_map &vm,
                    uint64_t *size);
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path);
+             size_t *arg_index, std::string *path);
 
 int get_formatter(const boost::program_options::variables_map &vm,
                   argument_types::Format::Formatter *formatter);

@@ -31,7 +31,7 @@ protected:
   /// A finisher needed so that we don't re-enter kick_off_scrubs
   Finisher *finisher;
 
-  /// The stack of dentries we want to scrub
+  /// The stack of inodes we want to scrub
   elist<CInode*> inode_stack;
   /// current number of dentries we're actually scrubbing
   int scrubs_in_progress;
@@ -73,14 +73,14 @@ public:
    * @param header The ScrubHeader propagated from whereever this scrub
    *               was initiated
    */
-  void enqueue_inode_top(CInode *in, const ScrubHeaderRefConst& header,
+  void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,
 			 MDSInternalContextBase *on_finish) {
     enqueue_inode(in, header, on_finish, true);
   }
   /** Like enqueue_inode_top, but we wait for all pending scrubs before
    * starting this one.
    */
-  void enqueue_inode_bottom(CInode *in, const ScrubHeaderRefConst& header,
+  void enqueue_inode_bottom(CInode *in, ScrubHeaderRef& header,
 			    MDSInternalContextBase *on_finish) {
     enqueue_inode(in, header, on_finish, false);
   }
@@ -90,9 +90,9 @@ private:
    * Put the inode at either the top or bottom of the stack, with
    * the given scrub params, and then try and kick off more scrubbing.
    */
-  void enqueue_inode(CInode *in, const ScrubHeaderRefConst& header,
+  void enqueue_inode(CInode *in, ScrubHeaderRef& header,
                       MDSInternalContextBase *on_finish, bool top);
-  void _enqueue_inode(CInode *in, CDentry *parent, const ScrubHeaderRefConst& header,
+  void _enqueue_inode(CInode *in, CDentry *parent, ScrubHeaderRef& header,
                       MDSInternalContextBase *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
@@ -100,7 +100,7 @@ private:
    */
   void kick_off_scrubs();
   /**
-   * Push a indoe on top of the stack.
+   * Push a inode on top of the stack.
    */
   inline void push_inode(CInode *in);
   /**
@@ -114,7 +114,7 @@ private:
 
   /**
    * Scrub a file inode.
-   * @param in The indoe to scrub
+   * @param in The inode to scrub
    */
   void scrub_file_inode(CInode *in);
 
@@ -142,7 +142,7 @@ private:
    * 4) If all dirfrags have been scrubbed, scrub my inode.
    *
    * @param in The CInode to scrub as a directory
-   * @param added_dentries set to true if we pushed some of our children
+   * @param added_children set to true if we pushed some of our children
    * onto the ScrubStack
    * @param is_terminal set to true if there are no descendant dentries
    * remaining to start scrubbing.
@@ -164,7 +164,7 @@ private:
    * progress. Try again later.
    *
    */
-  void scrub_dirfrag(CDir *dir, const ScrubHeaderRefConst& header,
+  void scrub_dirfrag(CDir *dir, ScrubHeaderRef& header,
 		     bool *added_children, bool *is_terminal, bool *done);
   /**
    * Scrub a directory-representing dentry.

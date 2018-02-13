@@ -14,12 +14,13 @@
 
 #include <mutex>
 #include <memory>
+#include <optional>
+#include <shared_mutex>
 #include <type_traits>
 #include <utility>
 
-#include <boost/thread/shared_mutex.hpp>
+#include <boost/optional.hpp>
 
-#include "common/backport14.h"
 #include "common/shunique_lock.h"
 
 #include "include/assert.h" // I despise you. Not you the reader, I'm talking
@@ -45,38 +46,38 @@ namespace ceph {
 // are some lock factories.
 template<typename Mutex, typename ...Args>
 inline auto uniquely_lock(Mutex&& m, Args&& ...args)
-  -> std::unique_lock<remove_reference_t<Mutex> > {
-  return std::unique_lock<remove_reference_t<Mutex> >(
+  -> std::unique_lock<std::remove_reference_t<Mutex> > {
+  return std::unique_lock<std::remove_reference_t<Mutex> >(
     std::forward<Mutex>(m), std::forward<Args>(args)... );
 }
 
 template<typename Mutex, typename ...Args>
 inline auto sharingly_lock(Mutex&& m, Args&& ...args)
-  -> boost::shared_lock<remove_reference_t<Mutex> > {
+  -> std::shared_lock<std::remove_reference_t<Mutex> > {
   return
-    boost::shared_lock<remove_reference_t<Mutex> >(
+    std::shared_lock<std::remove_reference_t<Mutex> >(
       std::forward<Mutex>(m), std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
 inline auto shuniquely_lock(std::unique_lock<Mutex>&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
     std::forward<std::unique_lock<Mutex> >(m), std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
-inline auto shuniquely_lock(boost::shared_lock<Mutex>&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
-    std::forward<boost::shared_lock<Mutex> >(m),
+inline auto shuniquely_lock(std::shared_lock<Mutex>&& m, Args&& ...args)
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
+    std::forward<std::shared_lock<Mutex> >(m),
     std::forward<Args>(args)...);
 }
 
 template<typename Mutex, typename ...Args>
 inline auto shuniquely_lock(Mutex&& m, Args&& ...args)
-  -> shunique_lock<remove_reference_t<Mutex> > {
-  return shunique_lock<remove_reference_t<Mutex> >(
+  -> shunique_lock<std::remove_reference_t<Mutex> > {
+  return shunique_lock<std::remove_reference_t<Mutex> >(
     std::forward<Mutex>(m), std::forward<Args>(args)...);
 }
 
@@ -103,7 +104,7 @@ inline auto shuniquely_lock(Mutex&& m, Args&& ...args)
 
 template<typename Mutex>
 inline auto guardedly_lock(Mutex&& m)
-  -> std::lock_guard<remove_reference_t<Mutex> > {
+  -> std::lock_guard<std::remove_reference_t<Mutex> > {
   m.lock();
   // So the way this works is that Copy List Initialization creates
   // one and only one Temporary. There is no implicit copy that is
@@ -125,7 +126,7 @@ inline auto guardedly_lock(Mutex&& m)
 
 template<typename Mutex>
 inline auto guardedly_lock(Mutex&& m, std::adopt_lock_t)
-  -> std::lock_guard<remove_reference_t<Mutex> > {
+  -> std::lock_guard<std::remove_reference_t<Mutex> > {
   return { std::forward<Mutex>(m), std::adopt_lock };
 }
 
@@ -155,10 +156,118 @@ inline auto with_shared_lock(Mutex&& mutex, Fun&& fun, Args&&... args)
 // returns a lock class.
 //
 #define UNIQUE_LOCK_T(m) \
-  ::std::unique_lock<ceph::remove_reference_t<decltype(m)>>
+  ::std::unique_lock<std::remove_reference_t<decltype(m)>>
 #define SHARED_LOCK_T(m) \
-  ::std::shared_lock<ceph::remove_reference_t<decltype(m)>>
+  ::std::shared_lock<std::remove_reference_t<decltype(m)>>
 #define SHUNIQUE_LOCK_T(m) \
-  ::ceph::shunique_lock<ceph::remove_reference_t<decltype(m)>>
+  ::ceph::shunique_lock<std::remove_reference_t<decltype(m)>>
 
+namespace ceph {
+// boost::optional is wonderful! Unfortunately it lacks a function for
+// the thing you would most obviously want to do with it: apply a
+// function to its contents.
+
+// There are two obvious candidates. The first is a function that
+// takes a function and an optional value and returns an optional
+// value, either holding the return value of the function or holding
+// nothing.
+//
+// I'd considered making more overloads for mutable lvalue
+// references, but those are going a bit beyond likely use cases.
+//
+template<typename T, typename F>
+auto maybe_do(const boost::optional<T>& t, F&& f) ->
+  boost::optional<std::result_of_t<F(const std::decay_t<T>)>>
+{
+  if (t)
+    return { std::forward<F>(f)(*t) };
+  else
+    return boost::none;
+}
+
+// The other obvious function takes an optional but returns an
+// ‘unwrapped’ value, either the result of evaluating the function or
+// a provided alternate value.
+//
+template<typename T, typename F, typename U>
+auto maybe_do_or(const boost::optional<T>& t, F&& f, U&& u) ->
+  std::result_of_t<F(const std::decay_t<T>)>
+{
+  static_assert(std::is_convertible_v<U, std::result_of_t<F(T)>>,
+		"Alternate value must be convertible to function return type.");
+  if (t)
+    return std::forward<F>(f)(*t);
+  else
+    return std::forward<U>(u);
+}
+
+
+// Same thing but for std::optional
+
+template<typename T, typename F>
+auto maybe_do(const std::optional<T>& t, F&& f) ->
+  std::optional<std::result_of_t<F(const std::decay_t<T>)>>
+{
+  if (t)
+    return { std::forward<F>(f)(*t) };
+  else
+    return std::nullopt;
+}
+
+// The other obvious function takes an optional but returns an
+// ‘unwrapped’ value, either the result of evaluating the function or
+// a provided alternate value.
+//
+template<typename T, typename F, typename U>
+auto maybe_do_or(const std::optional<T>& t, F&& f, U&& u) ->
+  std::result_of_t<F(const std::decay_t<T>)>
+{
+  static_assert(std::is_convertible_v<U, std::result_of_t<F(T)>>,
+		"Alternate value must be convertible to function return type.");
+  if (t)
+    return std::forward<F>(f)(*t);
+  else
+    return std::forward<U>(u);
+}
+
+namespace _convenience {
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(const std::tuple<Ts...>& t, const F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(std::tuple<Ts...>& t, const F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(const std::tuple<Ts...>& t, F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+template<typename... Ts, typename F,  std::size_t... Is>
+inline void for_each_helper(std::tuple<Ts...>& t, F& f,
+			    std::index_sequence<Is...>) {
+  (f(std::get<Is>(t)), ..., void());
+}
+}
+
+template<typename... Ts, typename F>
+inline void for_each(const std::tuple<Ts...>& t, const F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(std::tuple<Ts...>& t, const F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(const std::tuple<Ts...>& t, F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+template<typename... Ts, typename F>
+inline void for_each(std::tuple<Ts...>& t, F& f) {
+  _convenience::for_each_helper(t, f, std::index_sequence_for<Ts...>{});
+}
+}
 #endif // CEPH_COMMON_CONVENIENCE_H

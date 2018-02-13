@@ -21,6 +21,7 @@
 #include "MOSDOp.h"
 #include "os/ObjectStore.h"
 #include "common/errno.h"
+#include "common/mClockCommon.h"
 
 /*
  * OSD op reply
@@ -32,7 +33,7 @@
 
 class MOSDOpReply : public Message {
 
-  static const int HEAD_VERSION = 8;
+  static const int HEAD_VERSION = 9;
   static const int COMPAT_VERSION = 2;
 
   object_t oid;
@@ -48,6 +49,7 @@ class MOSDOpReply : public Message {
   int32_t retry_attempt = -1;
   bool do_redirect;
   request_redirect_t redirect;
+  dmc::PhaseType qos_resp;
 
 public:
   const object_t& get_oid() const { return oid; }
@@ -94,6 +96,8 @@ public:
   void set_redirect(const request_redirect_t& redir) { redirect = redir; }
   const request_redirect_t& get_redirect() const { return redirect; }
   bool is_redirect_reply() const { return do_redirect; }
+  void set_qos_resp(const dmc::PhaseType qresp) { qos_resp = qresp; }
+  dmc::PhaseType get_qos_resp() const { return qos_resp; }
 
   void add_flags(int f) { flags |= f; }
 
@@ -131,11 +135,11 @@ public:
     bdata_encode(false) {
     do_redirect = false;
   }
-  MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
-	      bool ignore_out_data)
+  MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype, bool ignore_out_data,
+              dmc::PhaseType qresp = dmc::PhaseType::reservation)
     : Message(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
-      bdata_encode(false) {
+      bdata_encode(false), qos_resp(qresp) {
 
     set_tid(req->get_tid());
     result = r;
@@ -158,6 +162,7 @@ private:
 
 public:
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if(false == bdata_encode) {
       OSDOp::merge_osd_op_vector_out_data(ops, data);
       bdata_encode = true;
@@ -174,83 +179,90 @@ public:
       head.result = result;
       head.num_ops = ops.size();
       head.object_len = oid.name.length();
-      ::encode(head, payload);
+      encode(head, payload);
       for (unsigned i = 0; i < head.num_ops; i++) {
-	::encode(ops[i].op, payload);
+	encode(ops[i].op, payload);
       }
-      ::encode_nohead(oid.name, payload);
+      encode_nohead(oid.name, payload);
     } else {
       header.version = HEAD_VERSION;
-      ::encode(oid, payload);
-      ::encode(pgid, payload);
-      ::encode(flags, payload);
-      ::encode(result, payload);
-      ::encode(bad_replay_version, payload);
-      ::encode(osdmap_epoch, payload);
+      encode(oid, payload);
+      encode(pgid, payload);
+      encode(flags, payload);
+      encode(result, payload);
+      encode(bad_replay_version, payload);
+      encode(osdmap_epoch, payload);
 
       __u32 num_ops = ops.size();
-      ::encode(num_ops, payload);
+      encode(num_ops, payload);
       for (unsigned i = 0; i < num_ops; i++)
-	::encode(ops[i].op, payload);
+	encode(ops[i].op, payload);
 
-      ::encode(retry_attempt, payload);
+      encode(retry_attempt, payload);
 
       for (unsigned i = 0; i < num_ops; i++)
-	::encode(ops[i].rval, payload);
+	encode(ops[i].rval, payload);
 
-      ::encode(replay_version, payload);
-      ::encode(user_version, payload);
+      encode(replay_version, payload);
+      encode(user_version, payload);
       if ((features & CEPH_FEATURE_NEW_OSDOPREPLY_ENCODING) == 0) {
         header.version = 6;
-        ::encode(redirect, payload);
+        encode(redirect, payload);
       } else {
         do_redirect = !redirect.empty();
-        ::encode(do_redirect, payload);
+        encode(do_redirect, payload);
         if (do_redirect) {
-          ::encode(redirect, payload);
+          encode(redirect, payload);
+        }
+        if ((features & CEPH_FEATURE_QOS_DMC) == 0) {
+          header.version = 8;
+        } else {
+          encode(qos_resp, payload);
         }
       }
       encode_trace(payload, features);
     }
   }
   void decode_payload() override {
+    using ceph::decode;
     bufferlist::iterator p = payload.begin();
 
     // Always keep here the newest version of decoding order/rule
     if (header.version == HEAD_VERSION) {
-      ::decode(oid, p);
-      ::decode(pgid, p);
-      ::decode(flags, p);
-      ::decode(result, p);
-      ::decode(bad_replay_version, p);
-      ::decode(osdmap_epoch, p);
+      decode(oid, p);
+      decode(pgid, p);
+      decode(flags, p);
+      decode(result, p);
+      decode(bad_replay_version, p);
+      decode(osdmap_epoch, p);
 
       __u32 num_ops = ops.size();
-      ::decode(num_ops, p);
+      decode(num_ops, p);
       ops.resize(num_ops);
       for (unsigned i = 0; i < num_ops; i++)
-	::decode(ops[i].op, p);
-      ::decode(retry_attempt, p);
+	decode(ops[i].op, p);
+      decode(retry_attempt, p);
 
       for (unsigned i = 0; i < num_ops; ++i)
-	::decode(ops[i].rval, p);
+	decode(ops[i].rval, p);
 
       OSDOp::split_osd_op_vector_out_data(ops, data);
 
-      ::decode(replay_version, p);
-      ::decode(user_version, p);
-      ::decode(do_redirect, p);
+      decode(replay_version, p);
+      decode(user_version, p);
+      decode(do_redirect, p);
       if (do_redirect)
-	::decode(redirect, p);
+	decode(redirect, p);
+      decode(qos_resp, p);
       decode_trace(p);
     } else if (header.version < 2) {
       ceph_osd_reply_head head;
-      ::decode(head, p);
+      decode(head, p);
       ops.resize(head.num_ops);
       for (unsigned i = 0; i < head.num_ops; i++) {
-	::decode(ops[i].op, p);
+	decode(ops[i].op, p);
       }
-      ::decode_nohead(head.object_len, oid.name, p);
+      decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
       result = (int32_t)head.result;
       flags = head.flags;
@@ -259,50 +271,53 @@ public:
       osdmap_epoch = head.osdmap_epoch;
       retry_attempt = -1;
     } else {
-      ::decode(oid, p);
-      ::decode(pgid, p);
-      ::decode(flags, p);
-      ::decode(result, p);
-      ::decode(bad_replay_version, p);
-      ::decode(osdmap_epoch, p);
+      decode(oid, p);
+      decode(pgid, p);
+      decode(flags, p);
+      decode(result, p);
+      decode(bad_replay_version, p);
+      decode(osdmap_epoch, p);
 
       __u32 num_ops = ops.size();
-      ::decode(num_ops, p);
+      decode(num_ops, p);
       ops.resize(num_ops);
       for (unsigned i = 0; i < num_ops; i++)
-	::decode(ops[i].op, p);
+	decode(ops[i].op, p);
 
       if (header.version >= 3)
-	::decode(retry_attempt, p);
+	decode(retry_attempt, p);
       else
 	retry_attempt = -1;
 
       if (header.version >= 4) {
 	for (unsigned i = 0; i < num_ops; ++i)
-	  ::decode(ops[i].rval, p);
+	  decode(ops[i].rval, p);
 
 	OSDOp::split_osd_op_vector_out_data(ops, data);
       }
 
       if (header.version >= 5) {
-	::decode(replay_version, p);
-	::decode(user_version, p);
+	decode(replay_version, p);
+	decode(user_version, p);
       } else {
 	replay_version = bad_replay_version;
 	user_version = replay_version.version;
       }
 
       if (header.version == 6) {
-	::decode(redirect, p);
+	decode(redirect, p);
         do_redirect = !redirect.empty();
       }
       if (header.version >= 7) {
-        ::decode(do_redirect, p);
+        decode(do_redirect, p);
         if (do_redirect) {
-	  ::decode(redirect, p);
+	  decode(redirect, p);
         }
       }
       if (header.version >= 8) {
+	if (header.version >= 9) {
+	  decode(qos_resp, p);
+	}
         decode_trace(p);
       }
     }

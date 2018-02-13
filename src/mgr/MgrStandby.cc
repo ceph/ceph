@@ -22,6 +22,7 @@
 #include "global/signal_handler.h"
 
 #include "mgr/MgrContext.h"
+#include "mgr/mgr_commands.h"
 
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
@@ -46,6 +47,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
   timer(g_ceph_context, lock),
+  py_module_registry(clog),
   active_mgr(nullptr),
   orig_argc(argc),
   orig_argv(argv),
@@ -93,6 +95,9 @@ void MgrStandby::handle_conf_change(
 
 int MgrStandby::init()
 {
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+
   Mutex::Locker l(lock);
 
   // Initialize Messenger
@@ -150,16 +155,25 @@ void MgrStandby::send_beacon()
   assert(lock.is_locked_by_me());
   dout(1) << state_str() << dendl;
 
-  set<string> modules;
-  PyModules::list_modules(&modules);
+  std::list<PyModuleRef> modules = py_module_registry.get_modules();
+
+  // Construct a list of the info about each loaded module
+  // which we will transmit to the monitor.
+  std::vector<MgrMap::ModuleInfo> module_info;
+  for (const auto &module : modules) {
+    MgrMap::ModuleInfo info;
+    info.name = module->get_name();
+    info.error_string = module->get_error_string();
+    info.can_run = module->get_can_run();
+    module_info.push_back(std::move(info));
+  }
 
   // Whether I think I am available (request MgrMonitor to set me
   // as available in the map)
   bool available = active_mgr != nullptr && active_mgr->is_initialized();
 
   auto addr = available ? active_mgr->get_server_addr() : entity_addr_t();
-  dout(10) << "sending beacon as gid " << monc.get_global_id()
-	   << " modules " << modules << dendl;
+  dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
   metadata["addr"] = monc.get_my_addr().ip_only_to_str();
@@ -170,16 +184,23 @@ void MgrStandby::send_beacon()
                                  g_conf->name.get_id(),
                                  addr,
                                  available,
-				 modules,
+				 std::move(module_info),
 				 std::move(metadata));
 
-  if (available && !available_in_map) {
-    // We are informing the mon that we are done initializing: inform
-    // it of our command set.  This has to happen after init() because
-    // it needs the python modules to have loaded.
-    m->set_command_descs(active_mgr->get_command_set());
-    dout(4) << "going active, including " << m->get_command_descs().size()
-            << " commands in beacon" << dendl;
+  if (available) {
+    if (!available_in_map) {
+      // We are informing the mon that we are done initializing: inform
+      // it of our command set.  This has to happen after init() because
+      // it needs the python modules to have loaded.
+      std::vector<MonCommand> commands = mgr_commands;
+      std::vector<MonCommand> py_commands = py_module_registry.get_commands();
+      commands.insert(commands.end(), py_commands.begin(), py_commands.end());
+      m->set_command_descs(commands);
+      dout(4) << "going active, including " << m->get_command_descs().size()
+              << " commands in beacon" << dendl;
+    }
+
+    m->set_services(active_mgr->get_services());
   }
                                  
   monc.send_mon_message(m);
@@ -190,7 +211,7 @@ void MgrStandby::tick()
   dout(10) << __func__ << dendl;
   send_beacon();
 
-  if (active_mgr) {
+  if (active_mgr && active_mgr->is_initialized()) {
     active_mgr->tick();
   }
 
@@ -214,6 +235,8 @@ void MgrStandby::shutdown()
   // Expect already to be locked as we're called from signal handler
   assert(lock.is_locked_by_me());
 
+  dout(4) << "Shutting down" << dendl;
+
   // stop sending beacon first, i use monc to talk with monitors
   timer.shutdown();
   // client uses monc and objecter
@@ -224,6 +247,9 @@ void MgrStandby::shutdown()
   if (active_mgr) {
     active_mgr->shutdown();
   }
+
+  py_module_registry.shutdown();
+
   // objecter is used by monc and active_mgr
   objecter.shutdown();
   // client_messenger is used by all of them, so stop it in the end
@@ -303,10 +329,24 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   const bool active_in_map = map.active_gid == monc.get_global_id();
   dout(4) << "active in map: " << active_in_map
           << " active is " << map.active_gid << dendl;
+
+  if (!py_module_registry.is_initialized()) {
+    int r = py_module_registry.init(map);
+
+    // FIXME: error handling
+    assert(r == 0);
+  } else {
+    bool need_respawn = py_module_registry.handle_mgr_map(map);
+    if (need_respawn) {
+      respawn();
+    }
+  }
+
   if (active_in_map) {
     if (!active_mgr) {
       dout(1) << "Activating!" << dendl;
-      active_mgr.reset(new Mgr(&monc, map, client_messenger.get(), &objecter,
+      active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
+                               client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
       active_mgr->background_init(new FunctionContext(
             [this](int r){
@@ -328,10 +368,16 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       dout(4) << "Map now says I am available" << dendl;
       available_in_map = true;
     }
+  } else if (active_mgr != nullptr) {
+    derr << "I was active but no longer am" << dendl;
+    respawn();
   } else {
-    if (active_mgr != nullptr) {
-      derr << "I was active but no longer am" << dendl;
-      respawn();
+    if (map.active_gid != 0 && map.active_name != g_conf->name.get_id()) {
+      // I am the standby and someone else is active, start modules
+      // in standby mode to do redirects if needed
+      if (!py_module_registry.is_standby_running()) {
+        py_module_registry.standby_start(&monc);
+      }
     }
   }
 
@@ -393,8 +439,6 @@ int MgrStandby::main(vector<const char *> args)
 {
   // Enable signal handlers
   signal_mgr = this;
-  init_async_signal_handler();
-  register_async_signal_handler(SIGHUP, sighup_handler);
   register_async_signal_handler_oneshot(SIGINT, handle_mgr_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_mgr_signal);
 
@@ -413,6 +457,12 @@ int MgrStandby::main(vector<const char *> args)
 
 std::string MgrStandby::state_str()
 {
-  return active_mgr == nullptr ? "standby" : "active";
+  if (active_mgr == nullptr) {
+    return "standby";
+  } else if (active_mgr->is_initialized()) {
+    return "active";
+  } else {
+    return "active (starting)";
+  }
 }
 

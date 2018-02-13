@@ -9,7 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def log_output(descriptor, message, terminal_logging):
+def log_output(descriptor, message, terminal_logging, logfile_logging):
     """
     log output to both the logger and the terminal if terminal_logging is
     enabled
@@ -20,7 +20,8 @@ def log_output(descriptor, message, terminal_logging):
     line = '%s %s' % (descriptor, message)
     if terminal_logging:
         getattr(terminal, descriptor)(message)
-    logger.info(line)
+    if logfile_logging:
+        logger.info(line)
 
 
 def log_descriptors(reads, process, terminal_logging):
@@ -42,10 +43,51 @@ def log_descriptors(reads, process, terminal_logging):
     for descriptor in reads:
         descriptor_name = descriptor_names[descriptor]
         try:
-            log_output(descriptor_name, read(descriptor, 1024), terminal_logging)
+            log_output(descriptor_name, read(descriptor, 1024), terminal_logging, True)
         except (IOError, OSError):
             # nothing else to log
             pass
+
+
+def obfuscate(command_, on=None):
+    """
+    Certain commands that are useful to log might contain information that
+    should be replaced by '*' like when creating OSDs and the keyryings are
+    being passed, which should not be logged.
+
+    :param on: A string (will match a flag) or an integer (will match an index)
+
+    If matching on a flag (when ``on`` is a string) it will obfuscate on the
+    value for that flag. That is a command like ['ls', '-l', '/'] that calls
+    `obfuscate(command, on='-l')` will obfustace '/' which is the value for
+    `-l`.
+
+    The reason for `on` to allow either a string or an integer, altering
+    behavior for both is because it is easier for ``run`` and ``call`` to just
+    pop a value to obfuscate (vs. allowing an index or a flag)
+    """
+    command = command_[:]
+    msg = "Running command: %s" % ' '.join(command)
+    if on in [None, False]:
+        return msg
+
+    if isinstance(on, int):
+        index = on
+
+    else:
+        try:
+            index = command.index(on) + 1
+        except ValueError:
+            # if the flag just doesn't exist then it doesn't matter just return
+            # the base msg
+            return msg
+
+    try:
+        command[index] = '*' * len(command[index])
+    except IndexError: # the index was completely out of range
+        return msg
+
+    return "Running command: %s" % ' '.join(command)
 
 
 def run(command, **kw):
@@ -55,25 +97,23 @@ def run(command, **kw):
 
     :param command: The command to pass in to the remote subprocess.Popen as a list
     :param stop_on_error: If a nonzero exit status is return, it raises a ``RuntimeError``
+    :param fail_msg: If a nonzero exit status is returned this message will be included in the log
     """
     stop_on_error = kw.pop('stop_on_error', True)
-    command_msg = "Running command: %s" % ' '.join(command)
-    stdin = kw.pop('stdin', None)
+    command_msg = obfuscate(command, kw.pop('obfuscate', None))
+    fail_msg = kw.pop('fail_msg', None)
     logger.info(command_msg)
     terminal.write(command_msg)
     terminal_logging = kw.pop('terminal_logging', True)
 
     process = subprocess.Popen(
         command,
-        stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         close_fds=True,
         **kw
     )
 
-    if stdin:
-        process.communicate(stdin)
     while True:
         reads, _, _ = select(
             [process.stdout.fileno(), process.stderr.fileno()],
@@ -90,6 +130,10 @@ def run(command, **kw):
     returncode = process.wait()
     if returncode != 0:
         msg = "command returned non-zero exit status: %s" % returncode
+        if fail_msg:
+            logger.warning(fail_msg)
+            if terminal_logging:
+                terminal.warning(fail_msg)
         if stop_on_error:
             raise RuntimeError(msg)
         else:
@@ -111,14 +155,22 @@ def call(command, **kw):
     Useful when system calls are needed to act on output, and that same output
     shouldn't get displayed on the terminal.
 
+    Optionally, the command can be displayed on the terminal and the log file,
+    and log file output can be turned off. This is useful to prevent sensitive
+    output going to stderr/stdout and being captured on a log file.
+
     :param terminal_verbose: Log command output to terminal, defaults to False, and
                              it is forcefully set to True if a return code is non-zero
+    :param logfile_verbose: Log stderr/stdout output to log file. Defaults to True
     """
     terminal_verbose = kw.pop('terminal_verbose', False)
+    logfile_verbose = kw.pop('logfile_verbose', True)
+    show_command = kw.pop('show_command', False)
     command_msg = "Running command: %s" % ' '.join(command)
     stdin = kw.pop('stdin', None)
     logger.info(command_msg)
-    terminal.write(command_msg)
+    if show_command:
+        terminal.write(command_msg)
 
     process = subprocess.Popen(
         command,
@@ -145,12 +197,13 @@ def call(command, **kw):
         # set to true so that we can log the stderr/stdout that callers would
         # do anyway
         terminal_verbose = True
+        logfile_verbose = True
 
     # the following can get a messed up order in the log if the system call
     # returns output with both stderr and stdout intermingled. This separates
     # that.
     for line in stdout:
-        log_output('stdout', line, terminal_verbose)
+        log_output('stdout', line, terminal_verbose, logfile_verbose)
     for line in stderr:
-        log_output('stderr', line, terminal_verbose)
+        log_output('stderr', line, terminal_verbose, logfile_verbose)
     return stdout, stderr, returncode

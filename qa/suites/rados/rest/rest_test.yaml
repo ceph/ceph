@@ -1,0 +1,44 @@
+roles:
+- - mon.a
+  - mgr.x
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mon.c
+  - osd.2
+  - osd.3
+  - client.0
+
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
+
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    log-whitelist:
+      - overall HEALTH
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(REQUEST_SLOW\)
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+      - but it is still running
+    conf:
+      client.rest0:
+        debug ms: 1
+        debug objecter: 20
+        debug rados: 20
+- rest-api: [client.0]
+- workunit:
+    clients:
+      client.0:
+         - rest/test.py

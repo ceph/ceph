@@ -62,20 +62,21 @@ public:
 
   void decode_payload() override { 
     bufferlist::iterator p = payload.begin();
-    ::decode(head, p);
+    decode(head, p);
     if (header.version >= 2) {
-      ::decode(client_meta, p);
+      decode(client_meta, p);
     }
   }
   void encode_payload(uint64_t features) override { 
-    ::encode(head, payload);
+    using ceph::encode;
+    encode(head, payload);
     if (client_meta.empty()) {
       // If we're not trying to send any metadata (always the case if
       // we are a server) then send older-format message to avoid upsetting
       // old kernel clients.
       header.version = 1;
     } else {
-      ::encode(client_meta, payload);
+      encode(client_meta, payload);
       header.version = HEAD_VERSION;
     }
 

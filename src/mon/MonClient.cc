@@ -328,7 +328,7 @@ void MonClient::handle_monmap(MMonMap *m)
   string cur_mon = monmap.get_name(peer);
 
   bufferlist::iterator p = m->monmapbl.begin();
-  ::decode(monmap, p);
+  decode(monmap, p);
 
   ldout(cct, 10) << " got monmap " << monmap.epoch
 		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
@@ -366,7 +366,8 @@ int MonClient::init()
     method = cct->_conf->auth_supported;
   else if (entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
 	   entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
-	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON)
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
+	   entity_name.get_type() == CEPH_ENTITY_TYPE_MGR)
     method = cct->_conf->auth_cluster_required;
   else
     method = cct->_conf->auth_client_required;
@@ -792,20 +793,14 @@ void MonClient::_un_backoff()
 
 void MonClient::schedule_tick()
 {
-  struct C_Tick : public Context {
-    MonClient *monc;
-    explicit C_Tick(MonClient *m) : monc(m) {}
-    void finish(int r) override {
-      monc->tick();
-    }
-  };
-
+  auto do_tick = make_lambda_context([this]() { tick(); });
   if (_hunting()) {
-    timer.add_event_after(cct->_conf->mon_client_hunt_interval
-			  * reopen_interval_multiplier,
-			  new C_Tick(this));
-  } else
-    timer.add_event_after(cct->_conf->mon_client_ping_interval, new C_Tick(this));
+    const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
+				reopen_interval_multiplier);
+    timer.add_event_after(hunt_interval, do_tick);
+  } else {
+    timer.add_event_after(cct->_conf->mon_client_ping_interval, do_tick);
+  }
 }
 
 // ---------
@@ -886,7 +881,7 @@ int MonClient::_check_auth_rotating()
 
   utime_t now = ceph_clock_now();
   utime_t cutoff = now;
-  cutoff -= MIN(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
+  cutoff -= std::min(30.0, cct->_conf->auth_service_ticket_ttl / 4.0);
   utime_t issued_at_lower_bound = now;
   issued_at_lower_bound -= cct->_conf->auth_service_ticket_ttl;
   if (!rotating_secrets->need_new_secrets(cutoff)) {
@@ -1211,10 +1206,10 @@ void MonConnection::start(epoch_t epoch,
   m->protocol = 0;
   m->monmap_epoch = epoch;
   __u8 struct_v = 1;
-  ::encode(struct_v, m->auth_payload);
-  ::encode(auth_supported.get_supported_set(), m->auth_payload);
-  ::encode(entity_name, m->auth_payload);
-  ::encode(global_id, m->auth_payload);
+  encode(struct_v, m->auth_payload);
+  encode(auth_supported.get_supported_set(), m->auth_payload);
+  encode(entity_name, m->auth_payload);
+  encode(global_id, m->auth_payload);
   con->send_message(m);
 }
 

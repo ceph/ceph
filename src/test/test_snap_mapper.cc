@@ -389,7 +389,7 @@ TEST_F(MapCacherTest, Simple)
   set<string> truth_keys;
   string blah("asdf");
   bufferlist bl;
-  ::encode(blah, bl);
+  encode(blah, bl);
   truth[string("asdf")] = bl;
   truth_keys.insert(truth.begin()->first);
   {

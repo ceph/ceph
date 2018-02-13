@@ -34,7 +34,7 @@ def create_ec_pool(remote, name, profile_name, pgnum, profile={}, cluster_name="
     if application:
         remote.run(args=[
             'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
-        ])
+        ], check_status=False) # may fail as EINVAL when run in jewel upgrade test
 
 def create_replicated_pool(remote, name, pgnum, cluster_name="ceph", application=None):
     remote.run(args=[
@@ -43,7 +43,7 @@ def create_replicated_pool(remote, name, pgnum, cluster_name="ceph", application
     if application:
         remote.run(args=[
             'sudo', 'ceph', 'osd', 'pool', 'application', 'enable', name, application, '--cluster', cluster_name
-        ])
+        ], check_status=False)
 
 def create_cache_pool(remote, base_name, cache_name, pgnum, size, cluster_name="ceph"):
     remote.run(args=[

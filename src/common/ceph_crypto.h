@@ -9,50 +9,7 @@
 #define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
 
-#ifdef USE_CRYPTOPP
-# define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <string.h>
-#include <cryptopp/md5.h>
-#include <cryptopp/sha.h>
-#include <cryptopp/hmac.h>
-
-// reinclude our assert to clobber the system one
-# include "include/assert.h"
-
-namespace ceph {
-  namespace crypto {
-    void assert_init();
-    void init(CephContext *cct);
-    // @param shared true if the the underlying crypto library could be shared
-    //               with the application linked against the Ceph library.
-    // @note we do extra global cleanup specific to the underlying crypto
-    //       library, if @c shared is @c false.
-    void shutdown(bool shared=true);
-
-    using CryptoPP::Weak::MD5;
-    using CryptoPP::SHA1;
-    using CryptoPP::SHA256;
-
-    class HMACSHA1: public CryptoPP::HMAC<CryptoPP::SHA1> {
-    public:
-      HMACSHA1 (const byte *key, size_t length)
-	: CryptoPP::HMAC<CryptoPP::SHA1>(key, length)
-	{
-	}
-      ~HMACSHA1();
-    };
-
-    class HMACSHA256: public CryptoPP::HMAC<CryptoPP::SHA256> {
-    public:
-      HMACSHA256 (const byte *key, size_t length)
-        : CryptoPP::HMAC<CryptoPP::SHA256>(key, length)
-        {
-        }
-      ~HMACSHA256();
-    };
-  }
-}
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 // you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
 # include <nss.h>
 # include <pk11pub.h>
@@ -63,9 +20,6 @@ namespace ceph {
 // with error checking, and just say these really should never fail.
 // This assert MUST NOT be compiled out, even on non-debug builds.
 # include "include/assert.h"
-
-// ugly bit of CryptoPP that we have to emulate here :(
-typedef unsigned char byte;
 
 namespace ceph {
   namespace crypto {
@@ -90,14 +44,14 @@ namespace ceph {
 	s = PK11_DigestBegin(ctx);
 	assert(s == SECSuccess);
       }
-      void Update (const byte *input, size_t length) {
+      void Update (const unsigned char *input, size_t length) {
         if (length) {
 	  SECStatus s;
 	  s = PK11_DigestOp(ctx, input, length);
 	  assert(s == SECSuccess);
         }
       }
-      void Final (byte *digest) {
+      void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
 	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
@@ -128,7 +82,7 @@ namespace ceph {
       PK11Context *ctx;
       unsigned int digest_size;
     public:
-      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const byte *key, size_t length) {
+      HMAC (CK_MECHANISM_TYPE cktype, unsigned int digestsize, const unsigned char *key, size_t length) {
         digest_size = digestsize;
 	slot = PK11_GetBestSlot(cktype, NULL);
 	assert(slot);
@@ -153,12 +107,12 @@ namespace ceph {
 	s = PK11_DigestBegin(ctx);
 	assert(s == SECSuccess);
       }
-      void Update (const byte *input, size_t length) {
+      void Update (const unsigned char *input, size_t length) {
 	SECStatus s;
 	s = PK11_DigestOp(ctx, input, length);
 	assert(s == SECSuccess);
       }
-      void Final (byte *digest) {
+      void Final (unsigned char *digest) {
 	SECStatus s;
 	unsigned int dummy;
 	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
@@ -170,12 +124,12 @@ namespace ceph {
 
     class HMACSHA1 : public HMAC {
     public:
-      HMACSHA1 (const byte *key, size_t length) : HMAC(CKM_SHA_1_HMAC, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, key, length) { }
+      HMACSHA1 (const unsigned char *key, size_t length) : HMAC(CKM_SHA_1_HMAC, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE, key, length) { }
     };
 
     class HMACSHA256 : public HMAC {
     public:
-      HMACSHA256 (const byte *key, size_t length) : HMAC(CKM_SHA256_HMAC, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, key, length) { }
+      HMACSHA256 (const unsigned char *key, size_t length) : HMAC(CKM_SHA256_HMAC, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE, key, length) { }
     };
   }
 }

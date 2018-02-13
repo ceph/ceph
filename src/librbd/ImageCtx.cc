@@ -22,6 +22,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Operations.h"
 #include "librbd/operation/ResizeRequest.h"
+#include "librbd/Types.h"
 #include "librbd/Utils.h"
 #include "librbd/LibrbdWriteback.h"
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
@@ -274,6 +275,11 @@ struct C_InvalidateCache : public Context {
     trace_endpoint.copy_name(pname);
     perf_start(pname);
 
+    assert(image_watcher == NULL);
+    image_watcher = new ImageWatcher<>(*this);
+  }
+
+  void ImageCtx::init_cache() {
     if (cache) {
       Mutex::Locker l(cache_lock);
       ldout(cct, 20) << "enabling caching..." << dendl;
@@ -290,9 +296,9 @@ struct C_InvalidateCache : public Context {
 		     << " max_dirty_age="
 		     << cache_max_dirty_age << dendl;
 
-      object_cacher = new ObjectCacher(cct, pname, *writeback_handler, cache_lock,
-				       NULL, NULL,
-				       cache_size,
+      object_cacher = new ObjectCacher(cct, perfcounter->get_name(),
+                                       *writeback_handler, cache_lock, NULL,
+                                       NULL, cache_size,
 				       10,  /* reset this in init */
 				       init_max_dirty,
 				       cache_target_dirty,
@@ -302,7 +308,10 @@ struct C_InvalidateCache : public Context {
       // size object cache appropriately
       uint64_t obj = cache_max_dirty_object;
       if (!obj) {
-	obj = MIN(2000, MAX(10, cache_size / 100 / sizeof(ObjectCacher::Object)));
+	obj = std::min<uint64_t>(2000,
+				 std::max<uint64_t>(
+				   10, cache_size / 100 /
+				   sizeof(ObjectCacher::Object)));
       }
       ldout(cct, 10) << " cache bytes " << cache_size
 	<< " -> about " << obj << " objects" << dendl;
@@ -362,20 +371,29 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::perf_start(string name) {
+    auto perf_prio = PerfCountersBuilder::PRIO_DEBUGONLY;
+    if (child == nullptr) {
+      // ensure top-level IO stats are exported for librbd daemons
+      perf_prio = PerfCountersBuilder::PRIO_USEFUL;
+    }
+
     PerfCountersBuilder plb(cct, name, l_librbd_first, l_librbd_last);
 
-    plb.add_u64_counter(l_librbd_rd, "rd", "Reads");
-    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads");
-    plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads");
-    plb.add_u64_counter(l_librbd_wr, "wr", "Writes");
-    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data");
-    plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency");
+    plb.add_u64_counter(l_librbd_rd, "rd", "Reads", "r", perf_prio);
+    plb.add_u64_counter(l_librbd_rd_bytes, "rd_bytes", "Data size in reads",
+                        "rb", perf_prio);
+    plb.add_time_avg(l_librbd_rd_latency, "rd_latency", "Latency of reads",
+                     "rl", perf_prio);
+    plb.add_u64_counter(l_librbd_wr, "wr", "Writes", "w", perf_prio);
+    plb.add_u64_counter(l_librbd_wr_bytes, "wr_bytes", "Written data",
+                        "wb", perf_prio);
+    plb.add_time_avg(l_librbd_wr_latency, "wr_latency", "Write latency",
+                     "wl", perf_prio);
     plb.add_u64_counter(l_librbd_discard, "discard", "Discards");
     plb.add_u64_counter(l_librbd_discard_bytes, "discard_bytes", "Discarded data");
     plb.add_time_avg(l_librbd_discard_latency, "discard_latency", "Discard latency");
     plb.add_u64_counter(l_librbd_flush, "flush", "Flushes");
-    plb.add_u64_counter(l_librbd_aio_flush, "aio_flush", "Async flushes");
-    plb.add_time_avg(l_librbd_aio_flush_latency, "aio_flush_latency", "Latency of async flushes");
+    plb.add_time_avg(l_librbd_flush_latency, "flush_latency", "Latency of flushes");
     plb.add_u64_counter(l_librbd_ws, "ws", "WriteSames");
     plb.add_u64_counter(l_librbd_ws_bytes, "ws_bytes", "WriteSame data");
     plb.add_time_avg(l_librbd_ws_latency, "ws_latency", "WriteSame latency");
@@ -392,8 +410,15 @@ struct C_InvalidateCache : public Context {
     plb.add_u64_counter(l_librbd_readahead_bytes, "readahead_bytes", "Data size in read ahead");
     plb.add_u64_counter(l_librbd_invalidate_cache, "invalidate_cache", "Cache invalidates");
 
+    plb.add_time(l_librbd_opened_time, "opened_time", "Opened time",
+                 "ots", perf_prio);
+    plb.add_time(l_librbd_lock_acquired_time, "lock_acquired_time",
+                 "Lock acquired time", "lats", perf_prio);
+
     perfcounter = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perfcounter);
+
+    perfcounter->tset(l_librbd_opened_time, ceph_clock_now());
   }
 
   void ImageCtx::perf_stop() {
@@ -444,13 +469,14 @@ struct C_InvalidateCache : public Context {
     data_ctx.snap_set_read(snap_id);
   }
 
-  snap_t ImageCtx::get_snap_id(cls::rbd::SnapshotNamespace in_snap_namespace,
-			       string in_snap_name) const
+  snap_t ImageCtx::get_snap_id(const cls::rbd::SnapshotNamespace& in_snap_namespace,
+                               const string& in_snap_name) const
   {
     assert(snap_lock.is_locked());
     auto it = snap_ids.find({in_snap_namespace, in_snap_name});
-    if (it != snap_ids.end())
+    if (it != snap_ids.end()) {
       return it->second;
+    }
     return CEPH_NOSNAP;
   }
 
@@ -461,7 +487,7 @@ struct C_InvalidateCache : public Context {
       snap_info.find(in_snap_id);
     if (it != snap_info.end())
       return &it->second;
-    return NULL;
+    return nullptr;
   }
 
   int ImageCtx::get_snap_name(snap_t in_snap_id,
@@ -621,6 +647,19 @@ struct C_InvalidateCache : public Context {
   {
     assert(snap_lock.is_locked());
     return ((features & in_features) == in_features);
+  }
+
+  bool ImageCtx::test_op_features(uint64_t in_op_features) const
+  {
+    RWLock::RLocker snap_locker(snap_lock);
+    return test_op_features(in_op_features, snap_lock);
+  }
+
+  bool ImageCtx::test_op_features(uint64_t in_op_features,
+                                  const RWLock &in_snap_lock) const
+  {
+    assert(snap_lock.is_locked());
+    return ((op_features & in_op_features) == in_op_features);
   }
 
   int ImageCtx::get_flags(librados::snap_t _snap_id, uint64_t *_flags) const
@@ -846,8 +885,7 @@ struct C_InvalidateCache : public Context {
   }
 
   void ImageCtx::register_watch(Context *on_finish) {
-    assert(image_watcher == NULL);
-    image_watcher = new ImageWatcher<>(*this);
+    assert(image_watcher != NULL);
     image_watcher->register_watch(on_finish);
   }
 
@@ -947,7 +985,7 @@ struct C_InvalidateCache : public Context {
     size_t conf_prefix_len = prefix.size();
 
     for (auto it : pairs) {
-      if (it.first.compare(0, MIN(conf_prefix_len, it.first.size()), prefix) > 0)
+      if (it.first.compare(0, std::min(conf_prefix_len, it.first.size()), prefix) > 0)
         return false;
 
       if (it.first.size() <= conf_prefix_len)
@@ -963,7 +1001,8 @@ struct C_InvalidateCache : public Context {
     return true;
   }
 
-  void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta) {
+  void ImageCtx::apply_metadata(const std::map<std::string, bufferlist> &meta,
+                                bool thread_safe) {
     ldout(cct, 20) << __func__ << dendl;
     std::map<string, bool> configs = boost::assign::map_list_of(
         "rbd_non_blocking_aio", false)(
@@ -980,6 +1019,7 @@ struct C_InvalidateCache : public Context {
         "rbd_localize_snap_reads", false)(
         "rbd_balance_parent_reads", false)(
         "rbd_localize_parent_reads", false)(
+        "rbd_sparse_read_threshold_bytes", false)(
         "rbd_readahead_trigger_requests", false)(
         "rbd_readahead_max_bytes", false)(
         "rbd_readahead_disable_after_bytes", false)(
@@ -997,8 +1037,10 @@ struct C_InvalidateCache : public Context {
         "rbd_journal_max_payload_bytes", false)(
         "rbd_journal_max_concurrent_object_sets", false)(
         "rbd_mirroring_resync_after_disconnect", false)(
+        "rbd_mirroring_delete_delay", false)(
         "rbd_mirroring_replay_delay", false)(
-        "rbd_skip_partial_discard", false);
+        "rbd_skip_partial_discard", false)(
+	"rbd_qos_iops_limit", false);
 
     md_config_t local_config_t;
     std::map<std::string, bufferlist> res;
@@ -1038,6 +1080,7 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(localize_snap_reads, bool);
     ASSIGN_OPTION(balance_parent_reads, bool);
     ASSIGN_OPTION(localize_parent_reads, bool);
+    ASSIGN_OPTION(sparse_read_threshold_bytes, uint64_t);
     ASSIGN_OPTION(readahead_trigger_requests, int64_t);
     ASSIGN_OPTION(readahead_max_bytes, int64_t);
     ASSIGN_OPTION(readahead_disable_after_bytes, int64_t);
@@ -1052,13 +1095,24 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_object_flush_interval, int64_t);
     ASSIGN_OPTION(journal_object_flush_bytes, int64_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
-    ASSIGN_OPTION(journal_pool, std::string);
     ASSIGN_OPTION(journal_max_payload_bytes, uint64_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
+    ASSIGN_OPTION(mirroring_delete_delay, uint64_t);
     ASSIGN_OPTION(mirroring_replay_delay, int64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
     ASSIGN_OPTION(blkin_trace_all, bool);
+    ASSIGN_OPTION(qos_iops_limit, uint64_t);
+
+    if (thread_safe) {
+      ASSIGN_OPTION(journal_pool, std::string);
+    }
+
+    if (sparse_read_threshold_bytes == 0) {
+      sparse_read_threshold_bytes = get_object_size();
+    }
+
+    io_work_queue->apply_qos_iops_limit(qos_iops_limit);
   }
 
   ExclusiveLock<ImageCtx> *ImageCtx::create_exclusive_lock() {

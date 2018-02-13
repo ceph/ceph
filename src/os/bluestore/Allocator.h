@@ -16,8 +16,6 @@
 #include "include/assert.h"
 #include "os/bluestore/bluestore_types.h"
 
-class FreelistManager;
-
 class Allocator {
 public:
   virtual ~Allocator() {}
@@ -36,15 +34,16 @@ public:
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
 			   uint64_t max_alloc_size, int64_t hint,
-			   AllocExtentVector *extents) = 0;
+			   PExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t alloc_unit,
-		   int64_t hint, AllocExtentVector *extents) {
+		   int64_t hint, PExtentVector *extents) {
     return allocate(want_size, alloc_unit, want_size, hint, extents);
   }
 
-  virtual void release(
-    uint64_t offset, uint64_t length) = 0;
+  /* Bulk release. Implementations may override this method to handle the whole
+   * set at once. This could save e.g. unnecessary mutex dance. */
+  virtual void release(const interval_set<uint64_t>& release_set) = 0;
 
   virtual void dump() = 0;
 

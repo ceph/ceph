@@ -251,7 +251,6 @@ private:
   vector<BlockDevice*> bdev;                  ///< block devices we can use
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
-  vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
@@ -268,13 +267,15 @@ private:
   void _drop_link(FileRef f);
 
   int _allocate(uint8_t bdev, uint64_t len,
-		mempool::bluefs::vector<bluefs_extent_t> *ev);
+		bluefs_fnode_t* node);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int _flush(FileWriter *h, bool force);
   int _fsync(FileWriter *h, std::unique_lock<std::mutex>& l);
 
+#ifdef HAVE_LIBAIO
   void _claim_completed_aios(FileWriter *h, list<aio_t> *ls);
   void wait_for_aio(FileWriter *h);  // safe to call without a lock
+#endif
 
   int _flush_and_sync_log(std::unique_lock<std::mutex>& l,
 			  uint64_t want_seq = 0,
@@ -310,7 +311,7 @@ private:
 
   int _open_super();
   int _write_super();
-  int _replay(bool noop); ///< replay journal
+  int _replay(bool noop, bool to_stdout = false); ///< replay journal
 
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
@@ -332,8 +333,14 @@ public:
   int mkfs(uuid_d osd_uuid);
   int mount();
   void umount();
+  
+  int log_dump(
+    CephContext *cct,
+    const string& path,
+    const vector<string>& devs);
 
-  void collect_metadata(map<string,string> *pm);
+  void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
+  void get_devices(set<string> *ls);
   int fsck();
 
   uint64_t get_fs_usage();
@@ -396,7 +403,7 @@ public:
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,
-		     AllocExtentVector *extents);
+		     PExtentVector *extents);
 
   void flush(FileWriter *h) {
     std::lock_guard<std::mutex> l(lock);

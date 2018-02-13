@@ -147,7 +147,7 @@ chunks are lost, it is not possible to recover the object.
 Reading the original content of object O can be a simple
 concatenation of O1, O2, ... OM, because the plugins are using
 `systematic codes
-<http://en.wikipedia.org/wiki/Systematic_code>`_. Otherwise the chunks
+<https://en.wikipedia.org/wiki/Systematic_code>`_. Otherwise the chunks
 must be given to the erasure code library *decode* method to retrieve
 the content of the object.
 

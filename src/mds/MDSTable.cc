@@ -60,7 +60,8 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
 	     << committing_version << " >= needed " << v << dendl;
-    waitfor_save[v].push_back(onfinish);
+    if (onfinish)
+      waitfor_save[v].push_back(onfinish);
     return;
   }
   
@@ -68,7 +69,7 @@ void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
   assert(is_active());
   
   bufferlist bl;
-  ::encode(version, bl);
+  encode(version, bl);
   encode_state(bl);
 
   committing_version = version;
@@ -174,7 +175,7 @@ void MDSTable::load_2(int r, bufferlist& bl, Context *onfinish)
   bufferlist::iterator p = bl.begin();
 
   try {
-    ::decode(version, p);
+    decode(version, p);
     projected_version = committed_version = version;
     dout(10) << "load_2 loaded v" << version << dendl;
     decode_state(p);

@@ -15,13 +15,7 @@
 #define CEPH_MGR_H_
 
 // Python.h comes first because otherwise it clobbers ceph's assert
-#include "Python.h"
-// Python's pyconfig-64.h conflicts with ceph's acconfig.h
-#undef HAVE_SYS_WAIT_H
-#undef HAVE_UNISTD_H
-#undef HAVE_UTIME_H
-#undef _POSIX_C_SOURCE
-#undef _XOPEN_SOURCE
+#include "PythonCompat.h"
 
 #include "mds/FSMap.h"
 #include "messages/MFSMap.h"
@@ -32,7 +26,7 @@
 #include "mon/MgrMap.h"
 
 #include "DaemonServer.h"
-#include "PyModules.h"
+#include "PyModuleRegistry.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -43,8 +37,6 @@ class MLog;
 class MServiceMap;
 class Objecter;
 class Client;
-
-class MgrPyModule;
 
 class Mgr {
 protected:
@@ -62,13 +54,16 @@ protected:
   bool digest_received;
   Cond digest_cond;
 
-  PyModules py_modules;
+  PyModuleRegistry *py_module_registry;
   DaemonStateIndex daemon_state;
   ClusterState cluster_state;
 
   DaemonServer server;
 
-  void load_config();
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+
+  PyModuleConfig load_config();
   void load_all_metadata();
   void init();
 
@@ -77,6 +72,7 @@ protected:
 
 public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
+      PyModuleRegistry *py_module_registry_,
       Messenger *clientm_, Objecter *objecter_,
       Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
   ~Mgr();
@@ -99,7 +95,36 @@ public:
   void background_init(Context *completion);
   void shutdown();
 
-  std::vector<MonCommand> get_command_set() const;
+  std::map<std::string, std::string> get_services() const;
 };
+
+/**
+ * Context for completion of metadata mon commands: take
+ * the result and stash it in DaemonStateIndex
+ */
+class MetadataUpdate : public Context
+{
+
+private:
+  DaemonStateIndex &daemon_state;
+  DaemonKey key;
+
+  std::map<std::string, std::string> defaults;
+
+public:
+  bufferlist outbl;
+  std::string outs;
+
+  MetadataUpdate(DaemonStateIndex &daemon_state_, const DaemonKey &key_)
+    : daemon_state(daemon_state_), key(key_) {}
+
+  void set_default(const std::string &k, const std::string &v)
+  {
+    defaults[k] = v;
+  }
+
+  void finish(int r) override;
+};
+
 
 #endif

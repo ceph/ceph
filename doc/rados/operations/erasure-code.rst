@@ -62,7 +62,7 @@ the following profile can be defined::
 The *NYAN* object will be divided in three (*K=3*) and two additional
 *chunks* will be created (*M=2*). The value of *M* defines how many
 OSD can be lost simultaneously without losing any data. The
-*crush-failure-domain=rack* will create a CRUSH ruleset that ensures
+*crush-failure-domain=rack* will create a CRUSH rule that ensures
 no two *chunks* are stored in the same rack.
 
 .. ditaa::

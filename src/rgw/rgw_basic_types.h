@@ -27,14 +27,14 @@ struct rgw_user {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(tenant, bl);
-    ::encode(id, bl);
+    encode(tenant, bl);
+    encode(id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(tenant, bl);
-    ::decode(id, bl);
+    decode(tenant, bl);
+    decode(id, bl);
     DECODE_FINISH(bl);
   }
 
@@ -160,12 +160,10 @@ public:
   }
 
   const std::string& get_tenant() const {
-    ceph_assert(t != Wildcard);
     return u.tenant;
   }
 
   const std::string& get_id() const {
-    ceph_assert(t != Wildcard && t != Tenant);
     return u.id;
   }
 
@@ -179,7 +177,6 @@ public:
 };
 
 std::ostream& operator <<(std::ostream& m, const Principal& p);
-std::string to_string(const Principal& p);
 }
 }
 

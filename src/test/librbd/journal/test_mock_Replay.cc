@@ -292,7 +292,7 @@ public:
                     EventEntry &&event_entry, Context *on_ready,
                     Context *on_safe) {
     bufferlist bl;
-    ::encode(event_entry, bl);
+    encode(event_entry, bl);
 
     bufferlist::iterator it = bl.begin();
     when_process(mock_journal_replay, &it, on_ready, on_safe);
@@ -1700,8 +1700,8 @@ TEST_F(TestMockJournalReplay, MetadataSetEvent) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_set(mock_image_ctx, &on_finish, "key", "value");
+  expect_refresh_image(mock_image_ctx, false, 0);
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
@@ -1737,8 +1737,8 @@ TEST_F(TestMockJournalReplay, MetadataRemoveEvent) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_remove(mock_image_ctx, &on_finish, "key");
+  expect_refresh_image(mock_image_ctx, false, 0);
 
   C_SaferCond on_start_ready;
   C_SaferCond on_start_safe;
@@ -1774,7 +1774,6 @@ TEST_F(TestMockJournalReplay, MetadataRemoveEventDNE) {
 
   InSequence seq;
   Context *on_finish = nullptr;
-  expect_refresh_image(mock_image_ctx, false, 0);
   expect_metadata_remove(mock_image_ctx, &on_finish, "key");
 
   C_SaferCond on_start_ready;
@@ -1813,7 +1812,7 @@ TEST_F(TestMockJournalReplay, UnknownEvent) {
 
   bufferlist bl;
   ENCODE_START(1, 1, bl);
-  ::encode(static_cast<uint32_t>(-1), bl);
+  encode(static_cast<uint32_t>(-1), bl);
   ENCODE_FINISH(bl);
 
   bufferlist::iterator it = bl.begin();

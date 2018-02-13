@@ -772,7 +772,7 @@ int librados::IoCtxImpl::aio_operate_read(const object_t &oid,
 					  bufferlist *pbl,
                                           const blkin_trace_info *trace_info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -802,7 +802,7 @@ int librados::IoCtxImpl::aio_operate(const object_t& oid,
 				     const SnapContext& snap_context, int flags,
                                      const blkin_trace_info *trace_info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
   auto ut = ceph::real_clock::now();
   /* can't write to a snapshot */
@@ -837,7 +837,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  bufferlist *pbl, size_t len, uint64_t off,
 				  uint64_t snapid, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -867,7 +867,7 @@ int librados::IoCtxImpl::aio_read(const object_t oid, AioCompletionImpl *c,
 				  char *buf, size_t len, uint64_t off,
 				  uint64_t snapid, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -913,7 +913,7 @@ int librados::IoCtxImpl::aio_sparse_read(const object_t oid,
 					 bufferlist *data_bl, size_t len,
 					 uint64_t off, uint64_t snapid)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   if (len > (size_t) INT_MAX)
     return -EDOM;
 
@@ -988,7 +988,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 				   const bufferlist& bl, size_t len,
 				   uint64_t off, const blkin_trace_info *info)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
   ldout(client->cct, 20) << "aio_write " << oid << " " << off << "~" << len << " snapc=" << snapc << " snap_seq=" << snap_seq << dendl;
   OID_EVENT_TRACE(oid.name.c_str(), "RADOS_WRITE_OP_BEGIN");
@@ -1023,7 +1023,7 @@ int librados::IoCtxImpl::aio_write(const object_t &oid, AioCompletionImpl *c,
 int librados::IoCtxImpl::aio_append(const object_t &oid, AioCompletionImpl *c,
 				    const bufferlist& bl, size_t len)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if (len > UINT_MAX/2)
@@ -1053,7 +1053,7 @@ int librados::IoCtxImpl::aio_write_full(const object_t &oid,
 					AioCompletionImpl *c,
 					const bufferlist& bl)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if (bl.length() > UINT_MAX/2)
@@ -1085,7 +1085,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 				       size_t write_len,
 				       uint64_t off)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   if ((bl.length() > UINT_MAX/2) || (write_len > UINT_MAX/2))
@@ -1116,7 +1116,7 @@ int librados::IoCtxImpl::aio_writesame(const object_t &oid,
 
 int librados::IoCtxImpl::aio_remove(const object_t &oid, AioCompletionImpl *c, int flags)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   auto ut = ceph::real_clock::now();
 
   /* can't write to a snapshot */
@@ -1389,7 +1389,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
 				  bufferlist& inbl, bufferlist *outbl)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -1411,7 +1411,7 @@ int librados::IoCtxImpl::aio_exec(const object_t& oid, AioCompletionImpl *c,
 				  const char *cls, const char *method,
 				  bufferlist& inbl, char *buf, size_t out_len)
 {
-  FUNCTRACE();
+  FUNCTRACE(client->cct);
   Context *oncomplete = new C_aio_Complete(c);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
@@ -1493,7 +1493,7 @@ int librados::IoCtxImpl::mapext(const object_t& oid,
     return r;
 
   bufferlist::iterator iter = bl.begin();
-  ::decode(m, iter);
+  decode(m, iter);
 
   return m.size();
 }

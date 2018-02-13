@@ -15,14 +15,13 @@
 #ifndef CEPH_RGW_ESCAPE_H
 #define CEPH_RGW_ESCAPE_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+#include <ostream>
+#include <boost/utility/string_view.hpp>
 
 /* Returns the length of a buffer that would be needed to escape 'buf'
  * as an XML attrribute
  */
-int escape_xml_attr_len(const char *buf);
+size_t escape_xml_attr_len(const char *buf);
 
 /* Escapes 'buf' as an XML attribute. Assumes that 'out' is at least long
  * enough to fit the output. You can find out the required length by calling
@@ -33,20 +32,33 @@ void escape_xml_attr(const char *buf, char *out);
 /* Returns the length of a buffer that would be needed to escape 'buf'
  * as an JSON attrribute
  */
-int escape_json_attr_len(const char *buf, int src_len);
+size_t escape_json_attr_len(const char *buf, size_t src_len);
 
 /* Escapes 'buf' as an JSON attribute. Assumes that 'out' is at least long
  * enough to fit the output. You can find out the required length by calling
  * escape_json_attr_len first.
  */
-void escape_json_attr(const char *buf, int src_len, char *out);
+void escape_json_attr(const char *buf, size_t src_len, char *out);
 
 /* Note: we escape control characters. Although the XML spec doesn't actually
  * require this, Amazon does it in their XML responses.
  */
 
-#ifdef __cplusplus
-}
-#endif
+// stream output operators that write escaped text without making a copy
+// usage:
+//   std::string xml_input = ...;
+//   std::cout << xml_stream_escaper(xml_input) << std::endl;
+
+struct xml_stream_escaper {
+  boost::string_view str;
+  xml_stream_escaper(boost::string_view str) : str(str) {}
+};
+std::ostream& operator<<(std::ostream& out, const xml_stream_escaper& e);
+
+struct json_stream_escaper {
+  boost::string_view str;
+  json_stream_escaper(boost::string_view str) : str(str) {}
+};
+std::ostream& operator<<(std::ostream& out, const json_stream_escaper& e);
 
 #endif

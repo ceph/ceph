@@ -26,8 +26,8 @@
 #include "common/Formatter.h"
 
 #include <algorithm>
+#include <regex>
 
-#include <boost/regex.hpp>
 #include "include/assert.h"
 
 static inline bool is_not_alnum_space(char c)
@@ -340,12 +340,14 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
 	  return 0;
         break;
       case StringConstraint::MATCH_TYPE_REGEX:
-        {
-	  boost::regex pattern(
-            p->second.value, boost::regex::extended | boost::regex::no_except);
-          if (pattern.empty() || !boost::regex_match(q->second, pattern))
+        try {
+	  std::regex pattern(
+            p->second.value, std::regex::extended);
+          if (!std::regex_match(q->second, pattern))
 	    return 0;
-        }
+        } catch(const std::regex_error&) {
+	  return 0;
+	}
         break;
       default:
         break;
@@ -424,7 +426,7 @@ bool MonCap::is_capable(CephContext *cct,
 void MonCap::encode(bufferlist& bl) const
 {
   ENCODE_START(4, 4, bl);   // legacy MonCaps was 3, 3
-  ::encode(text, bl);
+  encode(text, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -432,7 +434,7 @@ void MonCap::decode(bufferlist::iterator& bl)
 {
   string s;
   DECODE_START(4, bl);
-  ::decode(s, bl);
+  decode(s, bl);
   DECODE_FINISH(bl);
   parse(s, NULL);
 }
@@ -530,6 +532,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     // rwxa := * | [r][w][x]
     rwxa =
       (lit("*")[_val = MON_CAP_ANY]) |
+      (lit("all")[_val = MON_CAP_ANY]) |
       ( eps[_val = 0] >>
 	( lit('r')[_val |= MON_CAP_R] ||
 	  lit('w')[_val |= MON_CAP_W] ||

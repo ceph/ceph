@@ -84,21 +84,23 @@ private:
 
     void encode(bufferlist &bl) const
     {
+      using ceph::encode;
       __u8 v = 1;
-      ::encode(v, bl);
-      ::encode(objs, bl);
-      ::encode(subdirs, bl);
-      ::encode(hash_level, bl);
+      encode(v, bl);
+      encode(objs, bl);
+      encode(subdirs, bl);
+      encode(hash_level, bl);
     }
 
     void decode(bufferlist::iterator &bl)
     {
+      using ceph::decode;
       __u8 v;
-      ::decode(v, bl);
+      decode(v, bl);
       assert(v == 1);
-      ::decode(objs, bl);
-      ::decode(subdirs, bl);
-      ::decode(hash_level, bl);
+      decode(objs, bl);
+      decode(subdirs, bl);
+      decode(hash_level, bl);
     }
   };
 
@@ -107,15 +109,17 @@ private:
     settings_s() : split_rand_factor(0) {}
     void encode(bufferlist &bl) const
     {
+      using ceph::encode;
       __u8 v = 1;
-      ::encode(v, bl);
-      ::encode(split_rand_factor, bl);
+      encode(v, bl);
+      encode(split_rand_factor, bl);
     }
     void decode(bufferlist::iterator &bl)
     {
+      using ceph::decode;
       __u8 v;
-      ::decode(v, bl);
-      ::decode(split_rand_factor, bl);
+      decode(v, bl);
+      decode(split_rand_factor, bl);
     }
   } settings;
 
@@ -139,18 +143,20 @@ private:
     bool is_merge() const { return op == MERGE; }
 
     void encode(bufferlist &bl) const {
+      using ceph::encode;
       __u8 v = 1;
-      ::encode(v, bl);
-      ::encode(op, bl);
-      ::encode(path, bl);
+      encode(v, bl);
+      encode(op, bl);
+      encode(path, bl);
     }
 
     void decode(bufferlist::iterator &bl) {
+      using ceph::decode;
       __u8 v;
-      ::decode(v, bl);
+      decode(v, bl);
       assert(v == 1);
-      ::decode(op, bl);
-      ::decode(path, bl);
+      decode(op, bl);
+      decode(path, bl);
     }
   };
 

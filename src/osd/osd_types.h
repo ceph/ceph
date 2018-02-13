@@ -87,6 +87,15 @@
 /// max recovery priority for MBackfillReserve, only when forced manually
 #define OSD_RECOVERY_PRIORITY_FORCED 255
 
+/// priority for pg deletion when osd is not fullish
+#define OSD_DELETE_PRIORITY_NORMAL 179
+
+/// priority for pg deletion when osd is approaching full
+#define OSD_DELETE_PRIORITY_FULLISH 219
+
+/// priority when more full
+#define OSD_DELETE_PRIORITY_FULL 255
+
 
 typedef hobject_t collection_list_handle_t;
 
@@ -138,6 +147,7 @@ WRITE_CLASS_DENC(osd_reqid_t)
 
 
 struct pg_shard_t {
+  static const int32_t NO_OSD = 0x7fffffff;
   int32_t osd;
   shard_id_t shard;
   pg_shard_t() : osd(-1), shard(shard_id_t::NO_SHARD) {}
@@ -146,6 +156,7 @@ struct pg_shard_t {
   bool is_undefined() const {
     return osd == -1;
   }
+  string get_osd() const { return (osd == NO_OSD ? "NONE" : to_string(osd)); }
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
   void dump(Formatter *f) const {
@@ -425,22 +436,25 @@ struct pg_t {
   hobject_t get_hobj_end(unsigned pg_num) const;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(m_pool, bl);
-    ::encode(m_seed, bl);
-    ::encode(m_preferred, bl);
+    encode(v, bl);
+    encode(m_pool, bl);
+    encode(m_seed, bl);
+    encode(m_preferred, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 v;
-    ::decode(v, bl);
-    ::decode(m_pool, bl);
-    ::decode(m_seed, bl);
-    ::decode(m_preferred, bl);
+    decode(v, bl);
+    decode(m_pool, bl);
+    decode(m_seed, bl);
+    decode(m_preferred, bl);
   }
   void decode_old(bufferlist::iterator& bl) {
+    using ceph::decode;
     old_pg_t opg;
-    ::decode(opg, bl);
+    decode(opg, bl);
     *this = opg;
   }
   void dump(Formatter *f) const;
@@ -545,14 +559,14 @@ struct spg_t {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(pgid, bl);
-    ::encode(shard, bl);
+    encode(pgid, bl);
+    encode(shard, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(pgid, bl);
-    ::decode(shard, bl);
+    decode(pgid, bl);
+    decode(shard, bl);
     DECODE_FINISH(bl);
   }
 
@@ -822,16 +836,16 @@ public:
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.append((char *)this, sizeof(version_t) + sizeof(epoch_t));
 #else
-    ::encode(version, bl);
-    ::encode(epoch, bl);
+    encode(version, bl);
+    encode(epoch, bl);
 #endif
   }
   void decode(bufferlist::iterator &bl) {
 #if defined(CEPH_LITTLE_ENDIAN)
     bl.copy(sizeof(version_t) + sizeof(epoch_t), (char *)this);
 #else
-    ::decode(version, bl);
-    ::decode(epoch, bl);
+    decode(version, bl);
+    decode(epoch, bl);
 #endif
   }
   void decode(bufferlist& bl) {
@@ -869,32 +883,32 @@ inline ostream& operator<<(ostream& out, const eversion_t& e) {
  * current perf information about the osd
  */
 struct objectstore_perf_stat_t {
-  // cur_op_latency is in ms since double add/sub are not associative
-  uint32_t os_commit_latency;
-  uint32_t os_apply_latency;
+  // cur_op_latency is in ns since double add/sub are not associative
+  uint64_t os_commit_latency_ns;
+  uint64_t os_apply_latency_ns;
 
   objectstore_perf_stat_t() :
-    os_commit_latency(0), os_apply_latency(0) {}
+    os_commit_latency_ns(0), os_apply_latency_ns(0) {}
 
   bool operator==(const objectstore_perf_stat_t &r) const {
-    return os_commit_latency == r.os_commit_latency &&
-      os_apply_latency == r.os_apply_latency;
+    return os_commit_latency_ns == r.os_commit_latency_ns &&
+      os_apply_latency_ns == r.os_apply_latency_ns;
   }
 
   void add(const objectstore_perf_stat_t &o) {
-    os_commit_latency += o.os_commit_latency;
-    os_apply_latency += o.os_apply_latency;
+    os_commit_latency_ns += o.os_commit_latency_ns;
+    os_apply_latency_ns += o.os_apply_latency_ns;
   }
   void sub(const objectstore_perf_stat_t &o) {
-    os_commit_latency -= o.os_commit_latency;
-    os_apply_latency -= o.os_apply_latency;
+    os_commit_latency_ns -= o.os_commit_latency_ns;
+    os_apply_latency_ns -= o.os_apply_latency_ns;
   }
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(std::list<objectstore_perf_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(objectstore_perf_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 
 /** osd_stat
  * aggregate stats for an osd
@@ -938,11 +952,11 @@ struct osd_stat_t {
   }
 
   void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
+  void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::iterator &bl);
   static void generate_test_instances(std::list<osd_stat_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_stat_t)
+WRITE_CLASS_ENCODER_FEATURES(osd_stat_t)
 
 inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
   return l.kb == r.kb &&
@@ -974,41 +988,41 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 /*
  * pg states
  */
-#define PG_STATE_CREATING     (1<<0)  // creating
-#define PG_STATE_ACTIVE       (1<<1)  // i am active.  (primary: replicas too)
-#define PG_STATE_CLEAN        (1<<2)  // peers are complete, clean of stray replicas.
-#define PG_STATE_DOWN         (1<<4)  // a needed replica is down, PG offline
-//#define PG_STATE_REPLAY       (1<<5)  // crashed, waiting for replay
-//#define PG_STATE_STRAY      (1<<6)  // i must notify the primary i exist.
-//#define PG_STATE_SPLITTING    (1<<7)  // i am splitting
-#define PG_STATE_SCRUBBING    (1<<8)  // scrubbing
-//#define PG_STATE_SCRUBQ       (1<<9)  // queued for scrub
-#define PG_STATE_DEGRADED     (1<<10) // pg contains objects with reduced redundancy
-#define PG_STATE_INCONSISTENT (1<<11) // pg replicas are inconsistent (but shouldn't be)
-#define PG_STATE_PEERING      (1<<12) // pg is (re)peering
-#define PG_STATE_REPAIR       (1<<13) // pg should repair on next scrub
-#define PG_STATE_RECOVERING   (1<<14) // pg is recovering/migrating objects
-#define PG_STATE_BACKFILL_WAIT     (1<<15) // [active] reserving backfill
-#define PG_STATE_INCOMPLETE   (1<<16) // incomplete content, peering failed.
-#define PG_STATE_STALE        (1<<17) // our state for this pg is stale, unknown.
-#define PG_STATE_REMAPPED     (1<<18) // pg is explicitly remapped to different OSDs than CRUSH
-#define PG_STATE_DEEP_SCRUB   (1<<19) // deep scrub: check CRC32 on files
-#define PG_STATE_BACKFILL  (1<<20) // [active] backfilling pg content
-#define PG_STATE_BACKFILL_TOOFULL (1<<21) // backfill can't proceed: too full
-#define PG_STATE_RECOVERY_WAIT (1<<22) // waiting for recovery reservations
-#define PG_STATE_UNDERSIZED    (1<<23) // pg acting < pool size
-#define PG_STATE_ACTIVATING   (1<<24) // pg is peered but not yet active
-#define PG_STATE_PEERED        (1<<25) // peered, cannot go active, can recover
-#define PG_STATE_SNAPTRIM      (1<<26) // trimming snaps
-#define PG_STATE_SNAPTRIM_WAIT (1<<27) // queued to trim snaps
-#define PG_STATE_RECOVERY_TOOFULL (1<<28) // recovery can't proceed: too full
-#define PG_STATE_SNAPTRIM_ERROR (1<<29) // error stopped trimming snaps
-#define PG_STATE_FORCED_RECOVERY (1<<30) // force recovery of this pg before any other
-#define PG_STATE_FORCED_BACKFILL (1<<31) // force backfill of this pg before any other
+#define PG_STATE_CREATING           (1ULL << 0)  // creating
+#define PG_STATE_ACTIVE             (1ULL << 1)  // i am active.  (primary: replicas too)
+#define PG_STATE_CLEAN              (1ULL << 2)  // peers are complete, clean of stray replicas.
+#define PG_STATE_DOWN               (1ULL << 4)  // a needed replica is down, PG offline
+#define PG_STATE_RECOVERY_UNFOUND   (1ULL << 5)  // recovery stopped due to unfound
+#define PG_STATE_BACKFILL_UNFOUND   (1ULL << 6)  // backfill stopped due to unfound
+//#define PG_STATE_SPLITTING        (1ULL << 7)  // i am splitting
+#define PG_STATE_SCRUBBING          (1ULL << 8)  // scrubbing
+//#define PG_STATE_SCRUBQ           (1ULL << 9)  // queued for scrub
+#define PG_STATE_DEGRADED           (1ULL << 10) // pg contains objects with reduced redundancy
+#define PG_STATE_INCONSISTENT       (1ULL << 11) // pg replicas are inconsistent (but shouldn't be)
+#define PG_STATE_PEERING            (1ULL << 12) // pg is (re)peering
+#define PG_STATE_REPAIR             (1ULL << 13) // pg should repair on next scrub
+#define PG_STATE_RECOVERING         (1ULL << 14) // pg is recovering/migrating objects
+#define PG_STATE_BACKFILL_WAIT      (1ULL << 15) // [active] reserving backfill
+#define PG_STATE_INCOMPLETE         (1ULL << 16) // incomplete content, peering failed.
+#define PG_STATE_STALE              (1ULL << 17) // our state for this pg is stale, unknown.
+#define PG_STATE_REMAPPED           (1ULL << 18) // pg is explicitly remapped to different OSDs than CRUSH
+#define PG_STATE_DEEP_SCRUB         (1ULL << 19) // deep scrub: check CRC32 on files
+#define PG_STATE_BACKFILLING        (1ULL << 20) // [active] backfilling pg content
+#define PG_STATE_BACKFILL_TOOFULL   (1ULL << 21) // backfill can't proceed: too full
+#define PG_STATE_RECOVERY_WAIT      (1ULL << 22) // waiting for recovery reservations
+#define PG_STATE_UNDERSIZED         (1ULL << 23) // pg acting < pool size
+#define PG_STATE_ACTIVATING         (1ULL << 24) // pg is peered but not yet active
+#define PG_STATE_PEERED             (1ULL << 25) // peered, cannot go active, can recover
+#define PG_STATE_SNAPTRIM           (1ULL << 26) // trimming snaps
+#define PG_STATE_SNAPTRIM_WAIT      (1ULL << 27) // queued to trim snaps
+#define PG_STATE_RECOVERY_TOOFULL   (1ULL << 28) // recovery can't proceed: too full
+#define PG_STATE_SNAPTRIM_ERROR     (1ULL << 29) // error stopped trimming snaps
+#define PG_STATE_FORCED_RECOVERY    (1ULL << 30) // force recovery of this pg before any other
+#define PG_STATE_FORCED_BACKFILL    (1ULL << 31) // force backfill of this pg before any other
 
-std::string pg_state_string(int state);
+std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const vector<int32_t> &a);
-int pg_string_state(const std::string& state);
+boost::optional<uint64_t> pg_string_state(const std::string& state);
 
 
 /*
@@ -1157,6 +1171,8 @@ struct pg_pool_t {
     FLAG_FULL_QUOTA = 1<<10, // pool is currently running out of quota, will set FLAG_FULL too
     FLAG_NEARFULL = 1<<11, // pool is nearfull
     FLAG_BACKFILLFULL = 1<<12, // pool is backfillfull
+    FLAG_SELFMANAGED_SNAPS = 1<<13, // pool uses selfmanaged snaps
+    FLAG_POOL_SNAPS = 1<<14,        // pool has pool snaps
   };
 
   static const char *get_flag_name(int f) {
@@ -1174,6 +1190,8 @@ struct pg_pool_t {
     case FLAG_FULL_QUOTA: return "full_quota";
     case FLAG_NEARFULL: return "nearfull";
     case FLAG_BACKFILLFULL: return "backfillfull";
+    case FLAG_SELFMANAGED_SNAPS: return "selfmanaged_snaps";
+    case FLAG_POOL_SNAPS: return "pool_snaps";
     default: return "???";
     }
   }
@@ -1218,6 +1236,10 @@ struct pg_pool_t {
       return FLAG_NEARFULL;
     if (name == "backfillfull")
       return FLAG_BACKFILLFULL;
+    if (name == "selfmanaged_snaps")
+      return FLAG_SELFMANAGED_SNAPS;
+    if (name == "pool_snaps")
+      return FLAG_POOL_SNAPS;
     return 0;
   }
 
@@ -1300,7 +1322,6 @@ public:
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
   uint64_t auid;            ///< who owns the pg
-  __u32 crash_replay_interval; ///< seconds to allow clients to replay ACKed but unCOMMITted requests
 
   uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
   uint64_t quota_max_objects; ///< maximum number of objects for this pool
@@ -1417,7 +1438,6 @@ public:
       last_force_op_resend_preluminous(0),
       snap_seq(0), snap_epoch(0),
       auid(0),
-      crash_replay_interval(0),
       quota_max_bytes(0), quota_max_objects(0),
       pg_num_mask(0), pgp_num_mask(0),
       tier_of(-1), read_tier(-1), write_tier(-1),
@@ -1449,11 +1469,8 @@ public:
   void set_flag(uint64_t f) { flags |= f; }
   void unset_flag(uint64_t f) { flags &= ~f; }
 
-  bool ec_pool() const {
-    return type == TYPE_ERASURE;
-  }
   bool require_rollback() const {
-    return ec_pool();
+    return is_erasure();
   }
 
   /// true if incomplete clones may be present
@@ -1477,7 +1494,6 @@ public:
   epoch_t get_snap_epoch() const { return snap_epoch; }
   snapid_t get_snap_seq() const { return snap_seq; }
   uint64_t get_auid() const { return auid; }
-  unsigned get_crash_replay_interval() const { return crash_replay_interval; }
 
   void set_snap_seq(snapid_t s) { snap_seq = s; }
   void set_snap_epoch(epoch_t e) { snap_epoch = e; }
@@ -1662,6 +1678,7 @@ struct object_stat_sum_t {
   int64_t num_objects_pinned;
   int64_t num_objects_missing;
   int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
+  int64_t num_large_omap_objects = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1709,6 +1726,7 @@ struct object_stat_sum_t {
     FLOOR(num_wr);
     FLOOR(num_wr_kb);
     FLOOR(num_scrub_errors);
+    FLOOR(num_large_omap_objects);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
     FLOOR(num_objects_recovered);
@@ -1763,6 +1781,7 @@ struct object_stat_sum_t {
     SPLIT(num_wr);
     SPLIT(num_wr_kb);
     SPLIT(num_scrub_errors);
+    SPLIT(num_large_omap_objects);
     SPLIT(num_shallow_scrub_errors);
     SPLIT(num_deep_scrub_errors);
     SPLIT(num_objects_recovered);
@@ -1819,6 +1838,7 @@ struct object_stat_sum_t {
         sizeof(num_wr) +
         sizeof(num_wr_kb) +
         sizeof(num_scrub_errors) +
+        sizeof(num_large_omap_objects) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
@@ -1914,7 +1934,7 @@ struct pg_stat_t {
   eversion_t version;
   version_t reported_seq;  // sequence number
   epoch_t reported_epoch;  // epoch of this report
-  __u32 state;
+  uint64_t state;
   utime_t last_fresh;   // last reported
   utime_t last_change;  // new state != previous state
   utime_t last_active;  // state & PG_STATE_ACTIVE
@@ -1948,12 +1968,18 @@ struct pg_stat_t {
 
   vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
+  interval_set<snapid_t> purged_snaps;  ///< recently removed snaps that we've purged
+
   utime_t last_became_active;
   utime_t last_became_peered;
 
   /// up, acting primaries
   int32_t up_primary;
   int32_t acting_primary;
+
+  // snaptrimq.size() is 64bit, but let's be serious - anything over 50k is
+  // absurd already, so cap it to 2^32 and save 4 bytes at  the same time
+  uint32_t snaptrimq_len;
 
   bool stats_invalid:1;
   /// true if num_objects_dirty is not accurate (because it was not
@@ -1974,6 +2000,7 @@ struct pg_stat_t {
       mapping_epoch(0),
       up_primary(-1),
       acting_primary(-1),
+      snaptrimq_len(0),
       stats_invalid(false),
       dirty_stats_invalid(false),
       omap_stats_invalid(false),
@@ -2002,17 +2029,29 @@ struct pg_stat_t {
       log_size = f;
     if (ondisk_log_size < f)
       ondisk_log_size = f;
+    if (snaptrimq_len < f)
+      snaptrimq_len = f;
   }
 
   void add(const pg_stat_t& o) {
     stats.add(o.stats);
     log_size += o.log_size;
     ondisk_log_size += o.ondisk_log_size;
+    if (((uint64_t)snaptrimq_len + (uint64_t)o.snaptrimq_len) > (uint64_t)(1 << 31)) {
+      snaptrimq_len = 1 << 31;
+    } else {
+      snaptrimq_len += o.snaptrimq_len;
+    }
   }
   void sub(const pg_stat_t& o) {
     stats.sub(o.stats);
     log_size -= o.log_size;
     ondisk_log_size -= o.ondisk_log_size;
+    if (o.snaptrimq_len < snaptrimq_len) {
+      snaptrimq_len -= o.snaptrimq_len;
+    } else {
+      snaptrimq_len = 0;
+    }
   }
 
   bool is_acting_osd(int32_t osd, bool primary) const;
@@ -2491,52 +2530,52 @@ struct pg_fast_info_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(last_update, bl);
-    ::encode(last_complete, bl);
-    ::encode(last_user_version, bl);
-    ::encode(stats.version, bl);
-    ::encode(stats.reported_seq, bl);
-    ::encode(stats.last_fresh, bl);
-    ::encode(stats.last_active, bl);
-    ::encode(stats.last_peered, bl);
-    ::encode(stats.last_clean, bl);
-    ::encode(stats.last_unstale, bl);
-    ::encode(stats.last_undegraded, bl);
-    ::encode(stats.last_fullsized, bl);
-    ::encode(stats.log_size, bl);
-    ::encode(stats.stats.sum.num_bytes, bl);
-    ::encode(stats.stats.sum.num_objects, bl);
-    ::encode(stats.stats.sum.num_object_copies, bl);
-    ::encode(stats.stats.sum.num_rd, bl);
-    ::encode(stats.stats.sum.num_rd_kb, bl);
-    ::encode(stats.stats.sum.num_wr, bl);
-    ::encode(stats.stats.sum.num_wr_kb, bl);
-    ::encode(stats.stats.sum.num_objects_dirty, bl);
+    encode(last_update, bl);
+    encode(last_complete, bl);
+    encode(last_user_version, bl);
+    encode(stats.version, bl);
+    encode(stats.reported_seq, bl);
+    encode(stats.last_fresh, bl);
+    encode(stats.last_active, bl);
+    encode(stats.last_peered, bl);
+    encode(stats.last_clean, bl);
+    encode(stats.last_unstale, bl);
+    encode(stats.last_undegraded, bl);
+    encode(stats.last_fullsized, bl);
+    encode(stats.log_size, bl);
+    encode(stats.stats.sum.num_bytes, bl);
+    encode(stats.stats.sum.num_objects, bl);
+    encode(stats.stats.sum.num_object_copies, bl);
+    encode(stats.stats.sum.num_rd, bl);
+    encode(stats.stats.sum.num_rd_kb, bl);
+    encode(stats.stats.sum.num_wr, bl);
+    encode(stats.stats.sum.num_wr_kb, bl);
+    encode(stats.stats.sum.num_objects_dirty, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(1, p);
-    ::decode(last_update, p);
-    ::decode(last_complete, p);
-    ::decode(last_user_version, p);
-    ::decode(stats.version, p);
-    ::decode(stats.reported_seq, p);
-    ::decode(stats.last_fresh, p);
-    ::decode(stats.last_active, p);
-    ::decode(stats.last_peered, p);
-    ::decode(stats.last_clean, p);
-    ::decode(stats.last_unstale, p);
-    ::decode(stats.last_undegraded, p);
-    ::decode(stats.last_fullsized, p);
-    ::decode(stats.log_size, p);
-    ::decode(stats.stats.sum.num_bytes, p);
-    ::decode(stats.stats.sum.num_objects, p);
-    ::decode(stats.stats.sum.num_object_copies, p);
-    ::decode(stats.stats.sum.num_rd, p);
-    ::decode(stats.stats.sum.num_rd_kb, p);
-    ::decode(stats.stats.sum.num_wr, p);
-    ::decode(stats.stats.sum.num_wr_kb, p);
-    ::decode(stats.stats.sum.num_objects_dirty, p);
+    decode(last_update, p);
+    decode(last_complete, p);
+    decode(last_user_version, p);
+    decode(stats.version, p);
+    decode(stats.reported_seq, p);
+    decode(stats.last_fresh, p);
+    decode(stats.last_active, p);
+    decode(stats.last_peered, p);
+    decode(stats.last_clean, p);
+    decode(stats.last_unstale, p);
+    decode(stats.last_undegraded, p);
+    decode(stats.last_fullsized, p);
+    decode(stats.log_size, p);
+    decode(stats.stats.sum.num_bytes, p);
+    decode(stats.stats.sum.num_objects, p);
+    decode(stats.stats.sum.num_object_copies, p);
+    decode(stats.stats.sum.num_rd, p);
+    decode(stats.stats.sum.num_rd_kb, p);
+    decode(stats.stats.sum.num_wr, p);
+    decode(stats.stats.sum.num_wr_kb, p);
+    decode(stats.stats.sum.num_objects_dirty, p);
     DECODE_FINISH(p);
   }
 };
@@ -2663,10 +2702,10 @@ public:
     ENCODE_START(1, 1, bl);
     if (past_intervals) {
       __u8 type = 2;
-      ::encode(type, bl);
+      encode(type, bl);
       past_intervals->encode(bl);
     } else {
-      ::encode((__u8)0, bl);
+      encode((__u8)0, bl);
     }
     ENCODE_FINISH(bl);
   }
@@ -3172,15 +3211,16 @@ public:
     swap(other.max_required_version, max_required_version);
   }
   void append_id(ModID id) {
+    using ceph::encode;
     uint8_t _id(id);
-    ::encode(_id, bl);
+    encode(_id, bl);
   }
   void append(uint64_t old_size) {
     if (!can_local_rollback || rollback_info_completed)
       return;
     ENCODE_START(1, 1, bl);
     append_id(APPEND);
-    ::encode(old_size, bl);
+    encode(old_size, bl);
     ENCODE_FINISH(bl);
   }
   void setattrs(map<string, boost::optional<bufferlist> > &old_attrs) {
@@ -3188,7 +3228,7 @@ public:
       return;
     ENCODE_START(1, 1, bl);
     append_id(SETATTRS);
-    ::encode(old_attrs, bl);
+    encode(old_attrs, bl);
     ENCODE_FINISH(bl);
   }
   bool rmobject(version_t deletion_version) {
@@ -3196,7 +3236,7 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(DELETE);
-    ::encode(deletion_version, bl);
+    encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
     return true;
@@ -3206,7 +3246,7 @@ public:
       return false;
     ENCODE_START(1, 1, bl);
     append_id(TRY_DELETE);
-    ::encode(deletion_version, bl);
+    encode(deletion_version, bl);
     ENCODE_FINISH(bl);
     rollback_info_completed = true;
     return true;
@@ -3224,7 +3264,7 @@ public:
       return;
     ENCODE_START(1, 1, bl);
     append_id(UPDATE_SNAPS);
-    ::encode(old_snaps, bl);
+    encode(old_snaps, bl);
     ENCODE_FINISH(bl);
   }
   void rollback_extents(
@@ -3235,8 +3275,8 @@ public:
       max_required_version = 2;
     ENCODE_START(2, 2, bl);
     append_id(ROLLBACK_EXTENTS);
-    ::encode(gen, bl);
-    ::encode(extents, bl);
+    encode(gen, bl);
+    encode(extents, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -3668,34 +3708,36 @@ struct pg_missing_item {
   }
 
   void encode(bufferlist& bl, uint64_t features) const {
+    using ceph::encode;
     if (HAVE_FEATURE(features, OSD_RECOVERY_DELETES)) {
       // encoding a zeroed eversion_t to differentiate between this and
       // legacy unversioned encoding - a need value of 0'0 is not
       // possible. This can be replaced with the legacy encoding
       // macros post-luminous.
       eversion_t e;
-      ::encode(e, bl);
-      ::encode(need, bl);
-      ::encode(have, bl);
-      ::encode(static_cast<uint8_t>(flags), bl);
+      encode(e, bl);
+      encode(need, bl);
+      encode(have, bl);
+      encode(static_cast<uint8_t>(flags), bl);
     } else {
       // legacy unversioned encoding
-      ::encode(need, bl);
-      ::encode(have, bl);
+      encode(need, bl);
+      encode(have, bl);
     }
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     eversion_t e;
-    ::decode(e, bl);
+    decode(e, bl);
     if (e != eversion_t()) {
       // legacy encoding, this is the need value
       need = e;
-      ::decode(have, bl);
+      decode(have, bl);
     } else {
-      ::decode(need, bl);
-      ::decode(have, bl);
+      decode(need, bl);
+      decode(have, bl);
       uint8_t f;
-      ::decode(f, bl);
+      decode(f, bl);
       flags = static_cast<missing_flags_t>(f);
     }
   }
@@ -3751,7 +3793,6 @@ public:
   virtual bool have_missing() const = 0;
   virtual bool is_missing(const hobject_t& oid, pg_missing_item *out = nullptr) const = 0;
   virtual bool is_missing(const hobject_t& oid, eversion_t v) const = 0;
-  virtual eversion_t have_old(const hobject_t& oid) const = 0;
   virtual ~pg_missing_const_i() {}
 };
 
@@ -3842,13 +3883,13 @@ public:
       return false;
     return true;
   }
-  eversion_t have_old(const hobject_t& oid) const override {
-    map<hobject_t, item>::const_iterator m =
-      missing.find(oid);
-    if (m == missing.end())
+  eversion_t get_oldest_need() const {
+    if (missing.empty()) {
       return eversion_t();
-    const item &item(m->second);
-    return item.have;
+    }
+    auto it = missing.find(rmissing.begin()->second);
+    assert(it != missing.end());
+    return it->second.need;
   }
 
   void claim(pg_missing_set& o) {
@@ -3969,17 +4010,17 @@ public:
 
   void encode(bufferlist &bl) const {
     ENCODE_START(4, 2, bl);
-    ::encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
-    ::encode(may_include_deletes, bl);
+    encode(missing, bl, may_include_deletes ? CEPH_FEATURE_OSD_RECOVERY_DELETES : 0);
+    encode(may_include_deletes, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl, int64_t pool = -1) {
     for (auto const &i: missing)
       tracker.changed(i.first);
     DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
-    ::decode(missing, bl);
+    decode(missing, bl);
     if (struct_v >= 4) {
-      ::decode(may_include_deletes, bl);
+      decode(may_include_deletes, bl);
     }
     DECODE_FINISH(bl);
 
@@ -4132,27 +4173,27 @@ struct pg_nls_response_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(handle, bl);
+    encode(handle, bl);
     __u32 n = (__u32)entries.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (list<librados::ListObjectImpl>::const_iterator i = entries.begin(); i != entries.end(); ++i) {
-      ::encode(i->nspace, bl);
-      ::encode(i->oid, bl);
-      ::encode(i->locator, bl);
+      encode(i->nspace, bl);
+      encode(i->oid, bl);
+      encode(i->locator, bl);
     }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(handle, bl);
+    decode(handle, bl);
     __u32 n;
-    ::decode(n, bl);
+    decode(n, bl);
     entries.clear();
     while (n--) {
       librados::ListObjectImpl i;
-      ::decode(i.nspace, bl);
-      ::decode(i.oid, bl);
-      ::decode(i.locator, bl);
+      decode(i.nspace, bl);
+      decode(i.oid, bl);
+      decode(i.locator, bl);
       entries.push_back(i);
     }
     DECODE_FINISH(bl);
@@ -4200,17 +4241,19 @@ struct pg_ls_response_t {
   list<pair<object_t, string> > entries;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     __u8 v = 1;
-    ::encode(v, bl);
-    ::encode(handle, bl);
-    ::encode(entries, bl);
+    encode(v, bl);
+    encode(handle, bl);
+    encode(entries, bl);
   }
   void decode(bufferlist::iterator& bl) {
+    using ceph::decode;
     __u8 v;
-    ::decode(v, bl);
+    decode(v, bl);
     assert(v == 1);
-    ::decode(handle, bl);
-    ::decode(entries, bl);
+    decode(handle, bl);
+    decode(entries, bl);
   }
   void dump(Formatter *f) const {
     f->dump_stream("handle") << handle;
@@ -4338,23 +4381,6 @@ struct pg_create_t {
   static void generate_test_instances(list<pg_create_t*>& o);
 };
 WRITE_CLASS_ENCODER(pg_create_t)
-
-// -----------------------------------------
-
-struct osd_peer_stat_t {
-  utime_t stamp;
-
-  osd_peer_stat_t() { }
-
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::iterator &bl);
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<osd_peer_stat_t*>& o);
-};
-WRITE_CLASS_ENCODER(osd_peer_stat_t)
-
-ostream& operator<<(ostream& out, const osd_peer_stat_t &stat);
-
 
 // -----------------------------------------
 
@@ -4493,16 +4519,6 @@ struct SnapSet {
     return out;
   }
 
-  // return min element of snaps > after, return max if no such element
-  snapid_t get_first_snap_after(snapid_t after, snapid_t max) const {
-    for (vector<snapid_t>::const_reverse_iterator i = snaps.rbegin();
-	 i != snaps.rend();
-	 ++i) {
-      if (*i > after)
-	return *i;
-    }
-    return max;
-  }
 
   SnapSet get_filtered(const pg_pool_t &pinfo) const;
   void filter(const pg_pool_t &pinfo);
@@ -4554,15 +4570,48 @@ static inline ostream& operator<<(ostream& out, const notify_info_t& n) {
 	     << " " << n.timeout << "s)";
 }
 
+struct chunk_info_t {
+  enum {
+    FLAG_DIRTY = 1, 
+    FLAG_MISSING = 2,
+  };
+  uint32_t offset;
+  uint32_t length;
+  hobject_t oid;
+  uint32_t flags;   // FLAG_*
+
+  chunk_info_t() : offset(0), length(0), flags(0) { }
+
+  static string get_flag_string(uint64_t flags) {
+    string r;
+    if (flags & FLAG_DIRTY) {
+      r += "|dirty";
+    }
+    if (flags & FLAG_MISSING) {
+      r += "|missing";
+    }
+    if (r.length())
+      return r.substr(1);
+    return r;
+  }
+  void encode(bufferlist &bl) const;
+  void decode(bufferlist::iterator &bl);
+  void dump(Formatter *f) const;
+  friend ostream& operator<<(ostream& out, const chunk_info_t& ci);
+};
+WRITE_CLASS_ENCODER(chunk_info_t)
+ostream& operator<<(ostream& out, const chunk_info_t& ci);
+
 struct object_info_t;
 struct object_manifest_t {
   enum {
     TYPE_NONE = 0,
-    TYPE_REDIRECT = 1,  // start with this
-    TYPE_CHUNKED = 2,   // do this later
+    TYPE_REDIRECT = 1, 
+    TYPE_CHUNKED = 2, 
   };
   uint8_t type;  // redirect, chunked, ...
   hobject_t redirect_target;
+  map <uint64_t, chunk_info_t> chunk_map;
 
   object_manifest_t() : type(0) { }
   object_manifest_t(uint8_t type, const hobject_t& redirect_target) 
@@ -4588,6 +4637,11 @@ struct object_manifest_t {
   const char *get_type_name() const {
     return get_type_name(type);
   }
+  void clear() {
+    type = 0;
+    redirect_target = hobject_t();
+    chunk_map.clear();
+  }
   static void generate_test_instances(list<object_manifest_t*>& o);
   void encode(bufferlist &bl) const;
   void decode(bufferlist::iterator &bl);
@@ -4610,16 +4664,15 @@ struct object_info_t {
   // note: these are currently encoded into a total 16 bits; see
   // encode()/decode() for the weirdness.
   typedef enum {
-    FLAG_LOST     = 1<<0,
-    FLAG_WHITEOUT = 1<<1,  // object logically does not exist
-    FLAG_DIRTY    = 1<<2,  // object has been modified since last flushed or undirtied
-    FLAG_OMAP     = 1 << 3,  // has (or may have) some/any omap data
-    FLAG_DATA_DIGEST = 1 << 4,  // has data crc
-    FLAG_OMAP_DIGEST = 1 << 5,  // has omap crc
-    FLAG_CACHE_PIN = 1 << 6,    // pin the object in cache tier
-    FLAG_MANIFEST = 1 << 7,	// has manifest
-    // ...
-    FLAG_USES_TMAP = 1<<8,  // deprecated; no longer used.
+    FLAG_LOST        = 1<<0,
+    FLAG_WHITEOUT    = 1<<1, // object logically does not exist
+    FLAG_DIRTY       = 1<<2, // object has been modified since last flushed or undirtied
+    FLAG_OMAP        = 1<<3, // has (or may have) some/any omap data
+    FLAG_DATA_DIGEST = 1<<4, // has data crc
+    FLAG_OMAP_DIGEST = 1<<5, // has omap crc
+    FLAG_CACHE_PIN   = 1<<6, // pin the object in cache tier
+    FLAG_MANIFEST    = 1<<7, // has manifest
+    FLAG_USES_TMAP   = 1<<8, // deprecated; no longer used
   } flag_t;
 
   flag_t flags;
@@ -4701,7 +4754,6 @@ struct object_info_t {
   bool has_manifest() const {
     return test_flag(FLAG_MANIFEST);
   }
-
   void set_data_digest(__u32 d) {
     set_flag(FLAG_DATA_DIGEST);
     data_digest = d;
@@ -4881,12 +4933,16 @@ struct ScrubMap {
     bool stat_error:1;
     bool ec_hash_mismatch:1;
     bool ec_size_mismatch:1;
+    bool large_omap_object_found:1;
+    uint64_t large_omap_object_key_count = 0;
+    uint64_t large_omap_object_value_size = 0;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
       size(-1), omap_digest(0), digest(0),
-      negative(false), digest_present(false), omap_digest_present(false), 
-      read_error(false), stat_error(false), ec_hash_mismatch(false), ec_size_mismatch(false) {}
+      negative(false), digest_present(false), omap_digest_present(false),
+      read_error(false), stat_error(false), ec_hash_mismatch(false),
+      ec_size_mismatch(false), large_omap_object_found(false) {}
 
     void encode(bufferlist& bl) const;
     void decode(bufferlist::iterator& bl);
@@ -4898,6 +4954,7 @@ struct ScrubMap {
   map<hobject_t,object> objects;
   eversion_t valid_through;
   eversion_t incr_since;
+  bool has_large_omap_object_errors:1;
 
   void merge_incr(const ScrubMap &l);
   void insert(const ScrubMap &r) {
@@ -4917,6 +4974,60 @@ struct ScrubMap {
 };
 WRITE_CLASS_ENCODER(ScrubMap::object)
 WRITE_CLASS_ENCODER(ScrubMap)
+
+struct ScrubMapBuilder {
+  bool deep = false;
+  vector<hobject_t> ls;
+  size_t pos = 0;
+  int64_t data_pos = 0;
+  string omap_pos;
+  int ret = 0;
+  bufferhash data_hash, omap_hash;  ///< accumulatinng hash value
+  uint64_t omap_keys = 0;
+  uint64_t omap_bytes = 0;
+
+  bool empty() {
+    return ls.empty();
+  }
+  bool done() {
+    return pos >= ls.size();
+  }
+  void reset() {
+    *this = ScrubMapBuilder();
+  }
+
+  bool data_done() {
+    return data_pos < 0;
+  }
+
+  void next_object() {
+    ++pos;
+    data_pos = 0;
+    omap_pos.clear();
+    omap_keys = 0;
+    omap_bytes = 0;
+  }
+
+  friend ostream& operator<<(ostream& out, const ScrubMapBuilder& pos) {
+    out << "(" << pos.pos << "/" << pos.ls.size();
+    if (pos.pos < pos.ls.size()) {
+      out << " " << pos.ls[pos.pos];
+    }
+    if (pos.data_pos < 0) {
+      out << " byte " << pos.data_pos;
+    }
+    if (!pos.omap_pos.empty()) {
+      out << " key " << pos.omap_pos;
+    }
+    if (pos.deep) {
+      out << " deep";
+    }
+    if (pos.ret) {
+      out << " ret " << pos.ret;
+    }
+    return out << ")";
+  }
+};
 
 struct OSDOp {
   ceph_osd_op op;
@@ -4988,19 +5099,19 @@ struct watch_item_t {
 
   void encode(bufferlist &bl, uint64_t features) const {
     ENCODE_START(2, 1, bl);
-    ::encode(name, bl);
-    ::encode(cookie, bl);
-    ::encode(timeout_seconds, bl);
-    ::encode(addr, bl, features);
+    encode(name, bl);
+    encode(cookie, bl);
+    encode(timeout_seconds, bl);
+    encode(addr, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(2, bl);
-    ::decode(name, bl);
-    ::decode(cookie, bl);
-    ::decode(timeout_seconds, bl);
+    decode(name, bl);
+    decode(cookie, bl);
+    decode(timeout_seconds, bl);
     if (struct_v >= 2) {
-      ::decode(addr, bl);
+      decode(addr, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -5021,12 +5132,12 @@ struct obj_list_watch_response_t {
 
   void encode(bufferlist& bl, uint64_t features) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl, features);
+    encode(entries, bl, features);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(entries, bl);
+    decode(entries, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -5074,18 +5185,18 @@ struct clone_info {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(cloneid, bl);
-    ::encode(snaps, bl);
-    ::encode(overlap, bl);
-    ::encode(size, bl);
+    encode(cloneid, bl);
+    encode(snaps, bl);
+    encode(overlap, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(cloneid, bl);
-    ::decode(snaps, bl);
-    ::decode(overlap, bl);
-    ::decode(size, bl);
+    decode(cloneid, bl);
+    decode(snaps, bl);
+    decode(overlap, bl);
+    decode(size, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const {
@@ -5136,15 +5247,15 @@ struct obj_list_snap_response_t {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(clones, bl);
-    ::encode(seq, bl);
+    encode(clones, bl);
+    encode(seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(clones, bl);
+    decode(clones, bl);
     if (struct_v >= 2)
-      ::decode(seq, bl);
+      decode(seq, bl);
     else
       seq = CEPH_NOSNAP;
     DECODE_FINISH(bl);
@@ -5183,9 +5294,9 @@ WRITE_CLASS_ENCODER(obj_list_snap_response_t)
 // PromoteCounter
 
 struct PromoteCounter {
-  std::atomic_ullong  attempts{0};
-  std::atomic_ullong  objects{0};
-  std::atomic_ullong  bytes{0};
+  std::atomic<unsigned long long>  attempts{0};
+  std::atomic<unsigned long long>  objects{0};
+  std::atomic<unsigned long long>  bytes{0};
 
   void attempt() {
     attempts++;

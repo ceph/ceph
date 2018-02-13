@@ -1,7 +1,7 @@
 #ifndef CEPH_RGW_SYNC_TRACE_H
 #define CEPH_RGW_SYNC_TRACE_H
 
-#include <boost/regex.hpp>
+#include <regex>
 
 #include "common/debug.h"
 #include "common/ceph_json.h"
@@ -9,7 +9,6 @@
 #include "rgw_sync_trace.h"
 #include "rgw_rados.h"
 
-using namespace std;
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw_sync
@@ -72,7 +71,7 @@ int RGWSyncTraceServiceMapThread::process()
 {
   map<string, string> status;
   status["current_sync"] = manager->get_active_names();
-  int ret = store->update_service_map(status);
+  int ret = store->update_service_map(std::move(status));
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: update_service_map() returned ret=" << ret << dendl;
   }
@@ -93,8 +92,8 @@ RGWSyncTraceNodeRef RGWSyncTraceManager::add_node(RGWSyncTraceNode *node)
 bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
 {
   try {
-    boost::regex expr(search_term);
-    boost::smatch m;
+    std::regex expr(search_term);
+    std::smatch m;
 
     if (regex_search(prefix, m, expr)) {
       return true;
@@ -111,10 +110,8 @@ bool RGWSyncTraceNode::match(const string& search_term, bool search_history)
         return true;
       }
     }
-  } catch (boost::bad_expression const& e) {
+  } catch (const std::regex_error& e) {
     ldout(cct, 5) << "NOTICE: sync trace: bad expression: bad regex search term" << dendl;
-  } catch (...) {
-    ldout(cct, 5) << "NOTICE: sync trace: regex_search() threw exception" << dendl;
   }
 
   return false;

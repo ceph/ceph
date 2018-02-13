@@ -19,8 +19,6 @@
 #ifndef CEPH_OSDMAP_H
 #define CEPH_OSDMAP_H
 
-#include "include/cpp-btree/btree_map.h"
-
 /*
  * describe properties of the OSD cluster.
  *   disks, disk groups, total # osds,
@@ -36,24 +34,12 @@
 #include <set>
 #include <map>
 #include "include/memory.h"
-using namespace std;
+#include "include/btree_map.h"
 
 // forward declaration
 class CephContext;
 class CrushWrapper;
 class health_check_map_t;
-
-// FIXME C++11 does not have std::equal for two differently-typed containers.
-// use this until we move to c++14
-template<typename A, typename B>
-bool vectors_equal(A a, B b)
-{
-  return
-    a.size() == b.size() &&
-    (a.empty() ||
-     memcmp((char*)&a[0], (char*)&b[0], sizeof(a[0]) * a.size()) == 0);
-}
-
 
 /*
  * we track up to two intervals during which the osd was alive and
@@ -124,18 +110,20 @@ struct PGTempMap {
   map_t map;
 
   void encode(bufferlist& bl) const {
+    using ceph::encode;
     uint32_t n = map.size();
-    ::encode(n, bl);
+    encode(n, bl);
     for (auto &p : map) {
-      ::encode(p.first, bl);
+      encode(p.first, bl);
       bl.append((char*)p.second, (*p.second + 1) * sizeof(int32_t));
     }
   }
   void decode(bufferlist::iterator& p) {
+    using ceph::decode;
     data.clear();
     map.clear();
     uint32_t n;
-    ::decode(n, p);
+    decode(n, p);
     if (!n)
       return;
     bufferlist::iterator pstart = p;
@@ -144,11 +132,11 @@ struct PGTempMap {
     offsets.resize(n);
     for (unsigned i=0; i<n; ++i) {
       pg_t pgid;
-      ::decode(pgid, p);
+      decode(pgid, p);
       offsets[i].first = pgid;
       offsets[i].second = p.get_off() - start_off;
       uint32_t vn;
-      ::decode(vn, p);
+      decode(vn, p);
       p.advance(vn * sizeof(int32_t));
     }
     size_t len = p.get_off() - start_off;
@@ -245,13 +233,14 @@ struct PGTempMap {
     data.clear();
   }
   void set(pg_t pgid, const mempool::osdmap::vector<int32_t>& v) {
+    using ceph::encode;
     size_t need = sizeof(int32_t) * (1 + v.size());
     if (need < data.get_append_buffer_unused_tail_length()) {
       bufferptr z(data.get_append_buffer_unused_tail_length());
       z.zero();
       data.append(z.c_str(), z.length());
     }
-    ::encode(v, data);
+    encode(v, data);
     map[pgid] = (int32_t*)(data.back().end_c_str()) - (1 + v.size());
   }
   mempool::osdmap::vector<int32_t> get(pg_t pgid) {
@@ -269,10 +258,10 @@ struct PGTempMap {
   mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t> > pg_temp;
 
   void encode(bufferlist& bl) const {
-    ::encode(pg_temp, bl);
+    encode(pg_temp, bl);
   }
   void decode(bufferlist::iterator& p) {
-    ::decode(pg_temp, p);
+    decode(pg_temp, p);
   }
   friend bool operator==(const PGTempMap& l, const PGTempMap& r) {
     return
@@ -357,6 +346,10 @@ class OSDMap {
 public:
   MEMPOOL_CLASS_HELPERS();
 
+  typedef interval_set<
+    snapid_t,
+    mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -403,6 +396,8 @@ public:
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<int32_t>> new_pg_upmap;
     mempool::osdmap::map<pg_t,mempool::osdmap::vector<pair<int32_t,int32_t>>> new_pg_upmap_items;
     mempool::osdmap::set<pg_t> old_pg_upmap, old_pg_upmap_items;
+    mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
+    mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
     string cluster_snapshot;
 
@@ -488,6 +483,10 @@ public:
       }
 
       new_state[osd] &= ~state;
+      if (!new_state[osd]) {
+        // all flags cleared
+        new_state.erase(osd);
+      }
       return true;
     }
 
@@ -536,6 +535,15 @@ private:
   mempool::osdmap::vector<osd_xinfo_t> osd_xinfo;
 
   mempool::osdmap::unordered_map<entity_addr_t,utime_t> blacklist;
+
+  /// queue of snaps to remove
+  mempool::osdmap::map<int64_t, snap_interval_set_t> removed_snaps_queue;
+
+  /// removed_snaps additions this epoch
+  mempool::osdmap::map<int64_t, snap_interval_set_t> new_removed_snaps;
+
+  /// removed_snaps removals this epoch
+  mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
   epoch_t cluster_snapshot_epoch;
   string cluster_snapshot;
@@ -586,7 +594,6 @@ private:
     memset(&fsid, 0, sizeof(fsid));
   }
 
-  // no copying
 private:
   OSDMap(const OSDMap& other) = default;
   OSDMap& operator=(const OSDMap& other) = default;
@@ -680,6 +687,8 @@ public:
   bool test_flag(int f) const { return flags & f; }
   void set_flag(int f) { flags |= f; }
   void clear_flag(int f) { flags &= ~f; }
+
+  void get_flag_set(set<string> *flagset) const;
 
   static void calc_state_set(int state, set<string>& st);
 
@@ -970,6 +979,11 @@ public:
   uint8_t get_min_compat_client() const;
 
   /**
+   * gets the required minimum *client* version that can connect to the cluster.
+   */
+  uint8_t get_require_min_compat_client() const;
+
+  /**
    * get intersection of features supported by up osds
    */
   uint64_t get_up_osd_features() const;
@@ -1129,14 +1143,14 @@ public:
   bool pg_is_ec(pg_t pg) const {
     auto i = pools.find(pg.pool());
     assert(i != pools.end());
-    return i->second.ec_pool();
+    return i->second.is_erasure();
   }
   bool get_primary_shard(const pg_t& pgid, spg_t *out) const {
     auto i = get_pools().find(pgid.pool());
     if (i == get_pools().end()) {
       return false;
     }
-    if (!i->second.ec_pool()) {
+    if (!i->second.is_erasure()) {
       *out = spg_t(pgid);
       return true;
     }
@@ -1150,6 +1164,19 @@ public:
       }
     }
     return false;
+  }
+
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_removed_snaps_queue() const {
+    return removed_snaps_queue;
+  }
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_new_removed_snaps() const {
+    return new_removed_snaps;
+  }
+  const mempool::osdmap::map<int64_t,snap_interval_set_t>&
+  get_new_purged_snaps() const {
+    return new_purged_snaps;
   }
 
   int64_t lookup_pg_pool_name(const string& name) const {
@@ -1171,7 +1198,7 @@ public:
   void get_pool_ids_by_rule(int rule_id, set<int64_t> *pool_ids) const {
     assert(pool_ids);
     for (auto &p: pools) {
-      if ((int)p.second.get_crush_rule() == rule_id) {
+      if (p.second.get_crush_rule() == rule_id) {
         pool_ids->insert(p.first);
       }
     }
@@ -1351,7 +1378,7 @@ private:
 public:
   void print(ostream& out) const;
   void print_pools(ostream& out) const;
-  void print_summary(Formatter *f, ostream& out, const string& prefix) const;
+  void print_summary(Formatter *f, ostream& out, const string& prefix, bool extra=false) const;
   void print_oneline_summary(ostream& out) const;
 
   enum {
@@ -1361,7 +1388,7 @@ public:
     DUMP_DOWN = 8,       // only 'down' osds
     DUMP_DESTROYED = 16, // only 'destroyed' osds
   };
-  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0) const;
+  void print_tree(Formatter *f, ostream *out, unsigned dump_flags=0, string bucket="") const;
 
   int summarize_mapping_stats(
     OSDMap *newmap,

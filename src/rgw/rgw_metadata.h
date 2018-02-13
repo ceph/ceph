@@ -274,14 +274,14 @@ struct RGWMetadataLogHistory {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(oldest_realm_epoch, bl);
-    ::encode(oldest_period_id, bl);
+    encode(oldest_realm_epoch, bl);
+    encode(oldest_period_id, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator& p) {
     DECODE_START(1, p);
-    ::decode(oldest_realm_epoch, p);
-    ::decode(oldest_period_id, p);
+    decode(oldest_realm_epoch, p);
+    decode(oldest_period_id, p);
     DECODE_FINISH(p);
   }
 
@@ -353,8 +353,8 @@ public:
           obj_version *existing_version = NULL);
   int remove(string& metadata_key);
 
-  int list_keys_init(string& section, void **phandle);
-  int list_keys_init(string& section, const string& marker, void **phandle);
+  int list_keys_init(const string& section, void **phandle);
+  int list_keys_init(const string& section, const string& marker, void **phandle);
   int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
 

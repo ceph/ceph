@@ -13,7 +13,7 @@
 #include "common/safe_io.h"
 #include "global/global_context.h"
 #include <iostream>
-#include <boost/regex.hpp>
+#include <regex>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 
@@ -69,7 +69,7 @@ int read_string(int fd, unsigned max, std::string *out) {
   bl.append(buf, 4);
   bufferlist::iterator p = bl.begin();
   uint32_t len;
-  ::decode(len, p);
+  decode(len, p);
   if (len > max)
     return -EINVAL;
 
@@ -88,7 +88,7 @@ int extract_spec(const std::string &spec, std::string *pool_name,
     spec_validation = SPEC_VALIDATION_NONE;
   }
 
-  boost::regex pattern;
+  std::regex pattern;
   switch (spec_validation) {
   case SPEC_VALIDATION_FULL:
     // disallow "/" and "@" in image and snap name
@@ -104,12 +104,12 @@ int extract_spec(const std::string &spec, std::string *pool_name,
     pattern = "^(?:([^/]+)/)?([^@]+)(?:@(.+))?$";
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
 
-  boost::smatch match;
-  if (!boost::regex_match(spec, match, pattern)) {
+  std::smatch match;
+  if (!std::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
     return -EINVAL;
   }
@@ -128,12 +128,17 @@ int extract_spec(const std::string &spec, std::string *pool_name,
 
 int extract_group_spec(const std::string &spec,
 		       std::string *pool_name,
-		       std::string *group_name) {
-  boost::regex pattern;
-  pattern = "^(?:([^/]+)/)?(.+)?$";
+		       std::string *group_name,
+                       std::string *snap_name) {
+  std::regex pattern;
+  if (snap_name == nullptr) {
+    pattern = "^(?:([^/@]+)/)?([^/@]+)?$";
+  } else {
+    pattern = "^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$";
+  }
 
-  boost::smatch match;
-  if (!boost::regex_match(spec, match, pattern)) {
+  std::smatch match;
+  if (!std::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
     return -EINVAL;
   }
@@ -144,17 +149,20 @@ int extract_group_spec(const std::string &spec,
   if (group_name != nullptr) {
     *group_name = match[2];
   }
+  if (snap_name != nullptr && match[3].matched) {
+    *snap_name = match[3];
+  }
 
   return 0;
 }
 
 int extract_image_id_spec(const std::string &spec, std::string *pool_name,
                           std::string *image_id) {
-  boost::regex pattern;
+  std::regex pattern;
   pattern = "^(?:([^/]+)/)?(.+)?$";
 
-  boost::smatch match;
-  if (!boost::regex_match(spec, match, pattern)) {
+  std::smatch match;
+  if (!std::regex_match(spec, match, pattern)) {
     std::cerr << "rbd: invalid spec '" << spec << "'" << std::endl;
     return -EINVAL;
   }
@@ -227,7 +235,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
   if (group_name->empty()) {
     std::string spec = utils::get_positional_argument(vm, (*arg_index)++);
     if (!spec.empty()) {
-      r = utils::extract_group_spec(spec, group_pool_name, group_name);
+      r = extract_group_spec(spec, group_pool_name, group_name, nullptr);
       if (r < 0) {
         return r;
       }
@@ -243,7 +251,7 @@ int get_special_pool_group_names(const po::variables_map &vm,
   }
 
   if (group_name->empty()) {
-    std::cerr << "rbd: consistency group name was not specified" << std::endl;
+    std::cerr << "rbd: group name was not specified" << std::endl;
     return -EINVAL;
   }
 
@@ -338,7 +346,8 @@ int get_pool_group_names(const po::variables_map &vm,
 			 at::ArgumentModifier mod,
 			 size_t *spec_arg_index,
 			 std::string *pool_name,
-			 std::string *group_name) {
+			 std::string *group_name,
+                         std::string *snap_name) {
   std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
     at::DEST_POOL_NAME : at::POOL_NAME);
   std::string group_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
@@ -351,12 +360,16 @@ int get_pool_group_names(const po::variables_map &vm,
     *group_name = vm[group_key].as<std::string>();
   }
 
+  if (vm.count(at::SNAPSHOT_NAME) && snap_name != nullptr) {
+    *snap_name = vm[at::SNAPSHOT_NAME].as<std::string>();
+  }
+
   int r;
   if (group_name != nullptr && spec_arg_index != nullptr &&
       group_name->empty()) {
     std::string spec = get_positional_argument(vm, (*spec_arg_index)++);
     if (!spec.empty()) {
-      r = extract_group_spec(spec, pool_name, group_name);
+      r = extract_group_spec(spec, pool_name, group_name, snap_name);
       if (r < 0) {
         return r;
       }
@@ -372,6 +385,11 @@ int get_pool_group_names(const po::variables_map &vm,
     std::cerr << "rbd: "
               << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
               << "group name was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  if (snap_name != nullptr && snap_name->empty()) {
+    std::cerr << "rbd: snapshot name was not specified" << std::endl;
     return -EINVAL;
   }
 
@@ -441,8 +459,8 @@ int get_pool_image_snapshot_names(const po::variables_map &vm,
 
   //Validate pool name while creating/renaming/copying/cloning/importing/etc
   if (spec_validation == SPEC_VALIDATION_FULL) {
-    boost::regex pattern("^[^@/]+?$");
-    if (!boost::regex_match (*pool_name, pattern)) {
+    std::regex pattern("^[^@/]+?$");
+    if ((pool_name != nullptr) && !std::regex_match (*pool_name, pattern)) {
       std::cerr << "rbd: invalid pool name '" << *pool_name << "'" << std::endl;
       return -EINVAL;
     }
@@ -621,8 +639,8 @@ int validate_snapshot_name(at::ArgumentModifier mod,
 
   if (spec_validation == SPEC_VALIDATION_SNAP) {
     // disallow "/" and "@" in snap name
-    boost::regex pattern("^[^@/]*?$");
-    if (!boost::regex_match (snap_name, pattern)) {
+    std::regex pattern("^[^@/]*?$");
+    if (!std::regex_match (snap_name, pattern)) {
       std::cerr << "rbd: invalid snap name '" << snap_name << "'" << std::endl;
       return -EINVAL;
     }
@@ -805,11 +823,14 @@ int get_image_size(const boost::program_options::variables_map &vm,
 }
 
 int get_path(const boost::program_options::variables_map &vm,
-             const std::string &positional_path, std::string *path) {
-  if (!positional_path.empty()) {
-    *path = positional_path;
-  } else if (vm.count(at::PATH)) {
+             size_t *arg_index, std::string *path) {
+  if (vm.count(at::PATH)) {
     *path = vm[at::PATH].as<std::string>();
+  } else {
+    *path = get_positional_argument(vm, *arg_index);
+    if (!path->empty()) {
+      ++(*arg_index);
+    }
   }
 
   if (path->empty()) {

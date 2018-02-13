@@ -44,12 +44,17 @@ public:
       return;
     }
     ObjectStore::Transaction t;
+    ch = store->create_new_collection(cid);
     t.create_collection(cid, 4);
-    unsigned r = store->apply_transaction(nullptr, std::move(t));
+    unsigned r = store->apply_transaction(ch, std::move(t));
     if (r != 0) {
       derr << "failed to create collection with " << cpp_strerror(r) << dendl;
     }
     ASSERT_EQ(0U, r);
+  }
+  void TearDown() override {
+    ch.reset();
+    StoreTestFixture::TearDown();
   }
 };
 
@@ -72,8 +77,8 @@ TEST_F(MemStoreClone, CloneRangeAllocated)
   t.write(cid, src, 0, 12, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -96,8 +101,8 @@ TEST_F(MemStoreClone, CloneRangeHole)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -120,8 +125,8 @@ TEST_F(MemStoreClone, CloneRangeHoleStart)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -145,8 +150,8 @@ TEST_F(MemStoreClone, CloneRangeHoleMiddle)
   t.write(cid, src, 8, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 
@@ -170,8 +175,8 @@ TEST_F(MemStoreClone, CloneRangeHoleEnd)
   t.write(cid, src, 12, 4, srcbl);
   t.write(cid, dst, 0, 12, dstbl);
   t.clone_range(cid, src, dst, 2, 8, 2);
-  ASSERT_EQ(0u, store->apply_transaction(nullptr, std::move(t)));
-  ASSERT_EQ(12, store->read(cid, dst, 0, 12, result));
+  ASSERT_EQ(0u, store->apply_transaction(ch, std::move(t)));
+  ASSERT_EQ(12, store->read(ch, dst, 0, 12, result));
   ASSERT_EQ(expected, result);
 }
 

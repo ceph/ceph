@@ -59,8 +59,8 @@ TYPE(object_locator_t)
 TYPE(request_redirect_t)
 TYPE(pg_t)
 TYPE(coll_t)
-TYPE(objectstore_perf_stat_t)
-TYPE(osd_stat_t)
+TYPE_FEATUREFUL(objectstore_perf_stat_t)
+TYPE_FEATUREFUL(osd_stat_t)
 TYPE(OSDSuperblock)
 TYPE_FEATUREFUL(pool_snap_info_t)
 TYPE_FEATUREFUL(pg_pool_t)
@@ -89,7 +89,6 @@ TYPE(ScrubMap::object)
 TYPE(ScrubMap)
 TYPE(pg_hit_set_info_t)
 TYPE(pg_hit_set_history_t)
-TYPE(osd_peer_stat_t)
 TYPE(clone_info)
 TYPE(obj_list_snap_response_t)
 TYPE_FEATUREFUL(PullOp)
@@ -118,7 +117,7 @@ TYPE(ObjectStore::Transaction)
 #include "os/filestore/SequencerPosition.h"
 TYPE(SequencerPosition)
 
-#ifdef HAVE_LIBAIO
+#ifdef WITH_BLUESTORE
 #include "os/bluestore/bluestore_types.h"
 TYPE(bluestore_cnode_t)
 TYPE(bluestore_compression_header_t)
@@ -189,8 +188,8 @@ TYPE(sr_t)
 TYPE(frag_info_t)
 TYPE(nest_info_t)
 TYPE(client_writeable_range_t)
-TYPE_FEATUREFUL(inode_t)
-TYPE_FEATUREFUL(old_inode_t)
+TYPE_FEATUREFUL(inode_t<std::allocator>)
+TYPE_FEATUREFUL(old_inode_t<std::allocator>)
 TYPE(fnode_t)
 TYPE(old_rstat_t)
 TYPE_FEATUREFUL(session_info_t)
@@ -275,6 +274,8 @@ TYPE(librbd::journal::ClientData)
 TYPE(librbd::journal::TagData)
 #include "librbd/mirroring_watcher/Types.h"
 TYPE(librbd::mirroring_watcher::NotifyMessage)
+#include "librbd/trash_watcher/Types.h"
+TYPE(librbd::mirroring_watcher::NotifyMessage)
 #include "librbd/WatchNotifyTypes.h"
 TYPE(librbd::watch_notify::NotifyMessage)
 TYPE(librbd::watch_notify::ResponseMessage)
@@ -282,6 +283,9 @@ TYPE(librbd::watch_notify::ResponseMessage)
 #include "rbd_replay/ActionTypes.h"
 TYPE(rbd_replay::action::Dependency)
 TYPE(rbd_replay::action::ActionEntry);
+
+#include "tools/rbd_mirror/image_map/Types.h"
+TYPE(rbd::mirror::image_map::PolicyData)
 #endif
 
 #ifdef WITH_RADOSGW
@@ -306,6 +310,9 @@ TYPE(RGWAccessControlPolicy)
 TYPE(ObjectMetaInfo)
 TYPE(ObjectCacheInfo)
 TYPE(RGWCacheNotifyInfo)
+
+#include "rgw/rgw_lc.h"
+TYPE(RGWLifecycleConfiguration)
 
 #include "cls/rgw/cls_rgw_types.h"
 TYPE(rgw_bucket_pending_info)
@@ -350,6 +357,7 @@ TYPE(cls_rgw_reshard_get_ret)
 TYPE(cls_rgw_reshard_remove_op)
 TYPE(cls_rgw_set_bucket_resharding_op)
 TYPE(cls_rgw_clear_bucket_resharding_op)
+TYPE(cls_rgw_lc_obj_head)
 
 #include "cls/rgw/cls_rgw_client.h"
 TYPE(rgw_bi_log_entry)
@@ -389,17 +397,36 @@ TYPE(rgw_obj)
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)
 
+#include "rgw/rgw_sync.h"
+TYPE(rgw_meta_sync_info)
+TYPE(rgw_meta_sync_marker)
+TYPE(rgw_meta_sync_status)
+
+#include "rgw/rgw_data_sync.h"
+TYPE(rgw_data_sync_info)
+TYPE(rgw_data_sync_marker)
+TYPE(rgw_data_sync_status)
+
+#endif
+
 #ifdef WITH_RBD
 #include "cls/rbd/cls_rbd.h"
 TYPE(cls_rbd_parent)
 TYPE(cls_rbd_snap)
 
 #include "cls/rbd/cls_rbd_types.h"
+TYPE(cls::rbd::ChildImageSpec)
 TYPE(cls::rbd::MirrorPeer)
 TYPE(cls::rbd::MirrorImage)
 TYPE(cls::rbd::MirrorImageMap)
-#endif
-
+TYPE(cls::rbd::MirrorImageStatus)
+TYPE(cls::rbd::GroupImageSpec)
+TYPE(cls::rbd::GroupImageStatus)
+TYPE(cls::rbd::GroupSnapshot)
+TYPE(cls::rbd::GroupSpec)
+TYPE(cls::rbd::ImageSnapshotSpec)
+TYPE(cls::rbd::SnapshotInfo)
+TYPE(cls::rbd::SnapshotNamespace)
 #endif
 
 #include "cls/lock/cls_lock_types.h"

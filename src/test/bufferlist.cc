@@ -89,6 +89,7 @@ TEST(Buffer, constructors) {
     history_alloc_bytes += len;
     history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
+    delete [] str;
   }
   //
   // buffer::create_static
@@ -396,10 +397,11 @@ TEST_F(TestRawPipe, buffer_list_write_fd_zero_copy) {
   EXPECT_EQ(0, bl.read_fd_zero_copy(fd, len));
   EXPECT_TRUE(bl.can_zero_copy());
   int out_fd = ::open(FILENAME, O_RDWR|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, out_fd);
   EXPECT_EQ(0, bl.write_fd_zero_copy(out_fd));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  EXPECT_EQ(0, ::stat(FILENAME, &st));
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(len, st.st_size);
   char buf[len + 1];
   EXPECT_EQ((int)len, safe_read(out_fd, buf, len + 1));
@@ -1255,6 +1257,7 @@ TEST(BufferListIterator, copy) {
     i.seek(0);
     i.copy(3, copy);
     EXPECT_EQ(0, ::memcmp(copy, expected, 3));
+    free(copy);
   }
   //
   // void buffer::list::iterator::copy_deep(unsigned len, ptr &dest)
@@ -2147,8 +2150,8 @@ TEST(BufferList, claim_prepend_misc) {
   EXPECT_EQ((unsigned)(11-3), src_buf.length());
   src_buf.claim_prepend(b3);
   EXPECT_EQ((unsigned)(8+7), src_buf.length());
-  EXPECT_EQ(0, b3.get_num_buffers());
-  EXPECT_EQ(0, b3.length());
+  EXPECT_EQ(0u, b3.get_num_buffers());
+  EXPECT_EQ(0u, b3.length());
   src_buf.copy(0, src_buf.length(), dest_buf);
   EXPECT_EQ(3u, dest_buf.get_num_buffers()); 
 }
@@ -2554,6 +2557,7 @@ TEST(BufferList, read_fd) {
   bufferlist bl;
   EXPECT_EQ(-EBADF, bl.read_fd(fd, len));
   fd = ::open(FILENAME, O_RDONLY);
+  ASSERT_NE(-1, fd);
   EXPECT_EQ(len, (unsigned)bl.read_fd(fd, len));
   //EXPECT_EQ(CEPH_BUFFER_APPEND_SIZE - len, bl.front().unused_tail_length());
   EXPECT_EQ(len, bl.length());
@@ -2570,7 +2574,7 @@ TEST(BufferList, write_file) {
   EXPECT_EQ(0, bl.write_file(FILENAME, mode));
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ((unsigned)(mode | S_IFREG), st.st_mode);
   ::unlink(FILENAME);
 }
@@ -2578,6 +2582,7 @@ TEST(BufferList, write_file) {
 TEST(BufferList, write_fd) {
   ::unlink(FILENAME);
   int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, fd);
   bufferlist bl;
   for (unsigned i = 0; i < IOV_MAX * 2; i++) {
     bufferptr ptr("A", 1);
@@ -2587,7 +2592,7 @@ TEST(BufferList, write_fd) {
   ::close(fd);
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(IOV_MAX * 2, st.st_size);
   ::unlink(FILENAME);
 }
@@ -2595,6 +2600,7 @@ TEST(BufferList, write_fd) {
 TEST(BufferList, write_fd_offset) {
   ::unlink(FILENAME);
   int fd = ::open(FILENAME, O_WRONLY|O_CREAT|O_TRUNC, 0600);
+  ASSERT_NE(-1, fd);
   bufferlist bl;
   for (unsigned i = 0; i < IOV_MAX * 2; i++) {
     bufferptr ptr("A", 1);
@@ -2605,7 +2611,7 @@ TEST(BufferList, write_fd_offset) {
   ::close(fd);
   struct stat st;
   memset(&st, 0, sizeof(st));
-  ::stat(FILENAME, &st);
+  ASSERT_EQ(0, ::stat(FILENAME, &st));
   EXPECT_EQ(IOV_MAX * 2 + offset, (unsigned)st.st_size);
   ::unlink(FILENAME);
 }

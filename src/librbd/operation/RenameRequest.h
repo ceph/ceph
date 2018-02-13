@@ -68,7 +68,7 @@ private:
   std::string m_source_oid;
   std::string m_dest_oid;
 
-  State m_state;
+  State m_state = STATE_READ_SOURCE_HEADER;
 
   bufferlist m_header_bl;
 

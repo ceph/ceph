@@ -29,6 +29,13 @@ public:
     return m_global_id;
   }
 
+  int get_min_compatible_client(int8_t* min_compat_client,
+                                int8_t* require_min_compat_client) override {
+    *min_compat_client = CEPH_RELEASE_MIMIC;
+    *require_min_compat_client = CEPH_RELEASE_MIMIC;
+    return 0;
+  }
+
   void object_list(int64_t pool_id,
                    std::list<librados::TestRadosClient::Object> *list) override;
 
@@ -37,7 +44,7 @@ public:
                               const std::map<std::string,std::string>& metadata) override {
     return 0;
   }
-  int service_daemon_update_status(const std::map<std::string,std::string>& status) override {
+  int service_daemon_update_status(std::map<std::string,std::string>&& status) override {
     return 0;
   }
 

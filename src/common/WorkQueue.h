@@ -644,6 +644,7 @@ public:
 
     virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
+    virtual void stop_return_waiting_threads() = 0;
     virtual bool is_shard_empty(uint32_t thread_index) = 0;
   };      
 
@@ -653,8 +654,8 @@ public:
     ShardedThreadPool* sharded_pool;
 
   protected:
-    virtual void _enqueue(T) = 0;
-    virtual void _enqueue_front(T) = 0;
+    virtual void _enqueue(T&&) = 0;
+    virtual void _enqueue_front(T&&) = 0;
 
 
   public:
@@ -664,11 +665,11 @@ public:
     }
     ~ShardedWQ() override {}
 
-    void queue(T item) {
-      _enqueue(item);
+    void queue(T&& item) {
+      _enqueue(std::move(item));
     }
-    void queue_front(T item) {
-      _enqueue_front(item);
+    void queue_front(T&& item) {
+      _enqueue_front(std::move(item));
     }
     void drain() {
       sharded_pool->drain();

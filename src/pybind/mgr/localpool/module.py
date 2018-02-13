@@ -18,7 +18,8 @@ class Module(MgrModule):
         subtree_type = self.get_config('subtree') or 'rack'
         failure_domain = self.get_config('failure_domain') or 'host'
         pg_num = self.get_config('pg_num') or '128'
-        num_rep = self.get_config('num_rep') or '2'
+        num_rep = self.get_config('num_rep') or '3'
+        min_size = self.get_config('min_size')
         prefix = self.get_config('prefix') or 'by-' + subtree_type + '-'
 
         osdmap = self.get("osd_map")
@@ -67,6 +68,17 @@ class Module(MgrModule):
                         "val": str(num_rep),
                     }), "")
                     r, outb, outs = result.wait()
+
+                    if min_size:
+                        result = CommandResult("")
+                        self.send_command(result, "mon", "", json.dumps({
+                            "prefix": "osd pool set",
+                            "format": "json",
+                            "pool": pool_name,
+                            'var': 'min_size',
+                            "val": str(min_size),
+                        }), "")
+                        r, outb, outs = result.wait()
 
         # TODO remove pools for hosts that don't exist?
 

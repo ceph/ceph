@@ -32,7 +32,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
-  ::encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
+  encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
@@ -46,8 +46,8 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
     assert(bl.length());
     try {
       auto p = bl.begin();
-      ::decode(digest, p);
-      ::decode(service_map, p);
+      decode(digest, p);
+      decode(service_map, p);
       dout(10) << __func__ << " v" << version
 	       << " service_map e" << service_map.epoch << dendl;
     }
@@ -106,7 +106,7 @@ void MgrStatMonitor::create_pending()
   pending_digest = digest;
   pending_health_checks = get_health_checks();
   pending_service_map_bl.clear();
-  ::encode(service_map, pending_service_map_bl, mon->get_quorum_con_features());
+  encode(service_map, pending_service_map_bl, mon->get_quorum_con_features());
 }
 
 void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -114,7 +114,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ++version;
   dout(10) << " " << version << dendl;
   bufferlist bl;
-  ::encode(pending_digest, bl, mon->get_quorum_con_features());
+  encode(pending_digest, bl, mon->get_quorum_con_features());
   assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   put_version(t, version, bl);
@@ -181,13 +181,18 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   auto m = static_cast<MMonMgrReport*>(op->get_req());
   bufferlist bl = m->get_data();
   auto p = bl.begin();
-  ::decode(pending_digest, p);
+  decode(pending_digest, p);
   pending_health_checks.swap(m->health_checks);
   if (m->service_map_bl.length()) {
     pending_service_map_bl.swap(m->service_map_bl);
   }
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks" << dendl;
+  dout(20) << "pending_digest:\n";
+  JSONFormatter jf(true);
+  pending_digest.dump(&jf);
+  jf.flush(*_dout);
+  *_dout << dendl;
   return true;
 }
 
@@ -260,7 +265,7 @@ void MgrStatMonitor::check_sub(Subscription *sub)
     auto m = new MServiceMap(service_map);
     sub->session->con->send_message(m);
     if (sub->onetime) {
-      mon->with_session_map([this, sub](MonSessionMap& session_map) {
+      mon->with_session_map([sub](MonSessionMap& session_map) {
 	  session_map.remove_sub(sub);
 	});
     } else {

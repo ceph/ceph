@@ -28,7 +28,7 @@ namespace {
 
 void scribble(librbd::ImageCtx *image_ctx, int num_ops, size_t max_size)
 {
-  max_size = MIN(image_ctx->size, max_size);
+  max_size = std::min(image_ctx->size, max_size);
   for (int i=0; i<num_ops; i++) {
     uint64_t off = rand() % (image_ctx->size - max_size + 1);
     uint64_t len = 1 + rand() % max_size;
@@ -68,7 +68,7 @@ public:
 
     librbd::journal::ClientData client_data(m_client_meta);
     bufferlist client_data_bl;
-    ::encode(client_data, client_data_bl);
+    encode(client_data, client_data_bl);
 
     ASSERT_EQ(0, m_remote_journaler->register_client(client_data_bl));
   }

@@ -13,11 +13,7 @@
 
 #include <sstream>
 #include "Crypto.h"
-#ifdef USE_CRYPTOPP
-# include <cryptopp/modes.h>
-# include <cryptopp/aes.h>
-# include <cryptopp/filters.h>
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 # include <nspr.h>
 # include <nss.h>
 # include <pk11pub.h>
@@ -35,31 +31,48 @@
 #include "common/debug.h"
 #include <errno.h>
 
-int get_random_bytes(char *buf, int len)
+// use getentropy() if available. it uses the same source of randomness
+// as /dev/urandom without the filesystem overhead
+#ifdef HAVE_GETENTROPY
+
+#include <unistd.h>
+
+CryptoRandom::CryptoRandom() : fd(0) {}
+CryptoRandom::~CryptoRandom() = default;
+
+void CryptoRandom::get_bytes(char *buf, int len)
 {
-  int fd = TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY));
-  if (fd < 0)
-    return -errno;
-  int ret = safe_read_exact(fd, buf, len);
+  auto ret = TEMP_FAILURE_RETRY(::getentropy(buf, len));
+  if (ret < 0) {
+    throw std::system_error(errno, std::system_category());
+  }
+}
+
+#else // !HAVE_GETENTROPY
+
+// open /dev/urandom once on construction and reuse the fd for all reads
+CryptoRandom::CryptoRandom()
+  : fd(TEMP_FAILURE_RETRY(::open("/dev/urandom", O_RDONLY)))
+{
+  if (fd < 0) {
+    throw std::system_error(errno, std::system_category());
+  }
+}
+
+CryptoRandom::~CryptoRandom()
+{
   VOID_TEMP_FAILURE_RETRY(::close(fd));
-  return ret;
 }
 
-static int get_random_bytes(int len, bufferlist& bl)
+void CryptoRandom::get_bytes(char *buf, int len)
 {
-  char buf[len];
-  get_random_bytes(buf, len);
-  bl.append(buf, len);
-  return 0;
+  auto ret = safe_read_exact(fd, buf, len);
+  if (ret < 0) {
+    throw std::system_error(-ret, std::system_category());
+  }
 }
 
-uint64_t get_random(uint64_t min_val, uint64_t max_val)
-{
-  uint64_t r;
-  get_random_bytes((char *)&r, sizeof(r));
-  r = min_val + r % (max_val - min_val + 1);
-  return r;
-}
+#endif
 
 
 // ---------------------------------------------------
@@ -85,7 +98,7 @@ public:
   int get_type() const override {
     return CEPH_CRYPTO_NONE;
   }
-  int create(bufferptr& secret) override {
+  int create(CryptoRandom *random, bufferptr& secret) override {
     return 0;
   }
   int validate_secret(const bufferptr& secret) override {
@@ -107,96 +120,12 @@ public:
   int get_type() const override {
     return CEPH_CRYPTO_AES;
   }
-  int create(bufferptr& secret) override;
+  int create(CryptoRandom *random, bufferptr& secret) override;
   int validate_secret(const bufferptr& secret) override;
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_CRYPTOPP
-# define AES_KEY_LEN     ((size_t)CryptoPP::AES::DEFAULT_KEYLENGTH)
-# define AES_BLOCK_LEN   ((size_t)CryptoPP::AES::BLOCKSIZE)
-
-class CryptoAESKeyHandler : public CryptoKeyHandler {
-public:
-  CryptoPP::AES::Encryption *enc_key;
-  CryptoPP::AES::Decryption *dec_key;
-
-  CryptoAESKeyHandler()
-    : enc_key(NULL),
-      dec_key(NULL) {}
-  ~CryptoAESKeyHandler() {
-    delete enc_key;
-    delete dec_key;
-  }
-
-  int init(const bufferptr& s, ostringstream& err) {
-    secret = s;
-
-    enc_key = new CryptoPP::AES::Encryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
-    dec_key = new CryptoPP::AES::Decryption(
-      (byte*)secret.c_str(), CryptoPP::AES::DEFAULT_KEYLENGTH);
-
-    return 0;
-  }
-
-  int encrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const {
-    string ciphertext;
-    CryptoPP::StringSink *sink = new CryptoPP::StringSink(ciphertext);
-    CryptoPP::CBC_Mode_ExternalCipher::Encryption cbc(
-      *enc_key, (const byte*)CEPH_AES_IV);
-    CryptoPP::StreamTransformationFilter stfEncryptor(cbc, sink);
-
-    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
-	 it != in.buffers().end(); ++it) {
-      const unsigned char *in_buf = (const unsigned char *)it->c_str();
-      stfEncryptor.Put(in_buf, it->length());
-    }
-    try {
-      stfEncryptor.MessageEnd();
-    } catch (CryptoPP::Exception& e) {
-      if (error) {
-	ostringstream oss;
-	oss << "encryptor.MessageEnd::Exception: " << e.GetWhat();
-	*error = oss.str();
-      }
-      return -1;
-    }
-    out.append((const char *)ciphertext.c_str(), ciphertext.length());
-    return 0;
-  }
-
-  int decrypt(const bufferlist& in,
-	      bufferlist& out, std::string *error) const {
-    string decryptedtext;
-    CryptoPP::StringSink *sink = new CryptoPP::StringSink(decryptedtext);
-    CryptoPP::CBC_Mode_ExternalCipher::Decryption cbc(
-      *dec_key, (const byte*)CEPH_AES_IV );
-    CryptoPP::StreamTransformationFilter stfDecryptor(cbc, sink);
-    for (std::list<bufferptr>::const_iterator it = in.buffers().begin();
-	 it != in.buffers().end(); ++it) {
-      const unsigned char *in_buf = (const unsigned char *)it->c_str();
-      stfDecryptor.Put(in_buf, it->length());
-    }
-
-    try {
-      stfDecryptor.MessageEnd();
-    } catch (CryptoPP::Exception& e) {
-      if (error) {
-	ostringstream oss;
-	oss << "decryptor.MessageEnd::Exception: " << e.GetWhat();
-	*error = oss.str();
-      }
-      return -1;
-    }
-
-    out.append((const char *)decryptedtext.c_str(), decryptedtext.length());
-    return 0;
-  }
-};
-
-#elif defined(USE_NSS)
+#ifdef USE_NSS
 // when we say AES, we mean AES-128
 # define AES_KEY_LEN	16
 # define AES_BLOCK_LEN   16
@@ -329,13 +258,11 @@ public:
 
 // ------------------------------------------------------------
 
-int CryptoAES::create(bufferptr& secret)
+int CryptoAES::create(CryptoRandom *random, bufferptr& secret)
 {
-  bufferlist bl;
-  int r = get_random_bytes(AES_KEY_LEN, bl);
-  if (r < 0)
-    return r;
-  secret = buffer::ptr(bl.c_str(), bl.length());
+  bufferptr buf(AES_KEY_LEN);
+  random->get_bytes(buf.c_str(), buf.length());
+  secret = std::move(buf);
   return 0;
 }
 
@@ -372,19 +299,21 @@ CryptoKeyHandler *CryptoAES::get_key_handler(const bufferptr& secret,
 
 void CryptoKey::encode(bufferlist& bl) const
 {
-  ::encode(type, bl);
-  ::encode(created, bl);
+  using ceph::encode;
+  encode(type, bl);
+  encode(created, bl);
   __u16 len = secret.length();
-  ::encode(len, bl);
+  encode(len, bl);
   bl.append(secret);
 }
 
 void CryptoKey::decode(bufferlist::iterator& bl)
 {
-  ::decode(type, bl);
-  ::decode(created, bl);
+  using ceph::decode;
+  decode(type, bl);
+  decode(created, bl);
   __u16 len;
-  ::decode(len, bl);
+  decode(len, bl);
   bufferptr tmp;
   bl.copy_deep(len, tmp);
   if (_set_secret(type, tmp) < 0)
@@ -438,7 +367,7 @@ int CryptoKey::create(CephContext *cct, int t)
     return -EOPNOTSUPP;
   }
   bufferptr s;
-  int r = ch->create(s);
+  int r = ch->create(cct->random(), s);
   delete ch;
   if (r < 0)
     return r;

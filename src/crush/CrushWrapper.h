@@ -39,20 +39,21 @@ namespace CrushTreeDumper {
 
 WRITE_RAW_ENCODER(crush_rule_mask)   // it's all u8's
 
-inline static void encode(const crush_rule_step &s, bufferlist &bl)
+inline void encode(const crush_rule_step &s, bufferlist &bl)
 {
-  ::encode(s.op, bl);
-  ::encode(s.arg1, bl);
-  ::encode(s.arg2, bl);
+  using ceph::encode;
+  encode(s.op, bl);
+  encode(s.arg1, bl);
+  encode(s.arg2, bl);
 }
-inline static void decode(crush_rule_step &s, bufferlist::iterator &p)
+inline void decode(crush_rule_step &s, bufferlist::iterator &p)
 {
-  ::decode(s.op, p);
-  ::decode(s.arg1, p);
-  ::decode(s.arg2, p);
+  using ceph::decode;
+  decode(s.op, p);
+  decode(s.arg1, p);
+  decode(s.arg2, p);
 }
 
-using namespace std;
 class CrushWrapper {
 public:
   // magic value used by OSDMap for a "default" fallback choose_args, used if
@@ -1250,8 +1251,13 @@ public:
   void finalize() {
     assert(crush);
     crush_finalize(crush);
+    if (!name_map.empty() &&
+	name_map.rbegin()->first >= crush->max_devices) {
+      crush->max_devices = name_map.rbegin()->first + 1;
+    }
     have_uniform_rules = !has_legacy_rule_ids();
   }
+  int bucket_set_alg(int id, int alg);
 
   int update_device_class(int id, const string& class_name, const string& name, ostream *ss);
   int remove_device_class(CephContext *cct, int id, ostream *ss);
@@ -1389,9 +1395,9 @@ public:
     free(arg_map.args);
   }
 
-  void create_choose_args(int64_t id, int positions) {
+  bool create_choose_args(int64_t id, int positions) {
     if (choose_args.count(id))
-      return;
+      return false;
     assert(positions);
     auto &cmap = choose_args[id];
     cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
@@ -1420,6 +1426,7 @@ public:
 	carg.weight_set_size = 0;
       }
     }
+    return true;
   }
 
   void rm_choose_args(int64_t id) {
@@ -1457,7 +1464,7 @@ public:
     ostream *ss) {
     vector<int> weight(weightf.size());
     for (unsigned i = 0; i < weightf.size(); ++i) {
-      weight[i] = (int)(weightf[i] * (float)0x10000);
+      weight[i] = (int)(weightf[i] * (double)0x10000);
     }
     return choose_args_adjust_item_weight(cct, cmap, id, weight, ss);
   }

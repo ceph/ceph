@@ -12,8 +12,8 @@
 
 #include "librbd/ImageCtx.h"
 #include "librbd/internal.h"
-
 #include "librbd/Journal.h"
+#include "librbd/Types.h"
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -57,8 +57,7 @@ void AioCompletion::complete() {
   CephContext *cct = ictx->cct;
 
   tracepoint(librbd, aio_complete_enter, this, rval);
-  utime_t elapsed;
-  elapsed = ceph_clock_now() - start_time;
+  ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
   switch (aio_type) {
   case AIO_TYPE_GENERIC:
   case AIO_TYPE_OPEN:
@@ -71,7 +70,7 @@ void AioCompletion::complete() {
   case AIO_TYPE_DISCARD:
     ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
   case AIO_TYPE_FLUSH:
-    ictx->perfcounter->tinc(l_librbd_aio_flush_latency, elapsed); break;
+    ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
   case AIO_TYPE_WRITESAME:
     ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
   case AIO_TYPE_COMPARE_AND_WRITE:
@@ -94,7 +93,7 @@ void AioCompletion::complete() {
     lock.Lock();
   }
 
-  if (ictx && event_notify && ictx->event_socket.is_valid()) {
+  if (event_notify && ictx->event_socket.is_valid()) {
     ictx->completed_reqs_lock.Lock();
     ictx->completed_reqs.push_back(&m_xlist_item);
     ictx->completed_reqs_lock.Unlock();
@@ -116,7 +115,7 @@ void AioCompletion::init_time(ImageCtx *i, aio_type_t t) {
   if (ictx == nullptr) {
     ictx = i;
     aio_type = t;
-    start_time = ceph_clock_now();
+    start_time = coarse_mono_clock::now();
   }
 }
 

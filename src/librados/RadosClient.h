@@ -99,6 +99,9 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_client(int8_t* min_compat_client,
+                                int8_t* require_min_compat_client);
+
   int wait_for_latest_osdmap();
 
   int create_ioctx(const char *name, IoCtxImpl **io);
@@ -164,7 +167,7 @@ public:
     const std::string& name,     ///< daemon name (e.g., 'gwfoo')
     const std::map<std::string,std::string>& metadata); ///< static metadata about daemon
   int service_daemon_update_status(
-    const std::map<std::string,std::string>& status);
+    std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
 };

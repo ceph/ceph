@@ -16,6 +16,8 @@
 #include "MDCache.h"
 #include "MDSRank.h"
 
+#include <string_view>
+
 #include "messages/MClientSnap.h"
 
 
@@ -133,7 +135,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
     dout(10) << " current parent [" << srnode.current_parent_since << ",head] is " << *parent
 	     << " on " << *parent->inode << dendl;
     if (last >= srnode.current_parent_since &&
-	!parent->_open_parents(finish, MAX(first, srnode.current_parent_since), last))
+	!parent->_open_parents(finish, std::max(first, srnode.current_parent_since), last))
       return false;
   }
 
@@ -197,8 +199,8 @@ bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
       return false;
     }
     SnapRealm *parent_realm = open_past_parents[p->second.ino].first;
-    if (!parent_realm->have_past_parents_open(MAX(first, p->second.first),
-					      MIN(last, p->first)))
+    if (!parent_realm->have_past_parents_open(std::max(first, p->second.first),
+					      std::min(last, p->first)))
       return false;
   }
 
@@ -248,12 +250,12 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
-					 MAX(first, p->second.first),
-					 MIN(last, p->first));
+					 std::max(first, p->second.first),
+					 std::min(last, p->first));
   }
   if (srnode.current_parent_since <= last && parent)
     parent->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
-			   MAX(first, srnode.current_parent_since), last);
+			   std::max(first, srnode.current_parent_since), last);
 }
 
 
@@ -331,14 +333,14 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     oldparent->snaprealm->get_snap_info(infomap,
-					MAX(first, p->second.first),
-					MIN(last, p->first));
+					std::max(first, p->second.first),
+					std::min(last, p->first));
   }
   if (srnode.current_parent_since <= last && parent)
-    parent->get_snap_info(infomap, MAX(first, srnode.current_parent_since), last);
+    parent->get_snap_info(infomap, std::max(first, srnode.current_parent_since), last);
 }
 
-const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
+std::string_view SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
 {
   auto srnode_snaps_entry = srnode.snaps.find(snapid);
   if (srnode_snaps_entry != srnode.snaps.end()) {
@@ -361,7 +363,7 @@ const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
   return parent->get_snapname(snapid, atino);
 }
 
-snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t first, snapid_t last)
+snapid_t SnapRealm::resolve_snapname(std::string_view n, inodeno_t atino, snapid_t first, snapid_t last)
 {
   // first try me
   dout(10) << "resolve_snapname '" << n << "' in [" << first << "," << last << "]" << dendl;
@@ -378,7 +380,7 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
     int next_ = n.find('_', 1);
     if (next_ < 0) return 0;
     pname = n.substr(1, next_ - 1);
-    pino = atoll(n.c_str() + next_ + 1);
+    pino = atoll(n.data() + next_ + 1);
     dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pino << dendl;
   }
 
@@ -402,20 +404,21 @@ snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t 
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
     snapid_t r = oldparent->snaprealm->resolve_snapname(n, atino,
-							MAX(first, p->second.first),
-							MIN(last, p->first));
+							std::max(first, p->second.first),
+							std::min(last, p->first));
     if (r)
       return r;
   }
   if (parent && srnode.current_parent_since <= last)
-    return parent->resolve_snapname(n, atino, MAX(first, srnode.current_parent_since), last);
+    return parent->resolve_snapname(n, atino, std::max(first, srnode.current_parent_since), last);
   return 0;
 }
 
 
 void SnapRealm::adjust_parent()
 {
-  SnapRealm *newparent = inode->get_parent_dn()->get_dir()->get_inode()->find_snaprealm();
+  CDentry *pdn = inode->get_parent_dn();
+  SnapRealm *newparent = pdn ? pdn->get_dir()->get_inode()->find_snaprealm() : NULL;
   if (newparent != parent) {
     dout(10) << "adjust_parent " << parent << " -> " << newparent << dendl;
     if (parent)
@@ -455,7 +458,7 @@ void SnapRealm::split_at(SnapRealm *child)
        p != open_children.end(); ) {
     SnapRealm *realm = *p;
     if (realm != child &&
-	child->inode->is_projected_ancestor_of(realm->inode)) {
+	child->inode->is_ancestor_of(realm->inode)) {
       dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
       realm->parent = child;
       child->open_children.insert(realm);
@@ -467,29 +470,12 @@ void SnapRealm::split_at(SnapRealm *child)
   }
 
   // split inodes_with_caps
-  elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
-  while (!p.end()) {
+  for (elist<CInode*>::iterator p = inodes_with_caps.begin(member_offset(CInode, item_caps));
+       !p.end(); ) {
     CInode *in = *p;
     ++p;
-
     // does inode fall within the child realm?
-    bool under_child = false;
-
-    if (in == child->inode) {
-      under_child = true;
-    } else {
-      CInode *t = in;
-      while (t->get_parent_dn()) {
-	t = t->get_parent_dn()->get_dir()->get_inode();
-	if (t == child->inode) {
-	  under_child = true;
-	  break;
-	}
-	if (t == in)
-	  break;
-      }
-    }
-    if (under_child) {
+    if (child->inode->is_ancestor_of(in)) {
       dout(20) << " child gets " << *in << dendl;
       in->move_to_realm(child);
     } else {
@@ -532,7 +518,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl) const
     info.my_snaps.push_back(p->first);
   dout(10) << "build_snap_trace my_snaps " << info.my_snaps << dendl;
 
-  ::encode(info, snapbl);
+  encode(info, snapbl);
 
   if (parent)
     parent->build_snap_trace(snapbl);

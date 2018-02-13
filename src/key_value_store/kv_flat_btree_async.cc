@@ -31,7 +31,6 @@
 #include <stdlib.h>
 #include <iterator>
 
-using namespace std;
 using ceph::bufferlist;
 
 bool index_data::is_timed_out(utime_t now, utime_t timeout) const {
@@ -811,7 +810,7 @@ void KvFlatBtreeAsync::set_up_make_object(
     const map<std::string, bufferlist> &to_set,
     librados::ObjectWriteOperation *owo) {
   bufferlist inbl;
-  ::encode(to_set, inbl);
+  encode(to_set, inbl);
   owo->exec("kvs", "create_with_omap", inbl);
 }
 
@@ -895,7 +894,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 	  if (verbose) cout << client_name << " is suiciding!" << std::endl;
 	  return -ESUICIDE;
 	} else {
-	  assert(false);
+	  ceph_abort();
 	}
 	return err;
       }
@@ -924,7 +923,7 @@ int KvFlatBtreeAsync::perform_ops(const string &debug_prefix,
 		cerr << client_name << " is suiciding!" << std::endl;
 		return -ESUICIDE;
 	      } else {
-		assert(false);
+		ceph_abort();
 	      }
 	      return err;
 	    }
@@ -1827,7 +1826,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
 
   if (verbose) cout << "created key set and big_map" << std::endl;
 
-  ::encode(keys, inbl);
+  encode(keys, inbl);
   librados::AioCompletion * aioc = rados.aio_create_completion();
   io_ctx.aio_exec(index_name, aioc,  "kvs", "read_many", inbl, &outbl);
   aioc->wait_for_safe();
@@ -1840,7 +1839,7 @@ int KvFlatBtreeAsync::set_many(const map<string, bufferlist> &in_map) {
 
   map<string, bufferlist> imap;//read from the index
   bufferlist::iterator blit = outbl.begin();
-  ::decode(imap, blit);
+  decode(imap, blit);
 
   if (verbose) cout << "finished reading index for objects. there are "
       << imap.size() << " entries that need to be changed. " << std::endl;

@@ -26,9 +26,9 @@ uint64_t *auid)
 
   try {
     __u8 struct_v = 1;
-    ::decode(struct_v, iter);
-    ::decode(entity_name, iter);
-    ::decode(global_id, iter);
+    decode(struct_v, iter);
+    decode(entity_name, iter);
+    decode(global_id, iter);
   } catch (const buffer::error &err) {
     ldout(cct, 0) << "AuthNoneAuthorizeHandle::verify_authorizer() failed to decode" << dendl;
     return false;

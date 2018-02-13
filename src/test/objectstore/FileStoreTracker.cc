@@ -51,12 +51,12 @@ int FileStoreTracker::init()
   restart_seq = 0;
   if (!got.empty()) {
     bufferlist::iterator bp = got.begin()->second.begin();
-    ::decode(restart_seq, bp);
+    decode(restart_seq, bp);
   }
   ++restart_seq;
   KeyValueDB::Transaction t = db->get_transaction();
   got.clear();
-  ::encode(restart_seq, got["STATUS"]);
+  encode(restart_seq, got["STATUS"]);
   t->set("STATUS", got);
   db->submit_transaction(t);
   return 0;
@@ -73,10 +73,10 @@ void FileStoreTracker::submit_transaction(Transaction &t)
        ++i) {
     (**i)(this, &out);
   }
-  store->queue_transaction(
-    0, std::move(*out.t),
-    new OnApplied(this, in_flight),
-    new OnCommitted(this, in_flight));
+  out.t->register_on_applied(new OnApplied(this, in_flight));
+  out.t->register_on_commit(new OnCommitted(this, in_flight));
+  auto ch = store->open_collection(coll_t());
+  store->queue_transaction(ch, std::move(*out.t), nullptr);
   delete out.t;
 }
 
@@ -219,14 +219,14 @@ struct ObjStatus {
   }
 };
 void encode(const ObjStatus &obj, bufferlist &bl) {
-  ::encode(obj.last_applied, bl);
-  ::encode(obj.last_committed, bl);
-  ::encode(obj.restart_seq, bl);
+  encode(obj.last_applied, bl);
+  encode(obj.last_committed, bl);
+  encode(obj.restart_seq, bl);
 }
 void decode(ObjStatus &obj, bufferlist::iterator &bl) {
-  ::decode(obj.last_applied, bl);
-  ::decode(obj.last_committed, bl);
-  ::decode(obj.restart_seq, bl);
+  decode(obj.last_applied, bl);
+  decode(obj.last_committed, bl);
+  decode(obj.restart_seq, bl);
 }
 
 
@@ -240,7 +240,7 @@ ObjStatus get_obj_status(const pair<coll_t, string> &obj,
   ObjStatus retval;
   if (!got.empty()) {
     bufferlist::iterator bp = got.begin()->second.begin();
-    ::decode(retval, bp);
+    decode(retval, bp);
   }
   return retval;
 }
@@ -250,7 +250,7 @@ void set_obj_status(const pair<coll_t, string> &obj,
 		    KeyValueDB::Transaction t)
 {
   map<string, bufferlist> to_set;
-  ::encode(status, to_set["META"]);
+  encode(status, to_set["META"]);
   t->set(obj_to_meta_prefix(obj), to_set);
 }
 
@@ -278,7 +278,8 @@ void FileStoreTracker::verify(const coll_t &coll, const string &obj,
   pair<uint64_t, uint64_t> valid_reads = get_valid_reads(make_pair(coll, obj));
   std::cerr << "valid_reads is " << valid_reads << std::endl;
   bufferlist contents;
-  int r = store->read(coll_t(coll),
+  auto ch = store->open_collection(coll_t(coll));
+  int r = store->read(ch,
 		      ghobject_t(hobject_t(sobject_t(obj, CEPH_NOSNAP))),
 		      0,
 		      2*SIZE,
@@ -340,7 +341,7 @@ ObjectContents FileStoreTracker::get_current_content(
     bufferlist bl = iter->value();
     bufferlist::iterator bp = bl.begin();
     pair<uint64_t, bufferlist> val;
-    ::decode(val, bp);
+    decode(val, bp);
     assert(seq_to_key(val.first) == iter->key());
     bp = val.second.begin();
     return ObjectContents(bp);
@@ -359,7 +360,7 @@ ObjectContents FileStoreTracker::get_content(
     return ObjectContents();
   pair<uint64_t, bufferlist> val;
   bufferlist::iterator bp = got.begin()->second.begin();
-  ::decode(val, bp);
+  decode(val, bp);
   bp = val.second.begin();
   assert(val.first == version);
   return ObjectContents(bp);
@@ -376,7 +377,7 @@ pair<uint64_t, uint64_t> FileStoreTracker::get_valid_reads(
     pair<uint64_t, bufferlist> val;
     bufferlist bl = iter->value();
     bufferlist::iterator bp = bl.begin();
-    ::decode(val, bp);
+    decode(val, bp);
     bounds.second = val.first + 1;
   }
 
@@ -436,13 +437,13 @@ uint64_t FileStoreTracker::set_content(const pair<coll_t, string> &obj,
     pair<uint64_t, bufferlist> val;
     bufferlist bl = iter->value();
     bufferlist::iterator bp = bl.begin();
-    ::decode(val, bp);
+    decode(val, bp);
     most_recent = val.first;
   }
   bufferlist buf_content;
   content.encode(buf_content);
   map<string, bufferlist> to_set;
-  ::encode(make_pair(most_recent + 1, buf_content),
+  encode(make_pair(most_recent + 1, buf_content),
 	   to_set[seq_to_key(most_recent + 1)]);
   t->set(obj_to_prefix(obj), to_set);
   db->submit_transaction(t);

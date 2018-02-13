@@ -156,7 +156,7 @@ int MemWriteback::read_object_data(const object_t& oid, uint64_t off, uint64_t l
   const bufferlist& obj_bl = obj_i->second;
   dout(1) << "reading " << oid << " from total size " << obj_bl.length() << dendl;
 
-  uint64_t read_len = MIN(len, obj_bl.length()-off);
+  uint64_t read_len = std::min(len, obj_bl.length()-off);
   data_bl->substr_of(obj_bl, off, read_len);
   return 0;
 }

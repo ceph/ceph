@@ -22,13 +22,19 @@
 
 class MOSDMap : public Message {
 
-  static const int HEAD_VERSION = 3;
+  static const int HEAD_VERSION = 4;
+  static const int COMPAT_VERSION = 3;
 
  public:
   uuid_d fsid;
   map<epoch_t, bufferlist> maps;
   map<epoch_t, bufferlist> incremental_maps;
   epoch_t oldest_map =0, newest_map = 0;
+
+  // if we are fetching maps from the mon and have to jump a gap
+  // (client's next needed map is older than mon's oldest) we can
+  // share removed snaps from the gap here.
+  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> gap_removed_snaps;
 
   epoch_t get_first() const {
     epoch_t e = 0;
@@ -56,9 +62,9 @@ class MOSDMap : public Message {
   }
 
 
-  MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION) { }
+  MOSDMap() : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDMap(const uuid_d &f)
-    : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION),
+    : Message(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       oldest_map(0), newest_map(0) { }
 private:
@@ -68,30 +74,37 @@ public:
   // marshalling
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(incremental_maps, p);
-    ::decode(maps, p);
+    decode(fsid, p);
+    decode(incremental_maps, p);
+    decode(maps, p);
     if (header.version >= 2) {
-      ::decode(oldest_map, p);
-      ::decode(newest_map, p);
+      decode(oldest_map, p);
+      decode(newest_map, p);
     } else {
       oldest_map = 0;
       newest_map = 0;
     }
+    if (header.version >= 4) {
+      decode(gap_removed_snaps, p);
+    }
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     header.version = HEAD_VERSION;
-    ::encode(fsid, payload);
+    header.compat_version = COMPAT_VERSION;
+    encode(fsid, payload);
     if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	(features & CEPH_FEATURE_PGPOOL3) == 0 ||
 	(features & CEPH_FEATURE_OSDENC) == 0 ||
         (features & CEPH_FEATURE_OSDMAP_ENC) == 0 ||
-	(features & CEPH_FEATURE_MSG_ADDR2) == 0) {
+	(features & CEPH_FEATURE_MSG_ADDR2) == 0 ||
+	!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       if ((features & CEPH_FEATURE_PGID64) == 0 ||
 	  (features & CEPH_FEATURE_PGPOOL3) == 0)
 	header.version = 1;  // old old_client version
       else if ((features & CEPH_FEATURE_OSDENC) == 0)
 	header.version = 2;  // old pg_pool_t
+      header.compat_version = 0;
 
       // reencode maps using old format
       //
@@ -112,6 +125,14 @@ public:
 	  inc.fullmap.clear();
 	  m.encode(inc.fullmap, features | CEPH_FEATURE_RESERVED);
 	}
+	if (inc.crush.length()) {
+	  // embedded crush map
+	  CrushWrapper c;
+	  auto p = inc.crush.begin();
+	  c.decode(p);
+	  inc.crush.clear();
+	  c.encode(inc.crush, features);
+	}
 	inc.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
       for (map<epoch_t,bufferlist>::iterator p = maps.begin();
@@ -123,11 +144,14 @@ public:
 	m.encode(p->second, features | CEPH_FEATURE_RESERVED);
       }
     }
-    ::encode(incremental_maps, payload);
-    ::encode(maps, payload);
+    encode(incremental_maps, payload);
+    encode(maps, payload);
     if (header.version >= 2) {
-      ::encode(oldest_map, payload);
-      ::encode(newest_map, payload);
+      encode(oldest_map, payload);
+      encode(newest_map, payload);
+    }
+    if (header.version >= 4) {
+      encode(gap_removed_snaps, payload);
     }
   }
 
@@ -136,6 +160,8 @@ public:
     out << "osd_map(" << get_first() << ".." << get_last();
     if (oldest_map || newest_map)
       out << " src has " << oldest_map << ".." << newest_map;
+    if (!gap_removed_snaps.empty())
+      out << " +gap_removed_snaps";
     out << ")";
   }
 };

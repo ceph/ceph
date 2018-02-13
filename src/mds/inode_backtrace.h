@@ -3,6 +3,8 @@
 #ifndef CEPH_INODE_BACKTRACE_H
 #define CEPH_INODE_BACKTRACE_H
 
+#include <string_view>
+
 #include "mdstypes.h"
 
 namespace ceph {
@@ -25,7 +27,7 @@ struct inode_backpointer_t {
   version_t version;   // child's version at time of backpointer creation
 
   inode_backpointer_t() : version(0) {}
-  inode_backpointer_t(inodeno_t i, const string &d, version_t v) : dirino(i), dname(d), version(v) {}
+  inode_backpointer_t(inodeno_t i, std::string_view d, version_t v) : dirino(i), dname(d), version(v) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::iterator &bl);

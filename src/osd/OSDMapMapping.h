@@ -293,12 +293,6 @@ public:
     assert(osd < acting_rmap.size());
     return acting_rmap[osd];
   }
-  /* unsued
-  const std::vector<pg_t>& get_osd_up_pgs(unsigned osd) {
-    assert(osd < up_rmap.size());
-    return up_rmap[osd];
-  }
-  */
 
   void update(const OSDMap& map);
   void update(const OSDMap& map, pg_t pgid);

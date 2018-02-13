@@ -137,7 +137,7 @@ class RankEvicter(threading.Thread):
             time.sleep(self.POLL_PERIOD)
             self._ready_waited += self.POLL_PERIOD
 
-            self._mds_map = self._volume_client._rados_command("mds dump", {})
+            self._mds_map = self._volume_client.get_mds_map()
 
     def _evict(self):
         """
@@ -169,7 +169,7 @@ class RankEvicter(threading.Thread):
                 return True
             elif ret == errno.ETIMEDOUT:
                 # Oh no, the MDS went laggy (that's how libcephfs knows to emit this error)
-                self._mds_map = self._volume_client._rados_command("mds dump", {})
+                self._mds_map = self._volume_client.get_mds_map()
                 try:
                     self._wait_for_ready()
                 except self.GidGone:
@@ -203,6 +203,7 @@ CEPHFSVOLUMECLIENT_VERSION_HISTORY = """
     CephFSVolumeClient Version History:
 
     * 1 - Initial version
+    * 2 - Added get_object, put_object, delete_object methods to CephFSVolumeClient
 
 """
 
@@ -227,9 +228,7 @@ class CephFSVolumeClient(object):
     """
 
     # Current version
-    version = 1
-    # Earliest compatible version
-    compat_version = 1
+    version = 2
 
     # Where shall we create our volumes?
     POOL_PREFIX = "fsvolume_"
@@ -371,6 +370,9 @@ class CephFSVolumeClient(object):
         auth_meta['dirty'] = False
         self._auth_metadata_set(auth_id, auth_meta)
 
+    def get_mds_map(self):
+        fs_map = self._rados_command("fs dump", {})
+        return fs_map['filesystems'][0]['mdsmap']
 
     def evict(self, auth_id, timeout=30, volume_path=None):
         """
@@ -389,8 +391,7 @@ class CephFSVolumeClient(object):
 
         log.info("evict clients with {0}".format(', '.join(client_spec)))
 
-        mds_map = self._rados_command("mds dump", {})
-
+        mds_map = self.get_mds_map()
         up = {}
         for name, gid in mds_map['up'].items():
             # Quirk of the MDSMap JSON dump: keys in the up dict are like "mds_0"
@@ -624,9 +625,9 @@ class CephFSVolumeClient(object):
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
             log.info("create_volume: {0}, create pool {1} as data_isolated =True.".format(volume_path, pool_name))
             pool_id = self._create_volume_pool(pool_name)
-            mds_map = self._rados_command("mds dump", {})
+            mds_map = self.get_mds_map()
             if pool_id not in mds_map['data_pools']:
-                self._rados_command("mds add_data_pool", {
+                self._rados_command("fs {} add_data_pool".format(mds_map['fs_name']), {
                     'pool': pool_name
                 })
             self.fs.setxattr(path, 'ceph.dir.layout.pool', pool_name, 0)
@@ -724,9 +725,9 @@ class CephFSVolumeClient(object):
             pool_name = "{0}{1}".format(self.POOL_PREFIX, volume_path.volume_id)
             osd_map = self._rados_command("osd dump", {})
             pool_id = self._get_pool_id(osd_map, pool_name)
-            mds_map = self._rados_command("mds dump", {})
+            mds_map = self.get_mds_map()
             if pool_id in mds_map['data_pools']:
-                self._rados_command("mds remove_data_pool", {
+                self._rados_command("fs {} rm_data_pool".format(mds_map['fs_name']), {
                     'pool': pool_name
                 })
             self._rados_command("osd pool delete",
@@ -850,7 +851,7 @@ class CephFSVolumeClient(object):
         that encoded the metadata.
         """
         data['compat_version'] = 1
-        data['version'] = 1
+        data['version'] = self.version
         return self._metadata_set(self._auth_metadata_path(auth_id), data)
 
     def _volume_metadata_path(self, volume_path):
@@ -903,7 +904,7 @@ class CephFSVolumeClient(object):
         that encoded the metadata.
         """
         data['compat_version'] = 1
-        data['version'] = 1
+        data['version'] = self.version
         return self._metadata_set(self._volume_metadata_path(volume_path), data)
 
     def authorize(self, volume_path, auth_id, readonly=False, tenant_id=None):
@@ -1065,6 +1066,9 @@ class CephFSVolumeClient(object):
                 # Updates the existing auth caps such that there is a single
                 # occurrence of wanted auth caps and no occurrence of
                 # conflicting auth caps.
+
+                if not orig:
+                    return want
 
                 cap_tokens = set(orig.split(","))
 
@@ -1340,3 +1344,58 @@ class CephFSVolumeClient(object):
         src_snapshot_path = self._snapshot_path(self._get_path(src_volume_path), src_snapshot_name)
 
         self._cp_r(src_snapshot_path, dest_fs_path)
+
+    def put_object(self, pool_name, object_name, data):
+        """
+        Synchronously write data to an object.
+
+        :param pool_name: name of the pool
+        :type pool_name: str
+        :param object_name: name of the object
+        :type object_name: str
+        :param data: data to write
+        :type data: bytes
+        """
+        ioctx = self.rados.open_ioctx(pool_name)
+        max_size = int(self.rados.conf_get('osd_max_write_size')) * 1024 * 1024
+        if len(data) > max_size:
+            msg = ("Data to be written to object '{0}' exceeds "
+                   "{1} bytes".format(object_name, max_size))
+            log.error(msg)
+            raise CephFSVolumeClientError(msg)
+        try:
+            ioctx.write_full(object_name, data)
+        finally:
+            ioctx.close()
+
+    def get_object(self, pool_name, object_name):
+        """
+        Synchronously read data from object.
+
+        :param pool_name: name of the pool
+        :type pool_name: str
+        :param object_name: name of the object
+        :type object_name: str
+
+        :returns: bytes - data read from object
+        """
+        ioctx = self.rados.open_ioctx(pool_name)
+        max_size = int(self.rados.conf_get('osd_max_write_size')) * 1024 * 1024
+        try:
+            bytes_read = ioctx.read(object_name, max_size)
+            if ((len(bytes_read) == max_size) and
+                    (ioctx.read(object_name, 1, offset=max_size))):
+                log.warning("Size of object {0} exceeds '{1}' bytes "
+                            "read".format(object_name, max_size))
+        finally:
+            ioctx.close()
+        return bytes_read
+
+    def delete_object(self, pool_name, object_name):
+        ioctx = self.rados.open_ioctx(pool_name)
+        try:
+            ioctx.remove_object(object_name)
+        except rados.ObjectNotFound:
+            log.warn("Object '{0}' was already removed".format(object_name))
+        finally:
+            ioctx.close()

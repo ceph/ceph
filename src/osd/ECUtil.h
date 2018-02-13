@@ -23,11 +23,6 @@
 
 namespace ECUtil {
 
-const uint64_t CHUNK_ALIGNMENT = 64;
-const uint64_t CHUNK_INFO = 8;
-const uint64_t CHUNK_PADDING = 8;
-const uint64_t CHUNK_OVERHEAD = 16; // INFO + PADDING
-
 class stripe_info_t {
   const uint64_t stripe_width;
   const uint64_t chunk_size;
@@ -167,6 +162,6 @@ typedef ceph::shared_ptr<HashInfo> HashInfoRef;
 bool is_hinfo_key_string(const std::string &key);
 const std::string &get_hinfo_key();
 
-}
 WRITE_CLASS_ENCODER(ECUtil::HashInfo)
+}
 #endif

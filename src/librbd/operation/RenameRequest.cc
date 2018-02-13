@@ -74,8 +74,10 @@ bool RenameRequest<I>::should_complete(int r) {
     return true;
   }
 
-  if (m_state == STATE_REMOVE_SOURCE_HEADER) {
+  if (m_state == STATE_UPDATE_DIRECTORY) {
+    // update in-memory name before removing source header
     apply();
+  } else if (m_state == STATE_REMOVE_SOURCE_HEADER) {
     return true;
   }
 
@@ -91,7 +93,7 @@ bool RenameRequest<I>::should_complete(int r) {
     send_remove_source_header();
     break;
   default:
-    assert(false);
+    ceph_abort();
     break;
   }
   return false;
@@ -102,7 +104,13 @@ int RenameRequest<I>::filter_state_return_code(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
-  if (m_state == STATE_REMOVE_SOURCE_HEADER && r < 0) {
+  if (m_state == STATE_READ_SOURCE_HEADER && r == -ENOENT) {
+    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    if (image_ctx.name == m_dest_name) {
+      // signal that replay raced with itself
+      return -EEXIST;
+    }
+  } else if (m_state == STATE_REMOVE_SOURCE_HEADER && r < 0) {
     if (r != -ENOENT) {
       lderr(cct) << "warning: couldn't remove old source object ("
                  << m_source_oid << ")" << dendl;
@@ -159,11 +167,11 @@ void RenameRequest<I>::send_update_directory() {
   if (image_ctx.old_format) {
     bufferlist cmd_bl;
     bufferlist empty_bl;
-    ::encode(static_cast<__u8>(CEPH_OSD_TMAP_SET), cmd_bl);
-    ::encode(m_dest_name, cmd_bl);
-    ::encode(empty_bl, cmd_bl);
-    ::encode(static_cast<__u8>(CEPH_OSD_TMAP_RM), cmd_bl);
-    ::encode(image_ctx.name, cmd_bl);
+    encode(static_cast<__u8>(CEPH_OSD_TMAP_SET), cmd_bl);
+    encode(m_dest_name, cmd_bl);
+    encode(empty_bl, cmd_bl);
+    encode(static_cast<__u8>(CEPH_OSD_TMAP_RM), cmd_bl);
+    encode(image_ctx.name, cmd_bl);
     op.tmap_update(cmd_bl);
   } else {
     cls_client::dir_rename_image(&op, image_ctx.name, m_dest_name,

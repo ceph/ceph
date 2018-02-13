@@ -65,6 +65,30 @@ breathe_projects_source = {
              ["rados_types.h", "librados.h"])
 }
 breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp': 'cxx'}
-pybind = os.path.join(top_level, 'src/pybind')
-if pybind not in sys.path:
-    sys.path.insert(0, pybind)
+
+# mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
+# mgr.mgr_module
+class Dummy(object):
+    def __getattr__(self, _):
+        return lambda *args, **kwargs: None
+
+class Mock(object):
+    __all__ = []
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def __call__(self, *args, **kwargs):
+        return Mock()
+
+    @classmethod
+    def __getattr__(cls, name):
+        mock = type(name, (Dummy,), {})
+        mock.__module__ = __name__
+        return mock
+
+sys.modules['ceph_module'] = Mock()
+
+for pybind in [os.path.join(top_level, 'src/pybind'),
+               os.path.join(top_level, 'src/pybind/mgr')]:
+    if pybind not in sys.path:
+        sys.path.insert(0, pybind)

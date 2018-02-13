@@ -93,7 +93,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
     assert(latest_bl.length() != 0);
     dout(7) << __func__ << " loading summary e" << latest_full << dendl;
     bufferlist::iterator p = latest_bl.begin();
-    ::decode(summary, p);
+    decode(summary, p);
     dout(7) << __func__ << " loaded summary e" << summary.version << dendl;
   }
 
@@ -106,7 +106,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
 
     bufferlist::iterator p = bl.begin();
     __u8 v;
-    ::decode(v, p);
+    decode(v, p);
     while (!p.end()) {
       LogEntry le;
       le.decode(p);
@@ -115,6 +115,10 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
       string channel = le.channel;
       if (channel.empty()) // keep retrocompatibility
         channel = CLOG_CHANNEL_CLUSTER;
+
+      if (g_conf->get_val<bool>("mon_cluster_log_to_stderr")) {
+	cerr << channel << " " << le << std::endl;
+      }
 
       if (channels.do_log_to_syslog(channel)) {
         string level = channels.get_level(channel);
@@ -213,7 +217,7 @@ void LogMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist bl;
   dout(10) << __func__ << " v" << version << dendl;
   __u8 v = 1;
-  ::encode(v, bl);
+  encode(v, bl);
   multimap<utime_t,LogEntry>::iterator p;
   for (p = pending_log.begin(); p != pending_log.end(); ++p)
     p->second.encode(bl, mon->get_quorum_con_features());
@@ -228,7 +232,7 @@ void LogMonitor::encode_full(MonitorDBStore::TransactionRef t)
   assert(get_last_committed() == summary.version);
 
   bufferlist summary_bl;
-  ::encode(summary, summary_bl, mon->get_quorum_con_features());
+  encode(summary, summary_bl, mon->get_quorum_con_features());
 
   put_version_full(t, summary.version, summary_bl);
   put_version_latest_full(t, summary.version);
@@ -429,23 +433,24 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     };
 
     auto rp = summary.tail.rbegin();
-    while (num > 0 && rp != summary.tail.rend()) {
+    for (; num > 0 && rp != summary.tail.rend(); ++rp) {
       if (match(*rp)) {
         num--;
       }
-      ++rp;
+    }
+    if (rp == summary.tail.rend()) {
+      --rp;
     }
     ostringstream ss;
-    auto p = summary.tail.begin();
-    for ( ; p != summary.tail.end(); ++p) {
-      if (!match(*p)) {
+    for (; rp != summary.tail.rbegin(); --rp) {
+      if (!match(*rp)) {
         continue;
       }
 
       if (f) {
-	f->dump_object("entry", *p);
+	f->dump_object("entry", *rp);
       } else {
-	ss << *p << "\n";
+	ss << *rp << "\n";
       }
     }
     if (f) {
@@ -649,7 +654,7 @@ void LogMonitor::_create_sub_incremental(MLog *mlog, int level, version_t sv)
     assert(bl.length());
     bufferlist::iterator p = bl.begin();
     __u8 v;
-    ::decode(v,p);
+    decode(v,p);
     while (!p.end()) {
       LogEntry le;
       le.decode(p);

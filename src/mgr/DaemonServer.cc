@@ -12,12 +12,15 @@
  */
 
 #include "DaemonServer.h"
+#include "mgr/Mgr.h"
 
+#include "include/stringify.h"
 #include "include/str_list.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
 #include "mgr/mgr_commands.h"
+#include "mgr/OSDHealthMetricCollector.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
@@ -41,7 +44,7 @@ DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
 			   DaemonStateIndex &daemon_state_,
 			   ClusterState &cluster_state_,
-			   PyModules &py_modules_,
+			   PyModuleRegistry &py_modules_,
 			   LogChannelRef clog_,
 			   LogChannelRef audit_clog_)
     : Dispatcher(g_ceph_context),
@@ -69,9 +72,13 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      auth_registry(g_ceph_context,
+      auth_cluster_registry(g_ceph_context,
                     g_conf->auth_supported.empty() ?
                       g_conf->auth_cluster_required :
+                      g_conf->auth_supported),
+      auth_service_registry(g_ceph_context,
+                   g_conf->auth_supported.empty() ?
+                      g_conf->auth_service_required :
                       g_conf->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false)
@@ -111,9 +118,10 @@ int DaemonServer::init(uint64_t gid, entity_addr_t client_addr)
 			      mon_byte_throttler.get(),
 			      mon_msg_throttler.get());
 
-  int r = msgr->bind(g_conf->public_addr);
+  entity_addr_t paddr = g_conf->get_val<entity_addr_t>("public_addr");
+  int r = msgr->bind(paddr);
   if (r < 0) {
-    derr << "unable to bind mgr to " << g_conf->public_addr << dendl;
+    derr << "unable to bind mgr to " << paddr << dendl;
     return r;
   }
 
@@ -142,7 +150,15 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
     bool& is_valid,
     CryptoKey& session_key)
 {
-  auto handler = auth_registry.get_handler(protocol);
+  AuthAuthorizeHandler *handler = nullptr;
+  if (peer_type == CEPH_ENTITY_TYPE_OSD ||
+      peer_type == CEPH_ENTITY_TYPE_MON ||
+      peer_type == CEPH_ENTITY_TYPE_MDS ||
+      peer_type == CEPH_ENTITY_TYPE_MGR) {
+    handler = auth_cluster_registry.get_handler(protocol);
+  } else {
+    handler = auth_service_registry.get_handler(protocol);
+  }
   if (!handler) {
     dout(0) << "No AuthAuthorizeHandler found for protocol " << protocol << dendl;
     is_valid = false;
@@ -176,7 +192,7 @@ bool DaemonServer::ms_verify_authorizer(Connection *con,
       bufferlist::iterator p = caps_info.caps.begin();
       string str;
       try {
-	::decode(str, p);
+	decode(str, p);
       }
       catch (buffer::error& e) {
         is_valid = false;
@@ -407,6 +423,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
     // themselves to be a daemon for some service.
     dout(4) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
+    m->get_connection()->mark_down();
     m->put();
     return true;
   }
@@ -418,15 +435,53 @@ bool DaemonServer::handle_report(MMgrReport *m)
     daemon = daemon_state.get(key);
   } else {
     // we don't know the hostname at this stage, reject MMgrReport here.
-    dout(1) << "rejecting report from " << key << ", since we do not have its metadata now."
+    dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
 	    << dendl;
-    // kill session
-    MgrSessionRef session(static_cast<MgrSession*>(m->get_connection()->get_priv()));
-    if (!session) {
-      return false;
+
+    // issue metadata request in background
+    if (!daemon_state.is_updating(key) && 
+	(key.first == "osd" || key.first == "mds")) {
+
+      std::ostringstream oss;
+      auto c = new MetadataUpdate(daemon_state, key);
+      if (key.first == "osd") {
+        oss << "{\"prefix\": \"osd metadata\", \"id\": "
+            << key.second<< "}";
+
+      } else if (key.first == "mds") {
+        c->set_default("addr", stringify(m->get_source_addr()));
+        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
+            << key.second << "\"}";
+ 
+      } else {
+	ceph_abort();
+      }
+
+      monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
     }
-    m->get_connection()->mark_down();
-    session->put();
+    
+    {
+      Mutex::Locker l(lock);
+      // kill session
+      MgrSessionRef session(static_cast<MgrSession*>(m->get_connection()->get_priv()));
+      if (!session) {
+	return false;
+      }
+      m->get_connection()->mark_down();
+      session->put();
+
+      dout(10) << "unregistering osd." << session->osd_id
+	       << "  session " << session << " con " << m->get_connection() << dendl;
+      
+      if (osd_cons.find(session->osd_id) != osd_cons.end()) {
+	   osd_cons[session->osd_id].erase(m->get_connection());
+      } 
+
+      auto iter = daemon_connections.find(m->get_connection());
+      if (iter != daemon_connections.end()) {
+	daemon_connections.erase(iter);
+      }
+    }
 
     return false;
   }
@@ -447,6 +502,10 @@ bool DaemonServer::handle_report(MMgrReport *m)
       daemon->last_service_beacon = now;
     } else if (m->daemon_status) {
       derr << "got status from non-daemon " << key << dendl;
+    }
+    if (m->get_connection()->peer_is_osd()) {
+      // only OSD sends health_checks to me now
+      daemon->osd_health_metrics = std::move(m->osd_health_metrics);
     }
   }
 
@@ -665,29 +724,27 @@ bool DaemonServer::handle_command(MCommand *m)
   // lookup command
   const MonCommand *mgr_cmd = _get_mgrcommand(prefix, mgr_commands);
   _generate_command_map(cmdctx->cmdmap, param_str_map);
+
+  bool is_allowed;
   if (!mgr_cmd) {
     MonCommand py_command = {"", "", "py", "rw", "cli"};
-    if (!_allowed_command(session.get(), py_command.module, prefix, cmdctx->cmdmap,
-                          param_str_map, &py_command)) {
-      dout(1) << " access denied" << dendl;
-      ss << "access denied; does your client key have mgr caps?"
-	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
-      cmdctx->reply(-EACCES, ss);
-      return true;
-    }
+    is_allowed = _allowed_command(session.get(), py_command.module,
+      prefix, cmdctx->cmdmap, param_str_map, &py_command);
   } else {
     // validate user's permissions for requested command
-    if (!_allowed_command(session.get(), mgr_cmd->module, prefix, cmdctx->cmdmap,
-                          param_str_map, mgr_cmd)) {
+    is_allowed = _allowed_command(session.get(), mgr_cmd->module,
+      prefix, cmdctx->cmdmap,  param_str_map, mgr_cmd);
+  }
+  if (!is_allowed) {
       dout(1) << " access denied" << dendl;
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
                          << "cmd=" << m->cmd << ":  access denied";
-      ss << "access denied' does your client key have mgr caps?"
-	" See http://docs.ceph.com/docs/master/mgr/administrator/#client-authentication";
+      ss << "access denied: does your client key have mgr caps? "
+            "See http://docs.ceph.com/docs/master/mgr/administrator/"
+            "#client-authentication";
       cmdctx->reply(-EACCES, ss);
       return true;
-    }
   }
 
   audit_clog->debug()
@@ -893,14 +950,15 @@ bool DaemonServer::handle_command(MCommand *m)
       cmdctx->reply(r, ss);
       return true;
     }
-    double max_change = g_conf->mon_reweight_max_change;
+    
+    double max_change = g_conf->get_val<double>("mon_reweight_max_change");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_change", max_change);
     if (max_change <= 0.0) {
       ss << "max_change " << max_change << " must be positive";
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
-    int64_t max_osds = g_conf->mon_reweight_max_osds;
+    int64_t max_osds = g_conf->get_val<int64_t>("mon_reweight_max_osds");
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "max_osds", max_osds);
     if (max_osds <= 0) {
       ss << "max_osds " << max_osds << " must be positive";
@@ -1176,7 +1234,7 @@ bool DaemonServer::handle_command(MCommand *m)
 	  } else {
 	    auto workit = pg_map.pg_stat.find(parsed_pg);
 	    if (workit == pg_map.pg_stat.end()) {
-	      ss << "pg " << pstr << " not exists; ";
+	      ss << "pg " << pstr << " does not exist; ";
 	      r = -ENOENT;
 	    } else {
 	      pg_stat_t workpg = workit->second;
@@ -1197,7 +1255,7 @@ bool DaemonServer::handle_command(MCommand *m)
 		  }
 		  break;
 		case OFR_BACKFILL:
-		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILL)) == 0) {
+		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING)) == 0) {
 		    ss << "pg " << pstr << " doesn't require backfilling; ";
 		    continue;
 		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {
@@ -1286,37 +1344,80 @@ bool DaemonServer::handle_command(MCommand *m)
     }
   }
 
-  // None of the special native commands, 
-  MgrPyModule *handler = nullptr;
+  // Resolve the command to the name of the module that will
+  // handle it (if the command exists)
+  std::string handler_name;
   auto py_commands = py_modules.get_py_commands();
   for (const auto &pyc : py_commands) {
     auto pyc_prefix = cmddesc_get_prefix(pyc.cmdstring);
     dout(1) << "pyc_prefix: '" << pyc_prefix << "'" << dendl;
     if (pyc_prefix == prefix) {
-      handler = pyc.handler;
+      handler_name = pyc.module_name;
       break;
     }
   }
 
-  if (handler == nullptr) {
+  // Was the command unfound?
+  if (handler_name.empty()) {
     ss << "No handler found for '" << prefix << "'";
     dout(4) << "No handler found for '" << prefix << "'" << dendl;
     cmdctx->reply(-EINVAL, ss);
     return true;
-  } else {
-    // Okay, now we have a handler to call, but we must not call it
-    // in this thread, because the python handlers can do anything,
-    // including blocking, and including calling back into mgr.
-    dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
-    finisher.queue(new FunctionContext([cmdctx, handler](int r_) {
-      std::stringstream ds;
-      std::stringstream ss;
-      int r = handler->handle_command(cmdctx->cmdmap, &ds, &ss);
-      cmdctx->odata.append(ds);
-      cmdctx->reply(r, ss);
-    }));
-    return true;
   }
+
+  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+    std::stringstream ss;
+
+    // Validate that the module is enabled
+    PyModuleRef module = py_modules.get_module(handler_name);
+    if (!module->is_enabled()) {
+      ss << "Module '" << handler_name << "' is not enabled (required by "
+            "command '" << prefix << "'): use `ceph mgr module enable "
+            << handler_name << "` to enable it";
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EOPNOTSUPP, ss);
+      return;
+    }
+
+    // Hack: allow the self-test method to run on unhealthy modules.
+    // Fix this in future by creating a special path for self test rather
+    // than having the hook be a normal module command.
+    std::string self_test_prefix = handler_name + " " + "self-test";
+
+    // Validate that the module is healthy
+    bool accept_command;
+    if (module->is_loaded()) {
+      if (module->get_can_run() && !module->is_failed()) {
+        // Healthy module
+        accept_command = true;
+      } else if (self_test_prefix == prefix) {
+        // Unhealthy, but allow because it's a self test command
+        accept_command = true;
+      } else {
+        accept_command = false;
+        ss << "Module '" << handler_name << "' has experienced an error and "
+              "cannot handle commands: " << module->get_error_string();
+      }
+    } else {
+      // Module not loaded
+      accept_command = false;
+      ss << "Module '" << handler_name << "' failed to load and "
+            "cannot handle commands: " << module->get_error_string();
+    }
+
+    if (!accept_command) {
+      dout(4) << ss.str() << dendl;
+      cmdctx->reply(-EIO, ss);
+      return;
+    }
+
+    std::stringstream ds;
+    int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, &ds, &ss);
+    cmdctx->odata.append(ds);
+    cmdctx->reply(r, ss);
+  }));
+  return true;
 }
 
 void DaemonServer::_prune_pending_service_map()
@@ -1377,14 +1478,14 @@ void DaemonServer::send_report()
   auto m = new MMonMgrReport();
   py_modules.get_health_checks(&m->health_checks);
 
-  cluster_state.with_pgmap([&](const PGMap& pg_map) {
+  cluster_state.with_mutable_pgmap([&](PGMap& pg_map) {
       cluster_state.update_delta_stats();
 
       if (pending_service_map.epoch) {
 	_prune_pending_service_map();
 	if (pending_service_map_dirty >= pending_service_map.epoch) {
 	  pending_service_map.modified = ceph_clock_now();
-	  ::encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
+	  encode(pending_service_map, m->service_map_bl, CEPH_FEATURES_ALL);
 	  dout(10) << "sending service_map e" << pending_service_map.epoch
 		   << dendl;
 	  pending_service_map.epoch++;
@@ -1409,6 +1510,30 @@ void DaemonServer::send_report()
 	  *_dout << dendl;
 	});
     });
+
+  auto osds = daemon_state.get_by_service("osd");
+  map<osd_metric, unique_ptr<OSDHealthMetricCollector>> accumulated;
+  for (const auto& osd : osds) {
+    Mutex::Locker l(osd.second->lock);
+    for (const auto& metric : osd.second->osd_health_metrics) {
+      auto acc = accumulated.find(metric.get_type());
+      if (acc == accumulated.end()) {
+	auto collector = OSDHealthMetricCollector::create(metric.get_type());
+	if (!collector) {
+	  derr << __func__ << " " << osd.first << "." << osd.second
+	       << " sent me an unknown health metric: "
+	       << static_cast<uint8_t>(metric.get_type()) << dendl;
+	  continue;
+	}
+	tie(acc, std::ignore) = accumulated.emplace(metric.get_type(),
+						    std::move(collector));
+      }
+      acc->second->update(osd.first, metric);
+    }
+  }
+  for (const auto& acc : accumulated) {
+    acc.second->summarize(m->health_checks);
+  }
   // TODO? We currently do not notify the PyModules
   // TODO: respect needs_send, so we send the report only if we are asked to do
   //       so, or the state is updated.
@@ -1469,7 +1594,6 @@ const char** DaemonServer::get_tracked_conf_keys() const
 void DaemonServer::handle_conf_change(const struct md_config_t *conf,
                                               const std::set <std::string> &changed)
 {
-  dout(4) << "ohai" << dendl;
   // We may be called within lock (via MCommand `config set`) or outwith the
   // lock (via admin socket `config set`), so handle either case.
   const bool initially_locked = lock.is_locked_by_me();

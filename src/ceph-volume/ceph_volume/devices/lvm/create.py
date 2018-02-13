@@ -1,10 +1,13 @@
 from __future__ import print_function
 from textwrap import dedent
+import logging
 from ceph_volume.util import system
-from ceph_volume import decorators
-from .common import create_parser
+from ceph_volume import decorators, terminal
+from .common import create_parser, rollback_osd
 from .prepare import Prepare
 from .activate import Activate
+
+logger = logging.getLogger(__name__)
 
 
 class Create(object):
@@ -18,8 +21,20 @@ class Create(object):
     def create(self, args):
         if not args.osd_fsid:
             args.osd_fsid = system.generate_uuid()
-        Prepare([]).prepare(args)
-        Activate([]).activate(args)
+        prepare_step = Prepare([])
+        prepare_step.safe_prepare(args)
+        osd_id = prepare_step.osd_id
+        try:
+            # we try this for activate only when 'creating' an OSD, because a rollback should not
+            # happen when doing normal activation. For example when starting an OSD, systemd will call
+            # activate, which would never need to be rolled back.
+            Activate([]).activate(args)
+        except Exception:
+            logger.error('lvm activate was unable to complete, while creating the OSD')
+            logger.info('will rollback OSD ID creation')
+            rollback_osd(args, osd_id)
+            raise
+        terminal.success("ceph-volume lvm create successful for: %s" % args.data)
 
     def main(self):
         sub_command_help = dedent("""
@@ -50,4 +65,8 @@ class Create(object):
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
+        # Default to bluestore here since defaulting it in add_argument may
+        # cause both to be True
+        if not args.bluestore and not args.filestore:
+            args.bluestore = True
         self.create(args)

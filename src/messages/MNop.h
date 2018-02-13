@@ -36,12 +36,13 @@ public:
   ~MNop() {}
 
   void encode_payload(uint64_t _features) {
-    ::encode(tag, payload);
+    using ceph::encode;
+    encode(tag, payload);
   }
 
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
-    ::decode(tag, p);
+    decode(tag, p);
   }
 
   const char *get_type_name() const { return "MNop"; }

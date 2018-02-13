@@ -15,7 +15,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 void RGWAccessControlList::_add_grant(ACLGrant *grant)
 {
@@ -84,7 +83,7 @@ uint32_t RGWAccessControlList::get_referer_perm(const uint32_t current_perm,
   ldout(cct, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
 
-  /* This function is bacically a transformation from current perm to
+  /* This function is basically a transformation from current perm to
    * a new one that takes into consideration the Swift's HTTP referer-
    * based ACLs. We need to go through all items to respect negative
    * grants. */

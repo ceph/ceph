@@ -119,15 +119,13 @@ void InoTable::replay_alloc_ids(interval_set<inodeno_t>& ids)
   dout(10) << "replay_alloc_ids " << ids << dendl;
   interval_set<inodeno_t> is;
   is.intersection_of(free, ids);
-  if (is == ids) {
-    free.subtract(ids);
-    projected_free.subtract(ids);
-  } else {
+  if (!(is==ids)) {
     mds->clog->error() << "journal replay alloc " << ids << ", only "
 	<< is << " is in free " << free;
-    free.subtract(is);
-    projected_free.subtract(is);
   }
+  free.subtract(is);
+  projected_free.subtract(is);
+
   projected_version = ++version;
 }
 void InoTable::replay_release_ids(interval_set<inodeno_t>& ids) 
@@ -218,10 +216,10 @@ bool InoTable::repair(inodeno_t id)
   }
 
   assert(is_marked_free(id));
-  dout(10) << "repair: before status. ino = 0x" << std::hex << id << " pver =" << projected_version << " ver= " << version << dendl;
+  dout(10) << "repair: before status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   free.erase(id);
   projected_free.erase(id);
   projected_version = ++version;
-  dout(10) << "repair: after status. ino = 0x" << std::hex <<id << " pver =" << projected_version << " ver= " << version << dendl;
+  dout(10) << "repair: after status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   return true;
 }

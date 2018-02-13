@@ -22,8 +22,8 @@ function(add_ceph_test test_name test_path)
 endfunction()
 
 #sets uniform compiler flags and link libraries
-function(add_ceph_unittest unittest_name unittest_path)
-  add_ceph_test(${unittest_name} ${unittest_path})
+function(add_ceph_unittest unittest_name)
+  add_ceph_test(${unittest_name} ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/${unittest_name})
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
   set_target_properties(${unittest_name} PROPERTIES COMPILE_FLAGS ${UNITTEST_CXX_FLAGS})
 endfunction()

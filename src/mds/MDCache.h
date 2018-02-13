@@ -17,6 +17,8 @@
 #ifndef CEPH_MDCACHE_H
 #define CEPH_MDCACHE_H
 
+#include <string_view>
+
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
@@ -201,6 +203,8 @@ public:
   void force_readonly();
 
   DecayRate decayrate;
+
+  int num_shadow_inodes;
 
   int num_inodes_with_caps;
 
@@ -393,7 +397,7 @@ public:
 
   void project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
 				   int linkunlink, SnapRealm *prealm);
-  void _project_rstat_inode_to_frag(inode_t& inode, snapid_t ofirst, snapid_t last,
+  void _project_rstat_inode_to_frag(CInode::mempool_inode & inode, snapid_t ofirst, snapid_t last,
 				    CDir *parent, int linkunlink, bool update_inode);
   void project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 				   snapid_t ofirst, snapid_t last, 
@@ -532,7 +536,7 @@ public:
 
 
   void clean_open_file_lists();
-
+  void dump_openfiles(Formatter *f);
 protected:
   // [rejoin]
   bool rejoins_pending;
@@ -614,8 +618,9 @@ public:
     inodeno_t realm_ino;
     snapid_t snap_follows;
     int dirty_caps;
+    bool snapflush;
     reconnected_cap_info_t() :
-      realm_ino(0), snap_follows(0), dirty_caps(0) {}
+      realm_ino(0), snap_follows(0), dirty_caps(0), snapflush(false) {}
   };
   map<inodeno_t,map<client_t, reconnected_cap_info_t> >  reconnected_caps;   // inode -> client -> snap_follows,realmino
   map<inodeno_t,map<client_t, snapid_t> > reconnected_snaprealms;  // realmino -> client -> realmseq
@@ -625,9 +630,11 @@ public:
     info.realm_ino = inodeno_t(icr.capinfo.snaprealm);
     info.snap_follows = icr.snap_follows;
   }
-  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty) {
+  void set_reconnected_dirty_caps(client_t client, inodeno_t ino, int dirty, bool snapflush) {
     reconnected_cap_info_t &info = reconnected_caps[ino][client];
     info.dirty_caps |= dirty;
+    if (snapflush)
+      info.snapflush = snapflush;
   }
   void add_reconnected_snaprealm(client_t client, inodeno_t ino, snapid_t seq) {
     reconnected_snaprealms[ino][client] = seq;
@@ -786,6 +793,13 @@ public:
   CInode* get_inode(inodeno_t ino, snapid_t s=CEPH_NOSNAP) {
     return get_inode(vinodeno_t(ino, s));
   }
+  CInode* lookup_snap_inode(vinodeno_t vino) {
+    auto p = snap_inode_map.lower_bound(vino);
+    if (p != snap_inode_map.end() &&
+	p->second->ino() == vino.ino && p->second->first <= vino.snapid)
+      return p->second;
+    return NULL;
+  }
 
   CDir* get_dirfrag(dirfrag_t df) {
     CInode *in = get_inode(df.ino);
@@ -793,7 +807,7 @@ public:
       return NULL;
     return in->get_dirfrag(df.frag);
   }
-  CDir* get_dirfrag(inodeno_t ino, const string& dn) {
+  CDir* get_dirfrag(inodeno_t ino, std::string_view dn) {
     CInode *in = get_inode(ino);
     if (!in)
       return NULL;
@@ -1046,22 +1060,10 @@ protected:
   friend class C_MDC_Join;
 
 public:
-  void replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl) {
-    dirfrag_t df = dir->dirfrag();
-    ::encode(df, bl);
-    dir->encode_replica(to, bl);
-  }
-  void replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl) {
-    ::encode(dn->name, bl);
-    ::encode(dn->last, bl);
-    dn->encode_replica(to, bl);
-  }
+  void replicate_dir(CDir *dir, mds_rank_t to, bufferlist& bl);
+  void replicate_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl);
   void replicate_inode(CInode *in, mds_rank_t to, bufferlist& bl,
-		       uint64_t features) {
-    ::encode(in->inode.ino, bl);  // bleh, minor assymetry here
-    ::encode(in->last, bl);
-    in->encode_replica(to, bl, features);
-  }
+		       uint64_t features);
   
   CDir* add_replica_dir(bufferlist::iterator& p, CInode *diri, mds_rank_t from, list<MDSInternalContextBase*>& finished);
   CDentry *add_replica_dentry(bufferlist::iterator& p, CDir *dir, list<MDSInternalContextBase*>& finished);
@@ -1170,14 +1172,14 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 protected:
-  int dump_cache(const char *fn, Formatter *f,
-		  const std::string& dump_root = "",
+  int dump_cache(std::string_view fn, Formatter *f,
+		  std::string_view dump_root = "",
 		  int depth = -1);
 public:
   int dump_cache() { return dump_cache(NULL, NULL); }
-  int dump_cache(const std::string &filename);
+  int dump_cache(std::string_view filename);
   int dump_cache(Formatter *f);
-  int dump_cache(const std::string& dump_root, int depth, Formatter *f);
+  int dump_cache(std::string_view dump_root, int depth, Formatter *f);
 
   int cache_status(Formatter *f);
 
@@ -1212,11 +1214,11 @@ protected:
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
   friend class C_MDC_RepairDirfragStats;
 public:
-  void flush_dentry(const string& path, Context *fin);
+  void flush_dentry(std::string_view path, Context *fin);
   /**
    * Create and start an OP_ENQUEUE_SCRUB
    */
-  void enqueue_scrub(const string& path, const std::string &tag,
+  void enqueue_scrub(std::string_view path, std::string_view tag,
                      bool force, bool recursive, bool repair,
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);

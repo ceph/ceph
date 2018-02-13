@@ -98,6 +98,11 @@ int TestFixture::flatten(librbd::ImageCtx &ictx,
   return ictx.operations->flatten(prog_ctx);
 }
 
+int TestFixture::resize(librbd::ImageCtx *ictx, uint64_t size){
+  librbd::NoOpProgressContext prog_ctx;
+  return ictx->operations->resize(size, true, prog_ctx);
+}
+
 void TestFixture::close_image(librbd::ImageCtx *ictx) {
   m_ictxs.erase(ictx);
 

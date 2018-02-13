@@ -6,7 +6,7 @@ Creating a plugin
 -----------------
 
 In pybind/mgr/, create a python module.  Within your module, create a class
-named ``Module`` that inherits from ``MgrModule``.
+that inherits from ``MgrModule``.
 
 The most important methods to override are:
 
@@ -33,7 +33,7 @@ or older versions of Ceph.
 Logging
 -------
 
-MgrModule instances have a ``log`` property which is a logger instance that
+``MgrModule`` instances have a ``log`` property which is a logger instance that
 sends log messages into the Ceph logging layer where they will be recorded
 in the mgr daemon's log file.
 
@@ -100,41 +100,42 @@ to cope with the possibility.
 Note that these accessors must not be called in the modules ``__init__``
 function. This will result in a circular locking exception.
 
-``get(self, data_name)``
+.. py:currentmodule:: mgr_module
+.. automethod:: MgrModule.get
+.. automethod:: MgrModule.get_server
+.. automethod:: MgrModule.list_servers
+.. automethod:: MgrModule.get_metadata
+.. automethod:: MgrModule.get_counter
 
-Fetch named cluster-wide objects such as the OSDMap.  Valid things
-to fetch are osd_crush_map_text, osd_map, osd_map_tree,
-osd_map_crush, config, mon_map, fs_map, osd_metadata, pg_summary,
-df, osd_stats, health, mon_status.
+What if the mons are down?
+--------------------------
 
-All these structures have their own JSON representations: experiment
-or look at the C++ dump() methods to learn about them.
+The manager daemon gets much of its state (such as the cluster maps)
+from the monitor.  If the monitor cluster is inaccessible, whichever
+manager was active will continue to run, with the latest state it saw
+still in memory.
 
-``get_server(self, hostname)``
+However, if you are creating a module that shows the cluster state
+to the user then you may well not want to mislead them by showing
+them that out of date state.
 
-Fetch metadata about a particular hostname.  This is information
-that ceph-mgr has gleaned from the daemon metadata reported
-by daemons running on a particular server.
+To check if the manager daemon currently has a connection to
+the monitor cluster, use this function:
 
-``list_servers(self)``
+.. automethod:: MgrModule.have_mon_connection
 
-Like ``get_server``, but gives information about all servers (i.e. all
-unique hostnames that have been mentioned in daemon metadata)
+Reporting if your module cannot run
+-----------------------------------
 
-``get_metadata(self, svc_type, svc_id)``
+If your module cannot be run for any reason (such as a missing dependency),
+then you can report that by implementing the ``can_run`` function.
 
-Fetch the daemon metadata for a particular service.  svc_type is one
-of osd or mds, and svc_id is a string (convert OSD integer IDs to strings
-when calling this).
+.. automethod:: MgrModule.can_run
 
-``get_counter(self, svc_type, svc_name, path)``
-
-Fetch the latest performance counter data for a particular counter.  The
-path is a period-separated concatenation of the subsystem and the counter
-name, for example "mds.inodes".
-
-A list of two-tuples of (timestamp, value) is returned.  This may be
-empty if no data is available.
+Note that this will only work properly if your module can always be imported:
+if you are importing a dependency that may be absent, then do it in a
+try/except block so that your module can be loaded far enough to use
+``can_run`` even if the dependency is absent.
 
 Sending commands
 ----------------
@@ -142,24 +143,34 @@ Sending commands
 A non-blocking facility is provided for sending monitor commands
 to the cluster.
 
-``send_command(self, result, command_str, tag)``
+.. automethod:: MgrModule.send_command
 
-The ``result`` parameter should be an instance of the CommandResult
-class, defined in the same module as MgrModule.  This acts as a
-completion and stores the output of the command.  Use CommandResult.wait()
-if you want to block on completion.
 
-The ``command_str`` parameter is a JSON-serialized command.  This
-uses the same format as the ceph command line, which is a dictionary
-of command arguments, with the extra ``prefix`` key containing the
-command name itself.  Consult MonCommands.h for available commands
-and their expected arguments.
+Implementing standby mode
+-------------------------
 
-The ``tag`` parameter is used for nonblocking operation: when
-a command completes, the ``notify()`` callback on the MgrModule
-instance is triggered, with notify_type set to "command", and
-notify_id set to the tag of the command.
+For some modules, it is useful to run on standby manager daemons as well
+as on the active daemon.  For example, an HTTP server can usefully
+serve HTTP redirect responses from the standby managers so that
+the user can point his browser at any of the manager daemons without
+having to worry about which one is active.
 
+Standby manager daemons look for a subclass of ``StandbyModule``
+in each module.  If the class is not found then the module is not
+used at all on standby daemons.  If the class is found, then
+its ``serve`` method is called.  Implementations of ``StandbyModule``
+must inherit from ``mgr_module.MgrStandbyModule``.
+
+The interface of ``MgrStandbyModule`` is much restricted compared to
+``MgrModule`` -- none of the Ceph cluster state is available to
+the module.  ``serve`` and ``shutdown`` methods are used in the same
+way as a normal module class.  The ``get_active_uri`` method enables
+the standby module to discover the address of its active peer in
+order to make redirects.  See the ``MgrStandbyModule`` definition
+in the Ceph source code for the full list of methods.
+
+For an example of how to use this interface, look at the source code
+of the ``dashboard`` module.
 
 Logging
 -------

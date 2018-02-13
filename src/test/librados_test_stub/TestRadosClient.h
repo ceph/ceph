@@ -64,6 +64,9 @@ public:
   virtual uint32_t get_nonce() = 0;
   virtual uint64_t get_instance_id() = 0;
 
+  virtual int get_min_compatible_client(int8_t* min_compat_client,
+                                        int8_t* require_min_compat_client) = 0;
+
   virtual int connect();
   virtual void shutdown();
   virtual int wait_for_latest_osdmap();
@@ -81,7 +84,7 @@ public:
   virtual int service_daemon_register(const std::string& service,
                                       const std::string& name,
                                       const std::map<std::string,std::string>& metadata) = 0;
-  virtual int service_daemon_update_status(const std::map<std::string,std::string>& status) = 0;
+  virtual int service_daemon_update_status(std::map<std::string,std::string>&& status) = 0;
 
   virtual int pool_create(const std::string &pool_name) = 0;
   virtual int pool_delete(const std::string &pool_name) = 0;

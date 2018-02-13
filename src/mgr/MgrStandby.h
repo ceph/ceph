@@ -23,6 +23,7 @@
 #include "client/Client.h"
 #include "mon/MonClient.h"
 #include "osdc/Objecter.h"
+#include "PyModuleRegistry.h"
 
 
 class MMgrMap;
@@ -48,6 +49,7 @@ protected:
   Mutex lock;
   SafeTimer timer;
 
+  PyModuleRegistry py_module_registry;
   std::shared_ptr<Mgr> active_mgr;
 
   int orig_argc;

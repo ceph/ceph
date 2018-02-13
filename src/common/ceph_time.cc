@@ -14,6 +14,7 @@
 
 // For ceph_timespec
 #include "ceph_time.h"
+#include "log/LogClock.h"
 #include "config.h"
 
 #if defined(__APPLE__)
@@ -80,6 +81,7 @@ namespace ceph {
       const struct ceph_timespec& ts) {
       return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
     }
+
   }
 
   using std::chrono::duration_cast;

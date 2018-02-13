@@ -335,9 +335,7 @@ void PaxosService::_active()
       return;
     }
   } else {
-    if (!mon->is_leader()) {
-      dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
-    }
+    dout(7) << __func__ << " we are not the leader, hence we propose nothing!" << dendl;
   }
 
   // wake up anyone who came in while we were proposing.  note that
@@ -399,6 +397,7 @@ void PaxosService::maybe_trim()
   MonitorDBStore::TransactionRef t = paxos->get_pending_transaction();
   trim(t, get_first_committed(), trim_to);
   put_first_committed(t, trim_to);
+  cached_first_committed = trim_to;
 
   // let the service add any extra stuff
   encode_trim_extra(t, trim_to);
@@ -437,6 +436,6 @@ void PaxosService::load_health()
   mon->store->get("health", service_name, bl);
   if (bl.length()) {
     auto p = bl.begin();
-    ::decode(health_checks, p);
+    decode(health_checks, p);
   }
 }

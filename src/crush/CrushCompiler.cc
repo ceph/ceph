@@ -314,10 +314,12 @@ int CrushCompiler::decompile(ostream &out)
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
-    out << "device " << i << " ";
-    print_item_name(out, i, crush);
-    print_item_class(out, i, crush);
-    out << "\n";
+    const char *name = crush.get_item_name(i);
+    if (name) {
+      out << "device " << i << " " << name;
+      print_item_class(out, i, crush);
+      out << "\n";
+    }
   }
   
   out << "\n# types\n";
@@ -645,7 +647,7 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 
   // now do the items.
   if (!used_items.empty())
-    size = MAX(size, *used_items.rbegin());
+    size = std::max(size, *used_items.rbegin());
   vector<int> items(size);
   vector<int> weights(size);
 

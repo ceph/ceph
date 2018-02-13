@@ -12,6 +12,7 @@
 #include "include/assert.h"
 
 #define MAX_FLUSH_UNDER_LOCK 20  ///< max bh's we start writeback on
+#define BUFFER_MEMORY_WEIGHT 12   // memory usage of BufferHead, count in (1<<n)
 
 using std::chrono::seconds;
 				 /// while holding the lock
@@ -156,9 +157,6 @@ ObjectCacher::BufferHead *ObjectCacher::Object::split(BufferHead *left,
 void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 {
   assert(oc->lock.is_locked());
-  assert(left->end() == right->start());
-  assert(left->get_state() == right->get_state());
-  assert(left->can_merge_journal(right));
 
   ldout(oc->cct, 10) << "merge_left " << *left << " + " << *right << dendl;
   if (left->get_journal_tid() == 0) {
@@ -176,8 +174,8 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
 
   // version
   // note: this is sorta busted, but should only be used for dirty buffers
-  left->last_write_tid =  MAX( left->last_write_tid, right->last_write_tid );
-  left->last_write = MAX( left->last_write, right->last_write );
+  left->last_write_tid =  std::max( left->last_write_tid, right->last_write_tid );
+  left->last_write = std::max( left->last_write, right->last_write );
 
   left->set_dontneed(right->get_dontneed() ? left->get_dontneed() : false);
   left->set_nocache(right->get_nocache() ? left->get_nocache() : false);
@@ -195,6 +193,17 @@ void ObjectCacher::Object::merge_left(BufferHead *left, BufferHead *right)
   ldout(oc->cct, 10) << "merge_left result " << *left << dendl;
 }
 
+bool ObjectCacher::Object::can_merge_bh(BufferHead *left, BufferHead *right)
+{
+  if (left->end() != right->start() ||
+      left->get_state() != right->get_state() ||
+      !left->can_merge_journal(right))
+    return false;
+  if (left->is_tx() && left->last_write_tid != right->last_write_tid)
+    return false;
+  return true;
+}
+
 void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
 {
   assert(oc->lock.is_locked());
@@ -209,9 +218,7 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   assert(p->second == bh);
   if (p != data.begin()) {
     --p;
-    if (p->second->end() == bh->start() &&
-	p->second->get_state() == bh->get_state() &&
-	p->second->can_merge_journal(bh)) {
+    if (can_merge_bh(p->second, bh)) {
       merge_left(p->second, bh);
       bh = p->second;
     } else {
@@ -221,10 +228,7 @@ void ObjectCacher::Object::try_merge_bh(BufferHead *bh)
   // to the right?
   assert(p->second == bh);
   ++p;
-  if (p != data.end() &&
-      p->second->start() == bh->end() &&
-      p->second->get_state() == bh->get_state() &&
-      p->second->can_merge_journal(bh))
+  if (p != data.end() && can_merge_bh(bh, p->second))
     merge_left(bh, p->second);
 }
 
@@ -241,7 +245,7 @@ bool ObjectCacher::Object::is_cached(loff_t cur, loff_t left) const
 
     if (p->first <= cur) {
       // have part of it
-      loff_t lenfromcur = MIN(p->second->end() - cur, left);
+      loff_t lenfromcur = std::min(p->second->end() - cur, left);
       cur += lenfromcur;
       left -= lenfromcur;
       ++p;
@@ -331,7 +335,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         ceph_abort();
       }
 
-      loff_t lenfromcur = MIN(e->end() - cur, left);
+      loff_t lenfromcur = std::min(e->end() - cur, left);
       cur += lenfromcur;
       left -= lenfromcur;
       ++p;
@@ -341,7 +345,7 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
       // gap.. miss
       loff_t next = p->first;
       BufferHead *n = new BufferHead(this);
-      loff_t len = MIN(next - cur, left);
+      loff_t len = std::min(next - cur, left);
       n->set_start(cur);
       n->set_length(len);
       oc->bh_add(this,n);
@@ -353,8 +357,8 @@ int ObjectCacher::Object::map_read(ObjectExtent &ex,
         missing[cur] = n;
         ldout(oc->cct, 20) << "map_read gap " << *n << dendl;
       }
-      cur += MIN(left, n->length());
-      left -= MIN(left, n->length());
+      cur += std::min(left, n->length());
+      left -= std::min(left, n->length());
       continue;    // more?
     } else {
       ceph_abort();
@@ -491,7 +495,7 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     } else {
       // gap!
       loff_t next = p->first;
-      loff_t glen = MIN(next - cur, max);
+      loff_t glen = std::min(next - cur, max);
       ldout(oc->cct, 10) << "map_write gap " << cur << "~" << glen << dendl;
       if (final) {
         oc->bh_stat_sub(final);
@@ -625,7 +629,8 @@ ObjectCacher::ObjectCacher(CephContext *cct_, string name,
     flush_set_callback_arg(flush_callback_arg),
     last_read_tid(0), flusher_stop(false), flusher_thread(this),finisher(cct),
     stat_clean(0), stat_zero(0), stat_dirty(0), stat_rx(0), stat_tx(0),
-    stat_missing(0), stat_error(0), stat_dirty_waiting(0), reads_outstanding(0)
+    stat_missing(0), stat_error(0), stat_dirty_waiting(0),
+    stat_nr_dirty_waiters(0), reads_outstanding(0)
 {
   perf_start();
   finisher.start();
@@ -1147,14 +1152,8 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	 ++p) {
       BufferHead *bh = p->second;
 
-      if (bh->start() > start+(loff_t)length)
+      if (bh->start() >= start+(loff_t)length)
 	break;
-
-      if (bh->start() < start &&
-	  bh->end() > start+(loff_t)length) {
-	ldout(cct, 20) << "bh_write_commit skipping " << *bh << dendl;
-	continue;
-      }
 
       // make sure bh is tx
       if (!bh->is_tx()) {
@@ -1168,6 +1167,10 @@ void ObjectCacher::bh_write_commit(int64_t poolid, sobject_t oid,
 	ldout(cct, 10) << "bh_write_commit newer tid on " << *bh << dendl;
 	continue;
       }
+
+      // we don't merge tx buffers. tx buffer should be within the range
+      assert(bh->start() >= start);
+      assert(bh->end() <= start+(loff_t)length);
 
       if (r >= 0) {
 	// ok!  mark bh clean and error-free
@@ -1255,7 +1258,11 @@ void ObjectCacher::trim()
 		 << get_stat_clean() << ", objects: max " << max_objects
 		 << " current " << ob_lru.lru_get_size() << dendl;
 
-  while (get_stat_clean() > 0 && (uint64_t) get_stat_clean() > max_size) {
+  uint64_t max_clean_bh = max_size >> BUFFER_MEMORY_WEIGHT;
+  uint64_t nr_clean_bh = bh_lru_rest.lru_get_size() - bh_lru_rest.lru_get_num_pinned();
+  while (get_stat_clean() > 0 &&
+	 ((uint64_t)get_stat_clean() > max_size ||
+	  nr_clean_bh > max_clean_bh)) {
     BufferHead *bh = static_cast<BufferHead*>(bh_lru_rest.lru_expire());
     if (!bh)
       break;
@@ -1266,6 +1273,8 @@ void ObjectCacher::trim()
     Object *ob = bh->ob;
     bh_remove(ob, bh);
     delete bh;
+
+    --nr_clean_bh;
 
     if (ob->complete) {
       ldout(cct, 10) << "trim clearing complete on " << *ob << dendl;
@@ -1454,7 +1463,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  if (success) {
 	    ldout(cct, 10) << "readx missed, waiting on cache to complete "
 			   << waitfor_read.size() << " blocked reads, "
-			   << (MAX(rx_bytes, max_size) - max_size)
+			   << (std::max(rx_bytes, max_size) - max_size)
 			   << " read bytes" << dendl;
 	    waitfor_read.push_back(new C_RetryRead(this, rd, oset, onfinish,
 						   *trace));
@@ -1544,7 +1553,7 @@ int ObjectCacher::_readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	  BufferHead *bh = bh_it->second;
 	  assert(opos == (loff_t)(bh->start() + bhoff));
 
-	  uint64_t len = MIN(f_it->second - foff, bh->length() - bhoff);
+	  uint64_t len = std::min(f_it->second - foff, bh->length() - bhoff);
 	  ldout(cct, 10) << "readx rmap opos " << opos << ": " << *bh << " +"
 			 << bhoff << " frag " << f_it->first << "~"
 			 << f_it->second << " +" << foff << "~" << len
@@ -1782,9 +1791,14 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
   //  - do not wait for bytes other waiters are waiting on.  this means that
   //    threads do not wait for each other.  this effectively allows the cache
   //    size to balloon proportional to the data that is in flight.
+
+  uint64_t max_dirty_bh = max_dirty >> BUFFER_MEMORY_WEIGHT;
   while (get_stat_dirty() + get_stat_tx() > 0 &&
-	 (uint64_t) (get_stat_dirty() + get_stat_tx()) >=
-	 max_dirty + get_stat_dirty_waiting()) {
+	 (((uint64_t)(get_stat_dirty() + get_stat_tx()) >=
+	  max_dirty + get_stat_dirty_waiting()) ||
+	 (dirty_or_tx_bh.size() >=
+	  max_dirty_bh + get_stat_nr_dirty_waiters()))) {
+
     if (blocked == 0) {
       trace->event("start wait for writeback");
     }
@@ -1794,8 +1808,10 @@ void ObjectCacher::maybe_wait_for_writeback(uint64_t len,
 		   << get_stat_dirty_waiting() << dendl;
     flusher_cond.Signal();
     stat_dirty_waiting += len;
+    ++stat_nr_dirty_waiters;
     stat_cond.Wait(lock);
     stat_dirty_waiting -= len;
+    --stat_nr_dirty_waiters;
     ++blocked;
     ldout(cct, 10) << __func__ << " woke up" << dendl;
   }

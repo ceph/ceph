@@ -14,7 +14,7 @@
 #ifndef DAEMON_SERVER_H_
 #define DAEMON_SERVER_H_
 
-#include "PyModules.h"
+#include "PyModuleRegistry.h"
 
 #include <set>
 #include <string>
@@ -59,10 +59,13 @@ protected:
   Finisher  &finisher;
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
-  PyModules &py_modules;
+  PyModuleRegistry &py_modules;
   LogChannelRef clog, audit_clog;
 
-  AuthAuthorizeHandlerRegistry auth_registry;
+  // Authentication methods for cluster peers
+  AuthAuthorizeHandlerRegistry auth_cluster_registry;
+  // Authentication methods for clients
+  AuthAuthorizeHandlerRegistry auth_service_registry;
 
   // Connections for daemons, and clients with service names set
   // (i.e. those MgrClients that are allowed to send MMgrReports)
@@ -109,7 +112,7 @@ public:
                Finisher &finisher_,
 	       DaemonStateIndex &daemon_state_,
 	       ClusterState &cluster_state_,
-	       PyModules &py_modules_,
+	       PyModuleRegistry &py_modules_,
 	       LogChannelRef cl,
 	       LogChannelRef auditcl);
   ~DaemonServer() override;

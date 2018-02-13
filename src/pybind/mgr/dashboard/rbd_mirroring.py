@@ -18,19 +18,23 @@ class DaemonsAndPools(RemoteViewCache):
         for server in self._module.list_servers():
             for service in server['services']:
                 if service['type'] == 'rbd-mirror':
-                    metadata = self._module.get_metadata('rbd-mirror',
-                                                         service['id'])
-                    status = self._module.get_daemon_status('rbd-mirror',
-                                                            service['id'])
+                    id = service['id']
+                    metadata = self._module.get_metadata('rbd-mirror', id)
+                    status = self._module.get_daemon_status('rbd-mirror', id)
                     try:
                         status = json.loads(status['json'])
                     except:
                         status = {}
 
+                    instance_id = metadata['instance_id']
+                    if (id == instance_id):
+                        # new version that supports per-cluster leader elections
+                        id = metadata['id']
+
                     # extract per-daemon service data and health
                     daemon = {
-                        'id': service['id'],
-                        'instance_id': metadata['instance_id'],
+                        'id': id,
+                        'instance_id': instance_id,
                         'version': metadata['ceph_version'],
                         'server_hostname': server['hostname'],
                         'service': service,
@@ -41,7 +45,7 @@ class DaemonsAndPools(RemoteViewCache):
                     daemon = dict(daemon, **self.get_daemon_health(daemon))
                     daemons.append(daemon)
 
-        return sorted(daemons, key=lambda k: k['id'])
+        return sorted(daemons, key=lambda k: k['instance_id'])
 
     def get_daemon_health(self, daemon):
         health = {

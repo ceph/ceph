@@ -10,6 +10,7 @@
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/utime.h"
+#include "librbd/Types.h"
 #include <iosfwd>
 #include <list>
 #include <boost/none.hpp>
@@ -526,7 +527,6 @@ enum MirrorPeerState {
 
 struct MirrorPeerClientMeta {
   typedef std::list<MirrorPeerSyncPoint> SyncPoints;
-  typedef std::map<uint64_t, uint64_t> SnapSeqs;
 
   static const ClientMetaType TYPE = MIRROR_PEER_CLIENT_META_TYPE;
 
@@ -673,11 +673,11 @@ struct Listener {
   virtual void handle_resync() = 0;
 };
 
+WRITE_CLASS_ENCODER(EventEntry);
+WRITE_CLASS_ENCODER(ClientData);
+WRITE_CLASS_ENCODER(TagData);
+
 } // namespace journal
 } // namespace librbd
-
-WRITE_CLASS_ENCODER(librbd::journal::EventEntry);
-WRITE_CLASS_ENCODER(librbd::journal::ClientData);
-WRITE_CLASS_ENCODER(librbd::journal::TagData);
 
 #endif // CEPH_LIBRBD_JOURNAL_TYPES_H

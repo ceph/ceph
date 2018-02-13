@@ -31,7 +31,7 @@ class RGWBucketReshard {
 
   int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
-		 const RGWBucketInfo& new_bucket_info,
+		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
                  bool verbose,
                  ostream *os,

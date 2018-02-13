@@ -67,7 +67,6 @@ public:
 
   void on_change() override;
   void clear_recovery_state() override;
-  void on_flushed() override;
 
   class RPCRecPred : public IsPGRecoverablePredicate {
   public:
@@ -75,7 +74,7 @@ public:
       return !have.empty();
     }
   };
-  IsPGRecoverablePredicate *get_is_recoverable_predicate() override {
+  IsPGRecoverablePredicate *get_is_recoverable_predicate() const override {
     return new RPCRecPred;
   }
 
@@ -87,7 +86,7 @@ public:
       return have.count(whoami);
     }
   };
-  IsPGReadablePredicate *get_is_readable_predicate() override {
+  IsPGReadablePredicate *get_is_readable_predicate() const override {
     return new RPCReadPred(get_parent()->whoami_shard());
   }
 
@@ -384,7 +383,7 @@ private:
     eversion_t pg_roll_forward_to,
     hobject_t new_temp_oid,
     hobject_t discard_temp_oid,
-    const vector<pg_log_entry_t> &log_entries,
+    const bufferlist &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
     ObjectStore::Transaction &op_t,
     pg_shard_t peer,
@@ -426,15 +425,14 @@ private:
 
   void repop_applied(RepModifyRef rm);
   void repop_commit(RepModifyRef rm);
-  bool scrub_supported() override { return true; }
   bool auto_repair_supported() const override { return false; }
 
 
-  void be_deep_scrub(
-    const hobject_t &obj,
-    uint32_t seed,
-    ScrubMap::object &o,
-    ThreadPool::TPHandle &handle) override;
+  int be_deep_scrub(
+    const hobject_t &poid,
+    ScrubMap &map,
+    ScrubMapBuilder &pos,
+    ScrubMap::object &o) override;
   uint64_t be_get_ondisk_size(uint64_t logical_size) override { return logical_size; }
 };
 
