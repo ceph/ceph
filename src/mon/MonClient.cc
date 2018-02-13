@@ -127,19 +127,20 @@ int MonClient::get_monmap_and_config()
 	ceph::features::mon::FEATURE_MIMIC)) {
     ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
 		  << dendl;
+    r = 0;
   } else {
     Mutex::Locker l(monc_lock);
     while (!got_config) {
       ldout(cct,20) << __func__ << " waiting for config" << dendl;
       map_cond.WaitInterval(monc_lock, interval);
     }
-  }
-  if (got_config) {
-    ldout(cct,10) << __func__ << " success" << dendl;
-    r = 0;
-  } else {
-    lderr(cct) << __func__ << " failed to get config" << dendl;
-    r = -EIO;
+    if (got_config) {
+      ldout(cct,10) << __func__ << " success" << dendl;
+      r = 0;
+    } else {
+      lderr(cct) << __func__ << " failed to get config" << dendl;
+      r = -EIO;
+    }
   }
 
 out_shutdown:
