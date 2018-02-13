@@ -333,6 +333,7 @@ private:
   size_t m_update_notifications;
   Cond m_update_cond;
 
+  size_t m_ignore_watch_notifies = 0;
   size_t m_refreshes_in_progress = 0;
   Contexts m_refresh_ctxs;
 
@@ -340,6 +341,9 @@ private:
   ObjectSetPosition m_commit_position;
   Context *m_commit_position_ctx;
   Context *m_commit_position_task_ctx;
+
+  size_t m_flush_commits_in_progress = 0;
+  Contexts m_flush_commit_position_ctxs;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -358,7 +362,7 @@ private:
   void handle_watch_error(int err);
   void handle_notified(int r);
 
-  Context *schedule_laggy_clients_disconnect(Context *on_finish);
+  void schedule_laggy_clients_disconnect(Context *on_finish);
 
   friend std::ostream &operator<<(std::ostream &os,
 				  const JournalMetadata &journal_metadata);
