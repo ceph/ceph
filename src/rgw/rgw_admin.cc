@@ -5199,22 +5199,12 @@ next:
       return EIO;
     }
 
-    bucket_op.set_bucket_id(new_bucket_info.bucket.bucket_id);
-    bucket_op.set_user_id(new_bucket_info.owner);
-    string err;
-    int r = RGWBucketAdminOp::link(store, bucket_op, &err);
-    if (r < 0) {
-      cerr << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-r) << std::endl;
-      return -r;
-    }
-
-    r = rgw_bucket_set_attrs(store, new_bucket_info, attrs, &new_bucket_info.objv_tracker);
-    if (r < 0) {
-      cerr << "failed to reset attrs for bucket " << new_bucket_info.bucket.name <<
-	" instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << err << "; " << cpp_strerror(-ret)
-	   << ")" << std::endl;
-    }
-
+    ret = rgw_link_bucket(store, new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+    if (ret < 0) {
+      lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": "
+			  << cpp_strerror(-ret) << ")" << dendl;
+      return -ret;
+   }
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
