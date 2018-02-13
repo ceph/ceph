@@ -22,12 +22,14 @@ from util.rados import (rados, create_ec_pool,
 log = logging.getLogger(__name__)
 
 class RGWEndpoint:
-    def __init__(self, hostname=None, port=None):
+    def __init__(self, hostname=None, port=None, cert=None):
         self.hostname = hostname
         self.port = port
+        self.cert = cert
 
     def url(self):
-        return 'http://{hostname}:{port}/'.format(hostname=self.hostname, port=self.port)
+        proto = 'https' if self.cert else 'http'
+        return '{proto}://{hostname}:{port}/'.format(proto=proto, hostname=self.hostname, port=self.port)
 
 @contextlib.contextmanager
 def start_rgw(ctx, config, clients):
@@ -60,12 +62,21 @@ def start_rgw(ctx, config, clients):
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
         endpoint = ctx.rgw.role_endpoints[client]
-        frontends = \
-            '{frontend} port={port}'.format(frontend=ctx.rgw.frontend,
-                                            port=endpoint.port)
+        frontends = ctx.rgw.frontend
         frontend_prefix = client_config.get('frontend_prefix', None)
         if frontend_prefix:
             frontends += ' prefix={pfx}'.format(pfx=frontend_prefix)
+
+        if endpoint.cert:
+            # add the ssl certificate path
+            frontends += ' ssl_certificate={}'.format(endpoint.cert.certificate)
+            if ctx.rgw.frontend == 'civetweb':
+                frontends += ' port={}s'.format(endpoint.port)
+            else:
+                frontends += ' ssl_port={}'.format(endpoint.port)
+        else:
+            frontends += ' port={}'.format(endpoint.port)
+
         rgw_cmd.extend([
             '--rgw-frontends', frontends,
             '-n', client_with_id,
@@ -148,7 +159,7 @@ def start_rgw(ctx, config, clients):
                     ],
                 )
 
-def assign_endpoints(ctx, config):
+def assign_endpoints(ctx, config, default_cert):
     """
     Assign port numbers starting with port 7280.
     """
@@ -158,7 +169,19 @@ def assign_endpoints(ctx, config):
     for role, client_config in config.iteritems():
         client_config = client_config or {}
         remote = get_remote_for_role(ctx, role)
-        role_endpoints[role] = RGWEndpoint(remote.hostname, port)
+
+        cert = client_config.get('ssl certificate', default_cert)
+        if cert:
+            # find the certificate created by the ssl task
+            if not hasattr(ctx, 'ssl_certificates'):
+                raise ConfigError('rgw: no ssl task found for option "ssl certificate"')
+            ssl_certificate = ctx.ssl_certificates.get(cert, None)
+            if not ssl_certificate:
+                raise ConfigError('rgw: missing ssl certificate "{}"'.format(cert))
+        else:
+            ssl_certificate = None
+
+        role_endpoints[role] = RGWEndpoint(remote.hostname, port, ssl_certificate)
         port += 1
 
     return role_endpoints
@@ -253,12 +276,13 @@ def task(ctx, config):
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
     ctx.rgw.compression_type = config.pop('compression type', None)
+    default_cert = config.pop('ssl certificate', None)
     ctx.rgw.config = config
 
     log.debug("config is {}".format(config))
     log.debug("client list is {}".format(clients))
 
-    ctx.rgw.role_endpoints = assign_endpoints(ctx, config)
+    ctx.rgw.role_endpoints = assign_endpoints(ctx, config, default_cert)
 
     subtasks = [
         lambda: create_pools(ctx=ctx, clients=clients),
