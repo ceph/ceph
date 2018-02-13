@@ -158,6 +158,7 @@ public:
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::list<JournalMetadataListener*> Listeners;
+  typedef std::list<Context*> Contexts;
 
   struct CommitEntry {
     uint64_t object_num;
@@ -283,11 +284,9 @@ private:
     uint64_t minimum_set;
     uint64_t active_set;
     RegisteredClients registered_clients;
-    Context *on_finish;
 
-    C_Refresh(JournalMetadata *_journal_metadata, Context *_on_finish)
-      : journal_metadata(_journal_metadata), minimum_set(0), active_set(0),
-        on_finish(_on_finish) {
+    C_Refresh(JournalMetadata *_journal_metadata)
+      : journal_metadata(_journal_metadata), minimum_set(0), active_set(0) {
       Mutex::Locker locker(journal_metadata->m_lock);
       journal_metadata->m_async_op_tracker.start_op();
     }
@@ -333,6 +332,9 @@ private:
 
   size_t m_update_notifications;
   Cond m_update_cond;
+
+  size_t m_refreshes_in_progress = 0;
+  Contexts m_refresh_ctxs;
 
   uint64_t m_commit_position_tid = 0;
   ObjectSetPosition m_commit_position;
