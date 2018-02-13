@@ -6,6 +6,6 @@ tasks:
 upgrade_workload:
   sequential:
   - install.upgrade:
-      exclude_packages: ['ceph-test', 'ceph-test-dbg','libcephfs1']
+      exclude_packages: ['libcephfs1']
       client.0:
   - print: "**** done install.upgrade to -x on client.0"
