@@ -4710,7 +4710,7 @@ std::vector<Option> get_global_options() {
     .set_description("Filesystem path to the ceph-mgr data directory, used to "
                      "contain keyring."),
 
-    Option("mgr_tick_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mgr_tick_period", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(2)
     .add_service("mgr")
     .set_description("Period in seconds of beacon messages to monitor"),
@@ -4773,7 +4773,7 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds between monitor-to-manager "
                      "health/status updates"),
 
-    Option("mon_mgr_beacon_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mon_mgr_beacon_grace", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
     .set_default(30)
     .add_service("mon")
     .set_description("Period in seconds from last beacon to monitor marking "
