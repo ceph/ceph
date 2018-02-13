@@ -6054,15 +6054,15 @@ static std::vector<Option> get_rbd_options() {
                      "flush is called, to be sure the user of librbd will send "
                      "flushes so that writeback is safe"),
 
-    Option("rbd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32_M)
     .set_description("cache size in bytes"),
 
-    Option("rbd_cache_max_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_max_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(24_M)
     .set_description("dirty limit in bytes - set to 0 for write-through caching"),
 
-    Option("rbd_cache_target_dirty", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_cache_target_dirty", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16_M)
     .set_description("target dirty limit in bytes"),
 
@@ -6099,7 +6099,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("localize parent requests to closest OSD"),
 
-    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_UINT,
+    Option("rbd_sparse_read_threshold_bytes", Option::TYPE_SIZE,
            Option::LEVEL_ADVANCED)
     .set_default(64_K)
     .set_description("threshold for issuing a sparse-read")
@@ -6115,11 +6115,11 @@ static std::vector<Option> get_rbd_options() {
     .set_default(10)
     .set_description("number of sequential requests necessary to trigger readahead"),
 
-    Option("rbd_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_K)
     .set_description("set to 0 to disable readahead"),
 
-    Option("rbd_readahead_disable_after_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_readahead_disable_after_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(50_M)
     .set_description("how many bytes are read in total before readahead is disabled"),
 
@@ -6232,7 +6232,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default(0)
     .set_description("maximum number of pending commits per journal object"),
 
-    Option("rbd_journal_object_flush_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_object_flush_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of pending bytes per journal object"),
 
@@ -6244,7 +6244,7 @@ static std::vector<Option> get_rbd_options() {
     .set_default("")
     .set_description("pool for journal objects"),
 
-    Option("rbd_journal_max_payload_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_journal_max_payload_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(16384)
     .set_description("maximum journal payload size before splitting"),
 
@@ -6268,7 +6268,7 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(5)
     .set_description("maximum age (in seconds) between successive journal polls"),
 
-    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(32768)
     .set_description("maximum bytes to read from each journal data object per fetch"),
 
