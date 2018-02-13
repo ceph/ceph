@@ -98,8 +98,10 @@ int MonClient::get_monmap_and_config()
   ldout(cct, 10) << __func__ << dendl;
   assert(!messenger);
 
+  int tries = 10;
+
   utime_t interval;
-  interval.set_from_double(cct->_conf->mon_client_hunt_interval * 10);
+  interval.set_from_double(cct->_conf->mon_client_hunt_interval);
 
   cct->init_crypto();
 
@@ -115,32 +117,41 @@ int MonClient::get_monmap_and_config()
   messenger->add_dispatcher_head(this);
   messenger->start();
 
-  r = init();
-  if (r < 0) {
-    goto out_msgr;
-  }
-  r = authenticate(cct->_conf->client_mount_timeout);
-  if (r < 0) {
-    goto out_shutdown;
-  }
-  if (!monmap.persistent_features.contains_all(
-	ceph::features::mon::FEATURE_MIMIC)) {
-    ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
-		  << dendl;
-    r = 0;
-  } else {
-    Mutex::Locker l(monc_lock);
-    while (!got_config) {
-      ldout(cct,20) << __func__ << " waiting for config" << dendl;
-      map_cond.WaitInterval(monc_lock, interval);
+  while (tries-- > 0) {
+    r = init();
+    if (r < 0) {
+      goto out_msgr;
     }
-    if (got_config) {
-      ldout(cct,10) << __func__ << " success" << dendl;
+    r = authenticate(cct->_conf->client_mount_timeout);
+    if (r == -ETIMEDOUT) {
+      shutdown();
+      continue;
+    }
+    if (r < 0) {
+      goto out_shutdown;
+    }
+    if (!monmap.persistent_features.contains_all(
+	  ceph::features::mon::FEATURE_MIMIC)) {
+      ldout(cct,10) << __func__ << " pre-mimic monitor, no config to fetch"
+		    << dendl;
       r = 0;
-    } else {
-      lderr(cct) << __func__ << " failed to get config" << dendl;
-      r = -EIO;
+      break;
     }
+    {
+      Mutex::Locker l(monc_lock);
+      while (!got_config && r == 0) {
+	ldout(cct,20) << __func__ << " waiting for config" << dendl;
+	r = map_cond.WaitInterval(monc_lock, interval);
+      }
+      if (got_config) {
+	ldout(cct,10) << __func__ << " success" << dendl;
+	r = 0;
+	break;
+      }
+    }
+    lderr(cct) << __func__ << " failed to get config" << dendl;
+    shutdown();
+    continue;
   }
 
 out_shutdown:
