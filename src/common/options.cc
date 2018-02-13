@@ -6456,7 +6456,7 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description("maximum number of events in an MDS journal segment"),
 
-    Option("mds_log_segment_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("mds_log_segment_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("size in bytes of each MDS log segment"),
 
@@ -6817,7 +6817,7 @@ std::vector<Option> get_mds_client_options() {
     .set_default(128*1024)
     .set_description(""),
 
-    Option("client_readahead_max_bytes", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("client_readahead_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description(""),
 
