@@ -8696,6 +8696,8 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
     return -EBADF;
 #endif
   bufferlist bl;
+  /* We can't return bytes written larger than INT_MAX, clamp size to that */
+  size = std::min(size, (loff_t)INT_MAX);
   int r = _read(f, offset, size, &bl);
   ldout(cct, 3) << "read(" << fd << ", " << (void*)buf << ", " << size << ", " << offset << ") = " << r << dendl;
   if (r >= 0) {
@@ -8712,7 +8714,7 @@ int Client::preadv(int fd, const struct iovec *iov, int iovcnt, loff_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, false);
 }
 
-int Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
+int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
 {
   const md_config_t *conf = cct->_conf;
   Inode *in = f->inode.get();
@@ -9015,7 +9017,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   if (fh->flags & O_PATH)
     return -EBADF;
 #endif
-  int r = _write(fh, offset, size, buf, NULL, 0);
+  /* We can't return bytes written larger than INT_MAX, clamp size to that */
+  size = std::min(size, (loff_t)INT_MAX);
+  int r = _write(fh, offset, size, buf, NULL, false);
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
   return r;
 }
@@ -9027,18 +9031,10 @@ int Client::pwritev(int fd, const struct iovec *iov, int iovcnt, int64_t offset)
   return _preadv_pwritev(fd, iov, iovcnt, offset, true);
 }
 
-int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
+				   unsigned iovcnt, int64_t offset, bool write,
+				   bool clamp_to_int)
 {
-    Mutex::Locker lock(client_lock);
-    tout(cct) << fd << std::endl;
-    tout(cct) << offset << std::endl;
-
-    if (unmounting)
-     return -ENOTCONN;
-
-    Fh *fh = get_filehandle(fd);
-    if (!fh)
-        return -EBADF;
 #if defined(__linux__) && defined(O_PATH)
     if (fh->flags & O_PATH)
         return -EBADF;
@@ -9047,14 +9043,23 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     for (unsigned i = 0; i < iovcnt; i++) {
         totallen += iov[i].iov_len;
     }
+
+    /*
+     * Some of the API functions take 64-bit size values, but only return
+     * 32-bit signed integers. Clamp the I/O sizes in those functions so that
+     * we don't do I/Os larger than the values we can return.
+     */
+    if (clamp_to_int) {
+      totallen = std::min(totallen, (loff_t)INT_MAX);
+    }
     if (write) {
-        int w = _write(fh, offset, totallen, NULL, iov, iovcnt);
-        ldout(cct, 3) << "pwritev(" << fd << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
+        int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt);
+        ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
         return w;
     } else {
         bufferlist bl;
-        int r = _read(fh, offset, totallen, &bl);
-        ldout(cct, 3) << "preadv(" << fd << ", " <<  offset << ") = " << r << dendl;
+        int64_t r = _read(fh, offset, totallen, &bl);
+        ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
         if (r <= 0)
           return r;
 
@@ -9077,8 +9082,23 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
     }
 }
 
-int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
-                  const struct iovec *iov, int iovcnt)
+int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, int64_t offset, bool write)
+{
+    Mutex::Locker lock(client_lock);
+    tout(cct) << fd << std::endl;
+    tout(cct) << offset << std::endl;
+
+    if (unmounting)
+     return -ENOTCONN;
+
+    Fh *fh = get_filehandle(fd);
+    if (!fh)
+        return -EBADF;
+    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true);
+}
+
+int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
+	                const struct iovec *iov, int iovcnt)
 {
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
@@ -9254,7 +9274,7 @@ success:
   logger->tinc(l_c_wrlat, lat);
 
   totalwritten = size;
-  r = (int)totalwritten;
+  r = (int64_t)totalwritten;
 
   // extend file?
   if (totalwritten + offset > in->size) {
@@ -12644,6 +12664,8 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   if (unmounting)
     return -ENOTCONN;
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
   return _read(fh, off, len, bl);
 }
 
@@ -12784,10 +12806,28 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   if (unmounting)
     return -ENOTCONN;
 
+  /* We can't return bytes written larger than INT_MAX, clamp len to that */
+  len = std::min(len, (loff_t)INT_MAX);
   int r = _write(fh, off, len, data, NULL, 0);
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
   return r;
+}
+
+int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, false);
+}
+
+int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
+{
+  Mutex::Locker lock(client_lock);
+  if (unmounting)
+   return -ENOTCONN;
+  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, false);
 }
 
 int Client::ll_flush(Fh *fh)
