@@ -282,6 +282,7 @@ Requires:      python%{_python_buildid}-setuptools
 Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
+Conflicts:     ceph-test <= 12.2.2-9
 %if 0%{?suse_version}
 Recommends:    ntp-daemon
 %endif
@@ -340,6 +341,7 @@ Requires:      python%{_python_buildid}-flask
 %if 0%{?suse_version}
 Requires:      python%{_python_buildid}-Flask
 %endif
+Conflicts:     ceph-test <= 12.2.2-9
 %description mon
 ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
@@ -462,6 +464,7 @@ Requires:	gptfdisk
 %endif
 Requires:	parted
 Requires:	lvm2
+Conflicts:	ceph-test <= 12.2.2-9
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
