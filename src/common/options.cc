@@ -1914,7 +1914,7 @@ std::vector<Option> get_global_options() {
     .set_default(-1)
     .set_description(""),
 
-    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_K)
     .set_description("the amount of data (in bytes) in a data chunk, per stripe")
     .add_service("mon"),
@@ -2036,7 +2036,7 @@ std::vector<Option> get_global_options() {
     .set_default(25)
     .set_description(""),
 
-    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_tier_promote_max_bytes_sec", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5_M)
     .set_description(""),
 
@@ -2939,7 +2939,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("This prevents a deep scrub 'stampede' by randomly varying the scrub intervals so that they are soon uniformly distributed over the week")
     .add_see_also("osd_deep_scrub_interval"),
 
-    Option("osd_deep_scrub_stride", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_deep_scrub_stride", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_K)
     .set_description("Number of bytes to read from an object at a time during deep scrub"),
 
@@ -2957,7 +2957,7 @@ std::vector<Option> get_global_options() {
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
 
-    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_deep_scrub_large_omap_object_value_sum_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description("Warn when we encounter an object with more omap key bytes than this")
     .add_service("osd")
@@ -3441,7 +3441,7 @@ std::vector<Option> get_global_options() {
     .set_default(131072)
     .set_description(""),
 
-    Option("osd_max_omap_bytes_per_request", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_max_omap_bytes_per_request", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
@@ -3486,7 +3486,7 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
-    Option("memstore_device_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("memstore_device_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_G)
     .set_description(""),
 
@@ -3843,15 +3843,15 @@ std::vector<Option> get_global_options() {
     .set_description("Compression ratio required to store compressed data")
     .set_long_description("If we compress data and get less than this we discard the result and store the original uncompressed data."),
 
-    Option("bluestore_extent_map_shard_max_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_max_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(1200)
     .set_description("Max size (bytes) for a single extent map shard before splitting"),
 
-    Option("bluestore_extent_map_shard_target_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_target_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(500)
     .set_description("Target size (bytes) for a single extent map shard"),
 
-    Option("bluestore_extent_map_shard_min_size", Option::TYPE_UINT, Option::LEVEL_DEV)
+    Option("bluestore_extent_map_shard_min_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
     .set_default(150)
     .set_description("Min size (bytes) for a single extent map shard before merging"),
 
@@ -3983,17 +3983,17 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Try to submit metadata transaction to rocksdb in queuing thread context"),
 
-    Option("bluestore_throttle_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes in flight before we throttle IO submission"),
 
-    Option("bluestore_throttle_deferred_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_deferred_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(128_M)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Maximum bytes for deferred writes before we throttle IO submission"),
 
-    Option("bluestore_throttle_cost_per_io", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("bluestore_throttle_cost_per_io", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_flag(Option::FLAG_RUNTIME)
     .set_description("Overhead added to transaction cost (in bytes) for each IO"),
@@ -4113,7 +4113,7 @@ std::vector<Option> get_global_options() {
     .set_default(512)
     .set_description(""),
 
-    Option("kstore_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("kstore_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(64_M)
     .set_description(""),
 
@@ -4172,11 +4172,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enabling throttling of operations to backing file system"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(btrfs)"),
 
-    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_btrfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (btrfs)"),
 
@@ -4192,11 +4192,11 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .set_description("Start flushing (fsyncing) when this many distinct inodes have been modified (btrfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_start_flusher", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(41943040)
     .set_description("Start flushing (fsyncing) when this many bytes are written(xfs)"),
 
-    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_wbthrottle_xfs_bytes_hard_limit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(419430400)
     .set_description("Block writes when this many bytes haven't been flushed (fsynced) (xfs)"),
 
@@ -4372,7 +4372,7 @@ std::vector<Option> get_global_options() {
     .set_default(50)
     .set_description("Max IO operations in flight"),
 
-    Option("filestore_queue_max_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("filestore_queue_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(100_M)
     .set_description("Max (written) bytes in flight"),
 
