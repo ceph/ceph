@@ -26,13 +26,10 @@ class SubsystemMap {
   // lines. Access can be slow.
   std::vector<ceph_subsys_item_t> m_subsys;
 
-  // TODO(rzarzynski): knock this out with constexpr.
-  unsigned m_max_name_len = 0;
-
   friend class Log;
 
 public:
-  SubsystemMap() : m_max_name_len(0) {
+  SubsystemMap() {
     constexpr auto s = ceph_subsys_get_as_array();
     m_subsys.reserve(s.size());
 
@@ -40,18 +37,15 @@ public:
     for (const ceph_subsys_item_t& item : s) {
       m_subsys.emplace_back(item);
       m_gather_levels[i++] = std::max(item.log_level, item.gather_level);
-
-      m_max_name_len = std::max(m_max_name_len,
-        static_cast<unsigned>(strlen(item.name)));
     }
   }
 
-  constexpr static size_t get_num() {
+  constexpr static std::size_t get_num() {
     return ceph_subsys_get_num();
   }
 
-  int get_max_subsys_len() const {
-    return m_max_name_len;
+  constexpr static std::size_t get_max_subsys_len() {
+    return ceph_subsys_max_name_length();
   }
 
   int get_log_level(unsigned subsys) const {
