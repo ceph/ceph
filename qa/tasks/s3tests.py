@@ -367,7 +367,7 @@ def task(ctx, config):
                 'DEFAULT':
                     {
                     'port'      : endpoint.port,
-                    'is_secure' : 'no',
+                    'is_secure' : 'yes' if endpoint.cert else 'no',
                     },
                 'fixtures' : {},
                 's3 main'  : {},
