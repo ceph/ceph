@@ -1069,9 +1069,9 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
     ASSIGN_OPTION(cache_writethrough_until_flush, bool);
-    ASSIGN_OPTION(cache_size, int64_t);
-    ASSIGN_OPTION(cache_max_dirty, int64_t);
-    ASSIGN_OPTION(cache_target_dirty, int64_t);
+    ASSIGN_OPTION(cache_size, Option::size_t);
+    ASSIGN_OPTION(cache_max_dirty, Option::size_t);
+    ASSIGN_OPTION(cache_target_dirty, Option::size_t);
     ASSIGN_OPTION(cache_max_dirty_age, double);
     ASSIGN_OPTION(cache_max_dirty_object, int64_t);
     ASSIGN_OPTION(cache_block_writes_upfront, bool);
@@ -1080,10 +1080,10 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(localize_snap_reads, bool);
     ASSIGN_OPTION(balance_parent_reads, bool);
     ASSIGN_OPTION(localize_parent_reads, bool);
-    ASSIGN_OPTION(sparse_read_threshold_bytes, uint64_t);
+    ASSIGN_OPTION(sparse_read_threshold_bytes, Option::size_t);
     ASSIGN_OPTION(readahead_trigger_requests, int64_t);
-    ASSIGN_OPTION(readahead_max_bytes, int64_t);
-    ASSIGN_OPTION(readahead_disable_after_bytes, int64_t);
+    ASSIGN_OPTION(readahead_max_bytes, Option::size_t);
+    ASSIGN_OPTION(readahead_disable_after_bytes, Option::size_t);
     ASSIGN_OPTION(clone_copy_on_read, bool);
     ASSIGN_OPTION(blacklist_on_break_lock, bool);
     ASSIGN_OPTION(blacklist_expire_seconds, int64_t);
@@ -1093,9 +1093,9 @@ struct C_InvalidateCache : public Context {
     ASSIGN_OPTION(journal_splay_width, uint64_t);
     ASSIGN_OPTION(journal_commit_age, double);
     ASSIGN_OPTION(journal_object_flush_interval, int64_t);
-    ASSIGN_OPTION(journal_object_flush_bytes, int64_t);
+    ASSIGN_OPTION(journal_object_flush_bytes, Option::size_t);
     ASSIGN_OPTION(journal_object_flush_age, double);
-    ASSIGN_OPTION(journal_max_payload_bytes, uint64_t);
+    ASSIGN_OPTION(journal_max_payload_bytes, Option::size_t);
     ASSIGN_OPTION(journal_max_concurrent_object_sets, int64_t);
     ASSIGN_OPTION(mirroring_resync_after_disconnect, bool);
     ASSIGN_OPTION(mirroring_delete_delay, uint64_t);
