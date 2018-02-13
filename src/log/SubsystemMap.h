@@ -71,14 +71,21 @@ public:
   bool should_gather() {
     static_assert(SubV < get_num(), "wrong subsystem ID");
     static_assert(LvlV >= -1 && LvlV <= 200);
-    return LvlV <= m_gather_levels[SubV];
+
+    if constexpr (LvlV <= 0) {
+      // handle the -1 and 0 levels entirely at compile-time.
+      // Such debugs are intended be gathered regardless even
+      // of the user configuration.
+      return true;
+    } else {
+      return LvlV <= static_cast<int>(m_gather_levels[SubV]);
+    }
   }
   bool should_gather(const unsigned sub, int level) {
     assert(sub < m_subsys.size());
-    return level <= m_gather_levels[sub];
+    return level <= static_cast<int>(m_gather_levels[sub]);
   }
 
-  // TODO(rzarzynski): verify the -1 case
   void set_log_level(unsigned subsys, uint8_t log)
   {
     assert(subsys < m_subsys.size());
