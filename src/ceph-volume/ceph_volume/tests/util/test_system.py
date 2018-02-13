@@ -101,6 +101,18 @@ class TestDeviceIsMounted(object):
     def test_is_mounted_at_destination(self, fake_proc):
         assert system.device_is_mounted('/dev/sda1', destination='/far/lib/ceph/osd/ceph-7') is False
 
+    def test_is_realpath_dev_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(system.os.path, 'realpath', lambda x: '/dev/sda1' if 'foo' in x else x)
+        result = system.device_is_mounted('/dev/maper/foo', destination='/far/lib/ceph/osd/ceph-0')
+        assert result is True
+
+    def test_is_realpath_path_mounted_at_destination(self, fake_proc, monkeypatch):
+        monkeypatch.setattr(
+            system.os.path, 'realpath',
+            lambda x: '/far/lib/ceph/osd/ceph-0' if 'symlink' in x else x)
+        result = system.device_is_mounted('/dev/sda1', destination='/symlink/lib/ceph/osd/ceph-0')
+        assert result is True
+
 
 class TestGetMounts(object):
 
