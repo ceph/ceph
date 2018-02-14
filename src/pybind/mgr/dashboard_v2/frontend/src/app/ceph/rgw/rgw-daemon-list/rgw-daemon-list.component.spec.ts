@@ -2,7 +2,7 @@ import { HttpClientModule } from '@angular/common/http';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ComponentsModule } from '../../../shared/components/components.module';
+import { DataTableModule } from '../../../shared/datatable/datatable.module';
 import { RgwDaemonService } from '../services/rgw-daemon.service';
 import { RgwDaemonListComponent } from './rgw-daemon-list.component';
 
@@ -14,7 +14,7 @@ describe('RgwDaemonListComponent', () => {
     TestBed.configureTestingModule({
       declarations: [ RgwDaemonListComponent ],
       imports: [
-        ComponentsModule,
+        DataTableModule,
         HttpClientTestingModule,
         HttpClientModule
       ],

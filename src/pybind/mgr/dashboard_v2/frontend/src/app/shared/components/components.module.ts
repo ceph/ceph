@@ -1,21 +1,20 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule } from 'ngx-bootstrap';
-import { DataTableModule } from './datatable/datatable.module';
 
 import { ViewCacheComponent } from './view-cache/view-cache.component';
 
 @NgModule({
   imports: [
     CommonModule,
-    DataTableModule,
-    AlertModule.forRoot()
+    AlertModule.forRoot(),
+    ChartsModule
   ],
   declarations: [ViewCacheComponent],
   providers: [],
   exports: [
-    DataTableModule,
     ViewCacheComponent
   ]
 })
