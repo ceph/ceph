@@ -3,7 +3,7 @@
        *ngIf="toolHeader">
     <!-- actions -->
     <div class="oadatatableactions">
-        <ng-content select="table-actions"></ng-content>
+      <ng-content select="table-actions"></ng-content>
     </div>
     <!-- end actions -->
 
@@ -68,9 +68,15 @@
   </ngx-datatable>
 </div>
 <ng-template cdTableDetails></ng-template>
+
 <!-- cell templates that can be accessed from outside -->
 <ng-template #tableCellBoldTpl
              let-row="row"
              let-value="value">
   <strong>{{ value }}</strong>
+</ng-template>
+
+<ng-template #sparklineTpl
+             let-value="value">
+  <cd-sparkline [data]="value"></cd-sparkline>
 </ng-template>
