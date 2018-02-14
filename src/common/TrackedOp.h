@@ -98,104 +98,6 @@ public:
   }
 };
 
-struct ShardedTrackingData;
-class OpTracker {
-  friend class OpHistory;
-  std::atomic<int64_t> seq = { 0 };
-  vector<ShardedTrackingData*> sharded_in_flight_list;
-  OpHistory history;
-  uint32_t num_optracker_shards;
-  float complaint_time;
-  int log_threshold;
-  std::atomic<bool> tracking_enabled;
-  RWLock       lock;
-
-public:
-  CephContext *cct;
-  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
-      
-  void set_complaint_and_threshold(float time, int threshold) {
-    complaint_time = time;
-    log_threshold = threshold;
-  }
-  void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
-    history.set_size_and_duration(new_size, new_duration);
-  }
-  void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
-    history.set_slow_op_size_and_threshold(new_size, new_threshold);
-  }
-  bool is_tracking() const {
-    return tracking_enabled;
-  }
-  void set_tracking(bool enable) {
-    tracking_enabled = enable;
-  }
-  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
-  bool dump_historic_ops(Formatter *f, bool by_duration = false, set<string> filters = {""});
-  bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
-  bool register_inflight_op(TrackedOp *i);
-  void unregister_inflight_op(TrackedOp *i);
-
-  void get_age_ms_histogram(pow2_hist_t *h);
-
-  /**
-   * walk through ops in flight
-   *
-   * @param oldest_sec the amount of time since the oldest op was initiated
-   * @param check a function consuming tracked ops, the function returns
-   *              false if it don't want to be fed with more ops
-   * @return True if there are any Ops to warn on, false otherwise
-   */
-  bool visit_ops_in_flight(utime_t* oldest_secs,
-			   std::function<bool(TrackedOp&)>&& visit);
-  /**
-   * walk through slow ops in flight
-   *
-   * @param[out] oldest_sec the amount of time since the oldest op was initiated
-   * @param[out] num_slow_ops total number of slow ops
-   * @param on_warn a function consuming tracked ops, the function returns
-   *                false if it don't want to be fed with more ops
-   * @return True if there are any Ops to warn on, false otherwise
-   */
-  bool with_slow_ops_in_flight(utime_t* oldest_secs,
-			       int* num_slow_ops,
-			       std::function<void(TrackedOp&)>&& on_warn);
-  /**
-   * Look for Ops which are too old, and insert warning
-   * strings for each Op that is too old.
-   *
-   * @param summary[out] a string summarizing slow Ops.
-   * @param warning_strings[out] A vector<string> reference which is filled
-   * with a warning string for each old Op.
-   * @param slow[out] total number of slow ops
-   * @return True if there are any Ops to warn on, false otherwise.
-   */
-  bool check_ops_in_flight(std::string* summary,
-			   std::vector<string> &warning_strings,
-			   int* slow = nullptr);
-
-  void on_shutdown() {
-    history.on_shutdown();
-  }
-  ~OpTracker();
-
-  template <typename T, typename U>
-  typename T::Ref create_request(U params)
-  {
-    typename T::Ref retval(new T(params, this));
-    retval->tracking_start();
-
-    if (is_tracking()) {
-      retval->mark_event("header_read", params->get_recv_stamp());
-      retval->mark_event("throttled", params->get_throttle_stamp());
-      retval->mark_event("all_read", params->get_recv_complete_stamp());
-      retval->mark_event("dispatched", params->get_dispatch_stamp());
-    }
-
-    return retval;
-  }
-};
-
 
 class TrackedOp : public boost::intrusive::list_base_hook<> {
 private:
@@ -385,5 +287,103 @@ public:
   }
 };
 
+
+struct ShardedTrackingData;
+class OpTracker {
+  friend class OpHistory;
+  std::atomic<int64_t> seq = { 0 };
+  vector<ShardedTrackingData*> sharded_in_flight_list;
+  OpHistory history;
+  uint32_t num_optracker_shards;
+  float complaint_time;
+  int log_threshold;
+  std::atomic<bool> tracking_enabled;
+  RWLock       lock;
+
+public:
+  CephContext *cct;
+  OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
+      
+  void set_complaint_and_threshold(float time, int threshold) {
+    complaint_time = time;
+    log_threshold = threshold;
+  }
+  void set_history_size_and_duration(uint32_t new_size, uint32_t new_duration) {
+    history.set_size_and_duration(new_size, new_duration);
+  }
+  void set_history_slow_op_size_and_threshold(uint32_t new_size, uint32_t new_threshold) {
+    history.set_slow_op_size_and_threshold(new_size, new_threshold);
+  }
+  bool is_tracking() const {
+    return tracking_enabled;
+  }
+  void set_tracking(bool enable) {
+    tracking_enabled = enable;
+  }
+  bool dump_ops_in_flight(Formatter *f, bool print_only_blocked = false, set<string> filters = {""});
+  bool dump_historic_ops(Formatter *f, bool by_duration = false, set<string> filters = {""});
+  bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
+  bool register_inflight_op(TrackedOp *i);
+  void unregister_inflight_op(TrackedOp *i);
+
+  void get_age_ms_histogram(pow2_hist_t *h);
+
+  /**
+   * walk through ops in flight
+   *
+   * @param oldest_sec the amount of time since the oldest op was initiated
+   * @param check a function consuming tracked ops, the function returns
+   *              false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool visit_ops_in_flight(utime_t* oldest_secs,
+			   std::function<bool(TrackedOp&)>&& visit);
+  /**
+   * walk through slow ops in flight
+   *
+   * @param[out] oldest_sec the amount of time since the oldest op was initiated
+   * @param[out] num_slow_ops total number of slow ops
+   * @param on_warn a function consuming tracked ops, the function returns
+   *                false if it don't want to be fed with more ops
+   * @return True if there are any Ops to warn on, false otherwise
+   */
+  bool with_slow_ops_in_flight(utime_t* oldest_secs,
+			       int* num_slow_ops,
+			       std::function<void(TrackedOp&)>&& on_warn);
+  /**
+   * Look for Ops which are too old, and insert warning
+   * strings for each Op that is too old.
+   *
+   * @param summary[out] a string summarizing slow Ops.
+   * @param warning_strings[out] A vector<string> reference which is filled
+   * with a warning string for each old Op.
+   * @param slow[out] total number of slow ops
+   * @return True if there are any Ops to warn on, false otherwise.
+   */
+  bool check_ops_in_flight(std::string* summary,
+			   std::vector<string> &warning_strings,
+			   int* slow = nullptr);
+
+  void on_shutdown() {
+    history.on_shutdown();
+  }
+  ~OpTracker();
+
+  template <typename T, typename U>
+  typename T::Ref create_request(U params)
+  {
+    typename T::Ref retval(new T(params, this));
+    retval->tracking_start();
+
+    if (is_tracking()) {
+      retval->mark_event("header_read", params->get_recv_stamp());
+      retval->mark_event("throttled", params->get_throttle_stamp());
+      retval->mark_event("all_read", params->get_recv_complete_stamp());
+      retval->mark_event("dispatched", params->get_dispatch_stamp());
+    }
+
+    return retval;
+  }
+};
 
 #endif
