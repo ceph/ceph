@@ -149,7 +149,8 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   num_optracker_shards(num_shards),
   complaint_time(0), log_threshold(0),
   tracking_enabled(tracking),
-  lock("OpTracker::lock"), cct(cct_) {
+  lock("OpTracker::lock", false /* track_lock */),
+  cct(cct_) {
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
       char lock_name[32] = {0};
       snprintf(lock_name, sizeof(lock_name), "%s:%" PRIu32, "OpTracker::ShardedLock", i);
