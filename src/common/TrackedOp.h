@@ -287,7 +287,6 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
-  RWLock       lock;
 
 public:
   CephContext *cct;
@@ -314,7 +313,9 @@ public:
   bool dump_historic_slow_ops(Formatter *f, set<string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
   void unregister_inflight_op(TrackedOp *i);
-  void record_history_op(TrackedOpRef&& i);
+  void record_history_op(TrackedOpRef&& i) {
+    history.insert(ceph_clock_now(), std::move(i));
+  }
 
   void get_age_ms_histogram(pow2_hist_t *h);
 
