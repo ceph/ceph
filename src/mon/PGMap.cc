@@ -877,7 +877,7 @@ void PGMapDigest::dump_object_stat_sum(
   if (f) {
     f->dump_int("kb_used", shift_round_up(sum.num_bytes, 10));
     f->dump_int("bytes_used", sum.num_bytes);
-    f->dump_format_unquoted("percent_used", "%.2f", (used*100));
+    f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail / raw_used_rate);
     f->dump_int("objects", sum.num_objects);
     if (verbose) {
