@@ -178,7 +178,6 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   complaint_time(0),
   log_threshold(0),
   tracking_enabled(tracking),
-  lock("OpTracker::lock", false /* track_lock */),
   cct(cct_) {
 }
 
@@ -193,7 +192,6 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> fi
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   if (by_duration) {
     history.dump_ops_by_duration(now, f, filters);
@@ -232,7 +230,6 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
   utime_t now = ceph_clock_now();
   history.dump_slow_ops(now, f, filters);
   return true;
@@ -243,7 +240,6 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -276,7 +272,6 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
   uint64_t current_seq = ++seq;
   uint32_t shard_index = current_seq % sharded_in_flight_list.size();
   ShardedTrackingData& sdata = sharded_in_flight_list[shard_index];
@@ -305,9 +300,8 @@ void OpTracker::unregister_inflight_op(TrackedOp *i)
   if (!tracking_enabled)
     delete i;
   else {
-    RWLock::RLocker l(lock);
     i->state = TrackedOp::STATE_HISTORY;
-    utime_t now = ceph_clock_now();
+    const utime_t now = ceph_clock_now();
     history.insert(now, TrackedOpRef(i));
   }
 }
@@ -322,7 +316,6 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
   utime_t oldest_op = now;
   uint64_t total_ops_in_flight = 0;
 
-  RWLock::RLocker l(lock);
   for (const auto& sdata : sharded_in_flight_list) {
     Mutex::Locker locker(sdata.ops_in_flight_lock_sharded);
     if (!sdata.ops_in_flight_sharded.empty()) {

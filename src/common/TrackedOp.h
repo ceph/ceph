@@ -284,7 +284,6 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
-  RWLock       lock;
 
 public:
   CephContext *cct;
