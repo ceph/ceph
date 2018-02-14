@@ -248,9 +248,10 @@ else
         ;;
     opensuse|suse|sles)
         echo "Using zypper to install dependencies"
-        $SUDO zypper --gpg-auto-import-keys --non-interactive install lsb-release systemd-rpm-macros
+        zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
+        $SUDO $zypp_install lsb-release systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
-        $SUDO zypper --non-interactive install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         ;;
     alpine)
         # for now we need the testing repo for leveldb
