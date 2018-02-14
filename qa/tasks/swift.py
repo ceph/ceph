@@ -245,7 +245,7 @@ def task(ctx, config):
                     'func_test':
                         {
                         'auth_port'      : endpoint.port,
-                        'auth_ssl' : 'no',
+                        'auth_ssl' : 'yes' if endpoint.cert else 'no',
                         'auth_prefix' : '/auth/',
                         },
                     }
