@@ -130,6 +130,12 @@
   }
   .datatable-body {
     .datatable-body-row {
+      &.clickable:hover .datatable-row-group {
+        background-color: #eee;
+        transition-property: background;
+        transition-duration: .3s;
+        transition-timing-function: linear;
+      }
       &.datatable-row-even {
         background-color: #ffffff;
       }
