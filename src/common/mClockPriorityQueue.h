@@ -225,8 +225,9 @@ namespace ceph {
 
     mClockQueue(
       const typename dmc::PullPriorityQueue<K,T,true>::ClientInfoFunc& info_func,
+      bool allow_limit_break = true,
       double anticipation_timeout = 0.0) :
-      queue(info_func, true, anticipation_timeout)
+      queue(info_func, allow_limit_break, anticipation_timeout)
     {
       // empty
     }
@@ -376,6 +377,16 @@ namespace ceph {
       auto& retn = pr.get_retn();
       resp_params = retn.phase;
       return std::make_pair(std::move(*(retn.request)), resp_params);
+    }
+
+    double next_dequeue_delay() override final {
+      if (!high_queue.empty() || !queue_front.empty())
+        return 0.0;
+
+      double delay = queue.next_request_delay();
+      return (delay == dmc::TimeMax) ?
+             -1.0  /* illegal time for empty */ :
+             delay;
     }
 
     void dump(ceph::Formatter *f) const override final {

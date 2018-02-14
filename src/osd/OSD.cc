@@ -9666,17 +9666,19 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   auto& sdata = shard_list[shard_index];
   assert(sdata);
   // peek at spg_t
+  double delay = osd->cct->_conf->threadpool_empty_queue_max_wait;
   sdata->sdata_op_ordering_lock.Lock();
-  if (sdata->pqueue->empty()) {
+  if (sdata->pqueue->empty() ||
+     (delay = std::min(delay, sdata->pqueue->next_dequeue_delay())) > 0) {
     sdata->sdata_lock.Lock();
     if (!sdata->stop_waiting) {
-      dout(20) << __func__ << " empty q, waiting" << dendl;
+      dout(30) << __func__ << " empty q, waiting " << delay << dendl;
       osd->cct->get_heartbeat_map()->clear_timeout(hb);
       sdata->sdata_op_ordering_lock.Unlock();
-      sdata->sdata_cond.Wait(sdata->sdata_lock);
+      sdata->sdata_cond.WaitInterval(sdata->sdata_lock, utime_t(delay, 0));
       sdata->sdata_lock.Unlock();
       sdata->sdata_op_ordering_lock.Lock();
-      if (sdata->pqueue->empty()) {
+      if (sdata->pqueue->empty() || sdata->pqueue->next_dequeue_delay() > 0) {
 	sdata->sdata_op_ordering_lock.Unlock();
 	return;
       }

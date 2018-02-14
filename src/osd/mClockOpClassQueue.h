@@ -47,7 +47,7 @@ namespace ceph {
 
   public:
 
-    mClockOpClassQueue(CephContext *cct);
+    mClockOpClassQueue(CephContext *cct, bool allow_limit_break = true);
 
     const crimson::dmclock::ClientInfo*
     op_class_client_info_f(const osd_op_type_t& op_type);
@@ -117,6 +117,10 @@ namespace ceph {
     // Return an op to be dispatch
     inline Request dequeue() override final {
       return queue.dequeue();
+    }
+
+    inline double next_dequeue_delay() override final {
+      return queue.next_dequeue_delay();
     }
 
     // Formatted output of the queue

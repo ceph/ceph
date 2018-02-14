@@ -56,6 +56,8 @@ class OpQueue {
     virtual bool empty() const = 0;
     // Return an op to be dispatch
     virtual T dequeue() = 0;
+    // Time delay of the next pending op to dequeue
+    virtual double next_dequeue_delay() { return 0.0; };
     // Formatted output of the queue
     virtual void dump(ceph::Formatter *f) const = 0;
     // Don't leak resources on destruction

@@ -631,6 +631,27 @@ namespace crimson {
 #endif
       } // display_queues
 
+      Time next_request_delay() {
+         Time delay = TimeZero;
+         Time now = get_time();
+         DataGuard g(data_mtx);
+         NextReq next = do_next_request(now);
+         switch(next.type) {
+         case NextReqType::none:
+           delay = TimeMax;
+           break;
+         case NextReqType::returning:
+           // default TimeZero
+           break;
+         case NextReqType::future:
+           delay = next.when_ready - now;
+           assert(delay > 0);
+           break;
+         default:
+           assert(false);
+         }
+         return delay;
+      }
 
     protected:
 
