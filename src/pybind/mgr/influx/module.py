@@ -9,6 +9,7 @@ from mgr_module import MgrModule
 try:
     from influxdb import InfluxDBClient
     from influxdb.exceptions import InfluxDBClientError
+    from requests.exceptions import ConnectionError
 except ImportError:
     InfluxDBClient = None
 
@@ -78,12 +79,17 @@ class Module(MgrModule):
 
         df_types = [
             'bytes_used',
+            'kb_used',
             'dirty',
+            'rd',
             'rd_bytes',
             'raw_bytes_used',
+            'wr',
             'wr_bytes',
             'objects',
-            'max_avail'
+            'max_avail',
+            'quota_objects',
+            'quota_bytes'
         ]
 
         for df_type in df_types:
@@ -177,6 +183,13 @@ class Module(MgrModule):
         if not self.config['hostname']:
             self.log.error("No Influx server configured, please set one using: "
                            "ceph influx config-set hostname <hostname>")
+            self.set_health_checks({
+                'MGR_INFLUX_NO_SERVER': {
+                    'severity': 'warning',
+                    'summary': 'No InfluxDB server configured',
+                    'detail': ['Configuration option hostname not set']
+                }
+            })
             return
 
         # If influx server has authentication turned off then
@@ -196,6 +209,19 @@ class Module(MgrModule):
         try:
             client.write_points(self.get_df_stats(), 'ms')
             client.write_points(self.get_daemon_stats(), 'ms')
+            self.set_health_checks(dict())
+        except ConnectionError as e:
+            self.log.exception("Failed to connect to Influx host %s:%d",
+                               self.config['hostname'], self.config['port'])
+            self.set_health_checks({
+                'MGR_INFLUX_SEND_FAILED': {
+                    'severity': 'warning',
+                    'summary': 'Failed to send data to InfluxDB server at %s:%d'
+                               ' due to an connection error'
+                               % (self.config['hostname'], self.config['port']),
+                    'detail': [str(e)]
+                }
+            })
         except InfluxDBClientError as e:
             if e.code == 404:
                 self.log.info("Database '%s' not found, trying to create "
@@ -205,6 +231,13 @@ class Module(MgrModule):
                               self.config['username'])
                 client.create_database(self.config['database'])
             else:
+                self.set_health_checks({
+                    'MGR_INFLUX_SEND_FAILED': {
+                        'severity': 'warning',
+                        'summary': 'Failed to send data to InfluxDB',
+                        'detail': [str(e)]
+                    }
+                })
                 raise
 
     def shutdown(self):
