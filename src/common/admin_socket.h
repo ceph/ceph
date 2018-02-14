@@ -85,6 +85,9 @@ private:
 
   void *entry() override;
   bool do_accept();
+  bool validate(const std::string& command,
+		const cmdmap_t& cmdmap,
+		bufferlist& out) const;
 
   CephContext *m_cct;
   std::string m_path;
