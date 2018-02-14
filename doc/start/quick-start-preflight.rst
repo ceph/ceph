@@ -110,7 +110,7 @@ the following repositories:
 Ceph Node Setup
 ===============
 
-The admin node must be have password-less SSH access to Ceph nodes.
+The admin node must have password-less SSH access to Ceph nodes.
 When ceph-deploy logs in to a Ceph node as a user, that particular
 user must have passwordless ``sudo`` privileges.
 
