@@ -11,7 +11,7 @@ Settings
 
 ``osd_dmcrypt_type``
 
-:Description: this option specifies the mode in which ``cryptsetup`` works. It can be ``luks`` or ``plain``.  It kicks in only if the ``--dmcrypt`` option is passed to ``ceph-disk``. See also `cryptsetup document <https://gitlab.com/cryptsetup/cryptsetup/wikis/DMCrypt#configuration-using-cryptsetup>`_ for more details.
+:Description: this option specifies the mode in which ``cryptsetup`` works. It can be ``luks`` or ``plain``.  It kicks in only if the ``--dmcrypt`` option is passed to ``ceph-disk``. See also `cryptsetup document <https://gitlab.com/cryptsetup/cryptsetup/wikis/DMCrypt#user-content-configuration-using-cryptsetup>`_ for more details.
 
 :Type: String
 :Default: ``luks``
