@@ -121,6 +121,17 @@ class tmp_mount(object):
             encryption.dmcrypt_close(self.device)
 
 
+def unmount(path):
+    """
+    Removes mounts at the given path
+    """
+    process.run([
+        'umount',
+        '-v',
+        path,
+    ])
+
+
 def path_is_mounted(path, destination=None):
     """
     Check if the given path is mounted
