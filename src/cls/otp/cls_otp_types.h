@@ -41,32 +41,32 @@ namespace rados {
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          ::encode((uint8_t)type, bl);
+          encode((uint8_t)type, bl);
           /* if we ever implement anything other than TOTP
            * then we'll need to branch here */
-          ::encode(id, bl);
-          ::encode(seed, bl);
-          ::encode((uint8_t)seed_type, bl);
-          ::encode(seed_bin, bl);
-          ::encode(time_ofs, bl);
-          ::encode(step_size, bl);
-          ::encode(window, bl);
+          encode(id, bl);
+          encode(seed, bl);
+          encode((uint8_t)seed_type, bl);
+          encode(seed_bin, bl);
+          encode(time_ofs, bl);
+          encode(step_size, bl);
+          encode(window, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::iterator &bl) {
           DECODE_START(1, bl);
           uint8_t t;
-          ::decode(t, bl);
+          decode(t, bl);
           type = (OTPType)t;
-          ::decode(id, bl);
-          ::decode(seed, bl);
+          decode(id, bl);
+          decode(seed, bl);
           uint8_t st;
-          ::decode(st, bl);
+          decode(st, bl);
           seed_type = (SeedType)st;
-          ::decode(seed_bin, bl);
-          ::decode(time_ofs, bl);
-          ::decode(step_size, bl);
-          ::decode(window, bl);
+          decode(seed_bin, bl);
+          decode(time_ofs, bl);
+          decode(step_size, bl);
+          decode(window, bl);
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
@@ -87,17 +87,17 @@ namespace rados {
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          ::encode(token, bl);
-          ::encode(timestamp, bl);
-          ::encode((char)result, bl);
+          encode(token, bl);
+          encode(timestamp, bl);
+          encode((char)result, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::iterator &bl) {
           DECODE_START(1, bl);
-          ::decode(token, bl);
-          ::decode(timestamp, bl);
+          decode(token, bl);
+          decode(timestamp, bl);
           uint8_t t;
-          ::decode(t, bl);
+          decode(t, bl);
           result = (OTPCheckResult)t;
           DECODE_FINISH(bl);
         }
@@ -111,12 +111,12 @@ namespace rados {
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          ::encode(entries, bl);
+          encode(entries, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::iterator &bl) {
           DECODE_START(1, bl);
-          ::decode(entries, bl);
+          decode(entries, bl);
           DECODE_FINISH(bl);
         }
       };

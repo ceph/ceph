@@ -33,7 +33,7 @@ namespace rados {
         cls_otp_set_otp_op op;
         op.entries.push_back(config);
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("otp", "otp_set", in);
       }
 
@@ -42,7 +42,7 @@ namespace rados {
         cls_otp_set_otp_op op;
         op.entries = entries;
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("otp", "otp_set", in);
       }
 
@@ -51,7 +51,7 @@ namespace rados {
         cls_otp_remove_otp_op op;
         op.ids.push_back(id);
         bufferlist in;
-        ::encode(op, in);
+        encode(op, in);
         rados_op->exec("otp", "otp_remove", in);
       }
 
@@ -67,7 +67,7 @@ namespace rados {
         
         bufferlist in;
         bufferlist out;
-        ::encode(op, in);
+        encode(op, in);
         int r = ioctx.exec(oid, "otp", "otp_check", in, out);
         if (r < 0) {
           return r;
@@ -77,7 +77,7 @@ namespace rados {
         op2.token = buf;
         bufferlist in2;
         bufferlist out2;
-        ::encode(op2, in2);
+        encode(op2, in2);
         r = ioctx.exec(oid, "otp", "otp_get_result", in, out);
         if (r < 0) {
           return r;
@@ -86,7 +86,7 @@ namespace rados {
         auto iter = out.begin();
         cls_otp_get_result_reply ret;
         try {
-          ::decode(ret, iter);
+          decode(ret, iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }
@@ -111,7 +111,7 @@ namespace rados {
         bufferlist in;
         bufferlist out;
         int op_ret;
-        ::encode(op, in);
+        encode(op, in);
         rop->exec("otp", "otp_get", in, &out, &op_ret);
         int r = ioctx.operate(oid, rop, nullptr);
         if (r < 0) {
@@ -124,7 +124,7 @@ namespace rados {
         cls_otp_get_otp_reply ret;
         auto iter = out.begin();
         try {
-          ::decode(ret, iter);
+          decode(ret, iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }
@@ -163,7 +163,7 @@ namespace rados {
         bufferlist in;
         bufferlist out;
         int op_ret;
-        ::encode(op, in);
+        encode(op, in);
         ObjectReadOperation rop;
         rop.exec("otp", "get_current_time", in, &out, &op_ret);
         int r = ioctx.operate(oid, &rop, nullptr);
@@ -177,7 +177,7 @@ namespace rados {
         cls_otp_get_current_time_reply ret;
         auto iter = out.begin();
         try {
-          ::decode(ret, iter);
+          decode(ret, iter);
         } catch (buffer::error& err) {
 	  return -EBADMSG;
         }

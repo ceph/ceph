@@ -45,12 +45,12 @@ struct otp_header {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(ids, bl);
+    encode(ids, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(ids, bl);
+    decode(ids, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -66,16 +66,16 @@ struct otp_instance {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(otp, bl);
-    ::encode(last_checks, bl);
-    ::encode(last_success, bl);
+    encode(otp, bl);
+    encode(last_checks, bl);
+    encode(last_success, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(otp, bl);
-    ::decode(last_checks, bl);
-    ::decode(last_success, bl);
+    decode(otp, bl);
+    decode(last_checks, bl);
+    decode(last_success, bl);
     DECODE_FINISH(bl);
   }
 
@@ -176,7 +176,7 @@ static int get_otp_instance(cls_method_context_t hctx, const string& id, otp_ins
 
   try {
     bufferlist::iterator it = bl.begin();
-    ::decode(*instance, it);
+    decode(*instance, it);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: failed to decode %s", key.c_str());
     return -EIO;
@@ -190,7 +190,7 @@ static int write_otp_instance(cls_method_context_t hctx, const otp_instance& ins
   string key = otp_key_prefix + instance.otp.id;
 
   bufferlist bl;
-  ::encode(instance, bl);
+  encode(instance, bl);
 
   int r = cls_cxx_map_set_val(hctx, key, &bl);
   if (r < 0) {
@@ -217,7 +217,7 @@ static int remove_otp_instance(cls_method_context_t hctx, const string& id)
 static int read_header(cls_method_context_t hctx, otp_header *h)
 {
   bufferlist bl;
-  ::encode(h, bl);
+  encode(h, bl);
   int r = cls_cxx_map_get_val(hctx, otp_header_key, &bl);
   if (r == -ENOENT || r == -ENODATA) {
     *h = otp_header();
@@ -235,7 +235,7 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
 
   auto iter = bl.begin();
   try {
-    ::decode(*h, iter);
+    decode(*h, iter);
   } catch (buffer::error& err) {
     CLS_ERR("failed to decode otp_header");
     return -EIO;
@@ -247,7 +247,7 @@ static int read_header(cls_method_context_t hctx, otp_header *h)
 static int write_header(cls_method_context_t hctx, const otp_header& h)
 {
   bufferlist bl;
-  ::encode(h, bl);
+  encode(h, bl);
 
   int r = cls_cxx_map_set_val(hctx, otp_header_key, &bl);
   if (r < 0) {
@@ -298,7 +298,7 @@ static int otp_set_op(cls_method_context_t hctx,
   cls_otp_set_otp_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -347,7 +347,7 @@ static int otp_remove_op(cls_method_context_t hctx,
   cls_otp_remove_otp_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -393,7 +393,7 @@ static int otp_get_op(cls_method_context_t hctx,
   cls_otp_get_otp_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -432,7 +432,7 @@ static int otp_get_op(cls_method_context_t hctx,
     result.found_entries.push_back(instance.otp);
   }
 
-  ::encode(result, *out);
+  encode(result, *out);
 
   return 0;
 }
@@ -444,7 +444,7 @@ static int otp_check_op(cls_method_context_t hctx,
   cls_otp_check_otp_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -480,7 +480,7 @@ static int otp_get_result(cls_method_context_t hctx,
   cls_otp_check_otp_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -498,7 +498,7 @@ static int otp_get_result(cls_method_context_t hctx,
 
   cls_otp_get_result_reply reply;
   instance.find(op.token, &reply.result);
-  ::encode(reply, *out);
+  encode(reply, *out);
 
   return 0;
 }
@@ -510,7 +510,7 @@ static int otp_get_current_time_op(cls_method_context_t hctx,
   cls_otp_get_current_time_op op;
   try {
     auto iter = in->begin();
-    ::decode(op, iter);
+    decode(op, iter);
   } catch (const buffer::error &err) {
     CLS_ERR("ERROR: %s(): failed to decode request", __func__);
     return -EINVAL;
@@ -518,7 +518,7 @@ static int otp_get_current_time_op(cls_method_context_t hctx,
 
   cls_otp_get_current_time_reply reply;
   reply.time = real_clock::now();
-  ::encode(reply, *out);
+  encode(reply, *out);
 
   return 0;
 }
