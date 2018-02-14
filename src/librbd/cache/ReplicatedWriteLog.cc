@@ -753,6 +753,11 @@ void ReplicatedWriteLog<I>::append_scheduled_ops(void)
 
   if (ops.size()) {
     complete_op_log_entries(ops, append_result);
+    {
+      Mutex::Locker locker(m_lock);
+      /* New entries may be flushable */
+      wake_up();
+    }
   }
 }
 
@@ -850,6 +855,8 @@ void ReplicatedWriteLog<I>::alloc_op_log_entries(WriteLogOperations &ops)
       m_first_free_entry = (m_first_free_entry + 1) % m_total_log_entries;
       operation->log_entry->pmem_entry = &pmem_log_entries[operation->log_entry->log_entry_index];
       operation->log_entry->ram_entry.entry_valid = 1;
+      m_log_entries.push_back(operation->log_entry);
+      m_dirty_log_entries.push_back(operation->log_entry);
     }
   }
 }
@@ -1112,7 +1119,7 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
 
 template <typename I>
 void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
-                                    bool skip_partial_discard, Context *on_finish) {
+					bool skip_partial_discard, Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
@@ -1552,8 +1559,10 @@ bool ReplicatedWriteLog<I>::is_work_available() const {
 
 template <typename I>
 void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
-#if 0
   CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "Look for dirty entries" << dendl;
+#if 0
 
   // TODO throttle the amount of in-flight writebacks
   while (true) {
@@ -1648,10 +1657,19 @@ void ReplicatedWriteLog<I>::invalidate(Extents&& image_extents,
 template <typename I>
 void ReplicatedWriteLog<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 20) << "**** NOT FLUSHED ****" << dendl;
 
-  /* TODO: Actually flush */
-  on_finish->complete(0);
+   if (m_dirty_log_entries.empty()) {
+     ldout(cct, 20) << "no dirty entries" << dendl;
+     on_finish->complete(0);
+   } else {
+     ldout(cct, 20) << "dirty entries remain" << dendl;
+     Mutex::Locker locker(m_lock);
+     m_post_work_contexts.push_back(new FunctionContext(
+             [this, on_finish](int r) {
+	       flush(on_finish);
+	     }));
+     wake_up();
+   }
 }
 
 } // namespace cache

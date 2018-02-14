@@ -141,7 +141,6 @@ public:
 };
   
 typedef std::list<WriteLogEntry*> WriteLogEntries;
-typedef std::unordered_map<uint64_t, WriteLogEntry*> BlockToWriteLogEntry;
 
 /**** Write log entries end ****/
 
@@ -462,7 +461,11 @@ private:
   WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
   WriteLogMap m_blocks_to_log_entries;
-  
+
+  /* New entries are at the back. Oldest at the front */
+  WriteLogEntries m_log_entries;
+  WriteLogEntries m_dirty_log_entries;
+
   void wake_up();
   void process_work();
 
