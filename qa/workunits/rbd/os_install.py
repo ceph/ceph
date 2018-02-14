@@ -1,4 +1,5 @@
 import os
+import io
 import sys
 import shlex
 import guestfs
@@ -35,6 +36,21 @@ def execute_command(cmd_args, wait_time=None, return_output=False):
         logging.error('Command timed out after {} seconds'.format(wait_time))
     except Exception as e:
         logging.error(e)
+
+
+def generate_cfg():
+    with io.FileIO("/tmp/ks.cfg", "w+") as file:
+        file.write('''auth --enableshadow --passalgo=sha512\ncdrom\ntext\nfirstboot --enable \
+\nignoredisk --only-use=vda\nkeyboard --vckeymap=us --xlayouts='us'\nlang en_US.UTF-8 \
+\nnetwork  --bootproto=dhcp --device=eth0 --ipv6=auto\nnetwork  --hostname=localhost.localdomain \
+\nrootpw --iscrypted $6$o27BTU5i4n.jbdpY$/aGAXbOiXhVtxlnz9E0vnjW0lsWsuQArLkQaMPLAUSJ.rXj1z.72Et0qrnMJxQdq1401cxJOTRmGzNMt3iUWF. \
+\ntimezone America/New_York --isUtc \
+\nuser --groups=wheel --name=redhat --password=$6$IA.N9KLsyj1TfgXI$2IUaNL.0PmPBkAiKkKy4LdovCGueltiBjYEG3ZXxNwO2mJoWL76WILPYESsHV99BM9k20jfDiKiu1KRG..Dlb/ --iscrypted --gecos="redhat" \
+\nbootloader --append=" crashkernel=auto" --location=mbr --boot-drive=vda\nautopart --type=lvm \
+\nclearpart --all --initlabel --drives=vda\nreboot\n%packages\n@^minimal\n@core\nkexec-tools\nopenscap \
+\nopenscap-scanner\nscap-security-guide\n%end\n%addon org_fedora_oscap\ncontent-type = scap-security-guide \
+\nprofile = default\n%end\n%addon com_redhat_kdump --enable --reserve-mb='auto'\n%end''')
+        file.close()
 
 
 def inspect_disk(disk_parameter):
@@ -94,12 +110,17 @@ if __name__ == '__main__':
     vcpus = os.getenv('VCPUS')
     size = os.getenv('SIZE')
     iso_location = os.getenv('ISO_LOCATION')
-    ks_cfg = os.getenv('KS_CFG')
+    # ks_cfg = os.getenv('KS_CFG')
+    generate_cfg()
+    ks_cfg = '/tmp/ks.cfg'
+
+    execute_command('wget -P /tmp/ {}'.format(iso_location))
+    iso_location = '/tmp/'+iso_location.split('/')[-1]
 
     if 'ubuntu' in execute_command('lsb_release -is', return_output=True).lower():
         execute_command('ceph osd crush tunables hammer')
 
-    execute_command('ceph osd pool create {} 128 128'.format(pool_name))
+    execute_command('ceph osd pool create {} 2 2'.format(pool_name))
     execute_command('rbd create -s {} --image-feature layering {}/{}'.format(size, pool_name, image_name))
     disk = execute_command('rbd map {}/{}'.format(pool_name, image_name), return_output=True).strip()
     execute_command('virt-install --name {} --memory {} --vcpus {} --disk {},size={},bus=virtio \
