@@ -41,6 +41,28 @@ std::string cmddesc_get_prefix(const std::string &cmddesc)
   return result.str();
 }
 
+using arg_desc_t = std::map<boost::string_view, boost::string_view>;
+
+// Snarf up all the key=val,key=val pairs, put 'em in a dict.
+template<class String>
+arg_desc_t cmddesc_get_args(const String& cmddesc)
+{
+  arg_desc_t arg_desc;
+  for_each_substr(cmddesc, ",", [&](auto kv) {
+      // key=value; key by itself implies value is bool true
+      // name="name" means arg dict will be titled 'name'
+      auto equal = kv.find('=');
+      if (equal == kv.npos) {
+	// it should be the command
+	return;
+      }
+      auto key = kv.substr(0, equal);
+      auto val = kv.substr(equal + 1);
+      arg_desc[key] = val;
+    });
+  return arg_desc;
+}
+
 /**
  * Read a command description list out of cmd, and dump it to f.
  * A signature description is a set of space-separated words;
@@ -63,33 +85,13 @@ dump_cmd_to_json(Formatter *f, const string& cmd)
       f->dump_string("arg", word);
       continue;
     }
-    // Snarf up all the key=val,key=val pairs, put 'em in a dict.
-    // no '=val' implies '=True'.
-    std::stringstream argdesc(word);
-    std::string keyval;
-    std::map<std::string, std::string>desckv;
     // accumulate descriptor keywords in desckv
-
-    while (std::getline(argdesc, keyval, ',')) {
-      // key=value; key by itself implies value is bool true
-      // name="name" means arg dict will be titled 'name'
-      size_t pos = keyval.find('=');
-      std::string key, val;
-      if (pos != std::string::npos) {
-	key = keyval.substr(0, pos);
-	val = keyval.substr(pos+1);
-      } else {
-        key = keyval;
-        val = true;
-      }
-      desckv.insert(std::pair<std::string, std::string> (key, val));
-    }
+    auto desckv = cmddesc_get_args(word);
     // name the individual desc object based on the name key
-    f->open_object_section(desckv["name"].c_str());
+    f->open_object_section(string(desckv["name"]).c_str());
     // dump all the keys including name into the array
-    for (std::map<std::string, std::string>::iterator it = desckv.begin();
-	 it != desckv.end(); ++it) {
-      f->dump_string(it->first.c_str(), it->second);
+    for (auto [key, value] : desckv) {
+      f->dump_string(string(key).c_str(), string(value));
     }
     f->close_section(); // attribute object for individual desc
   }
@@ -422,8 +424,6 @@ T str_to_num(const std::string& s)
   }
 }
 
-using arg_desc_t = std::map<boost::string_view, boost::string_view>;
-
 template<typename T>
 bool arg_in_range(T value, const arg_desc_t& desc, std::ostream& os) {
   auto range = desc.find("range");
@@ -523,17 +523,7 @@ bool validate_cmd(CephContext* cct,
 		  std::ostream& os)
 {
   return !find_first_in(desc, " ", [&](auto desc) {
-    arg_desc_t arg_desc;
-    for_each_substr(desc, ",", [&](auto kv) {
-      auto equal = kv.find('=');
-      if (equal == kv.npos) {
-	// it should be the command
-	return;
-      }
-      auto key = kv.substr(0, equal);
-      auto val = kv.substr(equal + 1);
-      arg_desc[key] = val;
-      });
+    auto arg_desc = cmddesc_get_args(desc);
     if (arg_desc.empty()) {
       return false;
     }
