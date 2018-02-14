@@ -13,8 +13,8 @@ import { TablePerformanceCounterService } from '../services/table-performance-co
 })
 export class TablePerformanceCounterComponent implements OnInit {
 
-  private columns: Array<CdTableColumn> = [];
-  private counters: Array<object> = [];
+  columns: Array<CdTableColumn> = [];
+  counters: Array<object> = [];
 
   @ViewChild('valueTpl') public valueTpl: TemplateRef<any>;
 

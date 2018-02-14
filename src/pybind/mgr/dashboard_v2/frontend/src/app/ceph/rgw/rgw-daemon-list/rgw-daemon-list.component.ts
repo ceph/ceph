@@ -11,8 +11,8 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
 })
 export class RgwDaemonListComponent implements OnInit {
 
-  private columns: Array<CdTableColumn> = [];
-  private daemons: Array<object> = [];
+  columns: Array<CdTableColumn> = [];
+  daemons: Array<object> = [];
 
   detailsComponent = 'RgwDaemonDetailsComponent';
 

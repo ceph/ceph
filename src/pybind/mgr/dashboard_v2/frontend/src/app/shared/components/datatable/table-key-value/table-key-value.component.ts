@@ -18,7 +18,7 @@ import { CdTableColumn } from '../../../models/cd-table-column';
 })
 export class TableKeyValueComponent implements OnInit {
 
-  private columns: Array<CdTableColumn> = [];
+  columns: Array<CdTableColumn> = [];
 
   /**
    * An array of objects to be displayed in the data table.

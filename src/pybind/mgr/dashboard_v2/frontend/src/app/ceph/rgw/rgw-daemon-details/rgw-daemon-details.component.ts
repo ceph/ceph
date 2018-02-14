@@ -11,8 +11,8 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
 })
 export class RgwDaemonDetailsComponent implements OnInit {
 
-  private metadata: Array<object> = [];
-  private serviceId = '';
+  metadata: Array<object> = [];
+  serviceId = '';
 
   @Input() selected?: Array<any> = [];
 
