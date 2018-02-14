@@ -11,12 +11,12 @@ struct cls_otp_set_otp_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(entries, bl);
+    encode(entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(entries, bl);
+    decode(entries, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -30,16 +30,16 @@ struct cls_otp_check_otp_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(id, bl);
-    ::encode(val, bl);
-    ::encode(token, bl);
+    encode(id, bl);
+    encode(val, bl);
+    encode(token, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(id, bl);
-    ::decode(val, bl);
-    ::decode(token, bl);
+    decode(id, bl);
+    decode(val, bl);
+    decode(token, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -51,12 +51,12 @@ struct cls_otp_get_result_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(token, bl);
+    encode(token, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(token, bl);
+    decode(token, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -68,12 +68,12 @@ struct cls_otp_get_result_reply
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(result, bl);
+    encode(result, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(result, bl);
+    decode(result, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -85,12 +85,12 @@ struct cls_otp_remove_otp_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(ids, bl);
+    encode(ids, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(ids, bl);
+    decode(ids, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -103,14 +103,14 @@ struct cls_otp_get_otp_op
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(get_all, bl);
-    ::encode(ids, bl);
+    encode(get_all, bl);
+    encode(ids, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(get_all, bl);
-    ::decode(ids, bl);
+    decode(get_all, bl);
+    decode(ids, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -122,12 +122,12 @@ struct cls_otp_get_otp_reply
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(found_entries, bl);
+    encode(found_entries, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(found_entries, bl);
+    decode(found_entries, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -152,12 +152,12 @@ struct cls_otp_get_current_time_reply
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(time, bl);
+    encode(time, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::iterator &bl) {
     DECODE_START(1, bl);
-    ::decode(time, bl);
+    decode(time, bl);
     DECODE_FINISH(bl);
   }
 };

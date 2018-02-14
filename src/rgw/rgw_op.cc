@@ -2187,7 +2187,7 @@ void RGWSetBucketVersioning::execute()
 
   bool modified = mfa_set_status;
 
-  op_ret = retry_raced_bucket_write(store, s, [this] {
+  op_ret = retry_raced_bucket_write(store, s, [&] {
       if (mfa_set_status) {
         if (mfa_status) {
           s->bucket_info.flags |= BUCKET_MFA_ENABLED;
