@@ -4,6 +4,8 @@ import { NgModule } from '@angular/core';
 import { ComponentsModule } from '../../shared/components/components.module';
 import { SharedModule } from '../../shared/shared.module';
 import { HostsComponent } from './hosts/hosts.component';
+import { MonitorService } from './monitor.service';
+import { MonitorComponent } from './monitor/monitor.component';
 import { ServiceListPipe } from './service-list.pipe';
 
 @NgModule({
@@ -14,10 +16,12 @@ import { ServiceListPipe } from './service-list.pipe';
   ],
   declarations: [
     HostsComponent,
-    ServiceListPipe
+    ServiceListPipe,
+    MonitorComponent,
   ],
   providers: [
-    ServiceListPipe
+    ServiceListPipe,
+    MonitorService
   ]
 })
-export class ClusterModule { }
+export class ClusterModule {}
