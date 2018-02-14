@@ -6,7 +6,7 @@ junit*xml
 __pycache__
 .cache
 ceph.conf
-wheelhouse
+wheelhouse*
 
 # IDE
 .vscode
