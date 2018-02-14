@@ -6,13 +6,13 @@ from __future__ import absolute_import
 
 import errno
 import os
+import socket
 try:
     from urlparse import urljoin
 except ImportError:
     from urllib.parse import urljoin
-
 import cherrypy
-from mgr_module import MgrModule
+from mgr_module import MgrModule, MgrStandbyModule
 
 if 'COVERAGE_ENABLED' in os.environ:
     import coverage
@@ -110,6 +110,14 @@ class Module(MgrModule):
             }
         }
 
+        # Publish the URI that others may use to access the service we're
+        # about to start serving
+        self.set_uri("http://{0}:{1}{2}/".format(
+            socket.getfqdn() if server_addr == "::" else server_addr,
+            server_port,
+            self.url_prefix
+        ))
+
         cherrypy.tree.mount(Module.ApiRoot(self), '/api')
         cherrypy.tree.mount(Module.StaticRoot(), '/', config=config)
 
@@ -191,3 +199,61 @@ class Module(MgrModule):
 
     class StaticRoot(object):
         pass
+
+
+class StandbyModule(MgrStandbyModule):
+    def serve(self):
+        server_addr = self.get_localized_config('server_addr', '::')
+        server_port = self.get_localized_config('server_port', '7000')
+        if server_addr is None:
+            msg = 'no server_addr configured; try "ceph config-key set ' \
+                  'mgr/dashboard/server_addr <ip>"'
+            raise RuntimeError(msg)
+        self.log.info("server_addr: %s server_port: %s",
+                      server_addr, server_port)
+        cherrypy.config.update({
+            'server.socket_host': server_addr,
+            'server.socket_port': int(server_port),
+            'engine.autoreload.on': False
+        })
+
+        module = self
+
+        class Root(object):
+            @cherrypy.expose
+            def index(self):
+                active_uri = module.get_active_uri()
+                if active_uri:
+                    module.log.info("Redirecting to active '%s'", active_uri)
+                    raise cherrypy.HTTPRedirect(active_uri)
+                else:
+                    template = """
+                <html>
+                    <!-- Note: this is only displayed when the standby
+                         does not know an active URI to redirect to, otherwise
+                         a simple redirect is returned instead -->
+                    <head>
+                        <title>Ceph</title>
+                        <meta http-equiv="refresh" content="{delay}">
+                    </head>
+                    <body>
+                        No active ceph-mgr instance is currently running
+                        the dashboard.  A failover may be in progress.
+                        Retrying in {delay} seconds...
+                    </body>
+                </html>
+                    """
+                    return template.format(delay=5)
+
+        cherrypy.tree.mount(Root(), "/", {})
+        self.log.info("Starting engine...")
+        cherrypy.engine.start()
+        self.log.info("Waiting for engine...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STOPPED)
+        self.log.info("Engine done.")
+
+    def shutdown(self):
+        self.log.info("Stopping server...")
+        cherrypy.engine.wait(state=cherrypy.engine.states.STARTED)
+        cherrypy.engine.stop()
+        self.log.info("Stopped server")
