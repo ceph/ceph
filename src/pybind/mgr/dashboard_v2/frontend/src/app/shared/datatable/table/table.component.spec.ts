@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 
 import { NgxDatatableModule, TableColumn } from '@swimlane/ngx-datatable';
 
+import { ComponentsModule } from '../../components/components.module';
 import { TableComponent } from './table.component';
 
 describe('TableComponent', () => {
@@ -25,7 +26,7 @@ describe('TableComponent', () => {
     async(() => {
       TestBed.configureTestingModule({
         declarations: [TableComponent],
-        imports: [NgxDatatableModule, FormsModule]
+        imports: [NgxDatatableModule, FormsModule, ComponentsModule]
       }).compileComponents();
     })
   );
