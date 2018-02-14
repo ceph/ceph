@@ -80,3 +80,9 @@
              let-value="value">
   <cd-sparkline [data]="value"></cd-sparkline>
 </ng-template>
+
+<ng-template #routerLinkTpl
+             let-row="row"
+             let-value="value">
+  <a [routerLink]="[row.cdLink]">{{ value }}</a>
+</ng-template>

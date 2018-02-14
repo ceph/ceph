@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterModule } from '@angular/router';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
@@ -16,7 +17,8 @@ import { TableComponent } from './table/table.component';
     NgxDatatableModule,
     FormsModule,
     PipesModule,
-    ComponentsModule
+    ComponentsModule,
+    RouterModule
   ],
   declarations: [
     TableComponent,

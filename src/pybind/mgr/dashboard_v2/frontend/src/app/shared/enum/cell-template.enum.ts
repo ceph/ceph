@@ -1,4 +1,5 @@
 export enum CellTemplate {
   bold = 'bold',
-  sparkline = 'sparkline'
+  sparkline = 'sparkline',
+  routerLink = 'routerLink'
 }
