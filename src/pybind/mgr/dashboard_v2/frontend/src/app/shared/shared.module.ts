@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
 import { ComponentsModule } from './components/components.module';
+import { DataTableModule } from './datatable/datatable.module';
 import { PasswordButtonDirective } from './directives/password-button.directive';
 import { PipesModule } from './pipes/pipes.module';
 import { AuthGuardService } from './services/auth-guard.service';
@@ -17,14 +18,16 @@ import { ServicesModule } from './services/services.module';
     CommonModule,
     PipesModule,
     ComponentsModule,
-    ServicesModule
+    ServicesModule,
+    DataTableModule
   ],
   exports: [
     PipesModule,
     ComponentsModule,
     ServicesModule,
     PasswordButtonDirective,
-    ComponentsModule
+    ComponentsModule,
+    DataTableModule
   ],
   declarations: [
     PasswordButtonDirective

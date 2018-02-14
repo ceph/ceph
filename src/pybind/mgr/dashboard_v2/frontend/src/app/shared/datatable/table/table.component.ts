@@ -15,7 +15,7 @@ import {
 import { DatatableComponent } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
 
-import { CdTableColumn } from '../../../models/cd-table-column';
+import { CdTableColumn } from '../../models/cd-table-column';
 import { TableDetailsDirective } from '../table-details.directive';
 
 @Component({

@@ -1,7 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 
-import { CellTemplate } from '../../../enum/cell-template.enum';
-import { CdTableColumn } from '../../../models/cd-table-column';
+import { CellTemplate } from '../../enum/cell-template.enum';
+import { CdTableColumn } from '../../models/cd-table-column';
 
 /**
  * Display the given data in a 2 column data table. The left column
