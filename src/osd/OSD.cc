@@ -875,8 +875,11 @@ bool OSDService::_check_full(s_names type, ostream &ss) const
     return true;
   }
 
-  ss << "current usage is " << cur_ratio;
-  return cur_state >= type;
+  if (cur_state >= type) {
+    ss << "current usage is " << cur_ratio;
+    return true;
+  }
+  return false;
 }
 
 bool OSDService::check_failsafe_full(ostream &ss) const
