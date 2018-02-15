@@ -1,7 +1,7 @@
 import os
 import pytest
 from ceph_volume.api import lvm as lvm_api
-from ceph_volume import conf
+from ceph_volume import conf, configuration
 
 
 class Capture(object):
@@ -70,6 +70,26 @@ def conf_ceph(monkeypatch):
         stub = Factory(**kw)
         monkeypatch.setattr(conf, 'ceph', stub)
         return stub
+    return apply
+
+
+@pytest.fixture
+def conf_ceph_stub(monkeypatch, tmpfile):
+    """
+    Monkeypatches ceph_volume.conf.ceph with contents from a string that are
+    written to a temporary file and then is fed through the same ceph.conf
+    loading mechanisms for testing.  Unlike ``conf_ceph`` which is just a fake,
+    we are actually loading values as seen on a ceph.conf file
+
+    This is useful when more complex ceph.conf's are needed. In the case of
+    just trying to validate a key/value behavior ``conf_ceph`` is better
+    suited.
+    """
+    def apply(contents):
+        conf_path = tmpfile(contents=contents)
+        parser = configuration.load(conf_path)
+        monkeypatch.setattr(conf, 'ceph', parser)
+        return parser
     return apply
 
 
