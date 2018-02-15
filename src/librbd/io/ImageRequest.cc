@@ -478,7 +478,8 @@ ObjectRequestHandle *ImageWriteRequest<I>::create_object_request(
   assemble_extent(object_extent, &bl);
   ObjectRequest<I> *req = ObjectRequest<I>::create_write(
     &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, bl, snapc, m_op_flags, this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), snapc, m_op_flags, this->m_trace,
+    on_finish);
   return req;
 }
 
@@ -781,12 +782,13 @@ ObjectRequestHandle *ImageWriteSameRequest<I>::create_object_request(
     req = ObjectRequest<I>::create_writesame(
       &image_ctx, object_extent.oid.name, object_extent.objectno,
       object_extent.offset, object_extent.length,
-      bl, snapc, m_op_flags, this->m_trace, on_finish);
+      std::move(bl), snapc, m_op_flags, this->m_trace, on_finish);
     return req;
   }
   req = ObjectRequest<I>::create_write(
     &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, bl, snapc, m_op_flags, this->m_trace, on_finish);
+    object_extent.offset, std::move(bl), snapc, m_op_flags, this->m_trace,
+    on_finish);
   return req;
 }
 
@@ -862,13 +864,16 @@ ObjectRequestHandle *ImageCompareAndWriteRequest<I>::create_object_request(
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
+  // NOTE: safe to move m_cmp_bl since we only support this op against
+  // a single object
   bufferlist bl;
   assemble_extent(object_extent, &bl);
   ObjectRequest<I> *req = ObjectRequest<I>::create_compare_and_write(
                                   &image_ctx, object_extent.oid.name,
                                   object_extent.objectno, object_extent.offset,
-                                  m_cmp_bl, bl, snapc, m_mismatch_offset,
-                                  m_op_flags, this->m_trace, on_finish);
+                                  std::move(m_cmp_bl), std::move(bl), snapc,
+                                  m_mismatch_offset, m_op_flags, this->m_trace,
+                                  on_finish);
   return req;
 }
 

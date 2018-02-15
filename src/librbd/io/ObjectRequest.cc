@@ -48,12 +48,13 @@ template <typename I>
 ObjectRequest<I>*
 ObjectRequest<I>::create_write(I *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
-                               const ceph::bufferlist &data,
+                               ceph::bufferlist&& data,
                                const ::SnapContext &snapc, int op_flags,
 			       const ZTracer::Trace &parent_trace,
                                Context *completion) {
-  return new ObjectWriteRequest<I>(ictx, oid, object_no, object_off, data,
-                                   snapc, op_flags, parent_trace, completion);
+  return new ObjectWriteRequest<I>(ictx, oid, object_no, object_off,
+                                   std::move(data), snapc, op_flags,
+                                   parent_trace, completion);
 }
 
 template <typename I>
@@ -77,13 +78,13 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
                                    uint64_t object_no, uint64_t object_off,
                                    uint64_t object_len,
-                                   const ceph::bufferlist &data,
+                                   ceph::bufferlist&& data,
                                    const ::SnapContext &snapc, int op_flags,
 				   const ZTracer::Trace &parent_trace,
                                    Context *completion) {
   return new ObjectWriteSameRequest<I>(ictx, oid, object_no, object_off,
-                                       object_len, data, snapc, op_flags,
-                                       parent_trace, completion);
+                                       object_len, std::move(data), snapc,
+                                       op_flags, parent_trace, completion);
 }
 
 template <typename I>
@@ -91,15 +92,16 @@ ObjectRequest<I>*
 ObjectRequest<I>::create_compare_and_write(I *ictx, const std::string &oid,
                                            uint64_t object_no,
                                            uint64_t object_off,
-                                           const ceph::bufferlist &cmp_data,
-                                           const ceph::bufferlist &write_data,
+                                           ceph::bufferlist&& cmp_data,
+                                           ceph::bufferlist&& write_data,
                                            const ::SnapContext &snapc,
                                            uint64_t *mismatch_offset,
                                            int op_flags,
                                            const ZTracer::Trace &parent_trace,
                                            Context *completion) {
   return new ObjectCompareAndWriteRequest<I>(ictx, oid, object_no, object_off,
-                                             cmp_data, write_data, snapc,
+                                             std::move(cmp_data),
+                                             std::move(write_data), snapc,
                                              mismatch_offset, op_flags,
                                              parent_trace, completion);
 }
