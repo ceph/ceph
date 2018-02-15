@@ -126,32 +126,22 @@ public:
                                    uint64_t len, librados::snap_t snap_id,
                                    int op_flags, bool cache_initiated,
                                    const ZTracer::Trace &parent_trace,
-                                   Context *completion) {
+                                   ceph::bufferlist* read_data,
+                                   ExtentMap* extent_map, Context *completion) {
     return new ObjectReadRequest(ictx, oid, objectno, offset, len,
                                  snap_id, op_flags, cache_initiated,
-                                 parent_trace, completion);
+                                 parent_trace, read_data, extent_map,
+                                 completion);
   }
 
   ObjectReadRequest(ImageCtxT *ictx, const std::string &oid,
                     uint64_t objectno, uint64_t offset, uint64_t len,
                     librados::snap_t snap_id, int op_flags,
                     bool cache_initiated, const ZTracer::Trace &parent_trace,
+                    ceph::bufferlist* read_data, ExtentMap* extent_map,
                     Context *completion);
 
   void send() override;
-
-  inline uint64_t get_offset() const {
-    return this->m_object_off;
-  }
-  inline uint64_t get_length() const {
-    return this->m_object_len;
-  }
-  ceph::bufferlist &data() {
-    return m_read_data;
-  }
-  ExtentMap &get_extent_map() {
-    return m_ext_map;
-  }
 
   const char *get_op_type() const override {
     return "read";
@@ -187,8 +177,8 @@ private:
   int m_op_flags;
   bool m_cache_initiated;
 
-  ceph::bufferlist m_read_data;
-  ExtentMap m_ext_map;
+  ceph::bufferlist* m_read_data;
+  ExtentMap* m_extent_map;
 
   void read_cache();
   void handle_read_cache(int r);

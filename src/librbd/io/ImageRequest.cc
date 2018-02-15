@@ -259,12 +259,13 @@ void ImageReadRequest<I>::send_request() {
                      << extent.length << " from " << extent.buffer_extents
                      << dendl;
 
-      auto req_comp = new io::ReadResult::C_SparseReadRequest<I>(
-        aio_comp, std::move(extent.buffer_extents), true);
+      auto req_comp = new io::ReadResult::C_ObjectReadRequest(
+        aio_comp, extent.offset, extent.length,
+        std::move(extent.buffer_extents), true);
       ObjectReadRequest<I> *req = ObjectReadRequest<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
-        extent.length, snap_id, m_op_flags, false, this->m_trace, req_comp);
-      req_comp->request = req;
+        extent.length, snap_id, m_op_flags, false, this->m_trace,
+        &req_comp->bl, &req_comp->extent_map, req_comp);
       req->send();
     }
   }

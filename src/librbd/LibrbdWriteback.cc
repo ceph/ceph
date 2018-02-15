@@ -223,12 +223,12 @@ namespace librbd {
     aio_comp->read_result = io::ReadResult{pbl};
     aio_comp->set_request_count(1);
 
-    auto req_comp = new io::ReadResult::C_SparseReadRequest<>(
-      aio_comp, {{0, len}}, false);
+    auto req_comp = new io::ReadResult::C_ObjectReadRequest(
+      aio_comp, off, len, {{0, len}}, false);
     auto req = io::ObjectReadRequest<>::create(m_ictx, oid.name, object_no, off,
                                                len, snapid, op_flags, true,
-                                               trace, req_comp);
-    req_comp->request = req;
+                                               trace, &req_comp->bl,
+                                               &req_comp->extent_map, req_comp);
     req->send();
   }
 
