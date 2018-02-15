@@ -1,20 +1,26 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import cherrypy
 import rbd
 
-from ..tools import ApiController, AuthRequired, BaseController, ViewCache
+from ..tools import ApiController, AuthRequired, RESTController, ViewCache
 
 
-@ApiController('block_pool')
+@ApiController('rbd')
 @AuthRequired()
-class BlockPool(BaseController):
+class Rbd(RESTController):
 
     def __init__(self):
         self.rbd = None
 
-    def _format_bitmask(self, features):
+    @staticmethod
+    def _format_bitmask(features):
+        """
+        Formats the bitmask:
+
+        >>> Rbd._format_bitmask(45)
+        'deep-flatten, exclusive-lock, layering, object-map'
+        """
         RBD_FEATURES_NAME_MAPPING = {
             rbd.RBD_FEATURE_LAYERING: "layering",
             rbd.RBD_FEATURE_STRIPINGV2: "striping",
@@ -55,9 +61,7 @@ class BlockPool(BaseController):
             result.append(stat)
         return result
 
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def rbd_pool_data(self, pool_name):
+    def get(self, pool_name):
         # pylint: disable=unbalanced-tuple-unpacking
         status, value = self._rbd_list(pool_name)
         if status == ViewCache.VALUE_EXCEPTION:
