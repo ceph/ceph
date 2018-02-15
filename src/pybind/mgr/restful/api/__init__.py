@@ -1,14 +1,14 @@
 from pecan import expose
 from pecan.rest import RestController
 
-from config import Config
-from crush import Crush
-from doc import Doc
-from mon import Mon
-from osd import Osd
-from pool import Pool
-from request import Request
-from server import Server
+from .config import Config
+from .crush import Crush
+from .doc import Doc
+from .mon import Mon
+from .osd import Osd
+from .pool import Pool
+from .request import Request
+from .server import Server
 
 
 class Root(RestController):

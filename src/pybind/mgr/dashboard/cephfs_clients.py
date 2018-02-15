@@ -2,7 +2,7 @@
 import json
 
 from mgr_module import CommandResult
-from remote_view_cache import RemoteViewCache
+from .remote_view_cache import RemoteViewCache
 
 
 class CephFSClients(RemoteViewCache):
