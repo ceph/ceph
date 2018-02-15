@@ -323,9 +323,9 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
               ldout(cct, 30) << __func__ << " demoting1 0x" << std::hex << off << "~" << len
                              << std::dec << " to bin " << newbin << dendl;
               _insert_free(off, len);
-              return false;
+              return true;
             }
-            return true;
+            return false;
           });
         ++it;
       }
