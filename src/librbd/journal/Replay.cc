@@ -348,9 +348,9 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp, event.offset,
-                                   event.length, event.skip_partial_discard,
-				   {});
+  io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
+                                   {{event.offset, event.length}},
+                                   event.skip_partial_discard, {});
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);
@@ -426,8 +426,9 @@ void Replay<I>::handle_event(const journal::AioWriteSameEvent &event,
     return;
   }
 
-  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp, event.offset,
-                                     event.length, std::move(data), 0, {});
+  io::ImageRequest<I>::aio_writesame(&m_image_ctx, aio_comp,
+                                     {{event.offset, event.length}},
+                                     std::move(data), 0, {});
   if (flush_required) {
     m_lock.Lock();
     auto flush_comp = create_aio_flush_completion(nullptr);

@@ -20,12 +20,12 @@ class ImageCtx;
 namespace io {
 
 class AioCompletion;
-template <typename> class ImageRequest;
+template <typename> class ImageDispatchSpec;
 class ReadResult;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageRequestWQ
-  : public ThreadPool::PointerWQ<ImageRequest<ImageCtxT> > {
+  : public ThreadPool::PointerWQ<ImageDispatchSpec<ImageCtxT> > {
 public:
   ImageRequestWQ(ImageCtxT *image_ctx, const string &name, time_t ti,
                  ThreadPool *tp);
@@ -55,9 +55,8 @@ public:
                              bufferlist &&bl, uint64_t *mismatch_off,
                              int op_flags, bool native_async=true);
 
-  using ThreadPool::PointerWQ<ImageRequest<ImageCtxT> >::drain;
-
-  using ThreadPool::PointerWQ<ImageRequest<ImageCtxT> >::empty;
+  using ThreadPool::PointerWQ<ImageDispatchSpec<ImageCtxT> >::drain;
+  using ThreadPool::PointerWQ<ImageDispatchSpec<ImageCtxT> >::empty;
 
   void shut_down(Context *on_shutdown);
 
@@ -76,7 +75,7 @@ public:
 
 protected:
   void *_void_dequeue() override;
-  void process(ImageRequest<ImageCtxT> *req) override;
+  void process(ImageDispatchSpec<ImageCtxT> *req) override;
 
 private:
   typedef std::list<Context *> Contexts;
@@ -113,20 +112,20 @@ private:
     return (m_queued_writes == 0);
   }
 
-  void finish_queued_io(ImageRequest<ImageCtxT> *req);
+  void finish_queued_io(ImageDispatchSpec<ImageCtxT> *req);
   void finish_in_flight_write();
 
   int start_in_flight_io(AioCompletion *c);
   void finish_in_flight_io();
-  void fail_in_flight_io(int r, ImageRequest<ImageCtxT> *req);
+  void fail_in_flight_io(int r, ImageDispatchSpec<ImageCtxT> *req);
 
-  void queue(ImageRequest<ImageCtxT> *req);
+  void queue(ImageDispatchSpec<ImageCtxT> *req);
 
-  void handle_acquire_lock(int r, ImageRequest<ImageCtxT> *req);
-  void handle_refreshed(int r, ImageRequest<ImageCtxT> *req);
+  void handle_acquire_lock(int r, ImageDispatchSpec<ImageCtxT> *req);
+  void handle_refreshed(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_blocked_writes(int r);
 
-  void handle_iops_throttle_ready(int r, ImageRequest<ImageCtxT> *item);
+  void handle_iops_throttle_ready(int r, ImageDispatchSpec<ImageCtxT> *item);
 };
 
 } // namespace io

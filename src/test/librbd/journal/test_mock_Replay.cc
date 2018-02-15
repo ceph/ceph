@@ -37,14 +37,13 @@ struct ImageRequest<MockReplayImageCtx> {
     s_instance->aio_write(c, image_extents, bl, op_flags);
   }
 
-  MOCK_METHOD4(aio_discard, void(AioCompletion *c, uint64_t off, uint64_t len,
+  MOCK_METHOD3(aio_discard, void(AioCompletion *c, const Extents& image_extents,
                                  bool skip_partial_discard));
   static void aio_discard(MockReplayImageCtx *ictx, AioCompletion *c,
-                          uint64_t off, uint64_t len,
-                          bool skip_partial_discard,
+                          Extents&& image_extents, bool skip_partial_discard,
                           const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
-    s_instance->aio_discard(c, off, len, skip_partial_discard);
+    s_instance->aio_discard(c, image_extents, skip_partial_discard);
   }
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
@@ -54,13 +53,14 @@ struct ImageRequest<MockReplayImageCtx> {
     s_instance->aio_flush(c);
   }
 
-  MOCK_METHOD5(aio_writesame, void(AioCompletion *c, uint64_t off, uint64_t len,
+  MOCK_METHOD4(aio_writesame, void(AioCompletion *c,
+                                   const Extents& image_extents,
                                    const bufferlist &bl, int op_flags));
   static void aio_writesame(MockReplayImageCtx *ictx, AioCompletion *c,
-                            uint64_t off, uint64_t len, bufferlist &&bl,
+                            Extents&& image_extents, bufferlist &&bl,
                             int op_flags, const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
-    s_instance->aio_writesame(c, off, len, bl, op_flags);
+    s_instance->aio_writesame(c, image_extents, bl, op_flags);
   }
 
   MOCK_METHOD6(aio_compare_and_write, void(AioCompletion *c, const Extents &image_extents,
@@ -148,7 +148,8 @@ public:
   void expect_aio_discard(MockIoImageRequest &mock_io_image_request,
                           io::AioCompletion **aio_comp, uint64_t off,
                           uint64_t len, bool skip_partial_discard) {
-    EXPECT_CALL(mock_io_image_request, aio_discard(_, off, len, skip_partial_discard))
+    EXPECT_CALL(mock_io_image_request, aio_discard(_, io::Extents{{off, len}},
+                                                   skip_partial_discard))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 
@@ -176,17 +177,21 @@ public:
                             io::AioCompletion **aio_comp, uint64_t off,
                             uint64_t len, const char *data) {
     EXPECT_CALL(mock_io_image_request,
-                aio_writesame(_, off, len, BufferlistEqual(data), _))
+                aio_writesame(_, io::Extents{{off, len}},
+                              BufferlistEqual(data), _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 
   void expect_aio_compare_and_write(MockIoImageRequest &mock_io_image_request,
                                     io::AioCompletion **aio_comp, uint64_t off,
-                                    uint64_t len, const char *cmp_data, const char *data,
+                                    uint64_t len, const char *cmp_data,
+                                    const char *data,
                                     uint64_t *mismatch_offset) {
     EXPECT_CALL(mock_io_image_request,
                 aio_compare_and_write(_, io::Extents{{off, len}},
-                  BufferlistEqual(cmp_data), BufferlistEqual(data), mismatch_offset, _))
+                                      BufferlistEqual(cmp_data),
+                                      BufferlistEqual(data),
+                                      mismatch_offset, _))
                   .WillOnce(SaveArg<0>(aio_comp));
   }
 
