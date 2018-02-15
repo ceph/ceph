@@ -1,7 +1,8 @@
+from __future__ import absolute_import
 
 import rados
 import rbd
-from remote_view_cache import RemoteViewCache
+from .remote_view_cache import RemoteViewCache
 
 SERVICE_TYPE = 'tcmu-runner'
 

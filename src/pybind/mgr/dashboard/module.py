@@ -3,11 +3,19 @@
 Demonstrate writing a Ceph web interface inside a mgr module.
 """
 
+from __future__ import absolute_import
+
 # We must share a global reference to this instance, because it is the
 # gatekeeper to all accesses to data from the C++ side (e.g. the REST API
 # request handlers need to see it)
 from collections import defaultdict
+from functools import cmp_to_key
 import collections
+
+try:
+    iteritems = dict.iteritems
+except AttributeError:
+    iteritems = dict.items
 
 _global_instance = {'plugin': None}
 def global_instance():
@@ -26,18 +34,21 @@ import socket
 
 import cherrypy
 import jinja2
-import urlparse
+try:
+    import urlparse
+except ImportError:
+    import urllib.parse as urlparse
 
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult
 
-from types import OsdMap, NotFound, Config, FsMap, MonMap, \
+from .types import OsdMap, NotFound, Config, FsMap, MonMap, \
     PgSummary, Health, MonStatus
 
-import rbd_iscsi
-import rbd_mirroring
-from rbd_ls import RbdLs, RbdPoolLs
-from cephfs_clients import CephFSClients
-from rgw import RGWDaemons
+from . import rbd_iscsi
+from . import rbd_mirroring
+from .rbd_ls import RbdLs, RbdPoolLs
+from .cephfs_clients import CephFSClients
+from .rgw import RGWDaemons
 
 log = logging.getLogger("dashboard")
 
@@ -68,7 +79,7 @@ def get_prefixed_url(url):
 
 def to_sorted_array(data):
     assert isinstance(data, dict)
-    return sorted(data.iteritems())
+    return sorted(iteritems(data))
 
 def prepare_url_prefix(url_prefix):
     """
@@ -367,7 +378,7 @@ class Module(MgrModule):
                 )
 
         # Find the standby replays
-        for gid_str, daemon_info in mdsmap['info'].iteritems():
+        for gid_str, daemon_info in iteritems(mdsmap['info']):
             if daemon_info['state'] != "up:standby-replay":
                 continue
 
@@ -471,14 +482,12 @@ class Module(MgrModule):
                 # Transform the `checks` dict into a list for the convenience
                 # of rendering from javascript.
                 checks = []
-                for k, v in health['checks'].iteritems():
+                for k, v in iteritems(health['checks']):
                     v['type'] = k
                     checks.append(v)
 
-                checks = sorted(checks, cmp=lambda a, b: a['severity'] > b['severity'])
-
+                checks = sorted(checks, key=lambda x: x['severity'])
                 health['checks'] = checks
-
                 return health
 
             def _toplevel_data(self):
@@ -1208,32 +1217,28 @@ class Module(MgrModule):
             @cherrypy.expose
             def index(self, rgw_id=None):
                 if rgw_id is not None:
-		    template = env.get_template("rgw_detail.html")
-		    toplevel_data = self._toplevel_data()
-		    return template.render(
-			    url_prefix=global_instance().url_prefix,
-			    ceph_version=global_instance().version,
-			    path_info='/rgw' + cherrypy.request.path_info,
-			    toplevel_data=json.dumps(toplevel_data, indent=2),
-			    content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
-			)
+                    template = env.get_template("rgw_detail.html")
+                    toplevel_data = self._toplevel_data()
+                    return template.render(
+                            url_prefix=global_instance().url_prefix,
+                            ceph_version=global_instance().version,
+                            path_info='/rgw' + cherrypy.request.path_info,
+                            toplevel_data=json.dumps(toplevel_data, indent=2),
+                            content_data=json.dumps(self.rgw_data(rgw_id), indent=2)
+                        )
                 else:
+                    # List all RGW servers
+                    template = env.get_template("rgw.html")
+                    toplevel_data = self._toplevel_data()
+                    content_data = self._rgw_daemons()
+                    return template.render(
+                        url_prefix = global_instance().url_prefix,
+                        ceph_version=global_instance().version,
+                        path_info='/rgw' + cherrypy.request.path_info,
+                        toplevel_data=json.dumps(toplevel_data, indent=2),
+                        content_data=json.dumps(content_data, indent=2)
+                    )
 
-		    """ List all RGW servers """
-
-		    template = env.get_template("rgw.html")
-		    toplevel_data = self._toplevel_data()
-
-		    content_data = self._rgw_daemons()
-
-		    return template.render(
-			url_prefix = global_instance().url_prefix,
-			ceph_version=global_instance().version,
-			path_info='/rgw' + cherrypy.request.path_info,
-			toplevel_data=json.dumps(toplevel_data, indent=2),
-			content_data=json.dumps(content_data, indent=2)
-		    )
-            
             def _rgw_daemons(self):
                 status, data = global_instance().rgw_daemons.get()
                 if data is None:
@@ -1268,7 +1273,7 @@ class Module(MgrModule):
             @cherrypy.expose
             @cherrypy.tools.json_out()
             def rgw_data(self, rgw_id):
-	        return self._rgw(rgw_id)
+                return self._rgw(rgw_id)
 
         cherrypy.tree.mount(Root(), get_prefixed_url("/"), conf)
         cherrypy.tree.mount(OSDEndpoint(), get_prefixed_url("/osd"), conf)

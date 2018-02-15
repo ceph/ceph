@@ -57,6 +57,11 @@ int PyModuleRegistry::init(const MgrMap &map)
 #else
   Py_SetProgramName(const_cast<char*>(PYTHON_EXECUTABLE));
 #endif
+  // Add more modules
+  if (g_conf->get_val<bool>("daemonize")) {
+    PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
+  }
+  PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
   Py_InitializeEx(0);
 
   // Let CPython know that we will be calling it back from other
