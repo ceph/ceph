@@ -25,74 +25,47 @@ namespace io {
 struct AioCompletion;
 template <typename> class CopyupRequest;
 
-struct ObjectRequestHandle {
-  virtual ~ObjectRequestHandle() {
-  }
-
-  virtual void fail(int r) = 0;
-  virtual void send() = 0;
-};
-
 /**
  * This class represents an I/O operation to a single RBD data object.
  * Its subclasses encapsulate logic for dealing with special cases
  * for I/O due to layering.
  */
 template <typename ImageCtxT = ImageCtx>
-class ObjectRequest : public ObjectRequestHandle {
+class ObjectRequest {
 public:
-  static ObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
-                                     uint64_t object_no,
-                                     uint64_t object_off,
-                                     ceph::bufferlist&& data,
-                                     const ::SnapContext &snapc, int op_flags,
-				     const ZTracer::Trace &parent_trace,
-                                     Context *completion);
-  static ObjectRequest* create_discard(ImageCtxT *ictx, const std::string &oid,
-                                       uint64_t object_no, uint64_t object_off,
-                                       uint64_t object_len,
-                                       const ::SnapContext &snapc,
-                                       bool disable_clone_remove,
-                                       bool update_object_map,
-                                       const ZTracer::Trace &parent_trace,
-                                       Context *completion);
-  static ObjectRequest* create_writesame(ImageCtxT *ictx,
-                                         const std::string &oid,
-                                         uint64_t object_no,
-                                         uint64_t object_off,
-                                         uint64_t object_len,
-                                         ceph::bufferlist&& data,
-                                         const ::SnapContext &snapc,
-					 int op_flags,
-					 const ZTracer::Trace &parent_trace,
-                                         Context *completion);
-  static ObjectRequest* create_compare_and_write(ImageCtxT *ictx,
-                                                 const std::string &oid,
-                                                 uint64_t object_no,
-                                                 uint64_t object_off,
-                                                 ceph::bufferlist&& cmp_data,
-                                                 ceph::bufferlist&& write_data,
-                                                 const ::SnapContext &snapc,
-                                                 uint64_t *mismatch_offset, int op_flags,
-                                                 const ZTracer::Trace &parent_trace,
-                                                 Context *completion);
+  static ObjectRequest* create_write(
+      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
+      uint64_t object_off, ceph::bufferlist&& data, const ::SnapContext &snapc,
+      int op_flags, const ZTracer::Trace &parent_trace, Context *completion);
+  static ObjectRequest* create_discard(
+      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
+      uint64_t object_off, uint64_t object_len, const ::SnapContext &snapc,
+      bool disable_clone_remove, bool update_object_map,
+      const ZTracer::Trace &parent_trace, Context *completion);
+  static ObjectRequest* create_write_same(
+      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
+      uint64_t object_off, uint64_t object_len, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags,
+      const ZTracer::Trace &parent_trace, Context *completion);
+  static ObjectRequest* create_compare_and_write(
+      ImageCtxT *ictx, const std::string &oid, uint64_t object_no,
+      uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, const ::SnapContext &snapc,
+      uint64_t *mismatch_offset, int op_flags,
+      const ZTracer::Trace &parent_trace, Context *completion);
 
   ObjectRequest(ImageCtxT *ictx, const std::string &oid,
                 uint64_t objectno, uint64_t off, uint64_t len,
                 librados::snap_t snap_id, const char *trace_name,
                 const ZTracer::Trace &parent_trace, Context *completion);
-  ~ObjectRequest() override {
+  virtual ~ObjectRequest() {
     m_trace.event("finish");
   }
 
   static void add_write_hint(ImageCtxT& image_ctx,
                              librados::ObjectWriteOperation *wr);
 
-  void fail(int r) {
-    finish(r);
-  }
-
-  void send() override = 0;
+  virtual void send() = 0;
 
   bool has_parent() const {
     return m_has_parent;

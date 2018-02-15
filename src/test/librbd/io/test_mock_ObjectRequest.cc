@@ -1161,7 +1161,7 @@ TEST_F(TestMockIoObjectRequest, WriteSame) {
   expect_writesame(mock_image_ctx, 0, 4096, 0);
 
   C_SaferCond ctx;
-  auto req = MockObjectWriteSameRequest::create_writesame(
+  auto req = MockObjectWriteSameRequest::create_write_same(
     &mock_image_ctx, ictx->get_object_name(0), 0, 0, 4096, std::move(bl),
     mock_image_ctx.snapc, 0, {}, &ctx);
   req->send();

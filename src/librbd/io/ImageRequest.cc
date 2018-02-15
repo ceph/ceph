@@ -10,6 +10,8 @@
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
@@ -263,7 +265,7 @@ void ImageReadRequest<I>::send_request() {
       auto req_comp = new io::ReadResult::C_ObjectReadRequest(
         aio_comp, extent.offset, extent.length,
         std::move(extent.buffer_extents), true);
-      ObjectReadRequest<I> *req = ObjectReadRequest<I>::create(
+      auto req = ObjectReadRequest<I>::create(
         &image_ctx, extent.oid.name, extent.objectno, extent.offset,
         extent.length, snap_id, m_op_flags, false, this->m_trace,
         &req_comp->bl, &req_comp->extent_map, req_comp);
@@ -376,15 +378,14 @@ void AbstractImageWriteRequest<I>::send_object_requests(
     ldout(cct, 20) << "oid " << p->oid << " " << p->offset << "~" << p->length
                    << " from " << p->buffer_extents << dendl;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    ObjectRequestHandle *request = create_object_request(*p, snapc,
-                                                            req_comp);
+    auto request = create_object_request(*p, snapc, req_comp);
 
     // if journaling, stash the request for later; otherwise send
     if (request != NULL) {
       if (object_requests != NULL) {
         object_requests->push_back(request);
       } else {
-        request->send();
+        request->send(0);
       }
     }
   }
@@ -470,7 +471,7 @@ void ImageWriteRequest<I>::send_object_requests(
 }
 
 template <typename I>
-ObjectRequestHandle *ImageWriteRequest<I>::create_object_request(
+ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
@@ -478,10 +479,10 @@ ObjectRequestHandle *ImageWriteRequest<I>::create_object_request(
 
   bufferlist bl;
   assemble_extent(object_extent, &bl);
-  ObjectRequest<I> *req = ObjectRequest<I>::create_write(
-    &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, this->m_trace,
-    on_finish);
+  auto req = ObjectDispatchSpec::create_write(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+    object_extent.objectno, object_extent.offset, std::move(bl), snapc,
+    m_op_flags, 0, this->m_trace, on_finish);
   return req;
 }
 
@@ -575,15 +576,14 @@ void ImageDiscardRequest<I>::send_object_cache_requests(
 }
 
 template <typename I>
-ObjectRequestHandle *ImageDiscardRequest<I>::create_object_request(
+ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
-
-  auto req = ObjectRequest<I>::create_discard(
-    &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, object_extent.length, snapc, true, true,
-    this->m_trace, on_finish);
+  auto req = ObjectDispatchSpec::create_discard(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+    object_extent.objectno, object_extent.offset, object_extent.length, snapc,
+    0, 0, this->m_trace, on_finish);
   return req;
 }
 
@@ -726,26 +726,29 @@ void ImageWriteSameRequest<I>::send_object_requests(
 }
 
 template <typename I>
-ObjectRequestHandle *ImageWriteSameRequest<I>::create_object_request(
+ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
   assert(image_ctx.object_cacher == NULL);
 
   bufferlist bl;
-  ObjectRequest<I> *req;
+  ObjectDispatchSpec *req;
 
   if (util::assemble_write_same_extent(object_extent, m_data_bl, &bl, false)) {
-    req = ObjectRequest<I>::create_writesame(
-      &image_ctx, object_extent.oid.name, object_extent.objectno,
-      object_extent.offset, object_extent.length,
-      std::move(bl), snapc, m_op_flags, this->m_trace, on_finish);
+    Extents buffer_extents{object_extent.buffer_extents};
+
+    req = ObjectDispatchSpec::create_write_same(
+      &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+      object_extent.objectno, object_extent.offset, object_extent.length,
+      std::move(buffer_extents), std::move(bl), snapc, m_op_flags, 0,
+      this->m_trace, on_finish);
     return req;
   }
-  req = ObjectRequest<I>::create_write(
-    &image_ctx, object_extent.oid.name, object_extent.objectno,
-    object_extent.offset, std::move(bl), snapc, m_op_flags, this->m_trace,
-    on_finish);
+  req = ObjectDispatchSpec::create_write(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+    object_extent.objectno, object_extent.offset, std::move(bl), snapc,
+    m_op_flags, 0, this->m_trace, on_finish);
   return req;
 }
 
@@ -815,7 +818,7 @@ void ImageCompareAndWriteRequest<I>::send_image_cache_request() {
 }
 
 template <typename I>
-ObjectRequestHandle *ImageCompareAndWriteRequest<I>::create_object_request(
+ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
     const ObjectExtent &object_extent,
     const ::SnapContext &snapc,
     Context *on_finish) {
@@ -825,12 +828,11 @@ ObjectRequestHandle *ImageCompareAndWriteRequest<I>::create_object_request(
   // a single object
   bufferlist bl;
   assemble_extent(object_extent, &bl);
-  ObjectRequest<I> *req = ObjectRequest<I>::create_compare_and_write(
-                                  &image_ctx, object_extent.oid.name,
-                                  object_extent.objectno, object_extent.offset,
-                                  std::move(m_cmp_bl), std::move(bl), snapc,
-                                  m_mismatch_offset, m_op_flags, this->m_trace,
-                                  on_finish);
+  auto req = ObjectDispatchSpec::create_compare_and_write(
+    &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
+    object_extent.objectno, object_extent.offset, std::move(m_cmp_bl),
+    std::move(bl), snapc, m_mismatch_offset, m_op_flags, 0, this->m_trace,
+    on_finish);
   return req;
 }
 
