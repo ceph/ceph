@@ -3,7 +3,8 @@
           columnMode="flex"
           [toolHeader]="false"
           [footer]="false"
-          [limit]="0">
+          [limit]="0"
+          (fetchData)="getCounters()">
   <ng-template #valueTpl let-row="row">
     {{ row.value | dimless }} {{ row.unit }}
   </ng-template>

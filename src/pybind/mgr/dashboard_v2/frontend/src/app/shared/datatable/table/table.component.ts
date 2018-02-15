@@ -31,7 +31,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   @ViewChild('routerLinkTpl') routerLinkTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
-  @Input() data: any[];
+  @Input() data: any[] = [];
   // Each item -> { prop: 'attribute name', name: 'display name' }
   @Input() columns: CdTableColumn[];
   // Method used for setting column widths.
@@ -50,6 +50,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   // The current selection is passed as function argument. To do not display
   // the details page, return false.
   @Input() beforeShowDetails: Function;
+
   // Should be the function that will update the input data.
   @Output() fetchData = new EventEmitter();
 
@@ -60,6 +61,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   search = '';
   rows = [];
   selected = [];
+  loadingIndicator = false;
   paginationClasses = {
     pagerLeftArrow: 'i fa fa-angle-double-left',
     pagerRightArrow: 'i fa fa-angle-double-right',
@@ -118,11 +120,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   }
 
   reloadData() {
+    this.loadingIndicator = true;
     this.fetchData.emit();
   }
 
   useData() {
     this.rows = [...this.data];
+    this.loadingIndicator = false;
   }
 
   toggleExpandRow() {

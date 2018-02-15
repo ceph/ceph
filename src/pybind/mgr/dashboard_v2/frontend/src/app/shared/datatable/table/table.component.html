@@ -60,7 +60,7 @@
                  [headerHeight]="header ? 'auto' : 0"
                  [footerHeight]="footer ? 'auto' : 0"
                  [limit]="limit > 0 ? limit : undefined"
-                 [loadingIndicator]="true"
+                 [loadingIndicator]="loadingIndicator"
                  [rowHeight]="'auto'">
     <!-- Row Detail Template -->
     <ngx-datatable-row-detail (toggle)="updateDetailView()">
@@ -71,7 +71,6 @@
 
 <!-- cell templates that can be accessed from outside -->
 <ng-template #tableCellBoldTpl
-             let-row="row"
              let-value="value">
   <strong>{{ value }}</strong>
 </ng-template>

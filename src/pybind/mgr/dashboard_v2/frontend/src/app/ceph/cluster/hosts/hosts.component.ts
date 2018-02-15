@@ -1,5 +1,6 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { HostService } from '../../../shared/services/host.service';
 
@@ -10,7 +11,7 @@ import { HostService } from '../../../shared/services/host.service';
 })
 export class HostsComponent implements OnInit {
 
-  columns: Array<object> = [];
+  columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
 
   @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
@@ -38,6 +39,9 @@ export class HostsComponent implements OnInit {
         pipe: this.cephShortVersionPipe
       }
     ];
+  }
+
+  getHosts() {
     this.hostService.list().then((resp) => {
       resp.map((host) => {
         host.services.map((service) => {
@@ -49,5 +53,4 @@ export class HostsComponent implements OnInit {
       this.hosts = resp;
     });
   }
-
 }

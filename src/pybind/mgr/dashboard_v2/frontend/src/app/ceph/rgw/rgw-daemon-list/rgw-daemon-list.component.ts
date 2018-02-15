@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
@@ -9,36 +9,33 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
   templateUrl: './rgw-daemon-list.component.html',
   styleUrls: ['./rgw-daemon-list.component.scss']
 })
-export class RgwDaemonListComponent implements OnInit {
+export class RgwDaemonListComponent {
 
   columns: Array<CdTableColumn> = [];
   daemons: Array<object> = [];
 
   detailsComponent = 'RgwDaemonDetailsComponent';
 
-  constructor(private rgwDaemonService: RgwDaemonService) {
+  constructor(private rgwDaemonService: RgwDaemonService,
+              cephShortVersionPipe: CephShortVersionPipe) {
     this.columns = [
       {
         name: 'ID',
         prop: 'id',
-        width: 100
+        flexGrow: 2
       },
       {
         name: 'Hostname',
         prop: 'server_hostname',
-        width: 100
+        flexGrow: 2
       },
       {
         name: 'Version',
         prop: 'version',
-        width: 50,
-        pipe: new CephShortVersionPipe()
+        flexGrow: 1,
+        pipe: cephShortVersionPipe
       }
     ];
-  }
-
-  ngOnInit() {
-    this.getDaemonList();
   }
 
   getDaemonList() {

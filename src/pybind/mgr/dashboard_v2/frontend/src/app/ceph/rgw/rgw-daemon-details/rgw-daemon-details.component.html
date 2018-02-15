@@ -1,6 +1,7 @@
 <tabset>
   <tab heading="Details">
-    <cd-table-key-value [data]="metadata">
+    <cd-table-key-value [data]="metadata"
+                        (fetchData)="getMetaData()">
     </cd-table-key-value>
   </tab>
   <tab heading="Performance Counters">

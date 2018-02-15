@@ -48,7 +48,6 @@ export class TablePerformanceCounterComponent implements OnInit {
         flexGrow: 1
       }
     ];
-    this.getCounters();
   }
 
   getCounters() {
