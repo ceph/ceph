@@ -5,7 +5,7 @@ from __future__ import absolute_import
 from .helper import ControllerTestCase, authenticate
 
 
-class BlockPoolTest(ControllerTestCase):
+class RbdTest(ControllerTestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -20,7 +20,7 @@ class BlockPoolTest(ControllerTestCase):
 
     @authenticate
     def test_list(self):
-        data = self._get('/api/block_pool/rbd_pool_data/rbd')
+        data = self._get('/api/rbd/rbd')
         self.assertStatus(200)
 
         img1 = data['value'][0]
