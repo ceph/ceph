@@ -68,10 +68,10 @@ int RGWCompletionManager::get_next(void **user_info)
 {
   Mutex::Locker l(lock);
   while (complete_reqs.empty()) {
-    cond.Wait(lock);
     if (going_down) {
       return -ECANCELED;
     }
+    cond.Wait(lock);
   }
   *user_info = complete_reqs.front();
   complete_reqs.pop_front();
