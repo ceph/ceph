@@ -85,7 +85,8 @@
                 "omap_digest_mismatch",
                 "size_mismatch",
                 "attr_value_mismatch",
-                "attr_name_mismatch"
+                "attr_name_mismatch",
+                "snapset_inconsistency"
               ]
             },
             "minItems": 0,
