@@ -285,9 +285,11 @@ void ECBackend::handle_recovery_push(
   const PushOp &op,
   RecoveryMessages *m)
 {
-  ostringstream ss;
-  if (get_parent()->check_failsafe_full(ss)) {
-    dout(10) << __func__ << " Out of space (failsafe) processing push request: " << ss.str() << dendl;
+  unique_ptr<ostringstream> ss(nullptr);
+  if (cct->_conf->subsys.should_gather(dout_subsys, 10))
+    ss = unique_ptr<ostringstream>(new ostringstream);
+  if (get_parent()->check_failsafe_full(ss.get())) {
+    dout(10) << __func__ << " Out of space (failsafe) processing push request: " << ss->str() << dendl;
     ceph_abort();
   }
 
