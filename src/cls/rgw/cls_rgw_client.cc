@@ -648,7 +648,11 @@ int cls_rgw_usage_log_trim(IoCtx& io_ctx, const string& oid, string& user,
   return 0;
 }
 
-
+void cls_rgw_usage_log_clear(ObjectWriteOperation& op)
+{
+  bufferlist in;
+  op.exec(RGW_CLASS, RGW_USAGE_LOG_CLEAR, in);
+}
 
 void cls_rgw_usage_log_add(ObjectWriteOperation& op, rgw_usage_log_info& info)
 {

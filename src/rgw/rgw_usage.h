@@ -23,6 +23,8 @@ public:
 
   static int trim(RGWRados *store, rgw_user& uid, uint64_t start_epoch,
 	          uint64_t end_epoch);
+
+  static int clear(RGWRados *store);
 };
 
 
