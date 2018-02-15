@@ -4,8 +4,9 @@ Dashboard and Administration Module for Ceph Manager (aka "Dashboard v2")
 Overview
 --------
 
-The original Ceph Manager Dashboard started out as a simple read-only view into
-various run-time information and performance data of a Ceph cluster.
+The original Ceph Manager Dashboard that was shipped with Ceph "Luminous"
+started out as a simple read-only view into various run-time information and
+performance data of a Ceph cluster.
 
 However, there is a `growing demand <http://pad.ceph.com/p/mimic-dashboard>`_
 for adding more web-based management capabilities, to make it easier for
@@ -38,25 +39,26 @@ JIRA instance <https://tracker.openattic.org/browse/OP-3039>`_.
 Enabling and Starting the Dashboard
 -----------------------------------
 
-The Python backend code of this module requires a number of Python modules to be
-installed. They are listed in file ``requirements.txt``.  Using `pip
-<https://pypi.python.org/pypi/pip>`_ you may install all required dependencies
-by issuing ``pip -r requirements.txt``.
+If you have installed Ceph from distribution packages, the package management
+system should have taken care of installing all the required dependencies.
 
-If you're using the `ceph-dev-docker development environment
-<https://github.com/ricardoasmarques/ceph-dev-docker/>`_, simply run
-``./install_deps.sh`` from the current directory to install them.
+If you want to start the dashboard from within a development environment, you
+need to have built Ceph (see the toplevel ``README.md`` file and the `developer
+documentation <http://docs.ceph.com/docs/master/dev/>`_ for details on how to
+accomplish this.
 
-Start the Dashboard module by running::
+Finally, you need to build the dashboard frontend code. See the file
+``HACKING.rst`` in this directory for instructions on setting up the necessary
+development environment.
+
+From within a running Ceph cluster, you can start the Dashboard module by
+running the following command::
 
   $ ceph mgr module enable dashboard_v2
 
-You can see currently enabled modules with::
+You can see currently enabled Manager modules with::
 
   $ ceph mgr module ls
-
-Currently you will need to manually generate the frontend code.
-Instructions can be found in `./frontend/README.md`.
 
 In order to be able to log in, you need to define a username and password, which
 will be stored in the MON's configuration database::
@@ -65,300 +67,11 @@ will be stored in the MON's configuration database::
 
 The password will be stored as a hash using ``bcrypt``.
 
-The WebUI should then be reachable on TCP port 8080.
+The Dashboard's WebUI should then be reachable on TCP port 8080.
 
-Unit Testing and Linting
-------------------------
+Working on the Dashboard Code
+-----------------------------
 
-We included a ``tox`` configuration file that will run the unit tests under
-Python 2 and 3, as well as linting tools to guarantee the uniformity of code.
-
-You need to install ``tox`` before running it. To install ``tox`` in your
-system, either install it via your operating system's package management
-tools, e.g. by running ``dnf install python3-tox`` on Fedora Linux.
-
-Alternatively, you can use Python's native package installation method::
-
-  $ pip install tox
-
-To run tox, run the following command in the root directory (where ``tox.ini``
-is located)::
-
-  $ tox
-
-
-If you just want to run a single tox environment, for instance only run the
-linting tools::
-
-  $ tox -e lint
-
-Developer Notes
----------------
-
-How to add a new controller?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If you want to add a new endpoint to the backend, you just need to add a
-class derived from ``BaseController`` decorated with ``ApiController`` in a
-Python file located under the ``controllers`` directory. The Dashboard module
-will automatically load your new controller upon start.
-
-For example create a file ``ping2.py`` under ``controllers`` directory with the
-following code::
-
-  import cherrypy
-  from ..tools import ApiController, BaseController
-
-  @ApiController('ping2')
-  class Ping2(BaseController):
-    @cherrypy.expose
-    def default(self, *args):
-      return "Hello"
-
-Every path given in the ``ApiController`` decorator will automatically be
-prefixed with ``api``.  After reloading the Dashboard module you can access the
-above mentioned controller by pointing your browser to
-http://mgr_hostname:8080/api/ping2.
-
-It is also possible to have nested controllers.  The ``RgwController`` uses
-this technique to make the daemons available through the URL
-http://mgr_hostname:8080/api/rgw/daemon::
-
-  @ApiController('rgw')
-  @AuthRequired()
-  class Rgw(RESTController):
-    pass
-
-
-  @ApiController('rgw/daemon')
-  @AuthRequired()
-  class RgwDaemon(RESTController):
-
-    def list(self):
-      pass
-
-
-Note that paths must be unique and that a path like ``rgw/daemon`` has to have
-a parent ``rgw``.  Otherwise it won't work.
-
-How does the RESTController work?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-We also provide a simple mechanism to create REST based controllers using the
-``RESTController`` class.  Any class which inherits from ``RESTController``
-will, by default, return JSON.
-
-The ``RESTController`` is basically an additional abstraction layer which eases
-and unifies the work with collections.  A collection is just an array of
-objects with a specific type.  ``RestController`` enable some default mappings
-of request type and given parameters to specific method names.  This may sound
-complicated at first, but it's fairly easy.  Lets have look at the following
-example::
-
-  import cherrypy
-  from ..tools import ApiController, RESTController
-
-  @ApiController('ping2')
-  class Ping2(RESTController):
-    def list(self):
-      return {"msg": "Hello"}
-
-    def get(self, id):
-      return self.objects[id]
-
-In this case, the ``list`` method is automatically used for all requests to
-``api/ping2`` where no additional argument is given and where the request type
-is ``GET``.  If the request is given an additional argument, the ID in our
-case, it won't map to ``list`` anymore but to ``get`` and return the element
-with the given ID (assuming that ``self.objects`` has been filled before).  The
-same applies to other request types:
-
-+--------------+------------+----------------+-------------+
-| Request type | Arguments  | Method         | Status Code |
-+==============+============+================+=============+
-| GET          | No         | list           | 200         |
-+--------------+------------+----------------+-------------+
-| PUT          | No         | bulk_set       | 200         |
-+--------------+------------+----------------+-------------+
-| PATCH        | No         | bulk_set       | 200         |
-+--------------+------------+----------------+-------------+
-| POST         | No         | create         | 201         |
-+--------------+------------+----------------+-------------+
-| DELETE       | No         | bulk_delete    | 204         |
-+--------------+------------+----------------+-------------+
-| GET          | Yes        | get            | 200         |
-+--------------+------------+----------------+-------------+
-| PUT          | Yes        | set            | 200         |
-+--------------+------------+----------------+-------------+
-| PATCH        | Yes        | set            | 200         |
-+--------------+------------+----------------+-------------+
-| DELETE       | Yes        | delete         | 204         |
-+--------------+------------+----------------+-------------+
-
-How to restrict access to a controller?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-If you require that only authenticated users can access you controller, just
-add the ``AuthRequired`` decorator to your controller class.
-
-Example::
-
-  import cherrypy
-  from ..tools import ApiController, AuthRequired, RESTController
-
-  @ApiController('ping2')
-  @AuthRequired()
-  class Ping2(RESTController):
-    def list(self):
-      return {"msg": "Hello"}
-
-Now only authenticated users will be able to "ping" your controller.
-
-
-How to access the manager module instance from a controller?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Each controller class derived from ``BaseController``has a class property that
-points to the manager module global instance. The property is named ``mgr``.
-There is another class property called ``logger`` to easily add log messages.
-
-Example::
-
-  import cherrypy
-  from ..tools import ApiController, RESTController
-
-  @ApiController('servers')
-  class Servers(RESTController):
-    def list(self):
-      self.logger.debug('Listing available servers')
-      return {'servers': self.mgr.list_servers()}
-
-
-How to write a unit test for a controller?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-We provide a test helper class called ``ControllerTestCase`` to easily create
-unit tests for your controller.
-
-If we want to write a unit test for the above ``Ping2`` controller, create a
-``test_ping2.py`` file under the ``tests`` directory with the following code::
-
-  from .helper import ControllerTestCase
-  from .controllers.ping2 import Ping2
-
-  class Ping2Test(ControllerTestCase):
-      @classmethod
-      def setup_test(cls):
-          Ping2._cp_config['tools.authentica.on'] = False
-
-      def test_ping2(self):
-          self._get("/api/ping2")
-          self.assertStatus(200)
-          self.assertJsonBody({'msg': 'Hello'})
-
-The ``ControllerTestCase`` class will call the dashboard module code that loads
-the controllers and initializes the CherryPy webserver. Then it will call the
-``setup_test()`` class method to execute additional instructions that each test
-case needs to add to the test.
-In the example above we use the ``setup_test()`` method to disable the
-authentication handler for the ``Ping2`` controller.
-
-
-How to listen for manager notifications in a controller?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The manager notifies the modules of several types of cluster events, such
-as cluster logging event, etc...
-
-Each module has a "global" handler function called ``notify`` that the manager
-calls to notify the module. But this handler function must not block or spend
-too much time processing the event notification.
-For this reason we provide a notification queue that controllers can register
-themselves with to receive cluster notifications.
-
-The example below represents a controller that implements a very simple live
-log viewer page::
-
-  from __future__ import absolute_import
-
-  import collections
-
-  import cherrypy
-
-  from ..tools import ApiController, BaseController, NotificationQueue
-
-
-  @ApiController('livelog')
-  class LiveLog(BaseController):
-      log_buffer = collections.deque(maxlen=1000)
-
-      def __init__(self):
-          super(LiveLog, self).__init__()
-          NotificationQueue.register(self.log, 'clog')
-
-      def log(self, log_struct):
-          self.log_buffer.appendleft(log_struct)
-
-      @cherrypy.expose
-      def default(self):
-          ret = '<html><meta http-equiv="refresh" content="2" /><body>'
-          for l in self.log_buffer:
-              ret += "{}<br>".format(l)
-          ret += "</body></html>"
-          return ret
-
-As you can see above, the ``NotificationQueue`` class provides a register
-method that receives the function as its first argument, and receives the
-"notification type" as the second argument.
-You can omit the second argument of the ``register`` method, and in that case
-you are registering to listen all notifications of any type.
-
-Here is an list of notification types (these might change in the future) that
-can be used:
-
-* ``clog``: cluster log notifications
-* ``command``: notification when a command issued by ``MgrModule.send_command``
-  completes
-* ``perf_schema_update``: perf counters schema update
-* ``mon_map``: monitor map update
-* ``fs_map``: cephfs map update
-* ``osd_map``: OSD map update
-* ``service_map``: services (RGW, RBD-Mirror, etc.) map update
-* ``mon_status``: monitor status regular update
-* ``health``: health status regular update
-* ``pg_summary``: regular update of PG status information
-
-
-How to write a unit test when a controller accesses a Ceph module?
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-Consider the following example that implements a controller that retrieves the
-list of RBD images of the ``rbd`` pool::
-
-  import rbd
-  from ..tools import ApiController, RESTController
-
-  @ApiController('rbdimages')
-  class RbdImages(RESTController):
-      def __init__(self):
-          self.ioctx = self.mgr.rados.open_ioctx('rbd')
-          self.rbd = rbd.RBD()
-
-      def list(self):
-          return [{'name': n} for n in self.rbd.list(self.ioctx)]
-
-In the example above, we want to mock the return value of the ``rbd.list``
-function, so that we can test the JSON response of the controller.
-
-The unit test code will look like the following::
-
-  import mock
-  from .helper import ControllerTestCase
-
-  class RbdImagesTest(ControllerTestCase):
-      @mock.patch('rbd.RBD.list')
-      def test_list(self, rbd_list_mock):
-          rbd_list_mock.return_value = ['img1', 'img2']
-          self._get('/api/rbdimages')
-          self.assertJsonBody([{'name': 'img1'}, {'name': 'img2'}])
-
+If you're interested in helping with the development of the dashboard, please
+see the file ``HACKING.rst`` for details on how to set up a development
+environment and some other development-related topics.
