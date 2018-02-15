@@ -53,13 +53,16 @@ private:
    * SHUTDOWN_CACHE
    *    |
    *    v
-   * FLUSH_OP_WORK_QUEUE . . . . .
-   *    |                        .
-   *    v                        .
-   * CLOSE_PARENT                . (no parent)
-   *    |                        .
-   *    v                        .
-   * FLUSH_IMAGE_WATCHER < . . . .
+   * SHUT_DOWN_OBJECT_DISPATCHER
+   *    |
+   *    v
+   * FLUSH_OP_WORK_QUEUE
+   *    |
+   *    v (skip if no parent)
+   * CLOSE_PARENT
+   *    |
+   *    v
+   * FLUSH_IMAGE_WATCHER
    *    |
    *    v
    * <finish>
@@ -99,6 +102,9 @@ private:
 
   void send_shut_down_cache();
   void handle_shut_down_cache(int r);
+
+  void send_shut_down_object_dispatcher();
+  void handle_shut_down_object_dispatcher(int r);
 
   void send_flush_op_work_queue();
   void handle_flush_op_work_queue(int r);

@@ -55,6 +55,11 @@ enum {
   OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE = 1UL << 1
 };
 
+enum {
+  OBJECT_DISPATCH_FLAG_FLUSH                    = 1UL << 0,
+  OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR      = 1UL << 1
+};
+
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 
