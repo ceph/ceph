@@ -15,7 +15,8 @@
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/io/ImageRequestWQ.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchSpec.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/DemoteRequest.h"
 #include "librbd/journal/OpenRequest.h"
@@ -1465,14 +1466,14 @@ void Journal<I>::handle_io_event_safe(int r, uint64_t tid) {
 
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "completing tid=" << tid << dendl;
-  for (IOObjectRequests::iterator it = aio_object_requests.begin();
-       it != aio_object_requests.end(); ++it) {
+  for (auto it = aio_object_requests.begin(); it != aio_object_requests.end();
+       ++it) {
     if (r < 0) {
       // don't send aio requests if the journal fails -- bubble error up
       (*it)->fail(r);
     } else {
       // send any waiting aio requests now that journal entry is safe
-      (*it)->send();
+      (*it)->send(tid);
     }
   }
 

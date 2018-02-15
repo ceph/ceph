@@ -37,7 +37,7 @@ namespace librbd {
 
 class ImageCtx;
 
-namespace io { struct ObjectRequestHandle; }
+namespace io { struct ObjectDispatchSpec; }
 namespace journal { template <typename> class Replay; }
 
 template <typename ImageCtxT = ImageCtx>
@@ -91,7 +91,7 @@ public:
   static const std::string LOCAL_MIRROR_UUID;
   static const std::string ORPHAN_MIRROR_UUID;
 
-  typedef std::list<io::ObjectRequestHandle *> IOObjectRequests;
+  typedef std::list<io::ObjectDispatchSpec*> IOObjectRequests;
 
   Journal(ImageCtxT &image_ctx);
   ~Journal();

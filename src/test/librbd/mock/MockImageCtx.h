@@ -14,6 +14,7 @@
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librbd/mock/MockReadahead.h"
 #include "test/librbd/mock/io/MockImageRequestWQ.h"
+#include "test/librbd/mock/io/MockObjectDispatcher.h"
 #include "common/RWLock.h"
 #include "common/WorkQueue.h"
 #include "common/zipkin_trace.h"
@@ -84,6 +85,7 @@ struct MockImageCtx {
       group_spec(image_ctx.group_spec),
       layout(image_ctx.layout),
       io_work_queue(new io::MockImageRequestWQ()),
+      io_object_dispatcher(new io::MockObjectDispatcher()),
       op_work_queue(new MockContextWQ()),
       readahead_max_bytes(image_ctx.readahead_max_bytes),
       event_socket(image_ctx.event_socket),
@@ -132,6 +134,7 @@ struct MockImageCtx {
     delete image_watcher;
     delete op_work_queue;
     delete io_work_queue;
+    delete io_object_dispatcher;
   }
 
   void wait_for_async_requests() {
@@ -287,6 +290,7 @@ struct MockImageCtx {
   std::map<uint64_t, io::CopyupRequest<MockImageCtx>*> copyup_list;
 
   io::MockImageRequestWQ *io_work_queue;
+  io::MockObjectDispatcher *io_object_dispatcher;
   MockContextWQ *op_work_queue;
 
   cache::MockImageCache *image_cache = nullptr;

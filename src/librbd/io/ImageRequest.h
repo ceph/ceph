@@ -21,7 +21,7 @@ class ImageCtx;
 namespace io {
 
 class AioCompletion;
-class ObjectRequestHandle;
+class ObjectDispatchSpec;
 class ReadResult;
 
 template <typename ImageCtxT = ImageCtx>
@@ -65,7 +65,7 @@ public:
   }
 
 protected:
-  typedef std::list<ObjectRequestHandle *> ObjectRequests;
+  typedef std::list<ObjectDispatchSpec*> ObjectRequests;
 
   ImageCtxT &m_image_ctx;
   AioCompletion *m_aio_comp;
@@ -151,7 +151,7 @@ protected:
   virtual void send_object_requests(const ObjectExtents &object_extents,
                                     const ::SnapContext &snapc,
                                     ObjectRequests *object_requests);
-  virtual ObjectRequestHandle *create_object_request(
+  virtual ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) = 0;
 
@@ -198,7 +198,7 @@ protected:
                             const ::SnapContext &snapc,
                             ObjectRequests *aio_object_requests) override;
 
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) override;
 
@@ -241,7 +241,7 @@ protected:
   void send_object_cache_requests(const ObjectExtents &object_extents,
                                   uint64_t journal_tid) override;
 
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) override;
 
@@ -314,7 +314,7 @@ protected:
   void send_object_requests(const ObjectExtents &object_extents,
                             const ::SnapContext &snapc,
                             ObjectRequests *object_requests) override;
-  ObjectRequestHandle *create_object_request(
+  ObjectDispatchSpec *create_object_request(
       const ObjectExtent &object_extent, const ::SnapContext &snapc,
       Context *on_finish) override;
 
@@ -350,9 +350,9 @@ protected:
 
   void assemble_extent(const ObjectExtent &object_extent, bufferlist *bl);
 
-  ObjectRequestHandle *create_object_request(const ObjectExtent &object_extent,
-                                             const ::SnapContext &snapc,
-                                             Context *on_finish) override;
+  ObjectDispatchSpec *create_object_request(
+      const ObjectExtent &object_extent, const ::SnapContext &snapc,
+      Context *on_finish) override;
 
   uint64_t append_journal_event(const ObjectRequests &requests,
                                 bool synchronous) override;

@@ -67,7 +67,7 @@ struct AsyncRequest<librbd::MockTestImageCtx> {
 namespace io {
 
 template <>
-struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
+struct ObjectRequest<librbd::MockTestImageCtx> {
   static ObjectRequest* s_instance;
   Context *on_finish = nullptr;
 
@@ -94,7 +94,6 @@ struct ObjectRequest<librbd::MockTestImageCtx> : public ObjectRequestHandle {
 
   MOCK_METHOD3(construct, void(uint64_t, uint64_t, bool));
   MOCK_METHOD0(send, void());
-  MOCK_METHOD1(fail, void(int));
 };
 
 ObjectRequest<librbd::MockTestImageCtx>* ObjectRequest<librbd::MockTestImageCtx>::s_instance = nullptr;

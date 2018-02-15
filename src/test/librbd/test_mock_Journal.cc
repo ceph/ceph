@@ -13,7 +13,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/journal/Replay.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/CreateRequest.h"
@@ -426,7 +426,7 @@ public:
 
   uint64_t when_append_io_event(MockJournalImageCtx &mock_image_ctx,
                                 MockJournal &mock_journal,
-                                io::ObjectRequest<> *object_request,
+                                io::ObjectDispatchSpec *object_request,
                                 int filter_ret_val) {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     MockJournal::IOObjectRequests object_requests;
@@ -1032,9 +1032,9 @@ TEST_F(TestMockJournal, EventCommitError) {
   };
 
   C_SaferCond object_request_ctx;
-  auto object_request = new io::ObjectDiscardRequest<>(
-    ictx, "oid", 0, 0, ictx->layout.object_size, {}, true, true, {},
-    &object_request_ctx);
+  auto object_request = io::ObjectDispatchSpec::create_discard(
+    &mock_image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, "object0", 0, 0, 0, {}, 0,
+    0, {}, &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;
@@ -1074,9 +1074,9 @@ TEST_F(TestMockJournal, EventCommitErrorWithPendingWriteback) {
   };
 
   C_SaferCond object_request_ctx;
-  auto object_request = new io::ObjectDiscardRequest<>(
-    ictx, "oid", 0, 0, ictx->layout.object_size, {}, true, true, {},
-    &object_request_ctx);
+  auto object_request = io::ObjectDispatchSpec::create_discard(
+    &mock_image_ctx, io::OBJECT_DISPATCH_LAYER_NONE, "object0", 0, 0, 0, {}, 0,
+    0, {}, &object_request_ctx);
 
   ::journal::MockFuture mock_future;
   Context *on_journal_safe;

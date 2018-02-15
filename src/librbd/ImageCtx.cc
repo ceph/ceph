@@ -30,6 +30,7 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "librbd/journal/StandardPolicy.h"
 
 #include "osdc/Striper.h"
@@ -215,6 +216,7 @@ struct C_InvalidateCache : public Context {
       this, "librbd::io_work_queue",
       cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
       thread_pool);
+    io_object_dispatcher = new io::ObjectDispatcher<>(this);
 
     if (cct->_conf->get_val<bool>("rbd_auto_exclusive_lock_until_manual_request")) {
       exclusive_lock_policy = new exclusive_lock::AutomaticPolicy(this);
@@ -251,6 +253,8 @@ struct C_InvalidateCache : public Context {
     md_ctx.aio_flush();
     data_ctx.aio_flush();
     io_work_queue->drain();
+
+    delete io_object_dispatcher;
 
     delete journal_policy;
     delete exclusive_lock_policy;

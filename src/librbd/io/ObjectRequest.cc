@@ -76,7 +76,7 @@ ObjectRequest<I>::create_discard(I *ictx, const std::string &oid,
 
 template <typename I>
 ObjectRequest<I>*
-ObjectRequest<I>::create_writesame(I *ictx, const std::string &oid,
+ObjectRequest<I>::create_write_same(I *ictx, const std::string &oid,
                                    uint64_t object_no, uint64_t object_off,
                                    uint64_t object_len,
                                    ceph::bufferlist&& data,

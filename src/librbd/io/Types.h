@@ -36,6 +36,25 @@ enum Direction {
   DIRECTION_BOTH
 };
 
+enum DispatchResult {
+  DISPATCH_RESULT_INVALID,
+  DISPATCH_RESULT_CONTINUE,
+  DISPATCH_RESULT_COMPLETE
+};
+
+enum ObjectDispatchLayer {
+  OBJECT_DISPATCH_LAYER_NONE = 0,
+  OBJECT_DISPATCH_LAYER_CACHE,
+  OBJECT_DISPATCH_LAYER_JOURNAL,
+  OBJECT_DISPATCH_LAYER_CORE,
+  OBJECT_DISPATCH_LAYER_LAST
+};
+
+enum {
+  OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE      = 1UL << 0,
+  OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE = 1UL << 1
+};
+
 typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
 typedef std::map<uint64_t, uint64_t> ExtentMap;
 
