@@ -19,16 +19,16 @@ export class RgwDaemonDetailsComponent implements OnInit {
   constructor(private rgwDaemonService: RgwDaemonService) { }
 
   ngOnInit() {
-    this.getMetaData();
+    // Get the service id of the first selected row.
+    if (this.selected.length > 0) {
+      this.serviceId = this.selected[0].id;
+    }
   }
 
-  private getMetaData() {
-    if (this.selected.length < 1) {
+  getMetaData() {
+    if (_.isEmpty(this.serviceId)) {
       return;
     }
-
-    // Get the service id of the first selected row.
-    this.serviceId = this.selected[0].id;
 
     this.rgwDaemonService.get(this.serviceId)
       .then((resp) => {

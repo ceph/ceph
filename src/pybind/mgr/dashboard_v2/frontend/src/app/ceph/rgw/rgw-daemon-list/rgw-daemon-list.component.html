@@ -5,6 +5,7 @@
 </nav>
 <cd-table [data]="daemons"
           [columns]="columns"
+          columnMode="flex"
           [detailsComponent]="detailsComponent"
           (fetchData)="getDaemonList()"
           [beforeShowDetails]="beforeShowDetails">

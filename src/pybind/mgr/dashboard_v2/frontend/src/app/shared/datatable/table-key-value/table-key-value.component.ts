@@ -1,4 +1,4 @@
-import { Component, Input, OnInit } from '@angular/core';
+import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
@@ -39,6 +39,11 @@ export class TableKeyValueComponent implements OnInit {
    */
   @Input() value = 'value';
 
+  /**
+   * The function that will be called to update the input data.
+   */
+  @Output() fetchData = new EventEmitter();
+
   constructor() { }
 
   ngOnInit() {
@@ -53,5 +58,10 @@ export class TableKeyValueComponent implements OnInit {
         flexGrow: 3
       }
     ];
+  }
+
+  reloadData() {
+    // Forward event triggered by the 'cd-table' datatable.
+    this.fetchData.emit();
   }
 }
