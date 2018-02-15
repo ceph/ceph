@@ -10,4 +10,9 @@
           [toolHeader]="false"
           [footer]="false"
           [limit]="0">
+  <ng-template #servicesTpl let-value="value">
+    <span *ngFor="let service of value; last as isLast">
+      <a [routerLink]="[service.cdLink]">{{ service.type }}.{{ service.id }}</a>{{ !isLast ? ", " : "" }}
+    </span>
+  </ng-template>
 </cd-table>

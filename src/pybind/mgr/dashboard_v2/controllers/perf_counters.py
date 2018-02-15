@@ -53,6 +53,7 @@ class PerfCounter(RESTController):
 @AuthRequired()
 class PerfCounters(RESTController):
     def __init__(self):
+        self.mds = PerfCounter('mds', self.mgr)
         self.mon = PerfCounter('mon', self.mgr)
         self.osd = PerfCounter('osd', self.mgr)
         self.rgw = PerfCounter('rgw', self.mgr)

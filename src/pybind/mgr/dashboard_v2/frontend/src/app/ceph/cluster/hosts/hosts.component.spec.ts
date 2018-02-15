@@ -1,9 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { SharedModule } from '../../../shared/shared.module';
-import { ServiceListPipe } from '../service-list.pipe';
 import { HostsComponent } from './hosts.component';
 
 describe('HostsComponent', () => {
@@ -15,14 +15,11 @@ describe('HostsComponent', () => {
       imports: [
         SharedModule,
         HttpClientTestingModule,
-        ComponentsModule
+        ComponentsModule,
+        RouterTestingModule
       ],
       declarations: [
-        HostsComponent,
-        ServiceListPipe
-      ],
-      providers: [
-        ServiceListPipe
+        HostsComponent
       ]
     })
     .compileComponents();
