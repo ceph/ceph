@@ -258,7 +258,7 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_DISCARD);
   MockImageDiscardRequest mock_aio_image_discard(mock_image_ctx, aio_comp,
-                                                 0, 1,
+                                                 {{0, 1}},
                                                  ictx->skip_partial_discard,
                                                  {});
   {
@@ -322,7 +322,7 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   bufferlist bl;
   bl.append("1");
   MockImageWriteSameRequest mock_aio_image_writesame(mock_image_ctx, aio_comp,
-                                                     0, 1, std::move(bl), 0,
+                                                     {{0, 1}}, std::move(bl), 0,
                                                      {});
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
