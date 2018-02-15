@@ -246,8 +246,6 @@ def run_tests(ctx, config, run_stages):
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
     attrs = ["!fails_on_rgw"]
-    if not ctx.rgw.use_fastcgi:
-        attrs.append("!fails_on_mod_proxy_fcgi")
     for client, client_config in config.iteritems():
         stages = string.join(run_stages[client], ',')
         args = [
