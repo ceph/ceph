@@ -302,7 +302,7 @@ int RGWCoroutinesStack::unwind(int retcode)
 
 bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack *skip_stack) /* returns true if needs to be called again */
 {
-  bool done = true;
+  bool need_retry = false;
   rgw_spawned_stacks *s = (op ? &op->spawned : &spawned);
   *ret = 0;
   vector<RGWCoroutinesStack *> new_list;
@@ -324,7 +324,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack 
       *ret = r;
       ldout(cct, 20) << "collect(): s=" << (void *)this << " stack=" << (void *)stack << " encountered error (r=" << r << "), skipping next stacks" << dendl;
       new_list.insert(new_list.end(), ++iter, s->entries.end());
-      done &= (iter != s->entries.end());
+      need_retry = (iter != s->entries.end());
       break;
     }
 
@@ -332,7 +332,7 @@ bool RGWCoroutinesStack::collect(RGWCoroutine *op, int *ret, RGWCoroutinesStack 
   }
 
   s->entries.swap(new_list);
-  return (!done);
+  return need_retry;
 }
 
 bool RGWCoroutinesStack::collect_next(RGWCoroutine *op, int *ret, RGWCoroutinesStack **collected_stack) /* returns true if found a stack to collect */
