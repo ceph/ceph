@@ -43,7 +43,7 @@ public:
   static ObjectRequest* create_write(ImageCtxT *ictx, const std::string &oid,
                                      uint64_t object_no,
                                      uint64_t object_off,
-                                     const ceph::bufferlist &data,
+                                     ceph::bufferlist&& data,
                                      const ::SnapContext &snapc, int op_flags,
 				     const ZTracer::Trace &parent_trace,
                                      Context *completion);
@@ -60,7 +60,7 @@ public:
                                          uint64_t object_no,
                                          uint64_t object_off,
                                          uint64_t object_len,
-                                         const ceph::bufferlist &data,
+                                         ceph::bufferlist&& data,
                                          const ::SnapContext &snapc,
 					 int op_flags,
 					 const ZTracer::Trace &parent_trace,
@@ -69,8 +69,8 @@ public:
                                                  const std::string &oid,
                                                  uint64_t object_no,
                                                  uint64_t object_off,
-                                                 const ceph::bufferlist &cmp_data,
-                                                 const ceph::bufferlist &write_data,
+                                                 ceph::bufferlist&& cmp_data,
+                                                 ceph::bufferlist&& write_data,
                                                  const ::SnapContext &snapc,
                                                  uint64_t *mismatch_offset, int op_flags,
                                                  const ZTracer::Trace &parent_trace,
@@ -309,13 +309,13 @@ class ObjectWriteRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
   ObjectWriteRequest(ImageCtxT *ictx, const std::string &oid,
                      uint64_t object_no, uint64_t object_off,
-                     const ceph::bufferlist &data, const ::SnapContext &snapc,
+                     ceph::bufferlist&& data, const ::SnapContext &snapc,
                      int op_flags, const ZTracer::Trace &parent_trace,
                      Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
                                             data.length(), snapc, "write",
                                             parent_trace, completion),
-      m_write_data(data), m_op_flags(op_flags) {
+      m_write_data(std::move(data)), m_op_flags(op_flags) {
   }
 
   bool is_empty_write_op() const override {
@@ -434,14 +434,14 @@ class ObjectWriteSameRequest : public AbstractObjectWriteRequest<ImageCtxT> {
 public:
   ObjectWriteSameRequest(ImageCtxT *ictx, const std::string &oid,
 			 uint64_t object_no, uint64_t object_off,
-			 uint64_t object_len, const ceph::bufferlist &data,
+			 uint64_t object_len, ceph::bufferlist&& data,
                          const ::SnapContext &snapc, int op_flags,
 			 const ZTracer::Trace &parent_trace,
 			 Context *completion)
     : AbstractObjectWriteRequest<ImageCtxT>(ictx, oid, object_no, object_off,
                                             object_len, snapc, "writesame",
                                             parent_trace, completion),
-      m_write_data(data), m_op_flags(op_flags) {
+      m_write_data(std::move(data)), m_op_flags(op_flags) {
   }
 
   const char *get_op_type() const override {
@@ -461,8 +461,8 @@ class ObjectCompareAndWriteRequest : public AbstractObjectWriteRequest<ImageCtxT
 public:
   ObjectCompareAndWriteRequest(ImageCtxT *ictx, const std::string &oid,
                                uint64_t object_no, uint64_t object_off,
-                               const ceph::bufferlist &cmp_bl,
-                               const ceph::bufferlist &write_bl,
+                               ceph::bufferlist&& cmp_bl,
+                               ceph::bufferlist&& write_bl,
                                const ::SnapContext &snapc,
                                uint64_t *mismatch_offset, int op_flags,
                                const ZTracer::Trace &parent_trace,
@@ -471,7 +471,7 @@ public:
                                            cmp_bl.length(), snapc,
                                            "compare_and_write", parent_trace,
                                            completion),
-    m_cmp_bl(cmp_bl), m_write_bl(write_bl),
+    m_cmp_bl(std::move(cmp_bl)), m_write_bl(std::move(write_bl)),
     m_mismatch_offset(mismatch_offset), m_op_flags(op_flags) {
   }
 
