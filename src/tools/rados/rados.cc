@@ -1379,6 +1379,16 @@ static void dump_shard(const shard_info_t& shard,
     decode(oi, bliter);  // Can't be corrupted
     f.dump_stream("object_info") << oi;
   }
+  if (!shard.has_ss_attr_missing() && !shard.has_ss_attr_corrupted() &&
+      inc.has_snapset_inconsistency()) {
+    SnapSet ss;
+    bufferlist bl;
+    map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(SS_ATTR);
+    assert(k != shard.attrs.end()); // Can't be missing
+    bufferlist::iterator bliter = k->second.begin();
+    decode(ss, bliter);  // Can't be corrupted
+    f.dump_stream("snapset") << ss;
+  }
   if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()
      || inc.union_shards.has_oi_attr_missing()
      || inc.union_shards.has_oi_attr_corrupted()
@@ -1412,6 +1422,8 @@ static void dump_obj_errors(const obj_err_t &err, Formatter &f)
     f.dump_string("error", "attr_value_mismatch");
   if (err.has_attr_name_mismatch())
     f.dump_string("error", "attr_name_mismatch");
+  if (err.has_snapset_inconsistency())
+    f.dump_string("error", "snapset_inconsistency");
   f.close_section();
 }
 
