@@ -186,10 +186,13 @@ ObjectReadRequest<I>::ObjectReadRequest(I *ictx, const std::string &oid,
                                         uint64_t len, librados::snap_t snap_id,
                                         int op_flags, bool cache_initiated,
                                         const ZTracer::Trace &parent_trace,
+                                        bufferlist* read_data,
+                                        ExtentMap* extent_map,
                                         Context *completion)
   : ObjectRequest<I>(ictx, oid, objectno, offset, len, snap_id, "read",
                      parent_trace, completion),
-    m_op_flags(op_flags), m_cache_initiated(cache_initiated) {
+    m_op_flags(op_flags), m_cache_initiated(cache_initiated),
+    m_read_data(read_data), m_extent_map(extent_map) {
 }
 
 template <typename I>
@@ -214,7 +217,7 @@ void ObjectReadRequest<I>::read_cache() {
     *image_ctx, util::create_context_callback<
       ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_cache>(this));
   image_ctx->aio_read_from_cache(
-    this->m_oid, this->m_object_no, &m_read_data, this->m_object_len,
+    this->m_oid, this->m_object_no, m_read_data, this->m_object_len,
     this->m_object_off, cache_ctx, m_op_flags,
     (this->m_trace.valid() ? &this->m_trace : nullptr));
 }
@@ -255,10 +258,10 @@ void ObjectReadRequest<I>::read_object() {
 
   librados::ObjectReadOperation op;
   if (this->m_object_len >= image_ctx->sparse_read_threshold_bytes) {
-    op.sparse_read(this->m_object_off, this->m_object_len, &m_ext_map,
-                   &m_read_data, nullptr);
+    op.sparse_read(this->m_object_off, this->m_object_len, m_extent_map,
+                   m_read_data, nullptr);
   } else {
-    op.read(this->m_object_off, this->m_object_len, &m_read_data, nullptr);
+    op.read(this->m_object_off, this->m_object_len, m_read_data, nullptr);
   }
   op.set_op_flags2(m_op_flags);
 
@@ -329,7 +332,7 @@ void ObjectReadRequest<I>::read_parent() {
     ObjectReadRequest<I>, &ObjectReadRequest<I>::handle_read_parent>(
       this, util::get_image_ctx(image_ctx->parent), AIO_TYPE_READ);
   ImageRequest<I>::aio_read(image_ctx->parent, parent_completion,
-                            std::move(parent_extents), ReadResult{&m_read_data},
+                            std::move(parent_extents), ReadResult{m_read_data},
                             0, this->m_trace);
 }
 

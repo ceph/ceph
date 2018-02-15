@@ -43,4 +43,3 @@ typedef std::map<uint64_t, uint64_t> ExtentMap;
 } // namespace librbd
 
 #endif // CEPH_LIBRBD_IO_TYPES_H
-
