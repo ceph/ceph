@@ -2602,6 +2602,9 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
 
     if (key.compare(end_key) > 0) {
       key_iter = key;
+      if (truncated) {
+        *truncated = false;
+      }
       return 0;
     }
 
