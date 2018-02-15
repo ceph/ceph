@@ -715,7 +715,8 @@ int MDLog::trim_all()
   uint64_t last_seq = 0;
   if (!segments.empty()) {
     last_seq = get_last_segment_seq();
-    if (last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
+    if (!mds->mdcache->open_file_table.is_any_committing() &&
+	last_seq > mds->mdcache->open_file_table.get_committing_log_seq()) {
       submit_mutex.Unlock();
       mds->mdcache->open_file_table.commit(new C_OFT_Committed(this, last_seq),
 					   last_seq, CEPH_MSG_PRIO_DEFAULT);
