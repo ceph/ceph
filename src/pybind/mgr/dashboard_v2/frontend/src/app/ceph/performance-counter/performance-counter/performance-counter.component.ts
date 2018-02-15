@@ -1,8 +1,6 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
-import { TablePerformanceCounterService } from '../services/table-performance-counter.service';
-
 @Component({
   selector: 'cd-performance-counter',
   templateUrl: './performance-counter.component.html',
@@ -13,10 +11,7 @@ export class PerformanceCounterComponent implements OnInit, OnDestroy {
   serviceType: string;
   routeParamsSubscribe: any;
 
-  constructor(
-    private route: ActivatedRoute,
-    private performanceCounterService: TablePerformanceCounterService
-  ) {}
+  constructor(private route: ActivatedRoute) { }
 
   ngOnInit() {
     this.routeParamsSubscribe = this.route.params.subscribe(

@@ -1,6 +1,4 @@
-import { Component, OnInit } from '@angular/core';
-
-import { ServiceListPipe } from '../service-list.pipe';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { HostService } from '../../../shared/services/host.service';
@@ -15,9 +13,12 @@ export class HostsComponent implements OnInit {
   columns: Array<object> = [];
   hosts: Array<object> = [];
 
+  @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
+
   constructor(private hostService: HostService,
-              cephShortVersionPipe: CephShortVersionPipe,
-              serviceListPipe: ServiceListPipe) {
+              private cephShortVersionPipe: CephShortVersionPipe) { }
+
+  ngOnInit() {
     this.columns = [
       {
         name: 'Hostname',
@@ -28,19 +29,23 @@ export class HostsComponent implements OnInit {
         name: 'Services',
         prop: 'services',
         flexGrow: 3,
-        pipe: serviceListPipe
+        cellTemplate: this.servicesTpl
       },
       {
         name: 'Version',
         prop: 'ceph_version',
         flexGrow: 1,
-        pipe: cephShortVersionPipe
+        pipe: this.cephShortVersionPipe
       }
     ];
-  }
-
-  ngOnInit() {
     this.hostService.list().then((resp) => {
+      resp.map((host) => {
+        host.services.map((service) => {
+          service.cdLink = `/perf_counters/${service.type}/${service.id}`;
+          return service;
+        });
+        return host;
+      });
       this.hosts = resp;
     });
   }
