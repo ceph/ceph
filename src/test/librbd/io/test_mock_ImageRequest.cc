@@ -50,50 +50,6 @@ inline ImageCtx *get_image_ctx(MockTestImageCtx *image_ctx) {
 }
 
 } // namespace util
-
-namespace io {
-
-template <>
-struct ObjectReadRequest<librbd::MockTestImageCtx> {
-  typedef std::vector<std::pair<uint64_t, uint64_t> > Extents;
-  typedef std::map<uint64_t, uint64_t> ExtentMap;
-
-  static ObjectReadRequest* s_instance;
-  Context* on_finish = nullptr;
-
-  static ObjectReadRequest* create(librbd::MockTestImageCtx *ictx,
-                                   const std::string &oid,
-                                   uint64_t objectno, uint64_t offset,
-                                   uint64_t len, Extents &buffer_extents,
-                                   librados::snap_t snap_id, int op_flags,
-                                   const ZTracer::Trace &parent_trace,
-                                   Context *completion) {
-    assert(s_instance != nullptr);
-    s_instance->on_finish = completion;
-    return s_instance;
-  }
-
-  ObjectReadRequest() {
-    assert(s_instance == nullptr);
-    s_instance = this;
-  }
-  ~ObjectReadRequest() {
-    s_instance = nullptr;
-  }
-
-  MOCK_METHOD0(send, void());
-
-  MOCK_CONST_METHOD0(get_offset, uint64_t());
-  MOCK_CONST_METHOD0(get_length, uint64_t());
-  MOCK_METHOD0(data, ceph::bufferlist &());
-  MOCK_CONST_METHOD0(get_buffer_extents, const Extents &());
-  MOCK_METHOD0(get_extent_map, ExtentMap &());
-
-};
-
-ObjectReadRequest<librbd::MockTestImageCtx>* ObjectReadRequest<librbd::MockTestImageCtx>::s_instance = nullptr;
-
-} // namespace io
 } // namespace librbd
 
 #include "librbd/io/ImageRequest.cc"
@@ -115,7 +71,6 @@ struct TestMockIoImageRequest : public TestMockFixture {
   typedef ImageFlushRequest<librbd::MockTestImageCtx> MockImageFlushRequest;
   typedef ImageWriteSameRequest<librbd::MockTestImageCtx> MockImageWriteSameRequest;
   typedef ImageCompareAndWriteRequest<librbd::MockTestImageCtx> MockImageCompareAndWriteRequest;
-  typedef ObjectReadRequest<librbd::MockTestImageCtx> MockObjectReadRequest;
 
   void expect_is_journal_appending(MockTestJournal &mock_journal, bool appending) {
     EXPECT_CALL(mock_journal, is_journal_appending())

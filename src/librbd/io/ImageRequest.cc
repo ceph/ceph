@@ -9,7 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
-#include "librbd/io/ObjectRequest.h"
+#include "librbd/io/ObjectDispatchInterface.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/io/Utils.h"
@@ -265,11 +265,11 @@ void ImageReadRequest<I>::send_request() {
       auto req_comp = new io::ReadResult::C_ObjectReadRequest(
         aio_comp, extent.offset, extent.length,
         std::move(extent.buffer_extents), true);
-      auto req = ObjectReadRequest<I>::create(
-        &image_ctx, extent.oid.name, extent.objectno, extent.offset,
-        extent.length, snap_id, m_op_flags, false, this->m_trace,
-        &req_comp->bl, &req_comp->extent_map, req_comp);
-      req->send();
+      auto req = ObjectDispatchSpec::create_read(
+        &image_ctx, OBJECT_DISPATCH_LAYER_NONE, extent.oid.name,
+        extent.objectno, extent.offset, extent.length, snap_id, m_op_flags,
+        this->m_trace, &req_comp->bl, &req_comp->extent_map, req_comp);
+      req->send(0);
     }
   }
 
@@ -583,7 +583,7 @@ ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
     object_extent.objectno, object_extent.offset, object_extent.length, snapc,
-    0, 0, this->m_trace, on_finish);
+    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, 0, this->m_trace, on_finish);
   return req;
 }
 
