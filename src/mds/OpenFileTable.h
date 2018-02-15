@@ -67,12 +67,15 @@ protected:
   MDSRank *mds;
 
   version_t omap_version = 0;
+  unsigned omap_num_objs = 0;
+  std::vector<unsigned> omap_num_items;
 
   map<inodeno_t, OpenedAnchor> anchor_map;
   set<dirfrag_t> dirfrags;
 
-  std::map<inodeno_t, unsigned> dirty_items; // ino -> dirty state
-  static const unsigned DIRTY_NEW = 1;
+  std::map<inodeno_t, int> dirty_items; // ino -> dirty state
+  static const int DIRTY_NEW	= -1;
+  static const int DIRTY_UNDEF	= -2;
 
   uint64_t committed_log_seq = 0;
   uint64_t committing_log_seq = 0;
@@ -80,7 +83,7 @@ protected:
   void get_ref(CInode *in);
   void put_ref(CInode *in);
 
-  object_t get_object_name() const;
+  object_t get_object_name(unsigned idx) const;
 
   enum {
     JOURNAL_NONE = 0,
@@ -89,26 +92,28 @@ protected:
   };
   int journal_state = 0;
 
-  bool clear_on_commit = false;
   unsigned num_pending_commit = 0;
-  void _encode_header(bufferlist& bl);
+  void _encode_header(bufferlist& bl, int j_state);
   void _commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin);
+  void _journal_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin,
+		       std::map<unsigned, std::vector<ObjectOperation> >& ops);
 
-  std::map<std::string, bufferlist> loaded_journal;
+  std::vector<std::map<std::string, bufferlist> > loaded_journals;
   map<inodeno_t, RecoveredAnchor> loaded_anchor_map;
   set<dirfrag_t> loaded_dirfrags;
   list<MDSInternalContextBase*> waiting_for_load;
   bool load_done = false;
 
   void _reset_states() {
+    omap_num_objs = 0;
+    omap_num_items.resize(0);
     journal_state = JOURNAL_NONE;
-    clear_on_commit = true;
-    loaded_journal.clear();
+    loaded_journals.clear();
     loaded_anchor_map.clear();
     loaded_dirfrags.clear();
   }
   void _load_finish(int op_r, int header_r, int values_r,
-		    bool first, bool more,
+		    unsigned idx, bool first, bool more,
                     bufferlist &header_bl,
 		    std::map<std::string, bufferlist> &values);
   void _recover_finish(int r);
@@ -132,6 +137,7 @@ protected:
   friend class C_IO_OFT_Recover;
   friend class C_IO_OFT_Load;
   friend class C_IO_OFT_Save;
+  friend class C_IO_OFT_Journal;
   friend class C_OFT_OpenInoFinish;
 };
 

@@ -33,6 +33,8 @@ public:
   std::string d_name;
   __u8 d_type = 0;
 
+  int omap_idx = -1;	// stored in which omap object
+
   Anchor() {}
   Anchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp) :
     ino(i), dirino(di), d_name(str), d_type(tp) {}
