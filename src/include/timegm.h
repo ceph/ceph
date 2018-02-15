@@ -71,7 +71,7 @@ static  time_t internal_timegm(tm const *t) {
   int days_since_epoch = days_from_1970(year) + day_of_year ;
 
   time_t seconds_in_day = 3600 * 24;
-  time_t result = seconds_in_day * days_since_epoch + 3600 * t->tm_hour + 60 * t->tm_min + t->tm_sec;
+  time_t result = seconds_in_day * days_since_epoch + 3600 * t->tm_hour + 60 * t->tm_min + t->tm_sec - t->tm_gmtoff;
 
   return result;
 }
