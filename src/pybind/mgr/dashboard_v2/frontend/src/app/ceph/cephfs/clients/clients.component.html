@@ -1,0 +1,21 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Filesystem</li>
+    <li class="breadcrumb-item">
+      <a [routerLink]="['/cephfs/' + id]">{{ name }}</a>
+    </li>
+    <li class="breadcrumb-item active"
+        aria-current="page">
+      Clients
+    </li>
+  </ol>
+</nav>
+
+<fieldset>
+  <cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
+
+  <cd-table [data]="clients.data"
+            [columns]="clients.columns"
+            [header]="false">
+  </cd-table>
+</fieldset>

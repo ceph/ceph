@@ -2,6 +2,8 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
 import { PoolDetailComponent } from './ceph/block/pool-detail/pool-detail.component';
+import { CephfsComponent } from './ceph/cephfs/cephfs/cephfs.component';
+import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
@@ -31,6 +33,8 @@ const routes: Routes = [
     canActivate: [AuthGuardService]
   },
   { path: 'monitor', component: MonitorComponent, canActivate: [AuthGuardService] },
+  { path: 'cephfs/:id/clients', component: ClientsComponent, canActivate: [AuthGuardService] },
+  { path: 'cephfs/:id', component: CephfsComponent, canActivate: [AuthGuardService] },
   { path: '404', component: NotFoundComponent },
   { path: '**', redirectTo: '/404'}
 ];
