@@ -2780,6 +2780,8 @@ public:
     int new_min_size,
     unsigned old_pg_num,
     unsigned new_pg_num,
+    unsigned old_pg_num_pending,
+    unsigned new_pg_num_pending,
     bool old_sort_bitwise,
     bool new_sort_bitwise,
     bool old_recovery_deletes,

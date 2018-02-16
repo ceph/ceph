@@ -3417,6 +3417,8 @@ bool PastIntervals::is_new_interval(
   int new_min_size,
   unsigned old_pg_num,
   unsigned new_pg_num,
+  unsigned old_pg_num_pending,
+  unsigned new_pg_num_pending,
   bool old_sort_bitwise,
   bool new_sort_bitwise,
   bool old_recovery_deletes,
@@ -3429,6 +3431,16 @@ bool PastIntervals::is_new_interval(
     old_min_size != new_min_size ||
     old_size != new_size ||
     pgid.is_split(old_pg_num, new_pg_num, 0) ||
+    // pre-merge source
+    pgid.is_merge(old_pg_num_pending, new_pg_num_pending, 0) ||
+    // merge source
+    pgid.is_merge(old_pg_num, new_pg_num, 0) ||
+    // pre-merge target
+    (pgid.ps() < new_pg_num_pending &&
+     pgid.is_split(new_pg_num_pending, old_pg_num_pending, 0)) ||
+    // merge target
+    (pgid.ps() < new_pg_num &&
+     pgid.is_split(new_pg_num, old_pg_num, 0)) ||
     old_sort_bitwise != new_sort_bitwise ||
     old_recovery_deletes != new_recovery_deletes;
 }
@@ -3469,6 +3481,8 @@ bool PastIntervals::is_new_interval(
 		    pi->min_size,
 		    plast->get_pg_num(),
 		    pi->get_pg_num(),
+		    plast->get_pg_num_pending(),
+		    pi->get_pg_num_pending(),
 		    lastmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE),
 		    lastmap->test_flag(CEPH_OSDMAP_RECOVERY_DELETES),
