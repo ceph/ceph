@@ -558,6 +558,23 @@ unsigned pg_t::get_split_bits(unsigned pg_num) const {
     return p - 1;
 }
 
+bool pg_t::is_merge(unsigned old_pg_num, unsigned new_pg_num,
+		    pg_t *parent) const
+{
+  if (m_seed < old_pg_num &&
+      m_seed >= new_pg_num) {
+    if (parent) {
+      pg_t t = *this;
+      while (t.m_seed >= new_pg_num) {
+	t = t.get_parent();
+      }
+      *parent = t;
+    }
+    return true;
+  }
+  return false;
+}
+
 pg_t pg_t::get_parent() const
 {
   unsigned bits = cbits(m_seed);
