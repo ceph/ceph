@@ -1,0 +1,67 @@
+<nav aria-label="breadcrumb">
+  <ol class="breadcrumb">
+    <li class="breadcrumb-item">Cluster</li>
+    <li class="breadcrumb-item active"
+        aria-current="page">Configuration Documentation</li>
+  </ol>
+</nav>
+
+<div class="dataTables_wrapper">
+  <div class="dataTables_header clearfix form-inline">
+    <!-- filters -->
+    <div class="form-group pull-right filter"
+         *ngFor="let filter of filters">
+      <label>{{ filter.label }}: </label>
+      <select class="form-control input-sm"
+              [(ngModel)]="filter.value"
+              (ngModelChange)="updateFilter()">
+        <option *ngFor="let opt of filter.options">{{ opt }}</option>
+      </select>
+    </div>
+    <!-- end filters -->
+  </div>
+
+  <table class="oadatatable table table-striped table-condensed table-bordered table-hover">
+    <thead class="datatable-header">
+      <tr>
+        <th >Name</th>
+        <th style="width:400px;">Description</th>
+        <th>Type</th>
+        <th>Level</th>
+        <th style="width: 200px">Default</th>
+        <th>Tags</th>
+        <th>Services</th>
+        <th>See_also</th>
+        <th>Max</th>
+        <th>Min</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr *ngFor="let row of data | filter:filters">
+        <td >{{ row.name }}</td>
+        <td>
+          <p>
+            {{ row.desc }}</p>
+          <p *ngIf="row.long_desc"
+             class=text-muted>{{ row.long_desc }}</p>
+        </td>
+        <td>{{ row.type }}</td>
+        <td>{{ row.level }}</td>
+        <td class="wrap">
+          {{ row.default }} {{ row.daemon_default }}
+        </td>
+        <td>
+          <p *ngFor="let item of row.tags">{{ item }}</p>
+        </td>
+        <td>
+          <p *ngFor="let item of row.services">{{ item }}</p>
+        </td>
+        <td class="wrap">
+          <p *ngFor="let item of row.see_also">{{ item }}</p>
+        </td>
+        <td>{{ row.max }}</td>
+        <td>{{ row.min }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
