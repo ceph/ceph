@@ -284,6 +284,12 @@ class Module(MgrModule):
             id_ = osd['osd']
             p_addr = osd['public_addr'].split(':')[0]
             c_addr = osd['cluster_addr'].split(':')[0]
+            if p_addr == "-" or c_addr == "-":
+                self.log.info(
+                    "Missing address metadata for osd {0}, skipping occupation"
+                    " and metadata records for this osd".format(id_)
+                )
+                continue
             dev_class = next((osd for osd in osd_devices if osd['id'] == id_))
             self.metrics['osd_metadata'].set(1, (
                 c_addr,
