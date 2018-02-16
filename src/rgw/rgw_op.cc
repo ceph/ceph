@@ -72,6 +72,10 @@ static int forward_request_to_master(struct req_state *s, obj_version *objv, RGW
 
 static MultipartMetaFilter mp_filter;
 
+// this probably should belong in the rgw_iam_policy_keywords, I'll get it to it
+// at some point
+static constexpr auto S3_EXISTING_OBJTAG = "s3:ExistingObjectTag";
+
 static int parse_range(const char *range, off_t& ofs, off_t& end, bool *partial_content)
 {
   int r = -ERANGE;
@@ -562,6 +566,63 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   return ret;
 }
 
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, std::string_view val){
+  // This variant just adds non empty key pairs to IAM env., values can be empty
+  // in certain cases like tagging
+  if (!key.empty())
+    e.emplace(key,val);
+}
+
+static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
+  RGWObjTags tagset;
+  try {
+    auto bliter = bl.begin();
+    tagset.decode(bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    return -EIO;
+  }
+
+  for (const auto& tag: tagset.get_tags()){
+    rgw_add_to_iam_environment(s->env, "s3:ExistingObjectTag/" + tag.first, tag.second);
+  }
+  return 0;
+}
+
+static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
+  map <string, bufferlist> attrs;
+  store->set_atomic(s->obj_ctx, obj);
+  int op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0)
+    return op_ret;
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()){
+    return rgw_iam_add_tags_from_bl(s, tags->second);
+  }
+  return 0;
+}
+
+static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct req_state *s){
+
+  using header_pair_t = std::pair <const char*, const char*>;
+  static const std::initializer_list <header_pair_t> acl_header_conditionals {
+    {"HTTP_X_AMZ_GRANT_READ", "s3:x-amz-grant-read"},
+    {"HTTP_X_AMZ_GRANT_WRITE", "s3:x-amz-grant-write"},
+    {"HTTP_X_AMZ_GRANT_READ_ACP", "s3:x-amz-grant-acp"},
+    {"HTTP_X_AMZ_GRANT_WRITE_ACP", "s3:x-amz-grant-write-acp"},
+    {"HTTP_X_AMZ_GRANT_FULL_CONTROL", "s3:x-amz-grant-full-control"}
+  };
+
+  if (s->has_acl_header){
+    for (const auto& c: acl_header_conditionals){
+      auto hdr = s->info.env->get(c.first);
+      if(hdr) {
+	e[c.second] = hdr;
+      }
+    }
+  }
+}
+
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {
@@ -678,6 +739,8 @@ int RGWGetObj::verify_permission()
     } else {
       action = rgw::IAM::s3GetObjectVersion;
     }
+    if (s->iam_policy && s->iam_policy->has_partial_conditional(S3_EXISTING_OBJTAG))
+      rgw_iam_add_existing_objtags(store, s, obj, action);
   }
 
   if (!verify_object_permission(s, action)) {
@@ -709,10 +772,17 @@ int RGWOp::verify_op_mask()
 
 int RGWGetObjTags::verify_permission()
 {
-  if (!verify_object_permission(s,
-				s->object.instance.empty() ?
-				rgw::IAM::s3GetObjectTagging:
-				rgw::IAM::s3GetObjectVersionTagging))
+  auto iam_action = s->object.instance.empty()?
+    rgw::IAM::s3GetObjectTagging:
+    rgw::IAM::s3GetObjectVersionTagging;
+  // TODO since we are parsing the bl now anyway, we probably change
+  // the send_response function to accept RGWObjTag instead of a bl
+  if (s->iam_policy && s->iam_policy->has_partial_conditional(S3_EXISTING_OBJTAG)){
+    rgw_obj obj = rgw_obj(s->bucket, s->object);
+    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+  }
+
+  if (!verify_object_permission(s,iam_action))
     return -EACCES;
 
   return 0;
@@ -749,10 +819,16 @@ void RGWGetObjTags::execute()
 
 int RGWPutObjTags::verify_permission()
 {
-  if (!verify_object_permission(s,
-				s->object.instance.empty() ?
-				rgw::IAM::s3PutObjectTagging:
-				rgw::IAM::s3PutObjectVersionTagging))
+  auto iam_action = s->object.instance.empty() ?
+    rgw::IAM::s3PutObjectTagging:
+    rgw::IAM::s3PutObjectVersionTagging;
+
+  if(s->iam_policy && s->iam_policy->has_partial_conditional(S3_EXISTING_OBJTAG)){
+    auto obj = rgw_obj(s->bucket, s->object);
+    rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+  }
+
+  if (!verify_object_permission(s,iam_action))
     return -EACCES;
   return 0;
 }
@@ -786,10 +862,16 @@ void RGWDeleteObjTags::pre_exec()
 int RGWDeleteObjTags::verify_permission()
 {
   if (!s->object.empty()) {
-    if (!verify_object_permission(s,
-				  s->object.instance.empty() ?
-				  rgw::IAM::s3DeleteObjectTagging:
-				  rgw::IAM::s3DeleteObjectVersionTagging))
+    auto iam_action = s->object.instance.empty() ?
+      rgw::IAM::s3DeleteObjectTagging:
+      rgw::IAM::s3DeleteObjectVersionTagging;
+
+    if (s->iam_policy && s->iam_policy->has_partial_conditional(S3_EXISTING_OBJTAG)){
+      auto obj = rgw_obj(s->bucket, s->object);
+      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    }
+
+    if (!verify_object_permission(s, iam_action))
       return -EACCES;
   }
   return 0;
@@ -2972,7 +3054,38 @@ int RGWPutObj::verify_permission()
     }
   }
 
+  auto op_ret = get_params();
+  if (op_ret < 0) {
+    ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
+    return op_ret;
+  }
+
   if (s->iam_policy) {
+    rgw_add_grant_to_iam_environment(s->env, s);
+
+    rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
+
+    if (obj_tags != nullptr && obj_tags->count() > 0){
+      auto tags = obj_tags->get_tags();
+      for (const auto& kv: tags){
+        rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/"+kv.first, kv.second);
+      }
+    }
+
+    constexpr auto encrypt_attr = "x-amz-server-side-encryption";
+    constexpr auto s3_encrypt_attr = "s3:x-amz-server-side-encryption";
+    auto enc_header = s->info.x_meta_map.find(encrypt_attr);
+    if (enc_header != s->info.x_meta_map.end()){
+      rgw_add_to_iam_environment(s->env, s3_encrypt_attr, enc_header->second);
+    }
+
+    constexpr auto kms_attr = "x-amz-server-side-encryption-aws-kms-key-id";
+    constexpr auto s3_kms_attr = "s3:x-amz-server-side-encryption-aws-kms-key-id";
+    auto kms_header = s->info.x_meta_map.find(kms_attr);
+    if (kms_header != s->info.x_meta_map.end()){
+      rgw_add_to_iam_environment(s->env, s3_kms_attr, kms_header->second);
+    }
+
     auto e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
 				 rgw_obj(s->bucket, s->object));
@@ -3305,11 +3418,6 @@ void RGWPutObj::execute()
     return;
   }
 
-  op_ret = get_params();
-  if (op_ret < 0) {
-    ldout(s->cct, 20) << "get_params() returned ret=" << op_ret << dendl;
-    goto done;
-  }
 
   op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
   if (op_ret < 0) {
@@ -4439,11 +4547,27 @@ int RGWCopyObj::verify_permission()
   if (op_ret < 0) {
     return op_ret;
   }
-
+  auto dest_iam_policy = get_iam_policy_from_attr(s->cct, store, dest_attrs, dest_bucket.tenant);
   /* admin request overrides permission checks */
-  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id()) &&
-      ! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
-                                             RGW_PERM_WRITE)) {
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
+    if (dest_iam_policy != boost::none) {
+      rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
+      rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", md_directive);
+
+      auto e = dest_iam_policy->eval(s->env, *s->auth.identity,
+                                     rgw::IAM::s3PutObject,
+                                     ARN(dest_obj));
+      if (e == Effect::Deny) {
+        return -EACCES;
+      } else if (e == Effect::Pass &&
+                 ! dest_bucket_policy.verify_permission(*s->auth.identity,
+                                                        s->perm_mask,
+                                                        RGW_PERM_WRITE)){
+        return -EACCES;
+      }
+    }
+  } else if (! dest_bucket_policy.verify_permission(*s->auth.identity, s->perm_mask,
+                                                    RGW_PERM_WRITE)) {
     return -EACCES;
   }
 
@@ -4570,10 +4694,16 @@ int RGWGetACLs::verify_permission()
 {
   bool perm;
   if (!s->object.empty()) {
-    perm = verify_object_permission(s,
-				    s->object.instance.empty() ?
-				    rgw::IAM::s3GetObjectAcl :
-				    rgw::IAM::s3GetObjectVersionAcl);
+    auto iam_action = s->object.instance.empty() ?
+      rgw::IAM::s3GetObjectAcl :
+      rgw::IAM::s3GetObjectVersionAcl;
+
+    if (s->iam_policy && s->iam_policy->has_partial_conditional(S3_EXISTING_OBJTAG)){
+      rgw_obj obj = rgw_obj(s->bucket, s->object);
+      rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    }
+
+    perm = verify_object_permission(s, iam_action);
   } else {
     perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
   }
@@ -4604,11 +4734,15 @@ void RGWGetACLs::execute()
 int RGWPutACLs::verify_permission()
 {
   bool perm;
+
+  rgw_add_to_iam_environment(s->env, "s3:x-amz-acl", s->canned_acl);
+
+  rgw_add_grant_to_iam_environment(s->env, s);
   if (!s->object.empty()) {
-    perm = verify_object_permission(s,
-				    s->object.instance.empty() ?
-				    rgw::IAM::s3PutObjectAcl :
-				    rgw::IAM::s3PutObjectVersionAcl);
+    auto iam_action = s->object.instance.empty() ? rgw::IAM::s3PutObjectAcl : rgw::IAM::s3PutObjectVersionAcl;
+    auto obj = rgw_obj(s->bucket, s->object);
+    op_ret = rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+    perm = verify_object_permission(s, iam_action);
   } else {
     perm = verify_bucket_permission(s, rgw::IAM::s3PutBucketAcl);
   }
