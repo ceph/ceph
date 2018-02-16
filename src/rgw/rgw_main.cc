@@ -569,7 +569,7 @@ int main(int argc, const char **argv)
   delete olog;
 
   RGWStoreManager::close_storage(store);
-
+  rgw::auth::s3::LDAPEngine::shutdown();
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
   curl_global_cleanup();
