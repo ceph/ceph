@@ -120,7 +120,7 @@ if __name__ == '__main__':
     if 'ubuntu' in execute_command('lsb_release -is', return_output=True).lower():
         execute_command('ceph osd crush tunables hammer')
 
-    execute_command('ceph osd pool create {} 2 2'.format(pool_name))
+    execute_command('ceph osd pool create {} 128 128'.format(pool_name))
     execute_command('rbd create -s {} --image-feature layering {}/{}'.format(size, pool_name, image_name))
     disk = execute_command('rbd map {}/{}'.format(pool_name, image_name), return_output=True).strip()
     execute_command('virt-install --name {} --memory {} --vcpus {} --disk {},size={},bus=virtio \
