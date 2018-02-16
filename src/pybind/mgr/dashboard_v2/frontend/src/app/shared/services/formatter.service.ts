@@ -46,6 +46,6 @@ export class FormatterService {
       truncatedFloat = this.truncate(n, width);
     }
 
-    return truncatedFloat + units[unit];
+    return truncatedFloat === '' ? '-' : (truncatedFloat + units[unit]);
   }
 }

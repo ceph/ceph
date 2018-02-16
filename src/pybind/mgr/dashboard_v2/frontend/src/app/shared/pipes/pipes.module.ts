@@ -5,6 +5,8 @@ import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
 import { HealthColorPipe } from './health-color.pipe';
+import { ListPipe } from './list.pipe';
+import { RelativeDatePipe } from './relative-date.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -12,18 +14,24 @@ import { HealthColorPipe } from './health-color.pipe';
     DimlessBinaryPipe,
     HealthColorPipe,
     DimlessPipe,
-    CephShortVersionPipe
+    CephShortVersionPipe,
+    RelativeDatePipe,
+    ListPipe
   ],
   exports: [
     DimlessBinaryPipe,
     HealthColorPipe,
     DimlessPipe,
-    CephShortVersionPipe
+    CephShortVersionPipe,
+    RelativeDatePipe,
+    ListPipe
   ],
   providers: [
     CephShortVersionPipe,
     DimlessBinaryPipe,
-    DimlessPipe
+    DimlessPipe,
+    RelativeDatePipe,
+    ListPipe
   ]
 })
 export class PipesModule {}
