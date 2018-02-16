@@ -78,6 +78,10 @@ cmd_putval(CephContext *cct, cmdmap_t& cmdmap, const std::string& k, const T& va
   cmdmap[k] = val;
 }
 
+bool validate_cmd(CephContext* cct,
+		  const std::string& desc,
+		  const cmdmap_t& cmdmap,
+		  std::ostream& os);
 extern int parse_osd_id(const char *s, std::ostream *pss);
 extern long parse_pos_long(const char *s, std::ostream *pss = NULL);
 
