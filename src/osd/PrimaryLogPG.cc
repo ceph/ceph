@@ -10104,6 +10104,16 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     }
   }
 
+  dout(10) << __func__ << " missing_loc before: " << missing_loc.get_locations(soid) << dendl;
+  // clear out missing_loc
+  set<pg_shard_t> peers(missing_loc.get_locations(soid));
+  for (set<pg_shard_t>::iterator r = peers.begin();
+       r != peers.end();
+       ++r) {
+    pg_shard_t peer(*r);
+    missing_loc.remove_location(soid, peer);
+  }
+
   for (set<pg_shard_t>::const_iterator i = actingset.begin();
        i != actingset.end();
        ++i) {
@@ -10111,6 +10121,7 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     if (!peer_missing[peer].is_missing(soid))
       missing_loc.add_location(soid, peer);
   }
+  dout(10) << __func__ << " missing_loc after: " << missing_loc.get_locations(soid) << dendl;
 
   pgbackend->submit_transaction(
     soid,
