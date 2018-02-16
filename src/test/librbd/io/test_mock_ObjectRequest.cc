@@ -310,7 +310,6 @@ TEST_F(TestMockIoObjectRequest, Read) {
   ictx->sparse_read_threshold_bytes = 8096;
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -339,7 +338,6 @@ TEST_F(TestMockIoObjectRequest, SparseReadThreshold) {
   ictx->sparse_read_threshold_bytes = ictx->get_object_size();
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -370,7 +368,6 @@ TEST_F(TestMockIoObjectRequest, ReadError) {
   ictx->sparse_read_threshold_bytes = 8096;
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -414,7 +411,6 @@ TEST_F(TestMockIoObjectRequest, ParentRead) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.parent = &mock_image_ctx;
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -463,7 +459,6 @@ TEST_F(TestMockIoObjectRequest, ParentReadError) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.parent = &mock_image_ctx;
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
@@ -512,7 +507,6 @@ TEST_F(TestMockIoObjectRequest, CopyOnRead) {
 
   MockTestImageCtx mock_image_ctx(*ictx);
   mock_image_ctx.parent = &mock_image_ctx;
-  mock_image_ctx.object_cacher = nullptr;
 
   MockObjectMap mock_object_map;
   if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {

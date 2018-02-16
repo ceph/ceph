@@ -50,6 +50,14 @@ struct ImageDispatchSpec<librbd::MockTestImageCtx> {
     return s_instance;
   }
 
+  static ImageDispatchSpec* create_flush_request(
+      librbd::MockTestImageCtx &image_ctx, AioCompletion *aio_comp,
+      FlushSource flush_source, const ZTracer::Trace &parent_trace) {
+    assert(s_instance != nullptr);
+    s_instance->aio_comp = aio_comp;
+    return s_instance;
+  }
+
   MOCK_CONST_METHOD0(is_write_op, bool());
   MOCK_CONST_METHOD0(start_op, void());
   MOCK_CONST_METHOD0(send, void());

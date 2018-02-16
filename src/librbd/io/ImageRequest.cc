@@ -478,6 +478,10 @@ void ImageFlushRequest<I>::send_request() {
   aio_comp->set_request_count(1);
 
   Context *ctx = new C_AioRequest(aio_comp);
+
+  // ensure no locks are held when flush is complete
+  ctx = librbd::util::create_async_context_callback(image_ctx, ctx);
+
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
@@ -507,7 +511,10 @@ void ImageFlushRequest<I>::send_request() {
   aio_comp->start_op(true);
   aio_comp->put();
 
-  image_ctx.perfcounter->inc(l_librbd_flush);
+  // might be flushing during image shutdown
+  if (image_ctx.perfcounter != nullptr) {
+    image_ctx.perfcounter->inc(l_librbd_flush);
+  }
 }
 
 template <typename I>
