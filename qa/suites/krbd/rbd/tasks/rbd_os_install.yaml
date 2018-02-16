@@ -1,0 +1,26 @@
+meta:
+- desc: run the os_install.py workunit to install centos on rbd image
+tasks:
+- exec:
+    client.0:
+    - lsb_release -is | (grep -i ubuntu && sudo apt-get install -y python-guestfs && sudo apt install -y virtinst) || (sudo yum install -y python-libguestfs && yum install -y virt-install)
+    - pip install --pre subprocess32
+- workunit:
+    clients:
+      client.0: [rbd/os_install.py]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      POOL_NAME: 'test_pool'
+      IMAGE_NAME: 'test_image'
+      VM_NAME: 'test_vm'
+      MEMORY: '2048'
+      VCPUS: '1'
+      SIZE: '20480'
+      ISO_LOCATION: 'http://centos.mirror.net.in/centos/7/isos/x86_64/CentOS-7-x86_64-Minimal-1708.iso'
+      # KS_CFG: 'Enter the cfg location'
+- exec:
+    client.0:
+    - lsb_release -is | (grep -i ubuntu && sudo apt-get remove -y python-guestfs && sudo apt remove -y virtinst) || (sudo yum remove -y python-libguestfs && yum remove -y virt-install)
+    - pip uninstall -y subprocess32
+
