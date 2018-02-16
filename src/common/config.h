@@ -78,6 +78,11 @@ public:
                          bool md_config_t::*,
                          entity_addr_t md_config_t::*,
                          uuid_d md_config_t::*> member_ptr_t;
+
+  // For use when intercepting configuration updates
+  typedef std::function<bool(
+      const std::string &k, const std::string &v)> config_callback;
+
   /// true if we are a daemon (as per CephContext::code_env)
   const bool is_daemon;
 
@@ -171,7 +176,9 @@ public:
   void set_val_default(const std::string& key, const std::string &val);
 
   /// Set a values from mon
-  int set_mon_vals(CephContext *cct, const map<std::string,std::string>& kv);
+  int set_mon_vals(CephContext *cct,
+      const map<std::string,std::string>& kv,
+      config_callback config_cb);
 
   // Called by the Ceph daemons to make configuration changes at runtime
   int injectargs(const std::string &s, std::ostream *oss);
