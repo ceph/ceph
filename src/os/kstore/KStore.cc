@@ -2244,6 +2244,15 @@ void KStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        uint32_t bits = op->split_bits;
+	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
+	if (!r)
+	  continue;
+      }
+      break;
+
     case Transaction::OP_COLL_HINT:
       {
         uint32_t type = op->hint_type;
@@ -3367,6 +3376,37 @@ int KStore::_split_collection(TransContext *txc,
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
+	   << " bits " << bits << " = " << r << dendl;
+  return r;
+}
+
+int KStore::_merge_collection(TransContext *txc,
+			      CollectionRef *c,
+			      CollectionRef& d,
+			      unsigned bits)
+{
+  dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid << " "
+	   << " bits " << bits << dendl;
+  int r;
+  RWLock::WLocker l((*c)->lock);
+  RWLock::WLocker l2(d->lock);
+  (*c)->onode_map.clear();
+  d->onode_map.clear();
+  d->cnode.bits = bits;
+  r = 0;
+
+  coll_t cid = (*c)->cid;
+
+  bufferlist bl;
+  encode(d->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
+
+  coll_map.erase((*c)->cid);
+  txc->removed_collections.push_back(*c);
+  c->reset();
+  txc->t->rmkey(PREFIX_COLL, stringify(cid));
+
+  dout(10) << __func__ << " " << cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
