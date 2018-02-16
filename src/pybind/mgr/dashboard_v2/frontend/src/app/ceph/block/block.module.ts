@@ -6,7 +6,9 @@ import { TabsModule } from 'ngx-bootstrap';
 
 import { ComponentsModule } from '../../shared/components/components.module';
 import { PipesModule } from '../../shared/pipes/pipes.module';
+import { ServicesModule } from '../../shared/services/services.module';
 import { SharedModule } from '../../shared/shared.module';
+import { IscsiComponent } from './iscsi/iscsi.component';
 import { PoolDetailComponent } from './pool-detail/pool-detail.component';
 
 @NgModule({
@@ -16,8 +18,12 @@ import { PoolDetailComponent } from './pool-detail/pool-detail.component';
     TabsModule.forRoot(),
     SharedModule,
     ComponentsModule,
-    PipesModule
+    PipesModule,
+    ServicesModule
   ],
-  declarations: [PoolDetailComponent]
+  declarations: [
+    PoolDetailComponent,
+    IscsiComponent
+  ]
 })
 export class BlockModule { }
