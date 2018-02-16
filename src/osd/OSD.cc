@@ -3747,7 +3747,7 @@ PGRef OSD::_lookup_pg(spg_t pgid)
   return p->second->pg;
 }
 
-PG *OSD::_lookup_lock_pg(spg_t pgid)
+PGRef OSD::_lookup_lock_pg(spg_t pgid)
 {
   PGRef pg = _lookup_pg(pgid);
   if (!pg) {
@@ -3755,13 +3755,13 @@ PG *OSD::_lookup_lock_pg(spg_t pgid)
   }
   pg->lock();
   if (!pg->is_deleted()) {
-    return pg.get();
+    return pg;
   }
   pg->unlock();
   return nullptr;
 }
 
-PG *OSD::lookup_lock_pg(spg_t pgid)
+PGRef OSD::lookup_lock_pg(spg_t pgid)
 {
   return _lookup_lock_pg(pgid);
 }
@@ -4971,7 +4971,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       return;
     }
 
-    PG *pg = service->osd->_lookup_lock_pg(pgid);
+    PGRef pg = service->osd->_lookup_lock_pg(pgid);
     if (pg == nullptr) {
       ss << "Can't find pg " << pgid;
       return;
@@ -5850,7 +5850,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
       r = -EINVAL;
     } else {
       spg_t pcand;
-      PG *pg = nullptr;
+      PGRef pg;
       if (osdmap->get_primary_shard(pgid, &pcand) &&
 	  (pg = _lookup_lock_pg(pcand))) {
 	if (pg->is_primary()) {
@@ -6853,7 +6853,7 @@ void OSD::sched_scrub()
         continue;
       }
 
-      PG *pg = _lookup_lock_pg(scrub.pgid);
+      PGRef pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
       dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time

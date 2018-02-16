@@ -1800,7 +1800,7 @@ protected:
   PGRecoveryStats pg_recovery_stats;
 
   PGRef _lookup_pg(spg_t pgid);
-  PG   *_lookup_lock_pg(spg_t pgid);
+  PGRef _lookup_lock_pg(spg_t pgid);
   void register_pg(PGRef pg);
   void unregister_pg(PG *pg);
 
@@ -1808,7 +1808,7 @@ protected:
   void _get_pgids(vector<spg_t> *v);
 
 public:
-  PG   *lookup_lock_pg(spg_t pgid);
+  PGRef lookup_lock_pg(spg_t pgid);
 
 protected:
   PG* _make_pg(OSDMapRef createmap, spg_t pgid);
