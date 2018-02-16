@@ -11,7 +11,7 @@ import { RgwDaemonService } from '../services/rgw-daemon.service';
 })
 export class RgwDaemonDetailsComponent implements OnInit {
 
-  metadata: Array<object> = [];
+  metadata: any;
   serviceId = '';
 
   @Input() selected?: Array<any> = [];
@@ -29,19 +29,9 @@ export class RgwDaemonDetailsComponent implements OnInit {
     if (_.isEmpty(this.serviceId)) {
       return;
     }
-
     this.rgwDaemonService.get(this.serviceId)
       .then((resp) => {
-        const metadata = [];
-        const keys = _.keys(resp['rgw_metadata']);
-        keys.sort();
-        _.map(keys, (key) => {
-          metadata.push({
-            'key': key,
-            'value': resp['rgw_metadata'][key]
-          });
-        });
-        this.metadata = metadata;
+        this.metadata = resp['rgw_metadata'];
       });
   }
 }
