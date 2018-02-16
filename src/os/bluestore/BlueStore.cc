@@ -3388,11 +3388,13 @@ void BlueStore::Collection::split_cache(
 
   auto p = onode_map.onode_map.begin();
   while (p != onode_map.onode_map.end()) {
+    OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
+      ldout(store->cct, 20) << __func__ << " not moving " << o << " " << o->oid
+			    << dendl;
       ++p;
     } else {
-      OnodeRef o = p->second;
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
@@ -9874,6 +9876,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        uint32_t bits = op->split_bits;
+	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
+	if (!r)
+	  continue;
+      }
+      break;
+
     case Transaction::OP_COLL_HINT:
       {
         uint32_t type = op->hint_type;
@@ -12142,12 +12153,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
         }
       }
       if (!exists) {
-        coll_map.erase(cid);
-        txc->removed_collections.push_back(*c);
-        (*c)->exists = false;
-	_osr_register_zombie((*c)->osr.get());
-        c->reset();
-        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+	_do_remove_collection(txc, c);
         r = 0;
       } else {
         dout(10) << __func__ << " " << cid
@@ -12160,6 +12166,17 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
+}
+
+void BlueStore::_do_remove_collection(TransContext *txc,
+				      CollectionRef *c)
+{
+  coll_map.erase((*c)->cid);
+  txc->removed_collections.push_back(*c);
+  (*c)->exists = false;
+  _osr_register_zombie((*c)->osr.get());
+  txc->t->rmkey(PREFIX_COLL, stringify((*c)->cid));
+  c->reset();
 }
 
 int BlueStore::_split_collection(TransContext *txc,
@@ -12213,6 +12230,65 @@ int BlueStore::_split_collection(TransContext *txc,
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
+
+int BlueStore::_merge_collection(
+  TransContext *txc,
+  CollectionRef *c,
+  CollectionRef& d,
+  unsigned bits)
+{
+  dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid
+	   << " bits " << bits << dendl;
+  RWLock::WLocker l((*c)->lock);
+  RWLock::WLocker l2(d->lock);
+  int r;
+
+  coll_t cid = (*c)->cid;
+
+  // flush all previous deferred writes on this sequencer.  this is a bit
+  // heavyweight, but we need to make sure all deferred writes complete
+  // before we split as the new collection's sequencer may need to order
+  // this after those writes, and we don't bother with the complexity of
+  // moving those TransContexts over to the new osr.
+  _osr_drain_preceding(txc);
+
+  // move any cached items (onodes and referenced shared blobs) that will
+  // belong to the child collection post-split.  leave everything else behind.
+  // this may include things that don't strictly belong to the now-smaller
+  // parent split, but the OSD will always send us a split for every new
+  // child.
+
+  spg_t pgid, dest_pgid;
+  bool is_pg = cid.is_pg(&pgid);
+  ceph_assert(is_pg);
+  is_pg = d->cid.is_pg(&dest_pgid);
+  ceph_assert(is_pg);
+
+  // adjust bits.  note that this will be redundant for all but the first
+  // merge call for the parent/target.
+  d->cnode.bits = bits;
+
+  // behavior depends on target (d) bits, so this after that is updated.
+  (*c)->split_cache(d.get());
+
+  // remove source collection
+  {
+    RWLock::WLocker l3(coll_lock);
+    _do_remove_collection(txc, c);
+  }
+
+  r = 0;
+
+  bufferlist bl;
+  encode(d->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
+
+  dout(10) << __func__ << " " << cid << " to " << d->cid << " "
+	   << " bits " << bits << " = " << r << dendl;
+  return r;
+}
+
+
 
 // DB key value Histogram
 #define KEY_SLAB 32

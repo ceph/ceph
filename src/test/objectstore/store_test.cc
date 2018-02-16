@@ -5134,33 +5134,18 @@ void colsplittest(
   }
   ch->flush();
 
-  ObjectStore::Transaction t;
+  // check
   vector<ghobject_t> objects;
   r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
   ASSERT_EQ(r, 0);
   ASSERT_EQ(objects.size(), num_objects);
-  unsigned size = 0;
   for (vector<ghobject_t>::iterator i = objects.begin();
        i != objects.end();
        ++i) {
     ASSERT_EQ(!!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
-    t.remove(cid, *i);
-    if (++size > 100) {
-      size = 0;
-      r = queue_transaction(store, ch, std::move(t));
-      ASSERT_EQ(r, 0);
-      t = ObjectStore::Transaction();
-
-      // test environment may have a low open file limit
-      ch->flush();
-    }
   }
 
-  t.remove_collection(cid);
-  r = queue_transaction(store, ch, std::move(t));
-  t = ObjectStore::Transaction();
-  
   objects.clear();
   r = store->collection_list(tch, ghobject_t(), ghobject_t::get_max(),
 			     INT_MAX, &objects, 0);
@@ -5170,23 +5155,48 @@ void colsplittest(
        i != objects.end();
        ++i) {
     ASSERT_EQ(!(i->hobj.get_hash() & (1<<common_suffix_size)), 0u);
-    t.remove(tid, *i);
-    if (++size > 100) {
-      size = 0;
-      r = queue_transaction(store, tch, std::move(t));
-      ASSERT_EQ(r, 0);
-      t = ObjectStore::Transaction();
-
-      // test environment may have a low open file limit
-      tch->flush();
-    }
   }
 
-  t.remove_collection(tid);
-  r = queue_transaction(store, tch, std::move(t));
+  // merge them again!
+  {
+    ObjectStore::Transaction t;
+    t.merge_collection(tid, cid, common_suffix_size);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // check and clean up
+  ObjectStore::Transaction t;
+  {
+    vector<ghobject_t> objects;
+    r = store->collection_list(ch, ghobject_t(), ghobject_t::get_max(),
+			       INT_MAX, &objects, 0);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(objects.size(), num_objects * 2); // both halves
+    unsigned size = 0;
+    for (vector<ghobject_t>::iterator i = objects.begin();
+	 i != objects.end();
+	 ++i) {
+      t.remove(cid, *i);
+      if (++size > 100) {
+	size = 0;
+	r = queue_transaction(store, ch, std::move(t));
+	ASSERT_EQ(r, 0);
+	t = ObjectStore::Transaction();
+      }
+    }
+  }
+  t.remove_collection(cid);
+  r = queue_transaction(store, ch, std::move(t));
   ASSERT_EQ(r, 0);
+
+  ch->flush();
+  ASSERT_TRUE(!store->collection_exists(tid));
 }
 
+TEST_P(StoreTest, ColSplitTest0) {
+  colsplittest(store.get(), 10, 5, false);
+}
 TEST_P(StoreTest, ColSplitTest1) {
   colsplittest(store.get(), 10000, 11, false);
 }

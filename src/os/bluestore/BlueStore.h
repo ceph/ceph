@@ -2802,10 +2802,15 @@ private:
 			 unsigned bits, CollectionRef *c);
   int _remove_collection(TransContext *txc, const coll_t &cid,
                          CollectionRef *c);
+  void _do_remove_collection(TransContext *txc, CollectionRef *c);
   int _split_collection(TransContext *txc,
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+  int _merge_collection(TransContext *txc,
+			CollectionRef *c,
+			CollectionRef& d,
+			unsigned bits);
 };
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {

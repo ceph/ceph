@@ -233,6 +233,7 @@ private:
   int _collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
 			      coll_t cid, const ghobject_t& o);
   int _split_collection(const coll_t& cid, uint32_t bits, uint32_t rem, coll_t dest);
+  int _merge_collection(const coll_t& cid, uint32_t bits, coll_t dest);
 
   int _save();
   int _load();
