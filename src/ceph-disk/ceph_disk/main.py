@@ -2377,21 +2377,6 @@ class PrepareSpace(object):
                 self.space_symlink = getattr(self.args, self.name)
                 return
 
-        self.space_symlink = '/dev/disk/by-partuuid/{uuid}'.format(
-            uuid=getattr(self.args, self.name + '_uuid'))
-
-        if self.args.dmcrypt:
-            self.space_dmcrypt = self.space_symlink
-            self.space_symlink = '/dev/mapper/{uuid}'.format(
-                uuid=getattr(self.args, self.name + '_uuid'))
-
-        if reusing_partition:
-            # confirm that the space_symlink exists. It should since
-            # this was an active space
-            # in the past. Continuing otherwise would be futile.
-            assert os.path.exists(self.space_symlink)
-            return
-
         num = self.desired_partition_number()
 
         if num == 0:
@@ -2407,6 +2392,22 @@ class PrepareSpace(object):
             num=num)
 
         partition = device.get_partition(num)
+
+        self.space_symlink = '/dev/disk/by-parttypeuuid/{ptype}.{uuid}'.format(
+            ptype=partition.get_ptype(),
+            uuid=getattr(self.args, self.name + '_uuid'))
+
+        if self.args.dmcrypt:
+            self.space_dmcrypt = self.space_symlink
+            self.space_symlink = '/dev/mapper/{uuid}'.format(
+                uuid=getattr(self.args, self.name + '_uuid'))
+
+        if reusing_partition:
+            # confirm that the space_symlink exists. It should since
+            # this was an active space
+            # in the past. Continuing otherwise would be futile.
+            assert os.path.exists(self.space_symlink)
+            return
 
         LOG.debug('%s is GPT partition %s',
                   self.name.capitalize(),
