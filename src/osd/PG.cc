@@ -4685,7 +4685,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     int state = scrubber.state;
     auto scrub_requeue_callback =
         new FunctionContext([osds, pgid, state](int r) {
-          PG *pg = osds->osd->lookup_lock_pg(pgid);
+          PGRef pg = osds->osd->lookup_lock_pg(pgid);
           if (pg == nullptr) {
             lgeneric_dout(osds->osd->cct, 20)
                 << "scrub_requeue_callback: Could not find "
