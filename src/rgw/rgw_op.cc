@@ -424,9 +424,13 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
     if (s->bucket_instance_id.empty()) {
-      ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name, s->bucket_info, NULL, &s->bucket_attrs);
+      ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
+                                   s->bucket_info, &s->bucket_mtime,
+                                   &s->bucket_attrs);
     } else {
-      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id, s->bucket_info, NULL, &s->bucket_attrs);
+      ret = store->get_bucket_instance_info(obj_ctx, s->bucket_instance_id,
+                                            s->bucket_info, &s->bucket_mtime,
+                                            &s->bucket_attrs);
     }
     if (ret < 0) {
       if (ret != -ENOENT) {
@@ -2688,7 +2692,7 @@ void RGWCreateBucket::execute()
    * specific request */
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   op_ret = store->get_bucket_info(obj_ctx, s->bucket_tenant, s->bucket_name,
-				  s->bucket_info, NULL, &s->bucket_attrs);
+				  s->bucket_info, nullptr, &s->bucket_attrs);
   if (op_ret < 0 && op_ret != -ENOENT)
     return;
   s->bucket_exists = (op_ret != -ENOENT);
@@ -6288,7 +6292,7 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   RGWBucketInfo binfo;
   std::map<std::string, ceph::bufferlist> battrs;
   op_ret = store->get_bucket_info(*dir_ctx, s->bucket_tenant, bucket_name,
-                                  binfo, NULL, &battrs);
+                                  binfo, nullptr, &battrs);
   if (op_ret < 0 && op_ret != -ENOENT) {
     return op_ret;
   }

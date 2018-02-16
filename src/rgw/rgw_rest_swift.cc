@@ -521,6 +521,10 @@ static void dump_container_metadata(struct req_state *s,
   if (ws_conf.listing_enabled) {
     dump_header(s, "X-Container-Meta-Web-Listings", "true");
   }
+
+  /* Dump bucket's modification time. Compliance with the Swift API really
+   * needs that. */
+  dump_last_modified(s, s->bucket_mtime);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::execute()
