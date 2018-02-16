@@ -274,6 +274,7 @@ def task(ctx, config):
           - 'scrub 0 missing, 1 inconsistent objects'
           - 'scrub [0-9]+ errors'
           - 'size 1 != size'
+          - '!= size 1 from shard'
           - 'attr name mismatch'
           - 'Regular scrub request, losing deep-scrub details'
         conf:
