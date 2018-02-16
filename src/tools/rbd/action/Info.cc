@@ -295,13 +295,19 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       if (trash_image_info_valid) {
         f->dump_string("trash", parent_id);
       }
+      if ((features & RBD_FEATURE_MIGRATING) != 0) {
+        f->dump_bool("migration_source", true);
+      }
       f->dump_unsigned("overlap", overlap);
       f->close_section();
     } else {
       std::cout << "\tparent: " << parent_pool << "/" << parent_name
-                << "@" << parent_snapname;
+                << (parent_snapname.empty() ? "" : "@") << parent_snapname;
       if (trash_image_info_valid) {
         std::cout << " (trash " << parent_id << ")";
+      }
+      if ((features & RBD_FEATURE_MIGRATING) != 0) {
+        std::cout << " (migration source)";
       }
       std::cout << std::endl;
       std::cout << "\toverlap: " << byte_u_t(overlap) << std::endl;
