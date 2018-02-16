@@ -1,7 +1,7 @@
 from __future__ import print_function
 from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
-from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
+from rados import (Rados, Error, RadosStateError, Object, ObjectExists, PermissionError,
                    ObjectNotFound, ObjectBusy, requires, opt,
                    ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
@@ -280,7 +280,12 @@ class TestIoctx(object):
     def setUp(self):
         self.rados = Rados(conffile='')
         self.rados.connect()
-        self.rados.create_pool('test_pool')
+
+        try:
+            self.rados.create_pool('test_pool')
+        except ObjectExists:
+            print("Warning: \"test_pool\" already exists.\n")
+
         assert self.rados.pool_exists('test_pool')
         self.ioctx = self.rados.open_ioctx('test_pool')
 
@@ -472,6 +477,26 @@ class TestIoctx(object):
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("2", b"bbb")])
 
+    # Test that we have patched a segfaulting condition:
+    def test_omap_iterator_segfault(self):
+        keys = ("1", "2", "3", "4")
+        values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
+        with WriteOpCtx(self.ioctx) as write_op:
+            self.ioctx.set_omap(write_op, keys, values)
+            write_op.set_flags(LIBRADOS_OPERATION_SKIPRWLOCKS)
+            self.ioctx.operate_write_op(write_op, "hw")
+        with ReadOpCtx(self.ioctx) as read_op:
+            omap_iter, rval = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+            self.ioctx.operate_read_op(read_op, "hw")    # omitting this line used to cause a segfalt
+            result = list(omap_iter)          
+        with ReadOpCtx(self.ioctx) as read_op:
+            # Rather than segfaulting, this should now throw an exception:
+            try:
+                omap_iter, rval = self.ioctx.get_omap_vals_by_keys(read_op, keys)
+                result = list(omap_iter)                                    
+            except PermissionError:
+                print("Caught exception, as expected.\n")
+ 
     def test_set_omap_aio(self):
         lock = threading.Condition()
         count = [0]
