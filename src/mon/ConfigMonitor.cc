@@ -355,19 +355,21 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
     cmd_getval(g_ceph_context, cmdmap, "value", value);
 
     if (prefix == "config set") {
-      const Option *opt = g_conf->find_option(name);
-      if (!opt) {
-	ss << "unrecognized config option '" << name << "'";
-	err = -EINVAL;
-	goto reply;
-      }
-
-      Option::value_t real_value;
-      string errstr;
-      err = opt->parse_value(value, &real_value, &errstr, &value);
-      if (err < 0) {
-	ss << "error parsing value: " << errstr;
-	goto reply;
+      if (name.substr(0, 4) != "mgr/") {
+	const Option *opt = g_conf->find_option(name);
+	if (!opt) {
+	  ss << "unrecognized config option '" << name << "'";
+	  err = -EINVAL;
+	  goto reply;
+	}
+	
+	Option::value_t real_value;
+	string errstr;
+	err = opt->parse_value(value, &real_value, &errstr, &value);
+	if (err < 0) {
+	  ss << "error parsing value: " << errstr;
+	  goto reply;
+	}
       }
     }
 
@@ -533,26 +535,13 @@ void ConfigMonitor::load_config()
       who = key.substr(0, last_slash);
     }
 
-    const Option *opt = g_conf->find_option(name);
-    if (!opt) {
-      dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
-    }
-    string err;
-    int r = opt->pre_validate(&value, &err);
-    if (r < 0) {
-      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
-	       << value << "' for " << name << dendl;
-    }
-
     string section_name;
-    MaskedOption mopt(opt);
-    mopt.raw_value = value;
-    if (who.size() &&
-	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " ignoring key " << key << dendl;
-    } else {
+    if (key.find("mgr") == 0) {
+      name = key.substr(key.find('/') + 1);    
+      MaskedOption mopt(new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN));
+      mopt.raw_value = value;      
       Section *section = &config_map.global;;
+      section_name = "mgr";
       if (section_name.size()) {
 	if (section_name.find('.') != std::string::npos) {
 	  section = &config_map.by_id[section_name];
@@ -561,7 +550,37 @@ void ConfigMonitor::load_config()
 	}
       }
       section->options.insert(make_pair(name, std::move(mopt)));
-      ++num;
+      ++num;      
+    } else {
+      const Option *opt = g_conf->find_option(name);
+      if (!opt) {
+	dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
+	opt = new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN);
+      }
+      string err;
+      int r = opt->pre_validate(&value, &err);
+      if (r < 0) {
+	dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
+		 << value << "' for " << name << dendl;
+      }
+    
+      MaskedOption mopt(opt);
+      mopt.raw_value = value;
+      if (who.size() &&
+	  !ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+	derr << __func__ << " ignoring key " << key << dendl;
+      } else {
+	Section *section = &config_map.global;;
+	if (section_name.size()) {
+	  if (section_name.find('.') != std::string::npos) {
+	    section = &config_map.by_id[section_name];
+	  } else {
+	    section = &config_map.by_type[section_name];
+	  }
+	}
+	section->options.insert(make_pair(name, std::move(mopt)));
+	++num;
+      }
     }
     it->next();
   }
@@ -586,14 +605,13 @@ void ConfigMonitor::load_config()
       osdmap.crush.get(),
       string(), // no device class
       &out);
-    g_conf->set_mon_vals(g_ceph_context, out);
+    g_conf->set_mon_vals(g_ceph_context, out, nullptr);
   }
 }
 
 bool ConfigMonitor::refresh_config(MonSession *s)
 {
   const OSDMap& osdmap = mon->osdmon()->osdmap;
-
   map<string,string> crush_location;
   if (s->remote_host.size()) {
     osdmap.crush->get_full_location(s->remote_host, &crush_location);

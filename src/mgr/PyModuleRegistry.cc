@@ -140,7 +140,8 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 
   dout(4) << "Starting modules in standby mode" << dendl;
 
-  standby_modules.reset(new StandbyPyModules(monc, mgr_map, clog));
+  standby_modules.reset(new StandbyPyModules(
+        monc, mgr_map, module_config, clog));
 
   std::set<std::string> failed_modules;
   for (const auto &i : modules) {
@@ -171,7 +172,7 @@ void PyModuleRegistry::standby_start(MonClient *monc)
 }
 
 void PyModuleRegistry::active_start(
-            PyModuleConfig &config_,
+            PyModuleConfig &module_config,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f)
@@ -192,7 +193,7 @@ void PyModuleRegistry::active_start(
   }
 
   active_modules.reset(new ActivePyModules(
-              config_, ds, cs, mc, clog_, objecter_, client_, f));
+              module_config, ds, cs, mc, clog_, objecter_, client_, f));
 
   for (const auto &i : modules) {
     if (!i.second->is_enabled()) {
@@ -377,6 +378,17 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
       }
       checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
     }
+  }
+}
+
+void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
+{
+  Mutex::Locker l(module_config.lock);
+
+  if (!v.empty()) {
+    module_config.config[k] = v;
+  } else {
+    module_config.config.erase(k);
   }
 }
 
