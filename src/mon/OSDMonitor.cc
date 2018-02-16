@@ -49,6 +49,7 @@
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGTemp.h"
+#include "messages/MOSDPGReadyToMerge.h"
 #include "messages/MMonCommand.h"
 #include "messages/MRemoveSnaps.h"
 #include "messages/MOSDScrub.h"
@@ -2068,6 +2069,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     return preprocess_alive(op);
   case MSG_OSD_PG_CREATED:
     return preprocess_pg_created(op);
+  case MSG_OSD_PG_READY_TO_MERGE:
+    return preprocess_pg_ready_to_merge(op);
   case MSG_OSD_PGTEMP:
     return preprocess_pgtemp(op);
   case MSG_OSD_BEACON:
@@ -2107,6 +2110,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_pg_created(op);
   case MSG_OSD_PGTEMP:
     return prepare_pgtemp(op);
+  case MSG_OSD_PG_READY_TO_MERGE:
+    return prepare_pg_ready_to_merge(op);
   case MSG_OSD_BEACON:
     return prepare_beacon(op);
 
@@ -3183,6 +3188,75 @@ bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
   pending_created_pgs.push_back(m->pgid);
   return true;
 }
+
+bool OSDMonitor::preprocess_pg_ready_to_merge(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGReadyToMerge*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  const pg_pool_t *pi;
+  auto session = m->get_session();
+  if (!session) {
+    dout(10) << __func__ << ": no monitor session!" << dendl;
+    goto ignore;
+  }
+  if (!session->is_capable("osd", MON_CAP_X)) {
+    derr << __func__ << " received from entity "
+         << "with insufficient privileges " << session->caps << dendl;
+    goto ignore;
+  }
+  pi = osdmap.get_pg_pool(m->pgid.pool());
+  if (!pi) {
+    derr << __func__ << " pool for " << m->pgid << " dne" << dendl;
+    goto ignore;
+  }
+  if (pi->get_pg_num() <= m->pgid.ps()) {
+    dout(20) << " pg_num " << pi->get_pg_num() << " already < " << m->pgid << dendl;
+    goto ignore;
+  }
+  if (pi->get_pg_num() != m->pgid.ps() + 1) {
+    derr << " OSD trying to merge wrong pgid " << m->pgid << dendl;
+    goto ignore;
+  }
+  if (pi->get_pg_num_pending() > m->pgid.ps()) {
+    dout(20) << " pg_num_pending " << pi->get_pg_num_pending() << " > " << m->pgid << dendl;
+    goto ignore;
+  }
+  return false;
+
+ ignore:
+  mon->no_reply(op);
+  return true;
+}
+
+bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = static_cast<MOSDPGReadyToMerge*>(op->get_req());
+  dout(10) << __func__ << " " << *m << dendl;
+  pg_pool_t p;
+  if (pending_inc.new_pools.count(m->pgid.pool()))
+    p = pending_inc.new_pools[m->pgid.pool()];
+  else
+    p = *osdmap.get_pg_pool(m->pgid.pool());
+  if (p.get_pg_num() != m->pgid.ps() + 1 ||
+      p.get_pg_num_pending() > m->pgid.ps()) {
+    dout(10) << __func__
+	     << " race with concurrent pg_num[_pending] update, will retry"
+	     << dendl;
+    wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+    return true;
+  }
+
+  p.dec_pg_num();
+  p.last_change = pending_inc.epoch;
+  pending_inc.new_pools[m->pgid.pool()] = p;
+
+  wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+  mon->no_reply(op);
+  return true;
+}
+
 
 // -------------
 // pg_temp changes

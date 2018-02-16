@@ -125,6 +125,7 @@
 #define MSG_OSD_PG_CREATE2      120
 #define MSG_OSD_SCRUB2          121
 
+#define MSG_OSD_PG_READY_TO_MERGE 122
 
 // *** MDS ***
 
