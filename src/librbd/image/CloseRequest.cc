@@ -10,6 +10,8 @@
 #include "librbd/ImageWatcher.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ObjectDispatcher.h"
 
@@ -161,9 +163,14 @@ void CloseRequest<I>::send_flush() {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  m_image_ctx->flush(create_async_context_callback(
-    *m_image_ctx, create_context_callback<
-      CloseRequest<I>, &CloseRequest<I>::handle_flush>(this)));
+  auto ctx = create_context_callback<
+    CloseRequest<I>, &CloseRequest<I>::handle_flush>(this);
+  auto aio_comp = io::AioCompletion::create(ctx, m_image_ctx,
+                                            io::AIO_TYPE_FLUSH);
+  auto req = io::ImageDispatchSpec<I>::create_flush_request(
+    *m_image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
 }
 
 template <typename I>

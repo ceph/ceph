@@ -73,15 +73,6 @@ struct TestMockIoImageRequest : public TestMockFixture {
       .WillOnce(Return(appending));
   }
 
-  void expect_write_to_cache(MockImageCtx &mock_image_ctx,
-                             const object_t &object,
-                             uint64_t offset, uint64_t length,
-                             uint64_t journal_tid, int r) {
-    EXPECT_CALL(mock_image_ctx, write_to_cache(object, _, length, offset, _, _,
-                journal_tid, _))
-      .WillOnce(WithArg<4>(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue)));
-  }
-
   void expect_object_request_send(MockTestImageCtx &mock_image_ctx,
                                   int r) {
     EXPECT_CALL(*mock_image_ctx.io_object_dispatcher, send(_))
@@ -165,6 +156,8 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   MockTestImageCtx mock_image_ctx(*ictx);
   MockTestJournal mock_journal;
   mock_image_ctx.journal = &mock_journal;
+
+  expect_op_work_queue(mock_image_ctx);
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);

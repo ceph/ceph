@@ -7,10 +7,14 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/internal.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
+#include "librbd/io/ImageRequestWQ.h"
 #include "include/rados/librados.hpp"
 #include "include/interval_set.h"
 #include "common/errno.h"
 #include "common/Throttle.h"
+#include "osdc/Striper.h"
 #include "librados/snap_set_diff.h"
 #include <boost/tuple/tuple.hpp>
 #include <list>
@@ -235,12 +239,22 @@ int DiffIterate<I>::diff_iterate(I *ictx,
       		 << " len = " << len << dendl;
 
   // ensure previous writes are visible to listsnaps
+  C_SaferCond flush_ctx;
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    ictx->flush();
+    auto aio_comp = io::AioCompletion::create(&flush_ctx, ictx,
+                                              io::AIO_TYPE_FLUSH);
+    auto req = io::ImageDispatchSpec<I>::create_flush_request(
+      *ictx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+    req->send();
+    delete req;
+  }
+  int r = flush_ctx.wait();
+  if (r < 0) {
+    return r;
   }
 
-  int r = ictx->state->refresh_if_required();
+  r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
   }

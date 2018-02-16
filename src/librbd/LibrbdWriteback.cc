@@ -7,6 +7,7 @@
 #include "common/dout.h"
 #include "common/Mutex.h"
 #include "common/WorkQueue.h"
+#include "osdc/Striper.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"

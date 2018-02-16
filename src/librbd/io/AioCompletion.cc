@@ -57,27 +57,29 @@ void AioCompletion::complete() {
   CephContext *cct = ictx->cct;
 
   tracepoint(librbd, aio_complete_enter, this, rval);
-  ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
-  switch (aio_type) {
-  case AIO_TYPE_GENERIC:
-  case AIO_TYPE_OPEN:
-  case AIO_TYPE_CLOSE:
-    break;
-  case AIO_TYPE_READ:
-    ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
-  case AIO_TYPE_WRITE:
-    ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
-  case AIO_TYPE_DISCARD:
-    ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
-  case AIO_TYPE_FLUSH:
-    ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
-  case AIO_TYPE_WRITESAME:
-    ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
-  case AIO_TYPE_COMPARE_AND_WRITE:
-    ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
-  default:
-    lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
-    break;
+  if (ictx->perfcounter != nullptr) {
+    ceph::timespan elapsed = coarse_mono_clock::now() - start_time;
+    switch (aio_type) {
+    case AIO_TYPE_GENERIC:
+    case AIO_TYPE_OPEN:
+    case AIO_TYPE_CLOSE:
+      break;
+    case AIO_TYPE_READ:
+      ictx->perfcounter->tinc(l_librbd_rd_latency, elapsed); break;
+    case AIO_TYPE_WRITE:
+      ictx->perfcounter->tinc(l_librbd_wr_latency, elapsed); break;
+    case AIO_TYPE_DISCARD:
+      ictx->perfcounter->tinc(l_librbd_discard_latency, elapsed); break;
+    case AIO_TYPE_FLUSH:
+      ictx->perfcounter->tinc(l_librbd_flush_latency, elapsed); break;
+    case AIO_TYPE_WRITESAME:
+      ictx->perfcounter->tinc(l_librbd_ws_latency, elapsed); break;
+    case AIO_TYPE_COMPARE_AND_WRITE:
+      ictx->perfcounter->tinc(l_librbd_cmp_latency, elapsed); break;
+    default:
+      lderr(cct) << "completed invalid aio_type: " << aio_type << dendl;
+      break;
+    }
   }
 
   state = AIO_STATE_CALLBACK;

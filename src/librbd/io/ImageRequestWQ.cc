@@ -23,6 +23,20 @@
 namespace librbd {
 namespace io {
 
+namespace {
+
+template <typename I>
+void flush_image(I& image_ctx, Context* on_finish) {
+  auto aio_comp = librbd::io::AioCompletion::create(
+    on_finish, util::get_image_ctx(&image_ctx), librbd::io::AIO_TYPE_FLUSH);
+  auto req = librbd::io::ImageDispatchSpec<I>::create_flush_request(
+    image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
+}
+
+} // anonymous namespace
+
 template <typename I>
 struct ImageRequestWQ<I>::C_AcquireLock : public Context {
   ImageRequestWQ *work_queue;
@@ -477,7 +491,7 @@ void ImageRequestWQ<I>::shut_down(Context *on_shutdown) {
   }
 
   // ensure that all in-flight IO is flushed
-  m_image_ctx.flush(on_shutdown);
+  flush_image(m_image_ctx, on_shutdown);
 }
 
 template <typename I>
@@ -504,7 +518,7 @@ void ImageRequestWQ<I>::block_writes(Context *on_blocked) {
   }
 
   // ensure that all in-flight IO is flushed
-  m_image_ctx.flush(on_blocked);
+  flush_image(m_image_ctx, on_blocked);
 }
 
 template <typename I>
@@ -712,7 +726,7 @@ void ImageRequestWQ<I>::finish_in_flight_write() {
   }
 
   if (writes_blocked) {
-    m_image_ctx.flush(new C_BlockedWrites(this));
+    flush_image(m_image_ctx, new C_BlockedWrites(this));
   }
 }
 
@@ -748,7 +762,7 @@ void ImageRequestWQ<I>::finish_in_flight_io() {
   ldout(cct, 5) << "completing shut down" << dendl;
 
   assert(on_shutdown != nullptr);
-  m_image_ctx.flush(on_shutdown);
+  flush_image(m_image_ctx, on_shutdown);
 }
 
 template <typename I>
