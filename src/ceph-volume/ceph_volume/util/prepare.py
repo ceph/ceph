@@ -153,7 +153,7 @@ def mount_osd(device, osd_id):
         default=constants.mount.get('xfs'),
         split=' ',
     )
-    command.append(flags)
+    command.extend(flags)
     command.append(device)
     command.append(destination)
     process.run(command)
