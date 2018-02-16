@@ -220,27 +220,6 @@ void CloseRequest<I>::handle_flush_readahead(int r) {
   CephContext *cct = m_image_ctx->cct;
   ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
 
-  send_shut_down_cache();
-}
-
-template <typename I>
-void CloseRequest<I>::send_shut_down_cache() {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << dendl;
-
-  m_image_ctx->shut_down_cache(create_context_callback<
-    CloseRequest<I>, &CloseRequest<I>::handle_shut_down_cache>(this));
-}
-
-template <typename I>
-void CloseRequest<I>::handle_shut_down_cache(int r) {
-  CephContext *cct = m_image_ctx->cct;
-  ldout(cct, 10) << this << " " << __func__ << ": r=" << r << dendl;
-
-  save_result(r);
-  if (r < 0) {
-    lderr(cct) << "failed to shut down cache: " << cpp_strerror(r) << dendl;
-  }
   send_shut_down_object_dispatcher();
 }
 

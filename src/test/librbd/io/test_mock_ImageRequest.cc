@@ -95,11 +95,6 @@ struct TestMockIoImageRequest : public TestMockFixture {
                 }));
   }
 
-  void expect_flush(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(mock_image_ctx, flush_cache(_))
-      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
-  }
-
   void expect_flush_async_operations(MockImageCtx &mock_image_ctx, int r) {
     EXPECT_CALL(mock_image_ctx, flush_async_operations(_))
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
@@ -118,12 +113,7 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  if (mock_image_ctx.image_ctx->cache) {
-    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
-                          0, 1, 0, 0);
-  } else {
-    expect_object_request_send(mock_image_ctx, 0);
-  }
+  expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
@@ -184,7 +174,6 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   expect_is_journal_appending(mock_journal, false);
   expect_flush_async_operations(mock_image_ctx, 0);
   expect_object_request_send(mock_image_ctx, 0);
-  expect_flush(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
@@ -210,13 +199,7 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
 
   InSequence seq;
   expect_is_journal_appending(mock_journal, false);
-  if (mock_image_ctx.image_ctx->cache) {
-    expect_write_to_cache(mock_image_ctx, ictx->get_object_name(0),
-                          0, 1, 0, 0);
-  } else {
-    expect_object_request_send(mock_image_ctx, 0);
-  }
-
+  expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
