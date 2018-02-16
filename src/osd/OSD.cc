@@ -861,7 +861,7 @@ bool OSDService::need_fullness_update()
   return want != cur;
 }
 
-bool OSDService::_check_full(s_names type, ostream &ss) const
+bool OSDService::_check_full(s_names type, ostream *ssp) const
 {
   Mutex::Locker l(full_status_lock);
 
@@ -870,31 +870,35 @@ bool OSDService::_check_full(s_names type, ostream &ss) const
     // or if -1 then always return full
     if (injectfull > 0)
       --injectfull;
-    ss << "Injected " << get_full_state_name(type) << " OSD ("
-       << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
+    if (ssp) {
+      *ssp << "Injected " << get_full_state_name(type) << " OSD ("
+         << (injectfull < 0 ? "set" : std::to_string(injectfull)) << ")";
+    }
     return true;
   }
 
-  ss << "current usage is " << cur_ratio;
+  if (ssp && cur_state >= type) {
+    *ssp << "current usage is " << cur_ratio;
+  }
   return cur_state >= type;
 }
 
-bool OSDService::check_failsafe_full(ostream &ss) const
+bool OSDService::check_failsafe_full(ostream *ss) const
 {
   return _check_full(FAILSAFE, ss);
 }
 
-bool OSDService::check_full(ostream &ss) const
+bool OSDService::check_full(ostream *ss) const
 {
   return _check_full(FULL, ss);
 }
 
-bool OSDService::check_backfill_full(ostream &ss) const
+bool OSDService::check_backfill_full(ostream *ss) const
 {
   return _check_full(BACKFILLFULL, ss);
 }
 
-bool OSDService::check_nearfull(ostream &ss) const
+bool OSDService::check_nearfull(ostream *ss) const
 {
   return _check_full(NEARFULL, ss);
 }

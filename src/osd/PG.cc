@@ -7044,7 +7044,9 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
-  ostringstream ss;
+  unique_ptr<ostringstream> ss(nullptr);
+  if (pg->cct->_conf->subsys.should_gather(dout_subsys, 10))
+    ss = unique_ptr<ostringstream>(new ostringstream);
 
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
@@ -7052,9 +7054,9 @@ PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 		       << dendl;
     post_event(RejectRemoteReservation());
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-      pg->osd->check_backfill_full(ss)) {
+      pg->osd->check_backfill_full(ss.get())) {
     ldout(pg->cct, 10) << "backfill reservation rejected: "
-		       << ss.str() << dendl;
+		       << ss->str() << dendl;
     post_event(RejectRemoteReservation());
   } else {
     Context *preempt = nullptr;
@@ -7114,8 +7116,10 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  unique_ptr<ostringstream> ss(nullptr);
+  if (pg->cct->_conf->subsys.should_gather(dout_subsys, 10))
+    ss = unique_ptr<ostringstream>(new ostringstream);
 
-  ostringstream ss;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
@@ -7123,9 +7127,9 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
     post_event(RejectRemoteReservation());
     return discard_event();
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-	     pg->osd->check_backfill_full(ss)) {
+	     pg->osd->check_backfill_full(ss.get())) {
     ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
-		       << ss.str() << dendl;
+		       << ss->str() << dendl;
     post_event(RejectRemoteReservation());
     return discard_event();
   } else {
