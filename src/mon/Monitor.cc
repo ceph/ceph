@@ -4168,6 +4168,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_OSD_PGTEMP:
     case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
+    case MSG_OSD_PG_READY_TO_MERGE:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;
 
