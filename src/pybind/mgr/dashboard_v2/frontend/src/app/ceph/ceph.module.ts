@@ -1,6 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { SharedModule } from '../shared/shared.module';
 import { BlockModule } from './block/block.module';
 import { CephfsModule } from './cephfs/cephfs.module';
 import { ClusterModule } from './cluster/cluster.module';
@@ -14,7 +15,8 @@ import { RgwModule } from './rgw/rgw.module';
     DashboardModule,
     RgwModule,
     BlockModule,
-    CephfsModule
+    CephfsModule,
+    SharedModule
   ],
   declarations: []
 })

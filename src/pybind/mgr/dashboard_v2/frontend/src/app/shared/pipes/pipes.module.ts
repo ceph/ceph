@@ -4,6 +4,7 @@ import { NgModule } from '@angular/core';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
 import { DimlessBinaryPipe } from './dimless-binary.pipe';
 import { DimlessPipe } from './dimless.pipe';
+import { FilterPipe } from './filter.pipe';
 import { HealthColorPipe } from './health-color.pipe';
 import { ListPipe } from './list.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
@@ -16,7 +17,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     DimlessPipe,
     CephShortVersionPipe,
     RelativeDatePipe,
-    ListPipe
+    ListPipe,
+    FilterPipe
   ],
   exports: [
     DimlessBinaryPipe,
@@ -24,7 +26,8 @@ import { RelativeDatePipe } from './relative-date.pipe';
     DimlessPipe,
     CephShortVersionPipe,
     RelativeDatePipe,
-    ListPipe
+    ListPipe,
+    FilterPipe
   ],
   providers: [
     CephShortVersionPipe,

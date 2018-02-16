@@ -26,7 +26,6 @@ import { ServicesModule } from './services/services.module';
     ComponentsModule,
     ServicesModule,
     PasswordButtonDirective,
-    ComponentsModule,
     DataTableModule
   ],
   declarations: [
