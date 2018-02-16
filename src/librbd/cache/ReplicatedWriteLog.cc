@@ -380,12 +380,11 @@ public:
 } // namespace rwl
 
 template <typename I>
-ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
-  : m_image_ctx(image_ctx), 
+ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCache<I> *lower)
+  : m_image_ctx(image_ctx),
     m_log_pool(NULL), m_log_pool_size(DEFAULT_POOL_SIZE),
     m_total_log_entries(0), m_free_log_entries(0), 
-    m_image_writeback(image_ctx), m_image_cache(image_ctx),
-    m_write_log_guard(image_ctx.cct),
+    m_image_writeback(lower), m_write_log_guard(image_ctx.cct),
     m_first_free_entry(0), m_first_valid_entry(0),
     m_current_sync_gen(0), m_current_sync_point(NULL),
     m_last_op_sequence_num(0),
@@ -397,6 +396,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx)
     m_log_append_finisher(image_ctx.cct),
     m_on_persist_finisher(image_ctx.cct),
     m_blocks_to_log_entries(image_ctx.cct) {
+  assert(NULL != lower);
   m_persist_finisher.start();
   m_log_append_finisher.start();
   m_on_persist_finisher.start();
@@ -407,6 +407,7 @@ ReplicatedWriteLog<I>::~ReplicatedWriteLog() {
   m_persist_finisher.wait_for_empty();
   m_log_append_finisher.wait_for_empty();
   m_on_persist_finisher.wait_for_empty();
+  delete m_image_writeback;
 }
 
 template <typename ExtentsType>
@@ -618,11 +619,7 @@ void ReplicatedWriteLog<I>::aio_read(Extents &&image_extents, bufferlist *bl,
     read_ctx->complete(0);
   } else {
     /* Pass the read misses on to the layer below RWL */
-    if (m_image_ctx.persistent_cache_enabled) {
-      m_image_cache.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
-    } else {
-      m_image_writeback.aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
-    }
+    m_image_writeback->aio_read(std::move(read_ctx->m_miss_extents), &read_ctx->m_miss_bl, fadvise_flags, read_ctx);
   }
 }
 
@@ -635,12 +632,8 @@ void ReplicatedWriteLog<I>::detain_guarded_request(GuardedRequest &&req)
   BlockGuardCell *cell;
   int r = m_write_log_guard.detain({req.first_block_num, req.last_block_num},
 				   &req, &cell);
-  if (r < 0) {
-    lderr(cct) << "failed to detain guarded request: " << cpp_strerror(r)
-		   << dendl;
-    m_image_ctx.op_work_queue->queue(req.on_guard_acquire, r);
-    return;
-  } else if (r > 0) { 
+  assert(r>=0);
+  if (r > 0) { 
     ldout(cct, 6) << "detaining guarded request due to in-flight requests: "
                    << "start=" << req.first_block_num << ", "
 		   << "end=" << req.last_block_num << dendl;
@@ -676,17 +669,19 @@ void ReplicatedWriteLog<I>::release_guarded_request(BlockGuardCell *cell)
  */
 struct C_WriteRequest : public C_GuardedBlockIORequest {
   CephContext *m_cct;
-  ImageCache::Extents image_extents;
+  ImageCache::Extents m_image_extents;
   bufferlist bl;
   int fadvise_flags;
   Context *user_req; /* User write request */
   Context *_on_finish; /* Block guard release */
   std::atomic<bool> m_user_req_completed;
+  ExtentsSummary<ImageCache::Extents> m_image_extents_summary;
   C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
 		 bufferlist&& bl, int fadvise_flags, Context *user_req)
-    : C_GuardedBlockIORequest(cct), m_cct(cct), image_extents(std::move(image_extents)),
+    : C_GuardedBlockIORequest(cct), m_cct(cct), m_image_extents(std::move(image_extents)),
       bl(std::move(bl)), fadvise_flags(fadvise_flags),
-      user_req(user_req), _on_finish(NULL), m_user_req_completed(false) {
+      user_req(user_req), _on_finish(NULL), m_user_req_completed(false),
+      m_image_extents_summary(m_image_extents) {
     ldout(m_cct, 99) << this << dendl;
   }
 
@@ -966,6 +961,8 @@ template <typename I>
 void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 {
   CephContext *cct = m_image_ctx.cct;
+  WriteLogEntries log_entries;
+  WriteLogOperationSet *set;
   
   TOID(struct WriteLogPoolRoot) pool_root;
   pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
@@ -973,22 +970,18 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
   ldout(cct, 6) << "write_req=" << write_req << " cell=" << write_req->get_cell() << dendl;
   ldout(cct,6) << "bl=[" << write_req->bl << "]" << dendl;
 
-  ExtentsSummary<ImageCache::Extents> image_extents_summary(write_req->image_extents);
-
-  WriteLogEntries log_entries;
-  WriteLogOperationSet *set =
-    new WriteLogOperationSet(cct, m_current_sync_point, m_persist_on_flush,
-			     BlockExtent(image_extents_summary.first_block,
-					 image_extents_summary.last_block),
-			     new C_OnFinisher(write_req, &m_on_persist_finisher));
   {
     uint64_t buffer_offset = 0;
     Mutex::Locker locker(m_lock);
+    set = new WriteLogOperationSet(cct, m_current_sync_point, m_persist_on_flush,
+				   BlockExtent(write_req->m_image_extents_summary.first_block,
+					       write_req->m_image_extents_summary.last_block),
+				   new C_OnFinisher(write_req, &m_on_persist_finisher));
     /* TODO: If there isn't space for this whole write, defer it */
-    if (m_free_log_entries < write_req->image_extents.size()) {
-      ldout(cct, 6) << "wait for " << write_req->image_extents.size() << " log entries" << dendl;
+    if (m_free_log_entries < write_req->m_image_extents.size()) {
+      ldout(cct, 6) << "wait for " << write_req->m_image_extents.size() << " log entries" << dendl;
     } else {
-      for (auto &extent : write_req->image_extents) {
+      for (auto &extent : write_req->m_image_extents) {
 	/* operation->on_write_persist connected to m_prior_log_entries_persisted Gather */
 	WriteLogOperation *operation =
 	  new WriteLogOperation(set, extent.first, extent.second);
@@ -1092,8 +1085,6 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
     return;
   }
 
-  ExtentsSummary<ImageCache::Extents> image_extents_summary(image_extents);
-
   C_WriteRequest *write_req =
     new C_WriteRequest(cct, std::move(image_extents), std::move(bl), fadvise_flags, on_finish);
 
@@ -1111,8 +1102,8 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       dispatch_aio_write(write_req);
     });
 
-  GuardedRequest guarded(image_extents_summary.first_block,
-			 image_extents_summary.last_block,
+  GuardedRequest guarded(write_req->m_image_extents_summary.first_block,
+			 write_req->m_image_extents_summary.last_block,
 			 guarded_ctx);
   detain_guarded_request(std::move(guarded));
 }
@@ -1133,11 +1124,7 @@ void ReplicatedWriteLog<I>::aio_discard(uint64_t offset, uint64_t length,
     }
   }
 
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_discard(offset, length, skip_partial_discard, on_finish);
-  } else {
-    m_image_writeback.aio_discard(offset, length, skip_partial_discard, on_finish);
-  }
+  m_image_writeback->aio_discard(offset, length, skip_partial_discard, on_finish);
   /*
   if (!is_block_aligned({{offset, length}})) {
     // For clients that don't use LBA extents, re-align the discard request
@@ -1189,12 +1176,18 @@ void ReplicatedWriteLog<I>::aio_flush(Context *on_finish) {
       }
     }
   }
-  
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_flush(on_finish);
-  } else {
-    m_image_writeback.aio_flush(on_finish);
-  }
+
+  /* 
+   * TODO: if persist_on_flush, create a new sync point if there have been
+   * writes since the last one. If The current sync point isn't persisted,
+   * complete this flush when it is. Otherwise complete this flush now.
+   *
+   * We do not flush the caches below the RWL here.
+   */
+
+  /* temporary */
+  m_image_writeback->aio_flush(on_finish);
+
   /*
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
@@ -1225,11 +1218,7 @@ void ReplicatedWriteLog<I>::aio_writesame(uint64_t offset, uint64_t length,
     }
   }
 
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
-  } else {
-    m_image_writeback.aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
-  }
+  m_image_writeback->aio_writesame(offset, length, std::move(bl), fadvise_flags, on_finish);
 
   /*
   bufferlist total_bl;
@@ -1261,15 +1250,9 @@ void ReplicatedWriteLog<I>::aio_compare_and_write(Extents &&image_extents,
   //ldout(cct, 20) << "image_extents=" << image_extents << ", "
   //               << "on_finish=" << on_finish << dendl;
 
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.aio_compare_and_write(
-      std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
-      fadvise_flags, on_finish);
-  } else {
-    m_image_writeback.aio_compare_and_write(
-      std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
-      fadvise_flags, on_finish);
-  }
+  m_image_writeback->aio_compare_and_write(
+    std::move(image_extents), std::move(cmp_bl), std::move(bl), mismatch_offset,
+    fadvise_flags, on_finish);
 }
 
 /**
@@ -1333,7 +1316,7 @@ void ReplicatedWriteLog<I>::new_sync_point(void) {
 }
 
 template <typename I>
-void ReplicatedWriteLog<I>::init(Context *on_finish) {
+void ReplicatedWriteLog<I>::rwl_init(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
   TOID(struct WriteLogPoolRoot) pool_root;
@@ -1364,7 +1347,8 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 			(S_IWUSR | S_IRUSR))) == NULL) {
       lderr(cct) << "failed to create pool (" << m_log_pool_name << ")"
                  << pmemobj_errormsg() << dendl;
-      on_finish->complete(-1);
+      /* TODO: filter/replace errnos that are meaningless to the caller */
+      on_finish->complete(-errno);
       return;
     }
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
@@ -1391,7 +1375,7 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
       m_total_log_entries = 0;
       m_free_log_entries = 0;
       lderr(cct) << "failed to initialize pool (" << m_log_pool_name << ")" << dendl;
-      on_finish->complete(-1);
+      on_finish->complete(-pmemobj_tx_errno());
       return;
     } TX_FINALLY {
     } TX_END;
@@ -1401,19 +1385,19 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
 		      rwl_pool_layout_name)) == NULL) {
       lderr(cct) << "failed to open pool (" << m_log_pool_name << "): "
                  << pmemobj_errormsg() << dendl;
-      on_finish->complete(-1);
+      on_finish->complete(-errno);
       return;
     }
     pool_root = POBJ_ROOT(m_log_pool, struct WriteLogPoolRoot);
     if (D_RO(pool_root)->header.layout_version != RWL_POOL_VERSION) {
       lderr(cct) << "Pool layout version is " << D_RO(pool_root)->header.layout_version
 		 << " expected " << RWL_POOL_VERSION << dendl;
-      on_finish->complete(-1);
+      on_finish->complete(-EINVAL);
       return;
     }
     if (D_RO(pool_root)->block_size != MIN_WRITE_ALLOC_SIZE) {
       lderr(cct) << "Pool block size is " << D_RO(pool_root)->block_size << " expected " << MIN_WRITE_ALLOC_SIZE << dendl;
-      on_finish->complete(-1);
+      on_finish->complete(-EINVAL);
       return;
     }
     m_total_log_entries = D_RO(pool_root)->num_log_entries;
@@ -1432,20 +1416,25 @@ void ReplicatedWriteLog<I>::init(Context *on_finish) {
   /* Start the sync point following the last one seen in the log */
   m_current_sync_point = new SyncPoint(cct, m_current_sync_gen);
   ldout(cct,6) << "new sync point = [" << m_current_sync_point << "]" << dendl;
-  
-  // chain the initialization of the meta, image, and journal stores
+
+  on_finish->complete(0);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::init(Context *on_finish) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << dendl;
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (r >= 0) {
-	// Init succeeded
+	rwl_init(on_finish);
+      } else {
+	/* Don't init RWL if layer below failed to init */
+	on_finish->complete(r);
       }
-      on_finish->complete(r);
     });
-  if (m_image_ctx.persistent_cache_enabled) {
-    m_image_cache.init(ctx);
-  } else {
-    ctx->complete(0);
-  }
+  /* Initialize the cache layer below first */
+  m_image_writeback->init(ctx);
 }
 
 template <typename I>
@@ -1457,25 +1446,48 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
-      if (NULL != m_log_pool) {
-	pmemobj_close(m_log_pool);
+      Context *next_ctx = on_finish;
+      if (r < 0) {
+	/* Override on_finish status with this error */
+        next_ctx = new FunctionContext(
+          [r, on_finish](int _r) {
+            on_finish->complete(r);
+          });
       }
-      on_finish->complete(r);
+      /* Shut down the cache layer below */
+      m_image_writeback->shut_down(next_ctx);
     });
-  if (m_image_ctx.persistent_cache_enabled) {
-    ctx = new FunctionContext(
-      [this, ctx](int r) {
-        if (r < 0) ctx->complete(r);
-	m_image_cache.shut_down(ctx);
-      });
-  }
   ctx = new FunctionContext(
     [this, ctx](int r) {
-      // flush writeback journal to OSDs
-      if (r < 0) ctx->complete(r);
-      flush(ctx);
+      Context *next_ctx = ctx;
+      if (r < 0) {
+	/* Override next_ctx status with this error */
+        next_ctx = new FunctionContext(
+          [r, ctx](int _r) {
+            ctx->complete(r);
+          });
+      }
+      if (NULL != m_log_pool) {
+	pmemobj_close(m_log_pool);
+	r = -errno;
+      }
+      next_ctx->complete(r);
     });
-
+#if 0 // disable until flush will complete
+  ctx = new FunctionContext(
+    [this, ctx](int r) {
+      Context *next_ctx = ctx;
+      if (r < 0) {
+	/* Override next_ctx status with this error */
+        next_ctx = new FunctionContext(
+          [r, ctx](int _r) {
+            ctx->complete(r);
+          });
+      }
+      // flush all writes to OSDs
+      flush(next_ctx);
+    });
+#endif
   {
     Mutex::Locker locker(m_lock);
     m_async_op_tracker.wait(m_image_ctx, ctx);
@@ -1490,7 +1502,7 @@ void ReplicatedWriteLog<I>::invalidate(Context *on_finish) {
   Context *ctx = new FunctionContext(
     [this, on_finish](int r) {
       if (m_image_ctx.persistent_cache_enabled) {
-	m_image_cache.invalidate(on_finish);
+	m_image_writeback->invalidate(on_finish);
       } else {
 	on_finish->complete(0);
       }

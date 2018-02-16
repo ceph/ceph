@@ -370,9 +370,11 @@ struct C_WriteRequest;
  * Prototype pmem-based, client-side, replicated write log
  */
 template <typename ImageCtxT = librbd::ImageCtx>
-class ReplicatedWriteLog : public ImageCache {
+class ReplicatedWriteLog : public StackingImageCache<ImageCtxT> {
+  using typename ImageCache::Extent;
+  using typename ImageCache::Extents;
 public:
-  ReplicatedWriteLog(ImageCtx &image_ctx);
+  ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCache<ImageCtxT> *lower);
   ~ReplicatedWriteLog();
   ReplicatedWriteLog(const ReplicatedWriteLog&) = delete;
   ReplicatedWriteLog &operator=(const ReplicatedWriteLog&) = delete;
@@ -418,8 +420,8 @@ private:
   uint32_t m_total_log_entries;
   uint32_t m_free_log_entries;
 
-  ImageWriteback<ImageCtxT> m_image_writeback;
-  FileImageCache<ImageCtxT> m_image_cache;
+  //ImageWriteback<ImageCtxT> m_image_writeback;
+  StackingImageCache<ImageCtxT> *m_image_writeback;
   WriteLogGuard m_write_log_guard;
   
   /* 
@@ -466,6 +468,7 @@ private:
   WriteLogEntries m_log_entries;
   WriteLogEntries m_dirty_log_entries;
 
+  void rwl_init(Context *on_finish);
   void wake_up();
   void process_work();
 

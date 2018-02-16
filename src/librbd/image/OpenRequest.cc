@@ -7,6 +7,7 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "librbd/cache/StackingImageCache.h"
 #include "librbd/cache/FileImageCache.h"
 #include "librbd/cache/ReplicatedWriteLog.h"
 #include "librbd/image/CloseRequest.h"
@@ -30,7 +31,7 @@ static uint64_t MAX_METADATA_ITEMS = 128;
 
 using util::create_context_callback;
 using util::create_rados_callback;
-
+  
 template <typename I>
 OpenRequest<I>::OpenRequest(I *image_ctx, bool skip_open_parent,
                             Context *on_finish)
@@ -580,11 +581,18 @@ Context *OpenRequest<I>::send_init_image_cache(int *result) {
   ldout(cct, 10) << this << " " << __func__ << dendl;
 
   // TODO: hard-coded for prototype
+  cache::StackingImageCache<I> *layer =
+    new cache::ImageWriteback<I>(*m_image_ctx);
+  m_image_ctx->image_cache = layer;
+  if (m_image_ctx->persistent_cache_enabled) {
+    layer = new cache::FileImageCache<I>(*m_image_ctx,
+					 (cache::ImageWriteback<I>*)layer);
+    m_image_ctx->image_cache = layer;
+  }
   if (m_image_ctx->rwl_enabled) {
     ldout(cct, 4) << this << " " << __func__ << "RWL enabled" << dendl;
-    m_image_ctx->image_cache = new cache::ReplicatedWriteLog<ImageCtx>(*m_image_ctx);
-  } else {
-    m_image_ctx->image_cache = new cache::FileImageCache<ImageCtx>(*m_image_ctx);
+    layer = new cache::ReplicatedWriteLog<I>(*m_image_ctx, layer);
+    m_image_ctx->image_cache = layer;
   }
   Context *ctx = create_context_callback<
     OpenRequest<I>, &OpenRequest<I>::handle_init_image_cache>(this);

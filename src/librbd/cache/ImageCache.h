@@ -53,7 +53,6 @@ struct ImageCache {
 
   virtual void invalidate(Context *on_finish) = 0;
   virtual void flush(Context *on_finish) = 0;
-
 };
 
 } // namespace cache
