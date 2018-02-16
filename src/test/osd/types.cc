@@ -668,6 +668,32 @@ TEST(pg_t, split)
 
 }
 
+TEST(pg_t, merge)
+{
+  pg_t pgid, parent;
+  bool b;
+
+  pgid = pg_t(7, 0);
+  b = pgid.is_merge(8, 7, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+
+  b = pgid.is_merge(8, 5, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+
+  b = pgid.is_merge(8, 4, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+
+  b = pgid.is_merge(8, 3, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(1, 0));
+
+  b = pgid.is_merge(9, 8, &parent);
+  ASSERT_FALSE(b);
+}
+
 TEST(pg_missing_t, constructor)
 {
   pg_missing_t missing;

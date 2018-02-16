@@ -412,6 +412,8 @@ struct pg_t {
 
   bool is_split(unsigned old_pg_num, unsigned new_pg_num, set<pg_t> *pchildren) const;
 
+  bool is_merge(unsigned old_pg_num, unsigned new_pg_num, pg_t *parent) const;
+
   /**
    * Returns b such that for all object o:
    *   ~((~0)<<b) & o.hash) == 0 iff o is in the pg for *this
@@ -539,6 +541,15 @@ struct spg_t {
     }
     return is_split;
   }
+  bool is_merge(unsigned old_pg_num, unsigned new_pg_num, spg_t *parent) const {
+    spg_t out = *this;
+    bool r = pgid.is_merge(old_pg_num, new_pg_num, &out.pgid);
+    if (r && parent) {
+      *parent = out;
+    }
+    return r;
+  }
+
   bool is_no_shard() const {
     return shard == shard_id_t::NO_SHARD;
   }
