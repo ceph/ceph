@@ -1122,7 +1122,7 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       }
     }
 
-    if (parent_snap_name) {
+    if (parent_snap_name && parent_spec.snap_id != CEPH_NOSNAP) {
       RWLock::RLocker l(ictx->parent->snap_lock);
       r = ictx->parent->get_snap_name(parent_spec.snap_id,
 				      parent_snap_name);
