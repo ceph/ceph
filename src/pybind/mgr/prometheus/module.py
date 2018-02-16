@@ -179,6 +179,13 @@ class Module(MgrModule):
             'POOL Metadata',
             POOL_METADATA
         )
+
+        metrics['pg_total'] = Metric(
+            'gauge',
+            'pg_total',
+            'PG Total Count'
+        )
+
         for state in OSD_STATUS:
             path = 'osd_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -249,16 +256,25 @@ class Module(MgrModule):
 
     def get_pg_status(self):
         # TODO add per pool status?
-        pg_s = self.get('pg_summary')['all']
-        reported_pg_s = [(s,v) for key, v in pg_s.items() for s in
-                         key.split('+')]
-        for state, value in reported_pg_s:
+        pg_status = self.get('pg_status')
+
+        # Set total count of PGs, first
+        self.metrics['pg_total'].set(
+            pg_status['num_pgs'],
+        )
+
+        reported_states = {}
+        for pg in pg_status['pgs_by_state']:
+            for state in pg['state_name'].split('+'):
+                reported_states[state] =  reported_states.get(state, 0) + pg['count']
+
+        for state in reported_states:
             path = 'pg_{}'.format(state)
             try:
-                self.metrics[path].set(value)
+                self.metrics[path].set(reported_states[state])
             except KeyError:
                 self.log.warn("skipping pg in unknown state {}".format(state))
-        reported_states = [s[0] for s in reported_pg_s]
+
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             if state not in reported_states:
