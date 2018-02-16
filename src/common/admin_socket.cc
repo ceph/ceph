@@ -409,7 +409,8 @@ bool AdminSocket::do_accept()
     in_hook = true;
     auto match_hook = p->second;
     m_lock.Unlock();
-    bool success = match_hook->call(match, cmdmap, format, out);
+    bool success = (validate(match, cmdmap, out) &&
+                    match_hook->call(match, cmdmap, format, out));
     m_lock.Lock();
     in_hook = false;
     in_hook_cond.Signal();
@@ -437,6 +438,19 @@ bool AdminSocket::do_accept()
 
   VOID_TEMP_FAILURE_RETRY(close(connection_fd));
   return rval;
+}
+
+bool AdminSocket::validate(const std::string& command,
+			  const cmdmap_t& cmdmap,
+			  bufferlist& out) const
+{
+  stringstream os;
+  if (validate_cmd(m_cct, m_descs.at(command), cmdmap, os)) {
+    return true;
+  } else {
+    out.append(os);
+    return false;
+  }
 }
 
 int AdminSocket::register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help)
