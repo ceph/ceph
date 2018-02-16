@@ -26,8 +26,6 @@
 #include "ActivePyModules.h"
 #include "StandbyPyModules.h"
 
-
-
 /**
  * This class is responsible for setting up the python runtime environment
  * and importing the python modules.
@@ -40,7 +38,6 @@ class PyModuleRegistry
 {
 private:
   mutable Mutex lock{"PyModuleRegistry::lock"};
-
   LogChannelRef clog;
 
   std::map<std::string, PyModuleRef> modules;
@@ -59,8 +56,12 @@ private:
    */
   std::set<std::string> probe_modules() const;
 
+  PyModuleConfig module_config;
+
 public:
   static std::string config_prefix;
+
+  void handle_config(const std::string &k, const std::string &v);
 
   /**
    * Get references to all modules (whether they have loaded and/or
@@ -89,7 +90,7 @@ public:
   void init();
 
   void active_start(
-                PyModuleConfig &config_,
+                PyModuleConfig &module_config,
                 DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
                 LogChannelRef clog_, Objecter &objecter_, Client &client_,
                 Finisher &f);

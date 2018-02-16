@@ -29,8 +29,6 @@
 
 class health_check_map_t;
 
-typedef std::map<std::string, std::string> PyModuleConfig;
-
 class ActivePyModules
 {
 
@@ -48,7 +46,7 @@ class ActivePyModules
   mutable Mutex lock{"ActivePyModules::lock"};
 
 public:
-  ActivePyModules(PyModuleConfig const &config_,
+  ActivePyModules(PyModuleConfig &module_config,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, Objecter &objecter_, Client &client_,
             Finisher &f);
@@ -59,7 +57,6 @@ public:
   MonClient &get_monc() {return monc;}
   Objecter  &get_objecter() {return objecter;}
   Client    &get_client() {return client;}
-
   PyObject *get_python(const std::string &what);
   PyObject *get_server_python(const std::string &hostname);
   PyObject *list_servers_python();
@@ -77,10 +74,15 @@ public:
   PyObject *get_context();
   PyObject *get_osdmap();
 
-  bool get_config(const std::string &module_name,
+  bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
   PyObject *get_config_prefix(const std::string &module_name,
 			      const std::string &prefix) const;
+  void set_store(const std::string &module_name,
+      const std::string &key, const boost::optional<std::string> &val);
+
+  bool get_config(const std::string &module_name,
+      const std::string &key, std::string *val) const;
   void set_config(const std::string &module_name,
       const std::string &key, const boost::optional<std::string> &val);
 

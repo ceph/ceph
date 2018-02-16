@@ -132,3 +132,14 @@ public:
 
 typedef std::shared_ptr<PyModule> PyModuleRef;
 
+class PyModuleConfig {
+public:
+  mutable Mutex lock{"PyModuleConfig::lock"};
+  std::map<std::string, std::string> config;
+
+  PyModuleConfig();
+  
+  PyModuleConfig(PyModuleConfig &mconfig);
+  
+  ~PyModuleConfig();
+};

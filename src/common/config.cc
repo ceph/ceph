@@ -260,11 +260,24 @@ void md_config_t::set_val_default(const string& name, const std::string& val)
   assert(r >= 0);
 }
 
-int md_config_t::set_mon_vals(CephContext *cct, const map<string,string>& kv)
+int md_config_t::set_mon_vals(CephContext *cct,
+    const map<string,string>& kv,
+    config_callback config_cb)
 {
   Mutex::Locker l(lock);
   ignored_mon_values.clear();
+
+  if (!config_cb) {
+    ldout(cct, 4) << __func__ << " no callback set" << dendl;
+  }
+
   for (auto& i : kv) {
+    if (config_cb && config_cb(i.first, i.second)) {
+      ldout(cct, 4) << __func__ << " callback consumed " << i.first << dendl;
+      continue;
+    } else {
+      ldout(cct, 4) << __func__ << " callback ignored " << i.first << dendl;
+    }
     const Option *o = find_option(i.first);
     if (!o) {
       ldout(cct,10) << __func__ << " " << i.first << " = " << i.second

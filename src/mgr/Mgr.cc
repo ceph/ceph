@@ -30,7 +30,7 @@
 #include "messages/MCommandReply.h"
 #include "messages/MLog.h"
 #include "messages/MServiceMap.h"
-
+#include "PyModule.h"
 #include "Mgr.h"
 
 #define dout_context g_ceph_context
@@ -315,7 +315,7 @@ void Mgr::load_all_metadata()
   }
 }
 
-std::map<std::string, std::string> Mgr::load_config()
+PyModuleConfig Mgr::load_config()
 {
   assert(lock.is_locked_by_me());
 
@@ -327,10 +327,11 @@ std::map<std::string, std::string> Mgr::load_config()
   lock.Lock();
   assert(cmd.r == 0);
 
-  std::map<std::string, std::string> loaded;
+  PyModuleConfig loaded;
   
   for (auto &key_str : cmd.json_result.get_array()) {
     std::string const key = key_str.get_str();
+    
     dout(20) << "saw key '" << key << "'" << dendl;
 
     const std::string config_prefix = PyModuleRegistry::config_prefix;
@@ -345,7 +346,7 @@ std::map<std::string, std::string> Mgr::load_config()
       get_cmd.wait();
       lock.Lock();
       assert(get_cmd.r == 0);
-      loaded[key] = get_cmd.outbl.to_str();
+      loaded.config[key] = get_cmd.outbl.to_str();
     }
   }
 
