@@ -7,7 +7,10 @@
 #include "librbd/internal.h"
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
+#include "librbd/io/AioCompletion.h"
+#include "librbd/io/ImageDispatchSpec.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectDispatcher.h"
 #include "librbd/operation/TrimRequest.h"
 #include "common/dout.h"
 #include "common/errno.h"
@@ -182,18 +185,19 @@ Context *ResizeRequest<I>::handle_trim_image(int *result) {
 template <typename I>
 void ResizeRequest<I>::send_flush_cache() {
   I &image_ctx = this->m_image_ctx;
-  if (image_ctx.object_cacher == nullptr) {
-    send_trim_image();
-    return;
-  }
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
-  image_ctx.flush_cache(create_async_context_callback(
-    image_ctx, create_context_callback<
-      ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this)));
+  auto ctx = create_context_callback<
+    ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
+  auto aio_comp = io::AioCompletion::create(
+    ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
+  auto req = io::ImageDispatchSpec<I>::create_flush_request(
+    image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
+  req->send();
+  delete req;
 }
 
 template <typename I>
@@ -220,9 +224,8 @@ void ResizeRequest<I>::send_invalidate_cache() {
   // need to invalidate since we're deleting objects, and
   // ObjectCacher doesn't track non-existent objects
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
-  image_ctx.invalidate_cache(false, create_async_context_callback(
-    image_ctx, create_context_callback<
-      ResizeRequest<I>, &ResizeRequest<I>::handle_invalidate_cache>(this)));
+  image_ctx.io_object_dispatcher->invalidate_cache(create_context_callback<
+    ResizeRequest<I>, &ResizeRequest<I>::handle_invalidate_cache>(this));
 }
 
 template <typename I>

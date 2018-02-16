@@ -298,10 +298,6 @@ void ObjectReadRequest<I>::handle_read_object(int r) {
 template <typename I>
 void ObjectReadRequest<I>::read_parent() {
   I *image_ctx = this->m_ictx;
-  if (m_cache_initiated) {
-    this->finish(-ENOENT);
-    return;
-  }
 
   uint64_t object_overlap = 0;
   Extents parent_extents;

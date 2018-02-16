@@ -50,9 +50,6 @@ private:
    * FLUSH_READAHEAD
    *    |
    *    v
-   * SHUTDOWN_CACHE
-   *    |
-   *    v
    * SHUT_DOWN_OBJECT_DISPATCHER
    *    |
    *    v
@@ -99,9 +96,6 @@ private:
 
   void send_flush_readahead();
   void handle_flush_readahead(int r);
-
-  void send_shut_down_cache();
-  void handle_shut_down_cache(int r);
 
   void send_shut_down_object_dispatcher();
   void handle_shut_down_object_dispatcher(int r);

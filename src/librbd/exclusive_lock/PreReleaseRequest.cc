@@ -12,6 +12,7 @@
 #include "librbd/ObjectMap.h"
 #include "librbd/Utils.h"
 #include "librbd/io/ImageRequestWQ.h"
+#include "librbd/io/ObjectDispatcher.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -156,25 +157,19 @@ void PreReleaseRequest<I>::handle_wait_for_ops(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  send_invalidate_cache(false);
+  send_invalidate_cache();
 }
 
 template <typename I>
-void PreReleaseRequest<I>::send_invalidate_cache(bool purge_on_error) {
-  if (m_image_ctx.object_cacher == nullptr) {
-    send_flush_notifies();
-    return;
-  }
-
+void PreReleaseRequest<I>::send_invalidate_cache() {
   CephContext *cct = m_image_ctx.cct;
-  ldout(cct, 10) << "purge_on_error=" << purge_on_error << dendl;
+  ldout(cct, 10) << dendl;
 
   RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
-  Context *ctx = create_async_context_callback(
-    m_image_ctx, create_context_callback<
+  Context *ctx = create_context_callback<
       PreReleaseRequest<I>,
-      &PreReleaseRequest<I>::handle_invalidate_cache>(this));
-  m_image_ctx.invalidate_cache(purge_on_error, ctx);
+      &PreReleaseRequest<I>::handle_invalidate_cache>(this);
+  m_image_ctx.io_object_dispatcher->invalidate_cache(ctx);
 }
 
 template <typename I>
@@ -182,15 +177,7 @@ void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r == -EBLACKLISTED) {
-    lderr(cct) << "failed to invalidate cache because client is blacklisted"
-               << dendl;
-    if (!m_image_ctx.is_cache_empty()) {
-      // force purge the cache after after being blacklisted
-      send_invalidate_cache(true);
-      return;
-    }
-  } else if (r < 0 && r != -EBUSY) {
+  if (r < 0 && r != -EBLACKLISTED && r != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
                << dendl;
     m_image_ctx.io_work_queue->unblock_writes();
