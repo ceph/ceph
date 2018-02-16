@@ -26,30 +26,21 @@ void RGWRestRole::send_response()
   end_header(s);
 }
 
-int RGWRoleRead::verify_permission()
+int RGWRestRole::verify_permission()
 {
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  if (!verify_user_permission(s, RGW_PERM_READ)) {
-    return -EACCES;
-  }
-
-  return 0;
+  int ret = check_caps(s->user->caps);
+  ldout(s->cct, 0) << "INFO: verify_permissions ret" << ret << dendl;
+  return ret;
 }
 
-int RGWRoleWrite::verify_permission()
+int RGWRoleRead::check_caps(RGWUserCaps& caps)
 {
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
+    return caps.check_cap("roles", RGW_CAP_READ);
+}
 
-  if (!verify_user_permission(s, RGW_PERM_WRITE)) {
-    return -EACCES;
-  }
-
-  return 0;
+int RGWRoleWrite::check_caps(RGWUserCaps& caps)
+{
+    return caps.check_cap("roles", RGW_CAP_WRITE);
 }
 
 int RGWCreateRole::get_params()
