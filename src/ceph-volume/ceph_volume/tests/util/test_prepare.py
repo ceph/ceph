@@ -3,7 +3,7 @@ from textwrap import dedent
 import json
 from ceph_volume.util import prepare
 from ceph_volume.util.prepare import system
-from ceph_volume import conf, configuration
+from ceph_volume import conf
 from ceph_volume.tests.conftest import Factory
 
 
