@@ -6588,6 +6588,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
   pi->set_pg_num(pg_num);
+  pi->set_pg_num_pending(pg_num, pending_inc.epoch);
   pi->set_pgp_num(pgp_num);
   pi->last_change = pending_inc.epoch;
   pi->auid = 0;

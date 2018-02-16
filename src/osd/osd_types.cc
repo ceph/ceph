@@ -1195,6 +1195,10 @@ void pg_pool_t::dump(Formatter *f) const
   f->dump_int("object_hash", get_object_hash());
   f->dump_unsigned("pg_num", get_pg_num());
   f->dump_unsigned("pg_placement_num", get_pgp_num());
+  f->dump_unsigned("pg_placement_num_target", get_pgp_num_target());
+  f->dump_unsigned("pg_num_target", get_pg_num_target());
+  f->dump_unsigned("pg_num_pending", get_pg_num_pending());
+  f->dump_unsigned("pg_num_pending_dec_epoch", get_pg_num_pending_dec_epoch());
   f->dump_stream("last_change") << get_last_change();
   f->dump_stream("last_force_op_resend") << get_last_force_op_resend();
   f->dump_stream("last_force_op_resend_preluminous")
@@ -1577,7 +1581,7 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 27;
+  uint8_t v = 28;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
   if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
@@ -1588,6 +1592,8 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     v = 24;
   } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
     v = 26;
+  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 27;
   }
 
   ENCODE_START(v, 5, bl);
@@ -1666,12 +1672,18 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   if (v >= 27) {
     encode(create_time, bl);
   }
+  if (v >= 28) {
+    encode(pg_num_target, bl);
+    encode(pgp_num_target, bl);
+    encode(pg_num_pending, bl);
+    encode(pg_num_pending_dec_epoch, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(27, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(28, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -1824,6 +1836,16 @@ void pg_pool_t::decode(bufferlist::const_iterator& bl)
   if (struct_v >= 27) {
     decode(create_time, bl);
   }
+  if (struct_v >= 28) {
+    decode(pg_num_target, bl);
+    decode(pgp_num_target, bl);
+    decode(pg_num_pending, bl);
+    decode(pg_num_pending_dec_epoch, bl);
+  } else {
+    pg_num_target = pg_num;
+    pgp_num_target = pgp_num;
+    pg_num_pending = pg_num;
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -1840,7 +1862,11 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
   a.crush_rule = 3;
   a.object_hash = 4;
   a.pg_num = 6;
-  a.pgp_num = 5;
+  a.pgp_num = 4;
+  a.pgp_num_target = 4;
+  a.pg_num_target = 5;
+  a.pg_num_pending = 5;
+  a.pg_num_pending_dec_epoch = 2;
   a.last_change = 9;
   a.last_force_op_resend = 123823;
   a.last_force_op_resend_preluminous = 123824;
@@ -1902,8 +1928,18 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
       << " pg_num " << p.get_pg_num()
-      << " pgp_num " << p.get_pgp_num()
-      << " last_change " << p.get_last_change();
+      << " pgp_num " << p.get_pgp_num();
+  if (p.get_pg_num_target() != p.get_pg_num()) {
+    out << " pg_num_target " << p.get_pg_num_target();
+  }
+  if (p.get_pgp_num_target() != p.get_pgp_num()) {
+    out << " pgp_num_target " << p.get_pgp_num_target();
+  }
+  if (p.get_pg_num_pending() != p.get_pg_num()) {
+    out << " pg_num_pending " << p.get_pg_num_pending()
+	<< "(e" << p.get_pg_num_pending_dec_epoch() << ")";
+  }
+  out << " last_change " << p.get_last_change();
   if (p.get_last_force_op_resend() ||
       p.get_last_force_op_resend_preluminous())
     out << " lfor " << p.get_last_force_op_resend() << "/"
