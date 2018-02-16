@@ -115,7 +115,6 @@ protected:
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
   int op_ret;
-
   int do_aws4_auth_completion();
 
   virtual int init_quota();
@@ -1268,6 +1267,9 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
+  const char *copy_source = nullptr;
+  const char *md_directive = nullptr;
+
   off_t ofs;
   off_t len;
   off_t end;
