@@ -12,7 +12,7 @@ import {
   ViewChild
 } from '@angular/core';
 
-import { DatatableComponent } from '@swimlane/ngx-datatable';
+import { DatatableComponent, SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
 
 import { CdTableColumn } from '../../models/cd-table-column';
@@ -34,6 +34,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   @Input() data: any[] = [];
   // Each item -> { prop: 'attribute name', name: 'display name' }
   @Input() columns: CdTableColumn[];
+  // Each item -> { prop: 'attribute name', dir: 'asc'||'desc'}
+  @Input() sorts?: SortPropDir[];
   // Method used for setting column widths.
   @Input() columnMode ?= 'force';
   // Name of the component e.g. 'TableDetailsComponent'
@@ -87,6 +89,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
     if (this.detailsComponent) {
       this.selectionType = 'multi';
     }
+    if (!this.sorts) {
+      this.sorts = [
+        {
+          prop: this.columns[0].prop,
+          dir: SortDirection.asc
+        }
+      ];
+    }
   }
 
   ngAfterContentChecked() {
@@ -97,8 +107,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
     // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
-      // Force the redrawing of the table.
-      window.dispatchEvent(new Event('resize'));
+      this.table.recalculate();
     }
   }
 
@@ -128,6 +137,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   }
 
   useData() {
+    if (!this.data) {
+      return; // Wait for data
+    }
     this.rows = [...this.data];
     this.loadingIndicator = false;
   }
