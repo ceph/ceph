@@ -14,6 +14,7 @@
 #include <map>
 
 class Context;
+class ObjectExtent;
 
 namespace librbd {
 

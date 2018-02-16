@@ -10,6 +10,7 @@
 #include "common/WorkQueue.h"
 #include "include/Context.h"
 #include "include/err.h"
+#include "osd/osd_types.h"
 
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"

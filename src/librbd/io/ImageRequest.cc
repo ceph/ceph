@@ -10,6 +10,7 @@
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ObjectRequest.h"
+#include "librbd/io/Utils.h"
 #include "librbd/journal/Types.h"
 #include "include/rados/librados.hpp"
 #include "common/WorkQueue.h"
@@ -23,7 +24,7 @@
 namespace librbd {
 namespace io {
 
-using util::get_image_ctx;
+using librbd::util::get_image_ctx;
 
 namespace {
 
@@ -655,51 +656,6 @@ void ImageFlushRequest<I>::send_image_cache_request() {
 }
 
 template <typename I>
-bool ImageWriteSameRequest<I>::assemble_writesame_extent(const ObjectExtent &object_extent,
-                                                         bufferlist *bl, bool force_write) {
-  size_t m_data_len = m_data_bl.length();
-
-  if (!force_write) {
-    bool may_writesame = true;
-
-    for (auto q = object_extent.buffer_extents.begin();
-         q != object_extent.buffer_extents.end(); ++q) {
-      if (!(q->first % m_data_len == 0 && q->second % m_data_len == 0)) {
-        may_writesame = false;
-        break;
-      }
-    }
-
-    if (may_writesame) {
-      bl->append(m_data_bl);
-      return true;
-    }
-  }
-
-  for (auto q = object_extent.buffer_extents.begin();
-       q != object_extent.buffer_extents.end(); ++q) {
-    bufferlist sub_bl;
-    uint64_t sub_off = q->first % m_data_len;
-    uint64_t sub_len = m_data_len - sub_off;
-    uint64_t extent_left = q->second;
-    while (extent_left >= sub_len) {
-      sub_bl.substr_of(m_data_bl, sub_off, sub_len);
-      bl->claim_append(sub_bl);
-      extent_left -= sub_len;
-      if (sub_off) {
-	sub_off = 0;
-	sub_len = m_data_len;
-      }
-    }
-    if (extent_left) {
-      sub_bl.substr_of(m_data_bl, sub_off, extent_left);
-      bl->claim_append(sub_bl);
-    }
-  }
-  return false;
-}
-
-template <typename I>
 uint64_t ImageWriteSameRequest<I>::append_journal_event(
     const ObjectRequests &requests, bool synchronous) {
   I &image_ctx = this->m_image_ctx;
@@ -745,7 +701,7 @@ void ImageWriteSameRequest<I>::send_object_cache_requests(
     const ObjectExtent &object_extent = *p;
 
     bufferlist bl;
-    assemble_writesame_extent(object_extent, &bl, true);
+    util::assemble_write_same_extent(object_extent, m_data_bl, &bl, true);
 
     AioCompletion *aio_comp = this->m_aio_comp;
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
@@ -779,7 +735,7 @@ ObjectRequestHandle *ImageWriteSameRequest<I>::create_object_request(
   bufferlist bl;
   ObjectRequest<I> *req;
 
-  if (assemble_writesame_extent(object_extent, &bl, false)) {
+  if (util::assemble_write_same_extent(object_extent, m_data_bl, &bl, false)) {
     req = ObjectRequest<I>::create_writesame(
       &image_ctx, object_extent.oid.name, object_extent.objectno,
       object_extent.offset, object_extent.length,
