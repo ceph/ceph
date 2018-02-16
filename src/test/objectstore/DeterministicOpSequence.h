@@ -27,12 +27,23 @@ typedef boost::mt11213b rngen_t;
 
 class DeterministicOpSequence : public TestObjectStoreState {
  public:
-  DeterministicOpSequence(ObjectStore *store, std::string status = std::string());
+  DeterministicOpSequence(ObjectStore *store,
+			  std::string status = std::string());
   virtual ~DeterministicOpSequence();
 
   virtual void generate(int seed, int num_txs);
 
- protected:
+  static ghobject_t get_txn_object(coll_t cid) {
+    ghobject_t oid(hobject_t(sobject_t("txn", CEPH_NOSNAP)));
+    spg_t pgid;
+    bool r = cid.is_pg(&pgid);
+    if (r) {
+      oid.hobj.set_hash(pgid.ps());
+    }
+    return oid;
+  }
+
+protected:
   enum {
     DSOP_TOUCH = 0,
     DSOP_WRITE = 1,
@@ -49,15 +60,12 @@ class DeterministicOpSequence : public TestObjectStoreState {
 
   int32_t txn;
 
-  coll_t txn_coll;
-  hobject_t txn_object;
-
   ObjectStore::CollectionHandle m_ch;
   std::ofstream m_status;
 
   bool run_one_op(int op, rngen_t& gen);
 
-  void note_txn(ObjectStore::Transaction *t);
+  void note_txn(coll_entry_t *entry, ObjectStore::Transaction *t);
   bool do_touch(rngen_t& gen);
   bool do_remove(rngen_t& gen);
   bool do_write(rngen_t& gen);
