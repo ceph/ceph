@@ -869,6 +869,11 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
 
     if (old_format) {
+      if ( !getenv("RBD_FORCE_ALLOW_V1") ) {
+        lderr(cct) << "Format 1 image creation unsupported. " << dendl;
+        return -EINVAL;
+      }
+      lderr(cct) << "Forced V1 image creation. " << dendl;
       r = create_v1(io_ctx, image_name.c_str(), size, order);
     } else {
       ThreadPool *thread_pool;
