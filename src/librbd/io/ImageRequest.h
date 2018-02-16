@@ -306,9 +306,6 @@ protected:
     return "aio_writesame";
   }
 
-  bool assemble_writesame_extent(const ObjectExtent &object_extent,
-                                 bufferlist *bl, bool force_write);
-
   void send_image_cache_request() override;
 
   void send_object_cache_requests(const ObjectExtents &object_extents,
