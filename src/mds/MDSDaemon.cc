@@ -117,8 +117,8 @@ class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& out) override {
     stringstream ss;
     bool r = mds->asok_command(command, cmdmap, format, ss);
     out.append(ss);
@@ -126,8 +126,8 @@ public:
   }
 };
 
-bool MDSDaemon::asok_command(string command, cmdmap_t& cmdmap, string format,
-		    ostream& ss)
+bool MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
+			     std::string_view format, std::ostream& ss)
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 

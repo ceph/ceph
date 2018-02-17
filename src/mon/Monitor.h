@@ -665,18 +665,20 @@ public:
   void handle_subscribe(MonOpRequestRef op);
   void handle_mon_get_map(MonOpRequestRef op);
 
-  static void _generate_command_map(map<string,cmd_vartype>& cmdmap,
+  static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);
   static const MonCommand *_get_moncommand(
     const string &cmd_prefix,
     const vector<MonCommand>& cmds);
-  bool _allowed_command(MonSession *s, string &module, string &prefix,
-                        const map<string,cmd_vartype>& cmdmap,
+  bool _allowed_command(MonSession *s, const string& module,
+			const string& prefix,
+                        const cmdmap_t& cmdmap,
                         const map<string,string>& param_str_map,
                         const MonCommand *this_cmd);
   void get_mon_status(Formatter *f, ostream& ss);
   void _quorum_status(Formatter *f, ostream& ss);
-  bool _add_bootstrap_peer_hint(string cmd, cmdmap_t& cmdmap, ostream& ss);
+  bool _add_bootstrap_peer_hint(std::string_view cmd, const cmdmap_t& cmdmap,
+				std::ostream& ss);
   void handle_command(MonOpRequestRef op);
   void handle_route(MonOpRequestRef op);
 
@@ -944,8 +946,8 @@ public:
   int write_fsid();
   int write_fsid(MonitorDBStore::TransactionRef t);
 
-  void do_admin_command(std::string command, cmdmap_t& cmdmap,
-			std::string format, ostream& ss);
+  void do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
+			std::string_view format, std::ostream& ss);
 
 private:
   // don't allow copying

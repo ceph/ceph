@@ -257,8 +257,8 @@ class Client : public Dispatcher, public md_config_obs_t {
     Client *m_client;
   public:
     explicit CommandHook(Client *client);
-    bool call(std::string command, cmdmap_t &cmdmap, std::string format,
-	      bufferlist& out) override;
+    bool call(std::string_view command, const cmdmap_t& cmdmap,
+              std::string_view format, bufferlist& out) override;
   };
   CommandHook m_command_hook;
 

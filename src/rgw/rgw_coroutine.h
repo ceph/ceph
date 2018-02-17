@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_COROUTINE_H
 #define CEPH_RGW_COROUTINE_H
 
@@ -500,9 +503,9 @@ public:
   void remove(RGWCoroutinesManager *mgr);
 
   int hook_to_admin_command(const string& command);
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format,
-	    bufferlist& out) override;
-    
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+            std::string_view format, bufferlist& out) override;
+
   void dump(Formatter *f) const;
 };
 

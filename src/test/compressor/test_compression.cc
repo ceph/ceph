@@ -366,7 +366,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   res = zlib->decompress(out, after);
   EXPECT_EQ(res, 0);
   bufferlist exp;
-  exp.append(test);
+  exp.append(static_cast<char*>(test));
   EXPECT_TRUE(exp.contents_equal(after));
   after.clear();
   out.clear();
@@ -376,7 +376,7 @@ TEST(ZlibCompressor, zlib_isal_compatibility)
   EXPECT_EQ(res, 0);
   res = isal->decompress(out, after);
   EXPECT_EQ(res, 0);
-  exp.append(test);
+  exp.append(static_cast<char*>(test));
   EXPECT_TRUE(exp.contents_equal(after));
 }
 #endif

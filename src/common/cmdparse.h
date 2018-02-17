@@ -23,7 +23,7 @@ typedef boost::variant<std::string,
 		       std::vector<std::string>,
 		       std::vector<int64_t>,
 		       std::vector<double>>  cmd_vartype;
-typedef std::map<std::string, cmd_vartype> cmdmap_t;
+typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
 std::string cmddesc_get_prefix(const std::string &cmddesc);
 void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);

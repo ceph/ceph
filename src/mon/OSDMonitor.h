@@ -484,7 +484,7 @@ public:
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
-  bool prepare_command_impl(MonOpRequestRef op, map<string,cmd_vartype>& cmdmap);
+  bool prepare_command_impl(MonOpRequestRef op, const cmdmap_t& cmdmap);
 
   int validate_osd_create(
       const int32_t id,
@@ -518,15 +518,15 @@ public:
   int prepare_command_osd_remove(int32_t id);
   int prepare_command_osd_new(
       MonOpRequestRef op,
-      const map<string,cmd_vartype>& cmdmap,
+      const cmdmap_t& cmdmap,
       const map<string,string>& secrets,
       stringstream &ss,
       Formatter *f);
 
-  int prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
+  int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                stringstream& ss);
   int prepare_command_pool_application(const string &prefix,
-                                       map<string,cmd_vartype> &cmdmap,
+                                       const cmdmap_t& cmdmap,
                                        stringstream& ss);
 
   bool handle_osd_timeouts(const utime_t &now,
