@@ -6622,8 +6622,10 @@ int BlueStore::read(
   if (r >= 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
-  } else if (cct->_conf->bluestore_debug_random_read_err &&
-    (rand() % (int)(cct->_conf->bluestore_debug_random_read_err * 100.0)) == 0) {
+  } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
+	     cct->_conf->bluestore_debug_random_read_err &&
+	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
+			     100.0)) == 0) {
     dout(0) << __func__ << ": inject random EIO" << dendl;
     r = -EIO;
   }
