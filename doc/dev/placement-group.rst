@@ -149,3 +149,9 @@ User-visible PG States
 *remapped*
   the PG is temporarily mapped to a different set of OSDs from what
   CRUSH specified
+
+*premerge*
+  the PG is in a quiesced-IO state due to an impending PG merge.  That
+  happens when pg_num_pending < pg_num, and applies to the PGs with
+  pg_num_pending <= ps < pg_num as well as the corresponding peer PG
+  that it is merging with.
