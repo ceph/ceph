@@ -863,6 +863,8 @@ std::string pg_state_string(uint64_t state)
     oss << "degraded+";
   if (state & PG_STATE_REMAPPED)
     oss << "remapped+";
+  if (state & PG_STATE_PREMERGE)
+    oss << "premerge+";
   if (state & PG_STATE_SCRUBBING)
     oss << "scrubbing+";
   if (state & PG_STATE_DEEP_SCRUB)
@@ -912,6 +914,8 @@ boost::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_RECOVERY_UNFOUND;
   else if (state == "backfill_unfound")
     type = PG_STATE_BACKFILL_UNFOUND;
+  else if (state == "premerge")
+    type = PG_STATE_PREMERGE;
   else if (state == "scrubbing")
     type = PG_STATE_SCRUBBING;
   else if (state == "degraded")
@@ -1310,6 +1314,28 @@ unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
     return pg_num_mask + 1;           // smaller bin size (already split)
   else
     return (pg_num_mask + 1) >> 1;    // bigger bin (not yet split)
+}
+
+bool pg_pool_t::is_pending_merge(pg_t pgid, bool *target) const
+{
+  if (pg_num_pending >= pg_num) {
+    return false;
+  }
+  if (pgid.ps() >= pg_num_pending && pgid.ps() < pg_num) {
+    if (target) {
+      *target = false;
+    }
+    return true;
+  }
+  for (unsigned ps = pg_num_pending; ps < pg_num; ++ps) {
+    if (pg_t(ps, pgid.pool()).get_parent() == pgid) {
+      if (target) {
+	*target = true;
+      }
+      return true;
+    }
+  }
+  return false;
 }
 
 /*

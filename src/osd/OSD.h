@@ -714,6 +714,20 @@ public:
   AsyncReserver<spg_t> local_reserver;
   AsyncReserver<spg_t> remote_reserver;
 
+  // -- pg merge --
+  Mutex merge_lock = {"OSD::merge_lock"};
+  set<pg_t> ready_to_merge_source;
+  set<pg_t> ready_to_merge_target;
+  set<pg_t> sent_ready_to_merge_source;
+
+  void set_ready_to_merge_source(PG *pg);
+  void set_ready_to_merge_target(PG *pg);
+  void clear_ready_to_merge(PG *pg);
+  void send_ready_to_merge();
+  void _send_ready_to_merge();
+  void clear_sent_ready_to_merge();
+  void prune_sent_ready_to_merge(OSDMapRef& osdmap);
+
   // -- pg_temp --
 private:
   Mutex pg_temp_lock;

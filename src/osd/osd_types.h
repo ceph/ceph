@@ -1011,7 +1011,7 @@ inline ostream& operator<<(ostream& out, const osd_stat_t& s) {
 #define PG_STATE_DOWN               (1ULL << 4)  // a needed replica is down, PG offline
 #define PG_STATE_RECOVERY_UNFOUND   (1ULL << 5)  // recovery stopped due to unfound
 #define PG_STATE_BACKFILL_UNFOUND   (1ULL << 6)  // backfill stopped due to unfound
-//#define PG_STATE_SPLITTING        (1ULL << 7)  // i am splitting
+#define PG_STATE_PREMERGE           (1ULL << 7)  // i am prepare to merging
 #define PG_STATE_SCRUBBING          (1ULL << 8)  // scrubbing
 //#define PG_STATE_SCRUBQ           (1ULL << 9)  // queued for scrub
 #define PG_STATE_DEGRADED           (1ULL << 10) // pg contains objects with reduced redundancy
@@ -1565,6 +1565,8 @@ public:
   // return, for a given pg, the fraction (denominator) of the total
   // pool size that it represents.
   unsigned get_pg_num_divisor(pg_t pgid) const;
+
+  bool is_pending_merge(pg_t pgid, bool *target) const;
 
   void set_pg_num(int p) {
     pg_num = p;
