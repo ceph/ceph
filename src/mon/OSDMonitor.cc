@@ -3603,7 +3603,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
@@ -5895,7 +5895,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   return true;
 }
 
-int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
+int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
                                          stringstream& ss)
 {
   string poolstr;
@@ -6382,7 +6382,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
 }
 
 int OSDMonitor::prepare_command_pool_application(const string &prefix,
-                                                 map<string,cmd_vartype> &cmdmap,
+                                                 const cmdmap_t& cmdmap,
                                                  stringstream& ss)
 {
   string pool_name;
@@ -6809,7 +6809,7 @@ int OSDMonitor::prepare_command_osd_create(
 
 int OSDMonitor::prepare_command_osd_new(
     MonOpRequestRef op,
-    const map<string,cmd_vartype>& cmdmap,
+    const cmdmap_t& cmdmap,
     const map<string,string>& params,
     stringstream &ss,
     Formatter *f)
@@ -7074,7 +7074,7 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
   op->mark_osdmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
   stringstream ss;
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
@@ -7091,7 +7091,7 @@ bool OSDMonitor::prepare_command(MonOpRequestRef op)
 }
 
 static int parse_reweights(CephContext *cct,
-			   const map<string,cmd_vartype> &cmdmap,
+			   const cmdmap_t& cmdmap,
 			   const OSDMap& osdmap,
 			   map<int32_t, uint32_t>* weights)
 {
@@ -7268,7 +7268,7 @@ int OSDMonitor::prepare_command_osd_purge(
 }
 
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
-				      map<string,cmd_vartype> &cmdmap)
+				      const cmdmap_t& cmdmap)
 {
   op->mark_osdmon_event(__func__);
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
@@ -7846,7 +7846,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double weight;
     if (!cmd_getval(cct, cmdmap, "weight", weight)) {
       ss << "unable to parse weight value '"
-         << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -7915,7 +7915,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       double weight;
       if (!cmd_getval(cct, cmdmap, "weight", weight)) {
         ss << "unable to parse weight value '"
-           << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+           << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
         err = -EINVAL;
         goto reply;
       }
@@ -8191,7 +8191,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -8229,7 +8229,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -8295,7 +8295,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t value = -1;
     if (!cmd_getval(cct, cmdmap, "value", value)) {
       err = -EINVAL;
-      ss << "failed to parse integer value " << cmd_vartype_stringify(cmdmap["value"]);
+      ss << "failed to parse integer value "
+	 << cmd_vartype_stringify(cmdmap.at("value"));
       goto reply;
     }
 
@@ -8648,7 +8649,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t newmax;
     if (!cmd_getval(cct, cmdmap, "newmax", newmax)) {
       ss << "unable to parse 'newmax' value '"
-         << cmd_vartype_stringify(cmdmap["newmax"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("newmax")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -8690,7 +8691,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     double n;
     if (!cmd_getval(cct, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
-         << cmd_vartype_stringify(cmdmap["ratio"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("ratio")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9393,7 +9394,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9455,7 +9456,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9474,7 +9475,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t osd;
     if (!cmd_getval(cct, cmdmap, "id", osd)) {
       ss << "unable to parse 'id' value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9517,7 +9518,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     string pgidstr;
     if (!cmd_getval(cct, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
-         << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("pgid")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9584,7 +9585,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         vector<int64_t> id_vec;
         if (!cmd_getval(cct, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
-             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+             << cmd_vartype_stringify(cmdmap.at("id")) << "'";
           err = -EINVAL;
           goto reply;
         }
@@ -9644,7 +9645,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         vector<int64_t> id_vec;
         if (!cmd_getval(cct, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
-             << cmd_vartype_stringify(cmdmap["id"]) << "'";
+             << cmd_vartype_stringify(cmdmap.at("id")) << "'";
           err = -EINVAL;
           goto reply;
         }
@@ -9726,14 +9727,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "invalid osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse 'weight' value '"
-           << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9767,14 +9768,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
     if (!cmd_getval(cct, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
-         << cmd_vartype_stringify(cmdmap["weight"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9801,7 +9802,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     err = parse_reweights(cct, cmdmap, osdmap, &weights);
     if (err) {
       ss << "unable to parse 'weights' value '"
-         << cmd_vartype_stringify(cmdmap["weights"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("weights")) << "'";
       goto reply;
     }
     pending_inc.new_weight.insert(weights.begin(), weights.end());
@@ -9813,7 +9814,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("id")) << "'";
       err = -EINVAL;
       goto reply;
     }
@@ -9865,7 +9866,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t id;
     if (!cmd_getval(cct, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
-         << cmd_vartype_stringify(cmdmap["id"]) << "";
+         << cmd_vartype_stringify(cmdmap.at("id")) << "";
       err = -EINVAL;
       goto reply;
     }
@@ -10842,7 +10843,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t size = 0;
     if (!cmd_getval(cct, cmdmap, "size", size)) {
       ss << "unable to parse 'size' value '"
-         << cmd_vartype_stringify(cmdmap["size"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("size")) << "'";
       err = -EINVAL;
       goto reply;
     }

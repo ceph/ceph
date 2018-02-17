@@ -1851,9 +1851,10 @@ void MDSRank::handle_mds_failure(mds_rank_t who)
   snapclient->handle_mds_failure(who);
 }
 
-bool MDSRankDispatcher::handle_asok_command(
-    std::string command, cmdmap_t& cmdmap, Formatter *f,
-		    std::ostream& ss)
+bool MDSRankDispatcher::handle_asok_command(std::string_view command,
+					    const cmdmap_t& cmdmap,
+					    Formatter *f,
+					    std::ostream& ss)
 {
   if (command == "dump_ops_in_flight" ||
              command == "ops") {

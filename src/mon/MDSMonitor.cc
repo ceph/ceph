@@ -839,7 +839,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     // ss has reason for failure
     string rs = ss.str();
@@ -1167,7 +1167,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   stringstream ss;
   bufferlist rdata;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
@@ -1283,7 +1283,7 @@ int MDSMonitor::parse_role(
 int MDSMonitor::filesystem_command(
     MonOpRequestRef op,
     std::string const &prefix,
-    map<string, cmd_vartype> &cmdmap,
+    const cmdmap_t& cmdmap,
     std::stringstream &ss)
 {
   dout(4) << __func__ << " prefix='" << prefix << "'" << dendl;
@@ -1331,13 +1331,13 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
-         << cmd_vartype_stringify(cmdmap["gid"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
     MDSMap::DaemonState state;
     if (!cmd_getval(g_ceph_context, cmdmap, "state", state)) {
       ss << "error parsing 'state' string value '"
-         << cmd_vartype_stringify(cmdmap["state"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("state")) << "'";
       return -EINVAL;
     }
     if (pending_fsmap.gid_exists(gid)) {
@@ -1368,7 +1368,7 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
-         << cmd_vartype_stringify(cmdmap["gid"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
     if (!pending_fsmap.gid_exists(gid)) {
@@ -1417,7 +1417,7 @@ int MDSMonitor::filesystem_command(
     int64_t f;
     if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
-         << cmd_vartype_stringify(cmdmap["feature"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
     if (pending_fsmap.compat.compat.contains(f)) {
@@ -1433,7 +1433,7 @@ int MDSMonitor::filesystem_command(
     int64_t f;
     if (!cmd_getval(g_ceph_context, cmdmap, "feature", f)) {
       ss << "error parsing feature value '"
-         << cmd_vartype_stringify(cmdmap["feature"]) << "'";
+         << cmd_vartype_stringify(cmdmap.at("feature")) << "'";
       return -EINVAL;
     }
     if (pending_fsmap.compat.incompat.contains(f)) {

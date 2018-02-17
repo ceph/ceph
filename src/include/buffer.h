@@ -43,6 +43,10 @@
 #include <list>
 #include <vector>
 #include <string>
+#if __cplusplus >= 201703L
+#include <string_view>
+#endif // __cplusplus >= 201703L
+
 #include <exception>
 #include <type_traits>
 
@@ -334,6 +338,11 @@ namespace buffer CEPH_BUFFER_API {
 
     unsigned append(char c);
     unsigned append(const char *p, unsigned l);
+#if __cplusplus >= 201703L
+    inline unsigned append(std::string_view s) {
+      return append(s.data(), s.length());
+    }
+#endif // __cplusplus >= 201703L
     void copy_in(unsigned o, unsigned l, const char *src);
     void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
     void zero();
@@ -844,9 +853,23 @@ namespace buffer CEPH_BUFFER_API {
 
     void append(char c);
     void append(const char *data, unsigned len);
-    void append(const std::string& s) {
+    void append(std::string s) {
       append(s.data(), s.length());
     }
+#if __cplusplus >= 201703L
+    // To forcibly disambiguate between string and string_view in the
+    // case of arrays
+    template<std::size_t N>
+    void append(const char (&s)[N]) {
+      append(s, N);
+    }
+    void append(const char* s) {
+      append(s, strlen(s));
+    }
+    void append(std::string_view s) {
+      append(s.data(), s.length());
+    }
+#endif // __cplusplus >= 201703L
     void append(const ptr& bp);
     void append(ptr&& bp);
     void append(const ptr& bp, unsigned off, unsigned len);

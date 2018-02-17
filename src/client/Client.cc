@@ -137,8 +137,9 @@ Client::CommandHook::CommandHook(Client *client) :
 {
 }
 
-bool Client::CommandHook::call(std::string command, cmdmap_t& cmdmap,
-			       std::string format, bufferlist& out)
+bool Client::CommandHook::call(std::string_view command,
+			       const cmdmap_t& cmdmap,
+			       std::string_view format, bufferlist& out)
 {
   std::unique_ptr<Formatter> f(Formatter::create(format));
   f->open_object_section("result");

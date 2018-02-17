@@ -14046,8 +14046,8 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need
   }
 }
 
-bool RGWRados::call(std::string command, cmdmap_t& cmdmap, std::string format,
-                    bufferlist& out)
+bool RGWRados::call(std::string_view command, const cmdmap_t& cmdmap,
+		    std::string_view format, bufferlist& out)
 {
   if (command == "cache list"sv) {
     std::optional<std::string> filter;
@@ -14068,7 +14068,7 @@ bool RGWRados::call(std::string command, cmdmap_t& cmdmap, std::string format,
   } else if (command == "cache inspect"sv) {
     std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
     if (f) {
-      const auto& target = boost::get<std::string>(cmdmap["target"]);
+      const auto& target = boost::get<std::string>(cmdmap.at("target"));
       if (call_inspect(target, f.get())) {
         f->flush(out);
         return true;
@@ -14081,7 +14081,7 @@ bool RGWRados::call(std::string command, cmdmap_t& cmdmap, std::string format,
       return false;
     }
   } else if (command == "cache erase"sv) {
-    const auto& target = boost::get<std::string>(cmdmap["target"]);
+    const auto& target = boost::get<std::string>(cmdmap.at("target"));
     if (call_erase(target)) {
       return true;
     } else {
