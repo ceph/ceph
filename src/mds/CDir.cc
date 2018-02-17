@@ -3012,45 +3012,64 @@ void CDir::unfreeze_dir()
  * for identifying a directory and its state rather than for dumping
  * debug output.
  */
-void CDir::dump(Formatter *f) const
+void CDir::dump(Formatter *f, int flags) const
 {
   assert(f != NULL);
-
-  f->dump_stream("path") << get_path();
-
-  f->dump_stream("dirfrag") << dirfrag();
-  f->dump_int("snapid_first", first);
-
-  f->dump_stream("projected_version") << get_projected_version();
-  f->dump_stream("version") << get_version();
-  f->dump_stream("committing_version") << get_committing_version();
-  f->dump_stream("committed_version") << get_committed_version();
-
-  f->dump_bool("is_rep", is_rep());
-
-  if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
-    if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
-      f->dump_stream("dir_auth") << get_dir_auth().first;
-    } else {
-      f->dump_stream("dir_auth") << get_dir_auth();
-    }
-  } else {
-    f->dump_string("dir_auth", "");
+  if (flags & DUMP_PATH) {
+    f->dump_stream("path") << get_path();
   }
-
-  f->open_array_section("states");
-  MDSCacheObject::dump_states(f);
-  if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
-  if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
-  if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
-  if (state_test(CDir::STATE_FROZENDIR)) f->dump_string("state", "frozendir");
-  if (state_test(CDir::STATE_FREEZINGDIR)) f->dump_string("state", "freezingdir");
-  if (state_test(CDir::STATE_EXPORTBOUND)) f->dump_string("state", "exportbound");
-  if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
-  if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
-  f->close_section();
-
-  MDSCacheObject::dump(f);
+  if (flags & DUMP_DIRFRAG) {
+    f->dump_stream("dirfrag") << dirfrag();
+  }
+  if (flags & DUMP_SNAPID_FIRST) {
+    f->dump_int("snapid_first", first);
+  }
+  if (flags & DUMP_VERSIONS) {
+    f->dump_stream("projected_version") << get_projected_version();
+    f->dump_stream("version") << get_version();
+    f->dump_stream("committing_version") << get_committing_version();
+    f->dump_stream("committed_version") << get_committed_version();
+  }
+  if (flags & DUMP_REP) {
+    f->dump_bool("is_rep", is_rep());
+  }
+  if (flags & DUMP_DIR_AUTH) {
+    if (get_dir_auth() != CDIR_AUTH_DEFAULT) {
+      if (get_dir_auth().second == CDIR_AUTH_UNKNOWN) {
+        f->dump_stream("dir_auth") << get_dir_auth().first;
+      } else {
+        f->dump_stream("dir_auth") << get_dir_auth();
+      }
+    } else {
+      f->dump_string("dir_auth", "");
+    }
+  }
+  if (flags & DUMP_STATES) {
+    f->open_array_section("states");
+    MDSCacheObject::dump_states(f);
+    if (state_test(CDir::STATE_COMPLETE)) f->dump_string("state", "complete");
+    if (state_test(CDir::STATE_FREEZINGTREE)) f->dump_string("state", "freezingtree");
+    if (state_test(CDir::STATE_FROZENTREE)) f->dump_string("state", "frozentree");
+    if (state_test(CDir::STATE_FROZENDIR)) f->dump_string("state", "frozendir");
+    if (state_test(CDir::STATE_FREEZINGDIR)) f->dump_string("state", "freezingdir");
+    if (state_test(CDir::STATE_EXPORTBOUND)) f->dump_string("state", "exportbound");
+    if (state_test(CDir::STATE_IMPORTBOUND)) f->dump_string("state", "importbound");
+    if (state_test(CDir::STATE_BADFRAG)) f->dump_string("state", "badfrag");
+    f->close_section();
+  }
+  if (flags & DUMP_MDS_CACHE_OBJECT) {
+    MDSCacheObject::dump(f);
+  }
+  if (flags & DUMP_ITEMS) {
+    f->open_array_section("dentries");
+    for (auto &p : items) {
+      CDentry *dn = p.second;
+      f->open_object_section("dentry");
+      dn->dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 void CDir::dump_load(Formatter *f, utime_t now, const DecayRate& rate)
