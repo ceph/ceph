@@ -53,6 +53,9 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_objects']
 DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
+OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
+             'norecover', 'noscrub', 'nodeep-scrub')
+
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
 OSD_STATUS = ['weight', 'up', 'in']
@@ -186,6 +189,13 @@ class Module(MgrModule):
             'PG Total Count'
         )
 
+        for flag in OSD_FLAGS:
+            path = 'osd_flag_{}'.format(flag)
+            metrics[path] = Metric(
+                'untyped',
+                path,
+                'OSD Flag {}'.format(flag)
+            )
         for state in OSD_STATUS:
             path = 'osd_{}'.format(state)
             self.log.debug("init: creating {}".format(path))
@@ -295,6 +305,11 @@ class Module(MgrModule):
 
     def get_metadata_and_osd_status(self):
         osd_map = self.get('osd_map')
+        osd_flags = osd_map['flags'].split(',')
+        for flag in OSD_FLAGS:
+            self.metrics['osd_flag_{}'.format(flag)].set(
+                int(flag in osd_flags)
+            )
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             id_ = osd['osd']
