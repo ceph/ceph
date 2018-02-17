@@ -382,14 +382,8 @@ public:
 template <typename I>
 ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCache<I> *lower)
   : m_image_ctx(image_ctx),
-    m_log_pool(NULL), m_log_pool_size(DEFAULT_POOL_SIZE),
-    m_total_log_entries(0), m_free_log_entries(0), 
+    m_log_pool_size(DEFAULT_POOL_SIZE),
     m_image_writeback(lower), m_write_log_guard(image_ctx.cct),
-    m_first_free_entry(0), m_first_valid_entry(0),
-    m_current_sync_gen(0), m_current_sync_point(NULL),
-    m_last_op_sequence_num(0),
-    m_persist_on_write_until_flush(true), m_persist_on_flush(false),
-    m_flush_seen(false),
     m_log_append_lock("librbd::cache::ReplicatedWriteLog::m_log_append_lock"),
     m_lock("librbd::cache::ReplicatedWriteLog::m_lock"),
     m_persist_finisher(image_ctx.cct),
@@ -727,12 +721,6 @@ void ReplicatedWriteLog<I>::append_scheduled_ops(void)
   int append_result = 0;
 
   {
-    Mutex::Locker locker(m_lock);
-    if (m_ops_to_append.empty()) {
-      return;
-    }
-  }
-  {
     Mutex::Locker locker(m_log_append_lock);
 
     {
@@ -764,15 +752,19 @@ void ReplicatedWriteLog<I>::append_scheduled_ops(void)
 template <typename I>
 void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
 {
+  bool need_finisher;
   {
     Mutex::Locker locker(m_lock);
 
+    need_finisher = m_ops_to_append.empty();
     m_ops_to_append.splice(m_ops_to_append.end(), ops);
   }
 
-  m_log_append_finisher.queue(new FunctionContext([this](int r) {
-	append_scheduled_ops();
-      }));
+  if (need_finisher) {
+    m_log_append_finisher.queue(new FunctionContext([this](int r) {
+	  append_scheduled_ops();
+	}));
+  }
 }
 
 /*
@@ -804,15 +796,19 @@ void ReplicatedWriteLog<I>::flush_then_append_scheduled_ops(void)
 template <typename I>
 void ReplicatedWriteLog<I>::schedule_flush_and_append(WriteLogOperations &ops)
 {
+  bool need_finisher;
   {
     Mutex::Locker locker(m_lock);
 
+    need_finisher = m_ops_to_flush.empty();
     m_ops_to_flush.splice(m_ops_to_flush.end(), ops);
   }
 
-  m_persist_finisher.queue(new FunctionContext([this](int r) {
-	flush_then_append_scheduled_ops();
-      }));
+  if (need_finisher) {
+    m_persist_finisher.queue(new FunctionContext([this](int r) {
+	  flush_then_append_scheduled_ops();
+	}));
+  }
 }
 
 /*
@@ -1473,7 +1469,7 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
       }
       next_ctx->complete(r);
     });
-#if 0 // disable until flush will complete
+#if 1 // disable until flush will complete
   ctx = new FunctionContext(
     [this, ctx](int r) {
       Context *next_ctx = ctx;
@@ -1513,14 +1509,21 @@ void ReplicatedWriteLog<I>::invalidate(Context *on_finish) {
 
 template <typename I>
 void ReplicatedWriteLog<I>::wake_up() {
+  CephContext *cct = m_image_ctx.cct;
   assert(m_lock.is_locked());
-  if (m_wake_up_scheduled || m_async_op_tracker.is_waiting()) {
+  if (m_wake_up_requested || m_async_op_tracker.is_waiting()) {
     return;
   }
 
-  CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
+  /* Wake-up can be requested while it's already scheduled */
+  m_wake_up_requested = true;
+
+  /* Wake-up cannot be scheduled if it's already scheduled */
+  if (m_wake_up_scheduled) {
+    return;
+  }
   m_wake_up_scheduled = true;
   m_async_op_tracker.start_op();
   m_image_ctx.op_work_queue->queue(new FunctionContext(
@@ -1532,34 +1535,58 @@ void ReplicatedWriteLog<I>::wake_up() {
 template <typename I>
 void ReplicatedWriteLog<I>::process_work() {
   CephContext *cct = m_image_ctx.cct;
+  int max_iterations = 4;
+  bool wake_up_requested = false;
   ldout(cct, 20) << dendl;
 
   do {
+    {
+      Mutex::Locker locker(m_lock);
+      m_wake_up_requested = false;
+    }
     process_writeback_dirty_blocks();
     process_detained_block_ios();
     process_deferred_block_ios();
 
-    // TODO
-    Contexts post_work_contexts;
-    {
-      Mutex::Locker locker(m_lock);
-      post_work_contexts.swap(m_post_work_contexts);
-    }
-    if (!post_work_contexts.empty()) {
-      for (auto ctx : post_work_contexts) {
-        //TODO: fix flush post work
-        ctx->complete(0);
-      }
+    /* Do the work postponed from the work functions above */
+    if (drain_context_list(m_post_work_contexts, m_lock)) {
       continue;
     }
-  } while (false); // TODO need metric to only perform X amount of work per cycle
+    
+    {
+      Mutex::Locker locker(m_lock);
+      wake_up_requested = m_wake_up_requested;
+    }
+  } while (wake_up_requested && --max_iterations > 0);
 
-  // process delayed shut down request (if any)
   {
     Mutex::Locker locker(m_lock);
     m_wake_up_scheduled = false;
     m_async_op_tracker.finish_op();
+    /* Reschedule if it's still requested */
+    if (m_wake_up_requested) {
+      wake_up();
+    }
   }
+}
+
+/* Empties contexts list while holding lock, completes them, and returns true if there were any */
+template <typename I>
+bool ReplicatedWriteLog<I>::drain_context_list(Contexts &contexts, Mutex &contexts_lock) {
+  Contexts local_contexts;
+
+  {
+    Mutex::Locker locker(contexts_lock);
+    local_contexts.swap(contexts);
+  }
+
+  if (!local_contexts.empty()) {
+    for (auto ctx : local_contexts) {
+      ctx->complete(0);
+    }
+    return true;
+  }
+  return false;
 }
 
 template <typename I>
@@ -1570,38 +1597,100 @@ bool ReplicatedWriteLog<I>::is_work_available() const {
 }
 
 template <typename I>
-void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
+bool ReplicatedWriteLog<I>::can_flush_entry(WriteLogEntry *log_entry) {
   CephContext *cct = m_image_ctx.cct;
 
+  ldout(cct, 20) << "" << dendl;
+  assert(m_lock.is_locked_by_me());
+  return (0 == m_flush_ops_in_flight);
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::flush_entry(WriteLogEntry *log_entry) {
+  CephContext *cct = m_image_ctx.cct;
+
+  ldout(cct, 20) << "" << dendl;
+  assert(m_lock.is_locked_by_me());
+  m_flush_ops_in_flight += 1;
+  m_flush_bytes_in_flight += log_entry->ram_entry.write_bytes;
+
+  /* Construct bl for pmem buffer */
+  log_entry->add_reader();
+  log_entry->flushing = true;
+  buffer::raw *entry_buf =
+    buffer::claim_buffer(log_entry->ram_entry.write_bytes,
+			 (char*)log_entry->pmem_buffer,
+			 make_deleter([this, log_entry]
+				      {
+					CephContext *cct = m_image_ctx.cct;
+					ldout(cct, 5) << "removing reader: log_entry="
+						      << *log_entry << dendl;
+					log_entry->remove_reader();
+				      }));
+  /* We'll send the flush write later when we're not holding m_lock */
+  m_post_work_contexts.push_back(new FunctionContext(
+    [this, cct, log_entry, entry_buf](int r) {
+      /* Flush write completion action */
+      Context *ctx = new FunctionContext(
+        [this, cct, log_entry](int r) {
+	  {
+	    Mutex::Locker locker(m_lock);
+	    m_flush_ops_in_flight -= 1;
+	    m_flush_bytes_in_flight -= log_entry->ram_entry.write_bytes;
+	    log_entry->flushing = false;
+	    if (r < 0) {
+	      lderr(cct) << "failed to flush write log entry"
+			 << cpp_strerror(r) << dendl;
+	      m_dirty_log_entries.push_front(log_entry);
+	      return;
+	    } else {
+	      log_entry->flushed = true;
+	      ldout(cct, 20) << "flushed:" << log_entry << dendl;	    
+	    }
+	    wake_up();
+	  }
+	});
+	
+	bufferlist entry_bl;
+	entry_bl.push_back(entry_buf);
+      ldout(cct, 20) << "flushing:" << log_entry << dendl;	    
+      m_image_writeback->aio_write({{log_entry->ram_entry.image_offset_bytes,
+	                             log_entry->ram_entry.write_bytes}},
+	                           std::move(entry_bl), 0, ctx);
+    }));
+}
+
+template <typename I>
+void ReplicatedWriteLog<I>::process_writeback_dirty_blocks() {
+  CephContext *cct = m_image_ctx.cct;
+  bool all_clean = false;
+  
   ldout(cct, 20) << "Look for dirty entries" << dendl;
-#if 0
-
-  // TODO throttle the amount of in-flight writebacks
-  while (true) {
-    uint64_t tid = 0;
-    uint64_t block;
-    IOType io_type;
-    bool demoted;
-    int r = m_journal_store->get_writeback_event(&tid, &block, &io_type,
-                                                 &demoted);
-    //int r = m_policy->get_writeback_block(&block);
-    if (r == -ENODATA || r == -EBUSY) {
-      // nothing to writeback
-      return;
-    } else if (r < 0) {
-      lderr(cct) << "failed to retrieve writeback block: "
-                 << cpp_strerror(r) << dendl;
-      return;
+  {
+    Mutex::Locker locker(m_lock);
+    while (true) {
+      if (m_dirty_log_entries.empty()) {
+	ldout(cct, 20) << "Nothing new to flush" << dendl;
+	break;
+      }
+      if (can_flush_entry(m_dirty_log_entries.front())) {
+	flush_entry(m_dirty_log_entries.front());
+	m_dirty_log_entries.pop_front();
+      } else {
+	ldout(cct, 20) << "Next dirty entry isn't flushable yet" << dendl;
+	break;      
+      }
     }
-
-    // block is now detained -- safe for writeback
-    C_WritebackRequest<I> *req = new C_WritebackRequest<I>(
-      m_image_ctx, m_image_writeback, *m_policy, *m_journal_store,
-      *m_image_store, m_release_block, m_async_op_tracker, tid, block, io_type,
-      demoted, MIN_WRITE_SIZE);
-    req->send();
+    
+    /* Check for and take flush complete actions */
+    all_clean = (0 == m_flush_ops_in_flight &&
+		 m_dirty_log_entries.empty());
   }
-#endif
+
+  if (all_clean) {
+    /* All flushing complete, drain outside lock */
+    drain_context_list(m_flush_complete_contexts, m_lock);
+  }
 }
 
 template <typename I>
@@ -1669,19 +1758,28 @@ void ReplicatedWriteLog<I>::invalidate(Extents&& image_extents,
 template <typename I>
 void ReplicatedWriteLog<I>::flush(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
+  bool all_clean = false;
+  
+  {
+    Mutex::Locker locker(m_lock);
+    all_clean = (0 == m_flush_ops_in_flight &&
+		 m_dirty_log_entries.empty());
+  }
 
-   if (m_dirty_log_entries.empty()) {
-     ldout(cct, 20) << "no dirty entries" << dendl;
-     on_finish->complete(0);
-   } else {
-     ldout(cct, 20) << "dirty entries remain" << dendl;
-     Mutex::Locker locker(m_lock);
-     m_post_work_contexts.push_back(new FunctionContext(
-             [this, on_finish](int r) {
-	       flush(on_finish);
-	     }));
-     wake_up();
-   }
+  if (all_clean) {
+    /* Complete without holding m_lock */
+    ldout(cct, 20) << "no dirty entries" << dendl;
+    on_finish->complete(0);
+  } else {
+    ldout(cct, 20) << "dirty entries remain" << dendl;
+    Mutex::Locker locker(m_lock);
+    /* on_finish can't be completed yet */
+    m_flush_complete_contexts.push_back(new FunctionContext(
+      [this, on_finish](int r) {
+	flush(on_finish);
+      }));
+    wake_up();
+  }
 }
 
 } // namespace cache

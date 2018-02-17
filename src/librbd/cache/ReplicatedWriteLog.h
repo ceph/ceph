@@ -36,6 +36,10 @@ static const uint32_t MIN_WRITE_ALLOC_SIZE =
   (MIN_WRITE_SIZE > MIN_MIN_WRITE_ALLOC_SIZE ?
    MIN_WRITE_SIZE : MIN_MIN_WRITE_ALLOC_SIZE);
 
+/* Crash consistent flusher ignores these, and must flush in FIFO ordrer */
+static const int IN_FLIGHT_FLUSH_WRITE_LIMIT = 8;
+static const int IN_FLIGHT_FLUSH_BYTES_LIMIT = (1 * 1024 * 1024);
+
 BlockExtent block_extent(uint64_t offset_bytes, uint64_t length_bytes);
 BlockExtent block_extent(ImageCache::Extent& image_extent);
 
@@ -112,16 +116,17 @@ struct WriteLogPoolRoot {
 class WriteLogEntry {
 public:
   WriteLogPmemEntry ram_entry;
-  WriteLogPmemEntry *pmem_entry;
-  uint8_t *pmem_buffer;
-  uint32_t log_entry_index;
-  uint32_t referring_map_entries;
-  uint32_t reader_count;
+  WriteLogPmemEntry *pmem_entry = NULL;
+  uint8_t *pmem_buffer = NULL;
+  uint32_t log_entry_index = 0;
+  uint32_t referring_map_entries = 0;
+  uint32_t reader_count = 0;
   /* TODO: occlusion by subsequent writes */
   /* TODO: flush state: portions flushed, in-progress flushes */
+  bool flushing = false;
+  bool flushed = false;
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : ram_entry(image_offset_bytes, write_bytes), pmem_entry(NULL), pmem_buffer(NULL),
-      log_entry_index(0), referring_map_entries(0), reader_count(0) {
+    : ram_entry(image_offset_bytes, write_bytes) {
   }
   WriteLogEntry() {} 
   WriteLogEntry(const WriteLogEntry&) = delete;
@@ -135,7 +140,9 @@ public:
        << "log_entry_index=" << entry.log_entry_index << ", "
        << "pmem_entry=" << (void*)entry.pmem_entry << ", "
        << "referring_map_entries=" << entry.referring_map_entries << ", "
-       << "reader_count=" << entry.reader_count;
+       << "reader_count=" << entry.reader_count << ", "
+       << "flushing=" << entry.flushing << ", "
+       << "flushed=" << entry.flushed;
     return os;
   };
 };
@@ -414,13 +421,12 @@ private:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  PMEMobjpool *m_log_pool;
+  PMEMobjpool *m_log_pool = NULL;
   uint64_t m_log_pool_size;
   
-  uint32_t m_total_log_entries;
-  uint32_t m_free_log_entries;
+  uint32_t m_total_log_entries = 0;
+  uint32_t m_free_log_entries = 0;
 
-  //ImageWriteback<ImageCtxT> m_image_writeback;
   StackingImageCache<ImageCtxT> *m_image_writeback;
   WriteLogGuard m_write_log_guard;
   
@@ -429,19 +435,19 @@ private:
    * empty. There is always at least one free entry, which can't be
    * used.
    */
-  uint64_t m_first_free_entry;  /* Entries from here to m_first_valid_entry-1 are free */
-  uint64_t m_first_valid_entry; /* Entries from here to m_first_free_entry-1 are valid */
+  uint64_t m_first_free_entry = 0;  /* Entries from here to m_first_valid_entry-1 are free */
+  uint64_t m_first_valid_entry = 0; /* Entries from here to m_first_free_entry-1 are valid */
 
   /* Starts at 0 for a new write log. Incremented on every flush. */
-  uint64_t m_current_sync_gen;
-  SyncPoint *m_current_sync_point;
+  uint64_t m_current_sync_gen = 0;
+  SyncPoint *m_current_sync_point = NULL;
   /* Starts at 0 on each sync gen increase. Incremented before applied
      to an operation */
-  uint64_t m_last_op_sequence_num;
+  uint64_t m_last_op_sequence_num = 0;
 
-  bool m_persist_on_write_until_flush;
-  bool m_persist_on_flush; /* If false, persist each write before completion */
-  bool m_flush_seen;
+  bool m_persist_on_write_until_flush = true;
+  bool m_persist_on_flush = false; /* If false, persist each write before completion */
+  bool m_flush_seen = false;
   
   util::AsyncOpTracker m_async_op_tracker;
 
@@ -451,9 +457,11 @@ private:
   BlockGuard::BlockIOs m_deferred_block_ios;
   BlockGuard::BlockIOs m_detained_block_ios;
 
+  bool m_wake_up_requested = false;
   bool m_wake_up_scheduled = false;
 
   Contexts m_post_work_contexts;
+  Contexts m_flush_complete_contexts;
   Finisher m_persist_finisher;
   Finisher m_log_append_finisher;
   Finisher m_on_persist_finisher;
@@ -468,11 +476,17 @@ private:
   WriteLogEntries m_log_entries;
   WriteLogEntries m_dirty_log_entries;
 
+  int m_flush_ops_in_flight = 0;
+  int m_flush_bytes_in_flight = 0;
+  
   void rwl_init(Context *on_finish);
   void wake_up();
   void process_work();
+  bool drain_context_list(Contexts &contexts, Mutex &contexts_lock);
 
   bool is_work_available() const;
+  bool can_flush_entry(WriteLogEntry *log_entry);
+  void flush_entry(WriteLogEntry *log_entry);
   void process_writeback_dirty_blocks();
   void process_detained_block_ios();
   void process_deferred_block_ios();
