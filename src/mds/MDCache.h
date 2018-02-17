@@ -1172,7 +1172,7 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 protected:
-  int dump_cache(const char *fn, Formatter *f);
+  int dump_cache(std::string_view fn, Formatter *f);
 public:
   int dump_cache() { return dump_cache(NULL, NULL); }
   int dump_cache(std::string_view filename);

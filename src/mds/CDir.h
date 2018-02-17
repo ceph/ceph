@@ -140,8 +140,18 @@ public:
   static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
-
-
+  // -- dump flags --
+  static const int DUMP_PATH             = (1 << 0);
+  static const int DUMP_DIRFRAG          = (1 << 1);
+  static const int DUMP_SNAPID_FIRST     = (1 << 2);
+  static const int DUMP_VERSIONS         = (1 << 3);
+  static const int DUMP_REP              = (1 << 4);
+  static const int DUMP_DIR_AUTH         = (1 << 5);
+  static const int DUMP_STATES           = (1 << 6);
+  static const int DUMP_MDS_CACHE_OBJECT = (1 << 7);
+  static const int DUMP_ITEMS            = (1 << 8);
+  static const int DUMP_ALL              = (-1);
+  static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS); 
 
  public:
   // context
@@ -746,7 +756,7 @@ public:
 
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;
-  void dump(Formatter *f) const;
+  void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
   void dump_load(Formatter *f, utime_t now, const DecayRate& rate);
 };
 
