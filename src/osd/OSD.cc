@@ -9593,10 +9593,22 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   sdata->sdata_op_ordering_lock.Lock();
 
   auto q = sdata->pg_slots.find(token);
-  assert(q != sdata->pg_slots.end());
+  if (q == sdata->pg_slots.end()) {
+    // this can happen if we race with pg removal.
+    dout(20) << __func__ << " slot " << token << " no longer there" << dendl;
+    pg->unlock();
+    sdata->sdata_op_ordering_lock.Unlock();
+    return;
+  }
   auto *slot = q->second.get();
   --slot->num_running;
 
+  if (pg && !slot->pg) {
+    // this can happen if we race with pg removal.
+    dout(20) << __func__ << " slot " << token << " no longer attached" << dendl;
+    pg->unlock();
+    pg = nullptr;
+  }
   if (slot->to_process.empty()) {
     // raced with wake_pg_waiters or consume_map
     dout(20) << __func__ << " " << token
