@@ -71,46 +71,46 @@ def common_parser(prog, description):
         help='(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
     )
 
-    filestore_group.add_argument(
-        '--journal-size',
-        default=5,
-        metavar='GB',
-        type=int,
-        help='Size (in GB) for the journal',
-    )
     bluestore_group.add_argument(
         '--bluestore',
         action='store_true',
         help='Use the bluestore objectstore',
     )
+
     bluestore_group.add_argument(
         '--block.db',
         dest='block_db',
         help='Path to bluestore block.db logical volume or device',
     )
+
     bluestore_group.add_argument(
         '--block.wal',
         dest='block_wal',
         help='Path to bluestore block.wal logical volume or device',
     )
+
     parser.add_argument(
         '--osd-id',
         help='Reuse an existing OSD id',
     )
+
     parser.add_argument(
         '--osd-fsid',
         help='Reuse an existing OSD fsid',
     )
+
     parser.add_argument(
         '--crush-device-class',
         dest='crush_device_class',
         help='Crush device class to assign this OSD to',
     )
+
     parser.add_argument(
         '--dmcrypt',
         action='store_true',
         help='Enable device encryption via dm-crypt',
     )
+
     # Do not parse args, so that consumers can do something before the args get
     # parsed triggering argparse behavior
     return parser
