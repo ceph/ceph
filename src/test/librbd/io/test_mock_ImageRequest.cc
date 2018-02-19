@@ -197,7 +197,12 @@ struct TestMockIoImageRequest : public TestMockFixture {
   }
 
   void expect_flush(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(mock_image_ctx, flush(_))
+    EXPECT_CALL(mock_image_ctx, flush_cache(_))
+      .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
+  }
+
+  void expect_flush_async_operations(MockImageCtx &mock_image_ctx, int r) {
+    EXPECT_CALL(mock_image_ctx, flush_async_operations(_))
       .WillOnce(CompleteContext(r, mock_image_ctx.image_ctx->op_work_queue));
   }
 };
@@ -281,12 +286,14 @@ TEST_F(TestMockIoImageRequest, AioFlushJournalAppendDisabled) {
   InSequence seq;
   expect_user_flushed(mock_image_ctx);
   expect_is_journal_appending(mock_journal, false);
+  expect_flush_async_operations(mock_image_ctx, 0);
   expect_flush(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
   AioCompletion *aio_comp = AioCompletion::create_and_start(
     &aio_comp_ctx, ictx, AIO_TYPE_FLUSH);
-  MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp, {});
+  MockImageFlushRequest mock_aio_image_flush(mock_image_ctx, aio_comp,
+                                             FLUSH_SOURCE_USER, {});
   {
     RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
     mock_aio_image_flush.send();

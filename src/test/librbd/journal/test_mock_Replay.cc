@@ -48,7 +48,7 @@ struct ImageRequest<MockReplayImageCtx> {
 
   MOCK_METHOD1(aio_flush, void(AioCompletion *c));
   static void aio_flush(MockReplayImageCtx *ictx, AioCompletion *c,
-                        const ZTracer::Trace &parent_trace) {
+                        FlushSource, const ZTracer::Trace &parent_trace) {
     assert(s_instance != nullptr);
     s_instance->aio_flush(c);
   }

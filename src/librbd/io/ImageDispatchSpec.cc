@@ -53,7 +53,7 @@ struct ImageDispatchSpec<I>::SendVisitor
 
   void operator()(Flush& flush) const {
     ImageRequest<I>::aio_flush(
-      &spec->m_image_ctx, spec->m_aio_comp,
+      &spec->m_image_ctx, spec->m_aio_comp, FLUSH_SOURCE_USER,
       spec->m_parent_trace);
   }
 };
