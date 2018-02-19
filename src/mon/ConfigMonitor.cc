@@ -9,6 +9,7 @@
 #include "messages/MMonCommand.h"
 #include "common/Formatter.h"
 #include "common/TextTable.h"
+#include "common/cmdparse.h"
 #include "include/stringify.h"
 
 #define dout_subsys ceph_subsys_mon
@@ -105,10 +106,10 @@ static string indent_who(const string& who)
 bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 {
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
-  stringstream ss;
+  std::stringstream ss;
   int err = 0;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
@@ -327,10 +328,10 @@ bool ConfigMonitor::prepare_update(MonOpRequestRef op)
 bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 {
   MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
-  stringstream ss;
+  std::stringstream ss;
   int err = -EINVAL;
 
-  map<string, cmd_vartype> cmdmap;
+  cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
     string rs = ss.str();
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
