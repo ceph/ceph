@@ -287,7 +287,7 @@
      --path-prefix             path prefix for filtering roles
   
     --conf/-c FILE    read configuration from the given configuration file
-    --id/-i ID        set ID portion of my name
+    --id ID           set ID portion of my name
     --name/-n TYPE.ID set name
     --cluster NAME    set cluster name (default: ceph)
     --setuser USER    set uid to user or uid (and gid to user's gid)
