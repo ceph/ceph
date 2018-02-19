@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
+import { RouterModule } from '@angular/router';
 
 import { ChartsModule } from 'ng2-charts';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -17,7 +18,7 @@ import { PgStatusStylePipe } from './pg-status-style.pipe';
 import { PgStatusPipe } from './pg-status.pipe';
 
 @NgModule({
-  imports: [CommonModule, TabsModule.forRoot(), SharedModule, ChartsModule],
+  imports: [CommonModule, TabsModule.forRoot(), SharedModule, ChartsModule, RouterModule],
   declarations: [
     HealthComponent,
     DashboardComponent,
