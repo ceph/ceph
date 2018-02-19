@@ -145,8 +145,10 @@
     #define ceph_pthread_setname pthread_setname_np
   #endif
 #elif defined(HAVE_PTHREAD_SET_NAME_NP)
-  /* Fix a small name diff */
-  #define ceph_pthread_setname pthread_set_name_np
+  /* Fix a small name diff and return 0 */
+  #define ceph_pthread_setname(thread, name) ({ \
+    pthread_set_name_np(thread, name);          \
+    0; })
 #else
   /* compiler warning free success noop */
   #define ceph_pthread_setname(thread, name) ({ \
