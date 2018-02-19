@@ -3300,11 +3300,11 @@ void Objecter::_send_op(Op *op)
   op->session->con->send_message(m);
 }
 
-int Objecter::calc_op_budget(Op *op)
+int Objecter::calc_op_budget(const vector<OSDOp>& ops)
 {
   int op_budget = 0;
-  for (vector<OSDOp>::iterator i = op->ops.begin();
-       i != op->ops.end();
+  for (vector<OSDOp>::const_iterator i = ops.begin();
+       i != ops.end();
        ++i) {
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
       op_budget += i->indata.length();
@@ -3328,7 +3328,7 @@ void Objecter::_throttle_op(Op *op,
   bool locked_for_write = sul.owns_lock();
 
   if (!op_budget)
-    op_budget = calc_op_budget(op);
+    op_budget = calc_op_budget(op->ops);
   if (!op_throttle_bytes.get_or_fail(op_budget)) { //couldn't take right now
     sul.unlock();
     op_throttle_bytes.get(op_budget);
