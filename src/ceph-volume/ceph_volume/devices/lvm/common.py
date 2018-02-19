@@ -48,33 +48,50 @@ def common_parser(prog, description):
         formatter_class=argparse.RawDescriptionHelpFormatter,
         description=description,
     )
-    required_args = parser.add_argument_group('required arguments')
-    parser.add_argument(
-        '--journal',
-        help='(filestore) A logical volume (vg_name/lv_name), or path to a device',
-    )
-    required_args.add_argument(
+
+    required_group = parser.add_argument_group('required arguments')
+    filestore_group = parser.add_argument_group('filestore')
+    bluestore_group = parser.add_argument_group('bluestore')
+
+    required_group.add_argument(
         '--data',
         required=True,
         type=arg_validators.LVPath(),
         help='OSD data path. A physical device or logical volume',
     )
-    parser.add_argument(
+
+    filestore_group.add_argument(
+        '--filestore',
+        action='store_true',
+        help='Use the filestore objectstore',
+    )
+
+    filestore_group.add_argument(
+        '--journal',
+        help='(REQUIRED) A logical volume (vg_name/lv_name), or path to a device',
+    )
+
+    filestore_group.add_argument(
         '--journal-size',
         default=5,
         metavar='GB',
         type=int,
-        help='(filestore) Size (in GB) for the journal',
+        help='Size (in GB) for the journal',
     )
-    parser.add_argument(
+    bluestore_group.add_argument(
         '--bluestore',
         action='store_true',
         help='Use the bluestore objectstore',
     )
-    parser.add_argument(
-        '--filestore',
-        action='store_true',
-        help='Use the filestore objectstore',
+    bluestore_group.add_argument(
+        '--block.db',
+        dest='block_db',
+        help='Path to bluestore block.db logical volume or device',
+    )
+    bluestore_group.add_argument(
+        '--block.wal',
+        dest='block_wal',
+        help='Path to bluestore block.wal logical volume or device',
     )
     parser.add_argument(
         '--osd-id',
@@ -83,16 +100,6 @@ def common_parser(prog, description):
     parser.add_argument(
         '--osd-fsid',
         help='Reuse an existing OSD fsid',
-    )
-    parser.add_argument(
-        '--block.db',
-        dest='block_db',
-        help='(bluestore) Path to bluestore block.db logical volume or device',
-    )
-    parser.add_argument(
-        '--block.wal',
-        dest='block_wal',
-        help='(bluestore) Path to bluestore block.wal logical volume or device',
     )
     parser.add_argument(
         '--crush-device-class',
