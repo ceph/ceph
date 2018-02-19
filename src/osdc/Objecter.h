@@ -2187,6 +2187,7 @@ private:
   int _op_cancel(ceph_tid_t tid, int r);
 public:
   int op_cancel(ceph_tid_t tid, int r);
+  int op_cancel(const vector<ceph_tid_t>& tidls, int r);
 
   /**
    * Any write op which is in progress at the start of this call shall no
