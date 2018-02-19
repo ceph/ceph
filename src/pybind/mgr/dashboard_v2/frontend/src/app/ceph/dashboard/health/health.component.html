@@ -27,7 +27,7 @@
               </div>
               <div class="media-body">
                 <span class="media-heading"
-                      i18n="ceph monitors">Monitors</span>
+                      i18n="ceph monitors"><a routerLink="/monitor/">Monitors</a></span>
                 <span class="media-text">{{ contentData.mon_status | monSummary }}</span>
               </div>
             </div>
@@ -41,7 +41,7 @@
               </div>
               <div class="media-body">
                 <span class="media-heading"
-                      i18n="ceph OSDs">OSDs</span>
+                      i18n="ceph OSDs"><a routerLink="/osd/">OSDs</a></span>
                 <span class="media-text">{{ contentData.osd_map | osdSummary }}</span>
               </div>
             </div>
