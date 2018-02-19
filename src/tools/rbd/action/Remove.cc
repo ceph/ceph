@@ -84,11 +84,11 @@ int execute(const po::variables_map &vm,
     if (r == -ENOTEMPTY) {
       librbd::Image image;
       std::vector<librbd::snap_info_t> snaps;
-      r = utils::open_image(io_ctx, image_name, true, &image);
-      if (r >= 0) {
-        r = image.snap_list(snaps);
+      int image_r = utils::open_image(io_ctx, image_name, true, &image);
+      if (image_r >= 0) {
+        image_r = image.snap_list(snaps);
       }
-      if (r >= 0) {
+      if (image_r >= 0) {
         snaps.erase(std::remove_if(snaps.begin(), snaps.end(),
 			           [&image](const librbd::snap_info_t& snap) {
                                      return is_auto_delete_snapshot(&image,
@@ -124,8 +124,8 @@ int execute(const po::variables_map &vm,
         std::string pool_name = "";
         librados::Rados rados(io_ctx);
         librados::IoCtx pool_io_ctx;
-        r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
-        if (r < 0) {
+        image_r = rados.ioctx_create2(group_info.pool, pool_io_ctx);
+        if (image_r < 0) {
           pool_name = "<missing data pool " + stringify(group_info.pool) + ">";
         } else {
           pool_name = pool_io_ctx.get_pool_name();
@@ -142,7 +142,7 @@ int execute(const po::variables_map &vm,
     } else {
       std::cerr << "rbd: delete error: " << cpp_strerror(r) << std::endl;
     }
-    return r ;
+    return r;
   }
   return 0;
 }
