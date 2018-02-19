@@ -18,4 +18,14 @@ export class NavigationComponent implements OnInit {
       this.rbdPools = data.rbd_pools;
     });
   }
+
+  blockHealthColor() {
+    if (this.summaryData && this.summaryData.rbd_mirroring) {
+      if (this.summaryData.rbd_mirroring.errors > 0) {
+        return { color: '#d9534f' };
+      } else if (this.summaryData.rbd_mirroring.warnings > 0) {
+        return { color: '#f0ad4e' };
+      }
+    }
+  }
 }

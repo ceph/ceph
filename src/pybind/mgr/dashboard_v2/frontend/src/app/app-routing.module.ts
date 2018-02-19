@@ -2,6 +2,7 @@ import { NgModule } from '@angular/core';
 import { RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
+import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
 import { PoolDetailComponent } from './ceph/block/pool-detail/pool-detail.component';
 import { CephfsComponent } from './ceph/cephfs/cephfs/cephfs.component';
 import { ClientsComponent } from './ceph/cephfs/clients/clients.component';
@@ -40,6 +41,7 @@ const routes: Routes = [
   { path: 'cephfs/:id/clients', component: ClientsComponent, canActivate: [AuthGuardService] },
   { path: 'cephfs/:id', component: CephfsComponent, canActivate: [AuthGuardService] },
   { path: 'configuration', component: ConfigurationComponent, canActivate: [AuthGuardService] },
+  { path: 'mirroring', component: MirroringComponent, canActivate: [AuthGuardService] },
   { path: '404', component: NotFoundComponent },
   { path: 'osd', component: OsdListComponent, canActivate: [AuthGuardService] },
   { path: '**', redirectTo: '/404'}
