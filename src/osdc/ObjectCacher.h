@@ -464,8 +464,6 @@ class ObjectCacher {
 
   size_t stat_nr_dirty_waiters;
 
-  void verify_stats() const;
-
   void bh_stat_add(BufferHead *bh);
   void bh_stat_sub(BufferHead *bh);
   loff_t get_stat_tx() const { return stat_tx; }
