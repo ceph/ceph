@@ -1989,11 +1989,11 @@ private:
    * and returned whenever an op is removed from the map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
-  int calc_op_budget(Op *op);
+  int calc_op_budget(const vector<OSDOp>& ops);
   void _throttle_op(Op *op, shunique_lock& sul, int op_size = 0);
   int _take_op_budget(Op *op, shunique_lock& sul) {
     assert(sul && sul.mutex() == &rwlock);
-    int op_budget = calc_op_budget(op);
+    int op_budget = calc_op_budget(op->ops);
     if (keep_balanced_budget) {
       _throttle_op(op, sul, op_budget);
     } else {
@@ -2010,7 +2010,7 @@ private:
   }
   void put_op_budget(Op *op) {
     assert(op->budgeted);
-    int op_budget = calc_op_budget(op);
+    int op_budget = calc_op_budget(op->ops);
     put_op_budget_bytes(op_budget);
   }
   void put_nlist_context_budget(NListContext *list_context);
