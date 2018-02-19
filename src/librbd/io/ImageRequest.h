@@ -43,7 +43,8 @@ public:
                           Extents &&image_extents, bool skip_partial_discard,
 			  const ZTracer::Trace &parent_trace);
   static void aio_flush(ImageCtxT *ictx, AioCompletion *c,
-			const ZTracer::Trace &parent_trace);
+                        FlushSource flush_source,
+                        const ZTracer::Trace &parent_trace);
   static void aio_writesame(ImageCtxT *ictx, AioCompletion *c,
                             Extents &&image_extents, bufferlist &&bl,
                             int op_flags, const ZTracer::Trace &parent_trace);
@@ -255,8 +256,10 @@ template <typename ImageCtxT = ImageCtx>
 class ImageFlushRequest : public ImageRequest<ImageCtxT> {
 public:
   ImageFlushRequest(ImageCtxT &image_ctx, AioCompletion *aio_comp,
-		    const ZTracer::Trace &parent_trace)
-    : ImageRequest<ImageCtxT>(image_ctx, aio_comp, {}, "flush", parent_trace) {
+                    FlushSource flush_source,
+                    const ZTracer::Trace &parent_trace)
+    : ImageRequest<ImageCtxT>(image_ctx, aio_comp, {}, "flush", parent_trace),
+      m_flush_source(flush_source) {
   }
 
 protected:
@@ -274,6 +277,10 @@ protected:
   const char *get_request_type() const override {
     return "aio_flush";
   }
+
+private:
+  FlushSource m_flush_source;
+
 };
 
 template <typename ImageCtxT = ImageCtx>
