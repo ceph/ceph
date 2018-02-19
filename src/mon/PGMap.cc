@@ -917,7 +917,11 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	min = proj;
       }
     } else {
-      dout(0) << "Cannot get stat of OSD " << p->first << dendl;
+      if (osdmap.is_up(p->first)) {
+        // This is a level 4 rather than an error, because we might have
+        // only just started, and not received the first stats message yet.
+        dout(4) << "OSD " << p->first << " is up, but has no stats" << dendl;
+      }
     }
   }
   return min;
