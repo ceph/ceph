@@ -27,3 +27,9 @@ else:
     logging.root.handlers[0].setLevel(logging.DEBUG)
     os.environ['PATH'] = '{}:{}'.format(os.path.abspath('../../../../build/bin'),
                                         os.environ['PATH'])
+
+    # Mock ceph module otherwise every module that is involved in a testcase and imports it will
+    # raise an ImportError
+    import sys
+    import mock
+    sys.modules['ceph_module'] = mock.Mock()
