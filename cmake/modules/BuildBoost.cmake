@@ -143,7 +143,7 @@ function(do_build_boost version)
     set(source_dir
       URL ${boost_url}
       URL_MD5 ${boost_md5})
-    if(CMAKE_VERSION VERSION_GREATER 3.0)
+    if(CMAKE_VERSION VERSION_GREATER 3.1)
       list(APPEND source_dir DOWNLOAD_NO_PROGRESS 1)
     endif()
   endif()
