@@ -56,6 +56,8 @@ DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
              'norecover', 'noscrub', 'nodeep-scrub')
 
+MON_METADATA = ('id', 'public_addr', 'rank')
+
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
 
 OSD_STATUS = ['weight', 'up', 'in']
@@ -111,10 +113,17 @@ class Metrics(object):
             'health_status',
             'Cluster health status'
         )
-        metrics['mon_quorum_count'] = Metric(
+        metrics['mon_quorum_status'] = Metric(
             'gauge',
-            'mon_quorum_count',
-            'Monitors in quorum'
+            'mon_quorum_status',
+            'Monitors in quorum',
+            ('ceph_daemon',)
+        )
+        metrics['mon_metadata'] = Metric(
+            'untyped',
+            'mon_metadata',
+            'MON Metadata',
+            MON_METADATA
         )
         metrics['osd_metadata'] = Metric(
             'untyped',
@@ -301,8 +310,14 @@ class Module(MgrModule):
 
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
-        self.metrics.set('mon_quorum_count', len(mon_status['quorum']))
-        # maybe rather us mon_in_quorum{id=$rank} [0,1]?
+        for mon in mon_status['monmap']['mons']:
+            rank = mon['rank']
+            id_ = mon['name']
+            self.metrics.append('mon_metadata', 1,
+                                (id_, mon['public_addr'].split(':')[0], rank))
+            in_quorum = int(rank in mon_status['quorum'])
+            self.metrics.append('mon_quorum_status', in_quorum,
+                                ('mon_{}'.format(id_),))
 
     def get_pg_status(self):
         # TODO add per pool status?
@@ -343,9 +358,8 @@ class Module(MgrModule):
         osd_map = self.get('osd_map')
         osd_flags = osd_map['flags'].split(',')
         for flag in OSD_FLAGS:
-            self.metrics['osd_flag_{}'.format(flag)].set(
-                int(flag in osd_flags)
-            )
+            self.metrics.set('osd_flag_{}'.format(flag),
+                int(flag in osd_flags))
         osd_devices = self.get('osd_map_crush')['devices']
         for osd in osd_map['osds']:
             # id can be used to link osd metrics and metadata
