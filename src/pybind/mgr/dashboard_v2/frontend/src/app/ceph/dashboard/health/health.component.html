@@ -190,6 +190,7 @@
 
           <tabset>
             <tab heading="Cluster log"
+                 class="text-monospace"
                  i18n-heading>
               <span *ngFor="let line of contentData.clog">
                 {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
@@ -200,6 +201,7 @@
               </span>
             </tab>
             <tab heading="Audit log"
+                 class="text-monospace"
                  i18n-heading>
               <span *ngFor="let line of contentData.audit_log">
                 {{ line.stamp }}&nbsp;{{ line.priority }}&nbsp;
