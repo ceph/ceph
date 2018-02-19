@@ -3368,9 +3368,10 @@ TEST_F(TestLibRBD, ListChildrenTiered)
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
 
   librbd::RBD rbd;
-  string pool_name1 = m_pool_name;
+  string pool_name1 = create_pool(true);
   string pool_name2 = create_pool(true);
   string pool_name3 = create_pool(true);
+  ASSERT_NE("", pool_name1);
   ASSERT_NE("", pool_name2);
   ASSERT_NE("", pool_name3);
 
@@ -3494,7 +3495,7 @@ TEST_F(TestLibRBD, ListChildrenTiered)
                       child_id2, pool_name1.c_str(), child_name2.c_str(), false,
                       child_id3, pool_name2.c_str(), child_name3.c_str(), true,
                       child_id4, pool_name2.c_str(), child_name4.c_str(), false);
-  
+
   ASSERT_EQ(0, rbd.trash_restore(ioctx3, child_id3, ""));
   test_list_children(parent, 4, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str(),
