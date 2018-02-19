@@ -443,7 +443,6 @@ ObjectCacher::BufferHead *ObjectCacher::Object::map_write(ObjectExtent &ex,
     }
 
     ldout(oc->cct, 10) << "cur is " << cur << ", p is " << *p->second << dendl;
-    //oc->verify_stats();
 
     if (p->first <= cur) {
       BufferHead *bh = p->second;
@@ -1755,7 +1754,6 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
   int r = _wait_for_write(wr, bytes_written, oset, &trace, onfreespace);
   delete wr;
 
-  //verify_stats();
   trim();
   return r;
 }
@@ -2476,67 +2474,6 @@ void ObjectCacher::discard_set(ObjectSet *oset, const vector<ObjectExtent>& exls
   if (flush_set_callback &&
       were_dirty && oset->dirty_or_tx == 0)
     flush_set_callback(flush_set_callback_arg, oset);
-}
-
-void ObjectCacher::verify_stats() const
-{
-  assert(lock.is_locked());
-  ldout(cct, 10) << "verify_stats" << dendl;
-
-  loff_t clean = 0, zero = 0, dirty = 0, rx = 0, tx = 0, missing = 0,
-    error = 0;
-  for (vector<ceph::unordered_map<sobject_t, Object*> >::const_iterator i
-	 = objects.begin();
-       i != objects.end();
-       ++i) {
-    for (ceph::unordered_map<sobject_t, Object*>::const_iterator p
-	   = i->begin();
-	 p != i->end();
-	 ++p) {
-      Object *ob = p->second;
-      for (map<loff_t, BufferHead*>::const_iterator q = ob->data.begin();
-	   q != ob->data.end();
-	  ++q) {
-	BufferHead *bh = q->second;
-	switch (bh->get_state()) {
-	case BufferHead::STATE_MISSING:
-	  missing += bh->length();
-	  break;
-	case BufferHead::STATE_CLEAN:
-	  clean += bh->length();
-	  break;
-	case BufferHead::STATE_ZERO:
-	  zero += bh->length();
-	  break;
-	case BufferHead::STATE_DIRTY:
-	  dirty += bh->length();
-	  break;
-	case BufferHead::STATE_TX:
-	  tx += bh->length();
-	  break;
-	case BufferHead::STATE_RX:
-	  rx += bh->length();
-	  break;
-	case BufferHead::STATE_ERROR:
-	  error += bh->length();
-	  break;
-	default:
-	  ceph_abort();
-	}
-      }
-    }
-  }
-
-  ldout(cct, 10) << " clean " << clean << " rx " << rx << " tx " << tx
-		 << " dirty " << dirty << " missing " << missing
-		 << " error " << error << dendl;
-  assert(clean == stat_clean);
-  assert(rx == stat_rx);
-  assert(tx == stat_tx);
-  assert(dirty == stat_dirty);
-  assert(missing == stat_missing);
-  assert(zero == stat_zero);
-  assert(error == stat_error);
 }
 
 void ObjectCacher::bh_stat_add(BufferHead *bh)
