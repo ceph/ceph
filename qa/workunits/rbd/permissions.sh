@@ -27,8 +27,8 @@ delete_users() {
 }
 
 create_users() {
-    ceph auth get-or-create client.volumes mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow r class-read pool images, allow rwx pool volumes' >> $KEYRING
-    ceph auth get-or-create client.images mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool images' >> $KEYRING
+    ceph auth get-or-create client.volumes mon 'profile rbd' osd 'profile rbd pool=volumes, profile rbd-read-only pool=images' >> $KEYRING
+    ceph auth get-or-create client.images mon 'profile rbd' osd 'profile rbd pool=images' >> $KEYRING
 }
 
 expect() {
