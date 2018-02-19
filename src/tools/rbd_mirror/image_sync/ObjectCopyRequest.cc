@@ -173,6 +173,13 @@ template <typename I>
 void ObjectCopyRequest<I>::handle_read_object(int r) {
   dout(20) << ": r=" << r << dendl;
 
+  auto snap_seq = m_snap_sync_ops.begin()->first.second;
+  if (r == -ENOENT && m_read_whole_object[snap_seq]) {
+    dout(5) << ": object missing when forced to read whole object"
+            << dendl;
+    r = 0;
+  }
+
   if (r == -ENOENT) {
     m_retry_snap_set = m_snap_set;
     m_retry_missing_read = true;
@@ -413,9 +420,18 @@ void ObjectCopyRequest<I>::compute_diffs() {
     uint64_t end_size;
     bool exists;
     librados::snap_t clone_end_snap_id;
+    bool read_whole_object;
     calc_snap_set_diff(cct, m_snap_set, start_remote_snap_id,
                        end_remote_snap_id, &diff, &end_size, &exists,
-                       &clone_end_snap_id);
+                       &clone_end_snap_id, &read_whole_object);
+
+    if (read_whole_object) {
+      dout(1) << ": need to read full object" << dendl;
+      diff.insert(0, m_remote_image_ctx->layout.object_size);
+      exists = true;
+      end_size = m_remote_image_ctx->layout.object_size;
+      clone_end_snap_id = end_remote_snap_id;
+    }
 
     dout(20) << ": "
              << "start_remote_snap=" << start_remote_snap_id << ", "
@@ -455,6 +471,7 @@ void ObjectCopyRequest<I>::compute_diffs() {
         // do not read past the sync point snapshot
         clone_end_snap_id = remote_sync_pont_snap_id;
       }
+      m_read_whole_object[clone_end_snap_id] = read_whole_object;
 
       // object write/zero, or truncate
       // NOTE: a single snapshot clone might represent multiple snapshots, but
