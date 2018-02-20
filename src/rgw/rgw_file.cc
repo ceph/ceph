@@ -23,9 +23,9 @@
 #include "rgw_auth_s3.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
-
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
+#include "common/errno.h"
 
 #include <atomic>
 
@@ -1496,7 +1496,7 @@ namespace rgw {
 
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
-				 if_match, if_nomatch);
+                                if_match, if_nomatch);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
@@ -1620,16 +1620,25 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_statvfs *vfs_st, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  struct rados_cluster_stat_t stats;
 
-  /* XXX for now, just publish a huge capacity and
-   * limited utiliztion */
-  vfs_st->f_bsize = 1024*1024 /* 1M */;
-  vfs_st->f_frsize = 1024;    /* minimal allocation unit (who cares) */
-  vfs_st->f_blocks = UINT64_MAX;
-  vfs_st->f_bfree = UINT64_MAX;
-  vfs_st->f_bavail = UINT64_MAX;
-  vfs_st->f_files = 1024; /* object count, do we have an est? */
-  vfs_st->f_ffree = UINT64_MAX;
+  RGWGetClusterStatReq req(fs->get_context(), fs->get_user(), stats);
+  int rc = rgwlib.get_fe()->execute_req(&req);
+  if (rc < 0) {
+    lderr(fs->get_context()) << "ERROR: getting total cluster usage"
+                             << cpp_strerror(-rc) << dendl;
+    return rc;
+  }
+
+  //Set block size to 1M.
+  constexpr uint32_t CEPH_BLOCK_SHIFT = 20;
+  vfs_st->f_bsize = 1 << CEPH_BLOCK_SHIFT;
+  vfs_st->f_frsize = 1 << CEPH_BLOCK_SHIFT;
+  vfs_st->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_files = stats.num_objects;
+  vfs_st->f_ffree = -1;
   vfs_st->f_fsid[0] = fs->get_fsid();
   vfs_st->f_fsid[1] = fs->get_fsid();
   vfs_st->f_flag = 0;
@@ -1865,7 +1874,7 @@ int rgw_open(struct rgw_fs *rgw_fs,
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  /* XXX 
+  /* XXX
    * need to track specific opens--at least read opens and
    * a write open;  we need to know when a write open is returned,
    * that closes a write transaction
