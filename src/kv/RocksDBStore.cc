@@ -212,14 +212,14 @@ int RocksDBStore::tryInterpret(const string &key, const string &val, rocksdb::Op
 {
   if (key == "compaction_threads") {
     std::string err;
-    int f = strict_sistrtoll(val.c_str(), &err);
+    int f = strict_iecstrtoll(val.c_str(), &err);
     if (!err.empty())
       return -EINVAL;
     //Low priority threadpool is used for compaction
     opt.env->SetBackgroundThreads(f, rocksdb::Env::Priority::LOW);
   } else if (key == "flusher_threads") {
     std::string err;
-    int f = strict_sistrtoll(val.c_str(), &err);
+    int f = strict_iecstrtoll(val.c_str(), &err);
     if (!err.empty())
       return -EINVAL;
     //High priority threadpool is used for flusher
