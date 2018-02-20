@@ -536,10 +536,21 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   eversion_t auth_version;
   bufferlist auth_bl;
 
-  map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
+  // Create list of shards with primary first so it will be auth copy all
+  // other things being equal.
+  list<pg_shard_t> shards;
   for (map<pg_shard_t, ScrubMap *>::const_iterator j = maps.begin();
        j != maps.end();
        ++j) {
+    if (j->first == get_parent()->whoami_shard())
+      continue;
+    shards.push_back(j->first);
+  }
+  shards.push_front(get_parent()->whoami_shard());
+
+  map<pg_shard_t, ScrubMap *>::const_iterator auth = maps.end();
+  for (auto &l : shards) {
+    map<pg_shard_t, ScrubMap *>::const_iterator j = maps.find(l);
     map<hobject_t, ScrubMap::object, hobject_t::BitwiseComparator>::iterator i =
       j->second->objects.find(obj);
     if (i == j->second->objects.end()) {
@@ -563,6 +574,8 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     object_info_t oi;
     bufferlist bl;
     map<string, bufferptr>::iterator k;
+    SnapSet ss;
+    bufferlist ss_bl;
 
     if (i->second.stat_error) {
       shard_info.set_stat_error();
@@ -590,6 +603,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
       goto out;
     }
 
+    if (oi.soid != obj) {
+      shard_info.set_oi_attr_corrupted();
+      error_string += " oi_attr_corrupted";
+      goto out;
+    }
+
     if (auth_version != eversion_t()) {
       if (!object_error.has_object_info_inconsistency() && !(bl == auth_bl)) {
 	object_error.set_object_info_inconsistency();
@@ -601,6 +620,23 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     // XXX: For now we can't pick one shard for repair and another's object info
     if (i->second.read_error || i->second.ec_hash_mismatch || i->second.ec_size_mismatch)
       goto out;
+
+    // We don't set errors here for snapset, but we won't pick an auth copy if the
+    // snapset is missing or won't decode.
+    if (obj.is_head() || obj.is_snapdir()) {
+      k = i->second.attrs.find(SS_ATTR);
+      if (k == i->second.attrs.end()) {
+	goto out;
+      }
+      ss_bl.push_back(k->second);
+      try {
+	bufferlist::iterator bliter = ss_bl.begin();
+	::decode(ss, bliter);
+      } catch (...) {
+	// invalid snapset, probably corrupt
+	goto out;
+      }
+    }
 
     if (auth_version == eversion_t() || oi.version > auth_version ||
         (oi.version == auth_version && dcount(oi) > dcount(*auth_oi))) {
@@ -737,16 +773,16 @@ void PGBackend::be_compare_scrubmaps(
 		  << ": failed to pick suitable auth object\n";
         goto out;
       }
-      // Object errors exist and we haven't found an authortative shard
-      // Prefer the primary shard otherwise take first from list.
-      pg_shard_t auth_shard;
-      if (object_errors.count(get_parent()->whoami_shard())) {
-	auth_shard = get_parent()->whoami_shard();
+      // Object errors exist and nothing in auth_list
+      // Prefer the auth shard otherwise take first from list.
+      pg_shard_t shard;
+      if (object_errors.count(auth->first)) {
+	shard = auth->first;
       } else {
-	auth_shard = *(object_errors.begin());
+	shard = *(object_errors.begin());
       }
-      auth_list.push_back(auth_shard);
-      object_errors.erase(auth_shard);
+      auth_list.push_back(shard);
+      object_errors.erase(shard);
     }
     // At this point auth_list is populated, so we add the object errors shards
     // as inconsistent.
