@@ -1,4 +1,4 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
@@ -9,10 +9,12 @@ import { HostService } from '../../../shared/services/host.service';
   templateUrl: './hosts.component.html',
   styleUrls: ['./hosts.component.scss']
 })
-export class HostsComponent implements OnInit {
+export class HostsComponent implements OnInit, OnDestroy {
 
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
+  interval: any;
+  isLoadingHosts = false;
 
   @ViewChild('servicesTpl') public servicesTpl: TemplateRef<any>;
 
@@ -39,9 +41,20 @@ export class HostsComponent implements OnInit {
         pipe: this.cephShortVersionPipe
       }
     ];
+    this.interval = setInterval(() => {
+      this.getHosts();
+    }, 5000);
+  }
+
+  ngOnDestroy() {
+    clearInterval(this.interval);
   }
 
   getHosts() {
+    if (this.isLoadingHosts) {
+      return;
+    }
+    this.isLoadingHosts = true;
     this.hostService.list().then((resp) => {
       resp.map((host) => {
         host.services.map((service) => {
@@ -51,6 +64,9 @@ export class HostsComponent implements OnInit {
         return host;
       });
       this.hosts = resp;
+      this.isLoadingHosts = false;
+    }).catch(() => {
+      this.isLoadingHosts = false;
     });
   }
 }
