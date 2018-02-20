@@ -313,6 +313,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
     int rbd_get_create_timestamp(rbd_image_t image, timespec *timestamp)
+    int rbd_get_access_timestamp(rbd_image_t image, timespec *timestamp)
+    int rbd_get_modify_timestamp(rbd_image_t image, timespec *timestamp)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
     int rbd_get_name(rbd_image_t image, char *name, size_t *name_len)
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
@@ -2975,6 +2977,30 @@ written." % (self.name, ret, length))
         if ret != 0:
             raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
         return datetime.utcfromtimestamp(timestamp.tv_sec)
+
+    def access_timestamp(self):
+        """
+        Return the access timestamp for the image.
+        """
+        cdef:
+            timespec timestamp
+        with nogil:
+            ret = rbd_get_access_timestamp(self.image, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting access timestamp for image: %s' % (self.name))
+        return datetime.fromtimestamp(timestamp.tv_sec)
+
+    def modify_timestamp(self):
+        """
+        Return the modify timestamp for the image.
+        """
+        cdef:
+            timespec timestamp
+        with nogil:
+            ret = rbd_get_modify_timestamp(self.image, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting modify timestamp for image: %s' % (self.name))
+        return datetime.fromtimestamp(timestamp.tv_sec)
 
     def flatten(self):
         """

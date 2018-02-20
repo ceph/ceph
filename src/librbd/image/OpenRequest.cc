@@ -370,6 +370,50 @@ Context *OpenRequest<I>::handle_v2_get_create_timestamp(int *result) {
     return nullptr;
   }
 
+  send_v2_get_access_modify_timestamp();
+  return nullptr;
+}
+
+template <typename I>
+void OpenRequest<I>::send_v2_get_access_modify_timestamp() {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_access_timestamp_start(&op);
+  cls_client::get_modify_timestamp_start(&op);
+  //TODO: merge w/ create timestamp query after luminous EOLed
+
+  using klass = OpenRequest<I>;
+  librados::AioCompletion *comp = create_rados_callback<
+    klass, &klass::handle_v2_get_access_modify_timestamp>(this);
+  m_out_bl.clear();
+  m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op,
+                                  &m_out_bl);
+  comp->release();
+}
+
+template <typename I>
+Context *OpenRequest<I>::handle_v2_get_access_modify_timestamp(int *result) {
+  CephContext *cct = m_image_ctx->cct;
+  ldout(cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  if (*result == 0) {
+    auto it = m_out_bl.cbegin();
+    *result = cls_client::get_access_timestamp_finish(&it,
+        &m_image_ctx->access_timestamp);
+    if (*result == 0) 
+      *result = cls_client::get_modify_timestamp_finish(&it,
+        &m_image_ctx->modify_timestamp);
+  }
+  if (*result < 0 && *result != -EOPNOTSUPP) {
+    lderr(cct) << "failed to retrieve access/modify_timestamp: "
+               << cpp_strerror(*result)
+               << dendl;
+    send_close_image(*result);
+    return nullptr;
+  }
+
   send_v2_get_data_pool();
   return nullptr;
 }
