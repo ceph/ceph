@@ -16,6 +16,7 @@
 
 #include <climits>
 #include <limits>
+#include <cmath>
 #include <sstream>
 
 using std::ostringstream;
@@ -129,14 +130,23 @@ float strict_strtof(const char *str, std::string *err)
 }
 
 template<typename T>
-T strict_si_cast(const char *str, std::string *err)
+T strict_iec_cast(const char *str, std::string *err)
 {
   std::string s(str);
   if (s.empty()) {
-    *err = "strict_sistrtoll: value not specified";
+    *err = "strict_iecstrtoll: value not specified";
     return 0;
   }
-  const char &u = s.back();
+  char &u = s.back();
+  // consume 'i' if present, fail if "Bi" is passed
+  if ( u == 'i') {
+    s.pop_back();
+    u = s.back();
+    if (u == 'B') {
+      *err = "strict_iecstrtoll: illegal prefix \"Bi\"";
+      return 0;
+    }
+  }
   int m = 0;
   if (u == 'B')
     m = 0;
@@ -162,26 +172,82 @@ T strict_si_cast(const char *str, std::string *err)
 
   long long ll = strict_strtoll(s.c_str(), 10, err);
   if (ll < 0 && !std::numeric_limits<T>::is_signed) {
-    *err = "strict_sistrtoll: value should not be negative";
+    *err = "strict_iecstrtoll: value should not be negative";
     return 0;
   }
   if (static_cast<unsigned>(m) >= sizeof(T) * CHAR_BIT) {
-    *err = ("strict_sistrtoll: the SI prefix is too large for the designated "
+    *err = ("strict_iecstrtoll: the IEC prefix is too large for the designated "
 	    "type");
     return 0;
   }
   using promoted_t = typename std::common_type<decltype(ll), T>::type;
   if (static_cast<promoted_t>(ll) <
       static_cast<promoted_t>(std::numeric_limits<T>::min()) >> m) {
-    *err = "strict_sistrtoll: value seems to be too small";
+    *err = "strict_iecstrtoll: value seems to be too small";
     return 0;
   }
   if (static_cast<promoted_t>(ll) >
       static_cast<promoted_t>(std::numeric_limits<T>::max()) >> m) {
-    *err = "strict_sistrtoll: value seems to be too large";
+    *err = "strict_iecstrtoll: value seems to be too large";
     return 0;
   }
   return (ll << m);
+}
+
+template int strict_iec_cast<int>(const char *str, std::string *err);
+template long strict_iec_cast<long>(const char *str, std::string *err);
+template long long strict_iec_cast<long long>(const char *str, std::string *err);
+template uint64_t strict_iec_cast<uint64_t>(const char *str, std::string *err);
+template uint32_t strict_iec_cast<uint32_t>(const char *str, std::string *err);
+
+uint64_t strict_iecstrtoll(const char *str, std::string *err)
+{
+  return strict_iec_cast<uint64_t>(str, err);
+}
+
+template<typename T>
+T strict_si_cast(const char *str, std::string *err)
+{
+  std::string s(str);
+  if (s.empty()) {
+    *err = "strict_sistrtoll: value not specified";
+    return 0;
+  }
+  char &u = s.back();
+  int m = 0;
+  if (u == 'K')
+    m = 3;
+  else if (u == 'M')
+    m = 6;
+  else if (u == 'G')
+    m = 9;
+  else if (u == 'T')
+    m = 12;
+  else if (u == 'P')
+    m = 15;
+  else if (u == 'E')
+    m = 18;
+
+  if (m >= 3)
+    s.pop_back();
+
+  long long ll = strict_strtoll(s.c_str(), 10, err);
+  if (ll < 0 && !std::numeric_limits<T>::is_signed) {
+    *err = "strict_sistrtoll: value should not be negative";
+    return 0;
+  }
+  using promoted_t = typename std::common_type<decltype(ll), T>::type;
+  if (static_cast<promoted_t>(ll) <
+      static_cast<promoted_t>(std::numeric_limits<T>::min()) / pow (10, m)) {
+    *err = "strict_sistrtoll: value seems to be too small";
+    return 0;
+  }
+  if (static_cast<promoted_t>(ll) >
+      static_cast<promoted_t>(std::numeric_limits<T>::max()) / pow (10, m)) {
+    *err = "strict_sistrtoll: value seems to be too large";
+    return 0;
+  }
+  return (ll * pow (10,  m));
 }
 
 template int strict_si_cast<int>(const char *str, std::string *err);

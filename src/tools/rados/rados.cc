@@ -240,7 +240,7 @@ static void usage_exit()
 template <typename I, typename T>
 static int rados_sistrtoll(I &i, T *val) {
   std::string err;
-  *val = strict_sistrtoll(i->second.c_str(), &err);
+  *val = strict_iecstrtoll(i->second.c_str(), &err);
   if (err != "") {
     cerr << "Invalid value for " << i->first << ": " << err << std::endl;
     return -EINVAL;
