@@ -850,6 +850,7 @@ void ECBackend::sub_write_committed(
     reply.tid = tid;
     reply.last_complete = last_complete;
     reply.committed = true;
+    reply.applied = true;
     reply.from = get_parent()->whoami_shard();
     handle_sub_write_reply(
       get_parent()->whoami_shard(),
@@ -863,6 +864,7 @@ void ECBackend::sub_write_committed(
     r->op.tid = tid;
     r->op.last_complete = last_complete;
     r->op.committed = true;
+    r->op.applied = true;
     r->op.from = get_parent()->whoami_shard();
     r->set_priority(CEPH_MSG_PRIO_HIGH);
     r->trace = trace;
@@ -872,59 +874,11 @@ void ECBackend::sub_write_committed(
   }
 }
 
-struct SubWriteApplied : public Context {
-  ECBackend *pg;
-  OpRequestRef msg;
-  ceph_tid_t tid;
-  eversion_t version;
-  const ZTracer::Trace trace;
-  SubWriteApplied(
-    ECBackend *pg,
-    OpRequestRef msg,
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace)
-    : pg(pg), msg(msg), tid(tid), version(version), trace(trace) {}
-  void finish(int) override {
-    if (msg)
-      msg->mark_event("sub_op_applied");
-    pg->sub_write_applied(tid, version, trace);
-  }
-};
-void ECBackend::sub_write_applied(
-  ceph_tid_t tid, eversion_t version,
-  const ZTracer::Trace &trace) {
-  parent->op_applied(version);
-  if (get_parent()->pgb_is_primary()) {
-    ECSubWriteReply reply;
-    reply.from = get_parent()->whoami_shard();
-    reply.tid = tid;
-    reply.applied = true;
-    handle_sub_write_reply(
-      get_parent()->whoami_shard(),
-      reply, trace);
-  } else {
-    MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
-    r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
-    r->min_epoch = get_parent()->get_interval_start_epoch();
-    r->op.from = get_parent()->whoami_shard();
-    r->op.tid = tid;
-    r->op.applied = true;
-    r->set_priority(CEPH_MSG_PRIO_HIGH);
-    r->trace = trace;
-    r->trace.event("sending sub op apply");
-    get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
-  }
-}
-
 void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const ZTracer::Trace &trace,
-  Context *on_local_applied_sync)
+  const ZTracer::Trace &trace)
 {
   if (msg)
     msg->mark_started();
@@ -964,19 +918,12 @@ void ECBackend::handle_sub_write(
       ec_impl->get_data_chunk_count())
     op.t.set_fadvise_flag(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
 
-  if (on_local_applied_sync) {
-    dout(10) << "Queueing onreadable_sync: " << on_local_applied_sync << dendl;
-    localt.register_on_applied_sync(on_local_applied_sync);
-  }
   localt.register_on_commit(
     get_parent()->bless_context(
       new SubWriteCommitted(
 	this, msg, op.tid,
 	op.at_version,
 	get_parent()->get_info().last_complete, trace)));
-  localt.register_on_applied(
-    get_parent()->bless_context(
-      new SubWriteApplied(this, msg, op.tid, op.at_version, trace)));
   vector<ObjectStore::Transaction> tls;
   tls.reserve(2);
   tls.push_back(std::move(op.t));
@@ -1124,12 +1071,6 @@ void ECBackend::handle_sub_write_reply(
     i->second.pending_apply.erase(from);
   }
 
-  if (i->second.pending_apply.empty() && i->second.on_all_applied) {
-    dout(10) << __func__ << " Calling on_all_applied on " << i->second << dendl;
-    i->second.on_all_applied->complete(0);
-    i->second.on_all_applied = 0;
-    i->second.trace.event("ec write all applied");
-  }
   if (i->second.pending_commit.empty() && i->second.on_all_commit) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
     i->second.on_all_commit->complete(0);
@@ -1466,8 +1407,6 @@ void ECBackend::submit_transaction(
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &log_entries,
   boost::optional<pg_hit_set_history_t> &hset_history,
-  Context *on_local_applied_sync,
-  Context *on_all_applied,
   Context *on_all_commit,
   ceph_tid_t tid,
   osd_reqid_t reqid,
@@ -1483,8 +1422,6 @@ void ECBackend::submit_transaction(
   op->roll_forward_to = std::max(roll_forward_to, committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
-  op->on_local_applied_sync = on_local_applied_sync;
-  op->on_all_applied = on_all_applied;
   op->on_all_commit = on_all_commit;
   op->tid = tid;
   op->reqid = reqid;
@@ -1494,7 +1431,6 @@ void ECBackend::submit_transaction(
   
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
   start_rmw(op, std::move(t));
-  dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
 }
 
 void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
@@ -1966,7 +1902,6 @@ bool ECBackend::try_reads_to_commit()
   op->remote_read.clear();
   op->remote_read_result.clear();
 
-  dout(10) << "onreadable_sync: " << op->on_local_applied_sync << dendl;
   ObjectStore::Transaction empty;
   bool should_write_local = false;
   ECSubWrite local_write_op;
@@ -2022,13 +1957,11 @@ bool ECBackend::try_reads_to_commit()
     }
   }
   if (should_write_local) {
-      handle_sub_write(
-	get_parent()->whoami_shard(),
-	op->client_op,
-	local_write_op,
-	op->trace,
-	op->on_local_applied_sync);
-      op->on_local_applied_sync = 0;
+    handle_sub_write(
+      get_parent()->whoami_shard(),
+      op->client_op,
+      local_write_op,
+      op->trace);
   }
 
   for (auto i = op->on_write.begin();

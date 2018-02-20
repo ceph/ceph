@@ -498,6 +498,11 @@ public:
     Transaction(const Transaction& other) = default;
     Transaction& operator=(const Transaction& other) = default;
 
+    // expose object_index for FileStore::Op's benefit
+    const map<ghobject_t, __le32>& get_object_index() const {
+      return object_index;
+    }
+
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
       if (!c) return;
@@ -1415,33 +1420,12 @@ public:
     static void generate_test_instances(list<Transaction*>& o);
   };
 
-  // synchronous wrappers
-  unsigned apply_transaction(CollectionHandle& ch, Transaction&& t, Context *ondisk=0) {
+  int queue_transaction(CollectionHandle& ch,
+			Transaction&& t,
+			TrackedOpRef op = TrackedOpRef(),
+			ThreadPool::TPHandle *handle = NULL) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return apply_transactions(ch, tls, ondisk);
-  }
-  unsigned apply_transactions(CollectionHandle& ch, vector<Transaction>& tls, Context *ondisk=0);
-
-  int queue_transaction(CollectionHandle& ch, Transaction&& t, Context *onreadable, Context *ondisk=0,
-				Context *onreadable_sync=0,
-				TrackedOpRef op = TrackedOpRef(),
-				ThreadPool::TPHandle *handle = NULL) {
-    vector<Transaction> tls;
-    tls.push_back(std::move(t));
-    return queue_transactions(ch, tls, onreadable, ondisk, onreadable_sync,
-	                      op, handle);
-  }
-
-  int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
-			 Context *onreadable, Context *ondisk=0,
-			 Context *onreadable_sync=0,
-			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL) {
-    assert(!tls.empty());
-    tls.back().register_on_applied(onreadable);
-    tls.back().register_on_commit(ondisk);
-    tls.back().register_on_applied_sync(onreadable_sync);
     return queue_transactions(ch, tls, op, handle);
   }
 
@@ -1450,30 +1434,6 @@ public:
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
-
-  int queue_transactions(
-    CollectionHandle& ch,
-    vector<Transaction>& tls,
-    Context *onreadable,
-    Context *oncommit,
-    Context *onreadable_sync,
-    Context *oncomplete,
-    TrackedOpRef op);
-
-  int queue_transaction(
-    CollectionHandle& ch,
-    Transaction&& t,
-    Context *onreadable,
-    Context *oncommit,
-    Context *onreadable_sync,
-    Context *oncomplete,
-    TrackedOpRef op) {
-
-    vector<Transaction> tls;
-    tls.push_back(std::move(t));
-    return queue_transactions(
-      ch, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
-  }
 
  public:
   ObjectStore(CephContext* cct,

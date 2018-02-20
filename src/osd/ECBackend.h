@@ -57,10 +57,6 @@ public:
     ) override;
   friend struct SubWriteApplied;
   friend struct SubWriteCommitted;
-  void sub_write_applied(
-    ceph_tid_t tid,
-    eversion_t version,
-    const ZTracer::Trace &trace);
   void sub_write_committed(
     ceph_tid_t tid,
     eversion_t version,
@@ -70,8 +66,7 @@ public:
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace,
-    Context *on_local_applied_sync = 0
+    const ZTracer::Trace &trace
     );
   void handle_sub_read(
     pg_shard_t from,
@@ -110,8 +105,6 @@ public:
     const eversion_t &roll_forward_to,
     const vector<pg_log_entry_t> &log_entries,
     boost::optional<pg_hit_set_history_t> &hset_history,
-    Context *on_local_applied_sync,
-    Context *on_all_applied,
     Context *on_all_commit,
     ceph_tid_t tid,
     osd_reqid_t reqid,
@@ -490,8 +483,11 @@ public:
       return !remote_read.empty() && remote_read_result.empty();
     }
 
-    /// In progress write state
+    /// In progress write state.
     set<pg_shard_t> pending_commit;
+    // we need pending_apply for pre-mimic peers so that we don't issue a
+    // read on a remote shard before it has applied a previous write.  We can
+    // remove this after nautilus.
     set<pg_shard_t> pending_apply;
     bool write_in_progress() const {
       return !pending_commit.empty() || !pending_apply.empty();
@@ -504,12 +500,8 @@ public:
     ExtentCache::write_pin pin;
 
     /// Callbacks
-    Context *on_local_applied_sync = nullptr;
-    Context *on_all_applied = nullptr;
     Context *on_all_commit = nullptr;
     ~Op() {
-      delete on_local_applied_sync;
-      delete on_all_applied;
       delete on_all_commit;
     }
   };

@@ -1512,67 +1512,6 @@ void OSDService::_add_map_inc_bl(epoch_t e, bufferlist& bl)
   map_bl_inc_cache.add(e, bl);
 }
 
-void OSDService::pin_map_inc_bl(epoch_t e, bufferlist &bl)
-{
-  Mutex::Locker l(map_cache_lock);
-  // cache a contiguous buffer
-  if (bl.get_num_buffers() > 1) {
-    bl.rebuild();
-  }
-  map_bl_inc_cache.pin(e, bl);
-}
-
-void OSDService::pin_map_bl(epoch_t e, bufferlist &bl)
-{
-  Mutex::Locker l(map_cache_lock);
-  // cache a contiguous buffer
-  if (bl.get_num_buffers() > 1) {
-    bl.rebuild();
-  }
-  map_bl_cache.pin(e, bl);
-}
-
-void OSDService::clear_map_bl_cache_pins(epoch_t e)
-{
-  // do not rip cache out from under PGs who are processing maps
-  epoch_t min_pg_epoch = get_min_pg_epoch();
-  if (!min_pg_epoch) {
-    // no pgs, use latest osdmap epoch here
-    min_pg_epoch = osdmap->get_epoch();
-  }
-
-  Mutex::Locker l(map_cache_lock);
-  if (e) {
-    map_cache_pinned_epoch = e;
-  }
-  epoch_t actual;
-  if (map_cache_pinned_epoch > min_pg_epoch) {
-    dout(10) << __func__ << " adjusting pin bound " << map_cache_pinned_epoch
-	     << " -> min_pg_epoch " << min_pg_epoch
-	     << dendl;
-    actual = min_pg_epoch;
-    map_cache_pinned_low = true;
-  } else {
-    actual = map_cache_pinned_epoch;
-    if (map_cache_pinned_low) {
-      dout(10) << __func__ << " dropped min_pg_epoch adjustment, back to "
-	       << map_cache_pinned_epoch << dendl;
-      map_cache_pinned_low = false;
-    }
-  }
-  dout(20) << __func__ << " actual " << actual << dendl;
-  map_bl_inc_cache.clear_pinned(actual);
-  map_bl_cache.clear_pinned(actual);
-}
-
-void OSDService::check_map_bl_cache_pins()
-{
-  if (!map_cache_pinned_low) {
-    return;
-  }
-  clear_map_bl_cache_pins(0);
-}
-
 int OSDService::get_deleted_pool_pg_num(int64_t pool)
 {
   Mutex::Locker l(map_cache_lock);
@@ -1886,15 +1825,11 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
     ObjectStore::Transaction t;
     t.create_collection(coll_t::meta(), 0);
     t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
-    ret = store->apply_transaction(ch, std::move(t));
+    ret = store->queue_transaction(ch, std::move(t));
     if (ret) {
       derr << "OSD::mkfs: error while writing OSD_SUPERBLOCK_GOBJECT: "
-	   << "apply_transaction returned " << cpp_strerror(ret) << dendl;
+	   << "queue_transaction returned " << cpp_strerror(ret) << dendl;
       goto umount_store;
-    }
-    C_SaferCond waiter;
-    if (!ch->flush_commit(&waiter)) {
-      waiter.wait();
     }
   }
 
@@ -2653,7 +2588,7 @@ int OSD::init()
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
     ObjectStore::Transaction t;
     write_superblock(t);
-    r = store->apply_transaction(service.meta_ch, std::move(t));
+    r = store->queue_transaction(service.meta_ch, std::move(t));
     if (r < 0)
       goto out;
   }
@@ -2663,7 +2598,7 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
-    r = store->apply_transaction(service.meta_ch, std::move(t));
+    r = store->queue_transaction(service.meta_ch, std::move(t));
     if (r < 0)
       goto out;
   }
@@ -3489,7 +3424,7 @@ int OSD::shutdown()
   superblock.clean_thru = osdmap->get_epoch();
   ObjectStore::Transaction t;
   write_superblock(t);
-  int r = store->apply_transaction(service.meta_ch, std::move(t));
+  int r = store->queue_transaction(service.meta_ch, std::move(t));
   if (r) {
     derr << "OSD::shutdown: error writing superblock: "
 	 << cpp_strerror(r) << dendl;
@@ -3751,13 +3686,13 @@ void OSD::clear_temp_objects()
 	dout(20) << "  removing " << *p << " object " << *q << dendl;
 	t.remove(*p, *q);
         if (++removed > cct->_conf->osd_target_transaction_size) {
-          store->apply_transaction(service.meta_ch, std::move(t));
+          store->queue_transaction(service.meta_ch, std::move(t));
           t = ObjectStore::Transaction();
           removed = 0;
         }
       }
       if (removed) {
-        store->apply_transaction(service.meta_ch, std::move(t));
+        store->queue_transaction(service.meta_ch, std::move(t));
       }
     }
   }
@@ -3791,14 +3726,14 @@ void OSD::recursive_remove_collection(CephContext* cct,
       ceph_abort();
     t.remove(tmp, *p);
     if (removed > cct->_conf->osd_target_transaction_size) {
-      int r = store->apply_transaction(ch, std::move(t));
+      int r = store->queue_transaction(ch, std::move(t));
       assert(r == 0);
       t = ObjectStore::Transaction();
       removed = 0;
     }
   }
   t.remove_collection(tmp);
-  int r = store->apply_transaction(ch, std::move(t));
+  int r = store->queue_transaction(ch, std::move(t));
   assert(r == 0);
 
   C_SaferCond waiter;
@@ -4946,11 +4881,6 @@ void OSD::tick()
   assert(osd_lock.is_locked());
   dout(10) << "tick" << dendl;
 
-  // make sure map cache pin bound is properly adjusted (it may be set
-  // artificially low if the last maps were injested when pg map processing
-  // was behind).
-  service.check_map_bl_cache_pins();
-
   if (is_active() || is_waiting_for_healthy()) {
     maybe_update_heartbeat_peers();
   }
@@ -5102,7 +5032,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       val.append(valstr);
       newattrs[key] = val;
       t.omap_setkeys(coll_t(pgid), ghobject_t(obj), newattrs);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5114,7 +5044,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
 
       keys.insert(key);
       t.omap_rmkeys(coll_t(pgid), ghobject_t(obj), keys);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5126,7 +5056,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       cmd_getval(service->cct, cmdmap, "header", headerstr);
       newheader.append(headerstr);
       t.omap_setheader(coll_t(pgid), ghobject_t(obj), newheader);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
         ss << "error=" << r;
       else
@@ -5155,7 +5085,7 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
       int64_t trunclen;
       cmd_getval(service->cct, cmdmap, "len", trunclen);
       t.truncate(coll_t(pgid), ghobject_t(obj), trunclen);
-      r = store->apply_transaction(service->meta_ch, std::move(t));
+      r = store->queue_transaction(service->meta_ch, std::move(t));
       if (r < 0)
 	ss << "error=" << r;
       else
@@ -7087,19 +7017,6 @@ struct C_OnMapCommit : public Context {
   }
 };
 
-struct C_OnMapApply : public Context {
-  OSDService *service;
-  map<epoch_t,OSDMapRef> pinned_maps;
-  epoch_t e;
-  C_OnMapApply(OSDService *service,
-	       map<epoch_t,OSDMapRef> &&pinned_maps,
-	       epoch_t e)
-    : service(service), pinned_maps(std::move(pinned_maps)), e(e) {}
-  void finish(int r) override {
-    service->clear_map_bl_cache_pins(e);
-  }
-};
-
 void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 {
   Mutex::Locker l(osdmap_subscribe_lock);
@@ -7163,7 +7080,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   // off of disk. Otherwise these maps will probably not stay in the cache,
   // and reading those OSDMaps before they are actually written can result
   // in a crash. 
-  map<epoch_t,OSDMapRef> pinned_maps;
+  map<epoch_t,OSDMapRef> added_maps;
+  map<epoch_t,bufferlist> added_maps_bl;
   if (m->fsid != monc->get_fsid()) {
     dout(0) << "handle_osd_map fsid " << m->fsid << " != "
 	    << monc->get_fsid() << dendl;
@@ -7284,9 +7202,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
-      pin_map_bl(e, bl);
-      pinned_maps[e] = add_map(o);
-
+      added_maps[e] = add_map(o);
+      added_maps_bl[e] = bl;
       got_full_map(e);
       continue;
     }
@@ -7297,13 +7214,16 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
       ghobject_t oid = get_inc_osdmap_pobject_name(e);
       t.write(coll_t::meta(), oid, 0, bl.length(), bl);
-      pin_map_inc_bl(e, bl);
 
       OSDMap *o = new OSDMap;
       if (e > 1) {
 	bufferlist obl;
         bool got = get_map_bl(e - 1, obl);
-        assert(got);
+	if (!got) {
+	  auto p = added_maps_bl.find(e - 1);
+	  assert(p != added_maps_bl.end());
+	  obl = p->second;
+	}
 	o->decode(obl);
       }
 
@@ -7342,8 +7262,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
-      pin_map_bl(e, fbl);
-      pinned_maps[e] = add_map(o);
+      added_maps[e] = add_map(o);
+      added_maps_bl[e] = fbl;
       continue;
     }
 
@@ -7378,7 +7298,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for deleted pools
   OSDMapRef lastmap;
-  for (auto& i : pinned_maps) {
+  for (auto& i : added_maps) {
     if (!lastmap) {
       lastmap = get_map(i.first - 1);
     }
@@ -7403,11 +7323,10 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // superblock and commit
   write_superblock(t);
+  t.register_on_commit(new C_OnMapCommit(this, start, last, m));
   store->queue_transaction(
     service.meta_ch,
-    std::move(t),
-    new C_OnMapApply(&service, std::move(pinned_maps), last),
-    new C_OnMapCommit(this, start, last, m), 0);
+    std::move(t));
   service.publish_superblock(superblock);
 }
 
@@ -8234,37 +8153,24 @@ PG::RecoveryCtx OSD::create_context()
   return rctx;
 }
 
-struct C_OpenPGs : public Context {
-  set<PGRef> pgs;
-  ObjectStore *store;
-  OSD *osd;
-  C_OpenPGs(set<PGRef>& p, ObjectStore *s, OSD* o) : store(s), osd(o) {
-    pgs.swap(p);
-  }
-  void finish(int r) override {
-    RWLock::RLocker l(osd->pg_map_lock);
-    for (auto p : pgs) {
-      if (osd->pg_map.count(p->get_pgid())) {
-        p->ch = store->open_collection(p->coll);
-        assert(p->ch);
-      }
-    }
-  }
-};
-
 void OSD::dispatch_context_transaction(PG::RecoveryCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction->empty()) {
-    if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
-    }
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL,
-      TrackedOpRef(), handle);
-    delete (ctx.transaction);
+      std::move(*ctx.transaction), TrackedOpRef(), handle);
     assert(tr == 0);
+    delete (ctx.transaction);
+    for (auto pg : ctx.created_pgs) {
+      pg->ch = store->open_collection(pg->coll);
+      assert(pg->ch);
+    }
+    ctx.created_pgs.clear();
     ctx.transaction = new ObjectStore::Transaction;
     ctx.on_applied = new C_Contexts(cct);
     ctx.on_safe = new C_Contexts(cct);
@@ -8292,13 +8198,19 @@ void OSD::dispatch_context(PG::RecoveryCtx &ctx, PG *pg, OSDMapRef curmap,
     delete ctx.on_safe;
     assert(ctx.created_pgs.empty());
   } else {
-    if (!ctx.created_pgs.empty()) {
-      ctx.on_applied->add(new C_OpenPGs(ctx.created_pgs, store, this));
-    }
+    if (ctx.on_applied)
+      ctx.transaction->register_on_applied(ctx.on_applied);
+    if (ctx.on_safe)
+      ctx.transaction->register_on_commit(ctx.on_safe);
     int tr = store->queue_transaction(
       pg->ch,
-      std::move(*ctx.transaction), ctx.on_applied, ctx.on_safe, NULL, TrackedOpRef(),
+      std::move(*ctx.transaction), TrackedOpRef(),
       handle);
+    for (auto pg : ctx.created_pgs) {
+      pg->ch = store->open_collection(pg->coll);
+      assert(pg->ch);
+    }
+    ctx.created_pgs.clear();
     delete (ctx.transaction);
     assert(tr == 0);
   }
