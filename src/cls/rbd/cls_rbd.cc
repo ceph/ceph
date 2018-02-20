@@ -520,15 +520,15 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   bufferlist featuresbl;
   bufferlist object_prefixbl;
   bufferlist snap_seqbl;
-  bufferlist create_timestampbl;
+  bufferlist timestampbl;
   uint64_t snap_seq = 0;
-  utime_t create_timestamp = ceph_clock_now();
+  utime_t timestamp = ceph_clock_now();
   encode(size, sizebl);
   encode(order, orderbl);
   encode(features, featuresbl);
   encode(object_prefix, object_prefixbl);
   encode(snap_seq, snap_seqbl);
-  encode(create_timestamp, create_timestampbl);
+  encode(timestamp, timestampbl);
 
   map<string, bufferlist> omap_vals;
   omap_vals["size"] = sizebl;
@@ -536,7 +536,9 @@ int create(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   omap_vals["features"] = featuresbl;
   omap_vals["object_prefix"] = object_prefixbl;
   omap_vals["snap_seq"] = snap_seqbl;
-  omap_vals["create_timestamp"] = create_timestampbl;
+  omap_vals["create_timestamp"] = timestampbl;
+  omap_vals["access_timestamp"] = timestampbl;
+  omap_vals["modify_timestamp"] = timestampbl;
 
   if ((features & RBD_FEATURE_OPERATIONS) != 0ULL) {
     CLS_ERR("Attempting to set internal feature: operations");
@@ -1092,6 +1094,81 @@ int get_create_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *
   encode(timestamp, *out);
   return 0;
 }
+
+/**
+ * get the image access timestamp
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @param timestamp the image access timestamp
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int get_access_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "get_access_timestamp");
+
+  utime_t timestamp;
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, "access_timestamp", &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading access_timestamp: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    try {
+      auto it = bl.cbegin();
+      decode(timestamp, it);
+    } catch (const buffer::error &err) {
+      CLS_ERR("could not decode access_timestamp");
+      return -EIO;
+    }
+  }
+
+  encode(timestamp, *out);
+  return 0;
+}
+
+/**
+ * get the image modify timestamp
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @param timestamp the image modify timestamp
+ *
+ * @returns 0 on success, negative error code upon failure
+ */
+int get_modify_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "get_modify_timestamp");
+
+  utime_t timestamp;
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, "modify_timestamp", &bl);
+  if (r < 0) {
+    if (r != -ENOENT) {
+      CLS_ERR("error reading modify_timestamp: %s", cpp_strerror(r).c_str());
+      return r;
+    }
+  } else {
+    try {
+      auto it = bl.cbegin();
+      decode(timestamp, it);
+    } catch (const buffer::error &err) {
+      CLS_ERR("could not decode modify_timestamp");
+      return -EIO;
+    }
+  }
+
+  encode(timestamp, *out);
+  return 0;
+}
+
 
 /**
  * get the image flags
@@ -2392,6 +2469,59 @@ int set_id(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   encode(id, write_bl);
   return cls_cxx_write(hctx, 0, write_bl.length(), &write_bl);
 }
+
+/**
+ * Update the access timestamp of an image
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on other error
+ */
+int set_access_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+   int r = check_exists(hctx);
+   if(r < 0)
+     return r;
+   
+   utime_t timestamp = ceph_clock_now();
+   r = write_key(hctx, "access_timestamp", timestamp);
+   if(r < 0) {
+     CLS_ERR("error setting access_timestamp");
+     return r;
+   }
+
+   return 0;
+}
+
+/**
+ * Update the modify timestamp of an image
+ *
+ * Input:
+ * @param none
+ *
+ * Output:
+ * @returns 0 on success, negative error code on other error
+ */
+
+int set_modify_timestamp(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+   int r = check_exists(hctx);
+   if(r < 0)
+     return r;
+   
+   utime_t timestamp = ceph_clock_now();
+   r = write_key(hctx, "modify_timestamp", timestamp);
+   if(r < 0) {
+     CLS_ERR("error setting modify_timestamp");
+     return r;
+   }
+
+   return 0;
+}
+
+
 
 /*********************** methods for rbd_directory ***********************/
 
@@ -6651,6 +6781,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_get_stripe_unit_count;
   cls_method_handle_t h_set_stripe_unit_count;
   cls_method_handle_t h_get_create_timestamp;
+  cls_method_handle_t h_get_access_timestamp;
+  cls_method_handle_t h_get_modify_timestamp;
   cls_method_handle_t h_get_flags;
   cls_method_handle_t h_set_flags;
   cls_method_handle_t h_op_features_get;
@@ -6673,6 +6805,8 @@ CLS_INIT(rbd)
   cls_method_handle_t h_copyup;
   cls_method_handle_t h_get_id;
   cls_method_handle_t h_set_id;
+  cls_method_handle_t h_set_modify_timestamp;
+  cls_method_handle_t h_set_access_timestamp;
   cls_method_handle_t h_dir_get_id;
   cls_method_handle_t h_dir_get_name;
   cls_method_handle_t h_dir_list;
@@ -6828,6 +6962,12 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "get_create_timestamp",
                           CLS_METHOD_RD,
                           get_create_timestamp, &h_get_create_timestamp);
+  cls_register_cxx_method(h_class, "get_access_timestamp",
+                          CLS_METHOD_RD,
+                          get_access_timestamp, &h_get_access_timestamp);
+  cls_register_cxx_method(h_class, "get_modify_timestamp",
+                          CLS_METHOD_RD,
+                          get_modify_timestamp, &h_get_modify_timestamp);
   cls_register_cxx_method(h_class, "get_flags",
                           CLS_METHOD_RD,
                           get_flags, &h_get_flags);
@@ -6882,6 +7022,14 @@ CLS_INIT(rbd)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           assert_snapc_seq,
                           &h_assert_snapc_seq);
+
+  cls_register_cxx_method(h_class, "set_modify_timestamp",
+	            	  CLS_METHOD_RD | CLS_METHOD_WR,
+                          set_modify_timestamp, &h_set_modify_timestamp);
+
+  cls_register_cxx_method(h_class, "set_access_timestamp",
+	            	  CLS_METHOD_RD | CLS_METHOD_WR,
+                          set_access_timestamp, &h_set_access_timestamp);
 
   /* methods for the rbd_children object */
   cls_register_cxx_method(h_class, "add_child",

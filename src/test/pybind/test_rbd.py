@@ -384,6 +384,16 @@ class TestImage(object):
         assert_not_equal(0, timestamp.year)
         assert_not_equal(1970, timestamp.year)
 
+    def test_access_timestamp(self):
+        timestamp = self.image.access_timestamp()
+        assert_not_equal(0, timestamp.year)
+        assert_not_equal(1970, timestamp.year)
+
+    def test_modify_timestamp(self):
+        timestamp = self.image.modify_timestamp()
+        assert_not_equal(0, timestamp.year)
+        assert_not_equal(1970, timestamp.year)
+
     def test_invalidate_cache(self):
         self.image.write(b'abc', 0)
         eq(b'abc', self.image.read(0, 3))
