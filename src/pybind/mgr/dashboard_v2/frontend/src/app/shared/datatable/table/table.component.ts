@@ -120,6 +120,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   }
 
   reloadData() {
+    if (this.loadingIndicator) {
+      return;
+    }
     this.loadingIndicator = true;
     this.fetchData.emit();
   }
