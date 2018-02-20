@@ -2200,4 +2200,22 @@ public:
   virtual uint32_t op_mask() { return RGW_OP_TYPE_WRITE; }
 };
 
+class RGWGetClusterStat : public RGWOp {
+protected:
+  struct rados_cluster_stat_t stats_op;
+public:
+  RGWGetClusterStat() {}
+
+  void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
+    RGWOp::init(store, s, h);
+  }
+  int verify_permission() override {return 0;}
+  virtual void send_response() = 0;
+  virtual int get_params() = 0;
+  void execute() override;
+  virtual const string name() { return "get_cluster_stat"; }
+};
+
+
+
 #endif /* CEPH_RGW_OP_H */
