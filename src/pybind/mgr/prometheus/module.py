@@ -56,6 +56,10 @@ DF_POOL = ['max_avail', 'bytes_used', 'raw_bytes_used', 'objects', 'dirty',
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
              'norecover', 'noscrub', 'nodeep-scrub')
 
+FS_METADATA = ('data_pools', 'id', 'metadata_pool', 'name')
+
+MDS_METADATA = ('id', 'fs', 'public_addr', 'rank')
+
 MON_METADATA = ('id', 'public_addr', 'rank')
 
 OSD_METADATA = ('cluster_addr', 'device_class', 'id', 'public_addr')
@@ -118,6 +122,18 @@ class Metrics(object):
             'mon_quorum_status',
             'Monitors in quorum',
             ('ceph_daemon',)
+        )
+        metrics['fs_metadata'] = Metric(
+            'untyped',
+            'fs_metadata',
+            'FS Metadata',
+            FS_METADATA
+        )
+        metrics['mds_metadata'] = Metric(
+            'untyped',
+            'mds_metadata',
+            'MDS Metadata',
+            MDS_METADATA
         )
         metrics['mon_metadata'] = Metric(
             'untyped',
@@ -308,6 +324,21 @@ class Module(MgrModule):
                                     pool['stats'][stat],
                                     (pool['id'],))
 
+    def get_fs(self):
+        fs_map = self.get('fs_map')
+        active_daemons = []
+        for fs in fs_map['filesystems']:
+            # collect fs metadata
+            data_pools = ",".join([str(pool) for pool in fs['mdsmap']['data_pools']])
+            self.metrics.append('fs_metadata', 1,
+                                (data_pools,
+                                 fs['id'],
+                                 fs['mdsmap']['metadata_pool'],
+                                 fs['mdsmap']['fs_name']))
+            for gid, daemon in fs['mdsmap']['info'].items():
+                self.metrics.append('mds_metadata', 1,
+                                    (daemon['name'], fs['id'], daemon['addr'], daemon['rank']))
+
     def get_quorum_status(self):
         mon_status = json.loads(self.get('mon_status')['json'])
         for mon in mon_status['monmap']['mons']:
@@ -413,6 +444,7 @@ class Module(MgrModule):
     def collect(self):
         self.get_health()
         self.get_df()
+        self.get_fs()
         self.get_osd_stats()
         self.get_quorum_status()
         self.get_metadata_and_osd_status()
