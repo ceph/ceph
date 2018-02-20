@@ -5307,7 +5307,7 @@ int OSDMonitor::normalize_profile(const string& profilename,
   auto it = profile.find("stripe_unit");
   if (it != profile.end()) {
     string err_str;
-    uint32_t stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+    uint32_t stripe_unit = strict_iecstrtoll(it->second.c_str(), &err_str);
     if (!err_str.empty()) {
       *ss << "could not parse stripe_unit '" << it->second
 	  << "': " << err_str << std::endl;
@@ -5581,7 +5581,7 @@ int OSDMonitor::prepare_pool_stripe_width(const unsigned pool_type,
       auto it = profile.find("stripe_unit");
       if (it != profile.end()) {
 	string err_str;
-	stripe_unit = strict_si_cast<uint32_t>(it->second.c_str(), &err_str);
+	stripe_unit = strict_iecstrtoll(it->second.c_str(), &err_str);
 	assert(err_str.empty());
       }
       *stripe_width = data_chunks *
@@ -10950,11 +10950,18 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // val could contain unit designations, so we treat as a string
     string val;
     cmd_getval(cct, cmdmap, "val", val);
-    stringstream tss;
-    int64_t value = unit_to_bytesize(val, &tss);
-    if (value < 0) {
-      ss << "error parsing value '" << value << "': " << tss.str();
-      err = value;
+    string tss;
+    int64_t value;
+    if (field == "max_objects") {
+      value = strict_sistrtoll(val.c_str(), &tss);
+    } else if (field == "max_bytes") {
+      value = strict_iecstrtoll(val.c_str(), &tss);
+    } else {
+      assert(0 == "unrecognized option");
+    }
+    if (!tss.empty()) {
+      ss << "error parsing value '" << val << "': " << tss;
+      err = -EINVAL;
       goto reply;
     }
 
