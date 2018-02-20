@@ -59,6 +59,10 @@ trap finish TERM HUP INT
 
 PATH=$(pwd)/bin:$PATH
 
+# add /sbin and /usr/sbin to PATH to find sysctl in those cases where the
+# user's PATH does not get these directories by default (e.g., tumbleweed)
+PATH=$PATH:/sbin:/usr/sbin
+
 # TODO: Use getops
 dryrun=false
 if [[ "$1" = "--dry-run" ]]; then
