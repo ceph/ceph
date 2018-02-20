@@ -1617,6 +1617,14 @@ void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
 
 void OSDService::finish_pg_delete(PG *pg, unsigned old_pg_num)
 {
+  // update pg count now since we might not get an osdmap any time soon.
+  if (pg->is_primary())
+    logger->dec(l_osd_pg_primary);
+  else if (pg->is_replica())
+    logger->dec(l_osd_pg_replica);
+  else
+    logger->dec(l_osd_pg_stray);
+
   osd->unregister_pg(pg);
   for (auto shard : osd->shards) {
     shard->unprime_split_children(pg->pg_id, old_pg_num);
