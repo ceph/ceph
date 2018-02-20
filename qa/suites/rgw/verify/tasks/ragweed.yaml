@@ -1,4 +1,7 @@
 tasks:
+- rgw:
+    client.0:
+      valgrind: [--tool=memcheck]
 - ragweed:
     client.0:
       default-branch: ceph-master
