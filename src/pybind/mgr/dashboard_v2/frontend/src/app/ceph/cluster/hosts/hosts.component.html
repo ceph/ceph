@@ -7,9 +7,6 @@
 <cd-table [data]="hosts"
           [columns]="columns"
           columnMode="flex"
-          [toolHeader]="false"
-          [footer]="false"
-          [limit]="0"
           (fetchData)="getHosts()">
   <ng-template #servicesTpl let-value="value">
     <span *ngFor="let service of value; last as isLast">
