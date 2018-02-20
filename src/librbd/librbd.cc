@@ -15,7 +15,6 @@
 
 #include <errno.h>
 
-#include "cls/rbd/cls_rbd_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "common/TracepointProvider.h"
