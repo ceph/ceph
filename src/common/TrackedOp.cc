@@ -36,9 +36,10 @@ void OpHistory::insert(utime_t now, TrackedOpRef op)
   Mutex::Locker history_lock(ops_history_lock);
   if (shutdown)
     return;
-  duration.insert(make_pair(op->get_duration(), op));
+  double opduration = op->get_duration();
+  duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
-  if (op->get_duration() >= history_slow_op_threshold)
+  if (opduration >= history_slow_op_threshold)
     slow_op.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
 }
