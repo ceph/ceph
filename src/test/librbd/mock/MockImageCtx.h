@@ -61,6 +61,7 @@ struct MockImageCtx {
       owner_lock(image_ctx.owner_lock),
       md_lock(image_ctx.md_lock),
       snap_lock(image_ctx.snap_lock),
+      timestamp_lock(image_ctx.timestamp_lock),
       parent_lock(image_ctx.parent_lock),
       object_map_lock(image_ctx.object_map_lock),
       async_ops_lock(image_ctx.async_ops_lock),
@@ -112,7 +113,9 @@ struct MockImageCtx {
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
       enable_alloc_hint(image_ctx.enable_alloc_hint),
-      ignore_migrating(image_ctx.ignore_migrating)
+      ignore_migrating(image_ctx.ignore_migrating),
+      mtime_update_interval(image_ctx.mtime_update_interval),
+      atime_update_interval(image_ctx.atime_update_interval)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -176,6 +179,13 @@ struct MockImageCtx {
                                             bool *is_protected));
   MOCK_CONST_METHOD2(is_snap_unprotected, int(librados::snap_t in_snap_id,
                                               bool *is_unprotected));
+
+  MOCK_CONST_METHOD0(get_create_timestamp, utime_t());
+  MOCK_CONST_METHOD0(get_access_timestamp, utime_t());
+  MOCK_CONST_METHOD0(get_modify_timestamp, utime_t());
+
+  MOCK_METHOD1(set_access_timestamp, void(const utime_t at));
+  MOCK_METHOD1(set_modify_timestamp, void(const utime_t at));
 
   MOCK_METHOD8(add_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			      std::string in_snap_name,
@@ -247,6 +257,7 @@ struct MockImageCtx {
   RWLock &owner_lock;
   RWLock &md_lock;
   RWLock &snap_lock;
+  RWLock &timestamp_lock;
   RWLock &parent_lock;
   RWLock &object_map_lock;
   Mutex &async_ops_lock;
@@ -319,6 +330,9 @@ struct MockImageCtx {
   bool blkin_trace_all;
   bool enable_alloc_hint;
   bool ignore_migrating;
+  uint64_t mtime_update_interval;
+  uint64_t atime_update_interval;
+  bool cache;
 };
 
 } // namespace librbd
