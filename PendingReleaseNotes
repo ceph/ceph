@@ -57,12 +57,6 @@
 * The -f option of the rados tool now means "--format" instead of "--force",
   for consistency with the ceph tool.
 
->= 12.2.2
+>= 12.2.3
 ---------
 
-- *CephFS*:
-
-  * The CephFS client now catches failures to clear dentries during startup
-    and refuses to start as consistency and untrimmable cache issues may
-    develop. The new option client_die_on_failed_dentry_invalidate (default:
-    true) may be turned off to allow the client to proceed (dangerous!).
