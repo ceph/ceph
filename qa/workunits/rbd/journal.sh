@@ -13,7 +13,7 @@ function list_tests()
 
 function usage()
 {
-  echo "usage: $0 [-h|-l|-t <testname> [-t <testname>...] [--no-sanity-check] [--no-cleanup]]"
+  echo "usage: $0 [-h|-l|-t <testname> [-t <testname>...] [--no-cleanup]]"
 }
 
 function expect_false()
@@ -273,7 +273,6 @@ TESTS+=" rbd_feature"
 
 tests_to_run=()
 
-sanity_check=true
 cleanup=true
 
 while [[ $# -gt 0 ]]; do
@@ -282,9 +281,6 @@ while [[ $# -gt 0 ]]; do
     case "$opt" in
 	"-l" )
 	    do_list=1
-	    ;;
-	"--no-sanity-check" )
-	    sanity_check=false
 	    ;;
 	"--no-cleanup" )
 	    cleanup=false
@@ -322,15 +318,9 @@ if test -z "$tests_to_run" ; then
 fi
 
 for i in $tests_to_run; do
-    if $sanity_check ; then
-	wait_for_clean
-    fi
     set -x
     test_${i}
     set +x
 done
-if $sanity_check ; then
-    wait_for_clean
-fi
 
 echo OK
