@@ -48,9 +48,8 @@ ImageCache::Extent image_extent(BlockExtent block_extent)
 namespace rwl {
 
 SyncPoint::SyncPoint(CephContext *cct, uint64_t sync_gen_num)
-  : m_cct(cct), m_sync_gen_num(sync_gen_num),
-    m_prior_log_entries_persisted_status(0), m_on_sync_point_persisted(NULL) {
-  m_prior_log_entries_persisted = new C_Gather(cct, NULL);
+  : m_cct(cct), m_sync_gen_num(sync_gen_num) {
+  m_prior_log_entries_persisted = new C_Gather(cct, nullptr);
   ldout(cct, 6) << "sync point" << m_sync_gen_num << dendl;
   /* TODO: Connect m_prior_log_entries_persisted finisher to append this
      sync point and on persist complete call on_sync_point_persisted
@@ -315,7 +314,7 @@ struct C_BlockIORequest : public Context {
   CephContext *m_cct;
   C_BlockIORequest *next_block_request;
 
-  C_BlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
+  C_BlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request = nullptr)
     : m_cct(cct), next_block_request(next_block_request) {
     ldout(m_cct, 99) << this << dendl;
   }
@@ -326,7 +325,7 @@ struct C_BlockIORequest : public Context {
   virtual void finish(int r) override {
     ldout(m_cct, 20) << "(" << get_name() << "): r=" << r << dendl;
 
-    if (NULL != next_block_request) {
+    if (next_block_request) {
       if (r < 0) {
 	// abort the chain of requests upon failure
 	next_block_request->complete(r);
@@ -348,14 +347,10 @@ struct C_BlockIORequest : public Context {
 struct C_GuardedBlockIORequest : public C_BlockIORequest {
 private:
   CephContext *m_cct;
-  BlockGuardCell* m_cell;
+  BlockGuardCell* m_cell = nullptr;
 public:
-  C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request)
-    : C_BlockIORequest(cct, next_block_request), m_cct(cct), m_cell(NULL) {
-    ldout(m_cct, 99) << this << dendl;
-  }
-  C_GuardedBlockIORequest(CephContext *cct)
-    : C_BlockIORequest(cct, NULL), m_cct(cct), m_cell(NULL) {
+  C_GuardedBlockIORequest(CephContext *cct, C_BlockIORequest *next_block_request = nullptr)
+    : C_BlockIORequest(cct, next_block_request), m_cct(cct) {
     ldout(m_cct, 99) << this << dendl;
   }
   ~C_GuardedBlockIORequest() {
@@ -368,7 +363,7 @@ public:
   virtual const char *get_name() const = 0;
   void set_cell(BlockGuardCell *cell) {
     ldout(m_cct, 20) << this << dendl;
-    assert(NULL != cell);
+    assert(cell);
     m_cell = cell;
   }
   BlockGuardCell *get_cell(void) {
@@ -390,7 +385,7 @@ ReplicatedWriteLog<I>::ReplicatedWriteLog(ImageCtx &image_ctx, StackingImageCach
     m_log_append_finisher(image_ctx.cct),
     m_on_persist_finisher(image_ctx.cct),
     m_blocks_to_log_entries(image_ctx.cct) {
-  assert(NULL != lower);
+  assert(lower);
   m_persist_finisher.start();
   m_log_append_finisher.start();
   m_on_persist_finisher.start();
@@ -438,10 +433,8 @@ public:
 struct ImageExtentBuf : public ImageCache::Extent {
 public:
   buffer::raw *m_buf;
-  ImageExtentBuf(ImageCache::Extent extent, buffer::raw *buf)
+  ImageExtentBuf(ImageCache::Extent extent, buffer::raw *buf = nullptr)
     : ImageCache::Extent(extent), m_buf(buf) {}
-  ImageExtentBuf(ImageCache::Extent extent)
-    : ImageExtentBuf(extent, NULL) {}
 };
 typedef std::vector<ImageExtentBuf> ImageExtentBufs;
 
@@ -472,7 +465,7 @@ struct C_ReadRequest : public Context {
        */
       uint64_t miss_bl_offset = 0;
       for (auto &extent : m_read_extents) {
-	if (NULL == extent.m_buf) {
+	if (extent.m_buf) {
 	  /* This was a miss. */
 	  bufferlist miss_extent_bl;
 	  miss_extent_bl.substr_of(m_miss_bl, miss_bl_offset, extent.second);
@@ -667,15 +660,14 @@ struct C_WriteRequest : public C_GuardedBlockIORequest {
   bufferlist bl;
   int fadvise_flags;
   Context *user_req; /* User write request */
-  Context *_on_finish; /* Block guard release */
-  std::atomic<bool> m_user_req_completed;
+  Context *_on_finish = nullptr; /* Block guard release */
+  std::atomic<bool> m_user_req_completed = {false};
   ExtentsSummary<ImageCache::Extents> m_image_extents_summary;
   C_WriteRequest(CephContext *cct, ImageCache::Extents &&image_extents,
 		 bufferlist&& bl, int fadvise_flags, Context *user_req)
     : C_GuardedBlockIORequest(cct), m_cct(cct), m_image_extents(std::move(image_extents)),
       bl(std::move(bl)), fadvise_flags(fadvise_flags),
-      user_req(user_req), _on_finish(NULL), m_user_req_completed(false),
-      m_image_extents_summary(m_image_extents) {
+      user_req(user_req), m_image_extents_summary(m_image_extents) {
     ldout(m_cct, 99) << this << dendl;
   }
 
@@ -943,7 +935,7 @@ void ReplicatedWriteLog<I>::complete_write_req(C_WriteRequest *write_req, int re
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 6) << "write_req=" << write_req << dendl;
   ldout(cct, 6) << "write_req=" << write_req << " cell=" << write_req->get_cell() << dendl;
-  assert(NULL != write_req->get_cell());
+  assert(write_req->get_cell());
   release_guarded_request(write_req->get_cell());
 }
 
@@ -1091,7 +1083,7 @@ void ReplicatedWriteLog<I>::aio_write(Extents &&image_extents,
       CephContext *cct = m_image_ctx.cct;
       ldout(cct, 6) << "write_req=" << write_req << " cell=" << cell << dendl;
 
-      assert(NULL != cell);
+      assert(cell);
       write_req->set_cell(cell);
 
       /* TODO: Defer write_req until log resources available */
@@ -1278,15 +1270,14 @@ void ReplicatedWriteLog<I>::new_sync_point(void) {
 
   assert(m_lock.is_locked_by_me());
 
-  if (NULL != old_sync_point) {
-    new_sync_point = new SyncPoint(cct, ++m_current_sync_gen);
-  } else {
-    /* First sync point - don't advance gen number */
-    new_sync_point = new SyncPoint(cct, m_current_sync_gen);
+  if (old_sync_point) {
+    /* Advance the sync gen num unless this is the first sync point */
+    ++m_current_sync_gen;
   }
+  new_sync_point = new SyncPoint(cct, m_current_sync_gen);
   m_current_sync_point = new_sync_point;
   
-  if (NULL != old_sync_point) {
+  if (old_sync_point) {
     old_sync_point->m_final_op_sequence_num = m_last_op_sequence_num;
     /* Append of new sync point deferred until this sync point is persisted */
     old_sync_point->m_on_sync_point_persisted = m_current_sync_point->m_prior_log_entries_persisted->new_sub();
@@ -1302,7 +1293,7 @@ void ReplicatedWriteLog<I>::new_sync_point(void) {
 	  append_sync_point(new_sync_point, r);
 	}));
   
-  if (NULL != old_sync_point) {
+  if (old_sync_point) {
     ldout(cct,6) << "new sync point = [" << m_current_sync_point
 		 << "], prior = [" << old_sync_point << "]" << dendl;
   } else {
@@ -1463,7 +1454,7 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
             ctx->complete(r);
           });
       }
-      if (NULL != m_log_pool) {
+      if (m_log_pool) {
 	pmemobj_close(m_log_pool);
 	r = -errno;
       }

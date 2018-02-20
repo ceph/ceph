@@ -116,8 +116,8 @@ struct WriteLogPoolRoot {
 class WriteLogEntry {
 public:
   WriteLogPmemEntry ram_entry;
-  WriteLogPmemEntry *pmem_entry = NULL;
-  uint8_t *pmem_buffer = NULL;
+  WriteLogPmemEntry *pmem_entry = nullptr;
+  uint8_t *pmem_buffer = nullptr;
   uint32_t log_entry_index = 0;
   uint32_t referring_map_entries = 0;
   uint32_t reader_count = 0;
@@ -155,7 +155,7 @@ class SyncPoint {
 public:
   CephContext *m_cct;
   const uint64_t m_sync_gen_num;
-  uint64_t m_final_op_sequence_num;
+  uint64_t m_final_op_sequence_num = 0;
   /* A sync point can't appear in the log until all the writes bearing
    * it and all the prior sync points have been appended and
    * persisted.
@@ -164,11 +164,11 @@ public:
    * be sub-ops of this Gather. This sync point will not be appended
    * until all these complete. */
   C_Gather *m_prior_log_entries_persisted;
-  int m_prior_log_entries_persisted_status;
+  int m_prior_log_entries_persisted_status = 0;
   /* Signal this when this sync point is appended and persisted. This
    * is a sub-operation of the next sync point's
    * m_prior_log_entries_persisted Gather. */
-  Context *m_on_sync_point_persisted;
+  Context *m_on_sync_point_persisted = nullptr;
   
   SyncPoint(CephContext *cct, uint64_t sync_gen_num);
   ~SyncPoint();
@@ -278,17 +278,12 @@ struct WriteLogMapEntry {
   BlockExtent block_extent;
   WriteLogEntry *log_entry;
   
-  WriteLogMapEntry(BlockExtent block_extent, WriteLogEntry *log_entry)
+  WriteLogMapEntry(BlockExtent block_extent = BlockExtent(0, 0),
+		   WriteLogEntry *log_entry = nullptr)
     : block_extent(block_extent) , log_entry(log_entry) {
-  }
-  WriteLogMapEntry(BlockExtent block_extent)
-    : block_extent(block_extent) , log_entry(NULL) {
   }
   WriteLogMapEntry(WriteLogEntry *log_entry)
     : block_extent(log_entry->block_extent()) , log_entry(log_entry) {
-  }
-  WriteLogMapEntry(void)
-    : block_extent(0, 0) , log_entry(NULL) {
   }
   friend std::ostream &operator<<(std::ostream &os,
 				  WriteLogMapEntry &e) {
@@ -358,7 +353,7 @@ private:
 		   WriteLogMapEntryCompare> BlockExtentToWriteLogMapEntries;
 
   WriteLogMapEntry block_extent_to_map_key(BlockExtent &block_extent) {
-    return WriteLogMapEntry(block_extent, NULL);
+    return WriteLogMapEntry(block_extent);
   }
 
   CephContext *m_cct;
@@ -421,7 +416,7 @@ private:
   ImageCtxT &m_image_ctx;
 
   std::string m_log_pool_name;
-  PMEMobjpool *m_log_pool = NULL;
+  PMEMobjpool *m_log_pool = nullptr;
   uint64_t m_log_pool_size;
   
   uint32_t m_total_log_entries = 0;
@@ -440,7 +435,7 @@ private:
 
   /* Starts at 0 for a new write log. Incremented on every flush. */
   uint64_t m_current_sync_gen = 0;
-  SyncPoint *m_current_sync_point = NULL;
+  SyncPoint *m_current_sync_point = nullptr;
   /* Starts at 0 on each sync gen increase. Incremented before applied
      to an operation */
   uint64_t m_last_op_sequence_num = 0;
