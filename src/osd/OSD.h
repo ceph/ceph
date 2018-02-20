@@ -1064,7 +1064,14 @@ struct OSDShard {
   string sdata_op_ordering_lock_name;
   Mutex sdata_op_ordering_lock;   ///< protects all members below
 
+  string osdmap_lock_name;
+  Mutex osdmap_lock;
   OSDMapRef osdmap;
+
+  OSDMapRef get_osdmap() {
+    Mutex::Locker l(osdmap_lock);
+    return osdmap;
+  }
 
   /// map of slots for each spg_t.  maintains ordering of items dequeued
   /// from pqueue while _process thread drops shard lock to acquire the
@@ -1141,6 +1148,8 @@ struct OSDShard {
       sdata_op_ordering_lock_name(shard_name + "::sdata_op_ordering_lock"),
       sdata_op_ordering_lock(sdata_op_ordering_lock_name.c_str(), false, true,
 			     false, cct),
+      osdmap_lock_name(shard_name + "::osdmap_lock"),
+      osdmap_lock(osdmap_lock_name.c_str(), false, false) {
     if (opqueue == io_queue::weightedpriority) {
       pqueue = std::make_unique<
 	WeightedPriorityQueue<OpQueueItem,uint64_t>>(
