@@ -761,7 +761,7 @@ map<pg_shard_t, ScrubMap *>::const_iterator
   inconsistent_obj_wrapper &object_error)
 {
   eversion_t auth_version;
-  bufferlist first_bl;
+  bufferlist first_oi_bl, first_ss_bl;
 
   // Create list of shards with primary first so it will be auth copy all
   // other things being equal.
@@ -826,6 +826,12 @@ map<pg_shard_t, ScrubMap *>::const_iterator
         try {
 	  bufferlist::iterator bliter = ss_bl.begin();
 	  decode(ss, bliter);
+	  if (first_ss_bl.length() == 0) {
+	    first_ss_bl.append(ss_bl);
+	  } else if (!object_error.has_snapset_inconsistency() && !ss_bl.contents_equal(first_ss_bl)) {
+	    object_error.set_snapset_inconsistency();
+	    error_string += " snapset_inconsistency";
+	  }
         } catch (...) {
 	  // invalid snapset, probably corrupt
 	  shard_info.set_ss_attr_corrupted();
@@ -855,9 +861,9 @@ map<pg_shard_t, ScrubMap *>::const_iterator
     // This is automatically corrected in PG::_repair_oinfo_oid()
     assert(oi.soid == obj);
 
-    if (first_bl.length() == 0) {
-      first_bl.append(bl);
-    } else if (!object_error.has_object_info_inconsistency() && !bl.contents_equal(first_bl)) {
+    if (first_oi_bl.length() == 0) {
+      first_oi_bl.append(bl);
+    } else if (!object_error.has_object_info_inconsistency() && !bl.contents_equal(first_oi_bl)) {
       object_error.set_object_info_inconsistency();
       error_string += " object_info_inconsistency";
     }
