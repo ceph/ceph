@@ -151,10 +151,11 @@ struct obj_err_t {
     SIZE_MISMATCH        = 1 << 6,
     ATTR_VALUE_MISMATCH  = 1 << 7,
     ATTR_NAME_MISMATCH    = 1 << 8,
+    SNAPSET_INCONSISTENCY   = 1 << 9,
     // When adding more here add to either SHALLOW_ERRORS or DEEP_ERRORS
   };
   uint64_t errors = 0;
-  static constexpr uint64_t SHALLOW_ERRORS = OBJECT_INFO_INCONSISTENCY|SIZE_MISMATCH|ATTR_VALUE_MISMATCH|ATTR_NAME_MISMATCH;
+  static constexpr uint64_t SHALLOW_ERRORS = OBJECT_INFO_INCONSISTENCY|SIZE_MISMATCH|ATTR_VALUE_MISMATCH|ATTR_NAME_MISMATCH|SNAPSET_INCONSISTENCY;
   static constexpr uint64_t DEEP_ERRORS = DATA_DIGEST_MISMATCH|OMAP_DIGEST_MISMATCH;
   bool has_object_info_inconsistency() const {
     return errors & OBJECT_INFO_INCONSISTENCY;
@@ -179,6 +180,9 @@ struct obj_err_t {
   }
   bool has_deep_errors() const {
     return errors & DEEP_ERRORS;
+  }
+  bool has_snapset_inconsistency() const {
+    return errors & SNAPSET_INCONSISTENCY;
   }
 };
 
