@@ -6547,6 +6547,8 @@ void PG::_delete_some()
     // cancel reserver here, since the PG is about to get deleted and the
     // exit() methods don't run when that happens.
     osd->local_reserver.cancel_reservation(info.pgid);
+
+    osd->logger->dec(l_osd_pg_removing);
   }
 }
 
@@ -8448,6 +8450,8 @@ void PG::RecoveryState::ToDelete::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  // note: on a successful removal, this path doesn't execute. see
+  // _delete_some().
   pg->osd->logger->dec(l_osd_pg_removing);
   pg->osd->local_reserver.cancel_reservation(pg->info.pgid);
 }
