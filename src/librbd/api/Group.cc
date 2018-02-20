@@ -938,6 +938,8 @@ int Group<I>::snap_rename(librados::IoCtx& group_ioctx, const char *group_name,
                           const char *old_snap_name,
                           const char *new_snap_name) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
+  if (0 == strcmp(old_snap_name, new_snap_name))
+    return -EEXIST;
 
   std::string group_id;
   int r = cls_client::dir_get_id(&group_ioctx, RBD_GROUP_DIRECTORY,
