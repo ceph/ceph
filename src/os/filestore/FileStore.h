@@ -221,6 +221,7 @@ private:
     uint64_t ops, bytes;
     TrackedOpRef osd_op;
     ZTracer::Trace trace;
+    bool registered_apply = false;
   };
   class OpSequencer : public CollectionImpl {
     CephContext *cct;
@@ -230,6 +231,8 @@ private:
     list<pair<uint64_t, Context*> > flush_commit_waiters;
     Cond cond;
     string osr_name_str;
+    /// hash of pointers to ghobject_t's for in-flight writes
+    unordered_multimap<uint32_t,const ghobject_t*> applying;
   public:
     Mutex apply_lock;  // for apply mutual exclusion
     int id;
@@ -284,9 +287,10 @@ private:
       }
     }
 
-    void queue_journal(uint64_t s) {
+    void queue_journal(Op *o) {
       Mutex::Locker l(qlock);
-      jq.push_back(s);
+      jq.push_back(o->op);
+      _register_apply(o);
     }
     void dequeue_journal(list<Context*> *to_queue) {
       Mutex::Locker l(qlock);
@@ -297,8 +301,12 @@ private:
     void queue(Op *o) {
       Mutex::Locker l(qlock);
       q.push_back(o);
+      _register_apply(o);
       o->trace.keyval("queue depth", q.size());
     }
+    void _register_apply(Op *o);
+    void _unregister_apply(Op *o);
+    void wait_for_apply(const ghobject_t& oid);
     Op *peek_queue() {
       Mutex::Locker l(qlock);
       assert(apply_lock.is_locked());
@@ -312,7 +320,7 @@ private:
       Op *o = q.front();
       q.pop_front();
       cond.Signal();
-
+      _unregister_apply(o);
       _wake_flush_waiters(to_queue);
       return o;
     }
@@ -726,9 +734,7 @@ public:
   int omap_check_keys(CollectionHandle& c, const ghobject_t &oid, const set<string> &keys,
 		      set<string> *out) override;
   using ObjectStore::get_omap_iterator;
-  ObjectMap::ObjectMapIterator get_omap_iterator(CollectionHandle& c, const ghobject_t &oid) override {
-    return get_omap_iterator(c->cid, oid);
-  }
+  ObjectMap::ObjectMapIterator get_omap_iterator(CollectionHandle& c, const ghobject_t &oid) override;
   ObjectMap::ObjectMapIterator get_omap_iterator(const coll_t& cid, const ghobject_t &oid);
 
   int _create_collection(const coll_t& c, int bits,

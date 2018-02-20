@@ -37,7 +37,7 @@ void TestObjectStoreState::init(int colls, int objs)
   ObjectStore::Transaction t;
   auto meta_ch = m_store->create_new_collection(coll_t::meta());
   t.create_collection(coll_t::meta(), 0);
-  m_store->apply_transaction(meta_ch, std::move(t));
+  m_store->queue_transaction(meta_ch, std::move(t));
 
   wait_for_ready();
 

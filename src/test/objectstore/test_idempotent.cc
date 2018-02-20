@@ -79,7 +79,7 @@ int main(int argc, char **argv) {
     assert(!store->mount());
     ch = store->create_new_collection(coll);
     t.create_collection(coll, 0);
-    store->apply_transaction(ch, std::move(t));
+    store->queue_transaction(ch, std::move(t));
   } else {
     assert(!store->mount());
     ch = store->open_collection(coll);
