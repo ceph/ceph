@@ -766,6 +766,7 @@ class ObjectStoreTool:
         self.pool = pool
         self.osd = kwargs.get('osd', None)
         self.object_name = kwargs.get('object_name', None)
+        self.do_revive = kwargs.get('do_revive', True)
         if self.osd and self.pool and self.object_name:
             if self.osd == "primary":
                 self.osd = self.manager.get_object_primary(self.pool,
@@ -818,7 +819,9 @@ class ObjectStoreTool:
                 error = proc.stdout.getvalue() + " " + proc.stderr.getvalue()
                 raise Exception(error)
         finally:
-            self.manager.revive_osd(self.osd)
+            if self.do_revive:
+                self.manager.revive_osd(self.osd)
+                self.manager.wait_till_osd_is_up(self.osd, 300)
 
 
 class CephManager:
