@@ -1928,15 +1928,10 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   // initialize shards
   num_shards = get_num_op_shards();
   for (uint32_t i = 0; i < num_shards; i++) {
-    char lock_name[128] = {0};
-    snprintf(lock_name, sizeof(lock_name), "OSDShard.%d::sdata_lock", i);
-    char order_lock[128] = {0};
-    snprintf(order_lock, sizeof(order_lock), "OSDShard.%d::sdata_op_ordering_lock", i);
     OSDShard *one_shard = new OSDShard(
       i,
       cct,
       this,
-      lock_name, order_lock,
       cct->_conf->osd_op_pq_max_tokens_per_priority,
       cct->_conf->osd_op_pq_min_cost,
       op_queue);
