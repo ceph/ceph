@@ -332,7 +332,7 @@ public:
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
-      events.push_back(Event(initiated_at, "initiated"));
+      events.emplace_back(initiated_at, "initiated");
       state = STATE_LIVE;
     }
   }

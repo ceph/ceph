@@ -434,7 +434,7 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
 
   {
     Mutex::Locker l(lock);
-    events.push_back(Event(stamp, event));
+    events.emplace_back(stamp, event);
     current = events.back().c_str();
   }
   dout(6) << " seq: " << seq
@@ -452,7 +452,7 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
 
   {
     Mutex::Locker l(lock);
-    events.push_back(Event(stamp, event));
+    events.emplace_back(stamp, event);
     current = event;
   }
   dout(6) << " seq: " << seq
