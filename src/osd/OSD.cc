@@ -8796,7 +8796,7 @@ void OSD::dequeue_peering_evt(
   ThreadPool::TPHandle& handle)
 {
   PG::RecoveryCtx rctx = create_context();
-  auto curmap = sdata->osdmap;
+  auto curmap = sdata->get_osdmap();
   epoch_t need_up_thru = 0, same_interval_since = 0;
   if (!pg) {
     if (const MQuery *q = dynamic_cast<const MQuery*>(evt->evt.get())) {
@@ -9281,8 +9281,12 @@ void OSDShard::consume_map(
   set<spg_t> *new_children)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
-  OSDMapRef old_osdmap = std::move(osdmap);
-  osdmap = new_osdmap;
+  OSDMapRef old_osdmap;
+  {
+    Mutex::Locker l(osdmap_lock);
+    old_osdmap = std::move(osdmap);
+    osdmap = new_osdmap;
+  }
   dout(10) << new_osdmap->get_epoch()
            << " (was " << (old_osdmap ? old_osdmap->get_epoch() : 0) << ")"
 	   << dendl;
