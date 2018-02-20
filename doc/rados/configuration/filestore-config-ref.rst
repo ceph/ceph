@@ -257,13 +257,26 @@ Misc
 
 ``filestore split multiple``
 
-:Description:  ``filestore_split_multiple * abs(filestore_merge_threshold) * 16`` 
+:Description:  ``(filestore_split_multiple * abs(filestore_merge_threshold) + (rand() % filestore_split_rand_factor)) * 16``
                is the maximum number of files in a subdirectory before 
                splitting into child directories.
 
 :Type: Integer
 :Required: No
 :Default: ``2``
+
+
+``filestore split rand factor``
+
+:Description:  A random factor added to the split threshold to avoid
+               too many filestore splits occurring at once. See
+               ``filestore split multiple`` for details.
+               This can only be changed for an existing osd offline,
+               via ceph-objectstore-tool's apply-layout-settings command.
+
+:Type: Unsigned 32-bit Integer
+:Required: No
+:Default: ``20``
 
 
 ``filestore update to``
