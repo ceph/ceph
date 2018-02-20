@@ -2063,7 +2063,7 @@ void ReplicatedPG::do_op(OpRequestRef& op)
 	}
 
 	ObjectContextRef sobc = get_object_context(clone_oid, false);
-	if (!sobc) {
+	if (!sobc || !sobc->obs.exists) {
 	  if (!maybe_handle_cache(op, write_ordered, sobc, -ENOENT, clone_oid, true))
 	    osd->reply_op_error(op, -ENOENT);
 	  return;
