@@ -1251,7 +1251,7 @@ def get_conf_with_default(cluster, variable):
     except subprocess.CalledProcessError as e:
         raise Error(
             'getting variable from configuration failed',
-            e,
+            e, e.output,
         )
 
     value = str(out).split('\n', 1)[0]
