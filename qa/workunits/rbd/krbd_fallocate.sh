@@ -89,6 +89,11 @@ IMAGE_ID="$(rbd info --format=json $IMAGE_NAME |
 
 DEV=$(sudo rbd map $IMAGE_NAME)
 
+# make sure -ENOENT is hidden
+assert_deallocated
+py_blkdiscard 0
+assert_deallocated
+
 # blkdev_issue_discard
 allocate
 py_blkdiscard 0
