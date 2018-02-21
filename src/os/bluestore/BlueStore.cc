@@ -5011,6 +5011,18 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
+void BlueStore::_dump_alloc_on_rebalance_failure()
+{
+  auto dump_interval =
+    cct->_conf->bluestore_bluefs_balance_failure_dump_interval;
+  if (dump_interval > 0 &&
+    next_dump_on_bluefs_balance_failure <= ceph_clock_now()) {
+    alloc->dump();
+    next_dump_on_bluefs_balance_failure = ceph_clock_now();
+    next_dump_on_bluefs_balance_failure += dump_interval;
+  }
+}
+
 int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 {
   int ret = 0;
@@ -5098,18 +5110,18 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 					0, 0, extents);
 
     if (alloc_len <= 0) {
-      dout(1) << __func__ << " no allocate on 0x" << std::hex << gift
+      dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
               << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
       alloc->unreserve(gift);
-      alloc->dump();
+      _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
-      dout(1) << __func__ << " insufficient allocate on 0x" << std::hex << gift
+      dout(0) << __func__ << " insufficient allocate on 0x" << std::hex << gift
               << " min_alloc_size 0x" << min_alloc_size 
 	      << " allocated 0x" << alloc_len
 	      << std::dec << dendl;
       alloc->unreserve(gift - alloc_len);
-      alloc->dump();
+      _dump_alloc_on_rebalance_failure();
     }
     for (auto& e : *extents) {
       dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
