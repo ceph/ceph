@@ -12,7 +12,7 @@
  *
  */
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/debug.h"
 #include "common/errno.h"
@@ -2001,7 +2001,7 @@ protected:
 public:
   C_MDS_Send_Command_Reply(MDSRank *_mds, MCommand *_m) :
     MDSInternalContext(_mds), m(_m) { m->get(); }
-  void send (int r, std::string_view out_str) {
+  void send (int r, boost::string_view out_str) {
     bufferlist bl;
     MDSDaemon::send_command_reply(m, mds, r, bl, out_str);
     m->put();
@@ -2097,7 +2097,7 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
   f->close_section(); //sessions
 }
 
-void MDSRank::command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec)
+void MDSRank::command_scrub_path(Formatter *f, boost::string_view path, vector<string>& scrubop_vec)
 {
   bool force = false;
   bool recursive = false;
@@ -2120,7 +2120,7 @@ void MDSRank::command_scrub_path(Formatter *f, std::string_view path, vector<str
 }
 
 void MDSRank::command_tag_path(Formatter *f,
-    std::string_view path, std::string_view tag)
+    boost::string_view path, boost::string_view tag)
 {
   C_SaferCond scond;
   {
@@ -2130,7 +2130,7 @@ void MDSRank::command_tag_path(Formatter *f,
   scond.wait();
 }
 
-void MDSRank::command_flush_path(Formatter *f, std::string_view path)
+void MDSRank::command_flush_path(Formatter *f, boost::string_view path)
 {
   C_SaferCond scond;
   {
@@ -2308,7 +2308,7 @@ void MDSRank::command_get_subtrees(Formatter *f)
 
 
 void MDSRank::command_export_dir(Formatter *f,
-    std::string_view path,
+    boost::string_view path,
     mds_rank_t target)
 {
   int r = _command_export_dir(path, target);
@@ -2318,7 +2318,7 @@ void MDSRank::command_export_dir(Formatter *f,
 }
 
 int MDSRank::_command_export_dir(
-    std::string_view path,
+    boost::string_view path,
     mds_rank_t target)
 {
   Mutex::Locker l(mds_lock);

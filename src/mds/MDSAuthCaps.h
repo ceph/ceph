@@ -18,7 +18,7 @@
 
 #include <sstream>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 #include <vector>
 
 #include "include/types.h"
@@ -93,7 +93,7 @@ struct MDSCapMatch {
   }
 
   // check whether this grant matches against a given file and caller uid:gid
-  bool match(std::string_view target_path,
+  bool match(boost::string_view target_path,
 	     const int caller_uid,
 	     const int caller_gid,
 	     const vector<uint64_t> *caller_gid_list) const;
@@ -104,7 +104,7 @@ struct MDSCapMatch {
    *
    * @param target_path filesystem path without leading '/'
    */
-  bool match_path(std::string_view target_path) const;
+  bool match_path(boost::string_view target_path) const;
 };
 
 struct MDSCapGrant {
@@ -130,14 +130,14 @@ public:
     : cct(NULL), grants(grants_) { }
 
   void set_allow_all();
-  bool parse(CephContext *cct, std::string_view str, std::ostream *err);
+  bool parse(CephContext *cct, boost::string_view str, std::ostream *err);
 
   bool allow_all() const;
-  bool is_capable(std::string_view inode_path,
+  bool is_capable(boost::string_view inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, const vector<uint64_t> *caller_gid_list,
 		  unsigned mask, uid_t new_uid, gid_t new_gid) const;
-  bool path_capable(std::string_view inode_path) const;
+  bool path_capable(boost::string_view inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

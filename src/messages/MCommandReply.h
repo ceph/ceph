@@ -15,7 +15,7 @@
 #ifndef CEPH_MCOMMANDREPLY_H
 #define CEPH_MCOMMANDREPLY_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "msg/Message.h"
 #include "MCommand.h"
@@ -31,7 +31,7 @@ class MCommandReply : public Message {
     : Message(MSG_COMMAND_REPLY), r(_r) {
     header.tid = m->get_tid();
   }
-  MCommandReply(int _r, std::string_view s)
+  MCommandReply(int _r, boost::string_view s)
     : Message(MSG_COMMAND_REPLY),
       r(_r), rs(s) { }
 private:

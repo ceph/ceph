@@ -18,7 +18,7 @@
 #define CEPH_CDENTRY_H
 
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 #include <set>
 
 #include "include/counter.h"
@@ -102,7 +102,7 @@ public:
   static const unsigned EXPORT_NONCE = 1;
 
 
-  CDentry(std::string_view n, __u32 h,
+  CDentry(boost::string_view n, __u32 h,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
@@ -111,7 +111,7 @@ public:
     versionlock(this, &versionlock_type),
     name(n)
   {}
-  CDentry(std::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
+  CDentry(boost::string_view n, __u32 h, inodeno_t ino, unsigned char dt,
 	  snapid_t f, snapid_t l) :
     hash(h),
     first(f), last(l),
@@ -149,7 +149,7 @@ public:
 
   const CDir *get_dir() const { return dir; }
   CDir *get_dir() { return dir; }
-  std::string_view get_name() const { return std::string_view(name); }
+  boost::string_view get_name() const { return boost::string_view(name); }
 
   __u32 get_hash() const { return hash; }
 

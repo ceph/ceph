@@ -44,7 +44,7 @@ static int dout_wrapper(lua_State *L)
   return 0;
 }
 
-int Mantle::balance(std::string_view script,
+int Mantle::balance(boost::string_view script,
                     mds_rank_t whoami,
                     const std::vector<std::map<std::string, double>> &metrics,
                     std::map<mds_rank_t, double> &my_targets)

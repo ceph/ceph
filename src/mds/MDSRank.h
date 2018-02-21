@@ -15,7 +15,7 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
@@ -416,14 +416,14 @@ class MDSRank {
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
-    void command_tag_path(Formatter *f, std::string_view path,
-                          std::string_view tag);
-    void command_flush_path(Formatter *f, std::string_view path);
+    void command_scrub_path(Formatter *f, boost::string_view path, vector<string>& scrubop_vec);
+    void command_tag_path(Formatter *f, boost::string_view path,
+                          boost::string_view tag);
+    void command_flush_path(Formatter *f, boost::string_view path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
-        std::string_view path, mds_rank_t dest);
+        boost::string_view path, mds_rank_t dest);
     bool command_dirfrag_split(
         cmdmap_t cmdmap,
         std::ostream &ss);
@@ -434,7 +434,7 @@ class MDSRank {
         cmdmap_t cmdmap,
         std::ostream &ss,
         Formatter *f);
-    int _command_export_dir(std::string_view path, mds_rank_t dest);
+    int _command_export_dir(boost::string_view path, mds_rank_t dest);
     int _command_flush_journal(std::stringstream *ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,

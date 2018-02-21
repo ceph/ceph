@@ -192,13 +192,15 @@ void Capability::generate_test_instances(list<Capability*>& ls)
   ls.back()->_wanted = 14;
   ls.back()->_pending = 15;
   {
-    auto &r = ls.back()->_revokes.emplace_back();
+    ls.back()->_revokes.emplace_back();
+    auto &r = ls.back()->_revokes.back();
     r.before = 16;
     r.seq = 17;
     r.last_issue = 18;
   }
   {
-    auto &r = ls.back()->_revokes.emplace_back();
+    ls.back()->_revokes.emplace_back();
+    auto &r = ls.back()->_revokes.back();
     r.before = 19;
     r.seq = 20;
     r.last_issue = 21;

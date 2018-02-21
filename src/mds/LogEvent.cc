@@ -119,7 +119,7 @@ const std::map<std::string, LogEvent::EventType> LogEvent::types = {
  *
  * Return -1 if not found
  */
-LogEvent::EventType LogEvent::str_to_type(std::string_view str)
+LogEvent::EventType LogEvent::str_to_type(boost::string_view str)
 {
   return LogEvent::types.at(std::string(str));
 }

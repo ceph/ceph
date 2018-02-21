@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_EMETABLOB_H
 #define CEPH_MDS_EMETABLOB_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include <stdlib.h>
 
@@ -80,9 +80,9 @@ public:
     fullbit(const fullbit& o);
     const fullbit& operator=(const fullbit& o);
 
-    fullbit(std::string_view d, snapid_t df, snapid_t dl, 
+    fullbit(boost::string_view d, snapid_t df, snapid_t dl, 
 	    version_t v, const CInode::mempool_inode& i, const fragtree_t &dft,
-	    const CInode::mempool_xattr_map &xa, std::string_view sym,
+	    const CInode::mempool_xattr_map &xa, boost::string_view sym,
 	    snapid_t os, const bufferlist &sbl, __u8 st,
 	    const CInode::mempool_old_inode_map *oi = NULL) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), inode(i), xattrs(xa),
@@ -145,7 +145,7 @@ public:
     unsigned char d_type;
     bool dirty;
 
-    remotebit(std::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
+    remotebit(boost::string_view d, snapid_t df, snapid_t dl, version_t v, inodeno_t i, unsigned char dt, bool dr) : 
       dn(d), dnfirst(df), dnlast(dl), dnv(v), ino(i), d_type(dt), dirty(dr) { }
     explicit remotebit(bufferlist::iterator &p) { decode(p); }
     remotebit(): dnfirst(0), dnlast(0), dnv(0), ino(0),
@@ -172,7 +172,7 @@ public:
     version_t dnv;
     bool dirty;
 
-    nullbit(std::string_view d, snapid_t df, snapid_t dl, version_t v, bool dr) :
+    nullbit(boost::string_view d, snapid_t df, snapid_t dl, version_t v, bool dr) :
       dn(d), dnfirst(df), dnlast(dl), dnv(v), dirty(dr) { }
     explicit nullbit(bufferlist::iterator &p) { decode(p); }
     nullbit(): dnfirst(0), dnlast(0), dnv(0), dirty(false) {}

@@ -12,7 +12,7 @@
  * 
  */
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "snap.h"
 
@@ -68,7 +68,7 @@ ostream& operator<<(ostream& out, const SnapInfo &sn)
 	     << "' " << sn.stamp << ")";
 }
 
-std::string_view SnapInfo::get_long_name()
+boost::string_view SnapInfo::get_long_name()
 {
   if (long_name.length() == 0) {
     char nm[80];

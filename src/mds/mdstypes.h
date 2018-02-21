@@ -9,7 +9,7 @@
 #include <ostream>
 #include <set>
 #include <map>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/config.h"
 #include "common/Clock.h"
@@ -758,7 +758,7 @@ void inode_t<Allocator>::decode(bufferlist::iterator &p)
   if (struct_v >= 12) {
     std::string tmp;
     ::decode(tmp, p);
-    stray_prior_path = std::string_view(tmp);
+    stray_prior_path = boost::string_view(tmp);
   }
 
   if (struct_v >= 13) {
@@ -1093,10 +1093,10 @@ WRITE_CLASS_ENCODER_FEATURES(session_info_t)
 
 struct dentry_key_t {
   snapid_t snapid = 0;
-  std::string_view name;
+  boost::string_view name;
   __u32 hash = 0;
   dentry_key_t() {}
-  dentry_key_t(snapid_t s, std::string_view n, __u32 h=0) :
+  dentry_key_t(snapid_t s, boost::string_view n, __u32 h=0) :
     snapid(s), name(n), hash(h) {}
 
   bool is_valid() { return name.length() || snapid; }
@@ -1125,10 +1125,10 @@ struct dentry_key_t {
     ::decode(key, bl);
     decode_helper(key, nm, sn);
   }
-  static void decode_helper(std::string_view key, string& nm, snapid_t& sn) {
+  static void decode_helper(boost::string_view key, string& nm, snapid_t& sn) {
     size_t i = key.find_last_of('_');
     assert(i != string::npos);
-    if (key.compare(i+1, std::string_view::npos, "head") == 0) {
+    if (key.compare(i+1, boost::string_view::npos, "head") == 0) {
       // name_head
       sn = CEPH_NOSNAP;
     } else {
@@ -1138,7 +1138,7 @@ struct dentry_key_t {
       sscanf(x_str.c_str(), "%llx", &x);
       sn = x;
     }  
-    nm = key.substr(0, i);
+    nm = std::string(key.substr(0, i));
   }
 };
 
@@ -1169,7 +1169,7 @@ struct string_snap_t {
   string name;
   snapid_t snapid;
   string_snap_t() {}
-  string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
+  string_snap_t(boost::string_view n, snapid_t s) : name(n), snapid(s) {}
   string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
 
   void encode(bufferlist& bl) const;
@@ -1269,7 +1269,7 @@ struct cap_reconnect_t {
     memset(&capinfo, 0, sizeof(capinfo));
     snap_follows = 0;
   }
-  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, std::string_view p, int w, int i,
+  cap_reconnect_t(uint64_t cap_id, inodeno_t pino, boost::string_view p, int w, int i,
 		  inodeno_t sr, snapid_t sf, bufferlist& lb) :
     path(p) {
     capinfo.cap_id = cap_id;

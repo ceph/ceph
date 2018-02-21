@@ -15,7 +15,7 @@
 #ifndef CEPH_MMDSBEACON_H
 #define CEPH_MMDSBEACON_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "messages/PaxosServiceMessage.h"
 
@@ -140,7 +140,7 @@ struct MDSHealthMetric
   }
 
   MDSHealthMetric() : type(MDS_HEALTH_NULL), sev(HEALTH_OK) {}
-  MDSHealthMetric(mds_metric_t type_, health_status_t sev_, std::string_view message_)
+  MDSHealthMetric(mds_metric_t type_, health_status_t sev_, boost::string_view message_)
     : type(type_), sev(sev_), message(message_) {}
 };
 WRITE_CLASS_ENCODER(MDSHealthMetric)

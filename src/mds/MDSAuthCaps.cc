@@ -12,7 +12,7 @@
  * 
  */
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include <errno.h>
 #include <fcntl.h>
@@ -109,7 +109,7 @@ void MDSCapMatch::normalize_path()
   // drop ..
 }
 
-bool MDSCapMatch::match(std::string_view target_path,
+bool MDSCapMatch::match(boost::string_view target_path,
 			const int caller_uid,
 			const int caller_gid,
 			const vector<uint64_t> *caller_gid_list) const
@@ -141,7 +141,7 @@ bool MDSCapMatch::match(std::string_view target_path,
   return true;
 }
 
-bool MDSCapMatch::match_path(std::string_view target_path) const
+bool MDSCapMatch::match_path(boost::string_view target_path) const
 {
   if (path.length()) {
     if (target_path.find(path) != 0)
@@ -161,7 +161,7 @@ bool MDSCapMatch::match_path(std::string_view target_path) const
  * Is the client *potentially* able to access this path?  Actual
  * permission will depend on uids/modes in the full is_capable.
  */
-bool MDSAuthCaps::path_capable(std::string_view inode_path) const
+bool MDSAuthCaps::path_capable(boost::string_view inode_path) const
 {
   for (const auto &i : grants) {
     if (i.match.match_path(inode_path)) {
@@ -179,7 +179,7 @@ bool MDSAuthCaps::path_capable(std::string_view inode_path) const
  * This is true if any of the 'grant' clauses in the capability match the
  * requested path + op.
  */
-bool MDSAuthCaps::is_capable(std::string_view inode_path,
+bool MDSAuthCaps::is_capable(boost::string_view inode_path,
 			     uid_t inode_uid, gid_t inode_gid,
 			     unsigned inode_mode,
 			     uid_t caller_uid, gid_t caller_gid,
@@ -279,7 +279,7 @@ void MDSAuthCaps::set_allow_all()
                        MDSCapMatch()));
 }
 
-bool MDSAuthCaps::parse(CephContext *c, std::string_view str, ostream *err)
+bool MDSAuthCaps::parse(CephContext *c, boost::string_view str, ostream *err)
 {
   // Special case for legacy caps
   if (str == "allow") {

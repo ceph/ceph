@@ -15,7 +15,7 @@
 #ifndef CEPH_MDS_H
 #define CEPH_MDS_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/LogClient.h"
 #include "common/Mutex.h"
@@ -65,7 +65,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   MDSRankDispatcher *mds_rank;
 
  public:
-  MDSDaemon(std::string_view n, Messenger *m, MonClient *mc);
+  MDSDaemon(boost::string_view n, Messenger *m, MonClient *mc);
   ~MDSDaemon() override;
   int orig_argc;
   const char **orig_argv;
@@ -143,7 +143,7 @@ protected:
   // special message types
   friend class C_MDS_Send_Command_Reply;
   static void send_command_reply(MCommand *m, MDSRank* mds_rank, int r,
-				 bufferlist outbl, std::string_view outs);
+				 bufferlist outbl, boost::string_view outs);
   int _handle_command(
       const cmdmap_t &cmdmap,
       MCommand *m,

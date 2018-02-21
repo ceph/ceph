@@ -986,20 +986,20 @@ void EMetaBlob::get_paths(
 
     for (list<ceph::shared_ptr<fullbit> >::const_iterator
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
-      std::string_view dentry = (*iter)->dn;
+      boost::string_view dentry = (*iter)->dn;
       children[dir_ino].emplace_back(dentry);
       ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
     }
 
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string_view dentry = iter->dn;
+      boost::string_view dentry = iter->dn;
       children[dir_ino].emplace_back(dentry);
     }
 
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string_view dentry = iter->dn;
+      boost::string_view dentry = iter->dn;
       children[dir_ino].emplace_back(dentry);
     }
   }
@@ -1029,14 +1029,14 @@ void EMetaBlob::get_paths(
     list<nullbit> const &nb_list = dl.get_dnull();
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
-      std::string_view dentry = iter->dn;
+      boost::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
 
     list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
-      std::string_view dentry = iter->dn;
+      boost::string_view dentry = iter->dn;
       leaf_locations.push_back(Location(dir_ino, dentry));
     }
   }

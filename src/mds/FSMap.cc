@@ -225,7 +225,7 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 }
 
 
-void FSMap::create_filesystem(std::string_view name,
+void FSMap::create_filesystem(boost::string_view name,
                               int64_t metadata_pool, int64_t data_pool,
                               uint64_t features)
 {
@@ -650,7 +650,7 @@ void Filesystem::decode(bufferlist::iterator& p)
 }
 
 int FSMap::parse_filesystem(
-      std::string_view ns_str,
+      boost::string_view ns_str,
       std::shared_ptr<const Filesystem> *result
       ) const
 {
@@ -678,7 +678,7 @@ void Filesystem::print(std::ostream &out) const
   mds_map.print(out);
 }
 
-mds_gid_t FSMap::find_standby_for(mds_role_t role, std::string_view name) const
+mds_gid_t FSMap::find_standby_for(mds_role_t role, boost::string_view name) const
 {
   mds_gid_t result = MDS_GID_NONE;
 
@@ -753,7 +753,7 @@ mds_gid_t FSMap::find_unused_for(mds_role_t role,
   return MDS_GID_NONE;
 }
 
-mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name,
+mds_gid_t FSMap::find_replacement_for(mds_role_t role, boost::string_view name,
                                bool force_standby_active) const {
   const mds_gid_t standby = find_standby_for(role, name);
   if (standby)
@@ -1003,7 +1003,7 @@ std::list<mds_gid_t> FSMap::stop(mds_gid_t who)
  * if legacy_client_ns is set.
  */
 int FSMap::parse_role(
-    std::string_view role_str,
+    boost::string_view role_str,
     mds_role_t *role,
     std::ostream &ss) const
 {

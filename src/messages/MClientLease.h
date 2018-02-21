@@ -16,7 +16,7 @@
 #ifndef CEPH_MCLIENTLEASE_H
 #define CEPH_MCLIENTLEASE_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "msg/Message.h"
 
@@ -42,7 +42,7 @@ struct MClientLease : public Message {
     h.last = sl;
     h.duration_ms = 0;
   }
-  MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, std::string_view d) :
+  MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, boost::string_view d) :
     Message(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;

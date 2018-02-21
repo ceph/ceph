@@ -19,7 +19,7 @@
 #include <map>
 #include <set>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include <errno.h>
 
@@ -200,7 +200,7 @@ public:
   /**
    * Resolve daemon name to GID
    */
-  mds_gid_t find_mds_gid_by_name(std::string_view s) const
+  mds_gid_t find_mds_gid_by_name(boost::string_view s) const
   {
     const auto info = get_mds_info();
     for (const auto &p : info) {
@@ -214,7 +214,7 @@ public:
   /**
    * Resolve daemon name to status
    */
-  const MDSMap::mds_info_t* find_by_name(std::string_view name) const
+  const MDSMap::mds_info_t* find_by_name(boost::string_view name) const
   {
     std::map<mds_gid_t, MDSMap::mds_info_t> result;
     for (const auto &i : standby_daemons) {
@@ -305,7 +305,7 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  void create_filesystem(std::string_view name,
+  void create_filesystem(boost::string_view name,
                          int64_t metadata_pool, int64_t data_pool,
                          uint64_t features);
 
@@ -420,7 +420,7 @@ public:
   bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
   std::shared_ptr<const Filesystem> get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
   std::shared_ptr<const Filesystem> get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
-  std::shared_ptr<const Filesystem> get_filesystem(std::string_view name) const
+  std::shared_ptr<const Filesystem> get_filesystem(boost::string_view name) const
   {
     for (const auto &i : filesystems) {
       if (i.second->mds_map.fs_name == name) {
@@ -439,12 +439,12 @@ public:
     }
 
   int parse_filesystem(
-      std::string_view ns_str,
+      boost::string_view ns_str,
       std::shared_ptr<const Filesystem> *result
       ) const;
 
   int parse_role(
-      std::string_view role_str,
+      boost::string_view role_str,
       mds_role_t *role,
       std::ostream &ss) const;
 
@@ -461,11 +461,11 @@ public:
     return false;
   }
 
-  mds_gid_t find_standby_for(mds_role_t mds, std::string_view name) const;
+  mds_gid_t find_standby_for(mds_role_t mds, boost::string_view name) const;
 
   mds_gid_t find_unused_for(mds_role_t mds, bool force_standby_active) const;
 
-  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name,
+  mds_gid_t find_replacement_for(mds_role_t mds, boost::string_view name,
                                  bool force_standby_active) const;
 
   void get_health(list<pair<health_status_t,std::string> >& summary,

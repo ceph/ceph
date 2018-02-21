@@ -12,7 +12,7 @@
  * 
  */
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "include/types.h"
 
@@ -289,7 +289,7 @@ bool CDir::check_rstats(bool scrub)
   return good;
 }
 
-CDentry *CDir::lookup(std::string_view name, snapid_t snap)
+CDentry *CDir::lookup(boost::string_view name, snapid_t snap)
 { 
   dout(20) << "lookup (" << snap << ", '" << name << "')" << dendl;
   auto iter = items.lower_bound(dentry_key_t(snap, name, inode->hash_dentry_name(name)));
@@ -305,7 +305,7 @@ CDentry *CDir::lookup(std::string_view name, snapid_t snap)
   return 0;
 }
 
-CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
+CDentry *CDir::lookup_exact_snap(boost::string_view name, snapid_t last) {
   auto p = items.find(dentry_key_t(last, name, inode->hash_dentry_name(name)));
   if (p == items.end())
     return NULL;
@@ -316,7 +316,7 @@ CDentry *CDir::lookup_exact_snap(std::string_view name, snapid_t last) {
  * linking fun
  */
 
-CDentry* CDir::add_null_dentry(std::string_view dname,
+CDentry* CDir::add_null_dentry(boost::string_view dname,
 			       snapid_t first, snapid_t last)
 {
   // foreign
@@ -359,7 +359,7 @@ CDentry* CDir::add_null_dentry(std::string_view dname,
 }
 
 
-CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
+CDentry* CDir::add_primary_dentry(boost::string_view dname, CInode *in,
 				  snapid_t first, snapid_t last) 
 {
   // primary
@@ -409,7 +409,7 @@ CDentry* CDir::add_primary_dentry(std::string_view dname, CInode *in,
   return dn;
 }
 
-CDentry* CDir::add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
+CDentry* CDir::add_remote_dentry(boost::string_view dname, inodeno_t ino, unsigned char d_type,
 				 snapid_t first, snapid_t last) 
 {
   // foreign
@@ -677,7 +677,7 @@ void CDir::add_to_bloom(CDentry *dn)
   bloom->insert(dn->get_name().data(), dn->get_name().size());
 }
 
-bool CDir::is_in_bloom(std::string_view name)
+bool CDir::is_in_bloom(boost::string_view name)
 {
   if (!bloom)
     return false;
@@ -1218,7 +1218,7 @@ void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blo
  * WAITING
  */
 
-void CDir::add_dentry_waiter(std::string_view dname, snapid_t snapid, MDSInternalContextBase *c) 
+void CDir::add_dentry_waiter(boost::string_view dname, snapid_t snapid, MDSInternalContextBase *c) 
 {
   if (waiting_on_dentry.empty())
     get(PIN_DNWAITER);
@@ -1228,7 +1228,7 @@ void CDir::add_dentry_waiter(std::string_view dname, snapid_t snapid, MDSInterna
 	   << " " << c << " on " << *this << dendl;
 }
 
-void CDir::take_dentry_waiting(std::string_view dname, snapid_t first, snapid_t last,
+void CDir::take_dentry_waiting(boost::string_view dname, snapid_t first, snapid_t last,
 			       list<MDSInternalContextBase*>& ls)
 {
   if (waiting_on_dentry.empty())
@@ -1463,7 +1463,7 @@ void CDir::fetch(MDSInternalContextBase *c, bool ignore_authpinnability)
   return fetch(c, want, ignore_authpinnability);
 }
 
-void CDir::fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability)
+void CDir::fetch(MDSInternalContextBase *c, boost::string_view want_dn, bool ignore_authpinnability)
 {
   dout(10) << "fetch on " << *this << dendl;
   
@@ -1652,8 +1652,8 @@ void CDir::_omap_fetch_more(
 }
 
 CDentry *CDir::_load_dentry(
-    std::string_view key,
-    std::string_view dname,
+    boost::string_view key,
+    boost::string_view dname,
     const snapid_t last,
     bufferlist &bl,
     const int pos,
@@ -2013,7 +2013,7 @@ void CDir::_go_bad()
   finish_waiting(WAIT_COMPLETE, -EIO);
 }
 
-void CDir::go_bad_dentry(snapid_t last, std::string_view dname)
+void CDir::go_bad_dentry(snapid_t last, boost::string_view dname)
 {
   dout(10) << __func__ << " " << dname << dendl;
   std::string path(get_path());

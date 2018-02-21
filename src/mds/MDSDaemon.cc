@@ -70,7 +70,7 @@
 #define dout_prefix *_dout << "mds." << name << ' '
 
 // cons/des
-MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
+MDSDaemon::MDSDaemon(boost::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
   mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
@@ -554,7 +554,7 @@ void MDSDaemon::tick()
 
 void MDSDaemon::send_command_reply(MCommand *m, MDSRank *mds_rank,
 				   int r, bufferlist outbl,
-				   std::string_view outs)
+				   boost::string_view outs)
 {
   Session *session = static_cast<Session *>(m->get_connection()->get_priv());
   assert(session != NULL);

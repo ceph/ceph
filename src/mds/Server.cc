@@ -61,7 +61,7 @@
 
 #include <list>
 #include <iostream>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 using namespace std;
 
 #include "common/config.h"
@@ -2463,7 +2463,7 @@ bool Server::check_fragment_space(MDRequestRef &mdr, CDir *in)
  * verify that the dir exists and would own the dname.
  * do not check if the dentry exists.
  */
-CDir *Server::validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname)
+CDir *Server::validate_dentry_dir(MDRequestRef& mdr, CInode *diri, boost::string_view dname)
 {
   // make sure parent is a dir?
   if (!diri->is_dir()) {
@@ -2493,7 +2493,7 @@ CDir *Server::validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_v
  * prepare a null (or existing) dentry in given dir. 
  * wait for any dn lock.
  */
-CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist)
+CDentry* Server::prepare_null_dentry(MDRequestRef& mdr, CDir *dir, boost::string_view dname, bool okexist)
 {
   dout(10) << "prepare_null_dentry " << dname << " in " << *dir << dendl;
   assert(dir->is_auth());
@@ -2891,7 +2891,7 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   }
 
   // make a null dentry?
-  std::string_view dname = refpath.last_dentry();
+  boost::string_view dname = refpath.last_dentry();
   CDentry *dn;
   if (mustexist) {
     dn = dir->lookup(dname);
@@ -6505,7 +6505,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     respond_to_request(mdr, -EINVAL);
     return;
   }
-  std::string_view destname = destpath.last_dentry();
+  boost::string_view destname = destpath.last_dentry();
 
   vector<CDentry*>& srctrace = mdr->dn[1];
   vector<CDentry*>& desttrace = mdr->dn[0];
@@ -8507,7 +8507,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
     return;
   }
   
-  std::string_view snapname = req->get_filepath().last_dentry();
+  boost::string_view snapname = req->get_filepath().last_dentry();
 
   if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
     dout(20) << "mksnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
@@ -8649,7 +8649,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
     return;
   }
 
-  std::string_view snapname = req->get_filepath().last_dentry();
+  boost::string_view snapname = req->get_filepath().last_dentry();
 
   if (mdr->client_request->get_caller_uid() < g_conf->mds_snap_min_uid || mdr->client_request->get_caller_uid() > g_conf->mds_snap_max_uid) {
     dout(20) << "rmsnap " << snapname << " on " << *diri << " denied to uid " << mdr->client_request->get_caller_uid() << dendl;
@@ -8787,8 +8787,8 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
     return;
   }
 
-  std::string_view dstname = req->get_filepath().last_dentry();
-  std::string_view srcname = req->get_filepath2().last_dentry();
+  boost::string_view dstname = req->get_filepath().last_dentry();
+  boost::string_view srcname = req->get_filepath2().last_dentry();
   dout(10) << "renamesnap " << srcname << "->" << dstname << " on " << *diri << dendl;
 
   if (srcname.length() == 0 || srcname[0] == '_') {

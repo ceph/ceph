@@ -20,7 +20,7 @@
 #include <list>
 #include <map>
 #include <set>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/config.h"
 #include "include/counter.h"
@@ -108,8 +108,8 @@ public:
   void dump(Formatter *f) const;
 
   /* For use by offline tools */
-  __u32 hash_dentry_name(std::string_view dn);
-  frag_t pick_dirfrag(std::string_view dn);
+  __u32 hash_dentry_name(boost::string_view dn);
+  frag_t pick_dirfrag(boost::string_view dn);
 };
 
 class InodeStore : public InodeStoreBase {

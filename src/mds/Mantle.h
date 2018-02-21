@@ -15,7 +15,7 @@
 #ifndef CEPH_MANTLE_H
 #define CEPH_MANTLE_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include <lua.hpp>
 #include <vector>
@@ -28,7 +28,7 @@ class Mantle {
   public:
     Mantle();
     ~Mantle() { if (L) lua_close(L); }
-    int balance(std::string_view script,
+    int balance(boost::string_view script,
                 mds_rank_t whoami,
                 const std::vector <std::map<std::string, double>> &metrics,
                 std::map<mds_rank_t,double> &my_targets);

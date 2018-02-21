@@ -16,7 +16,7 @@
 
 #include <map>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "mds/mdstypes.h"
 
@@ -39,7 +39,7 @@ public:
 
   epoch_t get_epoch() const { return epoch; }
 
-  fs_cluster_id_t get_fs_cid(std::string_view name) const {
+  fs_cluster_id_t get_fs_cid(boost::string_view name) const {
     for (auto &p : filesystems) {
       if (p.second.name == name)
 	return p.first;

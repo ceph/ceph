@@ -22,7 +22,7 @@
 #include <map>
 #include <set>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "common/DecayCounter.h"
 #include "common/bloom_filter.hpp"
@@ -433,17 +433,17 @@ protected:
 
   // -- dentries and inodes --
  public:
-  CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
-  CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
+  CDentry* lookup_exact_snap(boost::string_view dname, snapid_t last);
+  CDentry* lookup(boost::string_view n, snapid_t snap=CEPH_NOSNAP);
   CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(std::string_view(n), snap);
+    return lookup(boost::string_view(n), snap);
   }
 
-  CDentry* add_null_dentry(std::string_view dname,
+  CDentry* add_null_dentry(boost::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_primary_dentry(std::string_view dname, CInode *in,
+  CDentry* add_primary_dentry(boost::string_view dname, CInode *in,
 			      snapid_t first=2, snapid_t last=CEPH_NOSNAP);
-  CDentry* add_remote_dentry(std::string_view dname, inodeno_t ino, unsigned char d_type,
+  CDentry* add_remote_dentry(boost::string_view dname, inodeno_t ino, unsigned char d_type,
 			     snapid_t first=2, snapid_t last=CEPH_NOSNAP);
   void remove_dentry( CDentry *dn );         // delete dentry
   void link_remote_inode( CDentry *dn, inodeno_t ino, unsigned char d_type);
@@ -453,7 +453,7 @@ protected:
   void try_remove_unlinked_dn(CDentry *dn);
 
   void add_to_bloom(CDentry *dn);
-  bool is_in_bloom(std::string_view name);
+  bool is_in_bloom(boost::string_view name);
   bool has_bloom() { return (bloom ? true : false); }
   void remove_bloom() {
     bloom.reset();
@@ -589,7 +589,7 @@ private:
     return file_object_t(ino(), frag);
   }
   void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
-  void fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSInternalContextBase *c, boost::string_view want_dn, bool ignore_authpinnability=false);
   void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
 protected:
   mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
@@ -599,8 +599,8 @@ protected:
     bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
     MDSInternalContextBase *fin);
   CDentry *_load_dentry(
-      std::string_view key,
-      std::string_view dname,
+      boost::string_view key,
+      boost::string_view dname,
       snapid_t last,
       bufferlist &bl,
       int pos,
@@ -616,7 +616,7 @@ protected:
   /**
    * Go bad due to a damaged dentry (register with damagetable and go BADFRAG)
    */
-  void go_bad_dentry(snapid_t last, std::string_view dname);
+  void go_bad_dentry(snapid_t last, boost::string_view dname);
 
   /**
    * Go bad due to a damaged header (register with damagetable and go BADFRAG)
@@ -666,11 +666,11 @@ protected:
   mempool::mds_co::compact_map< string_snap_t, mempool::mds_co::list<MDSInternalContextBase*> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 public:
-  bool is_waiting_for_dentry(std::string_view dname, snapid_t snap) {
+  bool is_waiting_for_dentry(boost::string_view dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSInternalContextBase *c);
-  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
+  void add_dentry_waiter(boost::string_view dentry, snapid_t snap, MDSInternalContextBase *c);
+  void take_dentry_waiting(boost::string_view dentry, snapid_t first, snapid_t last, std::list<MDSInternalContextBase*>& ls);
   void take_sub_waiting(std::list<MDSInternalContextBase*>& ls);  // dentry or ino
 
   void add_waiter(uint64_t mask, MDSInternalContextBase *c) override;

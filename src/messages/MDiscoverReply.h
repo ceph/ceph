@@ -158,7 +158,7 @@ public:
   }
 
   //  void set_flag_forward() { flag_forward = true; }
-  void set_flag_error_dn(std::string_view dn) { 
+  void set_flag_error_dn(boost::string_view dn) { 
     flag_error_dn = true; 
     error_dentry = dn; 
   }
@@ -168,7 +168,7 @@ public:
   void set_dir_auth_hint(int a) {
     dir_auth_hint = a;
   }
-  void set_error_dentry(std::string_view dn) {
+  void set_error_dentry(boost::string_view dn) {
     error_dentry = dn;
   }
 

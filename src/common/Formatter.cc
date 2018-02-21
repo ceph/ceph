@@ -52,9 +52,9 @@ Formatter::Formatter() { }
 
 Formatter::~Formatter() { }
 
-Formatter *Formatter::create(std::string_view type,
-			     std::string_view default_type,
-			     std::string_view fallback)
+Formatter *Formatter::create(boost::string_view type,
+			     boost::string_view default_type,
+			     boost::string_view fallback)
 {
   std::string mytype(type);
   if (mytype == "")
@@ -161,7 +161,7 @@ void JSONFormatter::print_comma(json_formatter_stack_entry_d& entry)
     m_ss << "    ";
 }
 
-void JSONFormatter::print_quoted_string(std::string_view s)
+void JSONFormatter::print_quoted_string(boost::string_view s)
 {
   int len = escape_json_attr_len(s.data(), s.size());
   char escaped[len];
@@ -272,7 +272,7 @@ void JSONFormatter::dump_float(const char *name, double d)
   m_ss << foo;
 }
 
-void JSONFormatter::dump_string(const char *name, std::string_view s)
+void JSONFormatter::dump_string(const char *name, boost::string_view s)
 {
   print_name(name);
   print_quoted_string(s);
@@ -443,7 +443,7 @@ void XMLFormatter::dump_float(const char *name, double d)
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_string(const char *name, std::string_view s)
+void XMLFormatter::dump_string(const char *name, boost::string_view s)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
@@ -455,7 +455,7 @@ void XMLFormatter::dump_string(const char *name, std::string_view s)
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+void XMLFormatter::dump_string_with_attrs(const char *name, boost::string_view s, const FormatterAttrs& attrs)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
@@ -564,7 +564,7 @@ void XMLFormatter::print_spaces()
   }
 }
 
-std::string XMLFormatter::escape_xml_str(std::string_view str)
+std::string XMLFormatter::escape_xml_str(boost::string_view str)
 {
   size_t len = escape_xml_attr_len(str.data());
   std::vector<char> escaped(len, '\0');
@@ -837,7 +837,7 @@ void TableFormatter::dump_float(const char *name, double d)
   m_ss.str("");
 }
 
-void TableFormatter::dump_string(const char *name, std::string_view s)
+void TableFormatter::dump_string(const char *name, boost::string_view s)
 {
   finish_pending_string();
   size_t i = m_vec_index(name);
@@ -848,7 +848,7 @@ void TableFormatter::dump_string(const char *name, std::string_view s)
   m_ss.str("");
 }
 
-void TableFormatter::dump_string_with_attrs(const char *name, std::string_view s, const FormatterAttrs& attrs)
+void TableFormatter::dump_string_with_attrs(const char *name, boost::string_view s, const FormatterAttrs& attrs)
 {
   finish_pending_string();
   size_t i = m_vec_index(name);

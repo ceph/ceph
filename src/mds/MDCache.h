@@ -17,7 +17,7 @@
 #ifndef CEPH_MDCACHE_H
 #define CEPH_MDCACHE_H
 
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 
 #include "include/types.h"
 #include "include/filepath.h"
@@ -797,7 +797,7 @@ public:
       return NULL;
     return in->get_dirfrag(df.frag);
   }
-  CDir* get_dirfrag(inodeno_t ino, std::string_view dn) {
+  CDir* get_dirfrag(inodeno_t ino, boost::string_view dn) {
     CInode *in = get_inode(ino);
     if (!in)
       return NULL;
@@ -1162,14 +1162,14 @@ public:
   void discard_delayed_expire(CDir *dir);
 
 protected:
-  int dump_cache(std::string_view fn, Formatter *f,
-		  std::string_view dump_root = "",
+  int dump_cache(boost::string_view fn, Formatter *f,
+		  boost::string_view dump_root = "",
 		  int depth = -1);
 public:
   int dump_cache() { return dump_cache(NULL, NULL); }
-  int dump_cache(std::string_view filename);
+  int dump_cache(boost::string_view filename);
   int dump_cache(Formatter *f);
-  int dump_cache(std::string_view dump_root, int depth, Formatter *f);
+  int dump_cache(boost::string_view dump_root, int depth, Formatter *f);
 
   int cache_status(Formatter *f);
 
@@ -1204,11 +1204,11 @@ protected:
   void repair_dirfrag_stats_work(MDRequestRef& mdr);
   friend class C_MDC_RepairDirfragStats;
 public:
-  void flush_dentry(std::string_view path, Context *fin);
+  void flush_dentry(boost::string_view path, Context *fin);
   /**
    * Create and start an OP_ENQUEUE_SCRUB
    */
-  void enqueue_scrub(std::string_view path, std::string_view tag,
+  void enqueue_scrub(boost::string_view path, boost::string_view tag,
                      bool force, bool recursive, bool repair,
 		     Formatter *f, Context *fin);
   void repair_inode_stats(CInode *diri);

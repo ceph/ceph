@@ -17,7 +17,7 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <string_view>
+#include <boost/utility/string_view.hpp>
 #include <map>
 
 #include "MDCache.h"
@@ -8136,7 +8136,7 @@ CInode *MDCache::cache_traverse(const filepath& fp)
     return NULL;
 
   for (unsigned i = 0; i < fp.depth(); i++) {
-    std::string_view dname = fp[i];
+    boost::string_view dname = fp[i];
     frag_t fg = in->pick_dirfrag(dname);
     dout(20) << " " << i << " " << dname << " frag " << fg << " from " << *in << dendl;
     CDir *curdir = in->get_dirfrag(fg);
@@ -11861,27 +11861,27 @@ int MDCache::cache_status(Formatter *f)
   return 0;
 }
 
-int MDCache::dump_cache(std::string_view file_name)
+int MDCache::dump_cache(boost::string_view file_name)
 {
   return dump_cache(file_name, NULL);
 }
 
 int MDCache::dump_cache(Formatter *f)
 {
-  return dump_cache(std::string_view(""), f);
+  return dump_cache(boost::string_view(""), f);
 }
 
-int MDCache::dump_cache(std::string_view dump_root, int depth, Formatter *f)
+int MDCache::dump_cache(boost::string_view dump_root, int depth, Formatter *f)
 {
-  return dump_cache(std::string_view(""), f, dump_root, depth);
+  return dump_cache(boost::string_view(""), f, dump_root, depth);
 }
 
 /**
  * Dump the metadata cache, either to a Formatter, if
  * provided, else to a plain text file.
  */
-int MDCache::dump_cache(std::string_view fn, Formatter *f,
-			 std::string_view dump_root, int depth)
+int MDCache::dump_cache(boost::string_view fn, Formatter *f,
+			 boost::string_view dump_root, int depth)
 {
   int r = 0;
   int fd = -1;
@@ -12051,8 +12051,8 @@ public:
 };
 
 void MDCache::enqueue_scrub(
-    std::string_view path,
-    std::string_view tag,
+    boost::string_view path,
+    boost::string_view tag,
     bool force, bool recursive, bool repair,
     Formatter *f, Context *fin)
 {
@@ -12348,7 +12348,7 @@ do_rdlocks:
   mds->server->respond_to_request(mdr, 0);
 }
 
-void MDCache::flush_dentry(std::string_view path, Context *fin)
+void MDCache::flush_dentry(boost::string_view path, Context *fin)
 {
   if (is_readonly()) {
     dout(10) << __func__ << ": read-only FS" << dendl;

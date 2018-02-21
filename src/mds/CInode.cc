@@ -495,7 +495,7 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 
 // dirfrags
 
-__u32 InodeStoreBase::hash_dentry_name(std::string_view dn)
+__u32 InodeStoreBase::hash_dentry_name(boost::string_view dn)
 {
   int which = inode.dir_layout.dl_dir_hash;
   if (!which)
@@ -504,7 +504,7 @@ __u32 InodeStoreBase::hash_dentry_name(std::string_view dn)
   return ceph_str_hash(which, dn.data(), dn.length());
 }
 
-frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
+frag_t InodeStoreBase::pick_dirfrag(boost::string_view dn)
 {
   if (dirfragtree.empty())
     return frag_t();          // avoid the string hash if we can.
@@ -1329,7 +1329,7 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
   if (is_symlink()) {
     std::string tmp;
     decode(tmp, bl);
-    symlink = std::string_view(tmp);
+    symlink = boost::string_view(tmp);
   }
   ::decode(dirfragtree, bl);
   ::decode(xattrs, bl);
@@ -3492,7 +3492,7 @@ void CInode::_decode_base(bufferlist::iterator& p)
   {
     std::string tmp;
     ::decode(tmp, p);
-    symlink = std::string_view(tmp);
+    symlink = boost::string_view(tmp);
   }
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);
@@ -3810,7 +3810,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     /**
      * Fetch backtrace and set tag if tag is non-empty
      */
-    void fetch_backtrace_and_tag(CInode *in, std::string_view tag,
+    void fetch_backtrace_and_tag(CInode *in, boost::string_view tag,
                                  Context *fin, int *bt_r, bufferlist *bt)
     {
       const int64_t pool = in->get_backtrace_pool();
@@ -3851,7 +3851,7 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       // present)
       if (in->scrub_infop) {
         // I'm a non-orphan, so look up my ScrubHeader via my linkage
-        std::string_view tag = in->scrub_infop->header->get_tag();
+        boost::string_view tag = in->scrub_infop->header->get_tag();
         // Rather than using the usual CInode::fetch_backtrace,
         // use a special variant that optionally writes a tag in the same
         // operation.
