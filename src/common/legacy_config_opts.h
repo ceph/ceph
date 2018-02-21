@@ -699,8 +699,7 @@ OPTION(osd_max_trimming_pgs, OPT_U64)
 OPTION(osd_heartbeat_min_healthy_ratio, OPT_FLOAT)
 
 OPTION(osd_mon_heartbeat_interval, OPT_INT)  // (seconds) how often to ping monitor if no peers
-OPTION(osd_mon_report_interval_max, OPT_INT)
-OPTION(osd_mon_report_interval_min, OPT_INT)  // pg stats, failures, up_thru, boot.
+OPTION(osd_mon_report_interval, OPT_INT)  // failures, up_thru, boot.
 OPTION(osd_mon_report_max_in_flight, OPT_INT)  // max updates in flight
 OPTION(osd_beacon_report_interval, OPT_INT)       // (second) how often to send beacon message to monitor
 OPTION(osd_pg_stat_report_interval_max, OPT_INT)  // report pg stats for any given pg at least this often
