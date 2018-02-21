@@ -7759,6 +7759,10 @@ void OSD::consume_map()
     ceph_abort();
   }
 
+  service.pre_publish_map(osdmap);
+  service.await_reserved_maps();
+  service.publish_map(osdmap);
+
   int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
 
   unsigned pushes_to_free = 0;
@@ -7802,10 +7806,6 @@ void OSD::consume_map()
       }
     }
   }
-
-  service.pre_publish_map(osdmap);
-  service.await_reserved_maps();
-  service.publish_map(osdmap);
 
   service.maybe_inject_dispatch_delay();
 
