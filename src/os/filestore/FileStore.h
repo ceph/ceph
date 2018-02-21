@@ -166,6 +166,9 @@ private:
 
   void create_backend(long f_type);
 
+  int vdo_fd = -1;
+  string vdo_name;
+
   deque<uint64_t> snaps;
 
   // Indexed Collections
