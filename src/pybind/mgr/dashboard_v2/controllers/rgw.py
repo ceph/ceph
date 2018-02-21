@@ -3,8 +3,9 @@ from __future__ import absolute_import
 
 import json
 
-from ..tools import ApiController, RESTController, AuthRequired
 from .. import logger
+from ..services.ceph_service import CephService
+from ..tools import ApiController, RESTController, AuthRequired
 
 
 @ApiController('rgw')
@@ -19,28 +20,27 @@ class RgwDaemon(RESTController):
 
     def list(self):
         daemons = []
-        for server in self.mgr.list_servers():
+        for hostname, server in CephService.get_service_map('rgw').items():
             for service in server['services']:
-                if service['type'] == 'rgw':
-                    metadata = self.mgr.get_metadata('rgw', service['id'])
-                    status = self.mgr.get_daemon_status('rgw', service['id'])
-                    if 'json' in status:
-                        try:
-                            status = json.loads(status['json'])
-                        except ValueError:
-                            logger.warning("%s had invalid status json", service['id'])
-                            status = {}
-                    else:
-                        logger.warning('%s has no key "json" in status', service['id'])
+                metadata = service['metadata']
+                status = service['status']
+                if 'json' in status:
+                    try:
+                        status = json.loads(status['json'])
+                    except ValueError:
+                        logger.warning("%s had invalid status json", service['id'])
+                        status = {}
+                else:
+                    logger.warning('%s has no key "json" in status', service['id'])
 
-                    # extract per-daemon service data and health
-                    daemon = {
-                        'id': service['id'],
-                        'version': metadata['ceph_version'],
-                        'server_hostname': server['hostname']
-                    }
+                # extract per-daemon service data and health
+                daemon = {
+                    'id': service['id'],
+                    'version': metadata['ceph_version'],
+                    'server_hostname': hostname
+                }
 
-                    daemons.append(daemon)
+                daemons.append(daemon)
 
         return sorted(daemons, key=lambda k: k['id'])
 
@@ -50,22 +50,21 @@ class RgwDaemon(RESTController):
             'rgw_id': svc_id,
             'rgw_status': []
         }
-        for server in self.mgr.list_servers():
-            for service in server['services']:
-                if service['type'] == 'rgw' and service['id'] == svc_id:
-                    metadata = self.mgr.get_metadata('rgw', service['id'])
-                    status = self.mgr.get_daemon_status('rgw', service['id'])
-                    if 'json' in status:
-                        try:
-                            status = json.loads(status['json'])
-                        except ValueError:
-                            logger.warning("%s had invalid status json", service['id'])
-                            status = {}
-                    else:
-                        logger.warning('%s has no key "json" in status', service['id'])
+        service = CephService.get_service('rgw', svc_id)
+        if not service:
+            return daemon
 
-                    daemon['rgw_metadata'] = metadata
-                    daemon['rgw_status'] = status
+        metadata = service['metadata']
+        status = service['status']
+        if 'json' in status:
+            try:
+                status = json.loads(status['json'])
+            except ValueError:
+                logger.warning("%s had invalid status json", service['id'])
+                status = {}
+        else:
+            logger.warning('%s has no key "json" in status', service['id'])
 
-                    break
+        daemon['rgw_metadata'] = metadata
+        daemon['rgw_status'] = status
         return daemon
