@@ -308,6 +308,7 @@ def task(ctx, config):
             client.1:
               extra_args: ['--exclude', 'test_100_continue']
     """
+    assert hasattr(ctx, 'rgw'), 'ragweed must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task ragweed only supports a list or dictionary for configuration"
@@ -330,12 +331,15 @@ def task(ctx, config):
 
     ragweed_conf = {}
     for client in clients:
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 'ragweed: no rgw endpoint for {}'.format(client)
+
         ragweed_conf[client] = ConfigObj(
             indent_type='',
             infile={
                 'rgw':
                     {
-                    'port'      : 7280,
+                    'port'      : endpoint.port,
                     'is_secure' : 'no',
                     },
                 'fixtures' : {},
