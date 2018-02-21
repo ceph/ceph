@@ -9,6 +9,7 @@ import time
 import cherrypy
 from mgr_module import CommandResult
 
+from ..services.ceph_service import CephService
 from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue, ViewCache
 
 
@@ -56,10 +57,7 @@ class Dashboard(BaseController):
 
     @ViewCache()
     def _rbd_pool_ls(self):
-        osd_map = self.mgr.get("osd_map")
-        rbd_pools = [pool['pool_name'] for pool in osd_map['pools'] if
-                     'rbd' in pool.get('application_metadata', {})]
-        return rbd_pools
+        return [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
 
     @cherrypy.expose
     @cherrypy.tools.json_out()
