@@ -1,10 +1,12 @@
 <tabset>
-  <tab heading="Details">
+  <tab i18n-heading
+       heading="Details">
     <cd-table-key-value [data]="metadata"
                         (fetchData)="getMetaData()">
     </cd-table-key-value>
   </tab>
-  <tab heading="Performance Counters">
+  <tab i18n-heading
+       heading="Performance Counters">
     <cd-table-performance-counter serviceType="rgw"
                                   [serviceId]="serviceId">
     </cd-table-performance-counter>

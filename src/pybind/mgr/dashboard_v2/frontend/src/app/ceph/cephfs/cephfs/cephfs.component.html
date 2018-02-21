@@ -1,6 +1,7 @@
 <nav aria-label="breadcrumb">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item">Filesystem</li>
+    <li i18n
+        class="breadcrumb-item">Filesystem</li>
     <li class="breadcrumb-item active"
         aria-current="page">{{ name }}</li>
   </ol>
@@ -9,7 +10,8 @@
 <div class="row">
   <div class="col-md-12">
     <i class="fa fa-desktop"></i>
-    <a [routerLink]="['/cephfs/' + id + '/clients']">
+    <a i18n
+       [routerLink]="['/cephfs/' + id + '/clients']">
       <span style="font-weight:bold;">{{ clientCount }}</span>
       Clients
     </a>
@@ -19,7 +21,7 @@
 <div class="row">
   <div class="col-sm-6">
     <fieldset>
-      <legend>Ranks</legend>
+      <legend i18n>Ranks</legend>
 
       <cd-table [data]="ranks.data"
                 [columns]="ranks.columns"
@@ -33,7 +35,7 @@
 
   <div class="col-sm-6">
     <fieldset>
-      <legend>Pools</legend>
+      <legend i18n>Pools</legend>
 
       <cd-table [data]="pools.data"
                 [columns]="pools.columns"
