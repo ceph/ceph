@@ -8246,7 +8246,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSInternal
       if (dir) {
 	dir->get_inode()->make_path_string(path);
 	path += "/";
-        path += dn->get_name();
+        path += std::string(dn->get_name());
       }
 
       bool fatal = mds->damage_table.notify_remote_damaged(ino, path);

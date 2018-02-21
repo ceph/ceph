@@ -97,16 +97,16 @@ class filepath {
   }
 
   void set_path(boost::string_view s, inodeno_t b) {
-    path = s;
+    path = std::string(s);
     ino = b;
   }
   void set_path(boost::string_view s) {
     if (s[0] == '/') {
-      path = s.substr(1);
+      path = std::string(s.substr(1));
       ino = 1;
     } else {
       ino = 0;
-      path = s;
+      path = std::string(s);
     }
     bits.clear();
   }
@@ -173,8 +173,8 @@ class filepath {
       parse_bits();
     if (!bits.empty())
       path += "/";
-    path += s;
-    bits.emplace_back(s);
+    path += std::string(s);
+    bits.emplace_back(std::string(s));
   }
   void push_dentry(const string& s) {
     push_dentry(boost::string_view(s));

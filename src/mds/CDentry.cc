@@ -423,7 +423,7 @@ void CDentry::decode_replica(bufferlist::iterator& p, bool is_new)
 void CDentry::set_object_info(MDSCacheObjectInfo &info) 
 {
   info.dirfrag = dir->dirfrag();
-  info.dname = name;
+  info.dname = std::string(boost::string_view(name));
   info.snapid = last;
 }
 

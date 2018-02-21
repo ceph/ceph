@@ -574,7 +574,7 @@ void EMetaBlob::fullbit::update_inode(MDSRank *mds, CInode *in)
       }
     }
   } else if (in->inode.is_symlink()) {
-    in->symlink = symlink;
+    in->symlink = mempool::mds_co::string(boost::string_view(symlink));
   }
   in->old_inodes = old_inodes;
   if (!in->old_inodes.empty()) {
@@ -988,7 +988,7 @@ void EMetaBlob::get_paths(
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       boost::string_view dentry = (*iter)->dn;
       children[dir_ino].emplace_back(dentry);
-      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, std::string(dentry));
     }
 
     for (list<nullbit>::const_iterator
@@ -1019,9 +1019,9 @@ void EMetaBlob::get_paths(
         iter = fb_list.begin(); iter != fb_list.end(); ++iter) {
       std::string dentry((*iter)->dn);
       children[dir_ino].push_back(dentry);
-      ino_locations[(*iter)->inode.ino] = Location(dir_ino, dentry);
+      ino_locations[(*iter)->inode.ino] = Location(dir_ino, std::string(dentry));
       if (children.find((*iter)->inode.ino) == children.end()) {
-        leaf_locations.push_back(Location(dir_ino, dentry));
+        leaf_locations.push_back(Location(dir_ino, std::string(dentry)));
 
       }
     }
@@ -1030,14 +1030,14 @@ void EMetaBlob::get_paths(
     for (list<nullbit>::const_iterator
 	iter = nb_list.begin(); iter != nb_list.end(); ++iter) {
       boost::string_view dentry = iter->dn;
-      leaf_locations.push_back(Location(dir_ino, dentry));
+      leaf_locations.push_back(Location(dir_ino, std::string(dentry)));
     }
 
     list<remotebit> const &rb_list = dl.get_dremote();
     for (list<remotebit>::const_iterator
 	iter = rb_list.begin(); iter != rb_list.end(); ++iter) {
       boost::string_view dentry = iter->dn;
-      leaf_locations.push_back(Location(dir_ino, dentry));
+      leaf_locations.push_back(Location(dir_ino, std::string(dentry)));
     }
   }
 

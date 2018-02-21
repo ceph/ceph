@@ -58,7 +58,7 @@ Formatter *Formatter::create(boost::string_view type,
 {
   std::string mytype(type);
   if (mytype == "")
-    mytype = default_type;
+    mytype = std::string(default_type);
 
   if (mytype == "json")
     return new JSONFormatter(false);

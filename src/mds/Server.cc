@@ -4832,7 +4832,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   // check xattrs kv pairs size
   size_t cur_xattrs_size = 0;
   for (const auto& p : *pxattrs) {
-    if ((flags & CEPH_XATTR_REPLACE) && (name.compare(p.first) == 0)) {
+    if ((flags & CEPH_XATTR_REPLACE) && (name.compare(std::string(boost::string_view(p.first))) == 0)) {
       continue;
     }
     cur_xattrs_size += p.first.length() + p.second.length();
@@ -4845,12 +4845,12 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
     return;
   }
 
-  if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(name))) {
+  if ((flags & CEPH_XATTR_CREATE) && pxattrs->count(mempool::mds_co::string(boost::string_view(name)))) {
     dout(10) << "setxattr '" << name << "' XATTR_CREATE and EEXIST on " << *cur << dendl;
     respond_to_request(mdr, -EEXIST);
     return;
   }
-  if ((flags & CEPH_XATTR_REPLACE) && !pxattrs->count(mempool::mds_co::string(name))) {
+  if ((flags & CEPH_XATTR_REPLACE) && !pxattrs->count(mempool::mds_co::string(boost::string_view(name)))) {
     dout(10) << "setxattr '" << name << "' XATTR_REPLACE and ENODATA on " << *cur << dendl;
     respond_to_request(mdr, -ENODATA);
     return;
@@ -4866,12 +4866,12 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   pi.inode.xattr_version++;
   auto &px = *pi.xattrs;
   if ((flags & CEPH_XATTR_REMOVE)) {
-    px.erase(mempool::mds_co::string(name));
+    px.erase(mempool::mds_co::string(boost::string_view(name)));
   } else {
     bufferptr b = buffer::create(len);
     if (len)
       req->get_data().copy(0, len, b.c_str());
-    auto em = px.emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(name)), std::forward_as_tuple(b));
+    auto em = px.emplace(std::piecewise_construct, std::forward_as_tuple(mempool::mds_co::string(boost::string_view(name))), std::forward_as_tuple(b));
     if (!em.second)
       em.first->second = b;
   }
@@ -4916,7 +4916,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
     return;
 
   auto pxattrs = cur->get_projected_xattrs();
-  if (pxattrs->count(mempool::mds_co::string(name)) == 0) {
+  if (pxattrs->count(mempool::mds_co::string(boost::string_view(name))) == 0) {
     dout(10) << "removexattr '" << name << "' and ENODATA on " << *cur << dendl;
     respond_to_request(mdr, -ENODATA);
     return;
@@ -4931,7 +4931,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   pi.inode.ctime = mdr->get_op_stamp();
   pi.inode.change_attr++;
   pi.inode.xattr_version++;
-  px.erase(mempool::mds_co::string(name));
+  px.erase(mempool::mds_co::string(boost::string_view(name)));
 
   // log + wait
   mdr->ls = mdlog->get_current_segment();
@@ -5204,7 +5204,7 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   // it's a symlink
   dn->push_projected_linkage(newi);
 
-  newi->symlink = req->get_path2();
+  newi->symlink = mempool::mds_co::string(boost::string_view(req->get_path2()));
   newi->inode.size = newi->symlink.length();
   newi->inode.rstat.rbytes = newi->inode.size;
   newi->inode.rstat.rfiles = 1;
@@ -5982,7 +5982,7 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   {
     std::string t;
     dn->make_path_string(t, true);
-    pi.inode.stray_prior_path = std::move(t);
+    pi.inode.stray_prior_path = mempool::mds_co::string(boost::string_view(t));
   }
   mdr->add_projected_inode(in); // do this _after_ my dn->pre_dirty().. we apply that one manually.
   pi.inode.version = in->pre_dirty();
@@ -6163,9 +6163,9 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   rmdir_rollback rollback;
   rollback.reqid = mdr->reqid;
   rollback.src_dir = dn->get_dir()->dirfrag();
-  rollback.src_dname = dn->get_name();
+  rollback.src_dname = std::string(dn->get_name());
   rollback.dest_dir = straydn->get_dir()->dirfrag();
-  rollback.dest_dname = straydn->get_name();
+  rollback.dest_dname = std::string(straydn->get_name());
   ::encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
 
@@ -7188,7 +7188,7 @@ void Server::_rename_prepare(MDRequestRef& mdr,
       {
         std::string t;
         destdn->make_path_string(t, true);
-        tpi->stray_prior_path = std::move(t);
+        tpi->stray_prior_path = mempool::mds_co::string(boost::string_view(t));
       }
       tpi->nlink--;
       if (tpi->nlink == 0)
@@ -7689,7 +7689,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   rollback.orig_src.dirfrag = srcdn->get_dir()->dirfrag();
   rollback.orig_src.dirfrag_old_mtime = srcdn->get_dir()->get_projected_fnode()->fragstat.mtime;
   rollback.orig_src.dirfrag_old_rctime = srcdn->get_dir()->get_projected_fnode()->rstat.rctime;
-  rollback.orig_src.dname = srcdn->get_name();
+  rollback.orig_src.dname = std::string(srcdn->get_name());
   if (srcdnl->is_primary())
     rollback.orig_src.ino = srcdnl->get_inode()->ino();
   else {
@@ -7701,7 +7701,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   rollback.orig_dest.dirfrag = destdn->get_dir()->dirfrag();
   rollback.orig_dest.dirfrag_old_mtime = destdn->get_dir()->get_projected_fnode()->fragstat.mtime;
   rollback.orig_dest.dirfrag_old_rctime = destdn->get_dir()->get_projected_fnode()->rstat.rctime;
-  rollback.orig_dest.dname = destdn->get_name();
+  rollback.orig_dest.dname = std::string(destdn->get_name());
   if (destdnl->is_primary())
     rollback.orig_dest.ino = destdnl->get_inode()->ino();
   else if (destdnl->is_remote()) {
@@ -7713,7 +7713,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
     rollback.stray.dirfrag = straydn->get_dir()->dirfrag();
     rollback.stray.dirfrag_old_mtime = straydn->get_dir()->get_projected_fnode()->fragstat.mtime;
     rollback.stray.dirfrag_old_rctime = straydn->get_dir()->get_projected_fnode()->rstat.rctime;
-    rollback.stray.dname = straydn->get_name();
+    rollback.stray.dname = std::string(straydn->get_name());
   }
   ::encode(rollback, mdr->more()->rollback_bl);
   dout(20) << " rollback is " << mdr->more()->rollback_bl.length() << " bytes" << dendl;
@@ -8426,9 +8426,9 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
     // actual
     string snap_name;
     if (p->second->ino == diri->ino())
-      snap_name = p->second->name;
+      snap_name = std::string(p->second->name);
     else
-      snap_name = p->second->get_long_name();
+      snap_name = std::string(p->second->get_long_name());
 
     unsigned start_len = dnbl.length();
     if (int(start_len + snap_name.length() + sizeof(__u32) + sizeof(LeaseStat)) > max_bytes)
@@ -8562,7 +8562,7 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   SnapInfo info;
   info.ino = diri->ino();
   info.snapid = snapid;
-  info.name = snapname;
+  info.name = std::string(snapname);
   info.stamp = mdr->get_op_stamp();
 
   auto &pi = diri->project_inode(false, true);
@@ -8847,7 +8847,7 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   auto &newsnap = *pi.snapnode;
   auto it = newsnap.snaps.find(snapid);
   assert(it != newsnap.snaps.end());
-  it->second.name = dstname;
+  it->second.name = std::string(dstname);
 
   // journal the inode changes
   mdr->ls = mdlog->get_current_segment();

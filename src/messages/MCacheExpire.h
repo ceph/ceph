@@ -79,7 +79,7 @@ public:
     realms[r].dirs[df] = nonce;
   }
   void add_dentry(dirfrag_t r, dirfrag_t df, boost::string_view dn, snapid_t last, unsigned nonce) {
-    realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
+    realms[r].dentries[df][pair<string,snapid_t>(std::string(dn),last)] = nonce;
   }
 
   void add_realm(dirfrag_t df, realm& r) {

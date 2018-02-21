@@ -1341,7 +1341,8 @@ void CDir::finish_waiting(uint64_t mask, int result)
 fnode_t *CDir::project_fnode()
 {
   assert(get_version() != 0);
-  auto &p = projected_fnode.emplace_back(*get_projected_fnode());
+  projected_fnode.emplace_back(*get_projected_fnode());
+  auto &p = projected_fnode.back();
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
     p.localized_scrub_stamp = scrub_infop->last_local.time;
@@ -1933,7 +1934,7 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
     }
 
-    if (dn && (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete)) {
+    if (dn && (wanted_items.count(mempool::mds_co::string(boost::string_view(dname))) > 0 || !complete)) {
       dout(10) << " touching wanted dn " << *dn << dendl;
       inode->mdcache->touch_dentry(dn);
     }
@@ -2018,7 +2019,7 @@ void CDir::go_bad_dentry(snapid_t last, boost::string_view dname)
   dout(10) << __func__ << " " << dname << dendl;
   std::string path(get_path());
   path += "/";
-  path += dname;
+  path += std::string(dname);
   const bool fatal = cache->mds->damage_table.notify_dentry(
       inode->ino(), frag, last, dname, path);
   if (fatal) {
@@ -2127,7 +2128,7 @@ void CDir::_omap_commit(int op_prio)
 
   if (!stale_items.empty()) {
     for (const auto &p : stale_items) {
-      to_remove.insert(std::string(p));
+      to_remove.insert(std::string(boost::string_view(p)));
       write_size += p.length();
     }
     stale_items.clear();

@@ -230,7 +230,7 @@ void FSMap::create_filesystem(boost::string_view name,
                               uint64_t features)
 {
   auto fs = std::make_shared<Filesystem>();
-  fs->mds_map.fs_name = name;
+  fs->mds_map.fs_name = std::string(name);
   fs->mds_map.max_mds = 1;
   fs->mds_map.data_pools.push_back(data_pool);
   fs->mds_map.metadata_pool = metadata_pool;

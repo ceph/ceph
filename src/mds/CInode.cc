@@ -384,9 +384,12 @@ sr_t &CInode::project_snaprealm(projected_inode &pi)
 
 CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
 {
-  auto &pi = projected_nodes.empty() ?
-    projected_nodes.emplace_back(inode) :
+  if (projected_nodes.empty()) {
+    projected_nodes.emplace_back(inode);
+  } else {
     projected_nodes.emplace_back(projected_nodes.back().inode);
+  }
+  auto &pi = projected_nodes.back();
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
     pi.inode.last_scrub_stamp = scrub_infop->last_scrub_stamp;
@@ -1328,8 +1331,8 @@ void InodeStoreBase::decode_bare(bufferlist::iterator &bl,
   ::decode(inode, bl);
   if (is_symlink()) {
     std::string tmp;
-    decode(tmp, bl);
-    symlink = boost::string_view(tmp);
+    ::decode(tmp, bl);
+    symlink = mempool::mds_co::string(boost::string_view(tmp));
   }
   ::decode(dirfragtree, bl);
   ::decode(xattrs, bl);
@@ -3492,7 +3495,7 @@ void CInode::_decode_base(bufferlist::iterator& p)
   {
     std::string tmp;
     ::decode(tmp, p);
-    symlink = boost::string_view(tmp);
+    symlink = mempool::mds_co::string(boost::string_view(tmp));
   }
   ::decode(dirfragtree, p);
   ::decode(xattrs, p);

@@ -758,7 +758,7 @@ void inode_t<Allocator>::decode(bufferlist::iterator &p)
   if (struct_v >= 12) {
     std::string tmp;
     ::decode(tmp, p);
-    stray_prior_path = boost::string_view(tmp);
+    stray_prior_path = std::basic_string<char,std::char_traits<char>,Allocator<char>>(boost::string_view(tmp));
   }
 
   if (struct_v >= 13) {

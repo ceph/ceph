@@ -89,7 +89,7 @@ public:
       oldest_snap(os), state(st)
     {
       if (i.is_symlink())
-	symlink = sym;
+	symlink = std::string(sym);
       if (i.is_dir())
 	dirfragtree = dft;
       if (oi)

@@ -151,7 +151,7 @@ bool DamageTable::notify_dentry(
   if (dentries.count(key) == 0) {
     DamageEntryRef entry = std::make_shared<DentryDamage>(
         ino, frag, dname, snap_id);
-    entry->path = path;
+    entry->path = std::string(path);
     dentries[key][DentryIdent(dname, snap_id)] = entry;
     by_id[entry->id] = std::move(entry);
   }
@@ -181,7 +181,7 @@ bool DamageTable::notify_dirfrag(inodeno_t ino, frag_t frag,
   auto key = DirFragIdent(ino, frag);
   if (dirfrags.count(key) == 0) {
     DamageEntryRef entry = std::make_shared<DirFragDamage>(ino, frag);
-    entry->path = path;
+    entry->path = std::string(path);
     dirfrags[key] = entry;
     by_id[entry->id] = std::move(entry);
   }
@@ -197,7 +197,7 @@ bool DamageTable::notify_remote_damaged(inodeno_t ino, boost::string_view path)
 
   if (remotes.count(ino) == 0) {
     auto entry = std::make_shared<BacktraceDamage>(ino);
-    entry->path = path;
+    entry->path = std::string(path);
     remotes[ino] = entry;
     by_id[entry->id] = std::move(entry);
   }

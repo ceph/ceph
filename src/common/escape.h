@@ -15,6 +15,8 @@
 #ifndef CEPH_RGW_ESCAPE_H
 #define CEPH_RGW_ESCAPE_H
 
+#include <stdlib.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

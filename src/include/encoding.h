@@ -26,7 +26,6 @@
 
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
-#include "common/ceph_time.h"
 
 #include "include/int_types.h"
 

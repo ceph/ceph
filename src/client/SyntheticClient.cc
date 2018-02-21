@@ -3358,7 +3358,7 @@ int SyntheticClient::chunk_file(string &filename)
   uint64_t size = st.st_size;
   dout(0) << "file " << filename << " size is " << size << dendl;
 
-  inode_t inode;
+  inode_t<> inode;
   memset(&inode, 0, sizeof(inode));
   inode.ino = st.st_ino;
   ret = client->fdescribe_layout(fd, &inode.layout);

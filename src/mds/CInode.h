@@ -481,11 +481,9 @@ public:
   }
   sr_t *get_projected_srnode() {
     if (num_projected_srnodes > 0) {
-      for (std::list<projected_inode_t*>::reverse_iterator p = projected_nodes.rbegin();
-	   p != projected_nodes.rend();
-	   ++p)
-	if ((*p)->snapnode)
-	  return (*p)->snapnode;
+      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
+	if (it->snapnode)
+	  return it->snapnode.get();
     }
     if (snaprealm)
       return &snaprealm->srnode;

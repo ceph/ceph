@@ -379,7 +379,7 @@ snapid_t SnapRealm::resolve_snapname(boost::string_view n, inodeno_t atino, snap
 	n[0] != '_') return 0;
     int next_ = n.find('_', 1);
     if (next_ < 0) return 0;
-    pname = n.substr(1, next_ - 1);
+    pname = std::string(n.substr(1, next_ - 1));
     pino = atoll(n.data() + next_ + 1);
     dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pino << dendl;
   }
