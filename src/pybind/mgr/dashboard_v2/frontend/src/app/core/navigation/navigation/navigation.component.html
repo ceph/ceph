@@ -25,6 +25,8 @@
   <div class="collapse navbar-collapse"
        id="bs-example-navbar-collapse-1">
     <ul class="nav navbar-nav navbar-primary">
+
+      <!-- Dashboard -->
       <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_dashboard">
         <a i18n
@@ -35,6 +37,75 @@
         </a>
       </li>
 
+      <!-- Cluster -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_cluster">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Cluster</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_hosts">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/hosts">Hosts
+            </a>
+          </li>
+
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_cluster_monitor">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/monitor/"> Monitors
+            </a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Block -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_block">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Block</ng-container>
+          <span class="caret"></span>
+        </a>
+
+        <ul class="dropdown-menu">
+          <li routerLinkActive="active">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/block/iscsi">iSCSI</a>
+          </li>
+          <li class="dropdown-submenu">
+            <a class="dropdown-toggle" data-toggle="dropdown">Pools</a>
+            <ul *dropdownMenu
+                class="dropdown-menu">
+              <li routerLinkActive="active"
+                  class="tc_submenuitem tc_submenuitem_pools"
+                  *ngFor="let rbdPool of rbdPools">
+                <a i18n
+                   class="dropdown-item"
+                   routerLink="/block/pool/{{ rbdPool }}">{{ rbdPool }}
+                </a>
+              </li>
+              <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
+                  *ngIf="rbdPools.length === 0">
+                <a class="dropdown-item disabled" i18n>There are no pools</a>
+              </li>
+            </ul>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Filesystem -->
       <li dropdown
           routerLinkActive="active"
           class="dropdown tc_menuitem tc_menuitem_cephs">
@@ -74,77 +145,15 @@
         </a>
       </li>
       -->
-      <li dropdown
-          routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_cluster">
-        <a dropdownToggle
-           class="dropdown-toggle"
-           data-toggle="dropdown">
-          <ng-container i18n>Cluster</ng-container>
-          <span class="caret"></span>
-        </a>
-        <ul *dropdownMenu
-            class="dropdown-menu">
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_hosts">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/hosts">Hosts
-            </a>
-          </li>
 
-          <li routerLinkActive="active"
-              class="tc_submenuitem tc_submenuitem_cluster_monitor">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/monitor/"> Monitors
-            </a>
-          </li>
-        </ul>
-      </li>
-      <!-- Block -->
-      <li dropdown
-          routerLinkActive="active"
-          class="dropdown tc_menuitem tc_menuitem_block">
-        <a dropdownToggle
-           class="dropdown-toggle"
-           data-toggle="dropdown">
-          <ng-container i18n>Block</ng-container>
-          <span class="caret"></span>
-        </a>
-
-        <ul class="dropdown-menu">
-          <li routerLinkActive="active">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/block/iscsi">iSCSI</a>
-          </li>
-          <li class="dropdown-submenu">
-            <a class="dropdown-toggle" data-toggle="dropdown">Pools</a>
-            <ul *dropdownMenu
-                class="dropdown-menu">
-              <li routerLinkActive="active"
-                  class="tc_submenuitem tc_submenuitem_pools"
-                  *ngFor="let rbdPool of rbdPools">
-                <a i18n
-                   class="dropdown-item"
-                   routerLink="/block/pool/{{ rbdPool }}">{{ rbdPool }}
-                </a>
-              </li>
-              <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
-                  *ngIf="rbdPools.length === 0">
-                <a class="dropdown-item disabled" i18n>There are no pools</a>
-              </li>
-            </ul>
-          </li>
-        </ul>
-      </li>
+      <!-- Object Gateway -->
       <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_rgw">
         <a i18n
            routerLink="/rgw">Object Gateway
         </a>
       </li>
+
       <!--<li class="dropdown tc_menuitem tc_menuitem_ceph_rgw">
         <a href=""
            class="dropdown-toggle"
