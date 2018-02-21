@@ -466,6 +466,11 @@ struct C_ReadRequest : public Context {
       uint64_t miss_bl_offset = 0;
       for (auto &extent : m_read_extents) {
 	if (extent.m_buf) {
+	  /* This was a hit */
+	  bufferlist hit_extent_bl;
+	  hit_extent_bl.append(extent.m_buf);
+	  m_out_bl->claim_append(hit_extent_bl);
+	} else {
 	  /* This was a miss. */
 	  bufferlist miss_extent_bl;
 	  miss_extent_bl.substr_of(m_miss_bl, miss_bl_offset, extent.second);
@@ -473,11 +478,6 @@ struct C_ReadRequest : public Context {
 	  m_out_bl->claim_append(miss_extent_bl);
 	  /* Consume these bytes in the read miss bufferlist */
 	  miss_bl_offset += extent.second;
-	} else {
-	  /* This was a hit */
-	  bufferlist hit_extent_bl;
-	  hit_extent_bl.append(extent.m_buf);
-	  m_out_bl->claim_append(hit_extent_bl);
 	}
       }
     }
