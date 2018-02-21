@@ -1,6 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
-
-import * as _ from 'lodash';
+import { Component } from '@angular/core';
 
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { MonitorService } from '../monitor.service';
@@ -10,7 +8,7 @@ import { MonitorService } from '../monitor.service';
   templateUrl: './monitor.component.html',
   styleUrls: ['./monitor.component.scss']
 })
-export class MonitorComponent implements OnInit, OnDestroy {
+export class MonitorComponent {
 
   mon_status: any;
   inQuorum: any;
@@ -22,9 +20,7 @@ export class MonitorComponent implements OnInit, OnDestroy {
     width: '50%'
   };
 
-  constructor(private monitorService: MonitorService) {}
-
-  ngOnInit() {
+  constructor(private monitorService: MonitorService) {
     this.inQuorum = {
       columns: [
         { prop: 'name', name: 'Name', cellTransformation: CellTemplate.routerLink },
@@ -47,16 +43,6 @@ export class MonitorComponent implements OnInit, OnDestroy {
       ],
       data: []
     };
-
-    this.refresh();
-
-    this.interval = setInterval(() => {
-      this.refresh();
-    }, 5000);
-  }
-
-  ngOnDestroy() {
-    clearInterval(this.interval);
   }
 
   refresh() {

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, OnDestroy } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
 @Component({
@@ -6,14 +6,12 @@ import { ActivatedRoute } from '@angular/router';
   templateUrl: './performance-counter.component.html',
   styleUrls: ['./performance-counter.component.scss']
 })
-export class PerformanceCounterComponent implements OnInit, OnDestroy {
+export class PerformanceCounterComponent implements OnDestroy {
   serviceId: string;
   serviceType: string;
   routeParamsSubscribe: any;
 
-  constructor(private route: ActivatedRoute) { }
-
-  ngOnInit() {
+  constructor(private route: ActivatedRoute) {
     this.routeParamsSubscribe = this.route.params.subscribe(
       (params: { type: string; id: string }) => {
         this.serviceId = params.id;

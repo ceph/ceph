@@ -3,7 +3,6 @@ import { ActivatedRoute } from '@angular/router';
 
 import * as _ from 'lodash';
 
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { CephfsService } from '../cephfs.service';
@@ -95,19 +94,10 @@ export class CephfsComponent implements OnInit, OnDestroy {
       this.pools.data = [];
       this.standbys = [];
       this.mdsCounters = {};
-
-      this.refresh();
-      this.draw_chart();
     });
-
-    this.interval = setInterval(() => {
-      this.refresh();
-      this.draw_chart();
-    }, 5000);
   }
 
   ngOnDestroy() {
-    clearInterval(this.interval);
     this.routeParamsSubscribe.unsubscribe();
   }
 
@@ -123,15 +113,13 @@ export class CephfsComponent implements OnInit, OnDestroy {
       ];
       this.name = data.cephfs.name;
       this.clientCount = data.cephfs.client_count;
+      this.draw_chart();
     });
   }
 
   draw_chart() {
     this.cephfsService.getMdsCounters(this.id).subscribe(data => {
       const topChart = true;
-
-      const oldKeys = Object.keys(this.mdsCounters);
-      const newKeys = Object.keys(data);
 
       _.each(this.mdsCounters, (value, key) => {
         if (data[key] === undefined) {
@@ -144,7 +132,7 @@ export class CephfsComponent implements OnInit, OnDestroy {
         const rhsData = this.delta_timeseries(mdsData[this.rhsCounter]);
 
         if (this.mdsCounters[mdsName] === undefined) {
-          const elem = {
+          this.mdsCounters[mdsName] = {
             datasets: [
               {
                 label: this.lhsCounter,
@@ -197,8 +185,6 @@ export class CephfsComponent implements OnInit, OnDestroy {
             },
             chartType: 'line'
           };
-
-          this.mdsCounters[mdsName] = elem;
         } else {
           this.mdsCounters[mdsName].datasets[0].data = lhsData;
           this.mdsCounters[mdsName].datasets[1].data = rhsData;

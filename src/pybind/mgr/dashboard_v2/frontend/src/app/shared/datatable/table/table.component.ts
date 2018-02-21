@@ -5,6 +5,7 @@ import {
   EventEmitter,
   Input,
   OnChanges,
+  OnDestroy,
   OnInit,
   Output,
   TemplateRef,
@@ -13,7 +14,10 @@ import {
 } from '@angular/core';
 
 import { DatatableComponent, SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
+
 import * as _ from 'lodash';
+import 'rxjs/add/observable/timer';
+import { Observable } from 'rxjs/Observable';
 
 import { CdTableColumn } from '../../models/cd-table-column';
 import { TableDetailsDirective } from '../table-details.directive';
@@ -23,7 +27,7 @@ import { TableDetailsDirective } from '../table-details.directive';
   templateUrl: './table.component.html',
   styleUrls: ['./table.component.scss']
 })
-export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
+export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
   @ViewChild(DatatableComponent) table: DatatableComponent;
   @ViewChild(TableDetailsDirective) detailTemplate: TableDetailsDirective;
   @ViewChild('tableCellBoldTpl') tableCellBoldTpl: TemplateRef<any>;
@@ -32,7 +36,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   @ViewChild('perSecondTpl') perSecondTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
-  @Input() data: any[] = [];
+  @Input() data: any[];
   // Each item -> { prop: 'attribute name', name: 'display name' }
   @Input() columns: CdTableColumn[];
   // Each item -> { prop: 'attribute name', dir: 'asc'||'desc'}
@@ -54,7 +58,25 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   // the details page, return false.
   @Input() beforeShowDetails: Function;
 
-  // Should be the function that will update the input data.
+  /**
+   * Auto reload time in ms - per default every 5s
+   * You can set it to 0, undefined or false to disable the auto reload feature in order to
+   * trigger 'fetchData' if the reload button is clicked.
+   */
+  @Input() autoReload: any = 5000;
+
+  // Which row property is unique for a row
+  @Input() identifier = 'id';
+
+  /**
+   * Should be a function to update the input data if undefined nothing will be triggered
+   *
+   * Sometimes it's useful to only define fetchData once.
+   * Example:
+   * Usage of multiple tables with data which is updated by the same function
+   * What happens:
+   * The function is triggered through one table and all tables will update
+   */
   @Output() fetchData = new EventEmitter();
 
   cellTemplates: {
@@ -64,13 +86,15 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   search = '';
   rows = [];
   selected = [];
-  loadingIndicator = false;
+  loadingIndicator = true;
   paginationClasses = {
     pagerLeftArrow: 'i fa fa-angle-double-left',
     pagerRightArrow: 'i fa fa-angle-double-right',
     pagerPrevious: 'i fa fa-angle-left',
     pagerNext: 'i fa fa-angle-right'
   };
+  private subscriber;
+  private updating = false;
 
   // Internal variable to check if it is necessary to recalculate the
   // table columns after the browser window has been resized.
@@ -86,17 +110,30 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
       }
       return column;
     });
-    this.reloadData();
     if (this.detailsComponent) {
       this.selectionType = 'multi';
     }
     if (!this.sorts) {
+      const sortProp = this.columns.some((c) => c.prop === this.identifier) ?
+        this.identifier :
+        this.columns[0].prop;
       this.sorts = [
         {
-          prop: this.columns[0].prop,
+          prop: sortProp,
           dir: SortDirection.asc
         }
       ];
+    }
+    if (this.autoReload) { // Also if nothing is bound to fetchData nothing will be triggered
+      this.subscriber = Observable.timer(0, this.autoReload).subscribe(x => {
+        return this.reloadData();
+      });
+    }
+  }
+
+  ngOnDestroy() {
+    if (this.subscriber) {
+      this.subscriber.unsubscribe();
     }
   }
 
@@ -131,11 +168,25 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
   }
 
   reloadData() {
-    if (this.loadingIndicator) {
-      return;
+    if (!this.updating) {
+      this.fetchData.emit();
+      this.updating = true;
     }
+  }
+
+  refreshBtn () {
     this.loadingIndicator = true;
-    this.fetchData.emit();
+    this.reloadData();
+  }
+
+  rowIdentity() {
+    return (row) => {
+      const id = row[this.identifier];
+      if (_.isUndefined(id)) {
+        throw new Error(`Wrong identifier "${this.identifier}" -> "${id}"`);
+      }
+      return id;
+    };
   }
 
   useData() {
@@ -143,7 +194,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges {
       return; // Wait for data
     }
     this.rows = [...this.data];
+    if (this.search.length > 0) {
+      this.updateFilter(true);
+    }
     this.loadingIndicator = false;
+    this.updating = false;
   }
 
   toggleExpandRow() {

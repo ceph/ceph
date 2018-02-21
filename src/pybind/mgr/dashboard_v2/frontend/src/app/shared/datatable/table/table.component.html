@@ -41,7 +41,7 @@
 
     <!-- refresh button -->
     <div class="widget-toolbar tc_refreshBtn">
-      <a (click)="reloadData()">
+      <a (click)="refreshBtn()">
         <i class="fa fa-lg fa-refresh"></i>
       </a>
     </div>
@@ -62,6 +62,7 @@
                  [footerHeight]="footer ? 'auto' : 0"
                  [limit]="limit > 0 ? limit : undefined"
                  [loadingIndicator]="loadingIndicator"
+                 [rowIdentity]="rowIdentity()"
                  [rowHeight]="'auto'">
     <!-- Row Detail Template -->
     <ngx-datatable-row-detail (toggle)="updateDetailView()">

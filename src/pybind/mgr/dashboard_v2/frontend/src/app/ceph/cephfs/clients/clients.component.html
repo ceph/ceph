@@ -16,6 +16,7 @@
 
   <cd-table [data]="clients.data"
             [columns]="clients.columns"
+            (fetchData)="refresh()"
             [header]="false">
   </cd-table>
 </fieldset>

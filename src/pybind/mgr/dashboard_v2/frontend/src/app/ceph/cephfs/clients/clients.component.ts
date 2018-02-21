@@ -17,8 +17,6 @@ export class ClientsComponent implements OnInit, OnDestroy {
   clients: any;
   viewCacheStatus: ViewCacheStatus;
 
-  interval: any;
-
   constructor(private route: ActivatedRoute, private cephfsService: CephfsService) {}
 
   ngOnInit() {
@@ -42,17 +40,10 @@ export class ClientsComponent implements OnInit, OnDestroy {
       this.cephfsService.getCephfs(this.id).subscribe((data: any) => {
         this.name = data.cephfs.name;
       });
-
-      this.refresh();
     });
-
-    this.interval = setInterval(() => {
-      this.refresh();
-    }, 5000);
   }
 
   ngOnDestroy() {
-    clearInterval(this.interval);
     this.routeParamsSubscribe.unsubscribe();
   }
 

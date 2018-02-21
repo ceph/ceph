@@ -25,6 +25,7 @@
 
       <cd-table [data]="ranks.data"
                 [columns]="ranks.columns"
+                (fetchData)="refresh()"
                 toolHeader="false">
       </cd-table>
     </fieldset>
