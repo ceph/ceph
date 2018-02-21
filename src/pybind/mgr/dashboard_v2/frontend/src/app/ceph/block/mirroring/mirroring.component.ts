@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import * as _ from 'lodash';
 
@@ -12,14 +12,13 @@ import { RbdMirroringService } from '../../../shared/services/rbd-mirroring.serv
   templateUrl: './mirroring.component.html',
   styleUrls: ['./mirroring.component.scss']
 })
-export class MirroringComponent implements OnInit, OnDestroy {
+export class MirroringComponent implements OnInit {
   @ViewChild('healthTmpl') healthTmpl: TemplateRef<any>;
   @ViewChild('stateTmpl') stateTmpl: TemplateRef<any>;
   @ViewChild('syncTmpl') syncTmpl: TemplateRef<any>;
   @ViewChild('progressTmpl') progressTmpl: TemplateRef<any>;
 
   contentData: any;
-  interval: any;
 
   status: ViewCacheStatus;
   daemons = {
@@ -122,14 +121,6 @@ export class MirroringComponent implements OnInit, OnDestroy {
         flexGrow: 1
       }
     ];
-
-    setTimeout(() => {
-      this.interval = this.refresh();
-    }, 30000);
-  }
-
-  ngOnDestroy() {
-    clearInterval(this.interval);
   }
 
   refresh() {

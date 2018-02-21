@@ -16,6 +16,7 @@
       <cd-table [data]="daemons.data"
                 columnMode="flex"
                 [columns]="daemons.columns"
+                [autoReload]="30000"
                 (fetchData)="refresh()">
       </cd-table>
     </fieldset>
@@ -27,8 +28,9 @@
 
       <cd-table [data]="pools.data"
                 columnMode="flex"
-                [columns]="pools.columns"
-                (fetchData)="refresh()">
+                [autoReload]="0"
+                (fetchData)="refresh()"
+                [columns]="pools.columns">
       </cd-table>
     </fieldset>
   </div>
@@ -42,22 +44,25 @@
         <tab heading="Issues" i18n-heading>
           <cd-table [data]="image_error.data"
                     columnMode="flex"
-                    [columns]="image_error.columns"
-                    (fetchData)="refresh()">
+                    [autoReload]="0"
+                    (fetchData)="refresh()"
+                    [columns]="image_error.columns">
           </cd-table>
         </tab>
         <tab heading="Syncing" i18n-heading>
           <cd-table [data]="image_syncing.data"
                     columnMode="flex"
-                    [columns]="image_syncing.columns"
-                    (fetchData)="refresh()">
+                    [autoReload]="0"
+                    (fetchData)="refresh()"
+                    [columns]="image_syncing.columns">
           </cd-table>
         </tab>
         <tab heading="Ready" i18n-heading>
           <cd-table [data]="image_ready.data"
                     columnMode="flex"
-                    [columns]="image_ready.columns"
-                    (fetchData)="refresh()">
+                    [autoReload]="0"
+                    (fetchData)="refresh()"
+                    [columns]="image_ready.columns">
           </cd-table>
         </tab>
       </tabset>

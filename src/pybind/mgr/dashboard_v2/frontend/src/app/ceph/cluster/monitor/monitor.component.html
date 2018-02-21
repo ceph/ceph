@@ -64,6 +64,7 @@
       <legend i18n
               class="in-quorum">Not In Quorum</legend>
       <cd-table [data]="notInQuorum.data"
+                (fetchData)="refresh()"
                 [columns]="notInQuorum.columns">
       </cd-table>
     </fieldset>

@@ -10,6 +10,7 @@
 
 <legend i18n>Daemons</legend>
 <cd-table [data]="daemons"
+          (fetchData)="refresh()"
           [columns]="daemonsColumns">
 </cd-table>
 

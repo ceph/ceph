@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -12,13 +12,12 @@ import { TcmuIscsiService } from '../../../shared/services/tcmu-iscsi.service';
   templateUrl: './iscsi.component.html',
   styleUrls: ['./iscsi.component.scss']
 })
-export class IscsiComponent implements OnInit, OnDestroy {
+export class IscsiComponent {
 
   daemons = [];
   daemonsColumns: any;
   images = [];
   imagesColumns: any;
-  interval: any;
 
   constructor(private tcmuIscsiService: TcmuIscsiService,
               cephShortVersionPipe: CephShortVersionPipe,
@@ -91,18 +90,6 @@ export class IscsiComponent implements OnInit, OnDestroy {
       },
     ];
 
-  }
-
-  ngOnInit() {
-    this.refresh();
-
-    this.interval = setInterval(() => {
-      this.refresh();
-    }, 5000);
-  }
-
-  ngOnDestroy() {
-    clearInterval(this.interval);
   }
 
   refresh() {

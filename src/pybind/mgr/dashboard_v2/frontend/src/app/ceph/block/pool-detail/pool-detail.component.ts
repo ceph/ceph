@@ -5,7 +5,6 @@ import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
-import { FormatterService } from '../../../shared/services/formatter.service';
 import { PoolService } from '../../../shared/services/pool.service';
 
 @Component({
@@ -18,10 +17,8 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
   images: any;
   columns: CdTableColumn[];
   retries: number;
-  maxRetries = 5;
   routeParamsSubscribe: any;
   viewCacheStatus: ViewCacheStatus;
-  interval: any;
 
   constructor(
     private route: ActivatedRoute,
@@ -75,15 +72,10 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
       this.images = [];
       this.retries = 0;
     });
-
-    this.interval = setInterval(() => {
-      this.loadImages();
-    }, 5000);
   }
 
   ngOnDestroy() {
     this.routeParamsSubscribe.unsubscribe();
-    clearInterval(this.interval);
   }
 
   loadImages() {
