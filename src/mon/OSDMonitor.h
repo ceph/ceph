@@ -24,8 +24,6 @@
 #include <map>
 #include <set>
 
-#include <boost/algorithm/string.hpp>
-
 #include "include/types.h"
 #include "common/simple_cache.hpp"
 #include "msg/Messenger.h"
