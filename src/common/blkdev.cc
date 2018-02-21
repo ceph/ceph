@@ -13,6 +13,9 @@
 #include <errno.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include "include/uuid.h"
 #include "blkdev.h"
@@ -297,6 +300,76 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
   }
 }
 
+int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+{
+  int vdo_fd = -1;
+
+  // we need to go from the raw devname (e.g., dm-4) to the VDO volume name.
+  // currently the best way seems to be to look at /dev/mapper/* ...
+  std::string expect = std::string("../") + devname;  // expected symlink target
+  DIR *dir = ::opendir("/dev/mapper");
+  if (!dir) {
+    return -1;
+  }
+  struct dirent *de = nullptr;
+  while ((de = ::readdir(dir))) {
+    if (de->d_name[0] == '.')
+      continue;
+    char fn[4096], target[4096];
+    snprintf(fn, sizeof(fn), "/dev/mapper/%s", de->d_name);
+    int r = readlink(fn, target, sizeof(target));
+    if (r < 0 || r >= (int)sizeof(target))
+      continue;
+    target[r] = 0;
+    if (expect == target) {
+      snprintf(fn, sizeof(fn), "/sys/kvdo/%s/statistics", de->d_name);
+      vdo_fd = ::open(fn, O_DIRECTORY);
+      if (vdo_fd >= 0) {
+	*vdo_name = de->d_name;
+	break;
+      }
+    }
+  }
+  closedir(dir);
+  return vdo_fd;
+}
+
+int64_t get_vdo_stat(int vdo_fd, const char *property)
+{
+  int64_t ret = 0;
+  int fd = ::openat(vdo_fd, property, O_RDONLY);
+  if (fd < 0) {
+    return 0;
+  }
+  char buf[1024];
+  int r = ::read(fd, buf, sizeof(buf) - 1);
+  if (r > 0) {
+    buf[r] = 0;
+    ret = atoll(buf);
+  }
+  TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
+{
+  int64_t block_size = get_vdo_stat(fd, "block_size");
+  int64_t physical_blocks = get_vdo_stat(fd, "physical_blocks");
+  int64_t overhead_blocks_used = get_vdo_stat(fd, "overhead_blocks_used");
+  int64_t data_blocks_used = get_vdo_stat(fd, "data_blocks_used");
+  if (!block_size
+      || !physical_blocks
+      || !overhead_blocks_used
+      || !data_blocks_used) {
+    return false;
+  }
+  int64_t avail_blocks =
+    physical_blocks - overhead_blocks_used - data_blocks_used;
+  *total = block_size * physical_blocks;
+  *avail = block_size * avail_blocks;
+  return true;
+}
+
 #elif defined(__APPLE__)
 #include <sys/disk.h>
 
@@ -340,6 +413,21 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
+int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+{
+  return -1;
+}
+
+int64_t get_vdo_stat(int fd, const char *property)
+{
+  return 0;
+}
+
+bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
+{
+  return false;
+}
+
 #elif defined(__FreeBSD__)
 #include <sys/disk.h>
 
@@ -380,6 +468,21 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
+int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+{
+  return -1;
+}
+
+int64_t get_vdo_stat(int fd, const char *property)
+{
+  return 0;
+}
+
+bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
+{
+  return false;
+}
+
 #else
 int get_block_device_size(int fd, int64_t *psize)
 {
@@ -413,5 +516,20 @@ int get_device_by_fd(int fd, char *partition, char *device, size_t max)
 }
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
+}
+
+int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+{
+  return -1;
+}
+
+int64_t get_vdo_stat(int fd, const char *property)
+{
+  return 0;
+}
+
+bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
+{
+  return false;
 }
 #endif
