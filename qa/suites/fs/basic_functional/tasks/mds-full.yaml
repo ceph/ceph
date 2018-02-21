@@ -18,7 +18,7 @@ overrides:
         mon osd backfillfull ratio: 0.6
         mon osd full ratio: 0.7
       osd:
-        osd mon report interval max: 5
+        osd mon report interval: 5
         osd objectstore: memstore
         osd failsafe full ratio: 1.0
         memstore device bytes: 200000000

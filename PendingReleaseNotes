@@ -109,3 +109,12 @@ method. See http://docs.ceph.com/docs/luminous/mgr/restful for details.
   now reflects the source of each config option (e.g., default, config file,
   command line) as well as the final (active) value.
 
+13.0.3
+------
+
+* The ``osd_mon_report_interval_min`` option has been renamed to
+  ``osd_mon_report_interval``, and the ``osd_mon_report_interval_max``
+  (unused) has been eliminated.  If this value has been customized on
+  your cluster then your configuration should be adjusted in order to
+  avoid reverting to the default value.
+

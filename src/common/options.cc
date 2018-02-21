@@ -2912,13 +2912,9 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
-    Option("osd_mon_report_interval_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(600)
-    .set_description(""),
-
-    Option("osd_mon_report_interval_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_mon_report_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
-    .set_description(""),
+    .set_description("Frequency of OSD reports to mon for peer failures, fullness status changes"),
 
     Option("osd_mon_report_max_in_flight", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)

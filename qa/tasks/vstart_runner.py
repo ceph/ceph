@@ -954,8 +954,8 @@ def exec_test():
 
     # For the benefit of polling tests like test_full -- in teuthology land we set this
     # in a .yaml, here it's just a hardcoded thing for the developer's pleasure.
-    remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "tell", "osd.*", "injectargs", "--osd-mon-report-interval-max", "5"])
-    ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval_max", "5")
+    remote.run(args=[os.path.join(BIN_PREFIX, "ceph"), "tell", "osd.*", "injectargs", "--osd-mon-report-interval", "5"])
+    ceph_cluster.set_ceph_conf("osd", "osd_mon_report_interval", "5")
 
     # Vstart defaults to two segments, which very easily gets a "behind on trimming" health warning
     # from normal IO latency.  Increase it for running teests.

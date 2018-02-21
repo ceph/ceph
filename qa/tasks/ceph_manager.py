@@ -1384,7 +1384,7 @@ class CephManager:
         assert False
 
     def wait_for_pg_stats(func):
-        # both osd_mon_report_interval_min and mgr_stats_period are 5 seconds
+        # both osd_mon_report_interval and mgr_stats_period are 5 seconds
         # by default, and take the faulty injection in ms into consideration,
         # 12 seconds are more than enough
         delays = [1, 1, 2, 3, 5, 8, 13]

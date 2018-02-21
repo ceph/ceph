@@ -4963,7 +4963,7 @@ void OSD::tick_without_osd_lock()
     // mon report?
     utime_t now = ceph_clock_now();
     if (service.need_fullness_update() ||
-	now - last_mon_report > cct->_conf->osd_mon_report_interval_min) {
+	now - last_mon_report > cct->_conf->osd_mon_report_interval) {
       last_mon_report = now;
       send_full_update();
       send_failures();
