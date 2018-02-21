@@ -68,6 +68,7 @@ set(librbd_internal_srcs
   io/Utils.cc
   journal/CreateRequest.cc
   journal/DemoteRequest.cc
+  journal/ObjectDispatch.cc
   journal/OpenRequest.cc
   journal/PromoteRequest.cc
   journal/RemoveRequest.cc
