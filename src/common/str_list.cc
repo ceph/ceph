@@ -23,7 +23,7 @@ using ceph::for_each_substr;
 void get_str_list(const string& str, const char *delims, list<string>& str_list)
 {
   str_list.clear();
-  for_each_substr(str, delims, [&str_list] (boost::string_view token) {
+  for_each_substr(str, delims, [&str_list] (auto token) {
       str_list.emplace_back(token.begin(), token.end());
     });
 }
@@ -44,7 +44,7 @@ list<string> get_str_list(const string& str, const char *delims)
 void get_str_vec(const string& str, const char *delims, vector<string>& str_vec)
 {
   str_vec.clear();
-  for_each_substr(str, delims, [&str_vec] (boost::string_view token) {
+  for_each_substr(str, delims, [&str_vec] (auto token) {
       str_vec.emplace_back(token.begin(), token.end());
     });
 }
@@ -65,7 +65,7 @@ vector<string> get_str_vec(const string& str, const char *delims)
 void get_str_set(const string& str, const char *delims, set<string>& str_set)
 {
   str_set.clear();
-  for_each_substr(str, delims, [&str_set] (boost::string_view token) {
+  for_each_substr(str, delims, [&str_set] (auto token) {
       str_set.emplace(token.begin(), token.end());
     });
 }
