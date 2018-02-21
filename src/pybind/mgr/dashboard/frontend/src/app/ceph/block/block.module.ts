@@ -13,8 +13,12 @@ import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
 import { MirroringComponent } from './mirroring/mirroring.component';
 import { PoolDetailComponent } from './pool-detail/pool-detail.component';
+import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 
 @NgModule({
+  entryComponents: [
+    RbdDetailsComponent
+  ],
   imports: [
     CommonModule,
     FormsModule,
@@ -29,7 +33,8 @@ import { PoolDetailComponent } from './pool-detail/pool-detail.component';
     PoolDetailComponent,
     IscsiComponent,
     MirroringComponent,
-    MirrorHealthColorPipe
+    MirrorHealthColorPipe,
+    RbdDetailsComponent
   ]
 })
 export class BlockModule { }

@@ -14,5 +14,11 @@
 <cd-table [data]="images"
           columnMode="flex"
           [columns]="columns"
+          identifier="name"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
           (fetchData)="loadImages()">
+  <cd-rbd-details cdTableDetail
+                  [selection]="selection">
+  </cd-rbd-details>
 </cd-table>

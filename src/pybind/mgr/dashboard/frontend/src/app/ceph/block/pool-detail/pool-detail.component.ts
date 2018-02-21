@@ -3,6 +3,7 @@ import { ActivatedRoute } from '@angular/router';
 
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
+import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { PoolService } from '../../../shared/services/pool.service';
@@ -19,6 +20,7 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
   retries: number;
   routeParamsSubscribe: any;
   viewCacheStatus: ViewCacheStatus;
+  selection = new CdTableSelection();
 
   constructor(
     private route: ActivatedRoute,
@@ -88,5 +90,9 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
         this.viewCacheStatus = ViewCacheStatus.ValueException;
       }
     );
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }

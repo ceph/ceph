@@ -76,6 +76,8 @@ class Rbd(RESTController):
             features = i.features()
             stat['features'] = features
             stat['features_name'] = self._format_bitmask(features)
+            stat['stripe_count'] = i.stripe_count()
+            stat['stripe_unit'] = i.stripe_unit()
 
             try:
                 parent_info = i.parent_info()
