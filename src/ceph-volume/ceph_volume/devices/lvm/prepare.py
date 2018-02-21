@@ -6,6 +6,7 @@ from textwrap import dedent
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
 from ceph_volume.util import system, disk
+from ceph_volume.util.arg_validators import exclude_group_options
 from ceph_volume import conf, decorators, terminal
 from ceph_volume.api import lvm as api
 from .common import prepare_parser, rollback_osd
@@ -353,6 +354,7 @@ class Prepare(object):
         if len(self.argv) == 0:
             print(sub_command_help)
             return
+        exclude_group_options(parser, argv=self.argv, groups=['filestore', 'bluestore'])
         args = parser.parse_args(self.argv)
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
