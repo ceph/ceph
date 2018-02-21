@@ -41,7 +41,7 @@ std::string cmddesc_get_prefix(const std::string &cmddesc)
   return result.str();
 }
 
-using arg_desc_t = std::map<boost::string_view, boost::string_view>;
+using arg_desc_t = std::map<std::string_view, std::string_view>;
 
 // Snarf up all the key=val,key=val pairs, put 'em in a dict.
 template<class String>
@@ -396,7 +396,7 @@ int parse_osd_id(const char *s, std::ostream *pss)
 
 namespace {
 template <typename Func>
-bool find_first_in(boost::string_view s, const char *delims, Func&& f)
+bool find_first_in(std::string_view s, const char *delims, Func&& f)
 {
   auto pos = s.find_first_not_of(delims);
   while (pos != s.npos) {
@@ -443,8 +443,8 @@ bool arg_in_range(T value, const arg_desc_t& desc, std::ostream& os) {
   return true;
 }
 
-bool validate_str_arg(boost::string_view value,
-		      boost::string_view type,
+bool validate_str_arg(std::string_view value,
+		      std::string_view type,
 		      const arg_desc_t& desc,
 		      std::ostream& os)
 {
@@ -482,8 +482,8 @@ template<bool is_vector,
 bool validate_arg(CephContext* cct,
 		  const cmdmap_t& cmdmap,
 		  const arg_desc_t& desc,
-		  const boost::string_view name,
-		  const boost::string_view type,
+		  const std::string_view name,
+		  const std::string_view type,
 		  std::ostream& os)
 {
   Value v;

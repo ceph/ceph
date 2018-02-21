@@ -350,7 +350,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
       "rocksdb_db_paths", [&opt, this](const std::string& paths) {
 	ceph::for_each_substr(
 	  paths, "; \t",
-	  [&paths, &opt, this](boost::string_view s) {
+	  [&paths, &opt, this](auto s) {
 	    size_t pos = s.find(',');
 	    if (pos == std::string::npos) {
 	      derr << __func__ << " invalid db path item " << s << " in "
