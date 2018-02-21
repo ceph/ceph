@@ -4428,7 +4428,7 @@ std::vector<Option> get_global_options() {
     .set_description("Period in seconds of beacon messages to monitor"),
 
     Option("mgr_stats_period", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(5)
+    .set_default(2)
     .add_service("mgr")
     .set_description("Period in seconds of OSD/MDS stats reports to manager")
     .set_long_description("Use this setting to control the granularity of "
