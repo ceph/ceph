@@ -159,6 +159,14 @@
     }
   }
   .datatable-body {
+    .empty-row {
+      background-color: $warning-background-color;
+      text-align: center;
+      font-weight: bold;
+      font-style: italic;
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
     .datatable-body-row {
       &.clickable:hover .datatable-row-group {
         background-color: #eee;
