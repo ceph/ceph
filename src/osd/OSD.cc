@@ -3982,6 +3982,8 @@ void OSD::resume_creating_pg()
     unsigned spare_pgs = max_pgs_per_osd - num_pgs;
     [[gnu::unused]] auto&& locker = guardedly_lock(pending_creates_lock);
     if (pending_creates_from_mon > 0) {
+      dout(20) << __func__ << " pending_creates_from_mon "
+	       << pending_creates_from_mon << dendl;
       do_sub_pg_creates = true;
       if (pending_creates_from_mon >= spare_pgs) {
 	spare_pgs = pending_creates_from_mon = 0;
@@ -3992,6 +3994,7 @@ void OSD::resume_creating_pg()
     }
     auto pg = pending_creates_from_osd.cbegin();
     while (spare_pgs > 0 && pg != pending_creates_from_osd.cend()) {
+      dout(20) << __func__ << " pg " << pg->first << dendl;
       if (!pgtemp) {
 	pgtemp = new MOSDPGTemp{osdmap->get_epoch()};
       }
@@ -4025,7 +4028,7 @@ void OSD::resume_creating_pg()
     // no need to subscribe the osdmap continuously anymore
     // once the pgtemp and/or mon_subscribe(pg_creates) is sent
     if (monc->sub_want_increment("osdmap", start, CEPH_SUBSCRIBE_ONETIME)) {
-      dout(4) << __func__ << ": re-subscribe osdmap(onetime) since"
+      dout(4) << __func__ << ": re-subscribe osdmap(onetime) since "
 	      << start << dendl;
       do_renew_subs = true;
     }
@@ -8314,6 +8317,13 @@ void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
 	    true)
 	  )));
   }
+
+  with_unique_lock(pending_creates_lock, [=]() {
+      if (pending_creates_from_mon == 0) {
+	last_pg_create_epoch = m->epoch;
+      }
+    });
+
   m->put();
 }
 
