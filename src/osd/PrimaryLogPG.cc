@@ -10107,16 +10107,16 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
   }
 
   dout(10) << __func__ << " missing_loc before: " << missing_loc.get_locations(soid) << dendl;
-  // clear out missing_loc
-  set<pg_shard_t> peers(missing_loc.get_locations(soid));
-  for (set<pg_shard_t>::iterator r = peers.begin();
-       r != peers.end();
-       ++r) {
-    pg_shard_t peer(*r);
-    missing_loc.remove_location(soid, peer);
-  }
 
   if (requires_missing_loc) {
+    // clear out missing_loc
+    set<pg_shard_t> peers(missing_loc.get_locations(soid));
+    for (set<pg_shard_t>::iterator r = peers.begin();
+         r != peers.end();
+         ++r) {
+      pg_shard_t peer(*r);
+      missing_loc.remove_location(soid, peer);
+    }
     for (set<pg_shard_t>::const_iterator i = actingset.begin();
          i != actingset.end();
          ++i) {
