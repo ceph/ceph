@@ -10,6 +10,13 @@ overrides:
         filestore odsync write: true
         osd max backfills: 2
         osd snap trim sleep: .5
+      mon:
+        mon min osdmap epochs: 50
+        paxos service trim min: 10
+        # prune full osdmaps regularly
+        mon osdmap full prune min: 15
+        mon osdmap full prune interval: 2
+        mon osdmap full prune txsize: 2
 tasks:
 - thrashosds:
     timeout: 1200
