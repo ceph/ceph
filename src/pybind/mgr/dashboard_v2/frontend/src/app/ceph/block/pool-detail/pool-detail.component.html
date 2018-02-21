@@ -12,6 +12,7 @@
 <cd-view-cache [status]="viewCacheStatus"></cd-view-cache>
 
 <cd-table [data]="images"
+          columnMode="flex"
           [columns]="columns"
           (fetchData)="loadImages()">
 </cd-table>

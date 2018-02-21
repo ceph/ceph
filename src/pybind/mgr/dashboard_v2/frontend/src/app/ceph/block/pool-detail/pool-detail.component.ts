@@ -33,38 +33,38 @@ export class PoolDetailComponent implements OnInit, OnDestroy {
       {
         name: 'Name',
         prop: 'name',
-        width: 100
+        flexGrow: 2
       },
       {
         name: 'Size',
         prop: 'size',
-        width: 50,
+        flexGrow: 1,
         cellClass: 'text-right',
         pipe: dimlessBinaryPipe
       },
       {
         name: 'Objects',
         prop: 'num_objs',
-        width: 50,
+        flexGrow: 1,
         cellClass: 'text-right',
         pipe: dimlessPipe
       },
       {
         name: 'Object size',
         prop: 'obj_size',
-        width: 50,
+        flexGrow: 1,
         cellClass: 'text-right',
         pipe: dimlessBinaryPipe
       },
       {
         name: 'Features',
         prop: 'features_name',
-        width: 150
+        flexGrow: 3
       },
       {
         name: 'Parent',
         prop: 'parent',
-        width: 100
+        flexGrow: 2
       }
     ];
   }
