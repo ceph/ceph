@@ -228,6 +228,12 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
   } else {
     (*pm)[prefix + "type"] = "ssd";
   }
+  if (vdo_fd >= 0) {
+    (*pm)[prefix + "vdo"] = "true";
+    uint64_t total, avail;
+    get_vdo_utilization(vdo_fd, &total, &avail);
+    (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  }
 
   struct stat st;
   int r = ::fstat(fd_buffered, &st);
