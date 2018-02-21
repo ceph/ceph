@@ -46,6 +46,7 @@
 #include "common/version.h"
 #include "common/io_priority.h"
 #include "common/pick_address.h"
+#include "common/SubProcess.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -145,6 +146,9 @@
 #include "include/assert.h"
 #include "common/config.h"
 #include "common/EventTrace.h"
+
+#include "json_spirit/json_spirit_reader.h"
+#include "json_spirit/json_spirit_writer.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -2326,6 +2330,19 @@ will start to track new ops received afterwards.";
     set<int> poollist = get_mapped_pools();
     f->dump_stream("pool_list") << poollist;
     f->close_section();
+  } else if (admin_command == "smart") {
+    probe_smart(ss);
+  } else if (admin_command == "list_devices") {
+    set<string> devnames;
+    store->get_devices(&devnames);
+    f->open_object_section("list_devices");
+    for (auto dev : devnames) {
+      f->dump_string("device", "/dev/" + dev);
+      if (dev.find("dm-") == 0) {
+	continue;
+      }
+    }
+    f->close_section();
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2882,6 +2899,18 @@ void OSD::final_init()
                                      asok_hook,
                                      "dump pools whose PG(s) are mapped to this OSD.");
 
+  assert(r == 0);
+
+  r = admin_socket->register_command("smart", "smart",
+                                     asok_hook,
+                                     "probe OSD devices for SMART data.");
+
+  assert(r == 0);
+
+  r = admin_socket->register_command("list_devices", "list_devices",
+                                     asok_hook,
+                                     "list OSD devices.");
+
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
@@ -3368,6 +3397,8 @@ int OSD::shutdown()
   cct->get_admin_socket()->unregister_command("dump_pgstate_history");
   cct->get_admin_socket()->unregister_command("compact");
   cct->get_admin_socket()->unregister_command("get_mapped_pools");
+  cct->get_admin_socket()->unregister_command("smart");
+  cct->get_admin_socket()->unregister_command("list_devices");
   delete asok_hook;
   asok_hook = NULL;
 
@@ -5820,6 +5851,9 @@ COMMAND("compact",
         "compact object store's omap. "
         "WARNING: Compaction probably slows your requests",
         "osd", "rw", "cli,rest")
+COMMAND("smart",
+        "runs smartctl on this osd devices.  ",
+        "osd", "rw", "cli,rest")
 };
 
 void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
@@ -6234,6 +6268,10 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     ss << "compacted omap in " << duration << " seconds";
   }
 
+  else if (prefix == "smart") {
+    probe_smart(ds);
+  }
+
   else {
     ss << "unrecognized command! " << cmd;
     r = -EINVAL;
@@ -6250,6 +6288,75 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     reply->set_data(odata);
     con->send_message(reply);
   }
+}
+
+void OSD::probe_smart(ostream& ss)
+{
+  set<string> devnames;
+  store->get_devices(&devnames);
+  uint64_t smart_timeout = cct->_conf->get_val<uint64_t>("osd_smart_report_timeout");
+  std::string result;
+
+  json_spirit::mObject json_map; // == typedef std::map<std::string, mValue> mObject;
+  json_spirit::mValue smart_json;
+
+  for (auto dev : devnames) {
+      // smartctl works only on physical devices; filter out any logical device
+      if (dev.find("dm-") == 0) {
+	  continue;
+      }
+
+      if (probe_smart_device(("/dev/" + dev).c_str(), smart_timeout, &result)) {
+	  derr << "probe_smart_device failed for /dev/" << dev << ", continuing to next device"<< dendl;
+	  continue;
+      }
+
+      // TODO: change to read_or_throw?
+      if (!json_spirit::read(result, smart_json)) {
+	  derr << "smartctl JSON output of /dev/" + dev + " is invalid" << dendl;
+      }
+      else { //json is valid, assigning
+	  json_map[dev] = smart_json;
+      }
+      // no need to result.clear() or clear smart_json
+  }
+  json_spirit::write(json_map, ss, json_spirit::pretty_print);
+}
+
+int OSD::probe_smart_device(const char *device, int timeout, std::string *result)
+{
+  // when using --json, smartctl will report its errors in JSON format to stdout 
+  SubProcessTimed smartctl("sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE, timeout);
+  smartctl.add_cmd_args(
+      "smartctl",
+      "-a",
+      //"-x",
+      "--json",
+      device,
+      NULL);
+
+  int ret = smartctl.spawn();
+  if (ret != 0) {
+    derr << "failed run smartctl: " << smartctl.err() << dendl;
+    return ret;
+  }
+
+  bufferlist output;
+  ret = output.read_fd(smartctl.get_stdout(), 100*1024);
+  if (ret < 0) {
+    derr << "failed read from smartctl: " << cpp_strerror(-ret) << dendl;
+    return ret;
+  }
+
+  derr << "smartctl output is: " << output.c_str() << dendl;
+  *result = output.c_str(); 
+
+  if (smartctl.join() != 0) {
+    derr << smartctl.err() << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 bool OSD::heartbeat_dispatch(Message *m)
