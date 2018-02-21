@@ -335,6 +335,7 @@ def task(ctx, config):
             client.1:
               extra_args: ['--exclude', 'test_100_continue']
     """
+    assert hasattr(ctx, 'rgw'), 's3tests must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
         "task s3tests only supports a list or dictionary for configuration"
@@ -357,12 +358,15 @@ def task(ctx, config):
 
     s3tests_conf = {}
     for client in clients:
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 's3tests: no rgw endpoint for {}'.format(client)
+
         s3tests_conf[client] = ConfigObj(
             indent_type='',
             infile={
                 'DEFAULT':
                     {
-                    'port'      : 7280,
+                    'port'      : endpoint.port,
                     'is_secure' : 'no',
                     },
                 'fixtures' : {},

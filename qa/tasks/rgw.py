@@ -13,12 +13,21 @@ from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.orchestra.run import CommandFailedError
+from util import get_remote_for_role
 from util.rgw import rgwadmin, wait_for_radosgw
 from util.rados import (rados, create_ec_pool,
                                         create_replicated_pool,
                                         create_cache_pool)
 
 log = logging.getLogger(__name__)
+
+class RGWEndpoint:
+    def __init__(self, hostname=None, port=None):
+        self.hostname = hostname
+        self.port = port
+
+    def url(self):
+        return 'http://{hostname}:{port}/'.format(hostname=self.hostname, port=self.port)
 
 @contextlib.contextmanager
 def start_rgw(ctx, config, clients):
@@ -50,10 +59,10 @@ def start_rgw(ctx, config, clients):
 
         log.info("Using %s as radosgw frontend", ctx.rgw.frontend)
 
-        host, port = ctx.rgw.role_endpoints[client]
+        endpoint = ctx.rgw.role_endpoints[client]
         frontends = \
             '{frontend} port={port}'.format(frontend=ctx.rgw.frontend,
-                                            port=port)
+                                            port=endpoint.port)
         frontend_prefix = client_config.get('frontend_prefix', None)
         if frontend_prefix:
             frontends += ' prefix={pfx}'.format(pfx=frontend_prefix)
@@ -73,8 +82,8 @@ def start_rgw(ctx, config, clients):
         if keystone_role is not None:
             if not ctx.keystone:
                 raise ConfigError('rgw must run after the keystone task')
-            url = 'http://{host}:{port}/v1/KEY_$(tenant_id)s'.format(host=host,
-                                                                     port=port)
+            url = 'http://{host}:{port}/v1/KEY_$(tenant_id)s'.format(host=endpoint.hostname,
+                                                                     port=endpoint.port)
             ctx.keystone.create_endpoint(ctx, keystone_role, 'swift', url)
 
             keystone_host, keystone_port = \
@@ -117,10 +126,10 @@ def start_rgw(ctx, config, clients):
 
     # XXX: add_daemon() doesn't let us wait until radosgw finishes startup
     for client in config.keys():
-        host, port = ctx.rgw.role_endpoints[client]
-        endpoint = 'http://{host}:{port}/'.format(host=host, port=port)
-        log.info('Polling {client} until it starts accepting connections on {endpoint}'.format(client=client, endpoint=endpoint))
-        wait_for_radosgw(endpoint)
+        endpoint = ctx.rgw.role_endpoints[client]
+        url = endpoint.url()
+        log.info('Polling {client} until it starts accepting connections on {url}'.format(client=client, url=url))
+        wait_for_radosgw(url)
 
     try:
         yield
@@ -139,17 +148,18 @@ def start_rgw(ctx, config, clients):
                     ],
                 )
 
-def assign_ports(ctx, config):
+def assign_endpoints(ctx, config):
     """
-    Assign port numberst starting with port 7280.
+    Assign port numbers starting with port 7280.
     """
     port = 7280
     role_endpoints = {}
-    for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for role in roles_for_host:
-            if role in config:
-                role_endpoints[role] = (remote.name.split('@')[1], port)
-                port += 1
+
+    for role, client_config in config.iteritems():
+        client_config = client_config or {}
+        remote = get_remote_for_role(ctx, role)
+        role_endpoints[role] = RGWEndpoint(remote.hostname, port)
+        port += 1
 
     return role_endpoints
 
@@ -236,9 +246,7 @@ def task(ctx, config):
     overrides = ctx.config.get('overrides', {})
     teuthology.deep_merge(config, overrides.get('rgw', {}))
 
-    role_endpoints = assign_ports(ctx, config)
     ctx.rgw = argparse.Namespace()
-    ctx.rgw.role_endpoints = role_endpoints
 
     ctx.rgw.ec_data_pool = bool(config.pop('ec-data-pool', False))
     ctx.rgw.erasure_code_profile = config.pop('erasure_code_profile', {})
@@ -249,6 +257,9 @@ def task(ctx, config):
 
     log.debug("config is {}".format(config))
     log.debug("client list is {}".format(clients))
+
+    ctx.rgw.role_endpoints = assign_endpoints(ctx, config)
+
     subtasks = [
         lambda: create_pools(ctx=ctx, clients=clients),
     ]
