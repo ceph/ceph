@@ -3481,6 +3481,11 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
 
+    Option("bluestore_bluefs_balance_failure_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("How frequently (in seconds) to dump information on "
+      "allocation failure occurred during BlueFS space rebalance"),
+
     Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
     .set_description("Amount of dpdk memory size in MB")
