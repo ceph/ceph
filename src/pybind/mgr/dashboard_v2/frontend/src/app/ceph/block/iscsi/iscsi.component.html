@@ -1,16 +1,18 @@
 <nav aria-label="breadcrumb">
   <ol class="breadcrumb">
-    <li class="breadcrumb-item">Block</li>
-    <li class="breadcrumb-item active" aria-current="page">iSCSI</li>
+    <li i18n
+        class="breadcrumb-item">Block</li>
+    <li i18n
+        class="breadcrumb-item active" aria-current="page">iSCSI</li>
   </ol>
 </nav>
 
-<legend>Daemons</legend>
+<legend i18n>Daemons</legend>
 <cd-table [data]="daemons"
           [columns]="daemonsColumns">
 </cd-table>
 
-<legend>Images</legend>
+<legend i18n>Images</legend>
 <cd-table [data]="images"
           [columns]="imagesColumns">
 </cd-table>

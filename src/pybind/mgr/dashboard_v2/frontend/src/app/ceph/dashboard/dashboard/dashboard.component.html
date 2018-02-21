@@ -1,9 +1,11 @@
 <div>
   <tabset *ngIf="hasGrafana">
-    <tab heading="Health">
+    <tab i18n-heading
+         heading="Health">
       <cd-health></cd-health>
     </tab>
-    <tab heading="Statistics">
+    <tab i18n-heading
+         heading="Statistics">
     </tab>
   </tabset>
   <cd-health *ngIf="!hasGrafana"></cd-health>
