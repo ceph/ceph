@@ -177,21 +177,29 @@ def configure(ctx, config):
     log.info('Configuring s3-tests...')
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
+        properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            s3tests_conf['DEFAULT']['host'] = host
-        else:
-            s3tests_conf['DEFAULT']['host'] = 'localhost'
 
-        if properties is not None and 'slow_backend' in properties:
-	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
+        # use rgw_server if given, or default to local client
+        role = properties.get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(role)
+        assert endpoint, 's3tests: no rgw endpoint for {}'.format(role)
+
+        s3tests_conf['DEFAULT']['host'] = endpoint.dns_name
+
+        website_role = properties.get('rgw_website_server')
+        if website_role:
+            website_endpoint = ctx.rgw.role_endpoints.get(website_role)
+            assert website_endpoint, \
+                    's3tests: no rgw endpoint for rgw_website_server {}'.format(website_role)
+            assert website_endpoint.website_dns_name, \
+                    's3tests: no dns-s3website-name for rgw_website_server {}'.format(website_role)
+            s3tests_conf['DEFAULT']['s3website_domain'] = website_endpoint.website_dns_name
+
+        slow_backend = properties.get('slow_backend')
+        if slow_backend:
+	    s3tests_conf['fixtures']['slow backend'] = slow_backend
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
