@@ -40,7 +40,7 @@ def task(ctx, config):
 
     seed = int(random.uniform(1,100))
     start = 800 + random.randint(800,1200)
-    end = start + 150
+    end = start + 50
 
     try:
         log.info('creating a working dir')
