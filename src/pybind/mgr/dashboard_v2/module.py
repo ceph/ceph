@@ -158,6 +158,11 @@ class Module(MgrModule):
 
     class ApiRoot(object):
 
+        _cp_config = {
+            'tools.sessions.on': True,
+            'tools.authenticate.on': True
+        }
+
         def __init__(self, mgrmod):
             self.ctrls = load_controllers(mgrmod)
             logger.debug('Loaded controllers: %s', self.ctrls)
