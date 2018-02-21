@@ -20,10 +20,12 @@
 #include "include/uuid.h"
 #include "blkdev.h"
 
-
 #ifdef __linux__
 #include <linux/fs.h>
 #include <blkid/blkid.h>
+
+#include <set>
+
 
 #define UUID_LEN 36
 
@@ -300,7 +302,7 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
   }
 }
 
-int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+int _get_vdo_stats_handle(const char *devname, std::string *vdo_name)
 {
   int vdo_fd = -1;
 
@@ -323,7 +325,7 @@ int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
     target[r] = 0;
     if (expect == target) {
       snprintf(fn, sizeof(fn), "/sys/kvdo/%s/statistics", de->d_name);
-      vdo_fd = ::open(fn, O_DIRECTORY);
+      vdo_fd = ::open(fn, O_RDONLY); //DIRECTORY);
       if (vdo_fd >= 0) {
 	*vdo_name = de->d_name;
 	break;
@@ -332,6 +334,25 @@ int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
   }
   closedir(dir);
   return vdo_fd;
+}
+
+int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
+{
+  std::set<std::string> devs = { devname };
+  while (!devs.empty()) {
+    std::string dev = *devs.begin();
+    devs.erase(devs.begin());
+    int fd = _get_vdo_stats_handle(dev.c_str(), vdo_name);
+    if (fd >= 0) {
+      // yay, it's vdo
+      return fd;
+    }
+    // ok, see if there are constituent devices
+    if (dev.find("dm-") == 0) {
+      get_dm_parents(dev, &devs);
+    }
+  }
+  return -1;
 }
 
 int64_t get_vdo_stat(int vdo_fd, const char *property)
