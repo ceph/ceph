@@ -490,11 +490,7 @@ namespace ceph {
     namespace mon {
       constexpr mon_feature_t FEATURE_KRAKEN(     (1ULL << 0));
       constexpr mon_feature_t FEATURE_LUMINOUS(   (1ULL << 1));
-<<<<<<< HEAD
-=======
-      constexpr mon_feature_t FEATURE_MIMIC(      (1ULL << 2));
       constexpr mon_feature_t FEATURE_OSDMAP_PRUNE (1ULL << 3);
->>>>>>> bc5df2b449... mon/OSDMonitor: prune full maps on encode_pending
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -508,11 +504,7 @@ namespace ceph {
         return (
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
-<<<<<<< HEAD
-=======
-	  FEATURE_MIMIC |
           FEATURE_OSDMAP_PRUNE |
->>>>>>> bc5df2b449... mon/OSDMonitor: prune full maps on encode_pending
 	  FEATURE_NONE
 	  );
       }
@@ -530,11 +522,7 @@ namespace ceph {
         return (
 	  FEATURE_KRAKEN |
 	  FEATURE_LUMINOUS |
-<<<<<<< HEAD
-=======
-	  FEATURE_MIMIC |
 	  FEATURE_OSDMAP_PRUNE |
->>>>>>> bc5df2b449... mon/OSDMonitor: prune full maps on encode_pending
 	  FEATURE_NONE
 	  );
       }
