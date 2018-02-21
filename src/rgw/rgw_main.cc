@@ -141,7 +141,9 @@ static int usage()
   cerr << "options:\n";
   cerr << "  --rgw-region=<region>     region in which radosgw runs\n";
   cerr << "  --rgw-zone=<zone>         zone in which radosgw runs\n";
+#if defined(WITH_RADOSGW_FCGI_FRONTEND)
   cerr << "  --rgw-socket-path=<path>  specify a unix domain socket path\n";
+#endif
   cerr << "  -m monaddress[:port]      connect to specified monitor\n";
   cerr << "  --keyring=<path>          path to radosgw keyring\n";
   cerr << "  --logfile=<logfile>       file to log debug output\n";
