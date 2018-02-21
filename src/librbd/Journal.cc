@@ -19,6 +19,7 @@
 #include "librbd/io/ObjectDispatcher.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/DemoteRequest.h"
+#include "librbd/journal/ObjectDispatch.h"
 #include "librbd/journal/OpenRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/journal/ResetRequest.h"
@@ -565,6 +566,10 @@ void Journal<I>::open(Context *on_finish) {
 
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
+  // inject our handler into the object dispatcher chain
+  m_image_ctx.io_object_dispatcher->register_object_dispatch(
+    journal::ObjectDispatch<I>::create(&m_image_ctx, this));
+
   Mutex::Locker locker(m_lock);
   assert(m_state == STATE_UNINITIALIZED);
   wait_for_steady_state(on_finish);
@@ -576,6 +581,14 @@ void Journal<I>::close(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
+  on_finish = new FunctionContext([this, on_finish](int r) {
+      // remove our handler from object dispatcher chain - preserve error
+      auto ctx = new FunctionContext([on_finish, r](int _) {
+          on_finish->complete(r);
+        });
+      m_image_ctx.io_object_dispatcher->shut_down_object_dispatch(
+        io::OBJECT_DISPATCH_LAYER_JOURNAL, ctx);
+    });
   on_finish = create_async_context_callback(m_image_ctx, on_finish);
 
   Mutex::Locker locker(m_lock);
