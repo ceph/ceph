@@ -57,6 +57,7 @@ public:
 protected:
   void send_op() override;
   bool should_complete(int r) override;
+  int filter_return_code(int r) const override;
 
   journal::Event create_event(uint64_t op_tid) const override {
     return journal::RenameEvent(op_tid, m_dest_name);
@@ -71,8 +72,6 @@ private:
   State m_state;
 
   bufferlist m_header_bl;
-
-  int filter_state_return_code(int r);
 
   void send_read_source_header();
   void send_write_destination_header();
