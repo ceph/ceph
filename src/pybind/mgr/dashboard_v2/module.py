@@ -23,6 +23,7 @@ if 'COVERAGE_ENABLED' in os.environ:
 from .controllers.auth import Auth
 from .tools import load_controllers, json_error_page, SessionExpireAtBrowserCloseTool, \
                    NotificationQueue
+from .services import Service
 from . import logger
 
 
@@ -67,6 +68,8 @@ class Module(MgrModule):
         self._url_prefix = ''
 
     def configure_cherrypy(self):
+        Service.mgr = self  # injects module instance into Service class
+
         server_addr = self.get_localized_config('server_addr', '::')
         server_port = self.get_localized_config('server_port', '8080')
         if server_addr is None:
