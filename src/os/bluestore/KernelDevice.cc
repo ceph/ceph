@@ -138,6 +138,8 @@ int KernelDevice::open(const string& p)
       dout(20) << __func__ << " devname " << devname << dendl;
       rotational = block_device_is_rotational(devname);
       this->devname = devname;
+
+      _detect_vdo();
     }
   }
 
@@ -191,6 +193,11 @@ void KernelDevice::close()
   assert(fs);
   delete fs;
   fs = NULL;
+
+  if (vdo_fd >= 0) {
+    VOID_TEMP_FAILURE_RETRY(::close(vdo_fd));
+    vdo_fd = -1;
+  }
 
   assert(fd_direct >= 0);
   VOID_TEMP_FAILURE_RETRY(::close(fd_direct));
@@ -267,6 +274,26 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     (*pm)[prefix + "path"] = path;
   }
   return 0;
+}
+
+void KernelDevice::_detect_vdo()
+{
+  vdo_fd = get_vdo_stats_handle(devname.c_str(), &vdo_name);
+  if (vdo_fd >= 0) {
+    dout(1) << __func__ << " VDO volume " << vdo_name
+	    << " maps to " << devname << dendl;
+  } else {
+    dout(20) << __func__ << " no VDO volume maps to " << devname << dendl;
+  }
+  return;
+}
+
+bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
+{
+  if (vdo_fd < 0) {
+    return false;
+  }
+  return get_vdo_utilization(vdo_fd, total, avail);
 }
 
 int KernelDevice::flush()
