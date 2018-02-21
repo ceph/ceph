@@ -57,6 +57,10 @@
 * The -f option of the rados tool now means "--format" instead of "--force",
   for consistency with the ceph tool.
 
+* The 'mon_allow_pool_delete_non_empty' option controls if the Monitors allow
+  removing a non-empty (containing objects) pool. The default is set to false
+  meaning that no pool containing data can be removed.
+
 >= 12.2.2
 ---------
 
