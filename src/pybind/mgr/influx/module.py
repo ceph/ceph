@@ -94,7 +94,6 @@ class Module(MgrModule):
         ]
 
         for df_type in df_types:
-            for pool in df['pools']:
                 point = {
                     "measurement": "ceph_pool_stats",
                     "tags": {
@@ -103,13 +102,52 @@ class Module(MgrModule):
                         "type_instance": df_type,
                         "fsid": self.get_fsid()
                     },
-                    "time": datetime.utcnow().isoformat() + 'Z',
+                    "time" : timestamp,
                     "fields": {
-                        "value": pool['stats'][df_type],
+                        "value" : pool['stats'][df_type],
                     }
                 }
                 data.append(point)
-        return data
+
+    def get_pg_summary(self, pool_info):
+        osd_sum = self.get('pg_summary')['by_osd']
+        pool_sum = self.get('pg_summary')['by_pool']
+        data = []
+        timestamp = datetime.utcnow().isoformat() + 'Z'
+
+        for osd_id, stats in osd_sum.iteritems():
+            metadata = self.get_metadata('osd', "%s" % osd_id)
+            for stat in stats:
+                point_1 = {
+                    "measurement": "ceph_pg_summary_osd",
+                    "tags": {
+                        "ceph_daemon": "osd." + str(osd_id),
+                        "type_instance": stat,
+                        "host": metadata['hostname']
+                    },
+                    "time" : timestamp, 
+                    "fields" : {
+                        "value": stats[stat]
+                    }
+                }
+                data.append(point_1)
+        for pool_id, stats in pool_sum.iteritems():
+            for stat in stats:
+                point_2 = {
+                    "measurement": "ceph_pg_summary_pool",
+                    "tags": {
+                        "pool_name" : pool_info[pool_id],
+                        "pool_id" : pool_id,
+                        "type_instance" : stat,
+                    },
+                    "time" : timestamp,
+                    "fields": {
+                        "value" : stats[stat],
+                    }
+                }
+                data.append(point_2)
+        return data 
+
 
     def get_daemon_stats(self):
         data = []
@@ -132,7 +170,7 @@ class Module(MgrModule):
                         "host": metadata['hostname'],
                         "fsid": self.get_fsid()
                     },
-                    "time": datetime.utcnow().isoformat() + 'Z',
+                    "time": timestamp,
                     "fields": {
                         "value": value
                     }
