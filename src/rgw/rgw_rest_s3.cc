@@ -1753,7 +1753,11 @@ int RGWPostObj_ObjStore_S3::get_params()
   env.add_var("key", s->object.name);
 
   part_str("Content-Type", &content_type);
-  env.add_var("Content-Type", content_type);
+
+  /* AWS permits POST without Content-Type: http://tracker.ceph.com/issues/20201 */
+  if (! content_type.empty()) {
+    env.add_var("Content-Type", content_type);
+  }
 
   map<string, struct post_form_part, ltstr_nocase>::iterator piter =
     parts.upper_bound(RGW_AMZ_META_PREFIX);
