@@ -426,7 +426,6 @@ set(libcommon_files
   common/escape.cc
   common/url_escape.cc
   common/io_priority.cc
-  common/Clock.cc
   common/ceph_time.cc
   common/mempool.cc
   common/Throttle.cc

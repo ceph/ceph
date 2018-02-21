@@ -62,6 +62,8 @@ public:
   }
   utime_t(const struct timespec v)
   {
+    // NOTE: this is used by ceph_clock_now() so should be kept
+    // as thin as possible.
     tv.tv_sec = v.tv_sec;
     tv.tv_nsec = v.tv_nsec;
   }
