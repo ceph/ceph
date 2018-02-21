@@ -10077,10 +10077,12 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
            ++i) {
     dout(10) << __func__ << " shard " << i->first << " before missing " << (i->second).get_items() << dendl;
   }
+  bool requires_missing_loc = false;
   for (set<pg_shard_t>::iterator i = async_recovery_targets.begin();
        i != async_recovery_targets.end();
        ++i) {
     if (*i == get_primary() || !peer_missing[*i].is_missing(soid)) continue;
+    requires_missing_loc = true;
     for (auto &&entry: ctx->log) {
       peer_missing[*i].add_next_event(entry);
     }
@@ -10114,12 +10116,14 @@ void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
     missing_loc.remove_location(soid, peer);
   }
 
-  for (set<pg_shard_t>::const_iterator i = actingset.begin();
-       i != actingset.end();
-       ++i) {
-    pg_shard_t peer(*i);
-    if (!peer_missing[peer].is_missing(soid))
-      missing_loc.add_location(soid, peer);
+  if (requires_missing_loc) {
+    for (set<pg_shard_t>::const_iterator i = actingset.begin();
+         i != actingset.end();
+         ++i) {
+      pg_shard_t peer(*i);
+      if (!peer_missing[peer].is_missing(soid))
+        missing_loc.add_location(soid, peer);
+    }
   }
   dout(10) << __func__ << " missing_loc after: " << missing_loc.get_locations(soid) << dendl;
 
