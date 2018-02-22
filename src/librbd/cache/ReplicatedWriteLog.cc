@@ -104,16 +104,16 @@ void WriteLogEntry::remove_reader() { reader_count--; }
  * entry will be updated to remove the regions that overlap with
  * this.
  */
-void WriteLogMap::add_entry(WriteLogEntry *log_entry) {
+void WriteLogMap::add_log_entry(WriteLogEntry *log_entry) {
   Mutex::Locker locker(m_lock);
-  add_entry_locked(log_entry);
+  add_log_entry_locked(log_entry);
 }
 
-void WriteLogMap::add_entries(WriteLogEntries &log_entries) {
+void WriteLogMap::add_log_entries(WriteLogEntries &log_entries) {
   Mutex::Locker locker(m_lock);
   ldout(m_cct, 20) << dendl;
   for (auto &log_entry : log_entries) {
-    add_entry_locked(log_entry);
+    add_log_entry_locked(log_entry);
   }
 }
   
@@ -121,30 +121,31 @@ void WriteLogMap::add_entries(WriteLogEntries &log_entries) {
  * Remove any map entries that refer to the supplied write log
  * entry.
  */
-void WriteLogMap::remove_entry(WriteLogEntry *log_entry) {
+void WriteLogMap::remove_log_entry(WriteLogEntry *log_entry) {
   Mutex::Locker locker(m_lock);
-  remove_entry_locked(log_entry);
+  remove_log_entry_locked(log_entry);
 }
 
-void WriteLogMap::remove_entries(WriteLogEntries &log_entries) {
+void WriteLogMap::remove_log_entries(WriteLogEntries &log_entries) {
   Mutex::Locker locker(m_lock);
   ldout(m_cct, 20) << dendl;
   for (auto &log_entry : log_entries) {
-    remove_entry_locked(log_entry);
+    remove_log_entry_locked(log_entry);
   }
 }
 
-#if 0
 /**
- * Returns the list of all write log entries that overlap the
- * specified block extent.
+ * Returns the list of all write log entries that overlap the specified block
+ * extent. This doesn't tell you which portions of these entries overlap the
+ * extent, or each other. For that, use find_map_entries(). A log entry may
+ * appear in the list more than once, if multiple map entries refer to it
+ * (e.g. the middle of that write log entry has been overwritten).
  */
-WriteLogEntries WriteLogMap::find_entries(BlockExtent block_extent) {
+WriteLogEntries WriteLogMap::find_log_entries(BlockExtent block_extent) {
   Mutex::Locker locker(m_lock);
   ldout(m_cct, 20) << dendl;
-  return find_entries_locked(block_extent);
+  return find_log_entries_locked(block_extent);
 }
-#endif
 
 /**
  * Returns the list of all write log map entries that overlap the
@@ -156,7 +157,7 @@ WriteLogMapEntries WriteLogMap::find_map_entries(BlockExtent block_extent) {
   return find_map_entries_locked(block_extent);
 }
   
-void WriteLogMap::add_entry_locked(WriteLogEntry *log_entry) {
+void WriteLogMap::add_log_entry_locked(WriteLogEntry *log_entry) {
   WriteLogMapEntry map_entry(log_entry);
   ldout(m_cct, 20) << "block_extent=" << map_entry.block_extent 
 		   << dendl;
@@ -193,27 +194,18 @@ void WriteLogMap::add_entry_locked(WriteLogEntry *log_entry) {
   add_map_entry_locked(map_entry);
 }
 
-void WriteLogMap::remove_entry_locked(WriteLogEntry *log_entry) {
+void WriteLogMap::remove_log_entry_locked(WriteLogEntry *log_entry) {
   ldout(m_cct, 20) << "*log_entry=" << *log_entry << dendl;
   assert(m_lock.is_locked_by_me());
-  
-#if 0
-    assert(cell != nullptr);
-    auto &detained_block_extent = reinterpret_cast<WriteLogMapExtent &>(
-      *cell);
-    ldout(m_cct, 20) << "block_start="
-                     << detained_block_extent.block_extent.block_start << ", "
-                     << "block_end="
-                     << detained_block_extent.block_extent.block_end << ", "
-                     << "pending_ops="
-                     << (detained_block_extent.block_operations.empty() ?
-                          0 : detained_block_extent.block_operations.size() - 1)
-                     << dendl;
 
-    *block_operations = std::move(detained_block_extent.block_operations);
-    m_detained_block_extents.erase(detained_block_extent.block_extent);
-    m_free_detained_block_extents.push_back(detained_block_extent);
-#endif
+  BlockExtent log_entry_extent(log_entry->block_extent());
+  WriteLogMapEntries possible_hits = find_map_entries_locked(log_entry_extent);
+  for (auto &possible_hit : possible_hits) {
+    if (possible_hit.log_entry == log_entry) {
+      /* This map entry refers to the specified log entry */
+      remove_map_entry_locked(possible_hit);
+    }
+  }
 }
 
 void WriteLogMap::add_map_entry_locked(WriteLogMapEntry &map_entry)
@@ -265,8 +257,7 @@ void WriteLogMap::split_map_entry_locked(WriteLogMapEntry &map_entry, BlockExten
   split.log_entry->referring_map_entries++;
 }
 
-#if 0
-WriteLogEntries WriteLogMap::find_entries_locked(BlockExtent block_extent) {
+WriteLogEntries WriteLogMap::find_log_entries_locked(BlockExtent &block_extent) {
   WriteLogEntries overlaps;
   ldout(m_cct, 20) << "block_extent=" << block_extent << dendl;
   
@@ -277,7 +268,6 @@ WriteLogEntries WriteLogMap::find_entries_locked(BlockExtent block_extent) {
   }
   return overlaps;
 }
-#endif
 
 /**
  * TODO: Generalize this to do some arbitrary thing to each map
@@ -1028,7 +1018,7 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
     i.copy((unsigned)operation->log_entry->ram_entry.write_bytes, (char*)operation->log_entry->pmem_buffer);
   }
 
-  m_blocks_to_log_entries.add_entries(log_entries);
+  m_blocks_to_log_entries.add_log_entries(log_entries);
   
   if (set->m_persist_on_flush) {
     /* 
@@ -1460,7 +1450,6 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
       }
       next_ctx->complete(r);
     });
-#if 1 // disable until flush will complete
   ctx = new FunctionContext(
     [this, ctx](int r) {
       Context *next_ctx = ctx;
@@ -1474,7 +1463,6 @@ void ReplicatedWriteLog<I>::shut_down(Context *on_finish) {
       // flush all writes to OSDs
       flush(next_ctx);
     });
-#endif
   {
     Mutex::Locker locker(m_lock);
     m_async_op_tracker.wait(m_image_ctx, ctx);

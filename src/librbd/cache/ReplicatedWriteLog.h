@@ -60,8 +60,8 @@ POBJ_LAYOUT_TOID(rbd_rwl, struct WriteLogPmemEntry);
 POBJ_LAYOUT_END(rbd_rwl);
 
 struct WriteLogPmemEntry {
-  uint64_t sync_gen_number;
-  uint64_t write_sequence_number;
+  uint64_t sync_gen_number = 0;
+  uint64_t write_sequence_number = 0;
   uint64_t image_offset_bytes;
   uint64_t write_bytes;
   TOID(uint8_t) write_data;
@@ -76,11 +76,9 @@ struct WriteLogPmemEntry {
 			       is an unmap */
   };
   WriteLogPmemEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
-    : sync_gen_number(0), write_sequence_number(0),
-      image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), 
+    : image_offset_bytes(image_offset_bytes), write_bytes(write_bytes), 
       entry_valid(0), sync_point(0), sequenced(0), has_data(0), unmap(0) {
   }
-  WriteLogPmemEntry() { WriteLogPmemEntry(0, 0); }
   BlockExtent block_extent() {
     return BlockExtent(librbd::cache::block_extent(image_offset_bytes, write_bytes));
   }
@@ -128,7 +126,6 @@ public:
   WriteLogEntry(uint64_t image_offset_bytes, uint64_t write_bytes) 
     : ram_entry(image_offset_bytes, write_bytes) {
   }
-  WriteLogEntry() {} 
   WriteLogEntry(const WriteLogEntry&) = delete;
   WriteLogEntry &operator=(const WriteLogEntry&) = delete;
   BlockExtent block_extent() { return ram_entry.block_extent(); }
@@ -303,21 +300,21 @@ public:
   WriteLogMap(const WriteLogMap&) = delete;
   WriteLogMap &operator=(const WriteLogMap&) = delete;
 
-  void add_entry(WriteLogEntry *log_entry);
-  void add_entries(WriteLogEntries &log_entries);
-  void remove_entry(WriteLogEntry *log_entry);
-  void remove_entries(WriteLogEntries &log_entries);
-  //WriteLogEntries find_entries(BlockExtent block_extent);
+  void add_log_entry(WriteLogEntry *log_entry);
+  void add_log_entries(WriteLogEntries &log_entries);
+  void remove_log_entry(WriteLogEntry *log_entry);
+  void remove_log_entries(WriteLogEntries &log_entries);
+  WriteLogEntries find_log_entries(BlockExtent block_extent);
   WriteLogMapEntries find_map_entries(BlockExtent block_extent);
   
 private:
-  void add_entry_locked(WriteLogEntry *log_entry);
-  void remove_entry_locked(WriteLogEntry *log_entry);
+  void add_log_entry_locked(WriteLogEntry *log_entry);
+  void remove_log_entry_locked(WriteLogEntry *log_entry);
   void add_map_entry_locked(WriteLogMapEntry &map_entry);
   void remove_map_entry_locked(WriteLogMapEntry &map_entry);
   void adjust_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &new_extent);
   void split_map_entry_locked(WriteLogMapEntry &map_entry, BlockExtent &removed_extent);
-  //WriteLogEntries find_entries_locked(BlockExtent block_extent);
+  WriteLogEntries find_log_entries_locked(BlockExtent &block_extent);
   WriteLogMapEntries find_map_entries_locked(BlockExtent &block_extent);
 
   /* We map block extents to write log entries, or portions of write log
