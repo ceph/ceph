@@ -3735,12 +3735,12 @@ std::vector<Option> get_global_options() {
     .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
     Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.99)
+    .set_default(.5)
     .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to metadata"),
 
     Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.01)
+    .set_default(.5)
     .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
