@@ -667,10 +667,9 @@ int fio_ceph_os_queue(thread_data* td, io_u* u)
       ghobject_t pgmeta_oid(coll.pg.make_pgmeta_oid());
       t.omap_setkeys(coll.cid, pgmeta_oid, omaps);
     }
+    t.register_on_commit(new UnitComplete(u));
     os->queue_transaction(coll.ch,
-                          std::move(t),
-                          nullptr,
-                          new UnitComplete(u));
+                          std::move(t));
     return FIO_Q_QUEUED;
   }
 
