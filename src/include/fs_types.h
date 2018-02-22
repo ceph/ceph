@@ -86,7 +86,7 @@ struct file_layout_t {
   }
 
   uint64_t get_period() const {
-    return stripe_count * object_size;
+    return static_cast<uint64_t>(stripe_count) * object_size;
   }
 
   void from_legacy(const ceph_file_layout& fl);
