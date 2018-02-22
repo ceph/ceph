@@ -202,6 +202,9 @@ bool check_if_image_spec_present(const boost::program_options::variables_map &vm
                                  argument_types::ArgumentModifier mod,
                                  size_t spec_arg_index);
 
+bool is_not_user_snap_namespace(librbd::Image* image,
+                                const librbd::snap_info_t &snap_info);
+
 std::string image_id(librbd::Image& image);
 
 std::string mirror_image_state(librbd::mirror_image_state_t mirror_image_state);
