@@ -2613,7 +2613,11 @@ int main(int argc, char **argv)
         if (vm.count("objcmd") && (objcmd == "remove-clone-metadata"))
 	  head = true;
 	lookup_ghobject lookup(object, head);
-	if (action_on_all_objects(fs, lookup, debug)) {
+	if (pgidstr.length())
+	  ret = action_on_all_objects_in_exact_pg(fs, coll_t(pgid), lookup, debug);
+	else
+	  ret = action_on_all_objects(fs, lookup, debug);
+	if (ret) {
 	  throw std::runtime_error("Internal error");
 	} else {
 	  if (lookup.size() != 1) {
