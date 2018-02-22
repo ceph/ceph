@@ -139,9 +139,9 @@ int main(int argc, const char **argv)
 
   if (g_conf->name.get_id().empty() ||
       (g_conf->name.get_id()[0] >= '0' && g_conf->name.get_id()[0] <= '9')) {
-    derr << "deprecation warning: MDS id '" << g_conf->name
-      << "' is invalid and will be forbidden in a future version.  "
+    derr << "MDS id '" << g_conf->name << "' is invalid. "
       "MDS names may not start with a numeric digit." << dendl;
+    exit(1);
   }
 
   auto nonce = ceph::util::generate_random_number<uint64_t>();
