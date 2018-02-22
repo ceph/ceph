@@ -1467,6 +1467,8 @@ OPTION(rgw_gc_max_objs, OPT_INT)
 OPTION(rgw_gc_obj_min_wait, OPT_INT)    // wait time before object may be handled by gc
 OPTION(rgw_gc_processor_max_time, OPT_INT)  // total run time for a single gc processor work
 OPTION(rgw_gc_processor_period, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_concurrent_io, OPT_INT)  // gc processor cycle time
+OPTION(rgw_gc_max_trim_chunk, OPT_INT)  // gc trim chunk size
 OPTION(rgw_s3_success_create_obj_status, OPT_INT) // alternative success status response for create-obj (0 - default)
 OPTION(rgw_resolve_cname, OPT_BOOL)  // should rgw try to resolve hostname as a dns cname record
 OPTION(rgw_obj_stripe_size, OPT_INT)

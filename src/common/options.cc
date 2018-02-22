@@ -5181,7 +5181,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "The number of garbage collector data shards, is the number of RADOS objects that "
         "RGW will use to store the garbage collection information on.")
-    .add_see_also({"rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_obj_min_wait", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2_hr)
@@ -5191,7 +5191,7 @@ std::vector<Option> get_rgw_options() {
        "a deleted object's data. RGW will not remove object immediately, as object could "
        "still have readers. A mechanism exists to increase the object's expiration time "
        "when it's being read.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_processor_max_time", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
@@ -5203,7 +5203,7 @@ std::vector<Option> get_rgw_options() {
         "objects concurrently. This time signifies that maximum amount of time that RGW "
         "is allowed to hold that lease. In the case where RGW goes down uncleanly, this "
         "is the amount of time where processing of that data shard will be blocked.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_period", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_gc_processor_period", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_hr)
@@ -5212,7 +5212,20 @@ std::vector<Option> get_rgw_options() {
         "The amount of time between the start of consecutive runs of the garbage collector "
         "threads. If garbage collector runs takes more than this period, it will not wait "
         "before running again.")
-    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time"}),
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io", "rgw_gc_max_trim_chunk"}),
+
+    Option("rgw_gc_max_concurrent_io", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Max concurrent RADOS IO operations for garbage collection")
+    .set_long_description(
+        "The maximum number of concurrent IO operations that the RGW garbage collection "
+        "thread will use when purging old data.")
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_trim_chunk"}),
+
+    Option("rgw_gc_max_trim_chunk", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(16)
+    .set_description("Max number of keys to remove from garbage collector log in a single operation")
+    .add_see_also({"rgw_gc_max_objs", "rgw_gc_obj_min_wait", "rgw_gc_processor_max_time", "rgw_gc_max_concurrent_io"}),
 
     Option("rgw_s3_success_create_obj_status", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)

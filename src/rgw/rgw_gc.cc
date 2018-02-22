@@ -154,9 +154,14 @@ class RGWGCIOManager {
   list<IO> ios;
   map<int, std::list<string> > remove_tags;
 
+#define MAX_AIO_DEFAULT 10
+  size_t max_aio{MAX_AIO_DEFAULT};
+
 public:
   RGWGCIOManager(CephContext *_cct, RGWGC *_gc) : cct(_cct),
-                                                  gc(_gc) {}
+                                                  gc(_gc) {
+    max_aio = cct->_conf->rgw_gc_max_concurrent_io;
+  }
   ~RGWGCIOManager() {
     for (auto io : ios) {
       io.c->release();
@@ -164,9 +169,7 @@ public:
   }
 
   int schedule_io(IoCtx *ioctx, const string& oid, ObjectWriteOperation *op, int index, const string& tag) {
-#warning configurable
-#define MAX_CONCURRENT_IO 5
-    while (ios.size() > MAX_CONCURRENT_IO) {
+    while (ios.size() > max_aio) {
       if (gc->going_down()) {
         return 0;
       }
@@ -209,8 +212,7 @@ public:
     }
 
     rt.push_back(io.tag);
-#define MAX_REMOVE_CHUNK 16
-    if (rt.size() > MAX_REMOVE_CHUNK) {
+    if (rt.size() > (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
       flush_remove_tags(io.index, rt);
     }
 done:
