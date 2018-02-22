@@ -89,7 +89,8 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   mgrc(m->cct, m),
   log_client(m->cct, messenger, &mc->monmap, LogClient::NO_FLAGS),
   mds_rank(NULL),
-  asok_hook(NULL)
+  asok_hook(NULL),
+  starttime(mono_clock::now())
 {
   orig_argc = 0;
   orig_argv = NULL;
@@ -179,6 +180,9 @@ void MDSDaemon::dump_status(Formatter *f)
     f->dump_unsigned("osdmap_epoch", 0);
     f->dump_unsigned("osdmap_epoch_barrier", 0);
   }
+
+  f->dump_float("uptime", get_uptime().count());
+
   f->close_section(); // status
 }
 

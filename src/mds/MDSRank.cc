@@ -91,7 +91,8 @@ MDSRank::MDSRank(
     messenger(msgr), monc(monc_),
     respawn_hook(respawn_hook_),
     suicide_hook(suicide_hook_),
-    standby_replaying(false)
+    standby_replaying(false),
+    starttime(mono_clock::now())
 {
   hb = g_ceph_context->get_heartbeat_map()->add_worker("MDSRank", pthread_self());
 
@@ -2534,6 +2535,7 @@ void MDSRank::dump_status(Formatter *f) const
   } else if (state == MDSMap::STATE_CLIENTREPLAY) {
     dump_clientreplay_status(f);
   }
+  f->dump_float("rank_uptime", get_uptime().count());
 }
 
 void MDSRank::dump_clientreplay_status(Formatter *f) const
