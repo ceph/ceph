@@ -22,30 +22,68 @@
 #define OPTRACKER_PREALLOC_EVENTS 20
 
 class TrackedOp;
+class OpHistory;
+
 typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
+
+class OpHistoryServiceThread : public Thread
+{
+private:
+  OpHistory* _ophistory;
+  mutable ceph::spinlock queue_spinlock;
+  list<pair<utime_t, TrackedOpRef>> _external_queue;
+  bool _break_thread;
+public:
+  explicit OpHistoryServiceThread(OpHistory* parent)
+    : _ophistory(parent),
+      _break_thread(false) { }
+
+  void break_thread();
+  void insert_op(const utime_t& now, TrackedOpRef op) {
+    queue_spinlock.lock();
+    _external_queue.emplace_back(now, op);
+    queue_spinlock.unlock();
+  }
+
+  void *entry() override;
+};
+
 
 class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
   set<pair<double, TrackedOpRef> > duration;
   set<pair<utime_t, TrackedOpRef> > slow_op;
   Mutex ops_history_lock;
+  std::atomic_bool shutdown;
   void cleanup(utime_t now);
-  bool shutdown;
   uint32_t history_size;
   uint32_t history_duration;
   uint32_t history_slow_op_size;
   uint32_t history_slow_op_threshold;
+  OpHistoryServiceThread opsvc;
+  friend class OpHistoryServiceThread;
 
 public:
   OpHistory() : ops_history_lock("OpHistory::Lock"), shutdown(false),
     history_size(0), history_duration(0),
-    history_slow_op_size(0), history_slow_op_threshold(0) {}
+    history_slow_op_size(0), history_slow_op_threshold(0),
+    opsvc(this) {
+    opsvc.create("OpHistorySvc");
+  }
   ~OpHistory() {
     assert(arrived.empty());
     assert(duration.empty());
     assert(slow_op.empty());
   }
-  void insert(utime_t now, TrackedOpRef op);
+  void insert(const utime_t& now, TrackedOpRef op)
+  {
+    if (shutdown)
+      return;
+
+    opsvc.insert_op(now, op);
+  }
+
+  void _insert_delayed(const utime_t& now, TrackedOpRef op);
   void dump_ops(utime_t now, Formatter *f, set<string> filters = {""});
   void dump_ops_by_duration(utime_t now, Formatter *f, set<string> filters = {""});
   void dump_slow_ops(utime_t now, Formatter *f, set<string> filters = {""});
