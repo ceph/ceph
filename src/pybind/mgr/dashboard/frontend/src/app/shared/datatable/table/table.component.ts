@@ -22,6 +22,7 @@ import * as _ from 'lodash';
 import 'rxjs/add/observable/timer';
 import { Observable } from 'rxjs/Observable';
 
+import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableSelection } from '../../models/cd-table-selection';
 
@@ -250,25 +251,48 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     ];
   }
 
-  updateFilter(event?) {
+  updateFilter(event?: any) {
     if (!event) {
       this.search = '';
     }
-    const val = this.search.toLowerCase();
-    const columns = this.columns;
+    const columns = this.columns.filter(c => c.cellTransformation !== CellTemplate.sparkline);
     // update the rows
-    this.rows = this.data.filter((d) => {
-      return (
-        columns.filter(c => {
-          return (
-            (_.isString(d[c.prop]) || _.isNumber(d[c.prop])) &&
-            (d[c.prop] + '').toLowerCase().indexOf(val) !== -1
-          );
-        }).length > 0
-      );
-    });
+    this.rows = this.subSearch(this.data, this.search.toLowerCase().split(/[, ]/), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
+  }
+
+  subSearch (data: any[], currentSearch: string[], columns: CdTableColumn[]) {
+    let tempColumns: CdTableColumn[];
+    if (currentSearch.length === 0 || data.length === 0) {
+      return data;
+    }
+    const searchWords: string[] = currentSearch.pop().split(':');
+    if (searchWords.length === 2) {
+      tempColumns = [...columns];
+      columns = columns.filter((c) => c.name.toLowerCase().indexOf(searchWords[0]) !== -1);
+    }
+    const searchWord: string = _.last(searchWords);
+    if (searchWord.length > 0) {
+      data = data.filter(d => {
+        return columns.filter(c => {
+          let cellValue: any = _.get(d, c.prop);
+          if (_.isUndefined(cellValue)) {
+            return;
+          }
+          if (_.isArray(cellValue)) {
+            cellValue = cellValue.join('');
+          } else if (_.isNumber(cellValue)) {
+            cellValue = cellValue.toString();
+          }
+          return cellValue.toLowerCase().indexOf(searchWord) !== -1;
+        }).length > 0;
+      });
+    }
+    if (_.isArray(tempColumns)) {
+      columns = tempColumns;
+    }
+    return this.subSearch(data, currentSearch, columns);
   }
 
   getRowClass() {
