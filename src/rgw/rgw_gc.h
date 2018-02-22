@@ -15,6 +15,8 @@
 #include "rgw_rados.h"
 #include "cls/rgw/cls_rgw_types.h"
 
+class RGWGCIOManager;
+
 class RGWGC {
   CephContext *cct;
   RGWRados *store;
@@ -54,7 +56,8 @@ public:
 
   int list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   void list_init(int *index) { *index = 0; }
-  int process(int index, int process_max_secs, bool expired_only);
+  int process(int index, int process_max_secs, bool expired_only,
+              RGWGCIOManager& io_manager);
   int process(bool expired_only);
 
   bool going_down();
