@@ -9568,89 +9568,75 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->sdata_op_ordering_lock.Unlock();
     return;    // OSD shutdown, discard.
   }
-  PGRef pg;
-  uint64_t requeue_seq;
   const auto token = item.get_ordering_token();
-  {
-    auto r = sdata->pg_slots.emplace(token, make_unique<OSDShardPGSlot>());
-    auto *slot = r.first->second.get();
-    dout(30) << __func__ << " " << token
-	     << (r.second ? " (new)" : "")
-	     << " to_process " << slot->to_process
-	     << " waiting " << slot->waiting
-	     << " waiting_peering " << slot->waiting_peering
-	     << dendl;
-    if (slot->waiting_for_split
-	|| (item.is_peering() && !slot->waiting_peering.empty())
-	|| (!item.is_peering() && !slot->waiting.empty())) {
-      dout(20) << __func__ << " " << token << " already waiting, adding " << item
-	       << dendl;
-      _add_slot_waiter(token, slot, std::move(item));
-      sdata->sdata_op_ordering_lock.Unlock();
-      return;
-    }
-    // note the requeue seq now...
-    requeue_seq = slot->requeue_seq;
-    pg = slot->pg;
-    slot->to_process.push_back(std::move(item));
-    dout(20) << __func__ << " " << slot->to_process.back()
-	     << " queued" << dendl;
-    ++slot->num_running;
-  }
-  sdata->sdata_op_ordering_lock.Unlock();
-
-  osd->service.maybe_inject_dispatch_delay();
+  auto r = sdata->pg_slots.emplace(token, make_unique<OSDShardPGSlot>());
+  OSDShardPGSlot *slot = r.first->second.get();
+  dout(20) << __func__ << " " << token
+	   << (r.second ? " (new)" : "")
+	   << " to_process " << slot->to_process
+	   << " waiting " << slot->waiting
+	   << " waiting_peering " << slot->waiting_peering
+	   << dendl;
+  PGRef pg = slot->pg;
+  slot->to_process.push_back(std::move(item));
+  dout(20) << __func__ << " " << slot->to_process.back()
+	   << " queued" << dendl;
 
   // lock pg (if we have it)
   if (pg) {
+    // note the requeue seq now...
+    uint64_t requeue_seq = slot->requeue_seq;
+    ++slot->num_running;
+
+    sdata->sdata_op_ordering_lock.Unlock();
+    osd->service.maybe_inject_dispatch_delay();
     pg->lock();
-  }
+    osd->service.maybe_inject_dispatch_delay();
+    sdata->sdata_op_ordering_lock.Lock();
 
-  osd->service.maybe_inject_dispatch_delay();
-
-  // we don't use a Mutex::Locker here because of the
-  // osd->service.release_reserved_pushes() call below
-  sdata->sdata_op_ordering_lock.Lock();
-
-  auto q = sdata->pg_slots.find(token);
-  if (q == sdata->pg_slots.end()) {
-    // this can happen if we race with pg removal.
-    dout(20) << __func__ << " slot " << token << " no longer there" << dendl;
-    pg->unlock();
-    sdata->sdata_op_ordering_lock.Unlock();
-    return;
-  }
-  auto *slot = q->second.get();
-  --slot->num_running;
-
-  if (pg && !slot->pg) {
-    // this can happen if we race with pg removal.
-    dout(20) << __func__ << " slot " << token << " no longer attached" << dendl;
-    pg->unlock();
-    pg = nullptr;
-  }
-  if (slot->to_process.empty()) {
-    // raced with wake_pg_waiters or consume_map
-    dout(20) << __func__ << " " << token
-	     << " nothing queued" << dendl;
-    if (pg) {
+    auto q = sdata->pg_slots.find(token);
+    if (q == sdata->pg_slots.end()) {
+      // this can happen if we race with pg removal.
+      dout(20) << __func__ << " slot " << token << " no longer there" << dendl;
       pg->unlock();
+      sdata->sdata_op_ordering_lock.Unlock();
+      return;
     }
-    sdata->sdata_op_ordering_lock.Unlock();
-    return;
-  }
-  if (requeue_seq != slot->requeue_seq) {
-    dout(20) << __func__ << " " << token
-	     << " requeue_seq " << slot->requeue_seq << " > our "
-	     << requeue_seq << ", we raced with wake_pg_waiters"
-	     << dendl;
-    if (pg) {
+    slot = q->second.get();
+    --slot->num_running;
+
+    if (slot->pg != pg) {
+      // this can happen if we race with pg removal.
+      dout(20) << __func__ << " slot " << token << " no longer attached to "
+	       << pg << dendl;
       pg->unlock();
+      pg = slot->pg;
     }
-    sdata->sdata_op_ordering_lock.Unlock();
-    return;
+
+    if (slot->to_process.empty()) {
+      // raced with wake_pg_waiters or consume_map
+      dout(20) << __func__ << " " << token
+	       << " nothing queued" << dendl;
+      if (pg) {
+	pg->unlock();
+      }
+      sdata->sdata_op_ordering_lock.Unlock();
+      return;
+    }
+    if (requeue_seq != slot->requeue_seq) {
+      dout(20) << __func__ << " " << token
+	       << " requeue_seq " << slot->requeue_seq << " > our "
+	       << requeue_seq << ", we raced with wake_pg_waiters"
+	       << dendl;
+      if (pg) {
+	pg->unlock();
+      }
+      sdata->sdata_op_ordering_lock.Unlock();
+      return;
+    }
   }
-  dout(30) << __func__ << " " << token
+
+  dout(20) << __func__ << " " << token
 	   << " to_process " << slot->to_process
 	   << " waiting " << slot->waiting
 	   << " waiting_peering " << slot->waiting_peering << dendl;
