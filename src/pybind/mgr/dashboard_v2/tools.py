@@ -13,7 +13,6 @@ import sys
 import time
 import threading
 
-import six
 import cherrypy
 
 from . import logger
@@ -69,7 +68,7 @@ def load_controllers():
                                       package='dashboard_v2')
         for _, cls in mod.__dict__.items():
             # Controllers MUST be derived from the class BaseController.
-            if isinstance(cls, BaseControllerMeta) and \
+            if inspect.isclass(cls) and issubclass(cls, BaseController) and \
                     hasattr(cls, '_cp_controller_'):
                 controllers.append(cls)
 
@@ -82,38 +81,13 @@ def json_error_page(status, message, traceback, version):
                            version=version))
 
 
-class BaseControllerMeta(type):
-    @property
-    def mgr(cls):
-        """
-        :return: Returns the MgrModule instance of this Ceph dashboard module.
-        """
-        return cls._mgr_module
-
-    @mgr.setter
-    def mgr(cls, value):
-        """
-        :param value: The MgrModule instance of the Ceph dashboard module.
-        """
-        cls._mgr_module = value
-
-
-class BaseController(six.with_metaclass(BaseControllerMeta, object)):
+class BaseController(object):
     """
     Base class for all controllers providing API endpoints.
     """
-    _mgr_module = None
-
     _cp_config_default = {
         'request.error_page': {'default': json_error_page},
     }
-
-    @property
-    def mgr(self):
-        """
-        :return: Returns the MgrModule instance of this Ceph module.
-        """
-        return self._mgr_module
 
 
 # pylint: disable=too-many-instance-attributes
