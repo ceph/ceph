@@ -591,7 +591,7 @@ int ReplicatedBackend::be_deep_scrub(
                            CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
   bool skip_data_digest = store->has_builtin_csum() &&
-    g_conf->get_val<bool>("osd_skip_data_digest");
+    g_conf->osd_skip_data_digest;
 
   utime_t sleeptime;
   sleeptime.set_from_double(cct->_conf->osd_debug_deep_scrub_sleep);
