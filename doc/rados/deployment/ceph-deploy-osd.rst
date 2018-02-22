@@ -21,7 +21,7 @@ before building out a large cluster. See `Data Storage`_ for additional details.
 List Disks
 ==========
 
-To list the disks on a node, execute the following command:: 
+To list the disks on a node, execute the following command::
 
 	ceph-deploy disk list {node-name [node-name]...}
 
@@ -38,72 +38,38 @@ execute the following::
 .. important:: This will delete all data.
 
 
-Prepare OSDs
-============
+Create OSDs
+===========
 
 Once you create a cluster, install Ceph packages, and gather keys, you
-may prepare the OSDs and deploy them to the OSD node(s). If you need to 
-identify a disk or zap it prior to preparing it for use as an OSD, 
+may create the OSDs and deploy them to the OSD node(s). If you need to
+identify a disk or zap it prior to preparing it for use as an OSD,
 see `List Disks`_ and `Zap Disks`_. ::
 
-	ceph-deploy osd prepare {node-name}:{data-disk}[:{journal-disk}]
-	ceph-deploy osd prepare osdserver1:sdb:/dev/ssd
-	ceph-deploy osd prepare osdserver1:sdc:/dev/ssd
+	ceph-deploy osd create --data {data-disk} {node-name}
 
-The ``prepare`` command only prepares the OSD. On most operating
-systems, the ``activate`` phase will automatically run when the
-partitions are created on the disk (using Ceph ``udev`` rules). If not
-use the ``activate`` command. See `Activate OSDs`_ for
-details.
+For example::
 
-The foregoing example assumes a disk dedicated to one Ceph OSD Daemon, and 
-a path to an SSD journal partition. We recommend storing the journal on 
-a separate drive to maximize throughput. You may dedicate a single drive
-for the journal too (which may be expensive) or place the journal on the 
-same disk as the OSD (not recommended as it impairs performance). In the
-foregoing example we store the journal on a partitioned solid state drive.
+	ceph-deploy osd create --data /dev/ssd osd-server1
 
-You can use the settings --fs-type or --bluestore to choose which file system
-you want to install in the OSD drive. (More information by running
-'ceph-deploy osd prepare --help').
+For bluestore (the default) the example assumes a disk dedicated to one Ceph
+OSD Daemon. Filestore is also supported, in which case a ``--journal`` flag in
+addition to ``--filestore`` needs to be used to define the Journal device on
+the remote host.
 
-.. note:: When running multiple Ceph OSD daemons on a single node, and 
+.. note:: When running multiple Ceph OSD daemons on a single node, and
    sharing a partioned journal with each OSD daemon, you should consider
    the entire node the minimum failure domain for CRUSH purposes, because
    if the SSD drive fails, all of the Ceph OSD daemons that journal to it
    will fail too.
 
 
-Activate OSDs
-=============
+List OSDs
+=========
 
-Once you prepare an OSD you may activate it with the following command.  ::
+To list the OSDs deployed on a node(s), execute the following command::
 
-	ceph-deploy osd activate {node-name}:{data-disk-partition}[:{journal-disk-partition}]
-	ceph-deploy osd activate osdserver1:/dev/sdb1:/dev/ssd1
-	ceph-deploy osd activate osdserver1:/dev/sdc1:/dev/ssd2
-
-The ``activate`` command will cause your OSD to come ``up`` and be placed
-``in`` the cluster. The ``activate`` command uses the path to the partition
-created when running the ``prepare`` command.
-
-
-Create OSDs
-===========
-
-You may prepare OSDs, deploy them to the OSD node(s) and activate them in one
-step with the ``create`` command. The ``create`` command is a convenience method
-for executing the ``prepare`` and ``activate`` command sequentially.  ::
-
-	ceph-deploy osd create {node-name}:{disk}[:{path/to/journal}]
-	ceph-deploy osd create osdserver1:sdb:/dev/ssd1
-
-.. List OSDs
-.. =========
-
-.. To list the OSDs deployed on a node(s), execute the following command:: 
-
-..	ceph-deploy osd list {node-name}
+ ceph-deploy osd list {node-name}
 
 
 Destroy OSDs
@@ -111,7 +77,7 @@ Destroy OSDs
 
 .. note:: Coming soon. See `Remove OSDs`_ for manual procedures.
 
-.. To destroy an OSD, execute the following command:: 
+.. To destroy an OSD, execute the following command::
 
 ..	ceph-deploy osd destroy {node-name}:{path-to-disk}[:{path/to/journal}]
 
