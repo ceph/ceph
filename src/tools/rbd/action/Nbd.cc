@@ -221,7 +221,8 @@ int execute_map_deprecated(const po::variables_map &vm_deprecated,
   options.add_options()
     ("read-only", po::bool_switch(), "")
     ("exclusive", po::bool_switch(), "")
-    ("options,o", po::value<std::vector<std::string>>(), "");
+    ("options,o", po::value<std::vector<std::string>>()
+                  ->default_value(std::vector<std::string>(), ""), "");
 
   po::variables_map vm;
   po::store(po::command_line_parser({}).options(options).run(), vm);
