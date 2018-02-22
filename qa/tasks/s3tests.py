@@ -279,7 +279,7 @@ def run_tests(ctx, config):
             '-a', ','.join(attrs),
             ]
         if client_config is not None and 'extra_args' in client_config:
-            args.extend(client_config['extra_args'])
+            args.append(client_config['extra_args'])
 
         remote.run(
             args=args,
