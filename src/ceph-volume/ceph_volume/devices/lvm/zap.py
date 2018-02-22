@@ -5,7 +5,7 @@ from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
-from ceph_volume.util import system
+from ceph_volume.util import system, encryption, disk
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -67,11 +67,27 @@ class Zap(object):
             vg_name = pv.vg_name
             lv = api.get_lv(vg_name=vg_name)
 
+        dmcrypt = False
+        dmcrypt_uuid = None
         if lv:
             osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
+            dmcrypt_uuid = lv.lv_uuid
+            dmcrypt = lv.encrypted
             if system.path_is_mounted(osd_path):
                 mlogger.info("Unmounting %s", osd_path)
                 system.unmount(osd_path)
+        else:
+            # we're most likely dealing with a partition here, check to
+            # see if it was encrypted
+            partuuid = disk.get_partuuid(device)
+            if encryption.status("/dev/mapper/{}".format(partuuid)):
+                dmcrypt_uuid = partuuid
+                dmcrypt = True
+
+        if dmcrypt and dmcrypt_uuid:
+            dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
+            mlogger.info("Closing encrypted path %s", dmcrypt_path)
+            encryption.dmcrypt_close(dmcrypt_path)
 
         if args.destroy and pv:
             logger.info("Found a physical volume created from %s, will destroy all it's vgs and lvs", device)
