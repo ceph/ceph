@@ -9,8 +9,7 @@ import time
 import cherrypy
 from mgr_module import CommandResult
 
-from ..services.ceph_service import CephService
-from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue, ViewCache
+from ..tools import ApiController, AuthRequired, BaseController, NotificationQueue
 
 
 LOG_BUFFER_SIZE = 30
@@ -54,35 +53,6 @@ class Dashboard(BaseController):
             else:
                 for l in lines:
                     buf.appendleft(l)
-
-    @ViewCache()
-    def _rbd_pool_ls(self):
-        return [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def toplevel(self):
-        fsmap = self.mgr.get("fs_map")
-
-        filesystems = [
-            {
-                "id": f['id'],
-                "name": f['mdsmap']['fs_name']
-            }
-            for f in fsmap['filesystems']
-        ]
-
-        _, data = self._rbd_pool_ls()
-        if data is None:
-            self.mgr.log.warning("Failed to get RBD pool list")
-            data = []
-        data.sort()
-
-        return {
-            'health_status': self.health_data()['status'],
-            'filesystems': filesystems,
-            'rbd_pools': data
-        }
 
     # pylint: disable=R0914
     @cherrypy.expose

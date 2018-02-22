@@ -6,12 +6,12 @@ import { Subject } from 'rxjs/Subject';
 import { AuthStorageService } from './auth-storage.service';
 
 @Injectable()
-export class TopLevelService {
+export class SummaryService {
   // Observable sources
-  private topLevelDataSource = new Subject();
+  private summaryDataSource = new Subject();
 
   // Observable streams
-  topLevelData$ = this.topLevelDataSource.asObservable();
+  summaryData$ = this.summaryDataSource.asObservable();
 
   constructor(private http: HttpClient, private authStorageService: AuthStorageService) {
     this.refresh();
@@ -19,8 +19,8 @@ export class TopLevelService {
 
   refresh() {
     if (this.authStorageService.isLoggedIn()) {
-      this.http.get('/api/dashboard/toplevel').subscribe(data => {
-        this.topLevelDataSource.next(data);
+      this.http.get('/api/summary').subscribe(data => {
+        this.summaryDataSource.next(data);
       });
     }
 

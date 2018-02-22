@@ -2,19 +2,19 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 
 import { SharedModule } from '../shared.module';
-import { TopLevelService } from './top-level.service';
+import { SummaryService } from './summary.service';
 
-describe('TopLevelService', () => {
+describe('SummaryService', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({
-      providers: [TopLevelService],
+      providers: [SummaryService],
       imports: [HttpClientTestingModule, SharedModule]
     });
   });
 
   it(
     'should be created',
-    inject([TopLevelService], (service: TopLevelService) => {
+    inject([SummaryService], (service: SummaryService) => {
       expect(service).toBeTruthy();
     })
   );
