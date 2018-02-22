@@ -72,7 +72,7 @@ class Zap(object):
         if lv:
             osd_path = "/var/lib/ceph/osd/{}-{}".format(lv.tags['ceph.cluster_name'], lv.tags['ceph.osd_id'])
             dmcrypt_uuid = lv.lv_uuid
-            dmcrypt = lv.tags.get('ceph.encrypted', '0') == '1'
+            dmcrypt = lv.encrypted
             if system.path_is_mounted(osd_path):
                 mlogger.info("Unmounting %s", osd_path)
                 system.unmount(osd_path)
