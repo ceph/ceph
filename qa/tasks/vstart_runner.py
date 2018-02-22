@@ -46,6 +46,7 @@ from teuthology.orchestra.run import Raw, quote
 from teuthology.orchestra.daemon import DaemonGroup
 from teuthology.config import config as teuth_config
 
+import cStringIO
 import logging
 
 log = logging.getLogger(__name__)
@@ -280,12 +281,16 @@ class LocalRemote(object):
                                        env=env)
 
         if stdin:
-            if not isinstance(stdin, basestring):
-                raise RuntimeError("Can't handle non-string stdins on a vstart cluster")
-
-            # Hack: writing to stdin is not deadlock-safe, but it "always" works
-            # as long as the input buffer is "small"
-            subproc.stdin.write(stdin)
+            if isinstance(stdin, cStringIO.InputType):
+               # Hack: writing to stdin is not deadlock-safe, but it "always" works
+               # as long as the input buffer is "small"
+               subproc.stdin.write(stdin.getvalue())
+            else:
+               if not isinstance(stdin, basestring):
+                   raise RuntimeError("Can't handle non-string stdins on a vstart cluster %r" % type(stdin))
+               # Hack: writing to stdin is not deadlock-safe, but it "always" works
+               # as long as the input buffer is "small"
+               subproc.stdin.write(stdin)
 
         proc = LocalRemoteProcess(
             args, subproc, check_status,

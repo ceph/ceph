@@ -93,9 +93,12 @@ def task(ctx, config):
       - local_cluster:
           cluster_path: /home/rzarzynski/ceph-1/build
       - local_rgw:
+         client.rgw
       - s3tests:
-          client.0:
+          client.rgw:
             force-branch: ceph-master
+            scan_for_encryption_keys: false
+      - radosgw-admin:
 
     Example of invocation:
       $ source ~/teuthology/virtualenv/bin/activate
@@ -103,7 +106,10 @@ def task(ctx, config):
                --suite-path ~/ceph-1/qa /tmp/config.yaml
 
     Remarks:
-      - RadosGW must be liseting on 7280,
+      - RadosGW must be liseting on 8000,
+      - For radosgw-admin you need to add to ceph.conf:
+        rgw gc obj min wait = 15
+        rgw_enable_usage_log = true
       - everything is a very, very early PoC.
     """
     # we need to update the PATH variable to let shell find binaries

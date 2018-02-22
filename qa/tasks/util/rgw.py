@@ -12,7 +12,7 @@ from teuthology import misc as teuthology
 
 log = logging.getLogger(__name__)
 
-def rgwadmin(ctx, client, cmd, stdin=StringIO(), check_status=False,
+def rgwadmin(ctx, client, cmd, stdin=None, check_status=False,
              format='json', decode=True, log_level=logging.DEBUG):
     log.info('rgwadmin: {client} : {cmd}'.format(client=client,cmd=cmd))
     testdir = teuthology.get_testdir(ctx)

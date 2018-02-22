@@ -1,5 +1,10 @@
 import argparse
 import contextlib
+import logging
+
+from teuthology import misc as teuthology
+
+log = logging.getLogger(__name__)
 
 def assign_ports(ctx, config):
     """
@@ -17,8 +22,31 @@ def assign_ports(ctx, config):
 
 @contextlib.contextmanager
 def task(ctx, config):
+
     ctx.rgw = argparse.Namespace()
+    if config is None:
+        config = dict(('client.{id}'.format(id=id_), None)
+                      for id_ in teuthology.all_roles_of_type(
+                          ctx.cluster, 'client'))
+    elif isinstance(config, list):
+        config = dict((name, None) for name in config)
+
+    ctx.rgw.config = config
+
+    log.debug("local rgw config is {}".format(ctx.rgw.config))
+
+    clients_from_config = ctx.rgw.config.keys()
+    # choose first client as default
+    client = clients_from_config[0]
+    log.debug('client is: %r', client)
+
     #role_endpoints = assign_ports(ctx, config)
     #ctx.rgw.role_endpoints = role_endpoints
     ctx.rgw.use_fastcgi = True
+    ctx.rgw.frontend = config.pop('frontend', 'civetweb')
+
+    ctx.rgw.role_endpoints = {}
+    ctx.rgw.role_endpoints[client] = ('localhost', 8000)
+    log.debug("role_endpoints {}".format(ctx.rgw.role_endpoints))
+
     yield
