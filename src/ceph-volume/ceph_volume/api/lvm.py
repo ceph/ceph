@@ -665,6 +665,7 @@ class Volume(object):
         self.lv_api = kw
         self.name = kw['lv_name']
         self.tags = parse_tags(kw['lv_tags'])
+        self.encrypted = self.tags.get('ceph.encrypted', '0') == '1'
 
     def __str__(self):
         return '<%s>' % self.lv_api['lv_path']
