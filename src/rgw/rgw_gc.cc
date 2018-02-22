@@ -84,11 +84,11 @@ int RGWGC::defer_chain(const string& tag, bool sync)
   return store->gc_aio_operate(obj_names[i], &op);
 }
 
-int RGWGC::remove(int index, const std::list<string>& tags)
+int RGWGC::remove(int index, const std::list<string>& tags, AioCompletion **pc)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
-  return store->gc_operate(obj_names[index], &op);
+  return store->gc_aio_operate(obj_names[index], &op, pc);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
@@ -136,6 +136,11 @@ class RGWGCIOManager {
   RGWGC *gc;
 
   struct IO {
+    enum Type {
+      UnknownIO = 0,
+      TailIO = 1,
+      IndexIO = 2,
+    } type{UnknownIO};
     librados::AioCompletion *c{nullptr};
     string oid;
     int index{-1};
@@ -169,7 +174,15 @@ public:
     if (ret < 0) {
       return ret;
     }
-    ios.push_back(IO{c, oid, index, tag});
+// sorry, not valid w/ -std=gnu++11
+//    ios.push_back(IO{IO::TailIO, c, oid, index, tag});
+    IO to_insert;
+    to_insert.type = IO::TailIO;
+    to_insert.c = c;
+    to_insert.oid = oid;
+    to_insert.index = index;
+    to_insert.tag = tag;
+    ios.push_back(to_insert);
 
     return 0;
   }
@@ -186,6 +199,14 @@ public:
     if (ret == -ENOENT) {
       ret = 0;
     }
+
+    if (io.type == IO::IndexIO) {
+      if (ret < 0) {
+        ldout(cct, 0) << "WARNING: gc cleanup of tags on gc shard index=" << io.index << " returned error, ret=" << ret << dendl;
+      }
+      goto done;
+    }
+
     if (ret < 0) {
       ldout(cct, 0) << "WARNING: could not remove oid=" << io.oid << ", ret=" << ret << dendl;
       goto done;
@@ -194,31 +215,48 @@ public:
     rt.push_back(io.tag);
 #define MAX_REMOVE_CHUNK 16
     if (rt.size() > MAX_REMOVE_CHUNK) {
-      drain_remove_tags(io.index, rt);
+      flush_remove_tags(io.index, rt);
     }
 done:
     ios.pop_front();
   }
 
-  void drain() {
+  void drain_ios() {
     while (!ios.empty()) {
       if (gc->going_down()) {
         return;
       }
       handle_next_completion();
     }
-
-    drain_remove_tags();
   }
 
-  void drain_remove_tags(int index, list<string>& rt) {
-    gc->remove(index, rt);
+  void drain() {
+    drain_ios();
+    flush_remove_tags();
+    /* the tags draining might have generated more ios, drain those too */
+    drain_ios();
+  }
+
+  void flush_remove_tags(int index, list<string>& rt) {
+    IO index_io;
+    index_io.type = IO::IndexIO;
+    index_io.index = index;
+
+    int ret = gc->remove(index, rt, &index_io.c);
     rt.clear();
+    if (ret < 0) {
+      /* we already cleared list of tags, this prevents us from ballooning in case of
+       * a persistent problem
+       */
+      ldout(cct, 0) << "WARNING: failed to remove tags on gc shard index=" << index << " ret=" << ret << dendl;
+      return;
+    }
+    ios.push_back(index_io);
   }
 
-  void drain_remove_tags() {
+  void flush_remove_tags() {
     for (auto iter : remove_tags) {
-      drain_remove_tags(iter.first, iter.second);
+      flush_remove_tags(iter.first, iter.second);
     }
   }
 };
