@@ -32,7 +32,7 @@
         <a i18n
            routerLink="/dashboard">
           <i class="fa fa-heartbeat fa-fw"
-             [ngStyle]="topLevelData?.health_status | healthColor"></i>
+             [ngStyle]="summaryData?.health_status | healthColor"></i>
           <span>Dashboard</span>
         </a>
       </li>
@@ -129,14 +129,14 @@
             class="dropdown-menu">
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_cephfs_fs"
-              *ngFor="let fs of topLevelData?.filesystems">
+              *ngFor="let fs of summaryData?.filesystems">
             <a i18n
                class="dropdown-item"
                routerLink="/cephfs/{{fs.id}}">{{ fs.name }}
             </a>
           </li>
           <li class="tc_submenuitem tc_submenuitem_cephfs_nofs"
-              *ngIf="topLevelData.filesystems.length === 0">
+              *ngIf="summaryData.filesystems.length === 0">
             <span i18n>There are no filesystems</span>
           </li>
         </ul>

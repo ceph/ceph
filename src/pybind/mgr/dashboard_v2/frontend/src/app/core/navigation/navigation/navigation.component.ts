@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { TopLevelService } from '../../../shared/services/top-level.service';
+import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
   selector: 'cd-navigation',
@@ -7,14 +7,14 @@ import { TopLevelService } from '../../../shared/services/top-level.service';
   styleUrls: ['./navigation.component.scss']
 })
 export class NavigationComponent implements OnInit {
-  topLevelData: any;
+  summaryData: any;
   rbdPools: Array<any> = [];
 
-  constructor(private topLevelService: TopLevelService) {}
+  constructor(private summaryService: SummaryService) {}
 
   ngOnInit() {
-    this.topLevelService.topLevelData$.subscribe((data: any) => {
-      this.topLevelData = data;
+    this.summaryService.summaryData$.subscribe((data: any) => {
+      this.summaryData = data;
       this.rbdPools = data.rbd_pools;
     });
   }
