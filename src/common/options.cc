@@ -3735,19 +3735,24 @@ std::vector<Option> get_global_options() {
     .set_description("Default bluestore_cache_size for non-rotational (solid state) media"),
 
     Option("bluestore_cache_meta_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.01)
+    .set_default(.99)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to metadata"),
 
     Option("bluestore_cache_kv_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(.99)
+    .set_default(.01)
+    .add_see_also("bluestore_cache_size")
     .set_description("Ratio of bluestore cache to devote to kv database (rocksdb)"),
 
-    Option("bluestore_cache_kv_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("bluestore_cache_kv_min", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(512_M)
-    .set_description("Max memory (bytes) to devote to kv database (rocksdb)")
+    .set_description("Minimum memory (bytes) of bluestore_cache_size to devote to kv database (rocksdb)")
+    .add_see_also("bluestore_cache_size")
     .set_long_description("A negative value means using bluestore_cache_meta_ratio "
       "and bluestore_cache_kv_ratio instead of calculating these ratios using "
-      "bluestore_cache_size_* and bluestore_cache_kv_max."),
+      "bluestore_cache_size_* and bluestore_cache_kv_min.  If "
+      "bluestore_cache_size is below bluestore_cache_kv_min "
+      "then this option has no effect."),
 
     Option("bluestore_kvbackend", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("rocksdb")
