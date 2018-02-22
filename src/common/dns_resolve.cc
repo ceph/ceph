@@ -212,16 +212,17 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 
   u_char nsbuf[NS_PACKETSZ];
   int len;
-
+  int family = cct->_conf->ms_bind_ipv6 ? AF_INET6 : AF_INET;
+  int type = cct->_conf->ms_bind_ipv6 ? ns_t_aaaa : ns_t_a;
 
 #ifdef HAVE_RES_NQUERY
-  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, ns_t_a, nsbuf, sizeof(nsbuf));
+  len = resolv_h->res_nquery(*res, hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
 #else
   {
 # ifndef HAVE_THREAD_SAFE_RES_QUERY
     Mutex::Locker l(lock);
 # endif
-    len = resolv_h->res_query(hostname.c_str(), ns_c_in, ns_t_a, nsbuf, sizeof(nsbuf));
+    len = resolv_h->res_query(hostname.c_str(), ns_c_in, type, nsbuf, sizeof(nsbuf));
   }
 #endif
   if (len < 0) {
@@ -250,7 +251,7 @@ int DNSResolver::resolve_ip_addr(CephContext *cct, res_state *res, const string&
 
   char addr_buf[64];
   memset(addr_buf, 0, sizeof(addr_buf));
-  inet_ntop(AF_INET, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
+  inet_ntop(family, ns_rr_rdata(rr), addr_buf, sizeof(addr_buf));
   if (!addr->parse(addr_buf)) {
       lderr(cct) << "failed to parse address '" << (const char *)ns_rr_rdata(rr) 
         << "'" << dendl;
