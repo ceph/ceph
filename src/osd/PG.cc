@@ -1571,9 +1571,11 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
 
   dout(20) << __func__ << " candidates by cost are: " << candidates_by_cost
            << dendl;
-
   // take out as many osds as we can for async recovery, in order of cost
   for (auto weighted_shard : candidates_by_cost) {
+    if (want->size() <= pool.info.min_size) {
+      break;
+    }
     pg_shard_t cur_shard = weighted_shard.second;
     vector<int> candidate_want(*want);
     for (auto it = candidate_want.begin(); it != candidate_want.end(); ++it) {
@@ -1583,9 +1585,6 @@ void PG::choose_async_recovery_replicated(const map<pg_shard_t, pg_info_t> &all_
 	async_recovery->insert(cur_shard);
         break;
       }
-    }
-    if (want->size() <= pool.info.min_size) {
-      break;
     }
   }
   dout(20) << __func__ << " result want=" << *want
