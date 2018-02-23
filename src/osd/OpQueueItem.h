@@ -12,38 +12,6 @@
  *
  */
 
-
-/*
-
-  Ordering notes:
-
-  - everybody waits for split.
-
-  - client ops must remained ordered by client, regardless of map epoch
-  - client ops wait for pg to exist (or are discarded if we confirm the pg
-  no longer should).
-  - client ops must wait for the min epoch.
-    -> this happens under the PG itself, not as part of the queue.
-       currently in PrimaryLogPG::do_request()
-    -> the pg waiting queue is ordered by client, so other clients do not have to wait
-
-  - peering messages must wait for the required_map
-    - currently in do_peering_event(), PG::peering_waiters
-  - peering messages must remain ordered (globally or by peer?)
-  - some peering messages create the pg
-  - query does not need a pg.
-    - q: do any peering messages need to wait for the pg to exist?
-        pretty sure no!
-
-    ---
-
-    bool waiting_for_split -- everyone waits.
-
-    waiting -- client/mon ops
-    waiting_peering -- peering ops
-
-  */
-
 #pragma once
 
 #include <ostream>
