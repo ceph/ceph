@@ -2480,9 +2480,17 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
        p != rawresult.end();
        ++p) {
     pool_stat_t& pv = result[p->first];
+    auto& pstat = p->second;
+    store_statfs_t &statfs = pstat.store_stats;
+    uint64_t allocated_bytes = pstat.get_allocated_bytes();
+    // again, raw_used_rate is unknown hence using num_store_stats that
+    // will produce results similar to get_allocated_bytes() for legacy mode
+    // and stored / num_store_stats for the new collection mode
+    uint64_t user_bytes = pstat.get_user_bytes(pstat.num_store_stats);
+
     object_stat_sum_t *sum = &p->second.stats.sum;
-    pv.num_kb = shift_round_up(sum->num_bytes, 10);
-    pv.num_bytes = sum->num_bytes;
+    pv.num_kb = shift_round_up(allocated_bytes, 10);
+    pv.num_bytes = allocated_bytes;
     pv.num_objects = sum->num_objects;
     pv.num_object_clones = sum->num_object_clones;
     pv.num_object_copies = sum->num_object_copies;
@@ -2493,6 +2501,10 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
     pv.num_rd_kb = sum->num_rd_kb;
     pv.num_wr = sum->num_wr;
     pv.num_wr_kb = sum->num_wr_kb;
+    pv.num_user_bytes = user_bytes;
+    pv.compressed_bytes_orig = statfs.data_compressed_original;
+    pv.compressed_bytes = statfs.data_compressed;
+    pv.compressed_bytes_alloc = statfs.data_compressed_allocated;
   }
   return r;
 }

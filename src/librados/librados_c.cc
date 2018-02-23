@@ -962,8 +962,14 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   }
 
   ::pool_stat_t& r = rawresult[pool_name];
-  stats->num_kb = shift_round_up(r.stats.sum.num_bytes, 10);
-  stats->num_bytes = r.stats.sum.num_bytes;
+  uint64_t allocated_bytes = r.get_allocated_bytes();
+  // again, raw_used_rate is unknown hence using num_store_stats that
+  // will produce results similar to get_allocated_bytes(1.0) for legacy mode
+  // and stored / num_store_stats for the new collection mode
+  uint64_t user_bytes = r.get_user_bytes(r.num_store_stats);
+
+  stats->num_kb = shift_round_up(allocated_bytes, 10);
+  stats->num_bytes = allocated_bytes;
   stats->num_objects = r.stats.sum.num_objects;
   stats->num_object_clones = r.stats.sum.num_object_clones;
   stats->num_object_copies = r.stats.sum.num_object_copies;
@@ -976,6 +982,11 @@ extern "C" int rados_ioctx_pool_stat(rados_ioctx_t io, struct rados_pool_stat_t 
   stats->num_rd_kb = r.stats.sum.num_rd_kb;
   stats->num_wr = r.stats.sum.num_wr;
   stats->num_wr_kb = r.stats.sum.num_wr_kb;
+  stats->num_user_bytes = user_bytes;
+  stats->compressed_bytes_orig = r.store_stats.data_compressed_original;
+  stats->compressed_bytes = r.store_stats.data_compressed;
+  stats->compressed_bytes_alloc = r.store_stats.data_compressed_allocated;
+
   tracepoint(librados, rados_ioctx_pool_stat_exit, 0, stats);
   return 0;
 }
