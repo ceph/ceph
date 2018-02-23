@@ -17,7 +17,9 @@ export class TablePerformanceCounterService {
   }
 
   get(service_type: string, service_id: string) {
-    return this.http.get(`${this.url}/${service_type}/${service_id}`)
+    const serviceType = service_type.replace('-', '_');
+
+    return this.http.get(`${this.url}/${serviceType}/${service_id}`)
       .toPromise()
       .then((resp: object): Array<object> => {
         return resp['counters'];
