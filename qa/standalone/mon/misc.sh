@@ -61,6 +61,11 @@ function TEST_osd_pool_get_set() {
 
     local size=$(ceph osd pool get $TEST_POOL size|awk '{print $2}')
     local min_size=$(ceph osd pool get $TEST_POOL min_size|awk '{print $2}')
+    local expected_min_size=$(expr $size - $size / 2)
+    if [ $min_size -ne $expected_min_size ]; then
+	echo "default min_size is wrong: expected $expected_min_size, got $min_size"
+	return 1
+    fi
 
     ceph osd pool set $TEST_POOL scrub_min_interval 123456 || return 1
     ceph osd dump | grep 'pool ' | grep 'scrub_min_interval 123456' || return 1
