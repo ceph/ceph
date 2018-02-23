@@ -1029,6 +1029,73 @@ enum class io_queue {
   mclock_client,
 };
 
+
+/*
+
+  Each PG slot includes queues for events that are processing and/or waiting
+  for a PG to be materialized in the slot.
+
+  These are the constraints:
+
+  - client ops must remained ordered by client, regardless of map epoch
+  - peering messages/events from peers must remain ordered by peer
+  - peering messages and client ops need not be ordered relative to each other
+
+  - some peering events can create a pg (e.g., notify)
+  - the query peering event can proceed when a PG doesn't exist
+
+  Implementation notes:
+
+  - everybody waits for split.  If the OSD has the parent PG it will instantiate
+    the PGSlot early and mark it waiting_for_split.  Everything will wait until
+    the parent is able to commit the split operation and the child PG's are
+    materialized in the child slots.
+
+  - every event has an epoch property and will wait for the OSDShard to catch
+    up to that epoch.  For example, if we get a peering event from a future
+    epoch, the event will wait in the slot until the local OSD has caught up.
+    (We should be judicious in specifying the required epoch [by, e.g., setting
+    it to the same_interval_since epoch] so that we don't wait for epochs that
+    don't affect the given PG.)
+
+  - we maintain two separate wait lists, *waiting* and *waiting_peering*. The
+    OpQueueItem has an is_peering() bool to determine which we use.  Waiting
+    peering events are queued up by epoch required.
+
+  - when we wake a PG slot (e.g., we finished split, or got a newer osdmap, or
+    materialized the PG), we wake *all* waiting items.  (This could be optimized,
+    probably, but we don't bother.)  We always requeue peering items ahead of
+    client ops.
+
+  - some peering events are marked !peering_requires_pg (PGQuery).  if we do
+    not have a PG these are processed immediately (under the shard lock).
+
+  - we do not have a PG present, we check if the slot maps to the current host.
+    if so, we either queue the item and wait for the PG to materialize, or
+    (if the event is a pg creating event like PGNotify), we materialize the PG.
+
+  - when we advance the osdmap on the OSDShard, we scan pg slots and
+    discard any slots with no pg (and not waiting_for_split) that no
+    longer map to the current host.
+
+  Some notes:
+
+  - There is theoretical race between query (which can proceed if the pg doesn't
+    exist) and split (which may materialize a PG in a different shard):
+      - osd has epoch E
+      - shard 0 processes notify on P from epoch E-1
+      - shard 0 identifies P splits to P+C in epoch E
+      - shard 1 receives query for P (epoch E), returns DNE
+      - shard 1 installs C in shard 0 with waiting_for_split
+
+    This can't really be fixed without ordering queries over all shards.  In
+    practice, it is very unlikely to occur, since only the primary sends a
+    notify (or other creating event) and only the primary who sends a query.
+    Even if it does happen, the instantiated P is empty, so reporting DNE vs
+    empty C is minimal harm.
+
+  */
+
 struct OSDShardPGSlot {
   PGRef pg;                      ///< pg reference
   deque<OpQueueItem> to_process; ///< order items for this slot
