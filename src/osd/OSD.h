@@ -1927,6 +1927,7 @@ protected:
   void _preboot(epoch_t oldest, epoch_t newest);
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
+  std::string _collect_compression_algorithms();
 
   void start_waiting_for_healthy();
   bool _is_healthy();
