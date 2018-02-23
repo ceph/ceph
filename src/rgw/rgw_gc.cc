@@ -147,15 +147,16 @@ class RGWGCIOManager {
     string tag;
   };
 
-  list<IO> ios;
-  map<int, std::list<string> > remove_tags;
+  deque<IO> ios;
+  vector<std::list<string> > remove_tags;
 
 #define MAX_AIO_DEFAULT 10
   size_t max_aio{MAX_AIO_DEFAULT};
 
 public:
   RGWGCIOManager(CephContext *_cct, RGWGC *_gc) : cct(_cct),
-                                                  gc(_gc) {
+                                                  gc(_gc),
+                                                  remove_tags(cct->_conf->rgw_gc_max_objs) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
   }
   ~RGWGCIOManager() {
@@ -257,8 +258,10 @@ done:
   }
 
   void flush_remove_tags() {
-    for (auto iter : remove_tags) {
-      flush_remove_tags(iter.first, iter.second);
+    int index = 0;
+    for (auto& rt : remove_tags) {
+      flush_remove_tags(index, rt);
+      ++index;
     }
   }
 };
