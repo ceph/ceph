@@ -548,7 +548,7 @@ void cls_rgw_gc_defer_entry(librados::ObjectWriteOperation& op, uint32_t expirat
 int cls_rgw_gc_list(librados::IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
                     list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker);
 
-void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const list<string>& tags);
+void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags);
 
 /* lifecycle */
 int cls_rgw_lc_get_head(librados::IoCtx& io_ctx, string& oid, cls_rgw_lc_obj_head& head);
