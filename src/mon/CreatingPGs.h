@@ -47,6 +47,17 @@ struct creating_pgs_t {
   /// pools that exist in the osdmap for which at least one pg has been created
   std::set<int64_t> created_pools;
 
+  bool is_creating_pool(int64_t poolid) {
+    if (queue.count(poolid)) {
+      return true;
+    }
+    for (auto& i : pgs) {
+      if ((int64_t)i.first.pool() == poolid) {
+	return true;
+      }
+    }
+    return false;
+  }
   bool create_pool(int64_t poolid, uint32_t pg_num,
 		   epoch_t created, utime_t modified) {
     if (created_pools.count(poolid) == 0) {
