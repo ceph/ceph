@@ -21,6 +21,14 @@ public:
   }
 };
 
+class GetNotifyOpVisitor  : public boost::static_visitor<NotifyOp> {
+public:
+  template <typename Payload>
+  NotifyOp operator()(const Payload &payload) const {
+    return Payload::NOTIFY_OP;
+  }
+};
+
 class DumpPayloadVisitor : public boost::static_visitor<void> {
 public:
   explicit DumpPayloadVisitor(Formatter *formatter) : m_formatter(formatter) {}
@@ -371,6 +379,10 @@ void NotifyMessage::decode(bufferlist::iterator& iter) {
 
 void NotifyMessage::dump(Formatter *f) const {
   apply_visitor(DumpPayloadVisitor(f), payload);
+}
+
+NotifyOp NotifyMessage::get_notify_op() const {
+  apply_visitor(GetNotifyOpVisitor(), payload);
 }
 
 void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
