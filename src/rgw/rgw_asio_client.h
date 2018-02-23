@@ -36,7 +36,7 @@ class ClientIO : public io::RestfulClient,
            beast::flat_buffer& buffer);
   ~ClientIO() override;
 
-  void init_env(CephContext *cct) override;
+  int init_env(CephContext *cct) override;
   size_t complete_request() override;
   void flush() override;
   size_t send_status(int status, const char *status_name) override;

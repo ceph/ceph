@@ -28,13 +28,13 @@ using Exception = std::system_error;
  * interacted with. */
 class BasicClient {
 protected:
-  virtual void init_env(CephContext *cct) = 0;
+  virtual int init_env(CephContext *cct) = 0;
 
 public:
   virtual ~BasicClient() = default;
 
   /* Initialize the BasicClient and inject CephContext. */
-  void init(CephContext *cct);
+  int init(CephContext *cct);
 
   /* Return the RGWEnv describing the environment that a given request lives in.
    * The method does not throw exceptions. */
@@ -197,7 +197,7 @@ protected:
     decoratee = &new_dec;
   }
 
-  void init_env(CephContext *cct) override {
+  int init_env(CephContext *cct) override {
     return get_decoratee().init_env(cct);
   }
 
