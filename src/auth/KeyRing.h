@@ -38,6 +38,10 @@ public:
   void print(ostream& out);
 
   // accessors
+  bool exists(const EntityName& name) const {
+    auto p = keys.find(name);
+    return p != keys.end();
+  }
   bool get_auth(const EntityName& name, EntityAuth &a) const {
     map<EntityName, EntityAuth>::const_iterator k = keys.find(name);
     if (k == keys.end())
