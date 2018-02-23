@@ -6,6 +6,6 @@ export class RbdMirroringService {
   constructor(private http: HttpClient) {}
 
   get() {
-    return this.http.get('/api/rbdmirror');
+    return this.http.get('api/rbdmirror');
   }
 }

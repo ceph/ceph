@@ -19,7 +19,7 @@ export class SummaryService {
 
   refresh() {
     if (this.authStorageService.isLoggedIn()) {
-      this.http.get('/api/summary').subscribe(data => {
+      this.http.get('api/summary').subscribe(data => {
         this.summaryDataSource.next(data);
       });
     }

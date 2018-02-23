@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 @Injectable()
 export class CephfsService {
-  baseURL = '/api/cephfs';
+  baseURL = 'api/cephfs';
 
   constructor(private http: HttpClient) {}
 

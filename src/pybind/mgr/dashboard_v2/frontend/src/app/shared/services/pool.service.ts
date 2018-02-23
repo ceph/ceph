@@ -8,7 +8,7 @@ export class PoolService {
   }
 
   rbdPoolImages(pool) {
-    return this.http.get(`/api/rbd/${pool}`).toPromise().then((resp: any) => {
+    return this.http.get(`api/rbd/${pool}`).toPromise().then((resp: any) => {
       return resp;
     });
   }

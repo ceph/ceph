@@ -6,6 +6,6 @@ export class ConfigurationService {
   constructor(private http: HttpClient) {}
 
   getConfigData() {
-    return this.http.get('/api/cluster_conf/');
+    return this.http.get('api/cluster_conf/');
   }
 }

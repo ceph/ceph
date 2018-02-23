@@ -6,6 +6,6 @@ export class DashboardService {
   constructor(private http: HttpClient) {}
 
   getHealth() {
-    return this.http.get('/api/dashboard/health');
+    return this.http.get('api/dashboard/health');
   }
 }

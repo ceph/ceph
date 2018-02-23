@@ -12,13 +12,13 @@ export class AuthService {
   }
 
   login(credentials: Credentials) {
-    return this.http.post('/api/auth', credentials).toPromise().then((resp: Credentials) => {
+    return this.http.post('api/auth', credentials).toPromise().then((resp: Credentials) => {
       this.authStorageService.set(resp.username);
     });
   }
 
   logout() {
-    return this.http.delete('/api/auth').toPromise().then(() => {
+    return this.http.delete('api/auth').toPromise().then(() => {
       this.authStorageService.remove();
     });
   }

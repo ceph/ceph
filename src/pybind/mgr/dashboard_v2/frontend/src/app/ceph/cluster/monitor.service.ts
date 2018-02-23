@@ -6,6 +6,6 @@ export class MonitorService {
   constructor(private http: HttpClient) {}
 
   getMonitor() {
-    return this.http.get('/api/monitor');
+    return this.http.get('api/monitor');
   }
 }
