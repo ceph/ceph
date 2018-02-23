@@ -52,7 +52,7 @@ struct creating_pgs_t {
       return true;
     }
     for (auto& i : pgs) {
-      if ((int64_t)i.first.pool() == poolid) {
+      if (i.first.pool() == poolid) {
 	return true;
       }
     }
