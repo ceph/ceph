@@ -5,9 +5,10 @@ import cherrypy
 from cherrypy.test.helper import CPWebCase
 
 from ..controllers.auth import Auth
+from ..controllers.summary import Summary
+from ..controllers.rbd_mirroring import RbdMirror
 from ..services import Service
 from ..tools import SessionExpireAtBrowserCloseTool
-from ..controllers.rbd_mirroring import RbdMirror
 from .helper import ControllerTestCase
 
 
@@ -62,14 +63,26 @@ class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
         mgr_mock.list_servers.return_value = mock_list_servers
         mgr_mock.get_metadata.return_value = mock_get_metadata
         mgr_mock.get_daemon_status.return_value = mock_get_daemon_status
-        mgr_mock.get.return_value = mock_osd_map
+        mgr_mock.get.side_effect = lambda key: {
+            'osd_map': mock_osd_map,
+            'health': {'json': '{"status": 1}'},
+            'fs_map': {'filesystems': []},
+
+        }[key]
         mgr_mock.url_prefix = ''
+        mgr_mock.get_mgr_id.return_value = 0
+        mgr_mock.have_mon_connection.return_value = True
+
+        Service.mgr = mgr_mock
 
         RbdMirror.mgr = mgr_mock
-        Service.mgr = mgr_mock
         RbdMirror._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
 
+        Summary.mgr = mgr_mock
+        Summary._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
+
         cherrypy.tree.mount(RbdMirror(), '/api/test/rbdmirror')
+        cherrypy.tree.mount(Summary(), '/api/test/summary')
 
     def __init__(self, *args, **kwargs):
         super(RbdMirroringControllerTest, self).__init__(*args, dashboard_port=54583, **kwargs)
@@ -82,3 +95,11 @@ class RbdMirroringControllerTest(ControllerTestCase, CPWebCase):
         self.assertEqual(result['status'], 0)
         for k in ['daemons', 'pools', 'image_error', 'image_syncing', 'image_ready']:
             self.assertIn(k, result['content_data'])
+
+    @mock.patch('dashboard_v2.controllers.rbd_mirroring.rbd')
+    def test_summary(self, rbd_mock):  # pylint: disable=W0613
+        """We're also testing `summary`, as it also uses code from `rbd_mirroring.py`"""
+        data = self._get('/api/test/summary')
+        self.assertStatus(200)
+        summary = data['rbd_mirroring']
+        self.assertEqual(summary, {'errors': 0, 'warnings': 1})
