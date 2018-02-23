@@ -29,9 +29,9 @@ typedef boost::intrusive_ptr<TrackedOp> TrackedOpRef;
 class OpHistoryServiceThread : public Thread
 {
 private:
+  list<pair<utime_t, TrackedOpRef>> _external_queue;
   OpHistory* _ophistory;
   mutable ceph::spinlock queue_spinlock;
-  list<pair<utime_t, TrackedOpRef>> _external_queue;
   bool _break_thread;
 public:
   explicit OpHistoryServiceThread(OpHistory* parent)
@@ -54,20 +54,20 @@ class OpHistory {
   set<pair<double, TrackedOpRef> > duration;
   set<pair<utime_t, TrackedOpRef> > slow_op;
   Mutex ops_history_lock;
-  std::atomic_bool shutdown;
   void cleanup(utime_t now);
   uint32_t history_size;
   uint32_t history_duration;
   uint32_t history_slow_op_size;
   uint32_t history_slow_op_threshold;
+  std::atomic_bool shutdown;
   OpHistoryServiceThread opsvc;
   friend class OpHistoryServiceThread;
 
 public:
-  OpHistory() : ops_history_lock("OpHistory::Lock"), shutdown(false),
+  OpHistory() : ops_history_lock("OpHistory::Lock"),
     history_size(0), history_duration(0),
     history_slow_op_size(0), history_slow_op_threshold(0),
-    opsvc(this) {
+    shutdown(false), opsvc(this) {
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
@@ -103,8 +103,8 @@ class OpTracker {
   friend class OpHistory;
   std::atomic<int64_t> seq = { 0 };
   vector<ShardedTrackingData*> sharded_in_flight_list;
-  uint32_t num_optracker_shards;
   OpHistory history;
+  uint32_t num_optracker_shards;
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
