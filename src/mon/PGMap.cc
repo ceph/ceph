@@ -805,7 +805,6 @@ void PGMapDigest::dump_pool_stats_full(
     } else {
       avail = avail_by_rule[ruleno];
     }
-
     if (f) {
       f->open_object_section("pool");
       f->dump_string("name", pool_name);
@@ -902,21 +901,23 @@ void PGMapDigest::dump_object_stat_sum(
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
   }
     
+  uint64_t used_bytes = pool_stat.get_allocated_bytes();
+
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
   if (avail) {
-    used = statfs.allocated;
+    used = used_bytes;
     used /= used + avail;
-  } else if (statfs.allocated) {
+  } else if (used_bytes) {
     used = 1.0;
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
   // an approximation for actually stored user data
   auto stored_normalized =
-    raw_used_rate ? statfs.stored / raw_used_rate : 0;
+    raw_used_rate ? statfs.data_stored / raw_used_rate : 0;
   if (f) {
-    f->dump_int("kb_used", shift_round_up(statfs.allocated, 10));
-    f->dump_int("bytes_used", statfs.allocated);
+    f->dump_int("kb_used", shift_round_up(used_bytes, 10));
+    f->dump_int("bytes_used", used_bytes);
     f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail_res);
     f->dump_int("objects", sum.num_objects);
@@ -929,10 +930,10 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("wr", sum.num_wr);
       f->dump_int("wr_bytes", sum.num_wr_kb * 1024ull);
       f->dump_int("stored", stored_normalized);
-      f->dump_int("compress_bytes_used", statfs.compressed_allocated);
-      f->dump_int("compress_under_bytes", statfs.compressed_original);
+      f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
+      f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
-      f->dump_int("stored_raw", statfs.stored);
+      f->dump_int("stored_raw", statfs.data_stored);
     }
   } else {
     tbl << stringify(byte_u_t(statfs.allocated));
@@ -944,8 +945,8 @@ void PGMapDigest::dump_object_stat_sum(
           << stringify(byte_u_t(sum.num_rd))
           << stringify(byte_u_t(sum.num_wr))
 	  << stringify(byte_u_t(stored_normalized))
-	  << stringify(byte_u_t(statfs.compressed_allocated))
-	  << stringify(byte_u_t(statfs.compressed_original))
+	  << stringify(byte_u_t(statfs.data_compressed_allocated))
+	  << stringify(byte_u_t(statfs.data_compressed_original))
 	  ;
     }
   }

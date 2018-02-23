@@ -311,6 +311,14 @@ struct rados_pool_stat_t {
   uint64_t num_wr;
   /// objects written in KB
   uint64_t num_wr_kb;
+  ///< bytes originally provided by user
+  uint64_t num_user_bytes;
+  ///< bytes passed compression
+  uint64_t compressed_bytes_orig;
+  ///< bytes resulted after compression
+  uint64_t compressed_bytes;
+  ///< bytes allocated at storage
+  uint64_t compressed_bytes_alloc;
 };
 
 /**

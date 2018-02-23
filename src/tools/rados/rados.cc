@@ -2292,6 +2292,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       tab.define_column("RD", TextTable::RIGHT, TextTable::RIGHT);
       tab.define_column("WR_OPS", TextTable::RIGHT, TextTable::RIGHT);
       tab.define_column("WR", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("USED COMPR", TextTable::RIGHT, TextTable::RIGHT);
+      tab.define_column("UNDER COMPR", TextTable::RIGHT, TextTable::RIGHT);
     } else {
       formatter->open_object_section("stats");
       formatter->open_array_section("pools");
@@ -2314,6 +2316,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
             << byte_u_t(s.num_rd_kb << 10)
             << s.num_wr
             << byte_u_t(s.num_wr_kb << 10)
+	    << byte_u_t(s.compressed_bytes_alloc)
+	    << byte_u_t(s.compressed_bytes_orig)
             << TextTable::endrow;
       } else {
         formatter->open_object_section("pool");
@@ -2336,6 +2340,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	formatter->dump_int("read_bytes", s.num_rd_kb * 1024ull);
 	formatter->dump_int("write_ops", s.num_wr);
 	formatter->dump_int("write_bytes", s.num_wr_kb * 1024ull);
+	formatter->dump_int("compress_bytes_used", s.compressed_bytes_alloc);
+	formatter->dump_int("compress_under_bytes", s.compressed_bytes_orig);
 	formatter->close_section();
       }
     }
