@@ -11503,7 +11503,7 @@ int OSDMonitor::_prepare_remove_pool(
   for (auto p = osdmap.pg_temp->begin();
        p != osdmap.pg_temp->end();
        ++p) {
-    if (p->first.pool() == (uint64_t)pool) {
+    if (p->first.pool() == pool) {
       dout(10) << __func__ << " " << pool << " removing obsolete pg_temp "
 	       << p->first << dendl;
       pending_inc.new_pg_temp[p->first].clear();
@@ -11513,7 +11513,7 @@ int OSDMonitor::_prepare_remove_pool(
   for (auto p = osdmap.primary_temp->begin();
       p != osdmap.primary_temp->end();
       ++p) {
-    if (p->first.pool() == (uint64_t)pool) {
+    if (p->first.pool() == pool) {
       dout(10) << __func__ << " " << pool
                << " removing obsolete primary_temp" << p->first << dendl;
       pending_inc.new_primary_temp[p->first] = -1;
@@ -11521,7 +11521,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
   // remove any pg_upmap mappings for this pool
   for (auto& p : osdmap.pg_upmap) {
-    if (p.first.pool() == (uint64_t)pool) {
+    if (p.first.pool() == pool) {
       dout(10) << __func__ << " " << pool
                << " removing obsolete pg_upmap "
                << p.first << dendl;
@@ -11544,7 +11544,7 @@ int OSDMonitor::_prepare_remove_pool(
   }
   // remove any pg_upmap_items mappings for this pool
   for (auto& p : osdmap.pg_upmap_items) {
-    if (p.first.pool() == (uint64_t)pool) {
+    if (p.first.pool() == pool) {
       dout(10) << __func__ << " " << pool
                << " removing obsolete pg_upmap_items " << p.first
                << dendl;

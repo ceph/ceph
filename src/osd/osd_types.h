@@ -390,7 +390,7 @@ struct pg_t {
   ps_t ps() const {
     return m_seed;
   }
-  uint64_t pool() const {
+  int64_t pool() const {
     return m_pool;
   }
 
