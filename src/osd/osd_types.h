@@ -407,9 +407,6 @@ struct pg_t {
   void set_pool(uint64_t p) {
     m_pool = p;
   }
-  void set_preferred(int32_t osd) {
-    m_preferred = osd;
-  }
 
   pg_t get_parent() const;
   pg_t get_ancestor(unsigned old_pg_num) const;

@@ -437,7 +437,6 @@ bool pg_t::parse(const char *s)
 
 bool spg_t::parse(const char *s)
 {
-  pgid.set_preferred(-1);
   shard = shard_id_t::NO_SHARD;
   uint64_t ppool;
   uint32_t pseed;
@@ -451,12 +450,8 @@ bool spg_t::parse(const char *s)
 
   const char *p = strchr(s, 'p');
   if (p) {
-    r = sscanf(p, "p%d", &pref);
-    if (r == 1) {
-      pgid.set_preferred(pref);
-    } else {
-      return false;
-    }
+    // preferred PGs were removed years ago
+    return false;
   }
 
   p = strchr(s, 's');
