@@ -4638,9 +4638,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	  scrubber.preempt_divisor *= 2;
 	  dout(10) << __func__ << " preempted, " << scrubber.preempt_left
 		   << " left" << dendl;
-	  scrubber.state = PG::Scrubber::NEW_CHUNK;
+	  scrub_preempted = false;
 	}
-	scrub_preempted = false;
 	scrub_can_preempt = scrubber.preempt_left > 0;
 
         {
