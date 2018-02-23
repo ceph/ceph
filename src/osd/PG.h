@@ -853,6 +853,7 @@ protected:
   };
 
 public:
+  bool dne() { return info.dne(); }
   struct RecoveryCtx {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > *query_map;
