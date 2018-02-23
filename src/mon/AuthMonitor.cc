@@ -83,6 +83,74 @@ void AuthMonitor::on_active()
   mon->key_server.start_server();
 }
 
+bufferlist _encode_cap(const string& cap)
+{
+  bufferlist bl;
+  encode(cap, bl);
+  return bl;
+}
+
+void AuthMonitor::get_initial_keyring(KeyRing *keyring)
+{
+  dout(10) << __func__ << dendl;
+  assert(keyring != nullptr);
+
+  bufferlist bl;
+  int ret = mon->store->get("mkfs", "keyring", bl);
+  if (ret == -ENOENT) {
+    return;
+  }
+  // fail hard only if there's an error we're not expecting to see
+  assert(ret == 0);
+
+  bufferlist::iterator p = bl.begin();
+  decode(*keyring, p);
+}
+
+void AuthMonitor::create_initial_keys(KeyRing *keyring)
+{
+  dout(10) << __func__ << dendl;
+
+  map<string,map<string,bufferlist> > bootstrap = {
+    { "admin", {
+      { "mon", _encode_cap("allow *") },
+      { "osd", _encode_cap("allow *") },
+      { "mds", _encode_cap("allow *") },
+      { "mgr", _encode_cap("allow *") }
+    } },
+    { "bootstrap-osd", {
+      { "mon", _encode_cap("allow profile bootstrap-osd") }
+    } },
+    { "bootstrap-rgw", {
+      { "mon", _encode_cap("allow profile bootstrap-rgw") }
+    } },
+    { "bootstrap-mds", {
+      { "mon", _encode_cap("allow profile bootstrap-mds") }
+    } },
+    { "bootstrap-mgr", {
+      { "mon", _encode_cap("allow profile bootstrap-mgr") }
+    } },
+    { "bootstrap-rbd", {
+      { "mon", _encode_cap("allow profile bootstrap-rbd") }
+    } }
+  };
+
+  for (auto &p : bootstrap) {
+    EntityName name;
+    name.from_str("client." + p.first);
+    if (keyring->exists(name)) {
+      continue;
+    }
+
+    dout(10) << __func__ << " creating entry for client." << p.first << dendl;
+    EntityAuth auth;
+    auth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+    auth.caps = p.second;
+
+    keyring->add(name, auth);
+  }
+}
+
 void AuthMonitor::create_initial()
 {
   dout(10) << "create_initial -- creating initial map" << dendl;
@@ -94,19 +162,12 @@ void AuthMonitor::create_initial()
 
   if (mon->is_keyring_required()) {
     KeyRing keyring;
-    bufferlist bl;
-    int ret = mon->store->get("mkfs", "keyring", bl);
-    // fail hard only if there's an error we're not expecting to see
-    assert((ret == 0) || (ret == -ENOENT));
-    
-    // try importing only if there's a key
-    if (ret == 0) {
-      KeyRing keyring;
-      bufferlist::iterator p = bl.begin();
-
-      decode(keyring, p);
-      import_keyring(keyring);
-    }
+    // attempt to obtain an existing mkfs-time keyring
+    get_initial_keyring(&keyring);
+    // create missing keys in the keyring
+    create_initial_keys(&keyring);
+    // import the resulting keyring
+    import_keyring(keyring);
   }
 
   max_global_id = MIN_GLOBAL_ID;
@@ -849,13 +910,6 @@ int AuthMonitor::do_osd_destroy(
   return 0;
 }
 
-bufferlist _encode_cap(const string& cap)
-{
-  bufferlist bl;
-  encode(cap, bl);
-  return bl;
-}
-
 int _create_auth(
     EntityAuth& auth,
     const string& key,
@@ -1440,6 +1494,14 @@ bool AuthMonitor::prepare_global_id(MonOpRequestRef op)
 
 void AuthMonitor::upgrade_format()
 {
+  // NOTE: make sure we either *always* get a bootstrap-mgr key if it doesn't
+  // exist when we upgrade, or that it already exists.
+  //
+  // <sage> joao: one thing is i think maybe we should create the key on
+  // upgrade if it doesn't exist.  right now it only happens on upgrade from
+  // kraken->luminous, but ironically i think fresh luminous clusters that
+  // don't use ceph-deploy might be missing it.
+
   unsigned int current = 2;
   if (!mon->get_quorum_mon_features().contains_all(
 	ceph::features::mon::FEATURE_LUMINOUS)) {

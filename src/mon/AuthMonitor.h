@@ -144,6 +144,8 @@ private:
 
   void on_active() override;
   bool should_propose(double& delay) override;
+  void get_initial_keyring(KeyRing *keyring);
+  void create_initial_keys(KeyRing *keyring);
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
   void create_pending() override;  // prepare a new pending
