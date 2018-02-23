@@ -6065,6 +6065,10 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
          << " (you may adjust 'mon max pool pg num' for higher values)";
       return -ERANGE;
     }
+    if (creating_pgs.is_creating_pool(pool)) {
+      ss << "still creating initial PGs; cannot update pg_num yet";
+      return -EBUSY;
+    }
     int r = check_pg_num(pool, n, p.get_size(), &ss);
     if (r) {
       return r;
