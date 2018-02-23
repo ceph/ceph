@@ -1824,8 +1824,7 @@ public:
   void on_activate() override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction *t) override;
-  void shutdown() override;
-  void on_shutdown();
+  void on_shutdown() override;
   bool check_failsafe_full() override;
   bool check_osdmap_full(const set<pg_shard_t> &missing_on) override;
   bool maybe_preempt_replica_scrub(const hobject_t& oid) override {

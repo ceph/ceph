@@ -3298,6 +3298,13 @@ void PG::init(
   write_if_dirty(*t);
 }
 
+void PG::shutdown()
+{
+  lock();
+  on_shutdown();
+  unlock();
+}
+
 #pragma GCC diagnostic ignored "-Wpragmas"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wdeprecated-declarations"
