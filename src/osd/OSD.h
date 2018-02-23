@@ -1078,22 +1078,6 @@ enum class io_queue {
     discard any slots with no pg (and not waiting_for_split) that no
     longer map to the current host.
 
-  Some notes:
-
-  - There is theoretical race between query (which can proceed if the pg doesn't
-    exist) and split (which may materialize a PG in a different shard):
-      - osd has epoch E
-      - shard 0 processes notify on P from epoch E-1
-      - shard 0 identifies P splits to P+C in epoch E
-      - shard 1 receives query for P (epoch E), returns DNE
-      - shard 1 installs C in shard 0 with waiting_for_split
-
-    This can't really be fixed without ordering queries over all shards.  In
-    practice, it is very unlikely to occur, since only the primary sends a
-    notify (or other creating event) and only the primary who sends a query.
-    Even if it does happen, the instantiated P is empty, so reporting DNE vs
-    empty C is minimal harm.
-
   */
 
 struct OSDShardPGSlot {
@@ -1190,11 +1174,11 @@ struct OSDShard {
   /// push osdmap into shard
   void consume_map(
     OSDMapRef& osdmap,
-    unsigned *pushes_to_free,
-    set<spg_t> *new_children);
+    unsigned *pushes_to_free);
 
   void _wake_pg_slot(spg_t pgid, OSDShardPGSlot *slot);
 
+  void identify_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
   void _prime_splits(set<spg_t> *pgids);
   void prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids);
   void register_and_wake_split_child(PG *pg);
