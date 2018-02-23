@@ -34,6 +34,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wpointer-arith -Werror=format-security -fno
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ftemplate-depth-1024")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
@@ -388,6 +389,7 @@ include_directories("${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/googletest/googletest/include")
 
 if(WITH_SEASTAR)
+  set(SEASTAR_ENABLE_TESTS OFF CACHE BOOL "disable seastar testing")
   add_subdirectory(seastar)
 endif()
 
