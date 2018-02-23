@@ -2,7 +2,29 @@ dashboard plugin
 ================
 
 Dashboard plugin visualizes the statistics of the cluster using a web server
-hosted by ``ceph-mgr``.
+hosted by ``ceph-mgr``. The dashboard currently provides insight into the
+following aspects of your Ceph cluster:
+
+* **Overall cluster health**: The overall cluster status, storage utilization
+  (e.g. number of objects, raw capacity, usage per pool), a list of pools and
+  their status and usage statistics, access to the cluster log file.
+* **Hosts**: A list of all hosts associated to the cluster, which services
+  are running and which version of Ceph is installed.
+* **Performance counters**: Display detailed statistics for each running service.
+* **Monitors**: List of all MONs, their quorum status, open sessions.
+* **Configuration Reference**: List all available configuration options, their
+  description and default values.
+* **OSDs**: A list of all OSDs, their status and usage statistics as well as
+  detailed information like attributes (OSD map), metadata, performance counters
+  and usage histograms for read/write operations.
+* **iSCSI**: List all hosts that run the TCMU runner service, list of all images
+  and their performance characteristics (read/write ops, traffic).
+* **RBD**: List of all RBD images and their properties (size, objects, features)
+  in a given pool. 
+* **CephFS**: List all active filesystem clients and associated pools, including
+  their usage statistics.
+* **Object Gateway**: List of all active object gateways and their performance
+  counters.
 
 Enabling
 --------
@@ -39,6 +61,23 @@ If the port is not configured, the web app will bind to port ``7000``.
 If the address it not configured, the web app will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
 
+In order to be able to log in, you need to define a username and password, which
+will be stored in the MON's configuration database::
+
+  ceph dashboard set-login-credentials <username> <password>
+
+The password will be stored in the configuration database in encrypted form
+using ``bcrypt``. This is a global setting that applies to all dashboard instances.
+
+You can now access the dashboard using your (JavaScript-enabled) web browser, by
+pointing it to the selected TCP port and any of the host names or IP addresses
+where a manager instance runs on, e.g. ``http://<$IP>:<$PORT>/``.
+
+You should then be greeted by the dashboard login page, requesting your
+previously defined username and password. Select the **Keep me logged in**
+checkbox if you want to skip the username/password request when accessing the
+dashboard in the future.
+
 Reverse proxies
 ---------------
 
@@ -52,4 +91,3 @@ to use hyperlinks that include your prefix, you can set the
   ceph config-key set mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
-
