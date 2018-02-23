@@ -446,7 +446,8 @@ public:
   void get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f);
   void with_heartbeat_peers(std::function<void(int)> f);
 
-  virtual void shutdown() = 0;
+  void shutdown();
+  virtual void on_shutdown() = 0;
 
   bool get_must_scrub() const {
     return scrubber.must_scrub;

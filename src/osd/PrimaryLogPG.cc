@@ -11676,13 +11676,6 @@ void PrimaryLogPG::clear_async_reads()
   }
 }
 
-void PrimaryLogPG::shutdown()
-{
-  lock();
-  on_shutdown();
-  unlock();
-}
-
 void PrimaryLogPG::on_shutdown()
 {
   dout(10) << __func__ << dendl;
