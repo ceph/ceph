@@ -734,13 +734,18 @@ void ReplicatedWriteLog<I>::append_scheduled_ops(void)
 template <typename I>
 void ReplicatedWriteLog<I>::schedule_append(WriteLogOperations &ops)
 {
+  CephContext *cct = m_image_ctx.cct;
   bool need_finisher;
+  int num_to_append;
   {
     Mutex::Locker locker(m_lock);
 
     need_finisher = m_ops_to_append.empty();
     m_ops_to_append.splice(m_ops_to_append.end(), ops);
+    num_to_append = m_ops_to_append.size();
   }
+
+  ldout(cct, 6) << "ops_to_append=" << num_to_append << dendl;
 
   if (need_finisher) {
     m_log_append_finisher.queue(new FunctionContext([this](int r) {
@@ -778,13 +783,18 @@ void ReplicatedWriteLog<I>::flush_then_append_scheduled_ops(void)
 template <typename I>
 void ReplicatedWriteLog<I>::schedule_flush_and_append(WriteLogOperations &ops)
 {
+  CephContext *cct = m_image_ctx.cct;
   bool need_finisher;
+  int num_to_flush;
   {
     Mutex::Locker locker(m_lock);
 
     need_finisher = m_ops_to_flush.empty();
     m_ops_to_flush.splice(m_ops_to_flush.end(), ops);
+    num_to_flush = m_ops_to_flush.size();
   }
+
+  ldout(cct, 6) << "ops_to_flush=" << num_to_flush << dendl;
 
   if (need_finisher) {
     m_persist_finisher.queue(new FunctionContext([this](int r) {
@@ -980,6 +990,9 @@ void ReplicatedWriteLog<I>::dispatch_aio_write(C_WriteRequest *write_req)
 								     &operation->buffer_alloc_action,
 								     alloc_bytes,
 								     0 /* Object type */);
+	if (TOID_IS_NULL(operation->log_entry->ram_entry.write_data)) {
+	  lderr(cct) << "pmemobj_reserve() failed: " << pmemobj_errormsg() << dendl;
+	}
 	assert(!TOID_IS_NULL(operation->log_entry->ram_entry.write_data));
 	operation->log_entry->pmem_buffer = D_RW(operation->log_entry->ram_entry.write_data);
 	operation->log_entry->ram_entry.sync_gen_number = m_current_sync_gen;

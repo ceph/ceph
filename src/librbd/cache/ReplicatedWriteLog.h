@@ -458,8 +458,7 @@ private:
   Finisher m_log_append_finisher;
   Finisher m_on_persist_finisher;
   
-  WriteLogOperations m_ops_to_flush; /* Write ops neding flush in local log */
-
+  WriteLogOperations m_ops_to_flush; /* Write ops needing flush in local log */
   WriteLogOperations m_ops_to_append; /* Write ops needing event append in local log */
 
   WriteLogMap m_blocks_to_log_entries;
