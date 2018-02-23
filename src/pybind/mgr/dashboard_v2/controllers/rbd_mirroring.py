@@ -26,7 +26,7 @@ def get_daemons_and_pools(mgr):  # pylint: disable=R0915
 
                 try:
                     status = json.loads(status['json'])
-                except ValueError:
+                except (ValueError, KeyError) as _:
                     status = {}
 
                 instance_id = metadata['instance_id']
@@ -248,9 +248,9 @@ class RbdMirror(BaseController):
 
         pool_names = [pool['pool_name'] for pool in CephService.get_pool_list('rbd')]
         _, data = get_daemons_and_pools(self.mgr)
-        if data is None:
-            logger.warning("Failed to get rbd-mirror daemons list")
-            data = {}
+        if isinstance(data, Exception):
+            logger.exception("Failed to get rbd-mirror daemons list")
+            raise type(data)(str(data))
         daemons = data.get('daemons', [])
         pool_stats = data.get('pools', {})
 
