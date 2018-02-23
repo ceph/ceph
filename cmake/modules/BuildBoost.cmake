@@ -35,6 +35,15 @@ function(check_boost_version source_dir expected_version)
   endif()
 endfunction()
 
+macro(list_replace list old new)
+  list(FIND ${list} ${old} where)
+  if(where GREATER -1)
+    list(REMOVE_AT ${list} ${where})
+    list(INSERT ${list} ${where} ${new})
+  endif()
+  unset(where)
+endmacro()
+
 function(do_build_boost version)
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
   set(boost_features "variant=release")
@@ -57,6 +66,7 @@ function(do_build_boost version)
   list(APPEND boost_features "cxxflags=${BOOST_CXXFLAGS}")
 
   list(FIND Boost_BUILD_COMPONENTS "python" with_python)
+  list_replace(Boost_BUILD_COMPONENTS "unit_test_framework" "test")
   string(REPLACE ";" "," boost_with_libs "${Boost_BUILD_COMPONENTS}")
   # build b2 and prepare the project-config.jam for boost
   set(configure_command
