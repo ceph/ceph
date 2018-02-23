@@ -177,7 +177,7 @@ TEST_F(OSDMapTest, MapPG) {
   set_up_map();
 
   std::cerr << " osdmap.pool_max==" << osdmap.get_pool_max() << std::endl;
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -196,7 +196,7 @@ TEST_F(OSDMapTest, MapPG) {
 TEST_F(OSDMapTest, MapFunctionsMatch) {
   // TODO: make sure pg_to_up_acting_osds and pg_to_acting_osds match
   set_up_map();
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -224,7 +224,7 @@ TEST_F(OSDMapTest, MapFunctionsMatch) {
 TEST_F(OSDMapTest, PrimaryIsFirst) {
   set_up_map();
 
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -238,7 +238,7 @@ TEST_F(OSDMapTest, PrimaryIsFirst) {
 TEST_F(OSDMapTest, PGTempRespected) {
   set_up_map();
 
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;
@@ -266,7 +266,7 @@ TEST_F(OSDMapTest, PGTempRespected) {
 TEST_F(OSDMapTest, PrimaryTempRespected) {
   set_up_map();
 
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds;
   vector<int> acting_osds;
@@ -326,7 +326,7 @@ TEST_F(OSDMapTest, CleanTemps) {
 TEST_F(OSDMapTest, KeepsNecessaryTemps) {
   set_up_map();
 
-  pg_t rawpg(0, my_rep_pool, -1);
+  pg_t rawpg(0, my_rep_pool);
   pg_t pgid = osdmap.raw_pg_to_pg(rawpg);
   vector<int> up_osds, acting_osds;
   int up_primary, acting_primary;

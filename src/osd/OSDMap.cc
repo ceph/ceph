@@ -3731,7 +3731,7 @@ int OSDMap::summarize_mapping_stats(
     vector<int> up, up2;
     int up_primary;
     for (unsigned ps = 0; ps < pi->get_pg_num(); ++ps) {
-      pg_t pgid(ps, pool_id, -1);
+      pg_t pgid(ps, pool_id);
       total_pg += pi->get_size();
       pg_to_up_acting_osds(pgid, &up, &up_primary, nullptr, nullptr);
       for (int osd : up) {

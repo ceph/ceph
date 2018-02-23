@@ -365,14 +365,13 @@ WRITE_CLASS_ENCODER(old_pg_t)
 struct pg_t {
   uint64_t m_pool;
   uint32_t m_seed;
-  int32_t m_preferred;
 
-  pg_t() : m_pool(0), m_seed(0), m_preferred(-1) {}
-  pg_t(ps_t seed, uint64_t pool, int pref=-1) :
-    m_pool(pool), m_seed(seed), m_preferred(pref) {}
+  pg_t() : m_pool(0), m_seed(0) {}
+  pg_t(ps_t seed, uint64_t pool) :
+    m_pool(pool), m_seed(seed) {}
   // cppcheck-suppress noExplicitConstructor
   pg_t(const ceph_pg& cpg) :
-    m_pool(cpg.pool), m_seed(cpg.ps), m_preferred((__s16)cpg.preferred) {}
+    m_pool(cpg.pool), m_seed(cpg.ps) {}
 
   // cppcheck-suppress noExplicitConstructor
   pg_t(const old_pg_t& opg) {
@@ -384,7 +383,7 @@ struct pg_t {
     assert(m_pool < 0xffffffffull);
     o.v.pool = m_pool;
     o.v.ps = m_seed;
-    o.v.preferred = (__s16)m_preferred;
+    o.v.preferred = (__s16)-1;
     return o;
   }
 
@@ -393,9 +392,6 @@ struct pg_t {
   }
   uint64_t pool() const {
     return m_pool;
-  }
-  int32_t preferred() const {
-    return m_preferred;
   }
 
   static const uint8_t calc_name_buf_size = 36;  // max length for max values len("18446744073709551615.ffffffff") + future suffix len("_head") + '\0'
@@ -438,7 +434,7 @@ struct pg_t {
     encode(v, bl);
     encode(m_pool, bl);
     encode(m_seed, bl);
-    encode(m_preferred, bl);
+    encode((int32_t)-1, bl); // was preferred
   }
   void decode(bufferlist::iterator& bl) {
     using ceph::decode;
@@ -446,7 +442,7 @@ struct pg_t {
     decode(v, bl);
     decode(m_pool, bl);
     decode(m_seed, bl);
-    decode(m_preferred, bl);
+    bl.advance(sizeof(int32_t)); // was preferred
   }
   void decode_old(bufferlist::iterator& bl) {
     using ceph::decode;
@@ -461,33 +457,27 @@ WRITE_CLASS_ENCODER(pg_t)
 
 inline bool operator<(const pg_t& l, const pg_t& r) {
   return l.pool() < r.pool() ||
-    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
-			      (l.preferred() == r.preferred() && (l.ps() < r.ps()))));
+    (l.pool() == r.pool() && (l.ps() < r.ps()));
 }
 inline bool operator<=(const pg_t& l, const pg_t& r) {
   return l.pool() < r.pool() ||
-    (l.pool() == r.pool() && (l.preferred() < r.preferred() ||
-			      (l.preferred() == r.preferred() && (l.ps() <= r.ps()))));
+    (l.pool() == r.pool() && (l.ps() <= r.ps()));
 }
 inline bool operator==(const pg_t& l, const pg_t& r) {
   return l.pool() == r.pool() &&
-    l.preferred() == r.preferred() &&
     l.ps() == r.ps();
 }
 inline bool operator!=(const pg_t& l, const pg_t& r) {
   return l.pool() != r.pool() ||
-    l.preferred() != r.preferred() ||
     l.ps() != r.ps();
 }
 inline bool operator>(const pg_t& l, const pg_t& r) {
   return l.pool() > r.pool() ||
-    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
-			      (l.preferred() == r.preferred() && (l.ps() > r.ps()))));
+    (l.pool() == r.pool() && (l.ps() > r.ps()));
 }
 inline bool operator>=(const pg_t& l, const pg_t& r) {
   return l.pool() > r.pool() ||
-    (l.pool() == r.pool() && (l.preferred() > r.preferred() ||
-			      (l.preferred() == r.preferred() && (l.ps() >= r.ps()))));
+    (l.pool() == r.pool() && (l.ps() >= r.ps()));
 }
 
 ostream& operator<<(ostream& out, const pg_t &pg);
@@ -498,7 +488,8 @@ namespace std {
     size_t operator()( const pg_t& x ) const
     {
       static hash<uint32_t> H;
-      return H((x.pool() & 0xffffffff) ^ (x.pool() >> 32) ^ x.ps() ^ x.preferred());
+      // xor (s32)-1 in there to preserve original m_preferred result (paranoia!)
+      return H((x.pool() & 0xffffffff) ^ (x.pool() >> 32) ^ x.ps() ^ (int32_t)(-1));
     }
   };
 } // namespace std
@@ -520,9 +511,6 @@ struct spg_t {
   }
   uint64_t pool() const {
     return pgid.pool();
-  }
-  int32_t preferred() const {
-    return pgid.preferred();
   }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
