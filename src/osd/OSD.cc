@@ -7766,12 +7766,10 @@ void OSD::consume_map()
   service.await_reserved_maps();
   service.publish_map(osdmap);
 
-  int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
-
-  unsigned pushes_to_free = 0;
+  // prime splits
   set<spg_t> newly_split;
   for (auto& shard : shards) {
-    shard->consume_map(osdmap, &pushes_to_free, &newly_split);
+    shard->identify_splits(osdmap, &newly_split);
   }
   if (!newly_split.empty()) {
     for (auto& shard : shards) {
@@ -7780,10 +7778,16 @@ void OSD::consume_map()
     assert(newly_split.empty());
   }
 
+  unsigned pushes_to_free = 0;
+  for (auto& shard : shards) {
+    shard->consume_map(osdmap, &pushes_to_free);
+  }
+
   vector<spg_t> pgids;
   _get_pgids(&pgids);
 
   // count (FIXME)
+  int num_pg_primary = 0, num_pg_replica = 0, num_pg_stray = 0;
   vector<PGRef> pgs;
   _get_pgs(&pgs);
   for (auto& pg : pgs) {
@@ -9298,8 +9302,7 @@ void OSDShard::wait_min_pg_epoch(epoch_t need)
 
 void OSDShard::consume_map(
   OSDMapRef& new_osdmap,
-  unsigned *pushes_to_free,
-  set<spg_t> *new_children)
+  unsigned *pushes_to_free)
 {
   Mutex::Locker l(sdata_op_ordering_lock);
   OSDMapRef old_osdmap;
@@ -9319,14 +9322,6 @@ void OSDShard::consume_map(
     OSDShardPGSlot *slot = p->second.get();
     const spg_t& pgid = p->first;
     dout(20) << __func__ << " " << pgid << dendl;
-    if (old_osdmap &&
-	(slot->pg || slot->waiting_for_split)) {
-      // only prime children for parent slots that are attached to a
-      // pg or are waiting_for_split (because their ancestor is
-      // attached to a pg).
-      osd->service.identify_split_children(old_osdmap, new_osdmap, pgid,
-					   new_children);
-    }
     if (slot->waiting_for_split) {
       dout(20) << __func__ << "  " << pgid
 	       << " waiting for split" << dendl;
@@ -9373,7 +9368,6 @@ void OSDShard::consume_map(
     }
     ++p;
   }
-  _prime_splits(new_children);
   if (queued) {
     sdata_lock.Lock();
     sdata_cond.SignalOne();
@@ -9413,6 +9407,20 @@ void OSDShard::_wake_pg_slot(
   slot->waiting_peering.clear();
   slot->waiting_for_split = false;
   ++slot->requeue_seq;
+}
+
+void OSDShard::identify_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids)
+{
+  Mutex::Locker l(sdata_op_ordering_lock);
+  if (osdmap) {
+    for (auto& i : pg_slots) {
+      const spg_t& pgid = i.first;
+      auto *slot = i.second.get();
+      if (slot->pg || slot->waiting_for_split) {
+	osd->service.identify_split_children(osdmap, as_of_osdmap, pgid, pgids);
+      }
+    }
+  }
 }
 
 void OSDShard::prime_splits(OSDMapRef as_of_osdmap, set<spg_t> *pgids)
