@@ -8,7 +8,7 @@ export class HostService {
   }
 
   list() {
-    return this.http.get('/api/host').toPromise().then((resp: any) => {
+    return this.http.get('api/host').toPromise().then((resp: any) => {
       return resp;
     });
   }

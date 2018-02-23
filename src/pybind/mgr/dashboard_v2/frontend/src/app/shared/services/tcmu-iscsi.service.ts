@@ -8,7 +8,7 @@ export class TcmuIscsiService {
   }
 
   tcmuiscsi() {
-    return this.http.get('/api/tcmuiscsi').toPromise().then((resp: any) => {
+    return this.http.get('api/tcmuiscsi').toPromise().then((resp: any) => {
       return resp;
     });
   }

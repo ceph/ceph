@@ -4,7 +4,7 @@ import { Injectable } from '@angular/core';
 @Injectable()
 export class TablePerformanceCounterService {
 
-  private url = '/api/perf_counters';
+  private url = 'api/perf_counters';
 
   constructor(private http: HttpClient) { }
 

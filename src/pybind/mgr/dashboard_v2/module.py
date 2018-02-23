@@ -37,6 +37,14 @@ def os_exit_noop(*args):
 os._exit = os_exit_noop
 
 
+def prepare_url_prefix(url_prefix):
+    """
+    return '' if no prefix, or '/prefix' without slash in the end.
+    """
+    url_prefix = urljoin('/', url_prefix)
+    return url_prefix.rstrip('/')
+
+
 class Module(MgrModule):
     """
     dashboard module entrypoint
@@ -80,13 +88,6 @@ class Module(MgrModule):
         self.log.info('server_addr: %s server_port: %s', server_addr,
                       server_port)
 
-        def prepare_url_prefix(url_prefix):
-            """
-            return '' if no prefix, or '/prefix' without slash in the end.
-            """
-            url_prefix = urljoin('/', url_prefix)
-            return url_prefix.rstrip('/')
-
         self._url_prefix = prepare_url_prefix(self.get_config('url_prefix',
                                                               default=''))
 
@@ -121,8 +122,8 @@ class Module(MgrModule):
             self.url_prefix
         ))
 
-        cherrypy.tree.mount(Module.ApiRoot(self), '/api')
-        cherrypy.tree.mount(Module.StaticRoot(), '/', config=config)
+        cherrypy.tree.mount(Module.ApiRoot(self), '{}/api'.format(self.url_prefix))
+        cherrypy.tree.mount(Module.StaticRoot(), '{}/'.format(self.url_prefix), config=config)
 
     def serve(self):
         if 'COVERAGE_ENABLED' in os.environ:
@@ -253,7 +254,9 @@ class StandbyModule(MgrStandbyModule):
                     """
                     return template.format(delay=5)
 
-        cherrypy.tree.mount(Root(), "/", {})
+        url_prefix = prepare_url_prefix(self.get_config('url_prefix',
+                                                        default=''))
+        cherrypy.tree.mount(Root(), "{}/".format(url_prefix), {})
         self.log.info("Starting engine...")
         cherrypy.engine.start()
         self.log.info("Waiting for engine...")
