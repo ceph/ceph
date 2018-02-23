@@ -116,14 +116,14 @@ int RGWSimpleRadosReadAttrsCR::request_complete()
 
 int RGWAsyncPutSystemObj::_send_request()
 {
-  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive);
+  return store->put_system_obj_data(NULL, obj, bl, -1, exclusive, objv_tracker);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
-                     rgw_obj& _obj, bool _exclusive,
-                     bufferlist& _bl) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                                       obj(_obj), exclusive(_exclusive),
-                                                       bl(_bl)
+                     RGWObjVersionTracker *_objv_tracker, rgw_obj& _obj,
+                     bool _exclusive, bufferlist& _bl)
+  : RGWAsyncRadosRequest(caller, cn), store(_store), objv_tracker(_objv_tracker),
+    obj(_obj), exclusive(_exclusive), bl(_bl)
 {
 }
 
@@ -322,6 +322,40 @@ int RGWRadosRemoveOmapKeysCR::send_request() {
 }
 
 int RGWRadosRemoveOmapKeysCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
+RGWRadosRemoveCR::RGWRadosRemoveCR(RGWRados *store, const rgw_bucket& pool,
+                                   const std::string& oid)
+  : RGWSimpleCoroutine(store->ctx()), store(store), pool(pool), oid(oid)
+{
+  set_description() << "remove dest=" << oid;
+}
+
+int RGWRadosRemoveCR::send_request()
+{
+  auto rados = store->get_rados_handle();
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  if (r < 0) {
+    lderr(cct) << "ERROR: failed to open pool (" << pool.name << ") ret=" << r << dendl;
+    return r;
+  }
+
+  set_status() << "send request";
+
+  librados::ObjectWriteOperation op;
+  op.remove();
+
+  cn = stack->create_completion_notifier();
+  return ioctx.aio_operate(oid, cn->completion(), &op);
+}
+
+int RGWRadosRemoveCR::request_complete()
 {
   int r = cn->completion()->get_return_value();
 
@@ -659,6 +693,70 @@ int RGWRadosTimelogAddCR::request_complete()
 
   return r;
 }
+
+RGWRadosTimelogTrimCR::RGWRadosTimelogTrimCR(RGWRados *store,
+                                             const std::string& oid,
+                                             const real_time& start_time,
+                                             const real_time& end_time,
+                                             const std::string& from_marker,
+                                             const std::string& to_marker)
+  : RGWSimpleCoroutine(store->ctx()), store(store), oid(oid),
+    start_time(start_time), end_time(end_time),
+    from_marker(from_marker), to_marker(to_marker)
+{
+  set_description() << "timelog trim oid=" <<  oid
+      << " start_time=" << start_time << " end_time=" << end_time
+      << " from_marker=" << from_marker << " to_marker=" << to_marker;
+}
+
+RGWRadosTimelogTrimCR::~RGWRadosTimelogTrimCR()
+{
+  if (cn) {
+    cn->put();
+  }
+}
+
+int RGWRadosTimelogTrimCR::send_request()
+{
+  set_status() << "sending request";
+
+  cn = stack->create_completion_notifier();
+  cn->get();
+  return store->time_log_trim(oid, start_time, end_time, from_marker,
+                              to_marker, cn->completion());
+}
+
+int RGWRadosTimelogTrimCR::request_complete()
+{
+  int r = cn->completion()->get_return_value();
+
+  set_status() << "request complete; ret=" << r;
+
+  return r;
+}
+
+
+RGWSyncLogTrimCR::RGWSyncLogTrimCR(RGWRados *store, const std::string& oid,
+                                   const std::string& to_marker,
+                                   std::string *last_trim_marker)
+  : RGWRadosTimelogTrimCR(store, oid, real_time{}, real_time{},
+                          std::string{}, to_marker),
+    cct(store->ctx()), last_trim_marker(last_trim_marker)
+{
+}
+
+int RGWSyncLogTrimCR::request_complete()
+{
+  int r = RGWRadosTimelogTrimCR::request_complete();
+  if (r < 0 && r != -ENODATA) {
+    return r;
+  }
+  if (*last_trim_marker < to_marker) {
+    *last_trim_marker = to_marker;
+  }
+  return 0;
+}
+
 
 int RGWAsyncStatObj::_send_request()
 {

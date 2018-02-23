@@ -33,6 +33,7 @@ class RGWDataNotifier;
 class RGWObjectExpirer;
 class RGWMetaSyncProcessorThread;
 class RGWDataSyncProcessorThread;
+class RGWSyncLogTrimThread;
 class RGWRESTConn;
 
 /* flags for put_obj_meta() */
@@ -1583,6 +1584,8 @@ public:
 WRITE_CLASS_ENCODER(RGWPeriod)
 
 class RGWDataChangesLog;
+class RGWMetaSyncStatusManager;
+class RGWDataSyncStatusManager;
 class RGWReplicaLogger;
 class RGWCoroutinesManagerRegistry;
   
@@ -1845,6 +1848,8 @@ class RGWRados
   RGWDataNotifier *data_notifier;
   RGWMetaSyncProcessorThread *meta_sync_processor_thread;
   map<string, RGWDataSyncProcessorThread *> data_sync_processor_threads;
+
+  RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
 
   Mutex meta_sync_thread_lock;
   Mutex data_sync_thread_lock;
@@ -2505,7 +2510,8 @@ public:
               ceph::real_time set_mtime /* 0 for don't set */);
 
   virtual int put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
-              off_t ofs, bool exclusive);
+              off_t ofs, bool exclusive,
+              RGWObjVersionTracker *objv_tracker = nullptr);
   virtual int put_obj_data(void *ctx, rgw_obj& obj, const char *data,
               off_t ofs, size_t len, bool exclusive);
   virtual int aio_put_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
@@ -2667,6 +2673,9 @@ public:
   bool is_syncing_bucket_meta(rgw_bucket& bucket);
   void wakeup_meta_sync_shards(set<int>& shard_ids);
   void wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids);
+
+  RGWMetaSyncStatusManager* get_meta_sync_manager();
+  RGWDataSyncStatusManager* get_data_sync_manager(const std::string& source_zone);
 
   int set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner);
   int set_buckets_enabled(std::vector<rgw_bucket>& buckets, bool enabled);
@@ -2932,7 +2941,8 @@ public:
   int time_log_info(const string& oid, cls_log_header *header);
   int time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cls_log_header *header, librados::AioCompletion *completion);
   int time_log_trim(const string& oid, const ceph::real_time& start_time, const ceph::real_time& end_time,
-                    const string& from_marker, const string& to_marker);
+                    const string& from_marker, const string& to_marker,
+                    librados::AioCompletion *completion = nullptr);
 
   string objexp_hint_get_shardname(int shard_num);
   int objexp_key_shard(const rgw_obj_key& key);

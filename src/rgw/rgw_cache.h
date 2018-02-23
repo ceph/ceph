@@ -237,7 +237,8 @@ public:
               bufferlist& data,
               RGWObjVersionTracker *objv_tracker,
               real_time set_mtime);
-  int put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive);
+  int put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl, off_t ofs, bool exclusive,
+                          RGWObjVersionTracker *objv_tracker = nullptr);
 
   int get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::Read::GetObjState& read_state,
                      RGWObjVersionTracker *objv_tracker, rgw_obj& obj,
@@ -432,7 +433,8 @@ int RGWCache<T>::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mti
 }
 
 template <class T>
-int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, off_t ofs, bool exclusive)
+int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, off_t ofs, bool exclusive,
+                                     RGWObjVersionTracker *objv_tracker)
 {
   rgw_bucket bucket;
   string oid;
@@ -446,7 +448,11 @@ int RGWCache<T>::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& data, 
     info.status = 0;
     info.flags = CACHE_FLAG_DATA;
   }
-  int ret = T::put_system_obj_data(ctx, obj, data, ofs, exclusive);
+  if (objv_tracker) {
+    info.version = objv_tracker->write_version;
+    info.flags |= CACHE_FLAG_OBJV;
+  }
+  int ret = T::put_system_obj_data(ctx, obj, data, ofs, exclusive, objv_tracker);
   if (cacheable) {
     string name = normal_name(bucket, oid);
     if (ret >= 0) {

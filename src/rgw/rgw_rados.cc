@@ -42,6 +42,9 @@
 
 #include "rgw_coroutine.h"
 
+#include "rgw_boost_asio_yield.h"
+#undef fork // fails to compile RGWPeriod::fork() below
+
 #include "common/Clock.h"
 
 #include "include/rados/librados.hpp"
@@ -2996,6 +2999,7 @@ public:
       sync.wakeup(*iter);
     }
   }
+  RGWMetaSyncStatusManager* get_manager() { return &sync; }
 
   int init() {
     int ret = sync.init();
@@ -3039,7 +3043,7 @@ public:
       sync.wakeup(iter->first, iter->second);
     }
   }
-
+  RGWDataSyncStatusManager* get_manager() { return &sync; }
 
   int init() {
     return 0;
@@ -3059,6 +3063,45 @@ public:
       return 0;
     }
     sync.run();
+    return 0;
+  }
+};
+
+class RGWSyncLogTrimThread : public RGWSyncProcessorThread
+{
+  RGWCoroutinesManager crs;
+  RGWRados *store;
+  RGWHTTPManager http;
+  const utime_t trim_interval;
+
+  uint64_t interval_msec() override { return 0; }
+  void stop_process() override { crs.stop(); }
+public:
+  RGWSyncLogTrimThread(RGWRados *store, int interval)
+    : RGWSyncProcessorThread(store),
+      crs(store->ctx(), store->get_cr_registry()), store(store),
+      http(store->ctx(), crs.get_completion_mgr()),
+      trim_interval(interval, 0)
+  {}
+
+  int init() override {
+    return http.set_threaded();
+  }
+  int process() override {
+    list<RGWCoroutinesStack*> stacks;
+    auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
+    meta->call(create_meta_log_trim_cr(store, &http,
+                                       cct->_conf->rgw_md_log_max_shards,
+                                       trim_interval));
+    stacks.push_back(meta);
+
+    auto data = new RGWCoroutinesStack(store->ctx(), &crs);
+    data->call(create_data_log_trim_cr(store, &http,
+                                       cct->_conf->rgw_data_log_num_shards,
+                                       trim_interval));
+    stacks.push_back(data);
+
+    crs.run(stacks);
     return 0;
   }
 };
@@ -3084,6 +3127,25 @@ void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<s
   RGWDataSyncProcessorThread *thread = iter->second;
   assert(thread);
   thread->wakeup_sync_shards(shard_ids);
+}
+
+RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
+{
+  Mutex::Locker l(meta_sync_thread_lock);
+  if (meta_sync_processor_thread) {
+    return meta_sync_processor_thread->get_manager();
+  }
+  return nullptr;
+}
+
+RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const std::string& source_zone)
+{
+  Mutex::Locker l(data_sync_thread_lock);
+  auto thread = data_sync_processor_threads.find(source_zone);
+  if (thread == data_sync_processor_threads.end()) {
+    return nullptr;
+  }
+  return thread->second->get_manager();
 }
 
 int RGWRados::get_required_alignment(rgw_bucket& bucket, uint64_t *alignment)
@@ -3160,6 +3222,9 @@ void RGWRados::finalize()
       RGWDataSyncProcessorThread *thread = iter.second;
       thread->stop();
     }
+    if (sync_log_trimmer) {
+      sync_log_trimmer->stop();
+    }
   }
   if (async_rados) {
     async_rados->stop();
@@ -3173,6 +3238,8 @@ void RGWRados::finalize()
       delete thread;
     }
     data_sync_processor_threads.clear();
+    delete sync_log_trimmer;
+    sync_log_trimmer = nullptr;
   }
   if (finisher) {
     finisher->stop();
@@ -3909,7 +3976,8 @@ int RGWRados::init_complete()
 
   /* no point of running sync thread if we don't have a master zone configured
      or there is no rest_master_conn */
-  if (get_zonegroup().master_zone.empty() || !rest_master_conn) {
+  if (get_zonegroup().master_zone.empty() || !rest_master_conn
+      || current_period.get_id().empty()) {
     run_sync_thread = false;
   }
 
@@ -3934,7 +4002,7 @@ int RGWRados::init_complete()
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this, async_rados);
     ret = meta_sync_processor_thread->init();
     if (ret < 0) {
-      ldout(cct, 0) << "ERROR: failed to initialize" << dendl;
+      ldout(cct, 0) << "ERROR: failed to initialize meta sync thread" << dendl;
       return ret;
     }
     meta_sync_processor_thread->start();
@@ -3945,11 +4013,21 @@ int RGWRados::init_complete()
       RGWDataSyncProcessorThread *thread = new RGWDataSyncProcessorThread(this, async_rados, iter->first);
       ret = thread->init();
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: failed to initialize" << dendl;
+        ldout(cct, 0) << "ERROR: failed to initialize data sync thread" << dendl;
         return ret;
       }
       thread->start();
       data_sync_processor_threads[iter->first] = thread;
+    }
+    auto interval = cct->_conf->rgw_sync_log_trim_interval;
+    if (interval > 0) {
+      sync_log_trimmer = new RGWSyncLogTrimThread(this, interval);
+      ret = sync_log_trimmer->init();
+      if (ret < 0) {
+        ldout(cct, 0) << "ERROR: failed to initialize sync log trim thread" << dendl;
+        return ret;
+      }
+      sync_log_trimmer->start();
     }
   }
   data_notifier = new RGWDataNotifier(this);
@@ -4762,7 +4840,8 @@ int RGWRados::time_log_info_async(librados::IoCtx& io_ctx, const string& oid, cl
 }
 
 int RGWRados::time_log_trim(const string& oid, const real_time& start_time, const real_time& end_time,
-			    const string& from_marker, const string& to_marker)
+			    const string& from_marker, const string& to_marker,
+                            librados::AioCompletion *completion)
 {
   librados::IoCtx io_ctx;
 
@@ -4775,7 +4854,15 @@ int RGWRados::time_log_trim(const string& oid, const real_time& start_time, cons
   utime_t st(start_time);
   utime_t et(end_time);
 
-  return cls_log_trim(io_ctx, oid, st, et, from_marker, to_marker);
+  ObjectWriteOperation op;
+  cls_log_trim(op, st, et, from_marker, to_marker);
+
+  if (!completion) {
+    r = io_ctx.operate(oid, &op);
+  } else {
+    r = io_ctx.aio_operate(oid, completion, &op);
+  }
+  return r;
 }
 
 string RGWRados::objexp_hint_get_shardname(int shard_num)
@@ -6492,7 +6579,8 @@ int RGWRados::put_system_obj_impl(rgw_obj& obj, uint64_t size, real_time *mtime,
 }
 
 int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
-			       off_t ofs, bool exclusive)
+                                  off_t ofs, bool exclusive,
+                                  RGWObjVersionTracker *objv_tracker)
 {
   rgw_rados_ref ref;
   rgw_bucket bucket;
@@ -6506,6 +6594,9 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
   if (exclusive)
     op.create(true);
 
+  if (objv_tracker) {
+    objv_tracker->prepare_op_for_write(&op);
+  }
   if (ofs == -1) {
     op.write_full(bl);
   } else {
@@ -6515,6 +6606,9 @@ int RGWRados::put_system_obj_data(void *ctx, rgw_obj& obj, bufferlist& bl,
   if (r < 0)
     return r;
 
+  if (objv_tracker) {
+    objv_tracker->apply_write();
+  }
   return 0;
 }
 
