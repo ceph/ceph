@@ -4646,7 +4646,8 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	   */
 	  int min = std::max<int64_t>(3, cct->_conf->osd_scrub_chunk_min /
 				      scrubber.preempt_divisor);
-	  int max = std::max<int64_t>(min, cct->_conf->osd_scrub_chunk_max);
+	  int max = std::max<int64_t>(min, cct->_conf->osd_scrub_chunk_max /
+                                      scrubber.preempt_divisor);
           hobject_t start = scrubber.start;
 	  hobject_t candidate_end;
 	  vector<hobject_t> objects;
