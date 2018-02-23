@@ -144,6 +144,34 @@ def format_device(device):
     process.run(command)
 
 
+def _normalize_mount_flags(flags):
+    """
+    Mount flag options have to be a single string, separated by a comma. If the
+    flags are separated by spaces, or with commas and spaces in ceph.conf, the
+    mount options will be passed incorrectly.
+
+    This will help when parsing ceph.conf values return something like::
+
+        ["rw,", "exec,"]
+
+    Or::
+
+        [" rw ,", "exec"]
+
+    :param flags: A list of flags, or a single string of mount flags
+    """
+    if isinstance(flags, list):
+        # ensure that spaces and commas are removed so that they can join
+        # correctly
+        return ','.join([f.strip().strip(',') for f in flags if f])
+
+    # split them, clean them, and join them back again
+    flags = flags.strip().split(' ')
+    return ','.join(
+        [f.strip().strip(',') for f in flags if f]
+    )
+
+
 def mount_osd(device, osd_id):
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     command = ['mount', '-t', 'xfs', '-o']
@@ -153,7 +181,7 @@ def mount_osd(device, osd_id):
         default=constants.mount.get('xfs'),
         split=' ',
     )
-    command.extend(flags)
+    command.append(_normalize_mount_flags(flags))
     command.append(device)
     command.append(destination)
     process.run(command)
