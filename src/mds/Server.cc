@@ -1743,6 +1743,10 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
   if (mdr->killed) {
     dout(10) << "request " << *mdr << " was killed" << dendl;
     return;
+  } else if (mdr->aborted) {
+    mdr->aborted = false;
+    mdcache->request_kill(mdr);
+    return;
   }
 
   MClientRequest *req = mdr->client_request;
