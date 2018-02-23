@@ -1,0 +1,4 @@
+overrides:
+  deepsea:
+    exec:
+    - "suites/ceph-test/pynfs.sh --fsal=both"

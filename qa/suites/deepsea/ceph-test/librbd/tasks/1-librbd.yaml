@@ -1,0 +1,11 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/ceph-test/librbd.sh
+tasks:
+# the "exec" task runs commands as root
+- exec:
+    client.0:
+      - "zypper --non-interactive --no-gpg-checks refresh"
+      - "zypper --non-interactive install --no-recommends ceph-test"
+      - "ceph_test_librbd"

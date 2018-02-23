@@ -1,0 +1,5 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-openattic.sh --cli
+    - sleep 10000000

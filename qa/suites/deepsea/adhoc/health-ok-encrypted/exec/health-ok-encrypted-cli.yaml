@@ -1,0 +1,5 @@
+overrides:
+  deepsea:
+    exec:
+    - suites/basic/health-ok.sh --cli --encrypted
+    - sleep 10000000

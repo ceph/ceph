@@ -1,0 +1,28 @@
+ceph_cm: salt
+roles:
+- [master.a]
+- [node.0]
+- [node.1]
+- [node.2]
+- [node.3]
+- [node.4]
+- [node.5]
+- [node.6]
+- [node.7]
+- [node.8]
+- [node.9]
+- [node.10]
+- [node.11]
+- [node.12]
+- [node.13]
+- [node.14]
+- [node.15]
+- [node.16]
+- [node.17]
+- [node.18]
+- [node.19]
+- [client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
