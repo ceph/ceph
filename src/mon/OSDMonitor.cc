@@ -189,8 +189,7 @@ OSDMonitor::OSDMonitor(
    inc_osd_cache(g_conf->mon_osd_cache_size),
    full_osd_cache(g_conf->mon_osd_cache_size),
    last_attempted_minwait_time(utime_t()),
-   mapper(mn->cct, &mn->cpu_tp),
-   op_tracker(cct, true, 1)
+   mapper(mn->cct, &mn->cpu_tp)
 {}
 
 bool OSDMonitor::_have_pending_crush()
