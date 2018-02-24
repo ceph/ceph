@@ -55,7 +55,13 @@ TEST_F(TestGroup, group_create)
   ASSERT_EQ(1U, groups.size());
   ASSERT_EQ("mygroup", groups[0]);
 
-  ASSERT_EQ(0, rbd.group_remove(ioctx, "mygroup"));
+  groups.clear();
+  ASSERT_EQ(0, rbd.group_rename(ioctx, "mygroup", "newgroup"));
+  ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
+  ASSERT_EQ(1U, groups.size());
+  ASSERT_EQ("newgroup", groups[0]);
+
+  ASSERT_EQ(0, rbd.group_remove(ioctx, "newgroup"));
 
   groups.clear();
   ASSERT_EQ(0, rbd.group_list(ioctx, &groups));
